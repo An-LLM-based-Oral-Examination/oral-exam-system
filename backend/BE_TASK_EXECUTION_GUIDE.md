@@ -1,7 +1,7 @@
 # ⚙️ BACKEND IMPLEMENTATION & TASK EXECUTION GUIDE (v2 — ĐÃ SỬA SAU PHẢN BIỆN)
 **Dành cho:** Nguyễn Quang Thành (Lead BE & Architect) & Nguyễn Trọng Tốt (BE, AI & QA)  
 **Công nghệ:** .NET 8, Clean Architecture, PostgreSQL, EF Core, SignalR, Polly, Google Gemini API, OpenAI Whisper (Server-side), EPPlus, xUnit.  
-**Quy chuẩn bắt buộc:** Quota kiểm soát bằng PostgreSQL (loại bỏ hoàn toàn Redis). Whisper STT chạy server-side cho thi thật phòng Lab MF-04. Hàng đợi 4 tầng load test ở Tuần 3. Tốt sở hữu duy nhất việc ghi score + feedback AI xuống DB.
+**Quy chuẩn bắt buộc:** Quota 3 lượt/môn/ngày kiểm soát bằng PostgreSQL. Whisper STT chạy server-side cho thi thật phòng Lab MF-04. Hàng đợi 4 tầng load test ở Tuần 3. Tốt sở hữu duy nhất việc ghi score + feedback AI xuống DB.
 
 ---
 
@@ -46,7 +46,7 @@ backend/src/
 ---
 
 ## 📦 2. CÁC NUGET PACKAGES CẦN CÀI ĐẶT
-*(Loại bỏ hoàn toàn Redis / StackExchange.Redis khỏi danh mục phụ thuộc)*
+*(Danh mục gói phụ thuộc chuẩn cho Clean Architecture .NET 8)*
 
 ```bash
 # Vào src/Infrastructure/
@@ -142,7 +142,7 @@ dotnet add package Moq
 ### 🏃 TUẦN 3: MF-02 (QUOTA GUARD POSTGRESQL, SERVER TIMER, LOAD TEST & API TẠO CA THI LAB)
 
 #### 🧑 Thành (Lead BE):
-- [ ] **Task BE-3.1:** Viết dịch vụ kiểm soát hạn mức `PostgreSqlQuotaService.cs` bằng **PostgreSQL** (hoàn toàn không dùng Redis):
+- [ ] **Task BE-3.1:** Viết dịch vụ kiểm soát hạn mức `PostgreSqlQuotaService.cs` bằng **PostgreSQL**:
   - Truy vấn đếm số lượt thi thử trong ngày trực tiếp từ database:
     ```sql
     SELECT COUNT(*) FROM mock_exam_sessions 
@@ -204,4 +204,4 @@ dotnet add package Moq
 - **Báo cáo (Report):** Whisper STT bóc băng chính xác kèm timestamp. Sửa 1 byte file audio trên R2 lập tức bị hàm băm SHA-256 phát hiện. API `PUT /api/v1/audit/override` ghi đè điểm trơn tru kèm nhật ký audit đầy đủ. Báo cáo UAT nghiệm thu hoàn tất.
 
 ---
-*(Tài liệu hướng dẫn triển khai Backend được cập nhật hoàn chỉnh, đồng bộ 100% với 12 điểm phản biện kỹ thuật, chuẩn hóa .NET 8 Clean Architecture và không còn bất kỳ dấu vết nào của Redis).*
+*(Tài liệu hướng dẫn triển khai Backend được cập nhật hoàn chỉnh, đồng bộ 100% với 12 điểm phản biện kỹ thuật và chuẩn hóa .NET 8 Clean Architecture).*
