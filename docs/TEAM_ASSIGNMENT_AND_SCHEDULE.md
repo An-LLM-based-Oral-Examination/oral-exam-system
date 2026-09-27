@@ -1,84 +1,77 @@
-# BẢNG PHÂN CÔNG NHIỆM VỤ & LỘ TRÌNH AGILE 4 TUẦN
+# BẢNG PHÂN CÔNG NHIỆM VỤ & LỘ TRÌNH AGILE (BÁM SÁT REPORT 2)
 **Dự án:** An LLM-based Oral Examination  
-**Đội hình (4 thành viên):** 3 Backend (BE) - 1 Frontend (FE)  
-**Quy tắc vận hành:** Review & Báo cáo tiến độ (Daily/Sync) mỗi 3 ngày 1 lần.  
-**Mục tiêu:** Khớp toàn bộ 4 Core Main Flows (MF-01 đến MF-04) từ Zero đến Production-Ready.
+**Đội hình (4 thành viên):** Dựa theo chuẩn RACI Matrix từ Report 2.  
 
 ---
 
-## 👨‍💻 PHẦN 1: MA TRẬN PHÂN CÔNG NHIỆM VỤ (TASK ASSIGNMENT)
+## 👨‍💻 PHẦN 1: MA TRẬN PHÂN CÔNG NHIỆM VỤ CHÍNH THỨC (TỪ REPORT 2)
 
-### 1. FRONTEND DEVELOPER (1 Người - Full UI/UX & Client Logic)
-Đóng vai trò Frontend Lead, tiêu thụ API từ 3 bạn BE.
-* **Nhiệm vụ lõi:** Setup UI Kit (TailwindCSS + Shadcn/ui), State Management (Zustand/Redux). Tích hợp Web Speech API (Speech-to-Text & Text-to-Speech) để thu âm và đọc câu hỏi mô phỏng.
-* **Chia Task theo Luồng:**
-  - **MF-01 & 02:** UI phòng thi ảo, bộ đếm ngược (Countdown Timer), màn hình đệm 60s (Code-Switching) và vẽ Biểu đồ Bloom Radar.
-  - **MF-03:** Form tạo câu hỏi, validation Zod chống nhập sai tổng điểm Rubric 10.0.
-  - **MF-04:** Cơ chế Lockdown trình duyệt (chặn F12, Fullscreen) và Giao diện nghe Audio Audit cho Giảng viên.
+Dựa trên tài liệu thiết kế (Report 2), dự án chia làm 2 nhóm chạy song song (FE và BE). Phân công chi tiết cho 4 thành viên như sau:
 
-### 2. BACKEND DEVELOPER 1 (Lead BE / System Architect)
-Thiết lập hạ tầng chịu tải và luồng thi thật căng thẳng nhất.
-* **Nhiệm vụ lõi:** Cấu hình kiến trúc `.NET 8 Clean Architecture` (DI, Middleware, JWT Auth). Setup hạ tầng thời gian thực SignalR.
-* **Chia Task theo Luồng:**
-  - **MF-01:** Hàng đợi 4 tầng (In-memory Bounded Channel) và cơ chế thử lại (Polly Retry), Dead-Letter Queue (DLQ).
-  - **MF-04:** API tạo phòng thi Lab, Audit Log, API khóa điểm 1 chiều (One-Way Lock) sau khi Giảng viên hậu kiểm.
+### 1. Lê Vũ Hoàng (Frontend Developer)
+* **Vai trò:** FE Lead, chịu trách nhiệm chính về mảng giao diện.
+* **Nhiệm vụ (Tasks):** 
+  - Thiết kế kiến trúc Frontend (FE architecture) và code các màn hình FE (Assigned FE screens).
+  - Khớp nối và tích hợp API với Backend (FE-BE integration).
+  - Hỗ trợ viết và chạy các kịch bản kiểm thử giao diện (Testing support).
 
-### 3. BACKEND DEVELOPER 2 (AI Integration & Cloud Storage)
-Giao tiếp với Trí tuệ nhân tạo (Gemini) và lưu trữ file ghi âm.
-* **Nhiệm vụ lõi:** Viết Service gọi API Google Gemini 1.5 Flash/Pro. Setup Cloudflare R2 / AWS S3 nhận file audio.
-* **Chia Task theo Luồng:**
-  - **MF-01 & 02:** Ép khuôn AI trả về JSON chuẩn, chấm điểm theo Barem. Tự động đẻ câu hỏi chuyên sâu (A2) nếu điểm 4.0 - 8.0.
-  - **MF-04:** Băm mã hóa SHA-256 niêm phong file audio bài thi sinh viên.
+### 2. Phạm Nguyễn Đăng Hải (Backend & FE Support)
+* **Vai trò:** BE Developer kiêm hỗ trợ Frontend.
+* **Nhiệm vụ (Tasks):** 
+  - Thiết kế sơ đồ CSDL (ERD), viết các file Database Migrations và dựng khung xương API (API scaffold).
+  - Trực tiếp hỗ trợ Hoàng code một số màn hình Frontend khó (Support for selected FE screens).
 
-### 4. BACKEND DEVELOPER 3 (Database Architect & CRUD Master)
-Tương tác PostgreSQL, Entity Framework Core và các API quản trị dữ liệu lớn.
-* **Nhiệm vụ lõi:** Thiết kế ERD, Migrations, tối ưu Index. Viết truy vấn hiệu năng cao, tránh N+1.
-* **Chia Task theo Luồng:**
-  - **MF-03:** API tạo/sửa/xóa Câu hỏi và Barem. Bảo đảm toàn vẹn dữ liệu ACID Transactions.
-  - **MF-02:** Logic "Quota Guard" (giới hạn 3 lần thi/môn/ngày). Xuất file Excel bảng điểm.
+### 3. Nguyễn Quang Thành (Team Leader & Backend Developer)
+* **Vai trò:** Trưởng nhóm, định hướng kiến trúc BE.
+* **Nhiệm vụ (Tasks):** 
+  - Điều phối team, quản lý và ưu tiên danh sách công việc (Backlog prioritization).
+  - Review kiến trúc BE, phụ trách tích hợp hệ thống (Integration).
+  - Chịu trách nhiệm chính trong các buổi báo cáo, trình diễn dự án (Demonstrations / Final Defense).
+
+### 4. Nguyễn Trọng Tốt (Backend, Project Management & QA)
+* **Vai trò:** BE Developer kiêm Quản lý chất lượng (QA).
+* **Nhiệm vụ (Tasks):** 
+  - Code các API Backend được phân công (Implementation of assigned BE APIs).
+  - Tích hợp và hỗ trợ mảng Trí tuệ nhân tạo (API/AI support).
+  - Viết kịch bản kiểm thử (Test cases), chạy kiểm thử E2E và lập báo cáo kiểm thử cuối cùng (Test report).
 
 ---
 
-## 📅 PHẦN 2: LỘ TRÌNH THỰC THI 4 TUẦN (AGILE SPRINT PLAN)
+## 📅 PHẦN 2: LỘ TRÌNH THỰC THI AGILE 4 TUẦN (ÉP TIẾN ĐỘ REPORT 2)
+*(Rút gọn từ lộ trình 15 tuần của Report 2 xuống 4 tuần thực chiến, Review 3 ngày/lần)*
 
-### 🏃 TUẦN 1: KHỞI TẠO NỀN TẢNG & NGÂN HÀNG CÂU HỎI (MF-03)
-* **Review Lần 1 (Ngày 3): Móng Hệ Thống**
-  * **BE 1:** Hoàn tất CI/CD, Swagger, JWT Auth và Base Controller.
-  * **BE 2:** Mở cổng API upload file thử nghiệm lên Cloudflare R2.
-  * **BE 3:** Chạy Migrations thành công, đẩy ERD 3NF lên PostgreSQL, sinh Seeder.
-  * **FE 1:** Setup xong UI Kit (Tailwind + Shadcn), Layout chung, login page.
-* **Review Lần 2 (Ngày 6): Chốt chặn MF-03**
-  * **BE 3:** Hoàn thiện API tạo/sửa Câu hỏi & Barem Rubric (Bảo đảm Validation tổng điểm 10.0).
-  * **BE 1:** Mở ACID Transactions cho hàm lưu của BE 3.
-  * **FE 1:** Hoàn thiện màn hình "Question Bank Studio", tích hợp API.
-  * **BE 2:** Khởi tạo SDK kết nối Google Gemini API.
+### 🏃 TUẦN 1: KHỞI TẠO NỀN TẢNG (NẮM MỐC REVIEW 1 CỦA W03)
+* **Ngày 3 (Review Foundation):**
+  * **Hải:** Chốt ERD, chạy Database Migrations và API scaffold.
+  * **Hoàng:** Setup Repo FE, giao diện Base.
+  * **Thành (Lead):** Review kiến trúc, chốt API Contract (OpenAPI) giữa FE và BE.
+* **Ngày 6 (Tích hợp MF-03):**
+  * **Hải & Tốt:** Code API Ngân hàng câu hỏi & Barem (Từ chối lưu nếu Rubric != 10).
+  * **Hoàng:** Ráp API MF-03 lên giao diện.
+  * **Tốt (QA):** Viết Test cases cho MF-03.
 
-### 🏃 TUẦN 2: THI TƯƠNG TÁC ĐA PHƯƠNG THỨC & TÍCH HỢP AI (MF-01)
-* **Review Lần 3 (Ngày 9): Khớp nối STT/TTS & AI Core**
-  * **FE 1:** Tích hợp Web Speech API, FE tự động thu âm và hiện chữ (Live Transcript). Đếm ngược 60s.
-  * **BE 2:** Cấu hình Gemini Prompt (Chain-of-Thought), ép AI trả về Structured Output.
-  * **BE 1:** Setup xong SignalR Hub (PracticeHub).
-* **Review Lần 4 (Ngày 12): Hoàn thiện MF-01**
-  * **BE 1:** Lên móng Hàng đợi 4 tầng (In-memory Channel + Polly) hứng bài nộp.
-  * **BE 3:** Viết API lưu Lịch sử luyện tập (Practice History).
-  * **FE 1:** Sau khi nộp, nhận tín hiệu SignalR từ BE và hiển thị Scorecard Modal.
+### 🏃 TUẦN 2: THI TƯƠNG TÁC ĐA PHƯƠNG THỨC (NẮM MỐC MF-01)
+* **Ngày 9 (Âm thanh & AI Concept):**
+  * **Hoàng & Hải:** Xử lý thu âm Web Speech API, đếm ngược 60s.
+  * **Tốt & Thành:** Setup Prompt AI, chạy thử file audio lấy điểm (Proof of Concept).
+* **Ngày 12 (Hoàn thiện MF-01):**
+  * **Thành:** Code hàng đợi (Queue) hứng bài nộp.
+  * **Tốt:** Đổ điểm đánh giá AI vào DB, sinh Test cases MF-01 (Lỗi mạng, lưu bài).
 
-### 🏃 TUẦN 3: THI THỬ BẤM GIỜ & ÁP LỰC CHỊU TẢI (MF-02)
-* **Review Lần 5 (Ngày 15): Chốt chặn Logic Cao cấp**
-  * **BE 3:** Code thành công "Quota Guard" (giới hạn 3 lần thi/môn/ngày).
-  * **BE 2:** Tinh chỉnh AI Logic sinh "Câu hỏi đào sâu A2" (điểm 4.0-8.0).
-  * **BE 1:** Tích hợp bộ đếm giờ (Server-side Timer) chống gian lận.
-* **Review Lần 6 (Ngày 18): Chạy E2E MF-02**
-  * **FE 1:** Giao diện Thi thử có Đồng hồ kép. Voice-First Gate (Bắt buộc thu âm xong mới mở ô gõ phím).
-  * **Toàn Team:** Đóng vai sinh viên test toàn bộ luồng thi thử, tạt tải hệ thống.
+### 🏃 TUẦN 3: THI THỬ & CHỊU TẢI (NẮM MỐC MF-02 & REVIEW 2 CỦA W08)
+* **Ngày 15 (Chốt chặn & Quota):**
+  * **Hải:** Viết API kiểm tra Quota (Giới hạn thi/ngày).
+  * **Tốt:** Gắn thuật toán sinh câu hỏi A2 nếu điểm 4.0 - 8.0.
+  * **Hoàng:** UI thi thử có đồng hồ kép, khóa text input (Voice-First Gate).
+* **Ngày 18 (End-to-End MF-02):**
+  * **Thành:** Tích hợp E2E, chuẩn bị Demo cho Review 2.
+  * **Tốt (QA):** Chạy hồi quy (Regression test) MF-01 & MF-02.
 
-### 🏃 TUẦN 4: AN NINH PHÒNG LAB (MF-04) & ĐÓNG GÓI SẢN PHẨM
-* **Review Lần 7 (Ngày 21): Khóa an ninh & Niêm phong Audio**
-  * **FE 1:** Kiosk Lockdown (Cảnh báo F12, đổi tab, Copy/Paste).
-  * **BE 2:** Băm mã hóa SHA-256 niêm phong audio `STT_MSSV.webm`.
-  * **BE 3:** Code xong API Cổng Hậu Kiểm Giảng viên (Lecturer Audit Portal).
-* **Review Lần 8 (Ngày 24): Hậu Kiểm & Khóa Điểm 1 Chiều**
-  * **BE 1:** Khóa Điểm (One-Way Lock). Xuất Excel bảng điểm.
-  * **FE 1:** Làm màn hình Hậu kiểm cho giảng viên: Audio player nhảy timestamp, form sửa điểm và giải trình.
-* **Review Lần 9 (Ngày 27 - 28): TỔNG DUYỆT & NGHIỆM THU (Launch)**
-  * Toàn team dọn dẹp Code (Refactor). Xử lý bug. Chuẩn bị Slide bảo vệ.
+### 🏃 TUẦN 4: AN NINH LAB (MF-04) & ĐÓNG GÓI BẢO VỆ (FINAL DEFENSE W15)
+* **Ngày 21 (An ninh & Hậu kiểm):**
+  * **Hoàng & Hải:** Lockdown Kiosk (Chặn F12) và UI Cổng Hậu kiểm Giảng viên.
+  * **Thành:** API khóa điểm 1 chiều (One-Way Lock) cho giảng viên.
+  * **Tốt:** Lưu trữ Cloudflare R2 audio `STT_MSSV.webm`.
+* **Ngày 24 & 27 (Tổng duyệt UAT & Bàn giao):**
+  * **Tốt (QA):** Đảm bảo 100% Critical Cases Pass, không còn lỗi Blocker (Mất bài, khóa điểm sai). Lập Test Report.
+  * **Thành:** Đóng gói bản Release, tổng duyệt Slide chuẩn bị cho Final Defense.
