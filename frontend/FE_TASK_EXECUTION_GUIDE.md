@@ -1,130 +1,163 @@
-# 🎨 FRONTEND IMPLEMENTATION & TASK EXECUTION GUIDE
+# 🎨 FRONTEND — TASK EXECUTION GUIDE (v2 — ĐÃ SỬA SAU PHẢN BIỆN)
 **Dành cho:** Lê Vũ Hoàng (FE Lead) & Phạm Nguyễn Đăng Hải (FE Developer)  
-**Công nghệ:** React 19, TypeScript, Vite, Tailwind CSS, Shadcn/ui, SignalR Client, Web Speech API, Recharts.
+**Công nghệ:** React 19, TypeScript, Vite, Tailwind CSS, Shadcn/ui, SignalR Client, Web Speech API, Recharts.  
+**Buffer Screen = 30 giây** (khớp Swimlane). Repo đã được khởi tạo sẵn — không cần `npm create vite`.
 
 ---
 
-## 📁 1. CẤU TRÚC THƯ MỤC CẦN TRIỂN KHAI TRONG `frontend/src/`
+## 📁 1. CẤU TRÚC THƯ MỤC CẦN TRIỂN KHAI (`frontend/src/`)
 
 ```text
 frontend/src/
-├── assets/             # Logo, icon SVG tĩnh
-├── components/         # Reusable UI components
-│   ├── ui/             # Button, Input, Modal, Toast (Shadcn style)
-│   ├── layout/         # Header.tsx, Sidebar.tsx, Footer.tsx
-│   ├── practice/       # BufferScreen.tsx, ScorecardModal.tsx (MF-01)
-│   ├── exam/           # VoiceFirstGate.tsx, CountdownTimer.tsx, BloomRadar.tsx (MF-02)
-│   └── audit/          # AudioPlayer.tsx, ScoreOverrideForm.tsx (MF-04)
-├── context/            # AuthContext.tsx, ExamContext.tsx
-├── hooks/              # Custom hooks
-│   ├── useWebSpeech.ts # TTS và STT wrapper (MF-01)
-│   ├── useSignalR.ts   # Kết nối SignalR Hub PracticeHub
-│   └── useKiosk.ts     # Bắt window onblur, F12, Right click (MF-04)
-├── pages/              # Màn hình chính
-│   ├── auth/           # LoginPage.tsx
-│   ├── question-bank/  # QuestionListPage.tsx, CreateQuestionModal.tsx (MF-03)
-│   ├── practice/       # PracticeSessionPage.tsx (MF-01)
-│   ├── mock-exam/      # MockExamPage.tsx (MF-02)
-│   └── lecturer/       # AuditPortalPage.tsx (MF-04)
-├── services/           # Axios API instances & API calls
-│   ├── api.ts          # Axios Interceptor bọc token & RFC 7807 error
+├── assets/                  # Logo, icon SVG tĩnh
+├── components/
+│   ├── ui/                  # Button, Input, Modal, Toast (Shadcn)
+│   ├── layout/              # Header.tsx, Sidebar.tsx, Footer.tsx
+│   ├── practice/            # BufferScreen.tsx, ScorecardModal.tsx
+│   ├── exam/                # VoiceFirstGate.tsx, CountdownTimer.tsx, BloomRadar.tsx
+│   └── audit/               # AudioPlayer.tsx, ScoreOverrideForm.tsx
+├── context/                 # AuthContext.tsx, ExamContext.tsx
+├── hooks/
+│   ├── useWebSpeech.ts      # TTS + STT cho MF-01/MF-02
+│   ├── useSignalR.ts        # Kết nối PracticeHub
+│   └── useKiosk.ts          # Bắt onblur, F12, chuột phải (MF-04)
+├── pages/
+│   ├── auth/                # LoginPage.tsx
+│   ├── question-bank/       # QuestionListPage.tsx, CreateQuestionPage.tsx
+│   ├── practice/            # PracticeSessionPage.tsx
+│   ├── mock-exam/           # MockExamPage.tsx
+│   └── lecturer/            # AuditPortalPage.tsx
+├── services/
+│   ├── api.ts               # Axios Interceptor (token + RFC 7807 error handler)
+│   ├── authService.ts
 │   ├── questionService.ts
-│   ├── examService.ts
-│   └── authService.ts
-└── types/              # Type definitions
+│   └── examService.ts
+└── types/
+    ├── auth.types.ts
     ├── question.types.ts
-    ├── exam.types.ts
-    └── auth.types.ts
+    └── exam.types.ts
 ```
 
 ---
 
-## 📦 2. CÁC THƯ VIỆN CẦN CÀI ĐẶT NGAY (`npm i`)
+## 📦 2. THƯ VIỆN CẦN CÀI (`npm i`)
 ```bash
-npm install lucide-react clsx tailwind-merge @microsoft/signalr recharts react-router-dom axios react-hook-form zod @hookform/resolvers
+npm install react-router-dom axios react-hook-form zod @hookform/resolvers
+npm install @microsoft/signalr recharts lucide-react clsx tailwind-merge
 ```
 
 ---
 
-## 📋 3. CHECKLIST TRIỂN KHAI CHI TIẾT THEO TUẦN (SPRINTS)
+## 🔌 3. HỢP ĐỒNG GIAO TIẾP VỚI BACKEND (TÓM TẮT)
+*(Chi tiết đầy đủ xem file `docs/API_CONTRACT_AND_INTEGRATION_GUIDE.md`)*
+
+- **Base URL:** `/api/v1/`
+- **Auth:** Gọi `POST /api/v1/auth/login` → nhận `{ accessToken, refreshToken }`. Đính kèm `Authorization: Bearer <token>` cho mọi request.
+- **Lỗi:** BE luôn trả `ProblemDetails` (RFC 7807). FE đọc trường `detail` hiện Toast đỏ, đọc mảng `errors` highlight input lỗi.
+- **Real-time:** SignalR Hub tại `/hubs/practice`. Lắng nghe event `ReceiveScorecard`.
+- **HTTP 202 Accepted:** Khi FE gọi `POST /api/v1/practice/submit`, BE trả 202 ngay (bài đã vào hàng đợi). FE chờ SignalR trả điểm sau — không cần polling.
+
+---
+
+## 📋 4. CHECKLIST TASK CHI TIẾT TỪNG TUẦN
 
 ### 🏃 TUẦN 1: NỀN TẢNG UI & MF-03 (QUẢN LÝ ĐỀ & BAREM 10.0)
 
 #### 🧑 Hoàng (FE Lead):
-- [ ] **Task FE-1.1:** Cài Tailwind CSS & cấu hình alias `@/` trong `tsconfig.json` và `vite.config.ts`.
-- [ ] **Task FE-1.2:** Dựng `src/components/layout/Sidebar.tsx` và `Header.tsx` (Menu: Luyện tập, Thi thử, Ngân hàng đề, Hậu kiểm).
-- [ ] **Task FE-1.3:** Tạo `src/components/AuthGuard.tsx` đọc `role` từ `localStorage` / Context (Chỉ cho role `Lecturer` vào trang tạo đề).
-- [ ] **Task FE-1.4:** Dựng trang `src/pages/auth/LoginPage.tsx` (Form email, password, nút đăng nhập).
+- [ ] **FE-1.1:** Cấu hình Tailwind CSS, Shadcn/ui, Prettier, ESLint, alias `@/` trong `tsconfig.json` và `vite.config.ts`.
+- [ ] **FE-1.2:** Dựng `Sidebar.tsx` (Menu: Luyện tập, Thi thử, Ngân hàng đề, Hậu kiểm) và `Header.tsx` (hiện tên user, nút logout).
+- [ ] **FE-1.3:** Tạo `AuthGuard.tsx` phân quyền 3 vai (`Student`, `Instructor`, `Admin`). Đọc role từ JWT decoded. Route `/question-bank/*` chỉ cho `Instructor/Admin`.
+- [ ] **FE-1.4:** Dựng `LoginPage.tsx` (email + password). Gọi `POST /api/v1/auth/login`. Lưu token vào Session Storage. Chuyển hướng theo role.
+- **Báo cáo:** Build 0 lỗi. Đăng nhập Student bị văng khỏi trang tạo đề. Đăng nhập Instructor vào được.
 
 #### 🧑 Hải (FE Developer):
-- [ ] **Task FE-1.5:** Dựng trang `src/pages/question-bank/QuestionListPage.tsx` hiển thị bảng danh sách câu hỏi.
-- [ ] **Task FE-1.6:** Dựng Modal `CreateQuestionModal.tsx` gồm:
-  - Input: Tiêu đề câu hỏi, Môn học (PRN231, SWD392...), Độ khó Bloom.
-  - Bảng tiêu chí Rubric động (Thêm/Xóa dòng tiêu chí: Tên tiêu chí, Điểm tối đa).
-- [ ] **Task FE-1.7:** Áp dụng Zod schema trong `CreateQuestionModal.tsx`:
-  - Công thức: `z.object({ criteria: z.array(...).refine(items => items.reduce((sum, c) => sum + c.score, 0) === 10, "Tổng điểm Rubric bắt buộc = 10.0") })`.
-  - Nếu tổng khác 10 -> Disable nút `Lưu câu hỏi` và hiện chữ đỏ cảnh báo.
+- [ ] **FE-1.5:** Dựng `QuestionListPage.tsx` gọi `GET /api/v1/questions` hiển thị bảng (Tên câu hỏi, Môn, Bloom Level, Ngày tạo).
+- [ ] **FE-1.6:** Dựng `CreateQuestionPage.tsx` gồm:
+  - Dropdown chọn Môn học (gọi `GET /api/v1/subjects`), chọn Chương, chọn Bloom Level.
+  - Bảng tiêu chí Rubric động: Thêm/Xóa dòng (Tên tiêu chí + Điểm tối đa).
+- [ ] **FE-1.7:** Áp Zod schema validate tổng điểm:
+  ```ts
+  z.object({
+    criteria: z.array(criterionSchema).refine(
+      items => items.reduce((sum, c) => sum + c.maxScore, 0) === 10,
+      "Tổng điểm Rubric bắt buộc = 10.0"
+    )
+  })
+  ```
+  Nếu tổng != 10 → Disable nút Lưu + hiện chữ đỏ cảnh báo.
+- **Báo cáo:** Nhập điểm lẻ (3.5 + 4.5 + 1.5 = 9.5) → nút Lưu mờ đi. Nhập đúng 10 → nút sáng lên.
 
 ---
 
-### 🏃 TUẦN 2: MF-01 (LUYỆN TẬP ĐA PHƯƠNG THỨC & SIGNALR)
+### 🏃 TUẦN 2: MF-01 (LUYỆN TẬP & SIGNALR) + NÚT CHẤM THỬ AI
 
 #### 🧑 Hoàng (FE Lead):
-- [ ] **Task FE-2.1:** Viết hook `src/hooks/useWebSpeech.ts`:
-  - `speak(text)`: Sử dụng `window.speechSynthesis` đọc câu hỏi.
-  - `startListening()` / `stopListening()`: Sử dụng `window.webkitSpeechRecognition` bắt giọng nói và trả về `transcript`.
-- [ ] **Task FE-2.2:** Dựng `src/pages/practice/PracticeSessionPage.tsx`:
-  - Nút "Nghe lại câu hỏi" (kích hoạt TTS).
-  - Nút "Bắt đầu nói" / "Dừng nói" có hiệu ứng sóng âm hoặc icon Micro nhấp nháy đỏ.
-- [ ] **Task FE-2.3:** Hiển thị văn bản nhận diện được vào ô Transcript theo thời gian thực.
+- [ ] **FE-2.1:** Viết hook `useWebSpeech.ts`:
+  - `speak(text)`: `window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))`.
+  - `startListening()` / `stopListening()`: `new webkitSpeechRecognition()`, trả về `transcript` realtime.
+- [ ] **FE-2.2:** Dựng `PracticeSessionPage.tsx`:
+  - Nút "Nghe câu hỏi" (kích TTS).
+  - Nút "Bắt đầu nói" / "Dừng nói" (icon Micro nhấp nháy đỏ khi đang thu).
+  - Hiển thị văn bản nhận diện vào ô Transcript realtime.
+- [ ] **FE-2.3:** Thêm nút **"Chấm thử bằng AI"** trên `CreateQuestionPage.tsx` (Tuần 1 chưa có Gemini Service, giờ mới gắn được). Gọi `POST /api/v1/questions/{id}/calibrate` → hiện kết quả AI chấm mẫu.
+- **Báo cáo:** Web đọc to câu hỏi. Micro bắt giọng hiện chữ. Nút chấm thử trả điểm mẫu.
 
 #### 🧑 Hải (FE Developer):
-- [ ] **Task FE-2.4:** Dựng `src/components/practice/BufferScreen.tsx`:
-  - Màn hình đệm 60s đếm ngược với progress bar.
-  - Cho phép sinh viên gõ bàn phím sửa lại các từ vựng kỹ thuật tiếng Anh (Code-Switching) bị STT nhận sai.
-- [ ] **Task FE-2.5:** Viết `src/hooks/useSignalR.ts` kết nối tới Backend URL `http://localhost:5265/hubs/practice`.
-- [ ] **Task FE-2.6:** Dựng `src/components/practice/ScorecardModal.tsx`:
-  - Lắng nghe event `ReceiveScorecard`.
-  - Hiển thị điểm số AI chấm, feedback nhận xét và nút "Luyện tập tiếp" / "Kết thúc".
+- [ ] **FE-2.4:** Dựng `BufferScreen.tsx`:
+  - Đếm ngược **30 giây** (progress bar tụt lùi).
+  - Cho phép SV gõ sửa lại từ vựng kỹ thuật tiếng Anh bị STT nhận sai (Code-Switching).
+  - Hết 30s → tự động submit transcript hiện tại.
+- [ ] **FE-2.5:** Viết hook `useSignalR.ts` kết nối `http://localhost:5265/hubs/practice`.
+- [ ] **FE-2.6:** Dựng `ScorecardModal.tsx`:
+  - Lắng nghe event `ReceiveScorecard` từ SignalR.
+  - Hiển thị điểm AI, feedback nhận xét, nút "Luyện tập tiếp" / "Kết thúc".
+- **Báo cáo:** Thanh 30s chạy mượt (requestAnimationFrame). Modal điểm bật lên khi BE bắn tín hiệu.
 
 ---
 
-### 🏃 TUẦN 3: MF-02 (THI THỬ BẤM GIỜ & VOICE-FIRST GATE)
+### 🏃 TUẦN 3: MF-02 (THI THỬ BẤM GIỜ & VOICE-FIRST)
 
 #### 🧑 Hoàng (FE Lead):
-- [ ] **Task FE-3.1:** Dựng `src/pages/mock-exam/MockExamPage.tsx`.
-- [ ] **Task FE-3.2:** Xây dựng chốt chặn `src/components/exam/VoiceFirstGate.tsx`:
-  - Input text bị khóa `readOnly = true` kèm icon ổ khóa.
-  - Chỉ khi người dùng bấm nút hoàn thành ghi âm Micro thì ổ khóa mới mở để cho phép gõ chỉnh sửa.
-  - Nếu click vào ô trước khi nói -> bắn thông báo Toast: *"Bạn phải trả lời bằng giọng nói trước!"*.
+- [ ] **FE-3.1:** Dựng `MockExamPage.tsx`.
+- [ ] **FE-3.2:** Xây dựng `VoiceFirstGate.tsx`:
+  - `<textarea disabled={!isRecordingFinished}>` kèm icon ổ khóa.
+  - Click vào ô khi chưa nói → Toast Error: *"Bạn phải trả lời bằng giọng nói trước!"*.
+  - Thu âm xong → ổ khóa mở → cho phép sửa text.
+- **Báo cáo:** Cố gõ phím trước khi nói → bị chặn. Nói xong → ô mở ra.
 
 #### 🧑 Hải (FE Developer):
-- [ ] **Task FE-3.3:** Dựng `src/components/exam/CountdownTimer.tsx`:
+- [ ] **FE-3.3:** Dựng `CountdownTimer.tsx`:
   - Đếm lùi thời gian toàn bài (vd: 15 phút) và thời gian từng câu (vd: 90 giây).
-  - Tự động gọi hàm `handleSubmitExam()` khi thời gian về 00:00.
-- [ ] **Task FE-3.4:** Dựng `src/components/exam/BloomRadar.tsx` dùng thư viện `Recharts`:
-  - Biểu đồ mạng nhện gồm 6 trục: Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo.
-  - Đổ dữ liệu từ payload kết quả thi thử của Backend.
+  - Thời gian đồng bộ với Server (lấy `startTime` + `maxDuration` từ BE, không dùng `Date.now()` thuần client).
+  - Tự động gọi `handleSubmitExam()` khi hết giờ.
+- [ ] **FE-3.4:** Dựng `BloomRadar.tsx` dùng `Recharts`:
+  - Biểu đồ mạng nhện 6 trục: Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo.
+  - Nhận data từ payload kết quả thi thử.
+- **Báo cáo:** Đồng hồ về 0 → tự nộp bài. Radar chart hiện đẹp.
 
 ---
 
 ### 🏃 TUẦN 4: MF-04 (THI THẬT LAB KIOSK & CỔNG HẬU KIỂM)
 
 #### 🧑 Hoàng (FE Lead):
-- [ ] **Task FE-4.1:** Viết hook `src/hooks/useKiosk.ts`:
-  - Bắt sự kiện `window.addEventListener('blur', ...)` khi sinh viên Alt+Tab hoặc chuyển tab.
-  - Bắt sự kiện `document.addEventListener('contextmenu', e => e.preventDefault())` chặn chuột phải.
-  - Bắt phím F12, Ctrl+C, Ctrl+V, Ctrl+Shift+I.
-- [ ] **Task FE-4.2:** Tạo giao diện cảnh báo vi phạm Kiosk:
-  - Vi phạm lần 1 & 2: Banner đỏ cảnh báo.
-  - Vi phạm lần 3: Tự động niêm phong màn hình, gọi API đình chỉ thi.
+- [ ] **FE-4.1:** Viết hook `useKiosk.ts`:
+  - Bắt `window.addEventListener('blur', ...)` (Alt+Tab, đổi tab).
+  - Chặn chuột phải: `document.addEventListener('contextmenu', e => e.preventDefault())`.
+  - Chặn F12, Ctrl+C, Ctrl+V, Ctrl+Shift+I.
+- [ ] **FE-4.2:** Giao diện cảnh báo vi phạm Kiosk:
+  - Vi phạm 1 & 2: Banner đỏ cảnh báo.
+  - Vi phạm lần 3: Tự niêm phong màn hình, gọi `POST /api/v1/exam/seal`.
+- **Báo cáo:** Ấn F12 ba lần → màn hình đỏ báo đình chỉ thi.
 
 #### 🧑 Hải (FE Developer):
-- [ ] **Task FE-4.3:** Dựng trang `src/pages/lecturer/AuditPortalPage.tsx` dành riêng cho Giảng viên:
-  - Danh sách bài thi của sinh viên theo số máy phòng Lab.
-- [ ] **Task FE-4.4:** Dựng `src/components/audit/AudioPlayer.tsx`:
-  - Trình phát âm thanh WebM phát bản ghi từ Cloudflare R2 / Backend.
-  - Thanh timeline: Bấm vào timestamp nào thì đoạn transcript tương ứng của sinh viên được highlight vàng.
-- [ ] **Task FE-4.5:** Form ghi đè điểm (`ScoreOverrideForm.tsx`):
-  - Ô sửa điểm từng tiêu chí + Ô bắt buộc nhập lý do giải trình.
-  - Nút "Xác nhận & Khóa điểm vĩnh viễn" (Gửi lệnh One-Way Lock).
+- [ ] **FE-4.3:** Dựng `AuditPortalPage.tsx` (dành riêng Lecturer):
+  - Danh sách bài thi SV theo phòng/số máy (gọi `GET /api/v1/audit/submissions`).
+- [ ] **FE-4.4:** Dựng `AudioPlayer.tsx`:
+  - Phát file `.webm` từ Cloudflare R2.
+  - Timeline: Bấm timestamp → đoạn transcript tương ứng highlight vàng.
+- [ ] **FE-4.5:** Dựng `ScoreOverrideForm.tsx`:
+  - Ô sửa điểm từng tiêu chí (điểm AI đề xuất hiện sẵn, GV ghi đè được).
+  - **Ô bắt buộc nhập lý do giải trình** (textarea `required`).
+  - Nút "Lưu điểm" → gọi `PUT /api/v1/audit/override`.
+  - Nút "Khóa vĩnh viễn" → gọi `POST /api/v1/audit/lock` (hiện confirm dialog trước khi khóa).
+- **Báo cáo:** Tua audio → transcript highlight. Ghi đè điểm thành công. Khóa xong → nút mờ đi vĩnh viễn.
