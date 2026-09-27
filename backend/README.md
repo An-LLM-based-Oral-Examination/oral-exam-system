@@ -14,7 +14,7 @@ backend/
     │   └── Domain.csproj     # (Zero external project dependencies)
     ├── Application/          # Use cases: Commands, Queries, Handlers, DTOs, Validators
     │   └── Application.csproj# (References Domain)
-    ├── Infrastructure/       # External adapters: Database, Redis, LLM API client, SignalR
+    ├── Infrastructure/       # External adapters: Database (PostgreSQL), LLM API client, SignalR
     │   └── Infrastructure.csproj # (References Application and Domain)
     └── API/                  # Presentation: REST Controllers, Middleware, DI Composition Root
         ├── Program.cs        # Application entrypoint and pipeline setup
