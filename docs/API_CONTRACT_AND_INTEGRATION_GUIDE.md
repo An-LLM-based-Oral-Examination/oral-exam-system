@@ -1,7 +1,7 @@
 # QUY ƯỚC GIAO TIẾP VÀ TÍCH HỢP FE - BE (API CONTRACT & INTEGRATION GUIDE)
 **Dự án:** An LLM-based Oral Examination (FA26SE166)  
 **Tài liệu này quy định bắt buộc (Mandatory) các chuẩn mực kết nối giữa Frontend (React/Vite) và Backend (.NET 8 Clean Architecture) cho 4 thành viên (Hoàng, Hải, Thành, Tốt).**  
-**Quy chuẩn bắt buộc:** Buffer Screen = 30 giây. Quota Guard đếm 3 lượt/môn/ngày bằng PostgreSQL (không dùng Redis). Thi thật phòng Lab MF-04 dùng Whisper STT server-side.
+**Quy chuẩn bắt buộc:** Buffer Screen = 30 giây. Quota Guard đếm 3 lượt/môn/ngày bằng PostgreSQL. Thi thật phòng Lab MF-04 dùng Whisper STT server-side.
 
 ---
 

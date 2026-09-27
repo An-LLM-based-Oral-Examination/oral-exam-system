@@ -2,7 +2,7 @@
 **Dự án:** An LLM-based Oral Examination  
 **Tài liệu này ánh xạ trực tiếp từ 4 luồng Swimlane (MF-01 đến MF-04) xuống cấp độ Code (Component, API, Database) cho 4 Tuần.**  
 **Đội hình (2 FE — 2 BE):** Hoàng (FE Lead), Hải (FE), Thành (BE Lead), Tốt (BE/AI/QA).  
-**Quy chuẩn bắt buộc:** Buffer Screen = 30 giây (đồng bộ 100% Swimlane). Quota đếm trực tiếp bằng PostgreSQL (không dùng Redis).
+**Quy chuẩn bắt buộc:** Buffer Screen = 30 giây (đồng bộ 100% Swimlane). Quota 3 lượt/môn/ngày đếm trực tiếp bằng PostgreSQL.
 
 ---
 
@@ -129,7 +129,7 @@
 
 ### 3. Nguyễn Quang Thành (BE Lead)
 - **Code (Do):**
-  - **BE-3.1:** Xây dựng cơ chế chốt chặn lượt thi `QuotaGuard` bằng **PostgreSQL** (hoàn toàn không dùng Redis):
+  - **BE-3.1:** Xây dựng cơ chế chốt chặn lượt thi `QuotaGuard` bằng **PostgreSQL**:
     - Đếm trực tiếp số lượt thi thử trong ngày bằng truy vấn tối ưu: `SELECT COUNT(*) FROM mock_exam_sessions WHERE user_id = @userId AND subject_id = @subjectId AND DATE(created_at AT TIME ZONE 'UTC') = CURRENT_DATE`.
     - Nếu số lượt đạt ngưỡng >= 3 lượt/môn/ngày, ném ngoại lệ trả về HTTP 429 Too Many Requests kèm thông báo rõ ràng trong RFC 7807: *"Bạn đã sử dụng hết hạn mức 3 lượt thi thử trong ngày cho môn học này. Vui lòng quay lại vào ngày mai!"*.
   - **BE-3.2:** Xây dựng đồng hồ giám định máy chủ (Server-side Master Timer):

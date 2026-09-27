@@ -1,7 +1,7 @@
 # BẢNG PHÂN CÔNG NHIỆM VỤ & LỘ TRÌNH AGILE 4 TUẦN (v2 — ĐÃ SỬA SAU PHẢN BIỆN)
 **Dự án:** An LLM-based Oral Examination  
 **Đội hình (2 FE — 2 BE):** Hoàng (FE Lead), Hải (FE), Thành (BE Lead), Tốt (BE/AI/QA).  
-**Quy tắc:** Review tiến độ mỗi 3 ngày. Buffer screen = 30 giây (khớp Swimlane). Quota dùng PostgreSQL (không Redis).
+**Quy tắc:** Review tiến độ mỗi 3 ngày. Buffer screen = 30 giây (khớp Swimlane). Quota 3 lượt/môn/ngày kiểm soát bằng PostgreSQL.
 
 ---
 
@@ -53,7 +53,7 @@
 |---|---|---|
 | **Hoàng** | Trang Mock Exam. Voice-First Gate (khóa textarea cho tới khi thu âm xong). | Cố gõ phím trước khi nói → bị chặn. |
 | **Hải** | CountdownTimer (sync server time, auto-submit khi hết giờ). BloomRadar 6 trục Recharts. | Đồng hồ về 0 → tự nộp bài. Radar chart hiện đẹp. |
-| **Thành** | Quota Guard bằng **PostgreSQL** (đếm 3 lần/môn/ngày, không Redis). Server-side Timer (từ chối nộp trễ > 10s). **API tạo ca thi Lab** (tạo session, room, gán SV vào số máy). | Thi lần 4 → HTTP 429. Nộp trễ → bị từ chối. Swagger hiện API tạo ca thi. |
+| **Thành** | Quota Guard bằng **PostgreSQL** (đếm 3 lần/môn/ngày). Server-side Timer (từ chối nộp trễ > 10s). **API tạo ca thi Lab** (tạo session, room, gán SV vào số máy). | Thi lần 4 → HTTP 429. Nộp trễ → bị từ chối. Swagger hiện API tạo ca thi. |
 | **Tốt** | AI Deep-dive A2 (điểm 4.0-8.0 → sinh câu hỏi đào sâu). Regression Test MF-01 + MF-02. Load test hàng đợi 4 tầng (tuần trước đã code xong). | Demo AI đẻ câu hỏi xoáy. Test Report không regression. |
 
 ### TUẦN 4: MF-04 & NGHIỆM THU
