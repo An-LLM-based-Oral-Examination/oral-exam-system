@@ -1,46 +1,49 @@
-import './App.css'
+import React from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from '@/context/AuthContext'
+import { AppLayout } from '@/components/layout/AppLayout'
+import { AuthGuard } from '@/components/layout/AuthGuard'
 
-function App() {
+// Pages
+import { LoginPage } from '@/pages/auth/LoginPage'
+import { UnauthorizedPage } from '@/pages/auth/UnauthorizedPage'
+import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { PracticeSessionPage } from '@/pages/practice/PracticeSessionPage'
+import { MockExamPage } from '@/pages/mock-exam/MockExamPage'
+import { QuestionListPage } from '@/pages/question-bank/QuestionListPage'
+import { CreateQuestionPage } from '@/pages/question-bank/CreateQuestionPage'
+import { AuditPortalPage } from '@/pages/lecturer/AuditPortalPage'
+
+export const App: React.FC = () => {
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <span className="badge">FA26SE166 Capstone Project</span>
-        <h1>An LLM-based Oral Examination</h1>
-        <p className="subtitle">
-          Interactive, rubric-driven oral examination platform powered by Large Language Models
-        </p>
-      </header>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-      <main className="app-content">
-        <div className="status-card">
-          <div className="status-indicator">
-            <span className="pulse-dot"></span>
-            <span>System Skeleton Ready</span>
-          </div>
-          <p className="status-description">
-            Frontend single page application skeleton initialized with React 19, TypeScript, and Vite.
-          </p>
-          <div className="meta-grid">
-            <div className="meta-item">
-              <span className="meta-label">Architecture</span>
-              <span className="meta-value">Clean Architecture Monorepo</span>
-            </div>
-            <div className="meta-item">
-              <span className="meta-label">Backend</span>
-              <span className="meta-value">.NET 8 Web API</span>
-            </div>
-            <div className="meta-item">
-              <span className="meta-label">Frontend</span>
-              <span className="meta-value">React 19 + TypeScript</span>
-            </div>
-          </div>
-        </div>
-      </main>
+          {/* Protected Routes for All Authenticated Users */}
+          <Route element={<AuthGuard />}>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/practice" element={<PracticeSessionPage />} />
+              <Route path="/mock-exam" element={<MockExamPage />} />
 
-      <footer className="app-footer">
-        <p>&copy; {new Date().getFullYear()} An LLM-based Oral Examination System. All rights reserved.</p>
-      </footer>
-    </div>
+              {/* Protected Routes for Instructor and Admin */}
+              <Route element={<AuthGuard allowedRoles={['Instructor', 'Admin']} />}>
+                <Route path="/question-bank" element={<QuestionListPage />} />
+                <Route path="/question-bank/create" element={<CreateQuestionPage />} />
+                <Route path="/lecturer/audit" element={<AuditPortalPage />} />
+              </Route>
+            </Route>
+          </Route>
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
 
