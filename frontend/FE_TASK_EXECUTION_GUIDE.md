@@ -1,8 +1,8 @@
-# 🎨 FRONTEND TASK & EXECUTION GUIDE (MASTER CONSOLIDATED v3.0)
+# 🎨 FRONTEND TASK & EXECUTION GUIDE (MASTER CONSOLIDATED v3.1 — 100% FULL SCOPE)
 ## ĐỒ ÁN TỐT NGHIỆP SEP490 (FA26SE166) — HỆ THỐNG VẤN ĐÁP AI (ORAL EXAM SYSTEM)
 **Dành cho:** 🧑 Lê Vũ Hoàng (FE Lead) & 🧑 Phạm Nguyễn Đăng Hải (FE Developer)  
 **Công nghệ:** React 19, TypeScript, Vite, Tailwind CSS v4, SignalR Client, Web Speech API, Recharts, Lucide-react.  
-**Quy chuẩn cốt lõi:** Buffer Screen = 30s | Voice-First Gate | Quota 3 lượt/ngày/môn | Kiosk 3 vi phạm | Khóa điểm 1 chiều (`is_locked=true`).
+**Quy chuẩn cốt lõi:** Buffer Screen = 30-60s | Voice-First Gate | Quota 3 lượt/ngày/môn | Kiosk 3 vi phạm | Khóa điểm 1 chiều (`is_locked=true`) | FPT Google OAuth PKCE | Cứu hộ DLQ Replay | Import/Export FAP Excel.
 
 ---
 
@@ -16,48 +16,52 @@ frontend/src/
 ├── components/
 │   ├── ui/                  # Button.tsx, Input.tsx, Card.tsx, Badge.tsx (Bộ primitives tái sử dụng)
 │   ├── layout/              # AppLayout.tsx, Header.tsx, Sidebar.tsx, Footer.tsx, AuthGuard.tsx
-│   ├── practice/            # BufferScreen.tsx (30s), ScorecardModal.tsx (MF-01)
+│   ├── practice/            # BufferScreen.tsx (30-60s), ScorecardModal.tsx (MF-01)
 │   ├── exam/                # VoiceFirstGate.tsx, CountdownTimer.tsx (MF-02)
 │   └── audit/               # AudioPlayer.tsx (R2 WebM), ScoreOverrideForm.tsx (MF-04)
 ├── context/
-│   └── AuthContext.tsx      # Quản lý phiên đăng nhập, JWT, 3 vai trò (Student, Instructor, Admin)
+│   └── AuthContext.tsx      # Quản lý phiên đăng nhập Google OAuth, JWT, 3 vai trò (Student, Instructor, Admin)
 ├── hooks/
 │   ├── useWebSpeech.ts      # Hook Web Speech API TTS đọc đề + STT ghi âm (MF-01/MF-02)
 │   ├── useSignalR.ts        # Hook WebSocket SignalR Hub /hubs/practice
 │   └── useKiosk.ts          # Hook Kiosk Mode bắt F12, chuột phải, đổi tab 3 strikes (MF-04)
 ├── pages/
-│   ├── auth/                # LoginPage.tsx (có sẵn Dev Role Switcher), UnauthorizedPage.tsx (403)
+│   ├── auth/                # LoginPage.tsx (FPT Google OAuth PKCE & Dev Role Switcher), UnauthorizedPage.tsx (403)
 │   ├── dashboard/           # DashboardPage.tsx (Trang chủ điều hướng 4 flows)
 │   ├── practice/            # PracticeSessionPage.tsx (Khung màn hình MF-01)
-│   ├── mock-exam/           # MockExamPage.tsx (Khung màn hình MF-02 với Quota 3 lượt)
-│   ├── question-bank/       # QuestionListPage.tsx, CreateQuestionPage.tsx (Khung MF-03 Rubric 10.0)
-│   └── lecturer/            # AuditPortalPage.tsx (Khung MF-04 Cổng hậu kiểm số máy Lab)
+│   ├── mock-exam/           # MockExamPage.tsx (Khung màn hình MF-02 với Quota 3 lượt & Radar Chart)
+│   ├── question-bank/       # QuestionListPage.tsx, CreateQuestionPage.tsx (MF-03 Rubric 10.0), ExamStructurePage.tsx
+│   ├── lecturer/            # AuditPortalPage.tsx (Khung MF-04 Cổng hậu kiểm số máy Lab & Upload Excel FAP)
+│   └── admin/               # DlqManagementPage.tsx (Quản trị hệ thống & Cứu hộ bài thi DLQ)
 ├── services/
 │   ├── api.ts               # Axios Client gắn sẵn Bearer Token & bắt lỗi RFC 7807 ProblemDetails
-│   ├── authService.ts       # Hợp đồng API Auth
-│   ├── questionService.ts   # Hợp đồng API Ngân hàng câu hỏi
-│   └── examService.ts       # Hợp đồng API Luyện tập, Thi thử & Thẩm định điểm Lab
+│   ├── authService.ts       # Hợp đồng API Auth Google PKCE & Refresh Token
+│   ├── questionService.ts   # Hợp đồng API Ngân hàng câu hỏi, Ma trận đề & Calibrate
+│   └── examService.ts       # Hợp đồng API Luyện tập, Thi thử, Import/Export Excel & Thẩm định điểm Lab
 ├── types/
 │   ├── auth.types.ts        # User, UserRole, LoginResponse, ProblemDetails
-│   ├── question.types.ts    # BloomLevel, ScopeType, RubricCriterion, Question
-│   └── exam.types.ts        # PracticeSession, MockExamSession, ExamSession, CandidateSubmission
+│   ├── question.types.ts    # BloomLevel, ScopeType, RubricCriterion, Question, ExamStructure
+│   └── exam.types.ts        # PracticeSession, MockExamSession, ExamSession, CandidateSubmission, DlqTask
 └── utils/
     └── cn.ts                # Utility clsx + twMerge tối ưu Tailwind CSS
 ```
 
 ### Bảng Phân Quyền Sở Hữu File (File Ownership Matrix):
-| Phân hệ / Thành phần | Tệp mã nguồn thực tế | Người sở hữu | Trách nhiệm kỹ thuật |
+| Phân hệ / Thành phần | Tệp mã nguồn thực tế | Người sở hữu | Trách nhiệm kỹ thuật & Nghiệm thu |
 |:---|:---|:---:|:---|
-| **Core UI & Primitives** | `src/utils/cn.ts`, `src/components/ui/*` | Hoàng | Đảm bảo components giao diện dùng chung chuẩn styling Tailwind, dễ mở rộng. |
-| **App Shell & Auth** | `src/components/layout/*`, `src/context/AuthContext.tsx`, `src/pages/auth/*` | Hoàng | Xây dựng shell co giãn, điều hướng phân quyền 3 vai (`Student`, `Instructor`, `Admin`). |
-| **MF-03: Ngân Hàng Đề** | `src/pages/question-bank/QuestionListPage.tsx`, `src/services/questionService.ts` | Hải | Render danh sách câu hỏi, thanh tìm kiếm và bộ lọc đa tiêu chí (Môn, Bloom, Scope). |
-| **MF-03: Barem Rubric 10.0** | `src/pages/question-bank/CreateQuestionPage.tsx` | Hải | Form thêm/xóa tiêu chí động; **Client Guard tổng điểm bắt buộc = 10.0đ**, AI Simulator. |
-| **MF-01: Voice AI** | `src/hooks/useWebSpeech.ts`, `src/pages/practice/PracticeSessionPage.tsx` | Hoàng | Web Speech TTS đọc đề, STT thu âm real-time, chọn 2 chế độ (Chấm từng câu / Làm cả bộ). |
-| **MF-01: Đệm 30s & SignalR** | `src/components/practice/BufferScreen.tsx`, `ScorecardModal.tsx`, `src/hooks/useSignalR.ts` | Hải | **Màn hình đệm 30s** sửa từ Code-Switching, kết nối SignalR Hub nhận điểm Scorecard và A2. |
-| **MF-02: Voice-First** | `src/components/exam/VoiceFirstGate.tsx`, `src/pages/mock-exam/MockExamPage.tsx` | Hoàng | **Khóa cứng Textarea**, bắt buộc nói mic xong mới cho phép sửa; bắt lỗi Quota 3 lượt (`HTTP 429`). |
-| **MF-02: Timer & Radar** | `src/components/exam/CountdownTimer.tsx`, Biểu đồ Recharts Radar | Hải | Master Timer đồng bộ thời gian máy chủ, AutoSubmitGuard khi hết giờ, biểu đồ mạng nhện Bloom. |
-| **MF-04: Kiosk Lockdown** | `src/hooks/useKiosk.ts`, giao diện Kiosk trạm thi Lab | Hoàng | Chặn F12, chuột phải, chuyển tab (3 vi phạm đình chỉ thi), stream audio R2 `STT_MSSV.webm`. |
-| **MF-04: Cổng Hậu Kiểm** | `src/pages/lecturer/AuditPortalPage.tsx`, `src/components/audit/*` | Hải | Danh sách thí sinh theo số máy STT, Waveform Player 1.5x, sửa điểm giải trình, **Khóa điểm 1 chiều**. |
+| **Core UI & Primitives** | `src/utils/cn.ts`, `src/components/ui/*` | **Hoàng** | Đảm bảo components giao diện dùng chung chuẩn styling Tailwind, dễ mở rộng. |
+| **App Shell & FPT Google Auth** | `src/components/layout/*`, `src/context/AuthContext.tsx`, `src/pages/auth/*` | **Hoàng** | Đăng nhập Google Workspace `@fpt.edu.vn`, phân quyền 3 vai (`Student`, `Instructor`, `Admin`), Silent Refresh. |
+| **MF-03: Ngân Hàng Đề** | `src/pages/question-bank/QuestionListPage.tsx`, `src/services/questionService.ts` | **Hải** | Render danh sách câu hỏi, thanh tìm kiếm và bộ lọc đa tiêu chí (Môn, Bloom, Scope). |
+| **MF-03: Barem Rubric 10.0** | `src/pages/question-bank/CreateQuestionPage.tsx` | **Hải** | Form thêm/xóa tiêu chí động; **Client Guard tổng điểm bắt buộc = 10.0đ**, Modal AI Calibrate. |
+| **MF-03: Cấu Trúc Đề & Ma Trận Bloom** | `src/pages/question-bank/ExamStructurePage.tsx` | **Hải** | Thiết lập ma trận đề (Nhớ, Hiểu, Vận dụng), nút bấm bốc ngẫu nhiên sinh bộ đề thi. |
+| **MF-01: Voice AI** | `src/hooks/useWebSpeech.ts`, `src/pages/practice/PracticeSessionPage.tsx` | **Hoàng** | Web Speech TTS đọc đề, STT thu âm real-time, chọn 2 chế độ (Chấm từng câu / Làm cả bộ). |
+| **MF-01: Đệm 30-60s & SignalR** | `src/components/practice/BufferScreen.tsx`, `ScorecardModal.tsx`, `src/hooks/useSignalR.ts` | **Hải** | **Màn hình đệm 30-60s** sửa từ Code-Switching, kết nối SignalR Hub nhận điểm Scorecard và A2. |
+| **MF-02: Voice-First & Quota** | `src/components/exam/VoiceFirstGate.tsx`, `src/pages/mock-exam/MockExamPage.tsx` | **Hoàng** | **Khóa cứng Textarea**, bắt buộc nói mic $\ge 5$s; bắt lỗi Quota 3 lượt (`HTTP 429 Too Many Requests`). |
+| **MF-02: Timer & Radar Chart Bloom** | `src/components/exam/CountdownTimer.tsx`, Biểu đồ Recharts Radar | **Hải** | Master Timer đồng bộ máy chủ, AutoSubmitGuard, **Biểu đồ mạng nhện 6 cấp độ Bloom (Recharts)**. |
+| **MF-04: Kiosk Lockdown** | `src/hooks/useKiosk.ts`, giao diện Kiosk trạm thi Lab | **Hoàng** | Chặn F12, chuột phải, chuyển tab (3 vi phạm đình chỉ thi), stream audio R2 `STT_MSSV.webm`. |
+| **MF-04: Import FAP Excel & Cổng Lab** | `src/pages/lecturer/LabSessionSetupPage.tsx` | **Hải** | Upload file Excel danh sách lớp FAP tự động map 40 máy; danh sách thí sinh theo số máy STT. |
+| **MF-04: Cổng Hậu Kiểm & Sửa Điểm** | `src/pages/lecturer/AuditPortalPage.tsx`, `src/components/audit/*` | **Hoàng** | Waveform Player 1.5x, sửa điểm kèm giải trình bắt buộc, **Khóa điểm 1 chiều & Tải file Excel FAP**. |
+| **Admin: Quản Trị & Cứu Hộ DLQ** | `src/pages/admin/DlqManagementPage.tsx` | **Hải** | Bảng danh sách bài thi lỗi trong Dead-Letter Queue, nút bấm `Replay` kích hoạt Worker chấm bù. |
 
 ---
 
