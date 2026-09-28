@@ -27,7 +27,7 @@ The project is structured as an enterprise monorepo with strict separation of co
 │   └── src/
 │       ├── Domain/           # Enterprise entities, value objects, domain logic (zero external dependencies)
 │       ├── Application/      # Use cases, CQRS commands/queries, MediatR handlers, DTOs
-│       ├── Infrastructure/   # Database context, external integrations (LLM, Redis, Storage)
+│       ├── Infrastructure/   # Database context, external integrations (PostgreSQL, LLM, Storage)
 │       └── API/              # ASP.NET Core Web API presentation layer, middleware, endpoints
 ├── frontend/                 # React 19 + TypeScript + Vite Single Page Application (SPA)
 │   ├── src/
