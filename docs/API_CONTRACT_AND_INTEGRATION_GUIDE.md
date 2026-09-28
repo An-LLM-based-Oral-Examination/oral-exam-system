@@ -55,7 +55,36 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 
 ## 4. BẢO MẬT & XÁC THỰC (AUTHENTICATION & JWT CONTRACT)
 
-### 4.1. Đăng nhập hệ thống
+### 4.1. Đăng nhập hệ thống (Email / Password cho Dev & FPT Google OAuth PKCE)
+
+#### Đăng nhập FPT Google OAuth 2.0 PKCE (Quy chuẩn Production)
+- **Endpoint:** `POST /api/v1/auth/google-login`
+- **Quyền truy cập:** Public
+- **Request Body:**
+```json
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...",
+  "role": "Student"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "user": {
+    "id": "usr-stu-001",
+    "email": "thanhntse170001@fpt.edu.vn",
+    "fullName": "Nguyễn Tiến Thành",
+    "studentCode": "SE170001",
+    "role": "Student"
+  }
+}
+```
+
+#### Đăng nhập Email / Mật khẩu nội bộ (Dành cho Dev & Giảng viên)
 - **Endpoint:** `POST /api/v1/auth/login`
 - **Quyền truy cập:** Public
 - **Request Body:**
@@ -65,28 +94,24 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
   "password": "SecurePassword123!"
 }
 ```
+- **Response 200 OK:** Trả về `accessToken`, `refreshToken`, và `user` tương tự như trên.
+
+#### Cấp lại Access Token mới (Silent Refresh Token)
+- **Endpoint:** `POST /api/v1/auth/refresh-token`
+- **Quyền truy cập:** Public (kèm Refresh Token trong Body hoặc HttpOnly Cookie)
+- **Request Body:**
+```json
+{
+  "refreshToken": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
 - **Response 200 OK:**
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.new...",
+  "refreshToken": "8d0f7780-8536-51ef-055c-f18fd2g01bf8",
   "tokenType": "Bearer",
-  "expiresIn": 86400,
-  "user": {
-    "id": "usr-inst-001",
-    "email": "instructor@oralexam.edu.vn",
-    "fullName": "ThS. Nguyễn Văn Giảng",
-    "role": "Instructor"
-  }
-}
-```
-- **Response 401 Unauthorized:**
-```json
-{
-  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.2",
-  "title": "Unauthorized",
-  "status": 401,
-  "detail": "Email hoặc mật khẩu không chính xác."
+  "expiresIn": 900
 }
 ```
 
@@ -239,7 +264,58 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 
 ---
 
-### 5.3. Luyện tập tương tác (Interactive Practice & Real-time) — MF-01
+### 5.3. Cấu trúc Đề thi & Sinh Bộ đề theo Ma trận Bloom (Exam Structure & Sets) — MF-03 & MF-02
+
+#### Giảng viên thiết lập cấu trúc ma trận đề thi
+- **Endpoint:** `POST /api/v1/exam-structures`
+- **Quyền:** `Instructor`, `Admin`
+- **Request Body:**
+```json
+{
+  "courseId": "sub-se01",
+  "name": "Khung đề Vấn đáp Cuối kỳ PRN231 - 5 câu",
+  "totalQuestions": 5,
+  "durationMinutes": 30,
+  "matrix": [
+    { "chapterId": "chp-01", "bloomLevel": "Remember", "questionCount": 1 },
+    { "chapterId": "chp-01", "bloomLevel": "Understand", "questionCount": 1 },
+    { "chapterId": "chp-02", "bloomLevel": "Understand", "questionCount": 1 },
+    { "chapterId": "chp-02", "bloomLevel": "Apply", "questionCount": 1 },
+    { "chapterId": "chp-03", "bloomLevel": "Analyze", "questionCount": 1 }
+  ]
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "id": "exstr-201",
+  "name": "Khung đề Vấn đáp Cuối kỳ PRN231 - 5 câu",
+  "totalQuestions": 5,
+  "createdAt": "2026-10-02T09:00:00Z"
+}
+```
+
+#### Bốc ngẫu nhiên sinh bộ đề thi theo ma trận cấu trúc
+- **Endpoint:** `POST /api/v1/exam-sets/generate`
+- **Quyền:** `Instructor`, `Admin`
+- **Request Body:**
+```json
+{
+  "structureId": "exstr-201",
+  "setCount": 10
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "generatedSets": 10,
+  "message": "Đã bốc ngẫu nhiên sinh thành công 10 bộ đề thi chuẩn hóa theo ma trận Bloom."
+}
+```
+
+---
+
+### 5.4. Luyện tập tương tác (Interactive Practice & Real-time) — MF-01
 
 #### Nộp câu trả lời luyện tập (Phòng thủ 4 tầng)
 - **Endpoint:** `POST /api/v1/practice/submit`
@@ -376,6 +452,24 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
   "roomCode": "LAB-302",
   "totalAssignedStudents": 3,
   "status": "SCHEDULED"
+}
+```
+
+#### Nạp tự động danh sách thí sinh từ file Excel FAP (EPPlus)
+- **Endpoint:** `POST /api/v1/exam-sessions/{id}/import-roster`
+- **Quyền:** `Instructor`, `Admin`
+- **Content-Type:** `multipart/form-data`
+- **Request Form:** `file`: `DanhSachThi_SWP391_LAB302.xlsx`
+- **Response 200 OK:**
+```json
+{
+  "sessionId": "lab-sess-701",
+  "importedCount": 40,
+  "message": "Đã nhập thành công 40 sinh viên từ file Excel FAP và tự động gán vào máy trạm pcNumber từ 1 đến 40.",
+  "allocatedSeats": [
+    { "studentCode": "SE170001", "fullName": "Nguyễn Tiến Thành", "pcNumber": 1 },
+    { "studentCode": "SE170002", "fullName": "Đặng Thái Hoàng", "pcNumber": 2 }
+  ]
 }
 ```
 
@@ -541,6 +635,62 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - **Endpoint:** `GET /api/v1/audit/export-excel?sessionId=lab-sess-701`
 - **Quyền:** `Instructor`, `Admin`
 - **Response:** File nhị phân định dạng `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (Content-Disposition: `attachment; filename="BangDiem_SWP391_LAB302_C1.xlsx"`).
+
+---
+
+### 5.8. Quản trị Admin, Cứu hộ Dead-Letter Queue (DLQ Replay) & Audit Logs — UC-44, 45, 47
+
+#### Tra cứu danh sách các bài chấm bị lỗi trong Dead-Letter Queue
+- **Endpoint:** `GET /api/v1/admin/dlq`
+- **Quyền:** `Admin`
+- **Query Params:** `?page=1&pageSize=20&status=UNRESOLVED`
+- **Response 200 OK:**
+```json
+[
+  {
+    "id": "dlq-task-9001",
+    "submissionId": "psub-901",
+    "studentId": "SV202601",
+    "studentName": "Trần Thị Lan",
+    "errorMessage": "Gemini API Gateway Timeout (504) after 3 retries",
+    "failedAt": "2026-10-15T10:30:00Z",
+    "isResolved": false
+  }
+]
+```
+
+#### Admin kích hoạt cứu hộ chấm bù bài thi (DLQ Replay)
+- **Endpoint:** `POST /api/v1/admin/dlq/{id}/replay`
+- **Quyền:** `Admin`
+- **Response 200 OK:**
+```json
+{
+  "dlqId": "dlq-task-9001",
+  "status": "REQUEUED",
+  "message": "Đã đẩy bài thi trở lại hàng đợi Bounded Channel để Worker tiến hành chấm bù thành công."
+}
+```
+
+#### Tra cứu nhật ký kiểm toán hệ thống (Audit Logs)
+- **Endpoint:** `GET /api/v1/admin/audit-logs`
+- **Quyền:** `Admin`
+- **Query Params:** `?action=OVERRIDE_SCORE&limit=50`
+- **Response 200 OK:**
+```json
+[
+  {
+    "id": "log-001",
+    "userId": "usr-inst-001",
+    "userEmail": "instructor@oralexam.edu.vn",
+    "action": "OVERRIDE_SCORE",
+    "targetEntity": "StudentExamTicket",
+    "targetId": "exam-sub-888",
+    "detail": "Điều chỉnh điểm từ 8.0 lên 8.5 kèm lý do giải trình.",
+    "ipAddress": "10.1.20.15",
+    "timestamp": "2026-10-25T14:15:00Z"
+  }
+]
+```
 
 ---
 *(Hợp đồng giao diện API Contract này là tài liệu pháp lý kỹ thuật bất biến giữa Frontend và Backend, bảo đảm tính toàn vẹn 100% khi tích hợp hệ thống).*
