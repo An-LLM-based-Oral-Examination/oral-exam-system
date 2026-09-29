@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>OralExamination.API</RootNamespace>
     <AssemblyName>OralExamination.API</AssemblyName>
+    <UserSecretsId>feb6670f-94e1-40af-ac1f-9f9ef1d1d904</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

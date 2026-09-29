@@ -11,12 +11,12 @@ services:
     container_name: oralexam-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-oralexam}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oralexam_dev}
-      POSTGRES_DB: ${POSTGRES_DB:-oralexam}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       TZ: Asia/Ho_Chi_Minh
     ports:
-      # Exposed for local BE/FE; do NOT expose 5432 publicly in production.
+      # Local only — do not publish 5432 on production hosts.
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - oralexam_pgdata:/var/lib/postgresql/data
