@@ -1,0 +1,312 @@
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="FA26SE166_System_Architecture_TD" name="Kiến Trúc Hệ Thống Chi Tiết Theo Chiều Dọc (Top-to-Bottom)">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="3200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- HEADER BANNER -->
+        <mxCell id="doc_title" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e293b;strokeColor=#0f172a;strokeWidth=2;fontColor=#ffffff;fontFamily=Helvetica;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" value="HỆ THỐNG LUYỆN THI &amp; ĐÁNH GIÁ VẤN ĐÁP BẰNG LLM CHO NGÀNH KỸ THUẬT PHẦN MỀM&#xa;ĐỒ ÁN CAPSTONE FA26SE166 — SƠ ĐỒ KIẾN TRÚC HỆ THỐNG CHI TIẾT THEO CHIỀU DỌC (TOP-TO-BOTTOM)" vertex="1">
+          <mxGeometry x="60" y="30" width="1380" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- TẦNG 1: TẦNG CLIENT & PHÒNG LAB -->
+        <!-- ========================================================================= -->
+        <mxCell id="tier1_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#3b82f6;strokeWidth=2;dashed=0;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=16;fontStyle=1;align=left;verticalAlign=top;spacingLeft=20;spacingTop=15;" value="1. TẦNG CLIENT &amp; PHÒNG LAB (Presentation &amp; Lab Kiosk Tier — React 19 Vite — Port 3000)" vertex="1">
+          <mxGeometry x="60" y="130" width="1380" height="420" as="geometry" />
+        </mxCell>
+
+        <!-- Actors -->
+        <mxCell id="act_student" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Sinh Viên SE (ACT-01)&#xa;• MF-01: Luyện tập tự do (Per-Q / Full-Session)&#xa;• MF-02: Thi thử bấm giờ (Quota K=3 lượt/ngày/môn)&#xa;• MF-04: Thi vấn đáp phòng Lab Kiosk" vertex="1">
+          <mxGeometry x="100" y="180" width="380" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_instructor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Giảng Viên / Giám Thị (ACT-02)&#xa;• MF-03: Soạn đề &amp; Barem Rubric 10.0đ&#xa;• MF-03: Hiệu chuẩn qua AI Simulator&#xa;• MF-04: Cổng Hậu Kiểm &amp; One-Way Lock" vertex="1">
+          <mxGeometry x="560" y="180" width="380" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="act_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontColor=#581c87;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Quản Trị Viên (ACT-03)&#xa;• Quản trị danh mục môn, lớp &amp; RBAC&#xa;• Cấu hình Quota K &amp; mô hình AI&#xa;• Giám sát hệ thống &amp; Replay bài lỗi DLQ" vertex="1">
+          <mxGeometry x="1020" y="180" width="380" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Components -->
+        <mxCell id="comp_student_app" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Web Portal Sinh Viên (React 19 Vite)&lt;/b&gt;&#xa;• Web Speech STT nhận diện giọng nói (&lt; 0.5s)&#xa;• Web Speech TTS đọc to câu hỏi và nhận xét&#xa;• Màn hình đệm 60s hiệu đính Code-Switching (MF-01)&#xa;• Instant Feedback Scorecard theo Barem Rubric 10.0 (MF-02)" vertex="1">
+          <mxGeometry x="100" y="300" width="380" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="comp_instructor_app" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d97706;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Web Studio Giảng Viên &amp; Hậu Kiểm&lt;/b&gt;&#xa;• Question &amp; Rubric Studio (Tiêu chí C1..Ck)&#xa;• Client Guard: Ràng buộc tổng Barem == 10.0đ&#xa;• AI Simulator Modal: Chấm thử nghiệm barem&#xa;• Lecturer Audit Portal (Waveform Player 1.0x, 1.25x, 1.5x)" vertex="1">
+          <mxGeometry x="560" y="300" width="380" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="comp_kiosk_app" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#ef4444;strokeWidth=1.5;fontColor=#0f172a;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Máy Trạm Kiosk Phòng Lab (Lab PC Client)&lt;/b&gt;&#xa;• Gán cứng: STT máy = Số danh sách thi&#xa;• Fullscreen Lockdown: Chặn Alt+Tab, F12, onblur 3 cấp&#xa;• Mic-Check 30s xác thực phần cứng tai nghe &amp; mic&#xa;• MediaRecorder WebM: STT_MSSV.webm + SHA-256&#xa;• Tuyệt đối KHÔNG hiện điểm liền trong phòng lab" vertex="1">
+          <mxGeometry x="1020" y="300" width="380" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note_tier1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;fontStyle=2;align=center;verticalAlign=middle;" value="Giao thức kết nối ra ngoài: HTTPS REST (Port 443), WebSocket WSS (SignalR Core), Direct Presigned Stream lên Cloudflare R2" vertex="1">
+          <mxGeometry x="100" y="440" width="1300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- TẦNG 2: CỔNG KẾT NỐI, ĐỊNH TUYẾN & BẢO MẬT -->
+        <!-- ========================================================================= -->
+        <mxCell id="tier2_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#10b981;strokeWidth=2;dashed=0;fontColor=#065f46;fontFamily=Helvetica;fontSize=16;fontStyle=1;align=left;verticalAlign=top;spacingLeft=20;spacingTop=15;" value="2. CỔNG KẾT NỐI, ĐỊNH TUYẾN &amp; BẢO MẬT (Ingress Gateway &amp; Auth Tier)" vertex="1">
+          <mxGeometry x="60" y="600" width="1380" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gw_cloudflare" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Cloudflare Edge Network (Global Anycast)&lt;/b&gt;&#xa;• DDoS Protection Layer 3 / 4 / 7&#xa;• WAF Rules chống SQLi, XSS, CSRF&#xa;• Quản lý DNS &amp; Chứng chỉ SSL/TLS 1.3" vertex="1">
+          <mxGeometry x="100" y="650" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gw_nginx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Nginx Reverse Proxy &amp; Ingress&lt;/b&gt;&#xa;• Port 80 -&gt; 301 Redirect sang Port 443&#xa;• SSL Offloading &amp; HSTS Security Headers&#xa;• Rate Limiting: 100 req/s/IP chống DoS&#xa;• Upstream: / -&gt; FE:3000 | /api/* -&gt; BE:5000" vertex="1">
+          <mxGeometry x="440" y="650" width="320" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gw_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Xác Thực Định Danh (Google Workspace)&lt;/b&gt;&#xa;• OAuth 2.0 Auth Code Flow kèm PKCE&#xa;• Đuôi email bắt buộc @fpt.edu.vn&#xa;• JWT Bearer Token &amp; RBAC Authorization" vertex="1">
+          <mxGeometry x="800" y="650" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gw_signalr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;SignalR Core Real-Time Hubs (WSS)&lt;/b&gt;&#xa;• /hubs/practice: Đẩy Scorecard &lt; 100ms&#xa;• /hubs/exam-proctor: Đồng bộ phòng thi&#xa;• WebSocket protocol upgrade tự động" vertex="1">
+          <mxGeometry x="1140" y="650" width="260" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note_tier2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;fontStyle=2;align=center;verticalAlign=middle;" value="Bảo vệ ranh giới: Zero Guest Access 100% | Phân luồng Traffic: Frontend UI (Port 3000) &lt;--&gt; Backend API (Port 5000)" vertex="1">
+          <mxGeometry x="100" y="780" width="1300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- TẦNG 3: LÕI BACKEND (.NET 8 CLEAN ARCHITECTURE) -->
+        <!-- ========================================================================= -->
+        <mxCell id="tier3_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#8b5cf6;strokeWidth=2;dashed=0;fontColor=#5b21b6;fontFamily=Helvetica;fontSize=16;fontStyle=1;align=left;verticalAlign=top;spacingLeft=20;spacingTop=15;" value="3. LÕI BACKEND (.NET 8 CLEAN ARCHITECTURE — Port 5000 Kestrel Web Server)" vertex="1">
+          <mxGeometry x="60" y="930" width="1380" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="be_api_layer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;API Layer (/api/v1/*)&lt;/b&gt;&#xa;• AuthController: Token Exchange PKCE&#xa;• PracticeController: Nộp bài (HTTP 202 Accepted)&#xa;• MockExamController: Quota Check (HTTP 429)&#xa;• ExamLabController: Nộp STT_MSSV.webm &amp; SHA-256&#xa;• ExamAuditController: Override giải trình &amp; One-Way Lock&#xa;• RFC 7807 Global Exception Handling (ProblemDetails)" vertex="1">
+          <mxGeometry x="100" y="980" width="380" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="be_app_cqrs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Application Layer (MediatR CQRS)&lt;/b&gt;&#xa;• ValidationBehavior: FluentValidation (Sum == 10.0đ -&gt; 422)&#xa;• Logging &amp; PerformanceBehavior (Cảnh báo &gt; 500ms)&#xa;• Commands: SubmitAnswer, StartMockExam, LockGrade&#xa;• Queries: GetScorecard, GetRubricScorecard, GetAuditSession&#xa;• PostgreSqlQuotaService: Đếm nguyên tử K=3 lượt/ngày/môn&#xa;• ExamGeneratorService: Bốc đề cân đối Bloom 6 mức" vertex="1">
+          <mxGeometry x="520" y="980" width="420" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="be_queue_workers" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Hàng Đợi RAM &amp; Hosted Workers (Zero Data Loss)&lt;/b&gt;&#xa;• Bounded Channel (1,000 slots RAM, Backpressure Wait)&#xa;• GradingQueueWorker (IHostedService): Rút task tuần tự&#xa;• Polly Retry Policy: Exponential Backoff (2s -&gt; 4s -&gt; 8s)&#xa;• DlqReplayWorker: Định kỳ 5 phút quét chấm bù tự động&#xa;• Server Master Timer: Quản lý thời gian, Grace Period 10s" vertex="1">
+          <mxGeometry x="980" y="980" width="420" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note_tier3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;fontStyle=2;align=center;verticalAlign=middle;" value="Cam kết kiến trúc: Persist-First ghi đĩa &lt; 100ms trước khi đưa vào hàng đợi | Phân tách Ingestion &amp; Worker độc lập" vertex="1">
+          <mxGeometry x="100" y="1160" width="1300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- TẦNG 4: TẦNG DỮ LIỆU & LƯU TRỮ -->
+        <!-- ========================================================================= -->
+        <mxCell id="tier4_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#f59e0b;strokeWidth=2;dashed=0;fontColor=#b45309;fontFamily=Helvetica;fontSize=16;fontStyle=1;align=left;verticalAlign=top;spacingLeft=20;spacingTop=15;" value="4. TẦNG DỮ LIỆU &amp; LƯU TRỮ (Data Persistence &amp; Cloud Storage Tier)" vertex="1">
+          <mxGeometry x="60" y="1400" width="1380" height="400" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db_postgres" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;PostgreSQL 16 Relational DB (Port 5432 Internal — 17 Bảng Chuẩn 3NF)&lt;/b&gt;&#xa;• [1] Identity &amp; RBAC (1 bảng): users&#xa;• [2] Academic &amp; Cohorts (3 bảng): courses, classes, class_enrollments&#xa;• [3] Question Bank &amp; Rubric (4 bảng): questions, model_answers, rubrics, rubric_criteria&#xa;• [4] Exam Structures &amp; Sets (3 bảng): exam_structures, exam_sets, exam_set_questions&#xa;• [5] Practice &amp; AI Queue (4 bảng): mock_exam_quotas, practice_sessions, student_answers, dead_letter_queues&#xa;• [6] Lab Exam &amp; Tickets (2 bảng chính): official_exam_sessions, student_exam_tickets&#xa;• Kèm 6 bảng chi tiết &amp; audit: ai_evaluations, submissions, audits, logs (23 DbSets)&#xa;• &lt;b&gt;OneWayLockInterceptor:&lt;/b&gt; Chặn UPDATE/DELETE khi is_locked=true (Ném HTTP 403 Forbidden)&#xa;• &lt;b&gt;AuditTrailInterceptor:&lt;/b&gt; Tự động ghi vết override_reason vào audit_logs" vertex="1">
+          <mxGeometry x="100" y="1450" width="760" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storage_r2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Cloudflare R2 Object Storage (Zero-Egress S3)&lt;/b&gt;&#xa;• Bucket: oralexam-lab-audio&#xa;• File định danh: {STT}_{MSSV}.webm (ví dụ: 01_SE170123.webm)&#xa;• Niêm phong toàn vẹn pháp lý bằng mã băm SHA-256&#xa;• Cấp quyền thẩm định qua Presigned URL (15 phút)&#xa;• Không tính phí tải ra (Zero-Egress Fees) tiết kiệm 100% băng thông" vertex="1">
+          <mxGeometry x="900" y="1450" width="500" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note_tier4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#94a3b8;strokeWidth=1;fontColor=#475569;fontFamily=Helvetica;fontSize=11;fontStyle=2;align=center;verticalAlign=middle;" value="CẤM TUYỆT ĐỐI mở port 5432 ra Internet | Bảo vệ dữ liệu: ACID Transaction + Daily Database Snapshot" vertex="1">
+          <mxGeometry x="100" y="1650" width="1300" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- TẦNG 5: CỤM AI & VOICE SERVICES -->
+        <!-- ========================================================================= -->
+        <mxCell id="tier5_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#ec4899;strokeWidth=2;dashed=0;fontColor=#9d174d;fontFamily=Helvetica;fontSize=16;fontStyle=1;align=left;verticalAlign=top;spacingLeft=20;spacingTop=15;" value="5. CỤM AI &amp; VOICE SERVICES (External AI &amp; Machine Learning Cluster)" vertex="1">
+          <mxGeometry x="60" y="1850" width="1380" height="380" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ai_whisper" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf2f8;strokeColor=#db2777;strokeWidth=1.5;fontColor=#831843;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Cloudflare Whisper Large-v3 STT Engine&lt;/b&gt;&#xa;• GPU Node bóc băng bài thi phòng lab MF-04&#xa;• Nhận diện chuẩn xác tiếng Việt &amp; thuật ngữ tiếng Anh&#xa;• Xuất timestamps_json chi tiết từng câu nói&#xa;• Phục vụ đối chiếu chứng cứ tại Waveform Player" vertex="1">
+          <mxGeometry x="100" y="1900" width="380" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ai_gemini_flash" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf2f8;strokeColor=#db2777;strokeWidth=1.5;fontColor=#831843;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Google Gemini 1.5 Flash API (Tốc độ cao 1.8s - 2.5s)&lt;/b&gt;&#xa;• Chấm điểm Luyện tập MF-01 &amp; Thi thử MF-02&#xa;• Giảng viên chạy AI Simulator hiệu chuẩn Barem MF-03&#xa;• Chain-of-Thought (CoT) 3 bước xuất Structured JSON&#xa;• Chấm chi tiết tiêu chí C1..Ck và tổng hợp điểm 10.0đ" vertex="1">
+          <mxGeometry x="520" y="1900" width="420" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ai_gemini_pro" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf2f8;strokeColor=#db2777;strokeWidth=1.5;fontColor=#831843;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Google Gemini 1.5 Pro API (Suy luận sâu)&lt;/b&gt;&#xa;• Chấm Batch ca thi phòng Lab MF-04 (chạy ngầm 1-2h sau ca thi)&#xa;• Phân tích sâu theo Barem Rubric 10.0đ&#xa;• Gắn Timestamp Citations trích dẫn chứng cứ từ Whisper" vertex="1">
+          <mxGeometry x="980" y="1900" width="420" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ai_followup_rules" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;strokeWidth=1.5;fontColor=#9f1239;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Bộ Quy Tắc Kích Hoạt Follow-Up Kép (Adaptive Follow-up Engine)&lt;/b&gt;&#xa;• &lt;b&gt;MF-01 (Luyện tập):&lt;/b&gt; Cổng Môn (has_follow_up=true) VÀ Cổng Điểm (4.0 &lt;= Điểm &lt;= 8.0) -&gt; Kích hoạt đúng 1 lần duy nhất&#xa;• &lt;b&gt;MF-02 (Thi thử) &amp; MF-04 (Thi thật):&lt;/b&gt; Cổng Môn (has_follow_up=true) VÀ Cổng Nội Dung (Phân tích luận điểm văn bản, KHÔNG theo điểm)" vertex="1">
+          <mxGeometry x="100" y="2050" width="1300" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ========================================================================= -->
+        <!-- MŨI TÊN KẾT NỐI TOÀN DIỆN XUYÊN TẦNG (TOP-TO-BOTTOM ARCHITECTURE CONNECTORS) -->
+        <!-- ========================================================================= -->
+        <!-- Tier 1: Actors -> Components -->
+        <mxCell id="edge_sv_portal" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="act_student" target="comp_student_app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_sv_kiosk" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ef4444;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="act_student" target="comp_kiosk_app">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="280" />
+              <mxPoint x="1210" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_gv_portal" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="act_instructor" target="comp_instructor_app">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_admin_portal" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9333ea;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="act_admin" target="comp_instructor_app">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1210" y="280" />
+              <mxPoint x="750" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 1 Components -> Tier 2 Edge/Nginx -->
+        <mxCell id="edge_student_edge" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3b82f6;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="comp_student_app" target="gw_cloudflare">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="430" />
+              <mxPoint x="250" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_instructor_edge" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="comp_instructor_app" target="gw_cloudflare">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="750" y="430" />
+              <mxPoint x="250" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_kiosk_edge" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ef4444;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="comp_kiosk_app" target="gw_cloudflare">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1210" y="430" />
+              <mxPoint x="250" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Kiosk direct upload to Cloudflare R2 -->
+        <mxCell id="edge_kiosk_r2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ef4444;strokeWidth=1.5;dashed=1;endArrow=classic;endFill=1;" edge="1" source="comp_kiosk_app" target="storage_r2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1410" y="355" />
+              <mxPoint x="1410" y="1430" />
+              <mxPoint x="1150" y="1430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 2: Cloudflare -> Nginx -->
+        <mxCell id="edge_cf_nginx" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="gw_cloudflare" target="gw_nginx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tier 2: Nginx -> Auth & SignalR -->
+        <mxCell id="edge_nginx_auth" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="gw_nginx" target="gw_auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_nginx_signalr" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="gw_nginx" target="gw_signalr">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="620" />
+              <mxPoint x="1270" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 2 -> Tier 3: Nginx -> API Layer -->
+        <mxCell id="edge_nginx_api" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#10b981;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" source="gw_nginx" target="be_api_layer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="900" />
+              <mxPoint x="290" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 3: API Layer -> App CQRS -> Workers -->
+        <mxCell id="edge_api_cqrs" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_api_layer" target="be_app_cqrs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_cqrs_workers" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_app_cqrs" target="be_queue_workers">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tier 3 -> Tier 4: Persist-First CQRS -> PostgreSQL -->
+        <mxCell id="edge_cqrs_db" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#8b5cf6;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" source="be_app_cqrs" target="db_postgres">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="730" y="1220" />
+              <mxPoint x="480" y="1220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 3 Workers -> Tier 4 (DB update & R2 audio check) -->
+        <mxCell id="edge_workers_db" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=1.5;dashed=1;endArrow=classic;endFill=1;" edge="1" source="be_queue_workers" target="db_postgres">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="1250" />
+              <mxPoint x="600" y="1250" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_workers_r2" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_queue_workers" target="storage_r2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="1370" />
+              <mxPoint x="1150" y="1370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 3 Workers -> Tier 5 AI Models -->
+        <mxCell id="edge_workers_whisper" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ec4899;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_queue_workers" target="ai_whisper">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1390" y="1150" />
+              <mxPoint x="1390" y="1820" />
+              <mxPoint x="290" y="1820" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_workers_gemini_flash" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ec4899;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_queue_workers" target="ai_gemini_flash">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="1380" />
+              <mxPoint x="1420" y="1380" />
+              <mxPoint x="1420" y="1830" />
+              <mxPoint x="730" y="1830" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge_workers_gemini_pro" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ec4899;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="be_queue_workers" target="ai_gemini_pro">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1190" y="1380" />
+              <mxPoint x="1420" y="1380" />
+              <mxPoint x="1420" y="1830" />
+              <mxPoint x="1190" y="1830" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tier 5: Gemini -> FollowUp Rules -->
+        <mxCell id="edge_flash_followup" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#db2777;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="ai_gemini_flash" target="ai_followup_rules">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_pro_followup" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#db2777;strokeWidth=1.5;endArrow=classic;endFill=1;" edge="1" source="ai_gemini_pro" target="ai_followup_rules">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

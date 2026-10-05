@@ -35,6 +35,6 @@ dotnet ef database update -p src/Infrastructure -s src/API
 
 ## Lưu ý
 
-- Không `database update` lại `InitialBaseline` trên DB đã có bảng.
+- Không `database update` lại `InitialBaseline27Tables` trên DB đã có bảng (dùng `infra/postgres/mark_baseline.sql` để đánh dấu).
 - Dev: password lấy từ `.env` — set biến môi trường (ASP.NET Core đọc `ConnectionStrings__DefaultConnection`) hoặc sửa local `src/API/appsettings.Development.json` (không commit password thật)
 

@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Flow 01: Luyện Tập Vấn Đáp Tương Tác (Upfront 2-Track Workflow)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: #f8fafc;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 36px 48px 30px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bg-dots {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+      background-size: 28px 28px;
+      opacity: 0.5;
+      z-index: 0;
+    }
+
+    .slide-wrapper {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 14px;
+    }
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .badge-pill {
+      align-self: flex-start;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 4px 16px;
+      border-radius: 9999px;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-pill svg { width: 15px; height: 15px; fill: #3b82f6; }
+    .flow-title {
+      font-size: 34px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+    }
+    .flow-subtitle {
+      font-size: 15.5px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .slide-num {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #0f172a;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      font-weight: 800;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Workflow Stage */
+    .flow-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 10px 0;
+    }
+
+    /* Left Initiation Section */
+    .init-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* Card Item */
+    .step-card {
+      width: 205px;
+      background: #ffffff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+      transition: all 0.2s ease;
+    }
+    .step-card.decision {
+      border: 2px dashed #3b82f6;
+      background: #eff6ff;
+    }
+    .step-card.track-a {
+      border-top: 4px solid #4f46e5;
+    }
+    .step-card.track-b {
+      border-top: 4px solid #059669;
+    }
+
+    .step-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: #0f172a;
+      color: #ffffff;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+    .step-badge.blue { background: #0284c7; }
+    .step-badge.indigo { background: #4f46e5; }
+    .step-badge.green { background: #16a34a; }
+    .step-badge.amber { background: #ea580c; }
+    .step-badge.purple { background: #7c3aed; }
+    .step-badge.rose { background: #be123c; }
+
+    .icon-bubble {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    .icon-bubble svg { width: 32px; height: 32px; }
+
+    .step-title {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+      line-height: 1.25;
+    }
+
+    .step-desc {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    /* Small Arrow Unit */
+    .arrow-unit-mini {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+    }
+    .arrow-unit-mini svg { width: 32px; height: 18px; }
+
+    /* Tracks Container */
+    .tracks-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+      gap: 24px;
+    }
+
+    .track-wrapper {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+    }
+    .track-wrapper.track-a-box {
+      background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+      border-left: 6px solid #4f46e5;
+    }
+    .track-wrapper.track-b-box {
+      background: linear-gradient(180deg, #f7fdfa 0%, #ffffff 100%);
+      border-left: 6px solid #059669;
+    }
+
+    .track-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .track-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .track-pill {
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 14px;
+      border-radius: 9999px;
+      color: #fff;
+    }
+    .track-pill.a { background: #4f46e5; }
+    .track-pill.b { background: #059669; }
+
+    .track-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .track-meta {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .track-steps-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    /* Fork SVG Unit */
+    .fork-svg-box {
+      width: 50px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-dots"></div>
+
+  <div class="slide-wrapper">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="badge-pill">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          MAIN WORKFLOWS
+        </div>
+        <div class="flow-title">Flow 01 · Luyện Tập Vấn Đáp Tương Tác (Interactive Practice)</div>
+        <div class="flow-subtitle">Khởi tạo phiên luyện tập viva · Hỗ trợ Nói (Voice) hoặc Nhập Text · Phân nhánh 2 chế độ Upfront: [Per-Question] Chấm từng câu vs [Full-Session] Luyện liền mạch</div>
+      </div>
+      <div class="slide-num">01</div>
+    </div>
+
+    <!-- Workflow Stage with 2 Tracks -->
+    <div class="flow-stage">
+      
+      <!-- INITIATION SECTION (Common) -->
+      <div class="init-section">
+        <!-- Step 1 -->
+        <div class="step-card">
+          <div class="step-badge blue">BƯỚC 1</div>
+          <div class="icon-bubble" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="step-title">Chọn Môn &amp; Chủ Đề</div>
+          <div class="step-desc">Sinh viên đăng nhập hệ thống, chọn Course (PRN231, SWD), chủ đề kiến thức &amp; độ khó (Dễ / TB / Khó).</div>
+        </div>
+
+        <!-- Arrow 1 -> 2 -->
+        <div class="arrow-unit-mini">
+          <svg viewBox="0 0 32 18">
+            <line x1="0" y1="9" x2="24" y2="9" stroke="#0f172a" stroke-width="2.5"/>
+            <polygon points="24,4 32,9 24,14" fill="#0f172a"/>
+          </svg>
+        </div>
+
+        <!-- Step 2: Decision Node -->
+        <div class="step-card decision">
+          <div class="step-badge indigo">QUYẾT ĐỊNH</div>
+          <div class="icon-bubble" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 3v6M12 15v6M3 12h6M15 12h6"/>
+            </svg>
+          </div>
+          <div class="step-title">Chọn Chế Độ Upfront</div>
+          <div class="step-desc">Lựa chọn chính sách chấm: Từng câu có phản biện A2 <b>[Per-Question]</b> hoặc Làm trọn vẹn cả phiên <b>[Full-Session]</b>.</div>
+        </div>
+      </div>
+
+      <!-- Fork SVG Column -->
+      <div class="fork-svg-box">
+        <svg width="50" height="420" viewBox="0 0 50 420" fill="none">
+          <!-- Fork to Track A (Up) -->
+          <path d="M 5 210 C 25 210, 25 105, 45 105" stroke="#4f46e5" stroke-width="3" fill="none"/>
+          <polygon points="43,99 50,105 43,111" fill="#4f46e5"/>
+          
+          <!-- Fork to Track B (Down) -->
+          <path d="M 5 210 C 25 210, 25 315, 45 315" stroke="#059669" stroke-width="3" fill="none"/>
+          <polygon points="43,309 50,315 43,321" fill="#059669"/>
+        </svg>
+      </div>
+
+      <!-- 2 PARALLEL TRACKS -->
+      <div class="tracks-container">
+        
+        <!-- TRACK A: Per-Question Grading & A2 Deep-dive -->
+        <div class="track-wrapper track-a-box">
+          <div class="track-header">
+            <div class="track-title-group">
+              <span class="track-pill a">NHÁNH 1</span>
+              <span class="track-name">Chế Độ Chấm Từng Câu [Per-Question] &amp; Phản Biện A2</span>
+            </div>
+            <span class="track-meta">Phù hợp luyện phản xạ chuyên sâu · Hỏi phụ cứu điểm/đào sâu khi 4.0 &le; Điểm &le; 8.0 (1-5 câu do Admin cấu hình)</span>
+          </div>
+
+          <div class="track-steps-row">
+            <!-- Step A1 -->
+            <div class="step-card track-a">
+              <div class="step-badge indigo">BƯỚC A1</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                </svg>
+              </div>
+              <div class="step-title">AI Phát Đề &amp; TTS</div>
+              <div class="step-desc">Backend bốc 1 câu kèm Rubric 10.0; Web Speech TTS tự động đọc to câu hỏi qua tai nghe.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#4f46e5" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#4f46e5"/></svg></div>
+
+            <!-- Step A2 -->
+            <div class="step-card track-a">
+              <div class="step-badge amber">BƯỚC A2</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                </svg>
+              </div>
+              <div class="step-title">Nói Mic / Gõ Text &amp; Vùng Đệm</div>
+              <div class="step-desc">Tùy chọn trả lời qua Micro (STT bóc băng) HOẶC gõ text trực tiếp; mở vùng đệm (mặc định 60s) kiểm tra thuật ngữ.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#4f46e5" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#4f46e5"/></svg></div>
+
+            <!-- Step A3 -->
+            <div class="step-card track-a">
+              <div class="step-badge purple">BƯỚC A3</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #f3e8ff 0%, #ddd6fe 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2">
+                  <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                  <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                </svg>
+              </div>
+              <div class="step-title">Queue 4 Tầng &amp; Chấm</div>
+              <div class="step-desc">Lưu Pending &lt;100ms &rarr; BoundedChannel &rarr; Polly Retry &rarr; Gemini 1.5 Flash CoT chấm Barem 10.0.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#4f46e5" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#4f46e5"/></svg></div>
+
+            <!-- Step A4 -->
+            <div class="step-card track-a">
+              <div class="step-badge rose">BƯỚC A4</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#be123c" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div class="step-title">Hỏi Phụ A2 (4.0-8.0đ)</div>
+              <div class="step-desc">Điểm 4.0-8.0: AI hỏi thêm câu phụ A2 đào sâu (1-5 câu do Admin cấu hình, mặc định 2); &lt;4.0 hoặc &gt;8.0: Mở Scorecard.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#4f46e5" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#4f46e5"/></svg></div>
+
+            <!-- Step A5 -->
+            <div class="step-card track-a">
+              <div class="step-badge blue">BƯỚC A5</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="m9 12 2 2 4-4"/>
+                </svg>
+              </div>
+              <div class="step-title">Scorecard Từng Câu</div>
+              <div class="step-desc">Modal bảng điểm tiêu chí, Web Speech TTS đọc lời nhận xét; Sinh viên chọn sang câu mới hoặc kết thúc.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TRACK B: Full-Session Consecutive Practice & Score + Feedback -->
+        <div class="track-wrapper track-b-box">
+          <div class="track-header">
+            <div class="track-title-group">
+              <span class="track-pill b">NHÁNH 2</span>
+              <span class="track-name">Chế Độ Luyện Liền Mạch [Full-Session] &amp; Điểm + Feedback</span>
+            </div>
+            <span class="track-meta">Mô phỏng thi trọn gói · Không bị AI ngắt quãng giữa chừng · Chấm tổng hợp 1 lần toàn bộ N câu</span>
+          </div>
+
+          <div class="track-steps-row">
+            <!-- Step B1 -->
+            <div class="step-card track-b">
+              <div class="step-badge green">BƯỚC B1</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </div>
+              <div class="step-title">Nạp Bộ Đề N Câu</div>
+              <div class="step-desc">Backend bốc ma trận N câu hỏi (Bloom 1-6); Khởi tạo trạng thái phiên liên tục phía Client.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#059669" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#059669"/></svg></div>
+
+            <!-- Step B2 -->
+            <div class="step-card track-b">
+              <div class="step-badge amber">BƯỚC B2</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                </svg>
+              </div>
+              <div class="step-title">Trả Lời N Câu (Mic / Text)</div>
+              <div class="step-desc">Sinh viên lần lượt trả lời N câu qua Micro hoặc gõ text; mỗi câu có đệm (mặc định 60s); lưu tạm Client Cache.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#059669" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#059669"/></svg></div>
+
+            <!-- Step B3 -->
+            <div class="step-card track-b">
+              <div class="step-badge purple">BƯỚC B3</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #f3e8ff 0%, #ddd6fe 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div class="step-title">Nộp Toàn Bài (Batch)</div>
+              <div class="step-desc">Làm xong đủ N câu, sinh viên bấm Nộp toàn bài; gói payload gửi qua Hàng đợi 4 tầng Zero Data Loss.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#059669" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#059669"/></svg></div>
+
+            <!-- Step B4 -->
+            <div class="step-card track-b">
+              <div class="step-badge indigo">BƯỚC B4</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+              </div>
+              <div class="step-title">AI Chấm Tổng Thể</div>
+              <div class="step-desc">Gemini 1.5 Flash CoT suy luận chấm điểm toàn diện N câu hỏi theo Barem Rubric 10.0 trong 1 request.</div>
+            </div>
+
+            <div class="arrow-unit-mini"><svg viewBox="0 0 32 18"><line x1="0" y1="9" x2="24" y2="9" stroke="#059669" stroke-width="2.5"/><polygon points="24,4 32,9 24,14" fill="#059669"/></svg></div>
+
+            <!-- Step B5 -->
+            <div class="step-card track-b">
+              <div class="step-badge green">BƯỚC B5</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #dcfce7 0%, #a7f3d0 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </div>
+              <div class="step-title">Báo Cáo &amp; Feedback</div>
+              <div class="step-desc">Hiển thị bảng điểm chi tiết từng tiêu chí và nhận xét đánh giá chuyên sâu (Feedback) từ AI.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+</body>
+</html>

@@ -20,32 +20,130 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pgcrypto");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AnswerType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("answer_type");
+
+                    b.Property<decimal?>("ConfidenceScore")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasColumnName("confidence_score");
+
+                    b.Property<DateTime>("EvaluatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evaluated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("ExamSubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_submission_id");
+
+                    b.Property<string>("Feedback")
+                        .HasColumnType("text")
+                        .HasColumnName("feedback");
+
+                    b.Property<Guid?>("PracticeAnswerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("practice_answer_id");
+
+                    b.Property<decimal>("TotalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("total_score");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExamSubmissionId")
+                        .HasDatabaseName("ix_ai_evaluations_exam_submission");
+
+                    b.HasIndex("PracticeAnswerId")
+                        .HasDatabaseName("ix_ai_evaluations_practice_answer");
+
+                    b.ToTable("ai_evaluations", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluationDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
+
+                    b.Property<Guid>("CriterionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("criterion_id");
+
+                    b.Property<Guid>("EvaluationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("evaluation_id");
+
+                    b.Property<decimal>("Score")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("score");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CriterionId")
+                        .HasDatabaseName("ix_ai_eval_details_criterion");
+
+                    b.HasIndex("EvaluationId")
+                        .HasDatabaseName("ix_ai_eval_details_evaluation");
+
+                    b.ToTable("ai_evaluation_details", (string)null);
+                });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AuditLog", b =>
                 {
-                    b.Property<Guid>("LogId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("log_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("action");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_name");
 
                     b.Property<string>("IpAddress")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("NewValues")
@@ -56,180 +154,285 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("old_values");
 
-                    b.Property<Guid?>("TargetId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("target_id");
-
-                    b.Property<string>("TargetTable")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("target_table");
-
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.HasKey("LogId")
-                        .HasName("audit_logs_pkey");
+                    b.HasKey("Id");
 
-                    b.HasIndex(new[] { "CreatedAt" }, "ix_audit_logs_created")
-                        .IsDescending();
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_audit_logs_created");
 
-                    b.HasIndex(new[] { "TargetTable", "TargetId" }, "ix_audit_logs_target");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_audit_logs_user");
 
-                    b.HasIndex(new[] { "UserId" }, "ix_audit_logs_user");
+                    b.HasIndex("EntityName", "EntityId")
+                        .HasDatabaseName("ix_audit_logs_entity");
 
                     b.ToTable("audit_logs", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Class", b =>
                 {
-                    b.Property<int>("ClassId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("class_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ClassId"));
-
-                    b.Property<string>("ClassName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("class_name");
-
-                    b.Property<int>("CourseId")
-                        .HasColumnType("integer")
-                        .HasColumnName("course_id");
-
-                    b.Property<Guid>("InstructorId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("instructor_id");
-
-                    b.Property<int>("SemesterId")
-                        .HasColumnType("integer")
-                        .HasColumnName("semester_id");
-
-                    b.HasKey("ClassId")
-                        .HasName("classes_pkey");
-
-                    b.HasIndex("CourseId");
-
-                    b.HasIndex("InstructorId");
-
-                    b.HasIndex(new[] { "SemesterId", "ClassName" }, "uq_classes_semester_name")
-                        .IsUnique();
-
-                    b.ToTable("classes", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.ClassEnrollment", b =>
-                {
-                    b.Property<Guid>("EnrollmentId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("enrollment_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<int>("ClassId")
-                        .HasColumnType("integer")
-                        .HasColumnName("class_id");
-
-                    b.Property<DateTime>("EnrolledAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("enrolled_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'ACTIVE'::character varying");
-
-                    b.Property<string>("StudentCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("student_code");
-
-                    b.Property<Guid>("StudentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("student_id");
-
-                    b.HasKey("EnrollmentId")
-                        .HasName("class_enrollments_pkey");
-
-                    b.HasIndex(new[] { "StudentId" }, "ix_class_enrollments_student");
-
-                    b.HasIndex(new[] { "ClassId", "StudentId" }, "uq_class_enrollments")
-                        .IsUnique();
-
-                    b.ToTable("class_enrollments", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.Course", b =>
-                {
-                    b.Property<int>("CourseId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("course_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("CourseId"));
-
-                    b.Property<string>("CourseCode")
+                    b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
-                        .HasColumnName("course_code");
+                        .HasColumnName("code");
 
-                    b.Property<string>("CourseName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("course_name");
-
-                    b.HasKey("CourseId")
-                        .HasName("courses_pkey");
-
-                    b.HasIndex(new[] { "CourseCode" }, "courses_course_code_key")
-                        .IsUnique();
-
-                    b.ToTable("courses", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
-                {
-                    b.Property<Guid>("QuestionId")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("CourseId")
                         .HasColumnType("uuid")
-                        .HasColumnName("question_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid?>("ApprovedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("approved_by");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("content");
-
-                    b.Property<int>("CourseId")
-                        .HasColumnType("integer")
                         .HasColumnName("course_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<string>("Difficulty")
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid?>("LecturerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lecturer_id");
+
+                    b.Property<int>("MaxStudents")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(35)
+                        .HasColumnName("max_students");
+
+                    b.Property<Guid>("SemesterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("semester_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_classes_code");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_classes_course");
+
+                    b.HasIndex("LecturerId")
+                        .HasDatabaseName("ix_classes_lecturer");
+
+                    b.HasIndex("SemesterId")
+                        .HasDatabaseName("ix_classes_semester");
+
+                    b.ToTable("classes", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ClassEnrollment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ClassId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("class_id");
+
+                    b.Property<DateTime>("EnrolledAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enrolled_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("enrolled")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId")
+                        .HasDatabaseName("ix_class_enrollments_student");
+
+                    b.HasIndex("ClassId", "StudentId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_class_enrollments");
+
+                    b.ToTable("class_enrollments", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.Course", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("Credits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("credits");
+
+                    b.Property<bool>("HasFollowUp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_follow_up");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("SemesterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("semester_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_courses_code");
+
+                    b.HasIndex("SemesterId")
+                        .HasDatabaseName("ix_courses_semester");
+
+                    b.ToTable("courses", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.DeadLetterQueue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("ErrorMessage")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<int>("RetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("retry_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TaskType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("task_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_dead_letter_queues_status");
+
+                    b.ToTable("dead_letter_queues", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<string>("BloomLevel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Understand")
+                        .HasColumnName("bloom_level");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("medium")
                         .HasColumnName("difficulty");
 
                     b.Property<bool>("IsActive")
@@ -238,253 +441,441 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
-                    b.Property<string>("ModelAnswer")
+                    b.Property<string>("KeyPoints")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("key_points")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid>("RubricId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rubric_id");
+
+                    b.Property<string>("SampleAnswer")
                         .HasColumnType("text")
-                        .HasColumnName("model_answer");
+                        .HasColumnName("sample_answer");
 
-                    b.HasKey("QuestionId")
-                        .HasName("exam_questions_pkey");
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("title");
 
-                    b.HasIndex("ApprovedBy");
+                    b.HasKey("Id");
 
-                    b.HasIndex("CourseId");
+                    b.HasIndex("ApprovedBy")
+                        .HasDatabaseName("ix_exam_questions_approved");
+
+                    b.HasIndex("RubricId")
+                        .HasDatabaseName("ix_exam_questions_rubric");
+
+                    b.HasIndex("CourseId", "Difficulty", "IsActive")
+                        .HasDatabaseName("ix_exam_questions_course");
 
                     b.ToTable("exam_questions", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestionSubmission", b =>
                 {
-                    b.Property<int>("StructureId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("structure_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("StructureId"));
-
-                    b.Property<int>("CourseId")
-                        .HasColumnType("integer")
-                        .HasColumnName("course_id");
-
-                    b.Property<int>("DurationMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("duration_minutes");
-
-                    b.Property<int>("EasyCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("easy_count");
-
-                    b.Property<string>("ExamMode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("exam_mode")
-                        .HasDefaultValueSql("'FIXED'::character varying");
-
-                    b.Property<int?>("FollowupTimeoutSec")
-                        .HasColumnType("integer")
-                        .HasColumnName("followup_timeout_sec");
-
-                    b.Property<int>("HardCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("hard_count");
-
-                    b.Property<int?>("MaxFollowups")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_followups");
-
-                    b.Property<int>("MediumCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("medium_count");
-
-                    b.Property<string>("StructureName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("structure_name");
-
-                    b.HasKey("StructureId")
-                        .HasName("exam_structures_pkey");
-
-                    b.HasIndex("CourseId");
-
-                    b.ToTable("exam_structures", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
-                {
-                    b.Property<Guid>("MockAnswerId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("mock_answer_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AiFeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("ai_feedback");
 
                     b.Property<decimal?>("AiScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
                         .HasColumnName("ai_score");
 
-                    b.Property<Guid?>("FollowupQuestionId")
+                    b.Property<string>("AudioHashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("audio_hash_sha256");
+
+                    b.Property<string>("AudioR2Url")
+                        .HasColumnType("text")
+                        .HasColumnName("audio_r2_url");
+
+                    b.Property<Guid>("ExamQuestionId")
                         .HasColumnType("uuid")
-                        .HasColumnName("followup_question_id");
+                        .HasColumnName("exam_question_id");
 
-                    b.Property<Guid>("MockSessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("mock_session_id");
+                    b.Property<decimal?>("FinalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("final_score");
 
-                    b.Property<Guid?>("ParentAnswerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_answer_id");
-
-                    b.Property<Guid>("QuestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("question_id");
-
-                    b.Property<int>("RoundIndex")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("round_index");
-
-                    b.Property<string>("Status")
+                    b.Property<string>("GradingStatus")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'PENDING'::character varying");
+                        .HasDefaultValue("pending")
+                        .HasColumnName("grading_status");
 
-                    b.Property<string>("UserTranscript")
+                    b.Property<DateTime>("SubmittedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.Property<int>("TimeSpentSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("time_spent_seconds");
+
+                    b.Property<string>("TimestampsWhisper")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("timestamps_whisper");
+
+                    b.Property<string>("TranscriptWhisper")
                         .HasColumnType("text")
-                        .HasColumnName("user_transcript");
+                        .HasColumnName("transcript_whisper");
 
-                    b.HasKey("MockAnswerId")
-                        .HasName("mock_exam_answers_pkey");
+                    b.HasKey("Id");
 
-                    b.HasIndex("FollowupQuestionId");
+                    b.HasIndex("ExamQuestionId")
+                        .HasDatabaseName("ix_exam_question_submissions_question");
 
-                    b.HasIndex("ParentAnswerId");
+                    b.HasIndex("TicketId")
+                        .HasDatabaseName("ix_exam_question_submissions_ticket");
 
-                    b.HasIndex("QuestionId");
+                    b.HasIndex("TicketId", "ExamQuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ticket_question");
 
-                    b.HasIndex(new[] { "MockSessionId" }, "ix_mock_answers_session");
-
-                    b.ToTable("mock_exam_answers", (string)null);
+                    b.ToTable("exam_question_submissions", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamFollowupQuestion", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSet", b =>
                 {
-                    b.Property<Guid>("FollowupId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("followup_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("ContextTranscript")
-                        .HasColumnType("text")
-                        .HasColumnName("context_transcript");
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("SetCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("set_code");
+
+                    b.Property<Guid>("StructureId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("structure_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_exam_sets_course");
+
+                    b.HasIndex("StructureId")
+                        .HasDatabaseName("ix_exam_sets_structure");
+
+                    b.ToTable("exam_sets", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ExamQuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_question_id");
+
+                    b.Property<Guid>("ExamSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_set_id");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("order_index");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExamQuestionId")
+                        .HasDatabaseName("ix_exam_set_questions_question");
+
+                    b.HasIndex("ExamSetId")
+                        .HasDatabaseName("ix_exam_set_questions_set");
+
+                    b.HasIndex("ExamSetId", "ExamQuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_exam_set_questions");
+
+                    b.ToTable("exam_set_questions", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("BloomDistribution")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("bloom_distribution")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<Guid>("MockAnswerId")
+                    b.Property<Guid>("CreatedBy")
                         .HasColumnType("uuid")
-                        .HasColumnName("mock_answer_id");
+                        .HasColumnName("created_by");
 
-                    b.Property<Guid>("MockSessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("mock_session_id");
-
-                    b.Property<string>("ModelVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("model_version");
-
-                    b.Property<Guid?>("ParentPracticeQuestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_practice_question_id");
-
-                    b.Property<string>("PromptVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("prompt_version");
-
-                    b.Property<string>("QuestionText")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("question_text");
-
-                    b.Property<int>("RoundIndex")
+                    b.Property<int>("DurationMinutes")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasDefaultValue(1)
-                        .HasColumnName("round_index");
+                        .HasDefaultValue(30)
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("TotalQuestions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5)
+                        .HasColumnName("total_questions");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_exam_structures_course");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_exam_structures_created_by");
+
+                    b.ToTable("exam_structures", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("AuditedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("audited_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<decimal>("AuditedScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("audited_score");
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_locked");
+
+                    b.Property<Guid>("LecturerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lecturer_id");
+
+                    b.Property<decimal>("OriginalAiScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("original_ai_score");
+
+                    b.Property<string>("OverrideReason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("override_reason");
+
+                    b.Property<Guid>("TicketId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ticket_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LecturerId")
+                        .HasDatabaseName("ix_lecturer_audits_lecturer");
+
+                    b.HasIndex("TicketId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_lecturer_audits_ticket");
+
+                    b.ToTable("lecturer_audits", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAuditDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("AiScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("ai_score");
+
+                    b.Property<Guid>("AuditId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("audit_id");
+
+                    b.Property<decimal>("AuditedScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("audited_score");
+
+                    b.Property<Guid>("CriterionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("criterion_id");
+
+                    b.Property<string>("LecturerComment")
+                        .HasColumnType("text")
+                        .HasColumnName("lecturer_comment");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuditId")
+                        .HasDatabaseName("ix_lecturer_audit_details_audit");
+
+                    b.HasIndex("CriterionId")
+                        .HasDatabaseName("ix_lecturer_audit_details_criterion");
+
+                    b.ToTable("lecturer_audit_details", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AnswerText")
+                        .HasColumnType("text")
+                        .HasColumnName("answer_text");
+
+                    b.Property<DateTime>("AnsweredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("answered_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("AudioUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("audio_url");
+
+                    b.Property<Guid>("ExamQuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_question_id");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'GENERATED'::character varying");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("answered")
+                        .HasColumnName("status");
 
-                    b.Property<int?>("TimeoutSec")
+                    b.Property<int>("TimeTakenSeconds")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasColumnName("timeout_sec");
+                        .HasDefaultValue(0)
+                        .HasColumnName("time_taken_seconds");
 
-                    b.HasKey("FollowupId")
-                        .HasName("mock_exam_followup_questions_pkey");
+                    b.HasKey("Id");
 
-                    b.HasIndex("MockAnswerId");
+                    b.HasIndex("ExamQuestionId")
+                        .HasDatabaseName("ix_mock_exam_answers_question");
 
-                    b.HasIndex("MockSessionId");
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_mock_exam_answers_session");
 
-                    b.HasIndex("ParentPracticeQuestionId");
-
-                    b.ToTable("mock_exam_followup_questions", (string)null);
+                    b.ToTable("mock_exam_answers", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamQuota", b =>
                 {
-                    b.Property<Guid>("QuotaId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("quota_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<int>("CourseId")
-                        .HasColumnType("integer")
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("course_id");
 
-                    b.Property<int>("MaxCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(3)
-                        .HasColumnName("max_count");
-
                     b.Property<DateOnly>("QuotaDate")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("date")
-                        .HasColumnName("quota_date")
-                        .HasDefaultValueSql("CURRENT_DATE");
+                        .HasColumnName("quota_date");
 
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<int>("UsedCount")
                         .ValueGeneratedOnAdd()
@@ -492,104 +883,151 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("used_count");
 
-                    b.HasKey("QuotaId")
-                        .HasName("mock_exam_quotas_pkey");
+                    b.HasKey("Id");
 
                     b.HasIndex("CourseId");
 
-                    b.HasIndex(new[] { "StudentId", "CourseId", "QuotaDate" }, "uq_mock_exam_quotas")
-                        .IsUnique();
+                    b.HasIndex("StudentId", "CourseId", "QuotaDate")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mock_exam_quotas_lookup");
 
                     b.ToTable("mock_exam_quotas", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamSession", b =>
                 {
-                    b.Property<Guid>("MockSessionId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("mock_session_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<DateTime?>("CompletedAt")
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<Guid>("ExamSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_set_id");
+
+                    b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<string>("ExamMode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("exam_mode")
-                        .HasDefaultValueSql("'FIXED'::character varying");
-
-                    b.Property<string>("OverallFeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("overall_feedback");
-
-                    b.Property<decimal?>("OverallScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("overall_score");
+                        .HasColumnName("expires_at");
 
                     b.Property<DateTime>("StartedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'IN_PROGRESS'::character varying");
-
-                    b.Property<int>("StructureId")
-                        .HasColumnType("integer")
-                        .HasColumnName("structure_id");
+                        .HasDefaultValue("in_progress")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
 
-                    b.HasKey("MockSessionId")
-                        .HasName("mock_exam_sessions_pkey");
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
 
-                    b.HasIndex("StructureId");
+                    b.Property<decimal?>("TotalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("total_score");
 
-                    b.HasIndex(new[] { "StudentId" }, "ix_mock_sessions_student");
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_mock_exam_sessions_course");
+
+                    b.HasIndex("ExamSetId")
+                        .HasDatabaseName("ix_mock_exam_sessions_set");
+
+                    b.HasIndex("StudentId", "StartedAt")
+                        .HasDatabaseName("ix_mock_exam_sessions_student");
 
                     b.ToTable("mock_exam_sessions", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.OfficialExamSession", b =>
                 {
-                    b.Property<Guid>("AnswerId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("answer_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("AiFeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("ai_feedback");
-
-                    b.Property<decimal?>("AiScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("ai_score");
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<Guid?>("FollowupQuestionId")
+                    b.Property<DateOnly>("ExamDate")
+                        .HasColumnType("date")
+                        .HasColumnName("exam_date");
+
+                    b.Property<Guid>("ExamStructureId")
                         .HasColumnType("uuid")
-                        .HasColumnName("followup_question_id");
+                        .HasColumnName("exam_structure_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("scheduled")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_official_exam_sessions_course");
+
+                    b.HasIndex("ExamStructureId")
+                        .HasDatabaseName("ix_official_exam_sessions_structure");
+
+                    b.ToTable("official_exam_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AnswerText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("answer_text");
+
+                    b.Property<string>("AudioUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("audio_url");
+
+                    b.Property<bool>("IsFollowUp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_follow_up");
 
                     b.Property<Guid?>("ParentAnswerId")
                         .HasColumnType("uuid")
@@ -608,519 +1046,207 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'PENDING'::character varying");
+                        .HasDefaultValue("pending")
+                        .HasColumnName("status");
 
-                    b.Property<string>("UserTranscript")
-                        .HasColumnType("text")
-                        .HasColumnName("user_transcript");
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
 
-                    b.HasKey("AnswerId")
-                        .HasName("practice_answers_pkey");
+                    b.Property<DateTime>("SubmittedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.HasIndex("FollowupQuestionId");
+                    b.HasKey("Id");
 
-                    b.HasIndex("ParentAnswerId");
+                    b.HasIndex("ParentAnswerId")
+                        .HasDatabaseName("ix_practice_answers_parent");
 
-                    b.HasIndex("QuestionId");
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("ix_practice_answers_question");
 
-                    b.HasIndex(new[] { "SessionId" }, "ix_practice_answers_session");
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_practice_answers_session");
+
+                    b.HasIndex("StudentId")
+                        .HasDatabaseName("ix_practice_answers_student");
 
                     b.ToTable("practice_answers", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeFollowupQuestion", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeQuestion", b =>
                 {
-                    b.Property<Guid>("FollowupId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("followup_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("GapSummary")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("gap_summary");
-
-                    b.Property<string>("ModelVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("model_version");
-
-                    b.Property<Guid>("PracticeAnswerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("practice_answer_id");
-
-                    b.Property<Guid>("PracticeSessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("practice_session_id");
-
-                    b.Property<string>("PromptVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("prompt_version");
-
-                    b.Property<string>("QuestionText")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("question_text");
-
-                    b.Property<int>("RoundIndex")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1)
-                        .HasColumnName("round_index");
-
-                    b.Property<string>("Status")
+                    b.Property<string>("BloomLevel")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'GENERATED'::character varying");
-
-                    b.Property<decimal?>("TriggerScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("trigger_score");
-
-                    b.HasKey("FollowupId")
-                        .HasName("practice_followup_questions_pkey");
-
-                    b.HasIndex("PracticeAnswerId");
-
-                    b.HasIndex("PracticeSessionId");
-
-                    b.ToTable("practice_followup_questions", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeQuestion", b =>
-                {
-                    b.Property<Guid>("QuestionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("question_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasDefaultValue("Understand")
+                        .HasColumnName("bloom_level");
 
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("content");
 
-                    b.Property<int>("CourseId")
-                        .HasColumnType("integer")
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("course_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Difficulty")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
+                        .HasDefaultValue("medium")
                         .HasColumnName("difficulty");
 
-                    b.Property<string>("ModelAnswer")
-                        .IsRequired()
+                    b.Property<string>("FollowUpPrompt")
                         .HasColumnType("text")
-                        .HasColumnName("model_answer");
+                        .HasColumnName("follow_up_prompt");
 
-                    b.HasKey("QuestionId")
-                        .HasName("practice_questions_pkey");
+                    b.Property<bool>("HasFollowUp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_follow_up");
 
-                    b.HasIndex("CourseId");
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("KeyPoints")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("key_points")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<Guid>("RubricId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rubric_id");
+
+                    b.Property<string>("SampleAnswer")
+                        .HasColumnType("text")
+                        .HasColumnName("sample_answer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RubricId")
+                        .HasDatabaseName("ix_practice_questions_rubric");
+
+                    b.HasIndex("CourseId", "Difficulty", "IsActive")
+                        .HasDatabaseName("ix_practice_questions_course");
 
                     b.ToTable("practice_questions", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeSession", b =>
                 {
-                    b.Property<Guid>("SessionId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("session_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<string>("PracticeMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("per_question")
+                        .HasColumnName("practice_mode");
+
+                    b.Property<DateTime>("StartedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasColumnName("started_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("in_progress")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
 
-                    b.HasKey("SessionId")
-                        .HasName("practice_sessions_pkey");
+                    b.HasKey("Id");
 
-                    b.HasIndex(new[] { "StudentId" }, "ix_practice_sessions_student");
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_practice_sessions_course");
+
+                    b.HasIndex("StudentId", "StartedAt")
+                        .HasDatabaseName("ix_practice_sessions_student");
 
                     b.ToTable("practice_sessions", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAnswer", b =>
-                {
-                    b.Property<Guid>("RealAnswerId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("real_answer_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AiEvidence")
-                        .HasColumnType("text")
-                        .HasColumnName("ai_evidence");
-
-                    b.Property<decimal?>("AiScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("ai_score");
-
-                    b.Property<string>("AudioUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("audio_url");
-
-                    b.Property<decimal?>("FinalScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("final_score");
-
-                    b.Property<Guid?>("FollowupQuestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("followup_question_id");
-
-                    b.Property<Guid?>("ParentAnswerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_answer_id");
-
-                    b.Property<Guid>("QuestionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("question_id");
-
-                    b.Property<Guid>("ResultId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_id");
-
-                    b.Property<int>("RoundIndex")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("round_index");
-
-                    b.Property<string>("RubricSnapshot")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("rubric_snapshot");
-
-                    b.Property<string>("TimestampsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("timestamps_json");
-
-                    b.Property<string>("Transcript")
-                        .HasColumnType("text")
-                        .HasColumnName("transcript");
-
-                    b.HasKey("RealAnswerId")
-                        .HasName("real_exam_answers_pkey");
-
-                    b.HasIndex("FollowupQuestionId");
-
-                    b.HasIndex("ParentAnswerId");
-
-                    b.HasIndex("QuestionId");
-
-                    b.HasIndex(new[] { "ResultId" }, "ix_real_answers_result");
-
-                    b.ToTable("real_exam_answers", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAssignment", b =>
-                {
-                    b.Property<Guid>("AssignmentId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("assignment_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AttendanceStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("attendance_status")
-                        .HasDefaultValueSql("'NOT_STARTED'::character varying");
-
-                    b.Property<int?>("BoothNumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("booth_number");
-
-                    b.Property<Guid>("ShiftId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("shift_id");
-
-                    b.Property<Guid>("StudentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("student_id");
-
-                    b.HasKey("AssignmentId")
-                        .HasName("real_exam_assignments_pkey");
-
-                    b.HasIndex("StudentId");
-
-                    b.HasIndex(new[] { "ShiftId", "StudentId" }, "uq_real_exam_assignments")
-                        .IsUnique();
-
-                    b.ToTable("real_exam_assignments", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamFollowupQuestion", b =>
-                {
-                    b.Property<Guid>("FollowupId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("followup_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("ContextTranscript")
-                        .HasColumnType("text")
-                        .HasColumnName("context_transcript");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("ModelVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("model_version");
-
-                    b.Property<string>("PromptSnapshot")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("prompt_snapshot");
-
-                    b.Property<string>("PromptVersion")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("prompt_version");
-
-                    b.Property<string>("QuestionText")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("question_text");
-
-                    b.Property<Guid>("RealAnswerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("real_answer_id");
-
-                    b.Property<Guid>("ResultId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_id");
-
-                    b.Property<int>("RoundIndex")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1)
-                        .HasColumnName("round_index");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'GENERATED'::character varying");
-
-                    b.Property<int?>("TimeoutSec")
-                        .HasColumnType("integer")
-                        .HasColumnName("timeout_sec");
-
-                    b.HasKey("FollowupId")
-                        .HasName("real_exam_followup_questions_pkey");
-
-                    b.HasIndex("RealAnswerId");
-
-                    b.HasIndex("ResultId");
-
-                    b.ToTable("real_exam_followup_questions", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamResult", b =>
-                {
-                    b.Property<Guid>("ResultId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<decimal?>("AiScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("ai_score");
-
-                    b.Property<Guid>("AssignmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("assignment_id");
-
-                    b.Property<decimal?>("FinalScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("final_score");
-
-                    b.Property<bool>("IsFlagged")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_flagged");
-
-                    b.Property<bool>("IsLocked")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_locked");
-
-                    b.Property<bool>("IsOverridden")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_overridden");
-
-                    b.Property<DateTime?>("LockedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("locked_at");
-
-                    b.Property<bool>("MicCheckPassed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("mic_check_passed");
-
-                    b.Property<string>("OverrideReason")
-                        .HasColumnType("text")
-                        .HasColumnName("override_reason");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<Guid?>("ReviewedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<string>("Sha256Hash")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("sha256_hash");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'NOT_STARTED'::character varying");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("submitted_at");
-
-                    b.Property<int>("ViolationCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("violation_count");
-
-                    b.HasKey("ResultId")
-                        .HasName("real_exam_results_pkey");
-
-                    b.HasIndex("ReviewedBy");
-
-                    b.HasIndex(new[] { "AssignmentId" }, "real_exam_results_assignment_id_key")
-                        .IsUnique();
-
-                    b.ToTable("real_exam_results", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSession", b =>
-                {
-                    b.Property<Guid>("ExamSessionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("exam_session_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<int>("ClassId")
-                        .HasColumnType("integer")
-                        .HasColumnName("class_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<DateOnly>("ExamDate")
-                        .HasColumnType("date")
-                        .HasColumnName("exam_date");
-
-                    b.Property<string>("ExamMode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("exam_mode")
-                        .HasDefaultValueSql("'FIXED'::character varying");
-
-                    b.Property<int>("StructureId")
-                        .HasColumnType("integer")
-                        .HasColumnName("structure_id");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("title");
-
-                    b.HasKey("ExamSessionId")
-                        .HasName("real_exam_sessions_pkey");
-
-                    b.HasIndex("ClassId");
-
-                    b.HasIndex("StructureId");
-
-                    b.ToTable("real_exam_sessions", (string)null);
-                });
-
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
                 {
-                    b.Property<Guid>("ShiftId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("shift_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("end_time");
 
-                    b.Property<Guid>("ExamSessionId")
+                    b.Property<Guid?>("ProctorUserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("exam_session_id");
+                        .HasColumnName("proctor_user_id");
 
-                    b.Property<string>("LabRoom")
+                    b.Property<string>("RoomLab")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("lab_room");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("room_lab");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
 
                     b.Property<string>("ShiftName")
                         .IsRequired()
@@ -1132,119 +1258,268 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("start_time");
 
-                    b.HasKey("ShiftId")
-                        .HasName("real_exam_session_shifts_pkey");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("scheduled")
+                        .HasColumnName("status");
 
-                    b.HasIndex("ExamSessionId");
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProctorUserId")
+                        .HasDatabaseName("ix_real_exam_shifts_proctor");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_real_exam_shifts_session");
 
                     b.ToTable("real_exam_session_shifts", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.Role", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.Rubric", b =>
                 {
-                    b.Property<int>("RoleId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("role_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("RoleId"));
-
-                    b.Property<string>("RoleName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("role_name");
-
-                    b.HasKey("RoleId")
-                        .HasName("roles_pkey");
-
-                    b.HasIndex(new[] { "RoleName" }, "roles_role_name_key")
-                        .IsUnique();
-
-                    b.ToTable("roles", (string)null);
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RubricItem", b =>
-                {
-                    b.Property<Guid>("RubricId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("rubric_id")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("CriteriaDescription")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("criteria_description");
-
-                    b.Property<Guid?>("ExamQuestionId")
+                    b.Property<Guid>("CourseId")
                         .HasColumnType("uuid")
-                        .HasColumnName("exam_question_id");
+                        .HasColumnName("course_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("TotalMaxScore")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasDefaultValue(10.00m)
+                        .HasColumnName("total_max_score");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId")
+                        .HasDatabaseName("ix_rubrics_course");
+
+                    b.ToTable("rubrics", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.RubricCriterion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("BloomLevel")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bloom_level");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("CriterionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("criterion_name");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<decimal>("MaxScore")
                         .HasPrecision(4, 2)
                         .HasColumnType("numeric(4,2)")
                         .HasColumnName("max_score");
 
-                    b.Property<Guid?>("PracticeQuestionId")
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid>("RubricId")
                         .HasColumnType("uuid")
-                        .HasColumnName("practice_question_id");
+                        .HasColumnName("rubric_id");
 
-                    b.HasKey("RubricId")
-                        .HasName("rubric_items_pkey");
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(3, 2)
+                        .HasColumnType("numeric(3,2)")
+                        .HasColumnName("weight");
 
-                    b.HasIndex(new[] { "ExamQuestionId" }, "ix_rubric_exam");
+                    b.HasKey("Id");
 
-                    b.HasIndex(new[] { "PracticeQuestionId" }, "ix_rubric_practice");
+                    b.HasIndex("RubricId")
+                        .HasDatabaseName("ix_rubric_criteria_rubric");
 
-                    b.ToTable("rubric_items", (string)null);
+                    b.ToTable("rubric_criteria", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Semester", b =>
                 {
-                    b.Property<int>("SemesterId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("semester_id");
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SemesterId"));
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date")
                         .HasColumnName("end_date");
 
-                    b.Property<string>("SemesterCode")
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("semester_code");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date")
                         .HasColumnName("start_date");
 
-                    b.HasKey("SemesterId")
-                        .HasName("semesters_pkey");
+                    b.HasKey("Id");
 
-                    b.HasIndex(new[] { "SemesterCode" }, "semesters_semester_code_key")
-                        .IsUnique();
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_semesters_code");
 
                     b.ToTable("semesters", (string)null);
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.User", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.StudentExamTicket", b =>
                 {
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("user_id")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CheckedInAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_in_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("ExamSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_set_id");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_locked");
+
+                    b.Property<int>("SeatNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("seat_number");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shift_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("checked_in")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExamSetId")
+                        .HasDatabaseName("ix_student_exam_tickets_set");
+
+                    b.HasIndex("ShiftId")
+                        .HasDatabaseName("ix_student_exam_tickets_shift");
+
+                    b.HasIndex("StudentId")
+                        .HasDatabaseName("ix_student_exam_tickets_student");
+
+                    b.HasIndex("ShiftId", "SeatNumber")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tickets_seat");
+
+                    b.HasIndex("ShiftId", "StudentId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tickets_student");
+
+                    b.ToTable("student_exam_tickets", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
-                        .HasDefaultValueSql("now()");
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -1254,37 +1529,87 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("FullName")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
                         .HasColumnName("full_name");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
 
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("password_hash");
 
-                    b.Property<int>("RoleId")
-                        .HasColumnType("integer")
-                        .HasColumnName("role_id");
-
-                    b.Property<string>("Username")
+                    b.Property<string>("Role")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("username");
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("student")
+                        .HasColumnName("role");
 
-                    b.HasKey("UserId")
-                        .HasName("users_pkey");
+                    b.Property<string>("StudentCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("student_code");
 
-                    b.HasIndex("RoleId");
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.HasIndex(new[] { "Email" }, "users_email_key")
-                        .IsUnique();
+                    b.HasKey("Id");
 
-                    b.HasIndex(new[] { "Username" }, "users_username_key")
-                        .IsUnique();
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_email");
+
+                    b.HasIndex("StudentCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_student_code");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluation", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestionSubmission", "ExamSubmission")
+                        .WithMany("AiEvaluations")
+                        .HasForeignKey("ExamSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("OralExamination.Domain.Entities.PracticeAnswer", "PracticeAnswer")
+                        .WithMany("AiEvaluations")
+                        .HasForeignKey("PracticeAnswerId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ExamSubmission");
+
+                    b.Navigation("PracticeAnswer");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluationDetail", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.RubricCriterion", "Criterion")
+                        .WithMany("AiEvaluationDetails")
+                        .HasForeignKey("CriterionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.AiEvaluation", "Evaluation")
+                        .WithMany("Details")
+                        .HasForeignKey("EvaluationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Criterion");
+
+                    b.Navigation("Evaluation");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AuditLog", b =>
@@ -1292,8 +1617,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasOne("OralExamination.Domain.Entities.User", "User")
                         .WithMany("AuditLogs")
                         .HasForeignKey("UserId")
-                        .IsRequired()
-                        .HasConstraintName("audit_logs_user_id_fkey");
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
                 });
@@ -1303,24 +1627,23 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("Classes")
                         .HasForeignKey("CourseId")
-                        .IsRequired()
-                        .HasConstraintName("classes_course_id_fkey");
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
-                    b.HasOne("OralExamination.Domain.Entities.User", "Instructor")
-                        .WithMany("Classes")
-                        .HasForeignKey("InstructorId")
-                        .IsRequired()
-                        .HasConstraintName("classes_instructor_id_fkey");
+                    b.HasOne("OralExamination.Domain.Entities.User", "Lecturer")
+                        .WithMany("InstructedClasses")
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("OralExamination.Domain.Entities.Semester", "Semester")
                         .WithMany("Classes")
                         .HasForeignKey("SemesterId")
-                        .IsRequired()
-                        .HasConstraintName("classes_semester_id_fkey");
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Course");
 
-                    b.Navigation("Instructor");
+                    b.Navigation("Lecturer");
 
                     b.Navigation("Semester");
                 });
@@ -1328,39 +1651,114 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("OralExamination.Domain.Entities.ClassEnrollment", b =>
                 {
                     b.HasOne("OralExamination.Domain.Entities.Class", "Class")
-                        .WithMany("ClassEnrollments")
+                        .WithMany("Enrollments")
                         .HasForeignKey("ClassId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("class_enrollments_class_id_fkey");
+                        .IsRequired();
 
                     b.HasOne("OralExamination.Domain.Entities.User", "Student")
-                        .WithMany("ClassEnrollments")
+                        .WithMany("Enrollments")
                         .HasForeignKey("StudentId")
-                        .IsRequired()
-                        .HasConstraintName("class_enrollments_student_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Class");
 
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.Course", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.Semester", "Semester")
+                        .WithMany("Courses")
+                        .HasForeignKey("SemesterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Semester");
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.User", "ApprovedByNavigation")
-                        .WithMany("ExamQuestions")
+                    b.HasOne("OralExamination.Domain.Entities.User", "ApprovedByUser")
+                        .WithMany("ApprovedExamQuestions")
                         .HasForeignKey("ApprovedBy")
-                        .HasConstraintName("exam_questions_approved_by_fkey");
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamQuestions")
                         .HasForeignKey("CourseId")
-                        .IsRequired()
-                        .HasConstraintName("exam_questions_course_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Navigation("ApprovedByNavigation");
+                    b.HasOne("OralExamination.Domain.Entities.Rubric", "Rubric")
+                        .WithMany("ExamQuestions")
+                        .HasForeignKey("RubricId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
 
                     b.Navigation("Course");
+
+                    b.Navigation("Rubric");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestionSubmission", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", "ExamQuestion")
+                        .WithMany("Submissions")
+                        .HasForeignKey("ExamQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.StudentExamTicket", "Ticket")
+                        .WithMany("Submissions")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExamQuestion");
+
+                    b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSet", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany("ExamSets")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
+                        .WithMany("ExamSets")
+                        .HasForeignKey("StructureId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("Structure");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetQuestion", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", "ExamQuestion")
+                        .WithMany("ExamSetQuestions")
+                        .HasForeignKey("ExamQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamSet", "ExamSet")
+                        .WithMany("ExamSetQuestions")
+                        .HasForeignKey("ExamSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExamQuestion");
+
+                    b.Navigation("ExamSet");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
@@ -1368,87 +1766,90 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamStructures")
                         .HasForeignKey("CourseId")
-                        .IsRequired()
-                        .HasConstraintName("exam_structures_course_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.User", "CreatedByUser")
+                        .WithMany("CreatedExamStructures")
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Course");
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAudit", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", "Lecturer")
+                        .WithMany("LecturerAudits")
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.StudentExamTicket", "Ticket")
+                        .WithOne("LecturerAudit")
+                        .HasForeignKey("OralExamination.Domain.Entities.LecturerAudit", "TicketId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lecturer");
+
+                    b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAuditDetail", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.LecturerAudit", "Audit")
+                        .WithMany("Details")
+                        .HasForeignKey("AuditId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.RubricCriterion", "Criterion")
+                        .WithMany("LecturerAuditDetails")
+                        .HasForeignKey("CriterionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Audit");
+
+                    b.Navigation("Criterion");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.MockExamFollowupQuestion", "FollowupQuestion")
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", "ExamQuestion")
                         .WithMany("MockExamAnswers")
-                        .HasForeignKey("FollowupQuestionId")
-                        .HasConstraintName("fk_mock_answers_followup");
+                        .HasForeignKey("ExamQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
-                    b.HasOne("OralExamination.Domain.Entities.MockExamSession", "MockSession")
-                        .WithMany("MockExamAnswers")
-                        .HasForeignKey("MockSessionId")
+                    b.HasOne("OralExamination.Domain.Entities.MockExamSession", "Session")
+                        .WithMany("Answers")
+                        .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_answers_mock_session_id_fkey");
+                        .IsRequired();
 
-                    b.HasOne("OralExamination.Domain.Entities.MockExamAnswer", "ParentAnswer")
-                        .WithMany("InverseParentAnswer")
-                        .HasForeignKey("ParentAnswerId")
-                        .HasConstraintName("mock_exam_answers_parent_answer_id_fkey");
+                    b.Navigation("ExamQuestion");
 
-                    b.HasOne("OralExamination.Domain.Entities.PracticeQuestion", "Question")
-                        .WithMany("MockExamAnswers")
-                        .HasForeignKey("QuestionId")
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_answers_question_id_fkey");
-
-                    b.Navigation("FollowupQuestion");
-
-                    b.Navigation("MockSession");
-
-                    b.Navigation("ParentAnswer");
-
-                    b.Navigation("Question");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamFollowupQuestion", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.MockExamAnswer", "MockAnswer")
-                        .WithMany("MockExamFollowupQuestions")
-                        .HasForeignKey("MockAnswerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_followup_questions_mock_answer_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.MockExamSession", "MockSession")
-                        .WithMany("MockExamFollowupQuestions")
-                        .HasForeignKey("MockSessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_followup_questions_mock_session_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.PracticeQuestion", "ParentPracticeQuestion")
-                        .WithMany("MockExamFollowupQuestions")
-                        .HasForeignKey("ParentPracticeQuestionId")
-                        .HasConstraintName("mock_exam_followup_questions_parent_practice_question_id_fkey");
-
-                    b.Navigation("MockAnswer");
-
-                    b.Navigation("MockSession");
-
-                    b.Navigation("ParentPracticeQuestion");
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamQuota", b =>
                 {
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
-                        .WithMany("MockExamQuota")
+                        .WithMany("MockExamQuotas")
                         .HasForeignKey("CourseId")
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_quotas_course_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("OralExamination.Domain.Entities.User", "Student")
-                        .WithMany("MockExamQuota")
+                        .WithMany("MockExamQuotas")
                         .HasForeignKey("StudentId")
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_quotas_student_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Course");
 
@@ -1457,76 +1858,82 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamSession", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("MockExamSessions")
-                        .HasForeignKey("StructureId")
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_sessions_structure_id_fkey");
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamSet", "ExamSet")
+                        .WithMany("MockExamSessions")
+                        .HasForeignKey("ExamSetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("OralExamination.Domain.Entities.User", "Student")
                         .WithMany("MockExamSessions")
                         .HasForeignKey("StudentId")
-                        .IsRequired()
-                        .HasConstraintName("mock_exam_sessions_student_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Navigation("Structure");
+                    b.Navigation("Course");
+
+                    b.Navigation("ExamSet");
 
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.OfficialExamSession", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany("OfficialExamSessions")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "ExamStructure")
+                        .WithMany("OfficialExamSessions")
+                        .HasForeignKey("ExamStructureId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("ExamStructure");
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.PracticeFollowupQuestion", "FollowupQuestion")
-                        .WithMany("PracticeAnswers")
-                        .HasForeignKey("FollowupQuestionId")
-                        .HasConstraintName("fk_practice_answers_followup");
-
                     b.HasOne("OralExamination.Domain.Entities.PracticeAnswer", "ParentAnswer")
-                        .WithMany("InverseParentAnswer")
+                        .WithMany("FollowUpAnswers")
                         .HasForeignKey("ParentAnswerId")
-                        .HasConstraintName("practice_answers_parent_answer_id_fkey");
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("OralExamination.Domain.Entities.PracticeQuestion", "Question")
                         .WithMany("PracticeAnswers")
                         .HasForeignKey("QuestionId")
-                        .IsRequired()
-                        .HasConstraintName("practice_answers_question_id_fkey");
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("OralExamination.Domain.Entities.PracticeSession", "Session")
-                        .WithMany("PracticeAnswers")
+                        .WithMany("Answers")
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("practice_answers_session_id_fkey");
+                        .IsRequired();
 
-                    b.Navigation("FollowupQuestion");
+                    b.HasOne("OralExamination.Domain.Entities.User", "Student")
+                        .WithMany("PracticeAnswers")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("ParentAnswer");
 
                     b.Navigation("Question");
 
                     b.Navigation("Session");
-                });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeFollowupQuestion", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.PracticeAnswer", "PracticeAnswer")
-                        .WithMany("PracticeFollowupQuestions")
-                        .HasForeignKey("PracticeAnswerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("practice_followup_questions_practice_answer_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.PracticeSession", "PracticeSession")
-                        .WithMany("PracticeFollowupQuestions")
-                        .HasForeignKey("PracticeSessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("practice_followup_questions_practice_session_id_fkey");
-
-                    b.Navigation("PracticeAnswer");
-
-                    b.Navigation("PracticeSession");
+                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeQuestion", b =>
@@ -1534,182 +1941,113 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("PracticeQuestions")
                         .HasForeignKey("CourseId")
-                        .IsRequired()
-                        .HasConstraintName("practice_questions_course_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.Rubric", "Rubric")
+                        .WithMany("PracticeQuestions")
+                        .HasForeignKey("RubricId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Course");
+
+                    b.Navigation("Rubric");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeSession", b =>
                 {
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany("PracticeSessions")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("OralExamination.Domain.Entities.User", "Student")
                         .WithMany("PracticeSessions")
                         .HasForeignKey("StudentId")
-                        .IsRequired()
-                        .HasConstraintName("practice_sessions_student_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
 
                     b.Navigation("Student");
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAnswer", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.RealExamFollowupQuestion", "FollowupQuestion")
-                        .WithMany("RealExamAnswers")
-                        .HasForeignKey("FollowupQuestionId")
-                        .HasConstraintName("fk_real_answers_followup");
+                    b.HasOne("OralExamination.Domain.Entities.User", "ProctorUser")
+                        .WithMany("ProctoredShifts")
+                        .HasForeignKey("ProctorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("OralExamination.Domain.Entities.RealExamAnswer", "ParentAnswer")
-                        .WithMany("InverseParentAnswer")
-                        .HasForeignKey("ParentAnswerId")
-                        .HasConstraintName("real_exam_answers_parent_answer_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", "Question")
-                        .WithMany("RealExamAnswers")
-                        .HasForeignKey("QuestionId")
-                        .IsRequired()
-                        .HasConstraintName("real_exam_answers_question_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.RealExamResult", "Result")
-                        .WithMany("RealExamAnswers")
-                        .HasForeignKey("ResultId")
+                    b.HasOne("OralExamination.Domain.Entities.OfficialExamSession", "Session")
+                        .WithMany("Shifts")
+                        .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("real_exam_answers_result_id_fkey");
+                        .IsRequired();
 
-                    b.Navigation("FollowupQuestion");
+                    b.Navigation("ProctorUser");
 
-                    b.Navigation("ParentAnswer");
-
-                    b.Navigation("Question");
-
-                    b.Navigation("Result");
+                    b.Navigation("Session");
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAssignment", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.Rubric", b =>
                 {
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany("Rubrics")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.RubricCriterion", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.Rubric", "Rubric")
+                        .WithMany("Criteria")
+                        .HasForeignKey("RubricId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Rubric");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.StudentExamTicket", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.ExamSet", "ExamSet")
+                        .WithMany("StudentExamTickets")
+                        .HasForeignKey("ExamSetId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("OralExamination.Domain.Entities.RealExamSessionShift", "Shift")
-                        .WithMany("RealExamAssignments")
+                        .WithMany("StudentExamTickets")
                         .HasForeignKey("ShiftId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("real_exam_assignments_shift_id_fkey");
+                        .IsRequired();
 
                     b.HasOne("OralExamination.Domain.Entities.User", "Student")
-                        .WithMany("RealExamAssignments")
+                        .WithMany("ExamTickets")
                         .HasForeignKey("StudentId")
-                        .IsRequired()
-                        .HasConstraintName("real_exam_assignments_student_id_fkey");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExamSet");
 
                     b.Navigation("Shift");
 
                     b.Navigation("Student");
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamFollowupQuestion", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluation", b =>
                 {
-                    b.HasOne("OralExamination.Domain.Entities.RealExamAnswer", "RealAnswer")
-                        .WithMany("RealExamFollowupQuestions")
-                        .HasForeignKey("RealAnswerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("real_exam_followup_questions_real_answer_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.RealExamResult", "Result")
-                        .WithMany("RealExamFollowupQuestions")
-                        .HasForeignKey("ResultId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("real_exam_followup_questions_result_id_fkey");
-
-                    b.Navigation("RealAnswer");
-
-                    b.Navigation("Result");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamResult", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.RealExamAssignment", "Assignment")
-                        .WithOne("RealExamResult")
-                        .HasForeignKey("OralExamination.Domain.Entities.RealExamResult", "AssignmentId")
-                        .IsRequired()
-                        .HasConstraintName("real_exam_results_assignment_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.User", "ReviewedByNavigation")
-                        .WithMany("RealExamResults")
-                        .HasForeignKey("ReviewedBy")
-                        .HasConstraintName("real_exam_results_reviewed_by_fkey");
-
-                    b.Navigation("Assignment");
-
-                    b.Navigation("ReviewedByNavigation");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSession", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.Class", "Class")
-                        .WithMany("RealExamSessions")
-                        .HasForeignKey("ClassId")
-                        .IsRequired()
-                        .HasConstraintName("real_exam_sessions_class_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
-                        .WithMany("RealExamSessions")
-                        .HasForeignKey("StructureId")
-                        .IsRequired()
-                        .HasConstraintName("real_exam_sessions_structure_id_fkey");
-
-                    b.Navigation("Class");
-
-                    b.Navigation("Structure");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.RealExamSession", "ExamSession")
-                        .WithMany("RealExamSessionShifts")
-                        .HasForeignKey("ExamSessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("real_exam_session_shifts_exam_session_id_fkey");
-
-                    b.Navigation("ExamSession");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RubricItem", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", "ExamQuestion")
-                        .WithMany("RubricItems")
-                        .HasForeignKey("ExamQuestionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("rubric_items_exam_question_id_fkey");
-
-                    b.HasOne("OralExamination.Domain.Entities.PracticeQuestion", "PracticeQuestion")
-                        .WithMany("RubricItems")
-                        .HasForeignKey("PracticeQuestionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .HasConstraintName("rubric_items_practice_question_id_fkey");
-
-                    b.Navigation("ExamQuestion");
-
-                    b.Navigation("PracticeQuestion");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.User", b =>
-                {
-                    b.HasOne("OralExamination.Domain.Entities.Role", "Role")
-                        .WithMany("Users")
-                        .HasForeignKey("RoleId")
-                        .IsRequired()
-                        .HasConstraintName("users_role_id_fkey");
-
-                    b.Navigation("Role");
+                    b.Navigation("Details");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Class", b =>
                 {
-                    b.Navigation("ClassEnrollments");
-
-                    b.Navigation("RealExamSessions");
+                    b.Navigation("Enrollments");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Course", b =>
@@ -1718,139 +2056,145 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
 
                     b.Navigation("ExamQuestions");
 
+                    b.Navigation("ExamSets");
+
                     b.Navigation("ExamStructures");
 
-                    b.Navigation("MockExamQuota");
+                    b.Navigation("MockExamQuotas");
+
+                    b.Navigation("MockExamSessions");
+
+                    b.Navigation("OfficialExamSessions");
 
                     b.Navigation("PracticeQuestions");
+
+                    b.Navigation("PracticeSessions");
+
+                    b.Navigation("Rubrics");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
                 {
-                    b.Navigation("RealExamAnswers");
+                    b.Navigation("ExamSetQuestions");
 
-                    b.Navigation("RubricItems");
+                    b.Navigation("MockExamAnswers");
+
+                    b.Navigation("Submissions");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestionSubmission", b =>
+                {
+                    b.Navigation("AiEvaluations");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSet", b =>
+                {
+                    b.Navigation("ExamSetQuestions");
+
+                    b.Navigation("MockExamSessions");
+
+                    b.Navigation("StudentExamTickets");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
                 {
-                    b.Navigation("MockExamSessions");
+                    b.Navigation("ExamSets");
 
-                    b.Navigation("RealExamSessions");
+                    b.Navigation("OfficialExamSessions");
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAudit", b =>
                 {
-                    b.Navigation("InverseParentAnswer");
-
-                    b.Navigation("MockExamFollowupQuestions");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.MockExamFollowupQuestion", b =>
-                {
-                    b.Navigation("MockExamAnswers");
+                    b.Navigation("Details");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamSession", b =>
                 {
-                    b.Navigation("MockExamAnswers");
+                    b.Navigation("Answers");
+                });
 
-                    b.Navigation("MockExamFollowupQuestions");
+            modelBuilder.Entity("OralExamination.Domain.Entities.OfficialExamSession", b =>
+                {
+                    b.Navigation("Shifts");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
                 {
-                    b.Navigation("InverseParentAnswer");
+                    b.Navigation("AiEvaluations");
 
-                    b.Navigation("PracticeFollowupQuestions");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.PracticeFollowupQuestion", b =>
-                {
-                    b.Navigation("PracticeAnswers");
+                    b.Navigation("FollowUpAnswers");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeQuestion", b =>
                 {
-                    b.Navigation("MockExamAnswers");
-
-                    b.Navigation("MockExamFollowupQuestions");
-
                     b.Navigation("PracticeAnswers");
-
-                    b.Navigation("RubricItems");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeSession", b =>
                 {
-                    b.Navigation("PracticeAnswers");
-
-                    b.Navigation("PracticeFollowupQuestions");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAnswer", b =>
-                {
-                    b.Navigation("InverseParentAnswer");
-
-                    b.Navigation("RealExamFollowupQuestions");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamAssignment", b =>
-                {
-                    b.Navigation("RealExamResult");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamFollowupQuestion", b =>
-                {
-                    b.Navigation("RealExamAnswers");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamResult", b =>
-                {
-                    b.Navigation("RealExamAnswers");
-
-                    b.Navigation("RealExamFollowupQuestions");
-                });
-
-            modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSession", b =>
-                {
-                    b.Navigation("RealExamSessionShifts");
+                    b.Navigation("Answers");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
                 {
-                    b.Navigation("RealExamAssignments");
+                    b.Navigation("StudentExamTickets");
                 });
 
-            modelBuilder.Entity("OralExamination.Domain.Entities.Role", b =>
+            modelBuilder.Entity("OralExamination.Domain.Entities.Rubric", b =>
                 {
-                    b.Navigation("Users");
+                    b.Navigation("Criteria");
+
+                    b.Navigation("ExamQuestions");
+
+                    b.Navigation("PracticeQuestions");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.RubricCriterion", b =>
+                {
+                    b.Navigation("AiEvaluationDetails");
+
+                    b.Navigation("LecturerAuditDetails");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Semester", b =>
                 {
                     b.Navigation("Classes");
+
+                    b.Navigation("Courses");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.StudentExamTicket", b =>
+                {
+                    b.Navigation("LecturerAudit");
+
+                    b.Navigation("Submissions");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.User", b =>
                 {
+                    b.Navigation("ApprovedExamQuestions");
+
                     b.Navigation("AuditLogs");
 
-                    b.Navigation("ClassEnrollments");
+                    b.Navigation("CreatedExamStructures");
 
-                    b.Navigation("Classes");
+                    b.Navigation("Enrollments");
 
-                    b.Navigation("ExamQuestions");
+                    b.Navigation("ExamTickets");
 
-                    b.Navigation("MockExamQuota");
+                    b.Navigation("InstructedClasses");
+
+                    b.Navigation("LecturerAudits");
+
+                    b.Navigation("MockExamQuotas");
 
                     b.Navigation("MockExamSessions");
 
+                    b.Navigation("PracticeAnswers");
+
                     b.Navigation("PracticeSessions");
 
-                    b.Navigation("RealExamAssignments");
-
-                    b.Navigation("RealExamResults");
+                    b.Navigation("ProctoredShifts");
                 });
 #pragma warning restore 612, 618
         }

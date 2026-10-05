@@ -1,15 +1,15 @@
 # PostgreSQL (Docker)
 
-Schema khớp `REVIEW 1/Database_LLMOramExam.md` + ERD_v1.
+Schema khớp `docs/ERD_DATABASE_DESIGN.md` (28 bảng 3NF phân tách Practice - Exam).
 
 Init SQL nằm trong `init/` và được mount vào `/docker-entrypoint-initdb.d` khi container start.
 
 
-| File                 | Việc làm                                                            |
-| -------------------- | ------------------------------------------------------------------- |
-| `init/01_schema.sql` | Tạo toàn bộ bảng / enum / FK                                        |
-| `init/02_seed.sql`   | Seed dữ liệu mẫu (nếu có)                                           |
-| `mark_baseline.sql`  | Đánh dấu migration EF `InitialBaseline` đã apply (chạy tay khi cần) |
+| File                 | Việc làm                                                                      |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `init/01_schema.sql` | Tạo toàn bộ 28 bảng / constraints / FK                                        |
+| `init/02_seed.sql`   | Seed dữ liệu mẫu (nếu có)                                                     |
+| `mark_baseline.sql`  | Đánh dấu migration EF `InitialBaseline27Tables` đã apply (chạy tay khi cần)   |
 
 
 ---
@@ -18,7 +18,7 @@ Init SQL nằm trong `init/` và được mount vào `/docker-entrypoint-initdb.
 
 ## Chạy lần đầu (init database)
 
-Làm **theo thứ tự** từ thư mục `oral-exam-system/` (root monorepo, nơi có `docker-compose.yml`).
+Làm **theo thứ tự** từ thư mục `05_Source_Code/` (root monorepo, nơi có `docker-compose.yml`).
 
 ### 1. Tạo file `.env`
 

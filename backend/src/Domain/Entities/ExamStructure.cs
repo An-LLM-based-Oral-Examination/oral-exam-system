@@ -1,33 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace OralExamination.Domain.Entities;
 
 public partial class ExamStructure
 {
-    public int StructureId { get; set; }
-
-    public int CourseId { get; set; }
-
-    public string StructureName { get; set; } = null!;
-
-    public string ExamMode { get; set; } = null!;
-
-    public int EasyCount { get; set; }
-
-    public int MediumCount { get; set; }
-
-    public int HardCount { get; set; }
-
-    public int DurationMinutes { get; set; }
-
-    public int? MaxFollowups { get; set; }
-
-    public int? FollowupTimeoutSec { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid CourseId { get; set; }
+    public Guid CreatedBy { get; set; }
+    public string Name { get; set; } = null!;
+    public int TotalQuestions { get; set; } = 5;
+    public int DurationMinutes { get; set; } = 30;
+    public string BloomDistribution { get; set; } = "{}";
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual Course Course { get; set; } = null!;
-
-    public virtual ICollection<MockExamSession> MockExamSessions { get; set; } = new List<MockExamSession>();
-
-    public virtual ICollection<RealExamSession> RealExamSessions { get; set; } = new List<RealExamSession>();
+    public virtual User CreatedByUser { get; set; } = null!;
+    public virtual ICollection<ExamSet> ExamSets { get; set; } = new List<ExamSet>();
+    public virtual ICollection<OfficialExamSession> OfficialExamSessions { get; set; } = new List<OfficialExamSession>();
 }
