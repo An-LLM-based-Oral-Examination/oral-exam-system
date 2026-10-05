@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>System Architectural Design - Oral Exam LLM System</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: #ffffff;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 36px 48px 30px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Section Header */
+    .section-header {
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #1d4ed8;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+    .section-desc {
+      font-size: 16px;
+      color: #334155;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+
+    /* Main Diagram Canvas */
+    .diagram-canvas {
+      flex: 1;
+      display: flex;
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    /* Generic Box Styling */
+    .arch-box {
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      background: #ffffff;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .box-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 10px;
+      border-bottom: 1px solid #cbd5e1;
+      background: #f8fafc;
+      border-top-left-radius: 7px;
+      border-top-right-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* 1. Client Layer (Left Column) */
+    .client-col {
+      width: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+    .client-content {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      justify-content: space-around;
+    }
+    .client-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .client-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .client-card-desc {
+      font-size: 10.5px;
+      color: #64748b;
+      line-height: 1.3;
+    }
+    .tech-stack-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .tech-badge {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    /* 2. Ingress / API Gateway Column */
+    .gateway-col {
+      width: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .gateway-box {
+      width: 100%;
+      height: 100%;
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 6px;
+      text-align: center;
+    }
+    .gateway-vertical-text {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #0f172a;
+      margin-top: 12px;
+    }
+
+    /* 3. Core Service Layer (Center Giant Box) */
+    .core-service-container {
+      flex: 1;
+      border: 2px solid #0f172a;
+      border-radius: 10px;
+      padding: 12px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: #ffffff;
+    }
+    .core-label {
+      position: absolute;
+      top: -12px;
+      left: 20px;
+      background: #ffffff;
+      padding: 0 10px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .service-layout {
+      display: flex;
+      gap: 16px;
+      flex: 1;
+      height: 100%;
+    }
+
+    /* Left side of Service Layer: Service Modules Stack */
+    .services-stack {
+      flex: 3;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      justify-content: space-between;
+    }
+    .service-row-item {
+      border: 1.2px solid #334155;
+      border-radius: 6px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    /* Inter-layer Downward Connectors */
+    .infra-connectors-row {
+      display: flex;
+      gap: 16px;
+      height: 24px;
+      align-items: center;
+      margin: -4px 0 2px;
+    }
+    .infra-connector-slot {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Event Bus Bus Lines */
+    .bus-connector-unit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 4px 0;
+      position: relative;
+    }
+    .bus-label-pill {
+      font-size: 10px;
+      font-weight: 700;
+      color: #0369a1;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      white-space: nowrap;
+    }
+    .service-icon {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .service-name {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .service-desc {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+    .service-db-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0369a1;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    /* Right side of Service Layer: Communication & CI/CD */
+    .service-sidebar {
+      flex: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sidebar-subbox {
+      border: 1.2px solid #334155;
+      border-radius: 6px;
+      padding: 10px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .subbox-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 4px;
+    }
+    .comm-items {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .comm-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #334155;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      padding: 5px 8px;
+      border-radius: 4px;
+    }
+
+    .event-bus-card {
+      border: 1.5px dashed #0284c7;
+      background: #f0f9ff;
+      border-radius: 6px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 4px;
+    }
+    .event-bus-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0369a1;
+    }
+    .event-bus-desc {
+      font-size: 10px;
+      color: #0284c7;
+    }
+
+    .cicd-box {
+      border: 1.2px solid #334155;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .cicd-logos {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 4px 0;
+    }
+
+    /* 4. Right Column: External Providers (Inference & Observability) */
+    .external-col {
+      width: 250px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .external-box {
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .ext-content {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: space-around;
+      flex: 1;
+    }
+    .ext-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+    .ext-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .ext-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .ext-desc {
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    /* 5. Bottom Infrastructure Row */
+    .bottom-infra-row {
+      display: flex;
+      gap: 16px;
+      height: 120px;
+    }
+    .infra-box {
+      flex: 1;
+      border: 1.5px solid #0f172a;
+      border-radius: 8px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+    }
+    .infra-content {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      flex: 1;
+    }
+    .infra-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .infra-text {
+      display: flex;
+      flex-direction: column;
+    }
+    .infra-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .infra-desc {
+      font-size: 10.5px;
+      color: #64748b;
+    }
+
+    /* Caption */
+    .diagram-caption {
+      text-align: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 6px;
+    }
+
+    /* SVG Connecting Lines Overlay */
+    .svg-connector {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Section Title -->
+  <div class="section-header">
+    <div class="section-title">III. Architectural Design</div>
+    <div class="section-desc">
+      The system is built upon a <strong>Modular Clean Architecture & Asynchronous Pipeline</strong> style to ensure modularity, integrity, and scalability based on the Deployment Diagram below.
+    </div>
+  </div>
+
+  <!-- Main Architecture Diagram Grid -->
+  <div class="diagram-canvas">
+
+    <!-- 1. Client Layer -->
+    <div class="arch-box client-col">
+      <div class="box-title">
+        <span>Client Layer</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="client-content">
+        
+        <!-- Student Viva -->
+        <div class="client-card">
+          <div class="client-card-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Student Practice Portal</span>
+          </div>
+          <div class="client-card-desc">Luyện viva 1-1, Web Speech STT & Buffer (mặc định 60s)</div>
+          <div class="tech-stack-row">
+            <span class="tech-badge">React 19</span>
+            <span class="tech-badge">Web Speech</span>
+          </div>
+        </div>
+
+        <!-- Timed Exam -->
+        <div class="client-card">
+          <div class="client-card-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Mock Exam Client</span>
+          </div>
+          <div class="client-card-desc">Dynamic Timer, Voice Gate & Quota K&le;3</div>
+          <div class="tech-stack-row">
+            <span class="tech-badge">Vite</span>
+            <span class="tech-badge">Tailwind v4</span>
+          </div>
+        </div>
+
+        <!-- Lab Kiosk -->
+        <div class="client-card" style="border-left: 3px solid #e11d48;">
+          <div class="client-card-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Lab Exam Kiosk</span>
+          </div>
+          <div class="client-card-desc">Fullscreen Lockdown, Opus 48kHz Stream</div>
+          <div class="tech-stack-row">
+            <span class="tech-badge" style="background:#ffe4e6;color:#be123c;">Lockdown</span>
+            <span class="tech-badge">Opus 48k</span>
+          </div>
+        </div>
+
+        <!-- Instructor Portal -->
+        <div class="client-card">
+          <div class="client-card-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Authoring & Proctor Hub</span>
+          </div>
+          <div class="client-card-desc">Barem &Sigma;=10.0, Live Monitor & One-Way Lock</div>
+          <div class="tech-stack-row">
+            <span class="tech-badge">shadcn/ui</span>
+            <span class="tech-badge">Grade Export</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Arrow Client -> Gateway -->
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+      <span style="font-size:9px; font-weight:700; color:#0f172a; background:#f1f5f9; border:1px solid #cbd5e1; padding:1px 5px; border-radius:4px; white-space:nowrap;">REST / WS</span>
+      <svg width="24" height="16" viewBox="0 0 24 16">
+        <line x1="0" y1="8" x2="16" y2="8" stroke="#0f172a" stroke-width="2.2"/>
+        <polygon points="14,3 24,8 14,13" fill="#0f172a"/>
+      </svg>
+    </div>
+
+    <!-- 2. Gateway / Reverse Proxy -->
+    <div class="gateway-col">
+      <div class="gateway-box">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7v10l10 5 10-5V7L12 2z" fill="#009639"/>
+          <path d="M8 8v8l8-8v8" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div style="font-size: 11px; font-weight: 800; color: #009639; margin-top: 4px;">NGINX</div>
+        <div class="gateway-vertical-text">API GATEWAY & REVERSE PROXY</div>
+        <div style="font-size: 9.5px; color: #64748b; margin-top: 10px; line-height: 1.2;">
+          SSL / TLS<br>Rate Limit<br>CORS Guard
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow Gateway -> Core Services -->
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+      <span style="font-size:9px; font-weight:700; color:#0f172a; background:#f1f5f9; border:1px solid #cbd5e1; padding:1px 5px; border-radius:4px; white-space:nowrap;">Route Proxy</span>
+      <svg width="24" height="16" viewBox="0 0 24 16">
+        <line x1="0" y1="8" x2="16" y2="8" stroke="#0f172a" stroke-width="2.2"/>
+        <polygon points="14,3 24,8 14,13" fill="#0f172a"/>
+      </svg>
+    </div>
+
+    <!-- 3. Core Service Layer (.NET 8 Clean Architecture) -->
+    <div class="core-service-container">
+      <div class="core-label">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#512bd4"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2"/></svg>
+        CORE SERVICE LAYER (.NET 8 CLEAN ARCHITECTURE & CQRS)
+      </div>
+
+      <div class="service-layout" style="margin-top: 8px;">
+        
+        <!-- Left: Micro-Modules Stack -->
+        <div class="services-stack">
+          
+          <!-- Module 1: Auth -->
+          <div class="service-row-item">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div>
+                <div class="service-name">Identity & Access Service</div>
+                <div class="service-desc">JWT Bearer Claim Provider, RBAC Policy Guard, PIN ca thi</div>
+              </div>
+            </div>
+            <div class="service-db-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>auth_db</span>
+            </div>
+          </div>
+
+          <!-- Module 2: Question & Rubric -->
+          <div class="service-row-item">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <div>
+                <div class="service-name">Question & Rubric Service</div>
+                <div class="service-desc">Bloom 1-6, Scope Tagging, Barem &Sigma;=10.0đ FluentValidation</div>
+              </div>
+            </div>
+            <div class="service-db-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>question_db</span>
+            </div>
+          </div>
+
+          <!-- Module 3: Session & Exam -->
+          <div class="service-row-item">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <div class="service-name">Exam & Session Service</div>
+                <div class="service-desc">State Machine, Dynamic Timer, Voice Gate & Daily Quota K&le;3</div>
+              </div>
+            </div>
+            <div class="service-db-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>session_db</span>
+            </div>
+          </div>
+
+          <!-- Module 4: AI Assessment -->
+          <div class="service-row-item" style="border-left: 3px solid #7c3aed;">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              </div>
+              <div>
+                <div class="service-name">AI Assessment & Scoring Pipeline</div>
+                <div class="service-desc">4-Tier Queue Defense, Structured JSON Prompt CoT, Follow-up A2</div>
+              </div>
+            </div>
+            <div class="service-db-badge" style="background:#faf5ff;border-color:#e9d5ff;color:#7c3aed;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              <span>pipeline_core</span>
+            </div>
+          </div>
+
+          <!-- Module 5: Audio & Storage Streamer -->
+          <div class="service-row-item">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>
+              </div>
+              <div>
+                <div class="service-name">Audio & Media Stream Service</div>
+                <div class="service-desc">MediaRecorder Opus Ingestion, SHA-256 Hasher, Cloudflare Streamer</div>
+              </div>
+            </div>
+            <div class="service-db-badge" style="background:#f0fdf4;border-color:#bbf7d0;color:#16a34a;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>sha256_vault</span>
+            </div>
+          </div>
+
+          <!-- Module 6: Audit & Gradebook -->
+          <div class="service-row-item" style="border-left: 3px solid #e11d48;">
+            <div class="service-info">
+              <div class="service-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              </div>
+              <div>
+                <div class="service-name">Audit & Gradebook Service</div>
+                <div class="service-desc">Proctor Console, Live Lab Monitor, One-Way Lock, Grade Export</div>
+              </div>
+            </div>
+            <div class="service-db-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              <span>grade_db</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Communication & CI/CD Pipeline -->
+        <div class="service-sidebar">
+          
+          <!-- Inter-service Comm -->
+          <div class="sidebar-subbox">
+            <div class="subbox-title">Inter-Service Communication</div>
+            <div class="comm-items">
+              <div class="comm-item">
+                <span>In-Process MediatR</span>
+                <span class="tech-badge">CQRS</span>
+              </div>
+              <div class="comm-item">
+                <span>Real-Time Hubs</span>
+                <span class="tech-badge">SignalR</span>
+              </div>
+              <div class="comm-item">
+                <span>Contract API</span>
+                <span class="tech-badge">REST</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bounded Channel Event Queue -->
+          <div style="display:flex; justify-content:center; margin-bottom:-4px;">
+            <span class="bus-label-pill">Publish Events / Audio Chunks &rarr;</span>
+          </div>
+          <div class="event-bus-card">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+              <circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/>
+              <line x1="9" y1="6" x2="15" y2="6"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/>
+            </svg>
+            <div class="event-bus-title">Bounded Channel Event Bus</div>
+            <div class="event-bus-desc">System.Threading.Channels<br>Non-blocking Batch Worker Queue</div>
+          </div>
+          <div style="display:flex; justify-content:center; margin-top:-4px;">
+            <span class="bus-label-pill">&larr; Worker Subscribe / Batch CoT</span>
+          </div>
+
+          <!-- CI/CD Pipeline -->
+          <div class="cicd-box">
+            <div class="subbox-title">CI / CD Pipeline</div>
+            <div class="cicd-logos">
+              <!-- GitHub -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="#24292e"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <!-- Arrow -->
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              <!-- Docker -->
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="#0db7ed"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.186.185.186m-2.93 2.714h2.119a.186.186 0 00.185-.185V9.006a.185.185 0 00-.185-.186H8.099a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m0-2.715h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H8.099a.185.185 0 00-.185.185v1.887c0 .102.083.186.185.186m-2.929 2.715h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.185-.186H5.17a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.929 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.185-.186H2.241a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m19.789 2.158c-.37-.238-.988-.363-1.637-.363-.44 0-.882.062-1.3.186-.23.069-.434.168-.62.298-.445.31-.76.786-.882 1.341a4.912 4.912 0 00-.28 1.474c-.035.797.108 1.62.43 2.378.43.992 1.157 1.764 2.063 2.193.398.188.835.293 1.282.31.25.01.503-.01.75-.062.91-.186 1.7-.68 2.227-1.391a4.57 4.57 0 00.75-2.023c.094-.954-.153-1.921-.692-2.715-.503-.736-1.25-1.257-2.091-1.626"/></svg>
+              <!-- Arrow -->
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              <!-- Cloud Deploy -->
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            </div>
+            <div style="font-size: 10px; color: #64748b; text-align: center;">Multi-stage Docker Build &amp; Deploy</div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Arrow Services <-> External Inference -->
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;">
+      <span style="font-size:9px; font-weight:700; color:#7c3aed; background:#faf5ff; border:1px solid #e9d5ff; padding:1px 5px; border-radius:4px; white-space:nowrap;">gRPC / HTTPS</span>
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <line x1="2" y1="12" x2="22" y2="12" stroke="#7c3aed" stroke-width="2.5"/>
+        <polygon points="6,7 0,12 6,17" fill="#7c3aed"/>
+        <polygon points="18,7 24,12 18,17" fill="#7c3aed"/>
+      </svg>
+      <span style="font-size:8.5px; color:#64748b; text-align:center;">CoT Prompt<br>&amp; Audio STT</span>
+    </div>
+
+    <!-- 4. Right Column: External Providers (Inference & Observability) -->
+    <div class="external-col">
+      
+      <!-- Inference Provider -->
+      <div class="external-box">
+        <div class="box-title">
+          <span>Inference Provider</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div class="ext-content">
+          
+          <!-- Gemini Flash -->
+          <div class="ext-item">
+            <svg width="24" height="24" viewBox="0 0 24 24">
+              <path d="M12 0C12 6.627 6.627 12 0 12c6.627 0 12 5.373 12 12 0-6.627 5.373-12 12-12-6.627 0-12-5.373-12-12z" fill="#4285f4"/>
+            </svg>
+            <div class="ext-info">
+              <div class="ext-name">Gemini 1.5 Flash</div>
+              <div class="ext-desc">Free Practice &amp; Timed Mock CoT</div>
+            </div>
+          </div>
+
+          <!-- Gemini Pro -->
+          <div class="ext-item">
+            <svg width="24" height="24" viewBox="0 0 24 24">
+              <path d="M12 0C12 6.627 6.627 12 0 12c6.627 0 12 5.373 12 12 0-6.627 5.373-12 12-12-6.627 0-12-5.373-12-12z" fill="#9333ea"/>
+            </svg>
+            <div class="ext-info">
+              <div class="ext-name">Gemini 1.5 Pro</div>
+              <div class="ext-desc">Lab Exam High-Precision Rubric</div>
+            </div>
+          </div>
+
+          <!-- Whisper STT -->
+          <div class="ext-item">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+            </svg>
+            <div class="ext-info">
+              <div class="ext-name">Whisper Large-v3</div>
+              <div class="ext-desc">Audio Opus &rarr; Exact Transcript</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Observability Stack -->
+      <div class="external-box">
+        <div class="box-title">
+          <span>Observability Stack</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+        <div class="ext-content">
+          
+          <!-- Grafana -->
+          <div class="ext-item">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#f46800">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+            <div class="ext-info">
+              <div class="ext-name">Grafana Dashboard</div>
+              <div class="ext-desc">Real-time Visualization</div>
+            </div>
+          </div>
+
+          <!-- Prometheus / Serilog -->
+          <div class="ext-item">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#e6522c">
+              <path d="M12 2L2 22h20L12 2zm0 4.5l6.5 13.5h-13L12 6.5z"/>
+            </svg>
+            <div class="ext-info">
+              <div class="ext-name">Prometheus &amp; Serilog</div>
+              <div class="ext-desc">Metrics &amp; Structured Logs</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Downward Connectors from Core Services to Infrastructure -->
+  <div class="infra-connectors-row">
+    <div class="infra-connector-slot">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:10px; font-weight:700; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; padding:1px 8px; border-radius:9999px;">State & Quota</span>
+        <svg width="18" height="20" viewBox="0 0 18 20"><line x1="9" y1="0" x2="9" y2="14" stroke="#dc2626" stroke-width="2.2"/><polygon points="4,12 9,19 14,12" fill="#dc2626"/></svg>
+      </div>
+    </div>
+    <div class="infra-connector-slot" style="flex:1.2;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:10px; font-weight:700; color:#0369a1; background:#f0f9ff; border:1px solid #bae6fd; padding:1px 8px; border-radius:9999px;">EF Core 8 ACID Transactions</span>
+        <svg width="18" height="20" viewBox="0 0 18 20"><line x1="9" y1="0" x2="9" y2="14" stroke="#0369a1" stroke-width="2.2"/><polygon points="4,12 9,19 14,12" fill="#0369a1"/></svg>
+      </div>
+    </div>
+    <div class="infra-connector-slot">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:10px; font-weight:700; color:#ea580c; background:#fff7ed; border:1px solid #fed7aa; padding:1px 8px; border-radius:9999px;">Stream Audio S3</span>
+        <svg width="18" height="20" viewBox="0 0 18 20"><line x1="9" y1="0" x2="9" y2="14" stroke="#ea580c" stroke-width="2.2"/><polygon points="4,12 9,19 14,12" fill="#ea580c"/></svg>
+      </div>
+    </div>
+    <div class="infra-connector-slot">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:10px; font-weight:700; color:#059669; background:#f0fdf4; border:1px solid #bbf7d0; padding:1px 8px; border-radius:9999px;">SHA-256 Audit Seal</span>
+        <svg width="18" height="20" viewBox="0 0 18 20"><line x1="9" y1="0" x2="9" y2="14" stroke="#059669" stroke-width="2.2"/><polygon points="4,12 9,19 14,12" fill="#059669"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Bottom Infrastructure & Data Stores Row -->
+  <div class="bottom-infra-row">
+    
+    <!-- Caching & State -->
+    <div class="infra-box">
+      <div class="box-title">
+        <span>Caching &amp; State</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#dc2626"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+      </div>
+      <div class="infra-content">
+        <div class="infra-item">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="#dc2626">
+            <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.8L19.2 8 12 11.2 4.8 8 12 4.8zM4 9.6l7 3.1v7.5l-7-3.5V9.6zm9 10.6v-7.5l7-3.1v7.1l-7 3.5z"/>
+          </svg>
+          <div class="infra-text">
+            <div class="infra-title">Redis 7.2 Cache</div>
+            <div class="infra-desc">Session State · Daily Quota Rate Limit · Prompt Caching</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Primary Relational DB -->
+    <div class="infra-box" style="flex: 1.2;">
+      <div class="box-title">
+        <span>Relational Database (ACID)</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#336791"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      </div>
+      <div class="infra-content">
+        <div class="infra-item">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="#336791">
+            <ellipse cx="12" cy="5" rx="9" ry="3" fill="#336791"/>
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" stroke="#fff" stroke-width="1.5"/>
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" fill="none" stroke="#336791" stroke-width="2"/>
+          </svg>
+          <div class="infra-text">
+            <div class="infra-title">PostgreSQL 16+ Relational DB</div>
+            <div class="infra-desc">12 Normalized Tables · EF Core 8 Resilient Transactions · One-Way Lock</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cloud Object Storage -->
+    <div class="infra-box">
+      <div class="box-title">
+        <span>Cloud Object Storage</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#f48120"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+      </div>
+      <div class="infra-content">
+        <div class="infra-item">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="#f48120">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+          </svg>
+          <div class="infra-text">
+            <div class="infra-title">Cloudflare R2 (S3-Compatible)</div>
+            <div class="infra-desc">Zero-Egress Fee · Audio Archive (STT_MSSV.webm)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security & Seal Vault -->
+    <div class="infra-box">
+      <div class="box-title">
+        <span>Integrity &amp; Security Vault</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#059669"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div class="infra-content">
+        <div class="infra-item">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+          <div class="infra-text">
+            <div class="infra-title">SHA-256 Audio Integrity Seal</div>
+            <div class="infra-desc">Chống can thiệp file phòng thi · One-Way Lock Audit Trail</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Caption -->
+  <div class="diagram-caption">
+    Figure: The deployment diagram of the oral exam LLM platform
+  </div>
+
+</body>
+</html>

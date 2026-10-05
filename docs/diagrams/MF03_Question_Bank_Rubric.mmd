@@ -1,0 +1,148 @@
+flowchart TD
+  subgraph Lane1["Lane 1: Department Head / Instructor / Admin"]
+    Q01((●))
+    Q02["Verify RBAC Role (dept_head / lecturer / admin)"]
+    Q04{" "}
+    Q05["Apply Search Filters"]
+    Q07["Select Question"]
+    Q10["Set Question Scope"]
+    Q11["Enter Question & Model Answer (>=50 chars)"]
+    Q12["Define Rubric Criteria"]
+    Q16["Adjust Points to 10.0"]
+    Q17{" "}
+    Q18["Enter Test Answer"]
+    Q21["Review AI Feedback"]
+    Q22{" "}
+    Q23["Giảng viên lưu nháp & Gửi lên Bộ Môn duyệt (source=manual)"]
+    Q_FLM_03["Select Target CLOs & Topics"]
+    Q_FLM_04["Configure Count, Bloom 1-6 & Difficulty"]
+    Q_FLM_08["Giảng viên tinh chỉnh câu hỏi, Barem riêng 10.0 & Model Answer"]
+    Q_FLM_09["Giảng viên bấm 'Gửi lên cho Bộ Môn'"]
+    Q_FLM_DeptHead["Trưởng Bộ Môn thẩm định & Ra quyết định phê duyệt"]
+    Q31["View Question Catalog"]
+    Q32(((●)))
+  end
+
+  subgraph Lane2["Lane 2: Question Studio & Preview UI"]
+    Q03["Open Question Studio"]
+    Q06["Display Question List"]
+    Q09["Load Question Form"]
+    Q13["Calculate Total Points"]
+    Q14{" "}
+    Q15["Show Error & Lock Save"]
+    Q20["Show AI Test Result"]
+    Q27["Show Point Error Alert"]
+    Q_FLM_01_UI["Show 403 Forbidden Alert (chỉ Lecturer / Dept Head / Admin)"]
+    Q_FLM_07["Render Draft Preview Studio (Custom Rubric 10.0 & Model Answer)"]
+    Q_FLM_Val_UI["Show Batch Point/Answer Error Alert"]
+    Q_FLM_Submitted_UI["Hiển thị thông báo đã gửi Bộ Môn (SUBMITTED_FOR_REVIEW)"]
+    Q_FLM_Review_UI["Cổng Thẩm định: Hiển thị danh sách đề chờ duyệt & Review Notes"]
+    Q30["Show Success Message"]
+  end
+
+  subgraph Lane3["Lane 3: Backend API & FLM Adapter Gateway"]
+    Q08["Fetch Question Data"]
+    Q24["Validate Total Points & Model Answer"]
+    Q25{" "}
+    Q26["Reject Invalid Points (422)"]
+    Q_FLM_01{"Verify Lecturer or Dept Head Role?"}
+    Q_FLM_01_Err["Reject Forbidden (403)"]
+    Q_FLM_02["Fetch Syllabus & CLOs via FLM Adapter"]
+    Q_FLM_05["Dispatch AI Generation Request"]
+    Q_FLM_Val{"Validate All ∑==10.0 & Model Answer >=50 chars"}
+    Q_FLM_Val_Err["Reject Batch (422 Unprocessable)"]
+    Q_FLM_Submit_API["Update Status = SUBMITTED_FOR_REVIEW"]
+    Q_FLM_Decision{"Quyết định của Trưởng Bộ Môn?"}
+    Q_FLM_Revision["Trả về Yêu cầu chỉnh sửa (NEEDS_REVISION) kèm Review Notes"]
+    Q_FLM_Reject["Bác bỏ loại hẳn câu hỏi (REJECTED) kèm Review Notes"]
+    Q_FLM_10["ACID Commit Batch to DB (Status: APPROVED)"]
+  end
+
+  subgraph Lane4["Lane 4: Database & Gemini AI Engine"]
+    Q19["Test Grading with AI Simulator"]
+    Q28["Save to Database (ACID Commit)"]
+    Q29["Clear System Cache & Audit Log"]
+    Q_FLM_06["AI Auto-Generate Questions, Custom Rubrics (∑=10.0) & Model Answers"]
+  end
+
+  %% Flow Transitions
+  Q01 --> Q02
+  Q02 --> Q03
+  Q03 --> Q04
+
+  %% Branch 1: Browse / Filter
+  Q04 -->|"[Browse / Filter]"| Q05
+  Q05 --> Q06
+  Q06 --> Q04
+
+  %% Branch 2: Edit Question
+  Q04 -->|"[Edit Question]"| Q07
+  Q07 --> Q08
+  Q08 --> Q09
+  Q09 --> Q11
+
+  %% Branch 3: Create Manual Question
+  Q04 -->|"[Create Manual]"| Q10
+  Q10 --> Q11
+
+  %% Branch 4: Generate from FLM API & Department Review Workflow
+  Q04 -->|"[Generate from FLM API]"| Q_FLM_01
+  Q_FLM_01 -->|"[Role == Student / Proctor]"| Q_FLM_01_Err
+  Q_FLM_01_Err --> Q_FLM_01_UI
+  Q_FLM_01_UI --> Q04
+  Q_FLM_01 -->|"[Role == Lecturer / Dept Head]"| Q_FLM_02
+  Q_FLM_02 --> Q_FLM_03
+  Q_FLM_03 --> Q_FLM_04
+  Q_FLM_04 --> Q_FLM_05
+  Q_FLM_05 --> Q_FLM_06
+  Q_FLM_06 --> Q_FLM_07
+  Q_FLM_07 --> Q_FLM_08
+  Q_FLM_08 --> Q_FLM_09
+  Q_FLM_09 --> Q_FLM_Val
+  Q_FLM_Val -->|"[Invalid ∑!=10.0 or Answer <50 chars]"| Q_FLM_Val_Err
+  Q_FLM_Val_Err --> Q_FLM_Val_UI
+  Q_FLM_Val_UI --> Q_FLM_08
+  Q_FLM_Val -->|"[All Valid]"| Q_FLM_Submit_API
+  Q_FLM_Submit_API --> Q_FLM_Submitted_UI
+  Q_FLM_Submitted_UI --> Q_FLM_Review_UI
+  Q_FLM_Review_UI --> Q_FLM_DeptHead
+  Q_FLM_DeptHead --> Q_FLM_Decision
+  Q_FLM_Decision -->|"[Yêu cầu chỉnh sửa (NEEDS_REVISION)]"| Q_FLM_Revision
+  Q_FLM_Revision --> Q_FLM_08
+  Q_FLM_Decision -->|"[Từ chối loại hẳn (REJECTED)]"| Q_FLM_Reject
+  Q_FLM_Reject --> Q31
+  Q_FLM_Decision -->|"[Phê duyệt chính thức (APPROVED)]"| Q_FLM_10
+  Q_FLM_10 --> Q30
+
+  %% Manual Rubric Design & Validation
+  Q11 --> Q12
+  Q12 --> Q13
+  Q13 --> Q14
+
+  Q14 -->|"[Sum != 10.0]"| Q15
+  Q15 --> Q16
+  Q16 -->|"[Recalculate Sum]"| Q13
+
+  Q14 -->|"[Sum == 10.0]"| Q17
+  Q17 -->|"[Run Simulator]"| Q18
+  Q18 --> Q19
+  Q19 --> Q20
+  Q20 --> Q21
+  Q21 --> Q22
+
+  Q22 -->|"[Refine Weights]"| Q12
+  Q22 -->|"[Keep Weights]"| Q23
+  Q17 -->|"[Skip Simulator]"| Q23
+
+  Q23 --> Q24
+  Q24 --> Q25
+
+  Q25 -->|"[Sum != 10.0]"| Q26
+  Q26 --> Q27
+  Q27 -->|"[Prompt Point Fix]"| Q16
+
+  Q25 -->|"[Sum == 10.0]"| Q_FLM_Submit_API
+  Q28 --> Q29
+  Q29 --> Q30
+  Q30 --> Q31
+  Q31 --> Q32

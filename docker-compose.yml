@@ -1,0 +1,32 @@
+# Local / team PostgreSQL for Oral Exam System (FA26SE166)
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f postgres
+#   docker compose down          # stop
+#   docker compose down -v       # stop + wipe data volume
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oralexam-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      # Local only — do not publish 5432 on production hosts.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - oralexam_pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  oralexam_pgdata:
+    name: oralexam_pgdata

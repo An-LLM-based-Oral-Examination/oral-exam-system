@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Oral Exam LLM System - Main Flows Presentation (VI & EN)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 40px 24px 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+    header {
+      text-align: center;
+      max-width: 1000px;
+    }
+    .header-badge {
+      display: inline-block;
+      background: #3b82f6;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 6px 18px;
+      border-radius: 9999px;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: 34px;
+      margin-bottom: 12px;
+      color: #f8fafc;
+      font-weight: 900;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* Tab Switcher */
+    .tab-bar {
+      display: flex;
+      gap: 12px;
+      background: #111827;
+      padding: 6px;
+      border-radius: 14px;
+      border: 1px solid #1f2937;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 10px 24px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tab-btn:hover {
+      color: #fff;
+    }
+    .tab-btn.active {
+      background: #3b82f6;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+      max-width: 1440px;
+      width: 100%;
+    }
+    .card {
+      background: #111827;
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+      border: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .flow-badge {
+      font-size: 13px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 8px;
+      color: #fff;
+    }
+    .flow-badge.arch { background: #2563eb; }
+    .flow-badge.mf1 { background: #2563eb; }
+    .flow-badge.mf2 { background: #ea580c; }
+    .flow-badge.mf3 { background: #7c3aed; }
+    .flow-badge.mf4 { background: #e11d48; }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f1f5f9;
+    }
+    .card-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-secondary {
+      background: #1f2937;
+      color: #94a3b8;
+      border: 1px solid #374151;
+    }
+    .btn-secondary:hover {
+      background: #374151;
+      color: #fff;
+    }
+    .btn-primary {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+    .btn-primary:hover {
+      background: #7dd3fc;
+    }
+    .img-wrapper {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #374151;
+      background: #000;
+    }
+    img {
+      width: 100%;
+      height: auto;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+    img:hover {
+      transform: scale(1.004);
+    }
+    .tab-content {
+      display: none;
+      width: 100%;
+    }
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+    }
+  </style>
+  <script>
+    function showTab(lang) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      document.getElementById('tab-btn-' + lang).classList.add('active');
+      document.getElementById('tab-content-' + lang).classList.add('active');
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <div class="header-badge">ORAL EXAM LLM SYSTEM</div>
+    <h1>BỘ 4 LƯỢC ĐỒ QUY TRÌNH (MAIN WORKFLOWS)</h1>
+    <p>Hệ Thống Luyện Thi &amp; Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm<br>
+    Định dạng chuẩn 16:9 (1920x1080 Full HD) · Thiết kế 2 Nhánh Rõ Rệt · Server Master Timer Toàn Ca Thi</p>
+  </header>
+
+  <!-- Language Switcher Bar -->
+  <div class="tab-bar">
+    <button id="tab-btn-vi" class="tab-btn active" onclick="showTab('vi')">
+      🇻🇳 Bản Tiếng Việt (Vietnamese)
+    </button>
+    <button id="tab-btn-en" class="tab-btn" onclick="showTab('en')">
+      🇬🇧 English Edition
+    </button>
+  </div>
+
+  <div class="grid">
+    
+    <!-- ==================== TAB VIETNAMESE ==================== -->
+    <div id="tab-content-vi" class="tab-content active">
+      
+      <!-- System Architecture -->
+      <div class="card" style="border: 1.5px solid #3b82f6; background: #0f172a;">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge arch">ARCHITECTURE</span>
+            <div class="card-title">Kiến Trúc Hệ Thống Tổng Thể (System Platform Deployment Diagram)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_Architecture.html" target="_blank">Mở Slide HTML</a>
+            <a class="btn btn-primary" href="./System_Architecture_Deployment_Diagram.png" target="_blank">Xem Ảnh Gốc (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./System_Architecture_Deployment_Diagram.png" alt="Kiến Trúc Hệ Thống">
+        </div>
+      </div>
+
+      <!-- MF-01 VI -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf1">MF-01</span>
+            <div class="card-title">Flow 01 · Luyện Tập Vấn Đáp Tương Tác (Hỗ trợ Voice / Text · Upfront: [Per-Question] Chấm từng câu vs [Full-Session] Luyện liền mạch)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF01.html" target="_blank">Mở Slide HTML</a>
+            <a class="btn btn-primary" href="./MF01_Luyen_Tap_Tu_Do.png" target="_blank">Xem Ảnh Gốc (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF01_Luyen_Tap_Tu_Do.png" alt="MF-01 Tiếng Việt">
+        </div>
+      </div>
+
+      <!-- MF-02 VI -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf2">MF-02</span>
+            <div class="card-title">Flow 02 · Thi Thử Bấm Giờ (Server Master Timer Toàn Ca 15-20p · Voice-First &amp; Đệm 45s · Rẽ 2 Nhánh Fast-Path vs Async Fallback)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF02.html" target="_blank">Mở Slide HTML</a>
+            <a class="btn btn-primary" href="./MF02_Thi_Thu_Bam_Gio.png" target="_blank">Xem Ảnh Gốc (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF02_Thi_Thu_Bam_Gio.png" alt="MF-02 Tiếng Việt">
+        </div>
+      </div>
+
+      <!-- MF-03 VI -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf3">MF-03</span>
+            <div class="card-title">Flow 03 · Quản Lý Ngân Hàng Câu Hỏi &amp; Barem Rubric 10.0 (Bộ Lọc 3 Tầng · Chốt chặn Invariant &Sigma; &equiv; 10.0đ · 2 Nhánh AI Simulator vs Lưu Ngay)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF03.html" target="_blank">Mở Slide HTML</a>
+            <a class="btn btn-primary" href="./MF03_Quan_Ly_Rubric_10.png" target="_blank">Xem Ảnh Gốc (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF03_Quan_Ly_Rubric_10.png" alt="MF-03 Tiếng Việt">
+        </div>
+      </div>
+
+      <!-- MF-04 VI -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf4">MF-04</span>
+            <div class="card-title">Flow 04 · Thi Thật Phòng Lab &amp; Cổng Hậu Kiểm Giảng Viên (Timer Toàn Ca Lab 45-60p · AI Hỏi Chuyên Sâu Theo Môn · Rẽ 2 Nhánh Hậu Kiểm &amp; One-Way Lock)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF04.html" target="_blank">Mở Slide HTML</a>
+            <a class="btn btn-primary" href="./MF04_Thi_That_Phong_Lab.png" target="_blank">Xem Ảnh Gốc (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF04_Thi_That_Phong_Lab.png" alt="MF-04 Tiếng Việt">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ==================== TAB ENGLISH ==================== -->
+    <div id="tab-content-en" class="tab-content">
+      
+      <!-- MF-01 EN -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf1">MF-01</span>
+            <div class="card-title">Flow 01 · Interactive Oral Practice (Multi-Modal Voice / Text Input · Upfront: [Per-Question] Instant Feedback &amp; A2 Follow-up vs [Full-Session] Consecutive)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF01_EN.html" target="_blank">Open Slide HTML</a>
+            <a class="btn btn-primary" href="./MF01_Interactive_Practice_EN.png" target="_blank">View HD Image (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF01_Interactive_Practice_EN.png" alt="MF-01 English">
+        </div>
+      </div>
+
+      <!-- MF-02 EN -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf2">MF-02</span>
+            <div class="card-title">Flow 02 · Timed Mock Exam (Daily Quota K &le; 3 · Total Exam Server Master Timer 15-20m · Dual-Path Evaluation: Fast-Path vs Async Fallback)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF02_EN.html" target="_blank">Open Slide HTML</a>
+            <a class="btn btn-primary" href="./MF02_Timed_Mock_Exam_EN.png" target="_blank">View HD Image (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF02_Timed_Mock_Exam_EN.png" alt="MF-02 English">
+        </div>
+      </div>
+
+      <!-- MF-03 EN -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf3">MF-03</span>
+            <div class="card-title">Flow 03 · Question Bank &amp; 10.0 Rubric Management (3-Tier Filtering · Invariant Guard &Sigma; &equiv; 10.0 pts · 2 Branches: AI Simulator vs Direct Save)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF03_EN.html" target="_blank">Open Slide HTML</a>
+            <a class="btn btn-primary" href="./MF03_Question_Rubric_Management_EN.png" target="_blank">View HD Image (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF03_Question_Rubric_Management_EN.png" alt="MF-03 English">
+        </div>
+      </div>
+
+      <!-- MF-04 EN -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <span class="flow-badge mf4">MF-04</span>
+            <div class="card-title">Flow 04 · Lab Oral Exam &amp; Lecturer Audit Portal (Total Session Timer 45-60m · Contextual Course Deep-Dive Viva · Audit Branches &amp; One-Way Lock)</div>
+          </div>
+          <div class="card-actions">
+            <a class="btn btn-secondary" href="./slide_MF04_EN.html" target="_blank">Open Slide HTML</a>
+            <a class="btn btn-primary" href="./MF04_Lab_Oral_Exam_EN.png" target="_blank">View HD Image (1920x1080)</a>
+          </div>
+        </div>
+        <div class="img-wrapper">
+          <img src="./MF04_Lab_Oral_Exam_EN.png" alt="MF-04 English">
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</body>
+</html>

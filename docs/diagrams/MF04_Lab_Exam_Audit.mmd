@@ -1,0 +1,186 @@
+flowchart TD
+  subgraph Student["Lane 1: Student / Examinee"]
+    st_start((●))
+    act_verify_id["1. Verify Student ID & Check-in"]
+    act_take_assigned_seat["2. Take Assigned Seat (Booth 1-40)"]
+    act_login_kiosk["3. Login Student ID (MSSV)"]
+    act_perform_mic_check["4. Mic-Check 30s (>= 60dB)"]
+    act_wait_exam_start["5. Wait Synchronized Start Signal"]
+    act_speak_viva_answer["6. Speak Viva Answer / Input Response"]
+    act_speak_followup["7. Speak Follow-up Answer"]
+    act_confirm_submission["8. Confirm Submit Exam (Kiosk Safely Locks)"]
+    act_vacate_lab_room["9. Sign Paper Roster & Leave Room (NO Immediate Grade)"]
+    act_view_official_grade["10. View Grade on Student Portal at Home (After Lecturer Publishes)"]
+    dec_student_ack_choice{"Student Decision on Portal?"}
+    act_student_ack["11A. Confirm Acceptance (ACKNOWLEDGED)"]
+    act_internal_appeal["11B. Submit Internal Appeal on Student Portal (POST /api/v1/appeals to Dept Head)"]
+    end_viva_lifecycle(((●)))
+  end
+
+  subgraph Workstation["Lane 2: Lab Workstation Kiosk"]
+    act_activate_kiosk["Fullscreen Kiosk Lockdown (Block Alt+Tab, F12)"]
+    act_measure_input_level["Measure Input Audio Level (dB)"]
+    dec_verify_hardware{" "}
+    act_start_kiosk_timer["Start Kiosk Countdown Timer"]
+    dec_check_input_mode{"ExamInputMode?"}
+    act_lock_keyboard["Lock Keyboard 100% (VoiceOnly)"]
+    act_enable_transcript_buffer["Enable Transcript Edit Buffer"]
+    act_enable_text_editor["Enable Text & Code Editor"]
+    act_play_question_tts["TTS Play Question via Headphone"]
+    act_record_media_stream["Record Answer Audio (WebM/Opus)"]
+    dec_check_subject_followup{" "}
+    act_play_followup_tts["TTS Play Follow-up Audio"]
+    dec_check_followup_count{" "}
+    act_package_audio["Package Audio (STT_MSSV.webm)"]
+    act_hash_sha256["Compute SHA-256 Hash Seal (Client-side)"]
+    act_stream_r2["Stream Audio to Cloudflare R2"]
+    dec_check_questions{" "}
+    act_auto_submit_exam["Auto-Submit on Timeout 00:00"]
+    act_send_submission["Dispatch Audio URL & SHA-256 Seal"]
+    act_kiosk_lock_screen["Lock Kiosk Safely (NO Grade Displayed - Lecturer audits & publishes later)"]
+  end
+
+  subgraph SystemWorker["Lane 3: Backend & AI Grading Service"]
+    act_init_session_db["Initialize Exam Shift in DB (SCHEDULED)"]
+    act_start_server_timer["Start Server Master Timer (Anti-cheat)"]
+    act_eval_answer_context["AI Quick Context Evaluation for Follow-up"]
+    dec_need_followup{" "}
+    act_persist_first["Persist First in DB (< 100ms, Status: SUBMITTED)"]
+    dec_ai_load{"AI Service Status?"}
+    act_enqueue_background["Enqueue to BoundedChannel (1,000 slots RAM) / DLQ Replay (5m)"]
+    act_execute_instant_gemini["Background Gemini 1.5 Pro Grading (Status: AI_GRADED)"]
+    act_classify_audit_queue["Auto-classify into 2 Groups: Suspicious vs High Confidence"]
+    act_save_lecturer_audit["Save Lecturer Override & Reason (Status: AUDITED)"]
+    act_publish_grades_db["Lecturer Publishes Shift Grades (Status: PUBLISHED)"]
+    act_enforce_oneway_lock["Enforce One-Way Lock (OneWayLockInterceptor, LOCKED)"]
+    act_publish_export_fpt["Release to Student Portal & Export FPT Standard Excel"]
+  end
+
+  subgraph Lecturer["Lane 4: Lecturer / Proctor & Auditor"]
+    init_start((●))
+    act_open_proctor_console["Proctor 1: Open Console (Load Shift & Lab Room)"]
+    act_verify_roster["Proctor 2: Verify ID & Assign Seat (Booth 1-40)"]
+    act_reassign_station["Proctor 2: Reassign to Backup Station"]
+    act_broadcast_start["Proctor 1: Broadcast Synchronized Start Signal"]
+    act_close_session_console["Proctor 1: Close Exam Shift"]
+    act_open_audit_portal["Lecturer: Open Audit Portal (Audit ALL Suspicious & Failed Papers)"]
+    act_play_waveform["Waveform Player (1.0x-1.5x, Jump to Citations & Anomaly Timestamps)"]
+    dec_audit_action{" "}
+    act_override_score["Adjust Criteria Scores & Enter Mandatory Reason (>=10 chars)"]
+    act_click_publish_grades["Click 'Công Bố Điểm' (Publish Grades when 100% Students Have Complete Scores)"]
+  end
+
+  subgraph DeptHead["Lane 5: Department Head (Quản trị Kỳ thi & Thẩm định Phúc khảo)"]
+    dept_start((●))
+    act_dept_create_season["Dept Head: Create Official Exam Season & Assign Courses"]
+    act_dept_config_subject["Dept Head: Configure Subject & Shifts (Follow-up 1-2, ExamInputMode)"]
+    act_depthead_review["Department Head: Open Internal Appeal Dossier (Evidence Panel: Audio R2, Whisper, CoT)"]
+    dec_appeal_decision{"Appeal Decision?"}
+    act_update_appeal_score["Accept Appeal: Adjust Grade in DB & Log AuditTrail"]
+    act_reject_appeal["Reject Appeal: Uphold Original Grade with Explanation"]
+  end
+
+  %% Phase 0: Exam Season & Shift Configuration by Department Head
+  dept_start --> act_dept_create_season
+  act_dept_create_season --> act_dept_config_subject
+  act_dept_config_subject --> act_init_session_db
+
+  %% Phase 1: Security Setup, Attendance & Hardware Verification
+  st_start --> act_verify_id
+  init_start --> act_open_proctor_console
+  act_open_proctor_console --> act_verify_roster
+  act_init_session_db --> act_verify_roster
+  act_verify_roster --> act_verify_id
+  act_verify_id --> act_take_assigned_seat
+  act_take_assigned_seat --> act_login_kiosk
+  act_login_kiosk --> act_activate_kiosk
+  act_activate_kiosk --> act_perform_mic_check
+  act_perform_mic_check --> act_measure_input_level
+  act_measure_input_level --> dec_verify_hardware
+
+  dec_verify_hardware -->|"[Mic < 60dB: Hardware Fault]"| act_reassign_station
+  act_reassign_station -->|"[Retest on Backup PC]"| act_activate_kiosk
+  dec_verify_hardware -->|"[Mic >= 60dB: Audio OK]"| act_wait_exam_start
+
+  %% Phase 2: Viva Voce Exam under ExamInputMode & Cryptographic Sealing
+  act_wait_exam_start --> act_broadcast_start
+  act_broadcast_start --> act_start_server_timer
+  act_start_server_timer --> act_start_kiosk_timer
+  act_start_kiosk_timer --> dec_check_input_mode
+
+  dec_check_input_mode -->|"[VoiceOnly]"| act_lock_keyboard
+  dec_check_input_mode -->|"[VoiceWithTranscriptEdit]"| act_enable_transcript_buffer
+  dec_check_input_mode -->|"[VoiceAndTextInput]"| act_enable_text_editor
+
+  act_lock_keyboard --> act_play_question_tts
+  act_enable_transcript_buffer --> act_play_question_tts
+  act_enable_text_editor --> act_play_question_tts
+
+  act_start_kiosk_timer -->|"[Timeout 00:00]"| act_auto_submit_exam
+  act_auto_submit_exam --> act_send_submission
+
+  act_play_question_tts --> act_speak_viva_answer
+  act_speak_viva_answer --> act_record_media_stream
+  act_record_media_stream --> dec_check_subject_followup
+
+  dec_check_subject_followup -->|"[AI Follow-up Enabled]"| act_eval_answer_context
+  act_eval_answer_context --> dec_need_followup
+
+  dec_need_followup -->|"[Needs Follow-up]"| act_play_followup_tts
+  dec_need_followup -->|"[Good Answer - No Follow-up]"| act_package_audio
+
+  act_play_followup_tts --> act_speak_followup
+  act_speak_followup --> dec_check_followup_count
+
+  dec_check_followup_count -->|"[Follow-up Done (1-2 Questions configured by Lecturer)]"| act_package_audio
+  dec_check_subject_followup -->|"[No AI Follow-up]"| act_package_audio
+
+  act_package_audio --> act_hash_sha256
+  act_hash_sha256 --> act_stream_r2
+  act_stream_r2 --> dec_check_questions
+
+  dec_check_questions -->|"[More Questions]"| act_play_question_tts
+  dec_check_questions -->|"[All Questions Done]"| act_confirm_submission
+
+  act_confirm_submission --> act_send_submission
+  act_send_submission --> act_persist_first
+
+  %% Phase 3: Kiosk Safe Lockdown & Resilient Background AI Grading
+  act_persist_first --> act_kiosk_lock_screen
+  act_kiosk_lock_screen --> act_vacate_lab_room
+  act_persist_first --> dec_ai_load
+  dec_ai_load -->|"[Normal Load]"| act_execute_instant_gemini
+  dec_ai_load -->|"[Overload 429 / Network Timeout]"| act_enqueue_background
+  act_enqueue_background --> act_execute_instant_gemini
+  act_execute_instant_gemini --> act_classify_audit_queue
+
+  %% Phase 4: Lecturer Audit Portal (2 Groups Classification)
+  act_vacate_lab_room --> act_close_session_console
+  act_close_session_console --> act_open_audit_portal
+  act_classify_audit_queue --> act_open_audit_portal
+  act_open_audit_portal --> act_play_waveform
+  act_play_waveform --> dec_audit_action
+
+  dec_audit_action -->|"[Score OK / High Confidence]"| act_click_publish_grades
+  dec_audit_action -->|"[Adjust Score with Waveform Review]"| act_override_score
+  act_override_score -->|"[Reason >=10 chars Saved]"| act_save_lecturer_audit
+  act_save_lecturer_audit --> act_click_publish_grades
+
+  %% Phase 5: Lecturer Publishes Grades (100% Complete), One-Way Lock & Internal Appeal
+  act_click_publish_grades --> act_publish_grades_db
+  act_publish_grades_db --> act_enforce_oneway_lock
+  act_enforce_oneway_lock --> act_publish_export_fpt
+  act_publish_export_fpt -->|"[Grades Released & Immutable]"| act_view_official_grade
+  act_view_official_grade --> dec_student_ack_choice
+
+  dec_student_ack_choice -->|"[Accept Grade]"| act_student_ack
+  dec_student_ack_choice -->|"[Appeal Grade]"| act_internal_appeal
+  act_student_ack --> end_viva_lifecycle
+
+  %% Phase 6: Department Head Reviews Internal Appeal
+  act_internal_appeal --> act_depthead_review
+  act_depthead_review --> dec_appeal_decision
+  dec_appeal_decision -->|"[Accept Appeal: Adjust Grade]"| act_update_appeal_score
+  dec_appeal_decision -->|"[Reject Appeal: Keep Grade]"| act_reject_appeal
+  act_update_appeal_score --> end_viva_lifecycle
+  act_reject_appeal --> end_viva_lifecycle

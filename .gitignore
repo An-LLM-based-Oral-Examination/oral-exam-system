@@ -48,3 +48,9 @@ Thumbs.db
 $RECYCLE.BIN/
 *.tmp
 *.temp
+*.bkp
+.*.bkp
+~$*
+
+# Analyzer & Temporary Outputs
+graphify-out/
