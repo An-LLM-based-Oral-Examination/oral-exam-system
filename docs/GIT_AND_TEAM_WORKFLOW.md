@@ -1,5 +1,11 @@
 # QUY TRÌNH LÀM VIỆC NHÓM TRÊN GIT (GIT WORKFLOW)
-Tài liệu này quy định cách chia nhánh (Branching) và làm việc nhóm để tránh xung đột mã nguồn (Conflict) cho đội hình 4 thành viên. Nhánh hiện tại là nhánh `develop`.
+Tài liệu này quy định cách chia nhánh (Branching) và làm việc nhóm để tránh xung đột mã nguồn (Conflict) cho đội ngũ 4 kỹ sư FA26SE166:
+- 🧑 **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect
+- 🧑 **Nguyễn Trọng Tốt:** Backend Developer, AI Engineer & QA Lead
+- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 28 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)
+- 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator
+
+Nhánh làm việc chung hiện tại là nhánh `develop`.
 
 ---
 
@@ -9,7 +15,7 @@ Tài liệu này quy định cách chia nhánh (Branching) và làm việc nhóm
 - `feature/<tên-tính-năng>`: Nhánh cá nhân để code tính năng mới.
   - Ví dụ BE: `feature/be-setup-signalr`, `feature/be-rubric-crud`.
   - Ví dụ FE: `feature/fe-login-ui`, `feature/fe-voice-gate`.
-- `bugfix/<tên-bug>`: Nhánh sửa lỗi phát sinh khi test. Ví dụ: `bugfix/fe-radar-chart-crash`.
+- `bugfix/<tên-bug>`: Nhánh sửa lỗi phát sinh khi test. Ví dụ: `bugfix/fe-scorecard-crash`.
 
 ---
 

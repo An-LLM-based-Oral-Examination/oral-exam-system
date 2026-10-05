@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Flow 04: Thi Thật Phòng Lab & Cổng Hậu Kiểm (Multi-Branch Security Flow)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: #f8fafc;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 32px 48px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bg-dots {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+      background-size: 28px 28px;
+      opacity: 0.5;
+      z-index: 0;
+    }
+
+    .slide-wrapper {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      justify-content: space-between;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 12px;
+    }
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .badge-pill {
+      align-self: flex-start;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 4px 16px;
+      border-radius: 9999px;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-pill svg { width: 15px; height: 15px; fill: #e11d48; }
+    .flow-title {
+      font-size: 33px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+    }
+    .flow-subtitle {
+      font-size: 14.5px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .slide-num {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #0f172a;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 19px;
+      font-weight: 800;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Main Container */
+    .flow-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 6px 0;
+    }
+
+    /* Top Container: Lab Exam Execution */
+    .top-lab-container {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 14px 20px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-meta {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #be123c;
+      background: #ffe4e6;
+      padding: 3px 12px;
+      border-radius: 9999px;
+    }
+
+    .lab-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    /* Card Item */
+    .step-card {
+      width: 220px;
+      background: #ffffff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.03);
+      position: relative;
+    }
+    .step-card.highlight-timer {
+      border: 2px solid #ea580c;
+      background: #fffaf5;
+    }
+    .step-card.mic-card {
+      border: 2px solid #0284c7;
+      background: #f0f9ff;
+    }
+
+    .step-badge {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 10px;
+      border-radius: 9999px;
+      background: #0f172a;
+      color: #ffffff;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    .step-badge.red { background: #e11d48; }
+    .step-badge.blue { background: #0284c7; }
+    .step-badge.amber { background: #ea580c; }
+    .step-badge.purple { background: #7c3aed; }
+    .step-badge.green { background: #16a34a; }
+
+    .icon-bubble {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+    }
+    .icon-bubble svg { width: 26px; height: 26px; }
+
+    .step-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 3px;
+      line-height: 1.25;
+    }
+    .step-desc {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #64748b;
+      line-height: 1.35;
+    }
+
+    /* Arrow Unit */
+    .arrow-unit {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+    }
+    .arrow-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #475569;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 6px;
+      margin-bottom: 3px;
+      white-space: nowrap;
+    }
+    .arrow-unit svg { width: 34px; height: 14px; }
+
+    /* Bottom Section: Audit Split */
+    .bottom-audit-container {
+      display: flex;
+      gap: 18px;
+      align-items: stretch;
+      flex: 1;
+    }
+
+    /* Post-processing Spine */
+    .batch-spine-box {
+      width: 490px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 20px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+    }
+    .batch-cards-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    /* Audit Branches Container */
+    .audit-branches-box {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .audit-row {
+      flex: 1;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.03);
+      gap: 24px;
+    }
+    .audit-row.approve-branch {
+      border-left: 6px solid #16a34a;
+      background: linear-gradient(90deg, #f0fdf4 0%, #ffffff 100%);
+    }
+    .audit-row.override-branch {
+      border-left: 6px solid #e11d48;
+      background: linear-gradient(90deg, #fff1f2 0%, #ffffff 100%);
+    }
+
+    .audit-info {
+      width: 270px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .audit-pill {
+      align-self: flex-start;
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 10px;
+      border-radius: 9999px;
+      color: #fff;
+    }
+    .audit-pill.ok { background: #16a34a; }
+    .audit-pill.mod { background: #e11d48; }
+    .audit-title { font-size: 14.5px; font-weight: 800; color: #0f172a; }
+    .audit-desc { font-size: 11px; font-weight: 500; color: #64748b; line-height: 1.35; }
+
+    .audit-steps-group {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      gap: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-dots"></div>
+
+  <div class="slide-wrapper">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="badge-pill">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          MAIN WORKFLOWS
+        </div>
+        <div class="flow-title">Flow 04 · Thi Thật Phòng Lab &amp; Cổng Hậu Kiểm Giảng Viên</div>
+        <div class="flow-subtitle">Server Master Timer toàn ca thi phòng Lab · Rẽ nhánh Mic-Check · AI Hỏi Chuyên Sâu Theo Môn · Audio STT_MSSV.webm SHA-256 · Persist First &lt; 100ms &amp; BoundedChannel 1,000 slots · Rẽ nhánh Hậu kiểm &amp; One-Way Lock</div>
+      </div>
+      <div class="slide-num">04</div>
+    </div>
+
+    <div class="flow-stage">
+      
+      <!-- TOP SECTION: Lab Exam Setup, Total Exam Timer & Hardware Security -->
+      <div class="top-lab-container">
+        <div class="section-header">
+          <div class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            PHA 1 &amp; PHA 2: ĐIỂM DANH, KIỂM TRA PHẦN CỨNG &amp; THI VIVA (AI HỎI CHUYÊN SÂU THEO MÔN)
+          </div>
+          <span class="section-meta">Server Master Timer quản lý tập trung thời gian toàn ca thi phòng Lab (45 - 60 phút) cho toàn bộ 40 máy trạm</span>
+        </div>
+
+        <div class="lab-row">
+          
+          <!-- Step 1: Attendance & Booth Assignment -->
+          <div class="step-card">
+            <div class="step-badge red">BƯỚC 1</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><circle cx="12" cy="10" r="3"/>
+              </svg>
+            </div>
+            <div class="step-title">Mở Ca &amp; Điểm Danh</div>
+            <div class="step-desc">Giám thị 1 mở ca SCHEDULED; Giám thị 2 đối chiếu CCCD, gán cố định số máy Booth 1-40.</div>
+          </div>
+
+          <!-- Arrow 1 -> 2 -->
+          <div class="arrow-unit">
+            <span class="arrow-label">Khóa Kiosk</span>
+            <svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg>
+          </div>
+
+          <!-- Step 2: Kiosk Lockdown & Mic Check (BRANCHING NOTE) -->
+          <div class="step-card mic-card">
+            <div class="step-badge blue">BƯỚC 2 (2 NHÁNH)</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <div class="step-title">Mic-Check &amp; Backup PC</div>
+            <div class="step-desc">&bull; <b>Lỗi Mic:</b> Đổi máy sang Backup PC.<br>&bull; <b>Đạt Mic:</b> Khóa Kiosk chờ mở đề thi.</div>
+          </div>
+
+          <!-- Arrow 2 -> 3 -->
+          <div class="arrow-unit">
+            <span class="arrow-label">Đạt phần cứng</span>
+            <svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg>
+          </div>
+
+          <!-- Step 3: Server Master Timer (TOTAL EXAM TIME) -->
+          <div class="step-card highlight-timer">
+            <div class="step-badge amber">BƯỚC 3 (ĐỒNG BỘ)</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <div class="step-title">Timer Toàn Ca Thi</div>
+            <div class="step-desc">Giám thị 1 mở đề SignalR; Server Master Timer kích hoạt <b>TỔNG THỜI GIAN TOÀN CA</b> (45-60 phút).</div>
+          </div>
+
+          <!-- Arrow 3 -> 4 -->
+          <div class="arrow-unit">
+            <span class="arrow-label">TTS phát đề môn</span>
+            <svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg>
+          </div>
+
+          <!-- Step 4: TTS Course Question & Student Answer -->
+          <div class="step-card">
+            <div class="step-badge purple">BƯỚC 4</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #f3e8ff 0%, #ddd6fe 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+              </svg>
+            </div>
+            <div class="step-title">Đề Chuyên Môn &amp; Trả Lời Mic</div>
+            <div class="step-desc">TTS đọc đề thi vấn đáp theo môn (PRN, SWD...); thí sinh trình bày trực tiếp câu trả lời qua Micro.</div>
+          </div>
+
+          <!-- Arrow 4 -> 5 -->
+          <div class="arrow-unit">
+            <span class="arrow-label">AI phân tích ngữ cảnh</span>
+            <svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg>
+          </div>
+
+          <!-- Step 5: AI Contextual Deep-Dive Follow-up -->
+          <div class="step-card" style="border: 2px solid #7c3aed; background: #faf5ff;">
+            <div class="step-badge purple">BƯỚC 5 (TƯƠNG TÁC AI)</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #f3e8ff 0%, #ddd6fe 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div class="step-title">AI Hỏi Chuyên Sâu Ngữ Cảnh</div>
+            <div class="step-desc">AI dựa vào ngữ cảnh câu trả lời &amp; môn học tự động phát vấn câu hỏi chuyên sâu; thí sinh phản biện qua Mic.</div>
+          </div>
+
+          <!-- Arrow 5 -> 6 -->
+          <div class="arrow-unit">
+            <span class="arrow-label">Kết thúc bài thi</span>
+            <svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg>
+          </div>
+
+          <!-- Step 6: Stream R2 & Exit -->
+          <div class="step-card">
+            <div class="step-badge green">BƯỚC 6</div>
+            <div class="icon-bubble" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <div class="step-title">Băm SHA-256 &amp; Stream R2</div>
+            <div class="step-desc">Đóng gói audio STT_MSSV.webm, băm SHA-256 seal niêm phong, stream lên R2 &amp; khóa Kiosk an toàn — THI XONG TUYỆT ĐỐI KHÔNG CÓ ĐIỂM LIỀN.</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- BOTTOM SECTION: Batch AI Processing & 2-Branch Lecturer Audit Portal -->
+      <div class="bottom-audit-container">
+        
+        <!-- Batch Worker Box -->
+        <div class="batch-spine-box">
+          <div class="section-title" style="font-size: 14px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.5"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+            PHA 3: PERSIST FIRST &lt; 100ms &amp; BOUNDEDCHANNEL (CHẤM NGẦM ZERO DATA LOSS)
+          </div>
+          
+          <div class="batch-cards-row">
+            <!-- Step 7: Persist First & BoundedChannel Queue -->
+            <div class="step-card" style="width: 215px;">
+              <div class="step-badge" style="background: #0284c7;">BƯỚC 7</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              </div>
+              <div class="step-title" style="font-size: 13px;">Persist First &lt; 100ms</div>
+              <div class="step-desc">Lưu DB &lt; 100ms (SUBMITTED); BoundedChannel 1,000 slots RAM / DLQ 5m (Chấm ngầm Zero Data Loss).</div>
+            </div>
+
+            <div class="arrow-unit"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#0f172a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#0f172a"/></svg></div>
+
+            <!-- Step 8: Whisper & Gemini CoT -->
+            <div class="step-card" style="width: 215px;">
+              <div class="step-badge purple">BƯỚC 8</div>
+              <div class="icon-bubble" style="background: linear-gradient(135deg, #f3e8ff 0%, #ddd6fe 100%);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/>
+                </svg>
+              </div>
+              <div class="step-title">Whisper &amp; Gemini CoT</div>
+              <div class="step-desc">Whisper bóc Timestamps; Gemini 1.5 Pro chấm Rubric 10.0 trích Citations câu hỏi chính &amp; câu hỏi chuyên sâu.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lecturer Audit Portal: 2 Branches (Approve vs Override) -->
+        <div class="audit-branches-box">
+          
+          <!-- Branch 1: Approve Score -->
+          <div class="audit-row approve-branch">
+            <div class="audit-info">
+              <span class="audit-pill ok">NHÁNH 1 · DUYỆT ĐIỂM (TIN CẬY)</span>
+              <div class="audit-title">Nhóm Tin Cậy (Độ Tin Cậy Cao)</div>
+              <div class="audit-desc">Đối chiếu Evidence Panel Waveform Player, xác nhận AI chấm chính xác &rarr; Giữ nguyên 100% điểm số.</div>
+            </div>
+
+            <div class="audit-steps-group">
+              <!-- Step 9A -->
+              <div class="step-card" style="width: 240px;">
+                <div class="step-badge green">BƯỚC 9A</div>
+                <div class="step-title">Xác Nhận Duyệt Điểm</div>
+                <div class="step-desc">Giảng viên bấm phê duyệt bảo lưu điểm số Barem 10.0 của AI; không cần nhập lý do giải trình.</div>
+              </div>
+
+              <div class="arrow-unit"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#16a34a" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#16a34a"/></svg></div>
+
+              <!-- Step 10A (Hội tụ) -->
+              <div class="step-card" style="width: 260px;">
+                <div class="step-badge green">BƯỚC 10 (KHÓA ĐIỂM &amp; PHÚC KHẢO)</div>
+                <div class="step-title">One-Way Lock &amp; Phúc Khảo Nội Bộ</div>
+                <div class="step-desc">Giảng viên chấm hết bài nghi ngờ/fail, đủ điểm 100% sinh viên mới công bố (HTTP 403). Sinh viên ở nhà xem điểm &amp; nộp AppealRequest gán Trưởng BM.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Branch 2: Override Score with Mandatory Reason -->
+          <div class="audit-row override-branch">
+            <div class="audit-info">
+              <span class="audit-pill mod">NHÁNH 2 · ĐIỀU CHỈNH (NGHI NGỜ)</span>
+              <div class="audit-title">Nhóm Nghi Ngờ (is_suspicious / Low Conf)</div>
+              <div class="audit-desc">Nghe lại Waveform Player bài nghi ngờ/fail, bắt buộc nhập lý do giải trình (override_reason) để lưu AuditLog.</div>
+            </div>
+
+            <div class="audit-steps-group">
+              <!-- Step 9B -->
+              <div class="step-card" style="width: 240px;">
+                <div class="step-badge red">BƯỚC 9B (BẮT BUỘC)</div>
+                <div class="step-title">Sửa Điểm &amp; Lý Do Giải Trình</div>
+                <div class="step-desc">Điều chỉnh điểm tiêu chí; form khóa cứng nếu bỏ trống ô lý do giải trình (override_reason).</div>
+              </div>
+
+              <div class="arrow-unit"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7" stroke="#e11d48" stroke-width="2"/><polygon points="26,3 34,7 26,11" fill="#e11d48"/></svg></div>
+
+              <!-- Step 10B (Hội tụ) -->
+              <div class="step-card" style="width: 260px;">
+                <div class="step-badge green">BƯỚC 10 (KHÓA ĐIỂM &amp; PHÚC KHẢO)</div>
+                <div class="step-title">AuditLog, One-Way Lock &amp; Phúc Khảo</div>
+                <div class="step-desc">Ghi nhật ký kiểm toán; Giảng viên đủ điểm 100% mới công bố (HTTP 403); Sinh viên ở nhà xem điểm &amp; nộp AppealRequest cho Trưởng BM.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+</body>
+</html>
