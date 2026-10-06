@@ -8,16 +8,12 @@ interface CountdownTimerProps {
   label?: string
 }
 
-export const CountdownTimer: React.FC<CountdownTimerProps> = ({
+const CountdownTimerInstance: React.FC<CountdownTimerProps> = ({
   totalSeconds,
   onExpire,
   label = 'Thời gian còn lại',
 }) => {
   const [secondsLeft, setSecondsLeft] = useState(totalSeconds)
-
-  useEffect(() => {
-    setSecondsLeft(totalSeconds)
-  }, [totalSeconds])
 
   useEffect(() => {
     if (secondsLeft <= 0) {
@@ -37,17 +33,21 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   return (
     <div
       className={cn(
-        'flex items-center space-x-2 px-3 py-1.5 rounded-lg border font-mono text-sm font-bold transition-colors',
+        'flex items-center space-x-2 rounded-lg border px-3 py-1.5 font-mono text-sm font-bold transition-colors',
         isUrgent
-          ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 animate-pulse'
-          : 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300'
+          ? 'animate-pulse border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          : 'border-slate-200 bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
       )}
     >
-      <Clock className="w-4 h-4" />
-      <span className="text-xs font-sans font-normal text-slate-500 mr-1">{label}:</span>
+      <Clock className="h-4 w-4" />
+      <span className="mr-1 font-sans text-xs font-normal text-slate-500">{label}:</span>
       <span>
         {minutes < 10 ? `0${minutes}` : minutes}:{seconds < 10 ? `0${seconds}` : seconds}
       </span>
     </div>
   )
 }
+
+export const CountdownTimer: React.FC<CountdownTimerProps> = (props) => (
+  <CountdownTimerInstance key={props.totalSeconds} {...props} />
+)

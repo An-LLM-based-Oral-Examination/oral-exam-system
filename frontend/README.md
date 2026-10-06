@@ -30,8 +30,8 @@ npm run dev
 
 | Thành viên | Trách nhiệm cốt lõi | Các tệp & thư mục phụ trách chính |
 | :--- | :--- | :--- |
-| **Hoàng** *(Lead Core Logic & API)* | • Quản lý State toàn cục & Authentication.<br>• Tích hợp API Backend .NET 8 (Axios Interceptor).<br>• Xử lý luồng Real-time WebSocket SignalR.<br>• Xử lý Web Speech API (Microphone STT/TTS). | • `src/services/` (`api.ts`, `authService.ts`,...)<br>• `src/hooks/` (`useSignalR.ts`, `useWebSpeech.ts`)<br>• `src/context/` (`AuthContext.tsx`)<br>• `src/types/` (Data contracts) |
-| **Hải** *(Lead UI/UX & Design System)* | • Xây dựng Design System & UI Primitives.<br>• Màn hình đệm 30s (`BufferScreen`), Modal Barem Rubric.<br>• Màn thi Voice-First & Đồng hồ đếm ngược Server.<br>• An ninh phòng Lab (`useKiosk.ts`), Audio Player R2.<br>• Biểu đồ năng lực Bloom Taxonomy (Recharts). | • `src/components/ui/` (Button, Card, Input, Badge)<br>• `src/components/practice/`, `exam/`, `audit/`<br>• `src/components/layout/` (Header, Sidebar, Layout)<br>• `src/pages/` (Giao diện 7 trang chức năng) |
+| **Hoàng** *(Lead Core Logic & API)* | • Quản lý State toàn cục & Authentication.<br>• Tích hợp API Backend .NET 8 (Axios Interceptor).<br>• Xử lý luồng Real-time WebSocket SignalR.<br>• Xử lý Web Speech API (Microphone STT/TTS). | • `src/services/` (`api.client.ts`, `auth.service.ts`,...)<br>• `src/hooks/` (`useSignalR.ts`, `useSpeechRecognition.ts`)<br>• `src/context/` (`AuthContext.tsx`)<br>• `src/types/` (Data contracts) |
+| **Hải** *(Lead UI/UX & Design System)* | • Xây dựng Design System & UI Primitives.<br>• Màn hình đệm 30s (`BufferScreen`), Modal Barem Rubric.<br>• Màn thi Voice-First & Đồng hồ đếm ngược Server.<br>• An ninh phòng Lab (`useKioskLockdown.ts`), Audio Player R2.<br>• Biểu đồ năng lực Bloom Taxonomy (Recharts). | • `src/components/common/` (Button, Card, Input, Badge)<br>• `src/components/practice/`, `exam/`, `audio/`, `rubric/`<br>• `src/components/layout/` (Navbar, Sidebar, Layout)<br>• `src/pages/student/`, `lecturer/` |
 
 ---
 
@@ -49,28 +49,40 @@ npm run dev
 
 ```
 src/
+├── routes/              # AppRoutes, ProtectedRoute, RoleBasedRedirect
+├── types/               # DTO theo practice, mock exam, official exam và rubric
+├── services/            # API client và service tách theo từng phân hệ
+├── stores/              # Khung dành cho Zustand khi nghiệp vụ tương ứng được triển khai
+├── hooks/               # Speech Recognition, SignalR và Kiosk Lockdown
 ├── components/
-│   ├── layout/          # Layout chung, Header, Sidebar, Footer, AuthGuard
-│   ├── ui/              # Primitives chuẩn: Button, Card, Input, Badge
-│   ├── practice/        # MF-01: BufferScreen.tsx (30s), ScorecardModal.tsx
-│   ├── exam/            # MF-02: VoiceFirstGate.tsx, CountdownTimer.tsx
-│   └── audit/           # MF-04: AudioPlayer.tsx (WebM R2), ScoreOverrideForm.tsx
-├── context/             # AuthContext.tsx (User State, JWT sessionStorage, RBAC)
-├── hooks/               # useSignalR.ts, useWebSpeech.ts, useKiosk.ts
-├── pages/               # 7 trang chức năng nghiệp vụ
-├── services/            # Axios API client cấu hình chuẩn RFC 7807 ProblemDetails
-├── types/               # 100% Strict TypeScript DTOs & Domain interfaces
+│   ├── common/          # Button, Card, Input, Badge và Separator
+│   ├── layout/          # App/Student layout, Navbar, Sidebar, Footer
+│   ├── practice/        # BufferScreen, ScorecardModal
+│   ├── rubric/          # Thành phần rubric và hậu kiểm điểm
+│   ├── audio/           # WaveformPlayer
+│   └── exam/            # VoiceFirstGate, CountdownTimer
+├── pages/
+│   ├── auth/            # Login và Unauthorized
+│   ├── student/         # Dashboard, Practice, Mock Exam, Exam History, Official Exam
+│   └── lecturer/        # Dashboard, Question Studio, Audit Evidence
+├── context/             # AuthContext hiện hữu, giữ nguyên hành vi đăng nhập
+├── assets/              # Logo và tài nguyên tĩnh
+├── lib/                 # Tiện ích tương thích thư viện
 └── utils/               # cn.ts (clsx + tailwind-merge)
 ```
 
 ---
 
-## 📚 5. Hai Tài Liệu Pháp Lý Kỹ Thuật Bắt Buộc Đọc
+## 📚 5. Ba Tài Liệu Kỹ Thuật Bắt Buộc Đọc
 
-1. 📋 **Kế hoạch chi tiết 4 tuần & Lịch họp 2 ngày/lần:**  
+1. 🖥️ **Đặc tả chức năng và danh sách màn hình frontend:**
+   👉 Đọc tại file: [`FE_TASK_BOARD.md`](./FE_TASK_BOARD.md)
+   *(Tài liệu chuẩn hiện tại về portal, màn hình, component và hợp đồng chức năng frontend).*
+
+2. 📋 **Kế hoạch chi tiết 4 tuần & Lịch họp 2 ngày/lần:**
    👉 Đọc tại file: [`FE_TASK_EXECUTION_GUIDE.md`](./FE_TASK_EXECUTION_GUIDE.md)  
    *(Chi tiết nhiệm vụ từng ngày từ Tuần 1 đến Tuần 4 cho Hoàng & Hải).*
 
-2. 🔌 **Quy ước Hợp đồng API giữa FE và BE (.NET 8):**  
+3. 🔌 **Quy ước Hợp đồng API giữa FE và BE (.NET 8):**
    👉 Đọc tại file: [`../docs/API_CONTRACT_AND_INTEGRATION_GUIDE.md`](../docs/API_CONTRACT_AND_INTEGRATION_GUIDE.md)  
    *(Chi tiết Base URL `/api/v1/`, cấu trúc JSON camelCase, mã lỗi 422/429/403, và SignalR Hub `/hubs/practice`).*

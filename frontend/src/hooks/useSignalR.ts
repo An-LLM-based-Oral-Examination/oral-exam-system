@@ -1,25 +1,19 @@
-import { useEffect, useState, useRef } from 'react'
-import * as signalR from '@microsoft/signalr'
-import type { ScorecardPayload } from '@/types/exam.types'
+import { useEffect, useState } from 'react'
+import type { ScorecardPayload } from '@/types/practice.types'
+import { createPracticeHubConnection } from '@/services/signalr.service'
 
 /**
  * SignalR Real-time Connection Hook for PracticeHub (/hubs/practice)
  */
-export function useSignalR(hubUrl: string = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice') {
+export function useSignalR(
+  hubUrl: string = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice',
+) {
   const [isConnected, setIsConnected] = useState(false)
   const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null)
-  const connectionRef = useRef<signalR.HubConnection | null>(null)
 
   useEffect(() => {
     const token = sessionStorage.getItem('access_token')
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl, {
-        accessTokenFactory: () => token || '',
-      })
-      .withAutomaticReconnect([0, 2000, 5000, 10000])
-      .configureLogging(signalR.LogLevel.Warning)
-      .build()
+    const connection = createPracticeHubConnection(hubUrl, token)
 
     connection.on('ReceiveScorecard', (data: ScorecardPayload) => {
       setScorecard(data)
@@ -34,10 +28,8 @@ export function useSignalR(hubUrl: string = import.meta.env.VITE_SIGNALR_HUB_URL
         console.warn('SignalR connection failed (Backend may be offline):', err.message)
       })
 
-    connectionRef.current = connection
-
     return () => {
-      connection.stop()
+      void connection.stop()
     }
   }, [hubUrl])
 
@@ -45,6 +37,5 @@ export function useSignalR(hubUrl: string = import.meta.env.VITE_SIGNALR_HUB_URL
     isConnected,
     scorecard,
     clearScorecard: () => setScorecard(null),
-    connection: connectionRef.current,
   }
 }
