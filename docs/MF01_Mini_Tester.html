@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MF-01 SignalR & API Mini Tester</title>
+    <!-- Thư viện SignalR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background: #1e1e1e; color: #fff; margin: 0; }
+        h2, h3, h4 { margin-top: 0; color: #61dafb; }
+        .container { display: flex; gap: 20px; }
+        .panel { flex: 1; background: #2d2d2d; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        label { display: block; margin-top: 10px; font-weight: bold; font-size: 13px; color: #aaa; }
+        input, select, textarea, button { padding: 9px 12px; margin: 5px 0 10px 0; width: 100%; box-sizing: border-box; background: #3d3d3d; color: white; border: 1px solid #555; border-radius: 4px; font-size: 14px; }
+        input:focus, select:focus, textarea:focus { border-color: #61dafb; outline: none; }
+        button { background: #007acc; cursor: pointer; font-weight: bold; transition: background 0.2s; border: none; }
+        button:hover { background: #0098ff; }
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #828a91; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #34ce57; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #e4606d; }
+        .btn-nav { background: #4a5568; }
+        .btn-nav:hover { background: #718096; }
+        pre { background: #111; padding: 12px; border-radius: 5px; max-height: 480px; overflow-y: auto; font-size: 12px; line-height: 1.5; color: #00ff66; border: 1px solid #333; font-family: Consolas, monospace; }
+        .log-error { color: #ff6b6b; font-weight: bold; }
+        .log-info { color: #63b3ed; }
+        .log-success { color: #48bb78; font-weight: bold; }
+        .log-warn { color: #ecc94b; }
+        .hidden { display: none; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .badge-info { background: #2b6cb0; color: white; }
+        .badge-warning { background: #d69e2e; color: black; }
+        .badge-success { background: #38a169; color: white; }
+        .badge-danger { background: #e53e3e; color: white; }
+        .question-card { background: #24292e; border: 1px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 15px; }
+        .flex-row { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <h2>🤖 MF-01: Luyện Tập Tương Tác (Interactive Practice) — Mini Tester</h2>
+    <p style="color: #aaa; margin-top: -10px;"><i>Công cụ kiểm thử độc lập cho Team Frontend & QA để kiểm tra toàn bộ luồng API + SignalR của Backend</i></p>
+
+    <div class="container">
+        <!-- CONTROL PANEL -->
+        <div class="panel">
+            <h3>1. Khởi Tạo Phiên Luyện Tập</h3>
+            
+            <div class="flex-row">
+                <div style="flex: 1;">
+                    <label>Student ID (GUID):</label>
+                    <input type="text" id="studentId" value="00000000-0000-0000-0000-000000000001" placeholder="Nhập StudentId từ DB">
+                </div>
+                <div style="flex: 1;">
+                    <label>Course ID (GUID):</label>
+                    <input type="text" id="courseId" value="00000000-0000-0000-0000-000000000001" placeholder="Nhập CourseId từ DB">
+                </div>
+            </div>
+
+            <div class="flex-row">
+                <div style="flex: 1;">
+                    <label>Chế độ:</label>
+                    <select id="practiceMode" onchange="onModeChange()">
+                        <option value="per_question">Per-Question (Có Follow-up khi điểm 4-8đ)</option>
+                        <option value="full_session">Full-Session (Làm liên tục, không Follow-up)</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label>Độ khó:</label>
+                    <select id="difficulty" onchange="onDifficultyChange()">
+                        <option value="progressive" selected>Progressive (Ngẫu nhiên Dễ -> Khó 3-10 câu)</option>
+                        <option value="easy">Dễ (Easy)</option>
+                        <option value="medium">Trung bình (Medium)</option>
+                        <option value="hard">Khó (Hard)</option>
+                    </select>
+                </div>
+            </div>
+
+            <label>Số lượng câu hỏi (Mặc định 3 - 10 câu):</label>
+            <input type="number" id="questionCount" value="3" min="1" max="10">
+
+            <button onclick="startSession()">🚀 Bắt Đầu Phiên & Kết Nối SignalR</button>
+            <button onclick="getHistory()" class="btn-secondary">📜 Xem Lịch Sử Luyện Tập SV</button>
+
+            <hr style="border-color: #444; margin: 20px 0;">
+
+            <!-- ACTION AREA -->
+            <div id="actionArea" class="hidden">
+                <h3>2. Thực Hiện Trả Lời Câu Hỏi</h3>
+                
+                <div class="question-card">
+                    <div>
+                        <span id="questionBadge" class="badge badge-info">Câu 1/3</span>
+                        <span id="difficultyBadge" class="badge badge-warning" style="margin-left: 5px;">Progressive</span>
+                        <span id="followUpBadge" class="badge badge-danger hidden" style="margin-left: 5px;">CÂU HỎI PHỤ (FOLLOW-UP)</span>
+                    </div>
+                    <p id="questionContent" style="font-size: 15px; margin: 10px 0; color: #fff; font-weight: 500;">Đang nạp câu hỏi...</p>
+                    <p style="font-size: 11px; color: #888; margin: 0;">Question ID: <span id="currentQuestionId"></span></p>
+                </div>
+
+                <label>Audio File (WebM/MP3/WAV/M4A):</label>
+                <input type="file" id="audioFile" accept="audio/*">
+                <button onclick="uploadAudio()" class="btn-nav">🎙️ Upload Audio & Bóc Băng (Cloudflare Whisper)</button>
+                
+                <label>Transcript (Mô phỏng Màn Hình Đệm 60s cho phép sửa):</label>
+                <textarea id="transcriptText" rows="4" placeholder="Nội dung bóc băng từ giọng nói sẽ hiển thị tại đây. Bạn có thể sửa trực tiếp..."></textarea>
+                
+                <input type="hidden" id="isFollowUp" value="false">
+                <input type="hidden" id="parentAnswerId" value="">
+
+                <div class="flex-row">
+                    <button onclick="submitAnswer()" class="btn-success" style="flex: 2;">✅ Nộp Câu Trả Lời (AI Chấm Ngầm)</button>
+                    <button onclick="nextQuestion()" id="btnNextQuestion" class="btn-nav hidden" style="flex: 1;">⏩ Câu Tiếp Theo</button>
+                </div>
+
+                <button onclick="completeSession()" class="btn-danger" style="margin-top: 10px;">🏁 Kết Thúc Phiên Luyện Tập (Complete)</button>
+            </div>
+        </div>
+
+        <!-- LOG & REALTIME MONITOR PANEL -->
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Realtime Monitor</h3>
+                <span id="connectionStatus" class="badge badge-danger">🔴 Disconnected</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <button onclick="clearLog()" style="width: auto; padding: 4px 10px; font-size: 12px; background: #555;">🧹 Xóa màn hình Log</button>
+            </div>
+            <pre id="logTerminal">Chờ lệnh thao tác...</pre>
+        </div>
+    </div>
+
+    <script>
+        let hubConnection = null;
+        let activeSessionId = null;
+        let sessionQuestions = [];
+        let currentQuestionIndex = 0;
+        const BASE_URL = 'http://localhost:5000';
+
+        function log(message, type = 'log-info') {
+            const terminal = document.getElementById('logTerminal');
+            const time = new Date().toLocaleTimeString();
+            terminal.innerHTML += `\n<span class="${type}">[${time}] ${message}</span>`;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logTerminal').innerHTML = 'Đã xóa log.';
+        }
+
+        function onModeChange() {
+            const mode = document.getElementById('practiceMode').value;
+            log(`Đã đổi chế độ sang: ${mode === 'per_question' ? 'Per-Question (có follow-up nếu điểm 4-8đ)' : 'Full-Session (làm liền mạch, không follow-up)'}`, 'log-warn');
+        }
+
+        function onDifficultyChange() {
+            const diff = document.getElementById('difficulty').value;
+            const countInput = document.getElementById('questionCount');
+            if (diff === 'progressive') {
+                if (parseInt(countInput.value, 10) < 3) countInput.value = 3;
+                countInput.min = 3;
+                countInput.max = 10;
+            } else {
+                countInput.min = 1;
+                countInput.max = 10;
+            }
+        }
+
+        async function connectSignalR(sessionId) {
+            if (hubConnection) {
+                try { await hubConnection.stop(); } catch(e) {}
+            }
+
+            hubConnection = new signalR.HubConnectionBuilder()
+                .withUrl(`${BASE_URL}/hubs/practice`)
+                .withAutomaticReconnect()
+                .build();
+
+            hubConnection.on("ReceiveGradingResult", (result) => {
+                log("🎉 [SIGNALR: ReceiveGradingResult] ĐÃ CHẤM XONG BÀI THI!", "log-success");
+                log(JSON.stringify(result, null, 2), "log-success");
+                
+                if (result.needsFollowUp) {
+                    log(`⚠️ [HỆ THỐNG KÍCH HOẠT FOLLOW-UP]: Điểm số rơi vào khoảng 4.0 - 8.0!`, "log-warn");
+                    log(`👉 Câu hỏi phụ: "${result.followUpPrompt}"`, "log-warn");
+                    
+                    document.getElementById('isFollowUp').value = "true";
+                    document.getElementById('parentAnswerId').value = result.answerId;
+                    document.getElementById('followUpBadge').classList.remove('hidden');
+                    document.getElementById('questionContent').innerText = "CÂU HỎI PHỤ: " + result.followUpPrompt;
+                    document.getElementById('transcriptText').value = "";
+                } else {
+                    document.getElementById('isFollowUp').value = "false";
+                    document.getElementById('parentAnswerId').value = "";
+                    document.getElementById('followUpBadge').classList.add('hidden');
+                    
+                    if (currentQuestionIndex < sessionQuestions.length - 1) {
+                        document.getElementById('btnNextQuestion').classList.remove('hidden');
+                        log("💡 Bạn có thể bấm nút '⏩ Câu Tiếp Theo' để làm tiếp câu kế.", "log-info");
+                    } else {
+                        log("🏁 Đã hoàn thành hết tất cả câu hỏi trong phiên. Bạn có thể bấm '🏁 Kết Thúc Phiên Luyện Tập'.", "log-info");
+                    }
+                }
+            });
+
+            hubConnection.on("ReceiveGradingError", (answerId, error) => {
+                log(`❌ [SIGNALR: ReceiveGradingError] LỖI CHẤM ĐIỂM (Answer: ${answerId}): ${error}`, "log-error");
+            });
+
+            try {
+                await hubConnection.start();
+                const statusBadge = document.getElementById('connectionStatus');
+                statusBadge.innerText = '🟢 Connected';
+                statusBadge.className = 'badge badge-success';
+                log("SignalR: Kết nối thành công đến /hubs/practice.");
+                
+                await hubConnection.invoke("JoinSession", sessionId);
+                log(`SignalR: Đã tham gia phòng session_${sessionId}`);
+            } catch (err) {
+                const statusBadge = document.getElementById('connectionStatus');
+                statusBadge.innerText = '🔴 Error';
+                statusBadge.className = 'badge badge-danger';
+                log(`SignalR Error: ${err.message}`, "log-error");
+            }
+        }
+
+        async function startSession() {
+            const studentId = document.getElementById('studentId').value.trim();
+            const courseId = document.getElementById('courseId').value.trim();
+            const mode = document.getElementById('practiceMode').value;
+            const difficulty = document.getElementById('difficulty').value;
+            const questionCount = parseInt(document.getElementById('questionCount').value, 10);
+            const isFullSession = (mode === 'full_session');
+
+            if (!studentId || !courseId) {
+                alert("Vui lòng điền đầy đủ Student ID và Course ID!");
+                return;
+            }
+
+            const payload = {
+                courseId: courseId,
+                difficulty: difficulty,
+                questionCount: questionCount,
+                isFullSession: isFullSession,
+                studentId: studentId
+            };
+
+            log(`Đang gọi POST /api/v1/practice/sessions...`);
+            log(`Payload: ${JSON.stringify(payload)}`, 'log-info');
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/practice/sessions`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-User-Id': studentId
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                log("✅ Tạo phiên luyện tập thành công:", "log-success");
+                log(JSON.stringify(data, null, 2), "log-info");
+                
+                activeSessionId = data.sessionId;
+                sessionQuestions = data.questions || [];
+                currentQuestionIndex = 0;
+
+                if (sessionQuestions.length > 0) {
+                    displayCurrentQuestion();
+                } else {
+                    document.getElementById('questionContent').innerText = "Phiên chưa có câu hỏi nào.";
+                }
+                
+                document.getElementById('actionArea').classList.remove('hidden');
+                await connectSignalR(activeSessionId);
+
+            } catch (error) {
+                log(`❌ Lỗi tạo phiên: ${error.message}`, "log-error");
+            }
+        }
+
+        function displayCurrentQuestion() {
+            if (!sessionQuestions || sessionQuestions.length === 0) return;
+            const q = sessionQuestions[currentQuestionIndex];
+            document.getElementById('questionBadge').innerText = `Câu ${currentQuestionIndex + 1}/${sessionQuestions.length}`;
+            document.getElementById('difficultyBadge').innerText = q.difficulty ? q.difficulty.toUpperCase() : 'STANDARD';
+            document.getElementById('currentQuestionId').innerText = q.questionId;
+            document.getElementById('questionContent').innerText = q.content || `Nội dung câu hỏi #${currentQuestionIndex + 1}`;
+            document.getElementById('followUpBadge').classList.add('hidden');
+            document.getElementById('isFollowUp').value = "false";
+            document.getElementById('parentAnswerId').value = "";
+            document.getElementById('transcriptText').value = "";
+            document.getElementById('btnNextQuestion').classList.add('hidden');
+            log(`👉 Đã nạp Câu ${currentQuestionIndex + 1}: ${q.content || q.questionId}`, "log-info");
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIndex < sessionQuestions.length - 1) {
+                currentQuestionIndex++;
+                displayCurrentQuestion();
+            } else {
+                alert("Đã là câu cuối cùng trong phiên!");
+            }
+        }
+
+        async function uploadAudio() {
+            const fileInput = document.getElementById('audioFile');
+            if (fileInput.files.length === 0) {
+                alert("Vui lòng chọn 1 file audio trước khi bấm bóc băng!"); 
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            log("Đang tải file audio và bóc băng qua Cloudflare Whisper trực tiếp...");
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/storage/upload-audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
+                
+                const data = await response.json();
+                log("✅ Bóc băng Whisper STT thành công:", "log-success");
+                log(JSON.stringify(data, null, 2), "log-info");
+                
+                document.getElementById('transcriptText').value = data.transcript || "";
+
+            } catch (error) {
+                log(`❌ Lỗi upload audio: ${error.message}`, "log-error");
+            }
+        }
+
+        async function submitAnswer() {
+            if (!activeSessionId) {
+                alert("Chưa có phiên làm việc!"); return;
+            }
+            const questionId = document.getElementById('currentQuestionId').innerText;
+            const studentId = document.getElementById('studentId').value.trim();
+            const text = document.getElementById('transcriptText').value.trim();
+            const isFollowUp = document.getElementById('isFollowUp').value === "true";
+            const parentAnswerId = document.getElementById('parentAnswerId').value || null;
+
+            if (!text) {
+                alert("Vui lòng nhập hoặc bóc băng câu trả lời trước khi nộp!");
+                return;
+            }
+
+            const payload = {
+                questionId: questionId,
+                studentId: studentId,
+                answerText: text,
+                isFollowUp: isFollowUp,
+                parentAnswerId: parentAnswerId
+            };
+
+            log("Đang nộp câu trả lời (Persist First)...");
+            log(`Payload: ${JSON.stringify(payload)}`, "log-info");
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/practice/sessions/${activeSessionId}/answers`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-User-Id': studentId
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
+                
+                const data = await response.json();
+                log(`✅ Đã nộp thành công! HTTP 202 Accepted. AnswerId: ${data.answerId}`, "log-success");
+                log(`⏳ Đang xếp hàng vào RAM BoundedChannel (1000 slots). AI Gemini đang chấm ngầm... Hãy quan sát cửa sổ SignalR!`, "log-warn");
+
+            } catch (error) {
+                log(`❌ Lỗi nộp bài: ${error.message}`, "log-error");
+            }
+        }
+
+        async function completeSession() {
+            if (!activeSessionId) {
+                alert("Chưa có phiên luyện tập nào đang hoạt động!");
+                return;
+            }
+            const studentId = document.getElementById('studentId').value.trim();
+            log(`Đang gọi POST /api/v1/practice/sessions/${activeSessionId}/complete...`);
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/practice/sessions/${activeSessionId}/complete?studentId=${studentId}`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-User-Id': studentId
+                    }
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
+                const data = await response.json();
+                log(`🏁 ${data.message || 'Phiên luyện tập đã hoàn tất thành công!'}`, "log-success");
+                log("Trạng thái phiên: Status = 'completed', CompletedAt = UTC Now.", "log-success");
+            } catch (error) {
+                log(`❌ Lỗi kết thúc phiên: ${error.message}`, "log-error");
+            }
+        }
+
+        async function getHistory() {
+            const studentId = document.getElementById('studentId').value.trim();
+            if (!studentId) {
+                alert("Vui lòng nhập Student ID để tra cứu lịch sử!");
+                return;
+            }
+            log(`Đang truy vấn lịch sử luyện tập của sinh viên: ${studentId}...`);
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/practice/student/history?studentId=${studentId}`, {
+                    method: 'GET',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-User-Id': studentId
+                    }
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
+                const data = await response.json();
+                log(`📜 LỊCH SỬ LUYỆN TẬP TÌM THẤY (${data.length} phiên):`, "log-success");
+                log(JSON.stringify(data, null, 2), "log-info");
+            } catch (error) {
+                log(`❌ Lỗi lấy lịch sử: ${error.message}`, "log-error");
+            }
+        }
+    </script>
+</body>
+</html>

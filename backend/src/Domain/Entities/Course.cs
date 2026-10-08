@@ -14,7 +14,7 @@ public partial class Course
     public bool HasFollowUp { get; set; } = false;
     public int TranscriptBufferSeconds { get; set; } = 60;
     public int MaxFollowUpQuestions { get; set; } = 2;
-    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceAndTextInput;
+    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

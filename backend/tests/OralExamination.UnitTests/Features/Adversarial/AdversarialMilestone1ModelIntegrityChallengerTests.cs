@@ -17,14 +17,14 @@ namespace OralExamination.UnitTests.Features.Adversarial;
 /// 
 /// Trọng tâm thử thách đối kháng:
 /// 1. Kiểm tra tính toàn vẹn của mô hình EF Core:
-///    - Thuộc tính ExamInputMode trong thực thể Course: kiểu CLR string, giá trị mặc định VoiceAndTextInput.
-///    - Cấu hình Fluent API trong OralExamDbContext: cột exam_input_mode, độ dài tối đa 30, IsRequired = true, DefaultValue = "VoiceAndTextInput".
+///    - Thuộc tính ExamInputMode trong thực thể Course: kiểu CLR string, giá trị mặc định VoiceWithTranscriptEdit.
+///    - Cấu hình Fluent API trong OralExamDbContext: cột exam_input_mode, độ dài tối đa 30, IsRequired = true, DefaultValue = "VoiceWithTranscriptEdit".
 /// 2. Kiểm tra tính tương thích giữa Course.cs và 01_schema.sql (bảng courses):
-///    - Định nghĩa cột exam_input_mode VARCHAR(30) NOT NULL DEFAULT 'VoiceAndTextInput' ở cả 2 tệp schema.
-///    - Ràng buộc CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput')).
+///    - Định nghĩa cột exam_input_mode VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit' ở cả 2 tệp schema.
+///    - Ràng buộc CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceWithTranscriptEdit')).
 ///    - Khớp 100% giữa DomainEnums.ExamInputMode.All và SQL CHECK constraint.
 /// 3. Kiểm thử ca biên Validator và Persistence:
-///    - Khả năng lưu và đọc lại qua EF Core với cả 3 giá trị ExamInputMode.
+///    - Khả năng lưu và đọc lại qua EF Core với cả 2 giá trị ExamInputMode.
 ///    - Chặn các giá trị lạ, sai hoa thường hoặc khoảng trắng qua UpdateCourseConfigurationCommandValidator.
 /// </summary>
 public class AdversarialMilestone1ModelIntegrityChallengerTests
@@ -42,7 +42,7 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
 
     #region 1. EF Core Model Metadata & Configuration Integrity
 
-    [Fact(DisplayName = "ADV-M1-01: EF Core Model Metadata của Course.ExamInputMode phải chuẩn xác (column: exam_input_mode, max_length: 30, default: VoiceAndTextInput, required: true)")]
+    [Fact(DisplayName = "ADV-M1-01: EF Core Model Metadata của Course.ExamInputMode phải chuẩn xác (column: exam_input_mode, max_length: 30, default: VoiceWithTranscriptEdit, required: true)")]
     public void EFCore_Model_Must_Configure_ExamInputMode_Correctly()
     {
         using var context = CreateDbContext();
@@ -62,21 +62,21 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         property.GetMaxLength().Should().Be(30, "Độ dài tối đa của cột phải là 30 ký tự (VARCHAR(30))");
 
         // 4. Default Value
-        property.GetDefaultValue().Should().Be("VoiceAndTextInput", "Giá trị mặc định phải là 'VoiceAndTextInput'");
+        property.GetDefaultValue().Should().Be("VoiceWithTranscriptEdit", "Giá trị mặc định phải là 'VoiceWithTranscriptEdit'");
 
         // 5. Required / Not Null
         property.IsNullable.Should().BeFalse("Thuộc tính ExamInputMode phải là NOT NULL (IsRequired)");
     }
 
-    [Fact(DisplayName = "ADV-M1-02: Thực thể Course khởi tạo mặc định phải có ExamInputMode = VoiceAndTextInput")]
-    public void Course_Instance_Default_ExamInputMode_Must_Be_VoiceAndTextInput()
+    [Fact(DisplayName = "ADV-M1-02: Thực thể Course khởi tạo mặc định phải có ExamInputMode = VoiceWithTranscriptEdit")]
+    public void Course_Instance_Default_ExamInputMode_Must_Be_VoiceWithTranscriptEdit()
     {
         var course = new Course();
-        course.ExamInputMode.Should().Be(ExamInputMode.VoiceAndTextInput);
-        course.ExamInputMode.Should().Be("VoiceAndTextInput");
+        course.ExamInputMode.Should().Be(ExamInputMode.VoiceWithTranscriptEdit);
+        course.ExamInputMode.Should().Be("VoiceWithTranscriptEdit");
     }
 
-    [Fact(DisplayName = "ADV-M1-03: EF Core có thể lưu trữ và truy vấn Course với cả 3 giá trị ExamInputMode mà không lỗi")]
+    [Fact(DisplayName = "ADV-M1-03: EF Core có thể lưu trữ và truy vấn Course với cả 2 giá trị ExamInputMode mà không lỗi")]
     public void EFCore_Must_Persist_And_Retrieve_All_Valid_ExamInputModes()
     {
         using var context = CreateDbContext();
@@ -112,17 +112,7 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
             ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit
         };
 
-        var course3 = new Course
-        {
-            Id = Guid.NewGuid(),
-            Code = "C3_VOICE_TEXT",
-            Name = "Course Voice & Text",
-            Credits = 3,
-            SemesterId = semester.Id,
-            ExamInputMode = ExamInputMode.VoiceAndTextInput
-        };
-
-        context.Courses.AddRange(course1, course2, course3);
+        context.Courses.AddRange(course1, course2);
         context.SaveChanges();
 
         var retrieved1 = context.Courses.FirstOrDefault(c => c.Code == "C1_VOICE_ONLY");
@@ -132,10 +122,6 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         var retrieved2 = context.Courses.FirstOrDefault(c => c.Code == "C2_TRANSCRIPT_EDIT");
         retrieved2.Should().NotBeNull();
         retrieved2!.ExamInputMode.Should().Be("VoiceWithTranscriptEdit");
-
-        var retrieved3 = context.Courses.FirstOrDefault(c => c.Code == "C3_VOICE_TEXT");
-        retrieved3.Should().NotBeNull();
-        retrieved3!.ExamInputMode.Should().Be("VoiceAndTextInput");
     }
 
     #endregion
@@ -162,8 +148,8 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         schemaPath.Should().NotBeNull("Tệp infra/postgres/init/01_schema.sql phải tồn tại");
         var sql = File.ReadAllText(schemaPath!);
 
-        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceAndTextInput',");
-        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput'))");
+        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',");
+        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))");
     }
 
     [Fact(DisplayName = "ADV-M1-05: 01_schema.sql tại 05_Source_Code/infra/postgres/init phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
@@ -186,23 +172,21 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         schemaPath.Should().NotBeNull("Tệp 05_Source_Code/infra/postgres/init/01_schema.sql phải tồn tại");
         var sql = File.ReadAllText(schemaPath!);
 
-        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceAndTextInput',");
-        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput'))");
+        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',");
+        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))");
     }
 
-    [Fact(DisplayName = "ADV-M1-06: DomainEnums.ExamInputMode phải khớp chính xác 100% với 3 giá trị trong SQL CHECK constraint")]
+    [Fact(DisplayName = "ADV-M1-06: DomainEnums.ExamInputMode phải khớp chính xác 100% với 2 giá trị trong SQL CHECK constraint")]
     public void DomainEnums_ExamInputMode_Must_Match_SQL_Check_Constraint()
     {
         ExamInputMode.VoiceOnly.Should().Be("VoiceOnly");
         ExamInputMode.VoiceWithTranscriptEdit.Should().Be("VoiceWithTranscriptEdit");
-        ExamInputMode.VoiceAndTextInput.Should().Be("VoiceAndTextInput");
 
-        ExamInputMode.All.Should().HaveCount(3);
+        ExamInputMode.All.Should().HaveCount(2);
         ExamInputMode.All.Should().BeEquivalentTo(new[]
         {
             "VoiceOnly",
-            "VoiceWithTranscriptEdit",
-            "VoiceAndTextInput"
+            "VoiceWithTranscriptEdit"
         });
     }
 
@@ -210,11 +194,10 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
 
     #region 3. Validator Edge Cases for ExamInputMode
 
-    [Theory(DisplayName = "ADV-M1-07: Validator PHẢI chấp thuận khi ExamInputMode là null hoặc 1 trong 3 giá trị hợp lệ")]
+    [Theory(DisplayName = "ADV-M1-07: Validator PHẢI chấp thuận khi ExamInputMode là null hoặc 1 trong 2 giá trị hợp lệ")]
     [InlineData(null)]
     [InlineData("VoiceOnly")]
     [InlineData("VoiceWithTranscriptEdit")]
-    [InlineData("VoiceAndTextInput")]
     public void Validator_Must_Pass_For_Valid_ExamInputModes(string? inputMode)
     {
         var command = new UpdateCourseConfigurationCommand(
@@ -230,6 +213,7 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
     }
 
     [Theory(DisplayName = "ADV-M1-08: Validator PHẢI chặn khi ExamInputMode là giá trị bất thường, sai hoa thường hoặc khoảng trắng")]
+    [InlineData("VoiceAndTextInput")]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("voice_only")]
@@ -255,6 +239,37 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(UpdateCourseConfigurationCommand.ExamInputMode));
         result.Errors.First(e => e.PropertyName == nameof(UpdateCourseConfigurationCommand.ExamInputMode))
             .ErrorMessage.Should().Contain("Phương thức thi ExamInputMode không hợp lệ");
+    }
+
+    #endregion
+
+    #region 4. SystemConfig Model & Seed Data Verification
+
+    [Fact(DisplayName = "ADV-M1-09: EF Core Model Metadata PHẢI Seed đầy đủ 5 cấu hình Admin cho system_configs")]
+    public void EFCore_Model_Must_Seed_All_Required_SystemConfigs()
+    {
+        using var context = CreateDbContext();
+        context.Database.EnsureCreated();
+
+        var configs = context.SystemConfigs.ToList();
+        configs.Should().NotBeEmpty("Bảng system_configs phải có seed data mặc định");
+
+        var configDict = configs.ToDictionary(s => s.Key, s => s.Value);
+
+        configDict.Should().ContainKey("MaxPracticeQuestionsPerSession");
+        configDict["MaxPracticeQuestionsPerSession"].Should().Be("10");
+
+        configDict.Should().ContainKey("MinMixedPracticeQuestions");
+        configDict["MinMixedPracticeQuestions"].Should().Be("3");
+
+        configDict.Should().ContainKey("MaxMixedPracticeQuestions");
+        configDict["MaxMixedPracticeQuestions"].Should().Be("10");
+
+        configDict.Should().ContainKey("TranscriptBufferSeconds");
+        configDict["TranscriptBufferSeconds"].Should().Be("60");
+
+        configDict.Should().ContainKey("MaxPracticeFollowUpQuestions");
+        configDict["MaxPracticeFollowUpQuestions"].Should().Be("2");
     }
 
     #endregion

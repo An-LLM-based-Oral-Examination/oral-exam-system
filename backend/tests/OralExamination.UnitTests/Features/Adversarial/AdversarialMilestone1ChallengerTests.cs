@@ -40,7 +40,7 @@ namespace OralExamination.UnitTests.Features.Adversarial;
 ///    - Reflection kiểm tra tham số thứ 5 có default value = null.
 /// 
 /// 3. Validation UpdateCourseConfigurationCommandValidator:
-///    - Hợp lệ: null, "VoiceOnly", "VoiceWithTranscriptEdit", "VoiceAndTextInput".
+///    - Hợp lệ: null, "VoiceOnly", "VoiceWithTranscriptEdit".
 ///    - Bất hợp lệ: "InvalidMode", "", "   ", "voiceonly" (sai case), trailing space, SQL injection payload.
 ///    - Kiểm tra thông điệp lỗi chính xác từ validator.
 ///    - Kiểm tra dải giá trị biên cho CourseId, TranscriptBufferSeconds, MaxFollowUpQuestions.
@@ -138,7 +138,6 @@ public class AdversarialMilestone1ChallengerTests
     [Theory(DisplayName = "M1-CHALLENGE-04: Khởi tạo Command với 5 tham số nhận diện chính xác các chế độ thi")]
     [InlineData("VoiceOnly")]
     [InlineData("VoiceWithTranscriptEdit")]
-    [InlineData("VoiceAndTextInput")]
     public void Command_Instantiation_With_5_Params_Should_Set_All_Properties_Correctly(string examInputMode)
     {
         // Arrange
@@ -205,11 +204,10 @@ public class AdversarialMilestone1ChallengerTests
 
     #region 3. VALIDATION CỦA UPDATECOURSECONFIGURATIONCOMMANDVALIDATOR
 
-    [Theory(DisplayName = "M1-CHALLENGE-07: Validator PASS với các giá trị hợp lệ của ExamInputMode: null, VoiceOnly, VoiceWithTranscriptEdit, VoiceAndTextInput")]
+    [Theory(DisplayName = "M1-CHALLENGE-07: Validator PASS với các giá trị hợp lệ của ExamInputMode: null, VoiceOnly, VoiceWithTranscriptEdit")]
     [InlineData(null)]
     [InlineData(ExamInputMode.VoiceOnly)]
     [InlineData(ExamInputMode.VoiceWithTranscriptEdit)]
-    [InlineData(ExamInputMode.VoiceAndTextInput)]
     public void Validator_Should_Pass_For_Valid_ExamInputMode(string? validMode)
     {
         // Arrange
@@ -235,6 +233,7 @@ public class AdversarialMilestone1ChallengerTests
     [InlineData("   ")]
     [InlineData("voiceonly")]
     [InlineData("VOICE_ONLY")]
+    [InlineData("VoiceAndTextInput")]
     [InlineData("VoiceAndTextInput ")]
     [InlineData(" VoiceOnly")]
     [InlineData("RandomString123")]
@@ -256,7 +255,7 @@ public class AdversarialMilestone1ChallengerTests
         // Assert
         result.IsValid.Should().BeFalse($"ExamInputMode '{invalidMode}' phải bị từ chối");
         var error = result.Errors.Should().ContainSingle(e => e.PropertyName == nameof(UpdateCourseConfigurationCommand.ExamInputMode)).Subject;
-        error.ErrorMessage.Should().Be("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit, VoiceAndTextInput.");
+        error.ErrorMessage.Should().Be("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit.");
     }
 
     [Theory(DisplayName = "M1-CHALLENGE-09: Validator kiểm tra nghiêm ngặt các dải biên khác (BufferSeconds, MaxFollowUp, CourseId)")]
@@ -274,7 +273,7 @@ public class AdversarialMilestone1ChallengerTests
             buffer,
             maxFollowUp,
             true,
-            ExamInputMode.VoiceAndTextInput
+            ExamInputMode.VoiceWithTranscriptEdit
         );
 
         // Act
@@ -317,7 +316,7 @@ public class AdversarialMilestone1ChallengerTests
             HasFollowUp = false,
             TranscriptBufferSeconds = 60,
             MaxFollowUpQuestions = 1,
-            ExamInputMode = ExamInputMode.VoiceAndTextInput,
+            ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
             IsActive = true
         };
         dbContext.Courses.Add(course);

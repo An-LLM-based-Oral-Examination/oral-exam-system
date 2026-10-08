@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" width="100%" height="100%">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#111827"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="800" height="520" fill="#ffffff"/>
+
+  <!-- Center Text -->
+  <text x="400" y="250" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="bold" fill="#111827">
+    Agile Development
+  </text>
+  <text x="400" y="278" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="bold" fill="#111827">
+    Methodology
+  </text>
+
+  <!-- Circular Curved Arrows (Clockwise) -->
+  <!-- 1. Top to Top-Right -->
+  <path d="M 505 85 A 210 210 0 0 1 615 155" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- 2. Top-Right to Bottom-Right -->
+  <path d="M 645 255 A 210 210 0 0 1 635 340" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- 3. Bottom-Right to Bottom -->
+  <path d="M 545 425 A 210 210 0 0 1 450 455" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- 4. Bottom to Bottom-Left -->
+  <path d="M 295 445 A 210 210 0 0 1 185 385" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- 5. Bottom-Left to Top-Left -->
+  <path d="M 155 300 A 210 210 0 0 1 165 200" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- 6. Top-Left to Top -->
+  <path d="M 245 125 A 210 210 0 0 1 325 80" fill="none" stroke="#111827" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <!-- Stage 1: Initiation & Planning (Top) -->
+  <g filter="url(#shadow)">
+    <rect x="290" y="40" width="220" height="52" rx="4" fill="#007a3d"/>
+    <text x="400" y="73" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Initiation &amp; Planning
+    </text>
+  </g>
+
+  <!-- Stage 2: Requirement Analysis (Top-Right) -->
+  <g filter="url(#shadow)">
+    <rect x="540" y="165" width="215" height="52" rx="4" fill="#007a3d"/>
+    <text x="647" y="198" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Req Analysis
+    </text>
+  </g>
+
+  <!-- Stage 3: Software Design (Bottom-Right) -->
+  <g filter="url(#shadow)">
+    <rect x="540" y="340" width="215" height="52" rx="4" fill="#007a3d"/>
+    <text x="647" y="373" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Software Designing
+    </text>
+  </g>
+
+  <!-- Stage 4: Implementation (Bottom) -->
+  <g filter="url(#shadow)">
+    <rect x="290" y="425" width="220" height="52" rx="4" fill="#007a3d"/>
+    <text x="400" y="458" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Implementation
+    </text>
+  </g>
+
+  <!-- Stage 5: Verification & Testing (Bottom-Left) -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="340" width="215" height="52" rx="4" fill="#007a3d"/>
+    <text x="157" y="373" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Testing &amp; Verification
+    </text>
+  </g>
+
+  <!-- Stage 6: Transition & Deployment (Top-Left) -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="165" width="215" height="52" rx="4" fill="#007a3d"/>
+    <text x="157" y="198" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">
+      Deployment &amp; Staging
+    </text>
+  </g>
+</svg>

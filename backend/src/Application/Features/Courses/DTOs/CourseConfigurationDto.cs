@@ -14,7 +14,7 @@ public sealed class CourseConfigurationDto
     public int TranscriptBufferSeconds { get; set; }
     public int MaxFollowUpQuestions { get; set; }
     public bool HasFollowUp { get; set; }
-    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceAndTextInput;
+    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public bool IsActive { get; set; }
 }
 

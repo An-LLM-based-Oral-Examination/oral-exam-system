@@ -203,5 +203,77 @@ Admin tạo và sửa học kỳ. Học kỳ có mã, tên, ngày bắt đầu, 
 ❌ [frontend/FE_TASK_BOARD.md](../frontend/FE_TASK_BOARD.md) chưa có màn tạo và sửa học kỳ.
 
 Admin xem nhật ký kiểm toán. Mục 6 thêm `Get Audit Logs`, cùng FE-08 với hàng đợi chấm lỗi.
-
 ❌ [frontend/FE_TASK_BOARD.md](../frontend/FE_TASK_BOARD.md) chưa có màn nhật ký. API đã có `GET /api/v1/admin/audit-logs` tại [API_CONTRACT_AND_INTEGRATION_GUIDE.md](API_CONTRACT_AND_INTEGRATION_GUIDE.md) mục 5.9, dòng 1777.
+
+---
+
+# Đợt cập nhật & Chốt kỹ thuật lần 2 (Triển khai & Chuẩn hóa Hệ thống)
+
+Người chốt: Nguyễn Quang Thành (Team Leader & Lead Backend Architect). Ngày: 08/10/2026.
+
+## 1. Phân công nhân sự & Ranh giới trách nhiệm (Teamwork Alignment)
+
+- **Nguyễn Quang Thành:** Chủ trì toàn diện Backend MF-01 (Interactive Practice) từ A-Z, Backend MF-02 (Timed Mock Exam) và Module Báo cáo Khảo thí Phòng thi (Excel `.xlsx` + PDF chữ ký số).
+- **Nguyễn Trọng Tốt:** Phụ trách Auth Google, toàn bộ Backend MF-03 (FLM Syllabus AI Generator, Rubric Studio), toàn bộ Backend MF-04 (Thi thật Lab Kiosk, Audio Stream R2, Background Grading Worker, One-Way Lock, Phúc khảo Internal Appeals), và các API quản trị phụ (FE-08 Học kỳ CRUD, FE-09 Quản lý User, FE-11 Hộp thư thông báo).
+- **Phân định rõ với Frontend:** Team Backend (Thành & Tốt) **tuyệt đối KHÔNG code trước giao diện React 19 trong `frontend/src/`**. Giao diện để toàn quyền cho Hoàng & Hải tự thiết kế và code sau. Backend chỉ cung cấp tài liệu đặc tả API chuẩn (`MF01_Frontend_Integration.md`) và file công cụ kiểm thử chạy trực tiếp (`MF01_Mini_Tester.html`) để Frontend tự nối vào.
+- **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer. Hải 100% không code C# Backend. Hải chuyên trách Database Schema, EF Core Migrations, và phụ trách Frontend các module: MF-02 (Thi thử Voice-First), Admin (FE-08 Học kỳ, FE-09 Người dùng), và Trưởng Bộ Môn (Duyệt đề MF-03, Quản lý ca thi & Giao đơn phúc khảo MF-04).
+- **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator. Phụ trách điều phối kiến trúc Frontend, phụ trách trực tiếp UI/UX MF-01 (Luyện tập, Buffer Screen 60s, Web Speech API, SignalR Hook), UI Kiosk phòng Lab MF-04, Cổng Hậu kiểm Evidence Panel & Waveform Audio Player, Dashboard Sinh viên / Giảng viên (FE-10), và Hộp thư Thông báo (FE-11).
+
+## 2. Thay đổi nghiệp vụ & Bổ sung chức năng MF-01 (Interactive Practice)
+
+- **Số lượng câu hỏi cho CẢ 2 CHẾ ĐỘ:** Cho phép sinh viên tự nhập số lượng câu hỏi luyện tập cho **cả chế độ `[Per-Question]` (luyện từng câu) và `[Full-Session]` (luyện trọn gói)**, từ 1 đến 10 câu (giới hạn tối đa đọc động từ cấu hình `MaxPracticeQuestionsPerSession` trong bảng `system_configs`).
+- **Tùy chọn độ khó "progressive" ("Ngẫu nhiên từ dễ đến khó"):**
+  - Bổ sung tùy chọn `progressive` áp dụng cho cả Per-Question và Full-Session.
+  - Sinh viên bắt buộc nhập từ **3 đến 10 câu** (ràng buộc bởi `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` do Admin cấu hình trong `system_configs`).
+  - Thuật toán bốc đề: Lấy câu hỏi chia đều các mức (Dễ, Trung bình, Khó) và sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó.
+  - Nếu kho đề không đủ câu cho bất kỳ mức nào, hệ thống trả về mã lỗi `HTTP 400 Bad Request` tiếng Việt rõ ràng, không tạo phiên rác.
+- **Loại bỏ hoàn toàn lưu Audio cho MF-01 và MF-02:**
+  - File ghi âm của sinh viên chỉ stream trực tiếp qua Cloudflare Whisper STT để lấy transcript tức thì phục vụ Buffer Screen.
+  - Không upload lên Cloudflare R2, không băm SHA-256.
+  - Xóa bỏ cột `AudioUrl` khỏi bảng `practice_answers` (chỉ lưu audio cho thi thật MF-04 để phục vụ hậu kiểm pháp lý).
+- **Bổ sung API Hoàn thành phiên (`POST /api/v1/practice/sessions/{id}/complete`):**
+  - Cập nhật trạng thái phiên sang `status = "completed"`, `completed_at = DateTime.UtcNow`.
+  - Có tính chất Idempotent (gọi nhiều lần không lỗi, không ghi đè trùng lặp).
+  - Hỗ trợ xác thực sinh viên qua cả `X-User-Id` header lẫn query param `?studentId=...` linh hoạt cho Frontend và công cụ test.
+- **Bổ sung API Lịch sử luyện tập (`GET /api/v1/practice/student/history`):**
+  - Trả về danh sách các phiên luyện tập của sinh viên kèm điểm trung bình, số câu đã trả lời để hiển thị chung với lịch sử thi thử tại Student Portal (FE-02).
+- **Follow-up Engine đa nấc trong Background Worker:**
+  - `GradingQueueWorker` kiểm tra số lượng câu hỏi phụ thực tế đã tạo so với `MaxPracticeFollowUpQuestions` (1–5 câu do Admin cấu hình trong `system_configs`, mặc định 2 câu).
+  - Chỉ kích hoạt khi điểm số rơi vào ranh giới $4.0 \le \text{Score} \le 8.0$ và chưa vượt quá số câu phụ tối đa.
+- **Tối ưu AsNoTracking:** Toàn bộ truy vấn đọc câu hỏi từ DB trong `StartPracticeSessionCommandHandler` được gắn `.AsNoTracking()` để tối ưu hiệu năng.
+
+## 3. Công cụ & Tài liệu Bàn giao Tích hợp Frontend
+
+- **Công cụ kiểm thử chạy trực tiếp `MF01_Mini_Tester.html`:** File HTML độc lập, mở thẳng trên Chrome/Edge có tích hợp sẵn thư viện SignalR, cho phép test toàn bộ luồng: Khởi tạo phiên (Progressive 3-10 câu), Upload audio Whisper STT, Sửa transcript, Nộp câu trả lời Persist First, AI chấm ngầm, Bắt câu hỏi phụ Follow-up realtime, Hoàn thành phiên và Tra cứu lịch sử.
+- **Tài liệu bàn giao `MF01_Frontend_Integration.md`:** Đặc tả đầy đủ 7 endpoints, chuẩn lỗi RFC 7807 Problem Details, hook `usePracticeHub.ts` React 19, đặc tả logic Buffer Screen 60s và Follow-up Engine.
+
+## 4. Cơ sở dữ liệu & Cấu hình Hệ thống (System Configs)
+
+- **Tạo bảng `system_configs`:** Lưu trữ dạng Key-Value chuẩn Enterprise để Admin cấu hình:
+  - `MinMixedPracticeQuestions`: `3`
+  - `MaxMixedPracticeQuestions`: `10`
+  - `TranscriptBufferSeconds`: `60`
+  - `MaxPracticeQuestionsPerSession`: `10`
+  - `MaxPracticeFollowUpQuestions`: `2`
+- **Xóa cột `password_hash` trong bảng `users`:** Chuyển hoàn toàn sang Google OAuth2, không hỗ trợ đăng nhập mật khẩu truyền thống.
+- **Bảng `notifications`:** Đã chuẩn hóa phục vụ Hộp thư thông báo in-app FE-11.
+- **Cột IP Kiosk phòng thi:** Thống nhất dùng duy nhất tên cột `ip_address` (loại bỏ hoàn toàn tên cũ `workstation_ip`).
+## 5. Khắc phục triệt để các phát hiện từ Báo cáo Kiểm toán Kỹ thuật (Audit Report Resolutions)
+
+- **Loại bỏ hoàn toàn `VoiceAndTextInput` (Cấp độ 2 - Warning resolved):**
+  - Xóa bỏ hằng số `VoiceAndTextInput` khỏi `DomainEnums.ExamInputMode`. Mảng `All` hiện chỉ gồm 2 giá trị chuẩn hóa: `VoiceOnly` và `VoiceWithTranscriptEdit`.
+  - Cập nhật giá trị mặc định của `ExamInputMode` trong các Entity (`Course.cs`, `OfficialExamSession.cs`), DTO (`CourseConfigurationDto.cs`), Fluent API mapping (`OralExamDbContext.cs`) và EF Core ModelSnapshot thành `ExamInputMode.VoiceWithTranscriptEdit`.
+  - Cập nhật `UpdateCourseConfigurationCommandValidator` chỉ chấp nhận `VoiceOnly` hoặc `VoiceWithTranscriptEdit`.
+  - Cập nhật các bài test đối kháng trong `AdversarialMilestone1ChallengerTests.cs` và `AdversarialMilestone1ModelIntegrityChallengerTests.cs`: chuyển `VoiceAndTextInput` thành ca kiểm thử bị REJECT (`HTTP 400` / Validation Failure).
+- **Seed đầy đủ 5 khóa cấu hình Admin cho `system_configs` (Cấp độ 2 - Warning resolved):**
+  - Cấu hình `HasData` trong `OralExamDbContext.cs`, `OralExamDbContextModelSnapshot.cs` và `02_seed.sql` với đầy đủ 5 cấu hình:
+    1. `MaxPracticeQuestionsPerSession`: `10`
+    2. `MinMixedPracticeQuestions`: `3`
+    3. `MaxMixedPracticeQuestions`: `10`
+    4. `TranscriptBufferSeconds`: `60`
+    5. `MaxPracticeFollowUpQuestions`: `2`
+  - Bổ sung test kiểm thử `ADV-M1-09` xác thực 100% metadata Seed Data của EF Core.
+- **Thống nhất quyền cấu hình `TranscriptBufferSeconds` (Cấp độ 3 - Code Hygiene resolved):**
+  - `StartPracticeSessionCommandHandler` ưu tiên đọc cấu hình `TranscriptBufferSeconds` từ bảng `system_configs` do Admin quản trị (fallback về cấu hình của Course hoặc 60s).
+  - Bổ sung 2 bài unit tests kiểm chứng cơ chế ưu tiên đọc cấu hình từ Admin và cơ chế fallback an toàn.
+- **Kiểm chứng kỹ thuật:** 516/516 unit tests passed 100% (Exit Code 0), .NET 8 build hoàn toàn sạch 0 Error.

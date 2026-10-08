@@ -18,7 +18,7 @@
         </mxCell>
 
         <!-- Actors -->
-        <mxCell id="act_student" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Sinh Viên SE (ACT-01)&#xa;• MF-01: Luyện tập tự do (Per-Q / Full-Session)&#xa;• MF-02: Thi thử bấm giờ (Quota K=3 lượt/ngày/môn)&#xa;• MF-04: Thi vấn đáp phòng Lab Kiosk" vertex="1">
+        <mxCell id="act_student" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Sinh Viên SE (ACT-01)&#xa;• MF-01: Luyện tập tự do (Per-Q / Full-Session)&#xa;• MF-02: Thi thử bấm giờ (Hạn ngạch do Trưởng BM cấu hình)&#xa;• MF-04: Thi vấn đáp phòng Lab Kiosk" vertex="1">
           <mxGeometry x="100" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
@@ -26,7 +26,7 @@
           <mxGeometry x="560" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="act_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontColor=#581c87;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Quản Trị Viên (ACT-03)&#xa;• Quản trị danh mục môn, lớp &amp; RBAC&#xa;• Cấu hình Quota K &amp; mô hình AI&#xa;• Giám sát hệ thống &amp; Replay bài lỗi DLQ" vertex="1">
+        <mxCell id="act_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontColor=#581c87;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Quản Trị Viên (ACT-03)&#xa;• Quản trị danh mục môn, lớp &amp; RBAC&#xa;• Cấu hình hệ thống MF-01 &amp; mô hình AI&#xa;• Giám sát hệ thống &amp; Replay bài lỗi DLQ" vertex="1">
           <mxGeometry x="1020" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
@@ -62,7 +62,7 @@
           <mxGeometry x="440" y="650" width="320" height="100" as="geometry" />
         </mxCell>
 
-        <mxCell id="gw_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Xác Thực Định Danh (Google Workspace)&lt;/b&gt;&#xa;• OAuth 2.0 Auth Code Flow kèm PKCE&#xa;• Đuôi email bắt buộc @fpt.edu.vn&#xa;• JWT Bearer Token &amp; RBAC Authorization" vertex="1">
+        <mxCell id="gw_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Xác Thực Định Danh (Google Workspace)&lt;/b&gt;&#xa;• OAuth 2.0 Auth Code Flow kèm PKCE&#xa;• Đăng nhập Google mọi email domain&#xa;• JWT Bearer Token &amp; RBAC Authorization" vertex="1">
           <mxGeometry x="800" y="650" width="300" height="100" as="geometry" />
         </mxCell>
 
@@ -85,7 +85,7 @@
           <mxGeometry x="100" y="980" width="380" height="150" as="geometry" />
         </mxCell>
 
-        <mxCell id="be_app_cqrs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Application Layer (MediatR CQRS)&lt;/b&gt;&#xa;• ValidationBehavior: FluentValidation (Sum == 10.0đ -&gt; 422)&#xa;• Logging &amp; PerformanceBehavior (Cảnh báo &gt; 500ms)&#xa;• Commands: SubmitAnswer, StartMockExam, LockGrade&#xa;• Queries: GetScorecard, GetRubricScorecard, GetAuditSession&#xa;• PostgreSqlQuotaService: Đếm nguyên tử K=3 lượt/ngày/môn&#xa;• ExamGeneratorService: Bốc đề cân đối Bloom 6 mức" vertex="1">
+        <mxCell id="be_app_cqrs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Application Layer (MediatR CQRS)&lt;/b&gt;&#xa;• ValidationBehavior: FluentValidation (Sum == 10.0đ -&gt; 422)&#xa;• Logging &amp; PerformanceBehavior (Cảnh báo &gt; 500ms)&#xa;• Commands: SubmitAnswer, StartMockExam, LockGrade&#xa;• Queries: GetScorecard, GetRubricScorecard, GetAuditSession&#xa;• PostgreSqlQuotaService: Kiểm tra hạn ngạch do Trưởng BM cấu hình&#xa;• ExamGeneratorService: Bốc đề theo cấu trúc Trưởng BM thiết lập" vertex="1">
           <mxGeometry x="520" y="980" width="420" height="150" as="geometry" />
         </mxCell>
 
@@ -104,7 +104,7 @@
           <mxGeometry x="60" y="1400" width="1380" height="400" as="geometry" />
         </mxCell>
 
-        <mxCell id="db_postgres" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;PostgreSQL 16 Relational DB (Port 5432 Internal — 17 Bảng Chuẩn 3NF)&lt;/b&gt;&#xa;• [1] Identity &amp; RBAC (1 bảng): users&#xa;• [2] Academic &amp; Cohorts (3 bảng): courses, classes, class_enrollments&#xa;• [3] Question Bank &amp; Rubric (4 bảng): questions, model_answers, rubrics, rubric_criteria&#xa;• [4] Exam Structures &amp; Sets (3 bảng): exam_structures, exam_sets, exam_set_questions&#xa;• [5] Practice &amp; AI Queue (4 bảng): mock_exam_quotas, practice_sessions, student_answers, dead_letter_queues&#xa;• [6] Lab Exam &amp; Tickets (2 bảng chính): official_exam_sessions, student_exam_tickets&#xa;• Kèm 6 bảng chi tiết &amp; audit: ai_evaluations, submissions, audits, logs (23 DbSets)&#xa;• &lt;b&gt;OneWayLockInterceptor:&lt;/b&gt; Chặn UPDATE/DELETE khi is_locked=true (Ném HTTP 403 Forbidden)&#xa;• &lt;b&gt;AuditTrailInterceptor:&lt;/b&gt; Tự động ghi vết override_reason vào audit_logs" vertex="1">
+        <mxCell id="db_postgres" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;PostgreSQL 16 Relational DB (Port 5432 Internal — 30 Bảng Chuẩn 3NF)&lt;/b&gt;&#xa;• [1] Identity &amp; RBAC (1 bảng): users&#xa;• [2] Academic &amp; Cohorts (4 bảng): semesters, courses, classes, class_enrollments&#xa;• [3] Question Bank &amp; Rubric (4 bảng): rubrics, rubric_criteria, practice_questions, exam_questions&#xa;• [4] Practice &amp; AI Evaluation (4 bảng): practice_sessions, practice_answers, ai_evaluations, ai_evaluation_details&#xa;• [5] Timed Mock Exams (6 bảng): exam_structures, exam_sets, exam_set_questions, mock_exam_quotas, mock_exam_sessions, mock_exam_answers&#xa;• [6] Lab Viva Exams &amp; Audits (7 bảng): official_exam_sessions, real_exam_session_shifts, student_exam_tickets, exam_question_submissions, lecturer_audits, lecturer_audit_details, appeal_requests&#xa;• [7] Infra, Config &amp; Logs (4 bảng): dead_letter_queues, audit_logs, system_configs, notifications&#xa;• &lt;b&gt;OneWayLockInterceptor:&lt;/b&gt; Chặn UPDATE/DELETE khi is_locked=true (Ném HTTP 403, mở đường cho GV chấm lại phúc khảo)&#xa;• &lt;b&gt;AuditTrailInterceptor:&lt;/b&gt; Tự động ghi vết override_reason vào audit_logs" vertex="1">
           <mxGeometry x="100" y="1450" width="760" height="170" as="geometry" />
         </mxCell>
 
@@ -135,7 +135,7 @@
           <mxGeometry x="980" y="1900" width="420" height="120" as="geometry" />
         </mxCell>
 
-        <mxCell id="ai_followup_rules" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;strokeWidth=1.5;fontColor=#9f1239;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Bộ Quy Tắc Kích Hoạt Follow-Up Kép (Adaptive Follow-up Engine)&lt;/b&gt;&#xa;• &lt;b&gt;MF-01 (Luyện tập):&lt;/b&gt; Cổng Môn (has_follow_up=true) VÀ Cổng Điểm (4.0 &lt;= Điểm &lt;= 8.0) -&gt; Kích hoạt đúng 1 lần duy nhất&#xa;• &lt;b&gt;MF-02 (Thi thử) &amp; MF-04 (Thi thật):&lt;/b&gt; Cổng Môn (has_follow_up=true) VÀ Cổng Nội Dung (Phân tích luận điểm văn bản, KHÔNG theo điểm)" vertex="1">
+        <mxCell id="ai_followup_rules" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;strokeWidth=1.5;fontColor=#9f1239;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Bộ Quy Tắc Kích Hoạt Follow-Up Kép (Adaptive Follow-up Engine)&lt;/b&gt;&#xa;• &lt;b&gt;MF-01 (Luyện tập Per-Question):&lt;/b&gt; Kích hoạt khi 4.0 &lt;= Điểm &lt;= 8.0 (1–5 câu do Admin cấu hình, mặc định 2 câu)&#xa;• &lt;b&gt;MF-02 (Thi thử) &amp; MF-04 (Thi thật):&lt;/b&gt; AI hỏi theo nội dung bài nói; MF-04 có 1–5 câu (mặc định 2 câu) do Trưởng BM cấu hình" vertex="1">
           <mxGeometry x="100" y="2050" width="1300" height="80" as="geometry" />
         </mxCell>
 

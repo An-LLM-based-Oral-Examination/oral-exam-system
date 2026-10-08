@@ -717,9 +717,6 @@
         <mxCell id="act_enable_transcript_buffer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#000000;align=center;verticalAlign=middle;" value="Enable Transcript Edit Buffer" vertex="1">
           <mxGeometry height="40" width="180" x="475" y="1150" as="geometry" />
         </mxCell>
-        <mxCell id="act_enable_text_editor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=14;fontStyle=1;fontColor=#000000;align=center;verticalAlign=middle;" value="Enable Text &amp; Code Editor" vertex="1">
-          <mxGeometry height="40" width="180" x="690" y="1150" as="geometry" />
-        </mxCell>
         <mxCell id="act_auto_submit_exam" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=1.5;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#000000;align=center;verticalAlign=middle;" value="Auto-Submit on Timeout" vertex="1">
           <mxGeometry height="50" width="220" x="455" y="2360" as="geometry" />
         </mxCell>
@@ -858,16 +855,10 @@
         <mxCell id="e_mode_buffer" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=12;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="[VoiceWithTranscriptEdit]" edge="1" source="dec_check_input_mode" target="act_enable_transcript_buffer">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_mode_text" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=12;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="[VoiceAndTextInput]" edge="1" source="dec_check_input_mode" target="act_enable_text_editor">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
         <mxCell id="e_mode_voice_play" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=14;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="" edge="1" source="act_lock_keyboard" target="act_play_question_tts">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_mode_buffer_play" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=14;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="" edge="1" source="act_enable_transcript_buffer" target="act_play_question_tts">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e_mode_text_play" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=14;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="" edge="1" source="act_enable_text_editor" target="act_play_question_tts">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_11c" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;strokeWidth=1.5;endArrow=block;endSize=6;fontFamily=Helvetica;fontSize=14;fontStyle=0;fontColor=#000000;align=center;verticalAlign=bottom;" value="[Timeout 00:00]" edge="1" source="act_start_kiosk_timer" target="act_auto_submit_exam">

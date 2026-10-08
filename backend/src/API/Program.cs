@@ -1,3 +1,4 @@
+using OralExamination.API.Middlewares;
 using OralExamination.Application;
 using OralExamination.Infrastructure;
 
@@ -5,6 +6,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<OralExamination.API.Workers.GradingQueueWorker>();
 
 builder.Services.AddCors(options =>
 {
@@ -23,6 +28,8 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -30,9 +37,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 
 app.MapControllers();
+app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
 
 app.MapGet("/health", () => Results.Ok(new
 {

@@ -68,16 +68,20 @@ public class NewMainFlowsBusinessRulesTests
         using var context = CreateDbContext();
         var course = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", SemesterId = Guid.NewGuid() };
         var student = new User { Id = Guid.NewGuid(), Email = "student@fpt.edu.vn", FullName = "Student A", Role = "student" };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Basic Rubric" };
+        var question = new PracticeQuestion { Id = Guid.NewGuid(), CourseId = course.Id, RubricId = rubric.Id, Title = "Q1", Content = "Content", IsActive = true };
         context.Courses.Add(course);
         context.Users.Add(student);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
         await context.SaveChangesAsync();
 
         var handler = new StartPracticeSessionCommandHandler(context);
-        var command = new StartPracticeSessionCommand(student.Id, course.Id, IsFullSession: false);
+        var command = new StartPracticeSessionCommand(student.Id, course.Id, Difficulty: "medium", QuestionCount: 1, IsFullSession: false, Topic: null);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var session = await context.PracticeSessions.FirstOrDefaultAsync(s => s.Id == result.Value);
+        var session = await context.PracticeSessions.FirstOrDefaultAsync(s => s.Id == result.Value!.SessionId);
         session.Should().NotBeNull();
         session!.PracticeMode.Should().Be("per_question", "Luyện từng câu luôn hỗ trợ Follow-up");
     }
@@ -88,16 +92,20 @@ public class NewMainFlowsBusinessRulesTests
         using var context = CreateDbContext();
         var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = ".NET", SemesterId = Guid.NewGuid() };
         var student = new User { Id = Guid.NewGuid(), Email = "student_full@fpt.edu.vn", FullName = "Student B", Role = "student" };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Basic Rubric" };
+        var question = new PracticeQuestion { Id = Guid.NewGuid(), CourseId = course.Id, RubricId = rubric.Id, Title = "Q1", Content = "Content", IsActive = true };
         context.Courses.Add(course);
         context.Users.Add(student);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
         await context.SaveChangesAsync();
 
         var handler = new StartPracticeSessionCommandHandler(context);
-        var command = new StartPracticeSessionCommand(student.Id, course.Id, IsFullSession: true);
+        var command = new StartPracticeSessionCommand(student.Id, course.Id, Difficulty: "medium", QuestionCount: 1, IsFullSession: true, Topic: null);
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        var session = await context.PracticeSessions.FirstOrDefaultAsync(s => s.Id == result.Value);
+        var session = await context.PracticeSessions.FirstOrDefaultAsync(s => s.Id == result.Value!.SessionId);
         session.Should().NotBeNull();
         session!.PracticeMode.Should().Be("full_session", "Luyện trọn gói không có Follow-up");
     }
