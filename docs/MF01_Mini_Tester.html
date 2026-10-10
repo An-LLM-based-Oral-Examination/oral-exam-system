@@ -63,22 +63,28 @@
                 <div style="flex: 1;">
                     <label>Chế độ:</label>
                     <select id="practiceMode" onchange="onModeChange()">
-                        <option value="per_question">Per-Question (Có Follow-up khi điểm 4-8đ)</option>
-                        <option value="full_session">Full-Session (Làm liên tục, không Follow-up)</option>
+                        <option value="per_question">Per-Question (On-Demand, Chặn lặp 3 câu, Follow-up 4-8đ)</option>
+                        <option value="full_session">Full-Session (Chia đều Dễ->Khó, không Follow-up)</option>
                     </select>
                 </div>
                 <div style="flex: 1;">
-                    <label>Độ khó:</label>
-                    <select id="difficulty" onchange="onDifficultyChange()">
-                        <option value="progressive" selected>Progressive (Ngẫu nhiên Dễ -> Khó 3-10 câu)</option>
-                        <option value="easy">Dễ (Easy)</option>
-                        <option value="medium">Trung bình (Medium)</option>
-                        <option value="hard">Khó (Hard)</option>
-                    </select>
+                    <label>Độ khó (Chọn đơn hoặc tổ hợp):</label>
+                    <div id="diffContainer" style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; align-items: center;">
+                        <label style="display: flex; align-items: center; gap: 4px; margin: 0; font-weight: normal; cursor: pointer; color: #fff;">
+                            <input type="checkbox" id="diffEasy" value="easy" checked style="width: auto; margin: 0;"> Dễ
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; margin: 0; font-weight: normal; cursor: pointer; color: #fff;">
+                            <input type="checkbox" id="diffMedium" value="medium" checked style="width: auto; margin: 0;"> TB
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; margin: 0; font-weight: normal; cursor: pointer; color: #fff;">
+                            <input type="checkbox" id="diffHard" value="hard" style="width: auto; margin: 0;"> Khó
+                        </label>
+                        <button type="button" onclick="toggleAllDifficulties()" style="width: auto; padding: 3px 8px; font-size: 11px; background: #555; margin: 0;">Chọn tất cả</button>
+                    </div>
                 </div>
             </div>
 
-            <label>Số lượng câu hỏi (Mặc định 3 - 10 câu):</label>
+            <label id="lblQuestionCount">Số lượng câu hỏi (Bắt buộc 3 - 10 câu cho Full-Session, tùy chọn cho Per-Question):</label>
             <input type="number" id="questionCount" value="3" min="1" max="10">
 
             <button onclick="startSession()">🚀 Bắt Đầu Phiên & Kết Nối SignalR</button>
@@ -88,7 +94,10 @@
 
             <!-- ACTION AREA -->
             <div id="actionArea" class="hidden">
-                <h3>2. Thực Hiện Trả Lời Câu Hỏi</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <h3 style="margin: 0;">2. Thực Hiện Trả Lời Câu Hỏi</h3>
+                    <span id="inactivityTimerBadge" class="badge badge-warning">⏳ Timeout: 10:00</span>
+                </div>
                 
                 <div class="question-card">
                     <div>
@@ -137,6 +146,8 @@
         let activeSessionId = null;
         let sessionQuestions = [];
         let currentQuestionIndex = 0;
+        let inactivityTimer = null;
+        let inactivitySecondsLeft = 600; // 10 phút
         const BASE_URL = 'http://localhost:5000';
 
         function log(message, type = 'log-info') {
@@ -152,19 +163,69 @@
 
         function onModeChange() {
             const mode = document.getElementById('practiceMode').value;
-            log(`Đã đổi chế độ sang: ${mode === 'per_question' ? 'Per-Question (có follow-up nếu điểm 4-8đ)' : 'Full-Session (làm liền mạch, không follow-up)'}`, 'log-warn');
+            const countInput = document.getElementById('questionCount');
+            const lblCount = document.getElementById('lblQuestionCount');
+            if (mode === 'per_question') {
+                log('Đã đổi sang: Per-Question (On-Demand lấy câu theo nhu cầu, chặn lặp 3 câu cùng mức, có follow-up 4-8đ)', 'log-warn');
+                lblCount.innerText = "Số lượng câu hỏi (Tùy chọn đối với Per-Question On-Demand):";
+            } else {
+                log('Đã đổi sang: Full-Session (Làm liên tục chia đều Dễ->Khó, không follow-up, bắt buộc 3-10 câu)', 'log-warn');
+                lblCount.innerText = "Số lượng câu hỏi (Bắt buộc 3 - 10 câu cho Full-Session):";
+                if (parseInt(countInput.value, 10) < 3) countInput.value = 3;
+            }
         }
 
-        function onDifficultyChange() {
-            const diff = document.getElementById('difficulty').value;
-            const countInput = document.getElementById('questionCount');
-            if (diff === 'progressive') {
-                if (parseInt(countInput.value, 10) < 3) countInput.value = 3;
-                countInput.min = 3;
-                countInput.max = 10;
+        function toggleAllDifficulties() {
+            const easy = document.getElementById('diffEasy');
+            const med = document.getElementById('diffMedium');
+            const hard = document.getElementById('diffHard');
+            const allChecked = easy.checked && med.checked && hard.checked;
+            easy.checked = !allChecked;
+            med.checked = !allChecked;
+            hard.checked = !allChecked;
+        }
+
+        function startInactivityTimer() {
+            stopInactivityTimer();
+            inactivitySecondsLeft = 600;
+            updateInactivityBadge();
+            inactivityTimer = setInterval(() => {
+                inactivitySecondsLeft--;
+                updateInactivityBadge();
+                if (inactivitySecondsLeft <= 0) {
+                    stopInactivityTimer();
+                    log("⚠️ [TIMEOUT] Phiên luyện tập đã hết hạn do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!", "log-error");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                }
+            }, 1000);
+        }
+
+        function resetInactivityTimer() {
+            if (activeSessionId) {
+                inactivitySecondsLeft = 600;
+                updateInactivityBadge();
+            }
+        }
+
+        function stopInactivityTimer() {
+            if (inactivityTimer) {
+                clearInterval(inactivityTimer);
+                inactivityTimer = null;
+            }
+        }
+
+        function updateInactivityBadge() {
+            const badge = document.getElementById('inactivityTimerBadge');
+            if (!badge) return;
+            const mins = Math.floor(inactivitySecondsLeft / 60).toString().padStart(2, '0');
+            const secs = (inactivitySecondsLeft % 60).toString().padStart(2, '0');
+            badge.innerText = `⏳ Timeout: ${mins}:${secs}`;
+            if (inactivitySecondsLeft <= 60) {
+                badge.className = 'badge badge-danger';
+            } else if (inactivitySecondsLeft <= 180) {
+                badge.className = 'badge badge-warning';
             } else {
-                countInput.min = 1;
-                countInput.max = 10;
+                badge.className = 'badge badge-info';
             }
         }
 
@@ -181,6 +242,7 @@
             hubConnection.on("ReceiveGradingResult", (result) => {
                 log("🎉 [SIGNALR: ReceiveGradingResult] ĐÃ CHẤM XONG BÀI THI!", "log-success");
                 log(JSON.stringify(result, null, 2), "log-success");
+                resetInactivityTimer();
                 
                 if (result.needsFollowUp) {
                     log(`⚠️ [HỆ THỐNG KÍCH HOẠT FOLLOW-UP]: Điểm số rơi vào khoảng 4.0 - 8.0!`, "log-warn");
@@ -196,12 +258,9 @@
                     document.getElementById('parentAnswerId').value = "";
                     document.getElementById('followUpBadge').classList.add('hidden');
                     
-                    if (currentQuestionIndex < sessionQuestions.length - 1) {
-                        document.getElementById('btnNextQuestion').classList.remove('hidden');
-                        log("💡 Bạn có thể bấm nút '⏩ Câu Tiếp Theo' để làm tiếp câu kế.", "log-info");
-                    } else {
-                        log("🏁 Đã hoàn thành hết tất cả câu hỏi trong phiên. Bạn có thể bấm '🏁 Kết Thúc Phiên Luyện Tập'.", "log-info");
-                    }
+                    // Ở chế độ Per-Question on-demand hoặc Full-session còn câu
+                    document.getElementById('btnNextQuestion').classList.remove('hidden');
+                    log("💡 Bạn có thể bấm nút '⏩ Câu Tiếp Theo' để lấy câu tiếp theo (On-Demand).", "log-info");
                 }
             });
 
@@ -230,8 +289,7 @@
             const studentId = document.getElementById('studentId').value.trim();
             const courseId = document.getElementById('courseId').value.trim();
             const mode = document.getElementById('practiceMode').value;
-            const difficulty = document.getElementById('difficulty').value;
-            const questionCount = parseInt(document.getElementById('questionCount').value, 10);
+            const questionCountVal = document.getElementById('questionCount').value;
             const isFullSession = (mode === 'full_session');
 
             if (!studentId || !courseId) {
@@ -239,10 +297,21 @@
                 return;
             }
 
+            const selectedDiffs = [];
+            if (document.getElementById('diffEasy').checked) selectedDiffs.push('easy');
+            if (document.getElementById('diffMedium').checked) selectedDiffs.push('medium');
+            if (document.getElementById('diffHard').checked) selectedDiffs.push('hard');
+
+            if (selectedDiffs.length === 0) {
+                alert("Vui lòng chọn ít nhất 1 mức độ khó!");
+                return;
+            }
+
             const payload = {
                 courseId: courseId,
-                difficulty: difficulty,
-                questionCount: questionCount,
+                difficulties: selectedDiffs,
+                difficulty: selectedDiffs.length === 3 ? 'progressive' : selectedDiffs[0],
+                questionCount: isFullSession ? parseInt(questionCountVal, 10) : (questionCountVal ? parseInt(questionCountVal, 10) : null),
                 isFullSession: isFullSession,
                 studentId: studentId
             };
@@ -260,6 +329,14 @@
                     body: JSON.stringify(payload)
                 });
                 
+                if (response.status === 410) {
+                    stopInactivityTimer();
+                    const err = await response.json();
+                    log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn'}`, "log-error");
+                    alert("Phiên luyện tập đã kết thúc do không tương tác quá 10 phút (HTTP 410 Gone)!");
+                    return;
+                }
+
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`HTTP ${response.status}: ${errorText}`);
@@ -280,6 +357,7 @@
                 }
                 
                 document.getElementById('actionArea').classList.remove('hidden');
+                startInactivityTimer();
                 await connectSignalR(activeSessionId);
 
             } catch (error) {
@@ -302,12 +380,76 @@
             log(`👉 Đã nạp Câu ${currentQuestionIndex + 1}: ${q.content || q.questionId}`, "log-info");
         }
 
-        function nextQuestion() {
-            if (currentQuestionIndex < sessionQuestions.length - 1) {
+        async function nextQuestion() {
+            if (!activeSessionId) {
+                alert("Chưa có phiên làm việc!");
+                return;
+            }
+
+            const mode = document.getElementById('practiceMode').value;
+
+            // Nếu là Full-Session và câu hỏi đã tải sẵn còn trong mảng
+            if (mode === 'full_session' && currentQuestionIndex < sessionQuestions.length - 1) {
                 currentQuestionIndex++;
                 displayCurrentQuestion();
-            } else {
-                alert("Đã là câu cuối cùng trong phiên!");
+                resetInactivityTimer();
+                return;
+            }
+
+            // Đối với Per-Question on-demand: Gọi API POST /api/v1/practice/sessions/{id}/next-question
+            const studentId = document.getElementById('studentId').value.trim();
+            log(`👉 Đang gọi API lấy câu hỏi tiếp theo: POST /api/v1/practice/sessions/${activeSessionId}/next-question ...`, "log-info");
+
+            try {
+                const response = await fetch(`${BASE_URL}/api/v1/practice/sessions/${activeSessionId}/next-question?studentId=${studentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': studentId
+                    }
+                });
+
+                if (response.status === 410) {
+                    stopInactivityTimer();
+                    const err = await response.json();
+                    log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn do không tương tác trong hơn 10 phút'}`, "log-error");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
+
+                const data = await response.json();
+                resetInactivityTimer();
+
+                if (!data.hasMoreQuestions || !data.question) {
+                    log(`🏁 ${data.message || 'Đã hoàn thành toàn bộ câu hỏi khả dụng theo mức độ đã chọn.'}`, "log-success");
+                    alert(data.message || 'Đã hoàn thành toàn bộ câu hỏi khả dụng theo mức độ đã chọn. Bạn có thể bấm Kết Thúc Phiên!');
+                    document.getElementById('btnNextQuestion').classList.add('hidden');
+                    return;
+                }
+
+                const q = data.question;
+                currentQuestionIndex++;
+                document.getElementById('questionBadge').innerText = `Câu ${q.questionOrder || (currentQuestionIndex + 1)}`;
+                document.getElementById('difficultyBadge').innerText = (q.difficulty || 'STANDARD').toUpperCase();
+                document.getElementById('currentQuestionId').innerText = q.id;
+                document.getElementById('questionContent').innerText = q.content || `Nội dung câu hỏi #${q.questionOrder}`;
+                document.getElementById('followUpBadge').classList.add('hidden');
+                document.getElementById('isFollowUp').value = "false";
+                document.getElementById('parentAnswerId').value = "";
+                document.getElementById('transcriptText').value = "";
+                document.getElementById('btnNextQuestion').classList.add('hidden');
+
+                log(`✅ Đã nhận Câu ${q.questionOrder} [${q.difficulty}]: ${q.content}`, "log-success");
+                if (q.rubricCriteria && q.rubricCriteria.length > 0) {
+                    log(`   📋 Tiêu chí chấm: ${q.rubricCriteria.join(' | ')}`, "log-info");
+                }
+            } catch (error) {
+                log(`❌ Lỗi khi lấy câu hỏi tiếp theo: ${error.message}`, "log-error");
             }
         }
 
@@ -328,12 +470,19 @@
                     body: formData
                 });
                 
+                if (response.status === 410) {
+                    stopInactivityTimer();
+                    alert("Phiên luyện tập đã hết hạn do không tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    return;
+                }
+
                 if (!response.ok) {
                     const errText = await response.text();
                     throw new Error(`HTTP ${response.status}: ${errText}`);
                 }
                 
                 const data = await response.json();
+                resetInactivityTimer();
                 log("✅ Bóc băng Whisper STT thành công:", "log-success");
                 log(JSON.stringify(data, null, 2), "log-info");
                 
@@ -380,12 +529,21 @@
                     body: JSON.stringify(payload)
                 });
                 
+                if (response.status === 410) {
+                    stopInactivityTimer();
+                    const err = await response.json();
+                    log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn'}`, "log-error");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    return;
+                }
+
                 if (!response.ok) {
                     const errText = await response.text();
                     throw new Error(`HTTP ${response.status}: ${errText}`);
                 }
                 
                 const data = await response.json();
+                resetInactivityTimer();
                 log(`✅ Đã nộp thành công! HTTP 202 Accepted. AnswerId: ${data.answerId}`, "log-success");
                 log(`⏳ Đang xếp hàng vào RAM BoundedChannel (1000 slots). AI Gemini đang chấm ngầm... Hãy quan sát cửa sổ SignalR!`, "log-warn");
 
@@ -414,6 +572,7 @@
                     throw new Error(`HTTP ${response.status}: ${errText}`);
                 }
                 const data = await response.json();
+                stopInactivityTimer();
                 log(`🏁 ${data.message || 'Phiên luyện tập đã hoàn tất thành công!'}`, "log-success");
                 log("Trạng thái phiên: Status = 'completed', CompletedAt = UTC Now.", "log-success");
             } catch (error) {

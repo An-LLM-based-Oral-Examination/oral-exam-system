@@ -26,7 +26,7 @@
 ---
 
 ## 2. QUY CHUẨN XỬ LÝ LỖI (GLOBAL EXCEPTION - RFC 7807)
-Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp vụ và hệ thống (400, 401, 403, 404, 422, 429, 500) đều phải bọc trong định dạng `ProblemDetails` theo chuẩn RFC 7807:
+Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp vụ và hệ thống (400, 401, 403, 404, 410, 422, 429, 500) đều phải bọc trong định dạng `ProblemDetails` theo chuẩn RFC 7807:
 
 ```json
 {
@@ -57,6 +57,7 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - `401 Unauthorized`: Chưa đăng nhập hoặc Token JWT hết hạn / không hợp lệ.
 - `403 Forbidden`: Bị từ chối quyền truy cập (ví dụ: Sinh viên cố truy cập route quản trị, người dùng không có quyền gọi API sinh câu hỏi FLM [yêu cầu `lecturer` hoặc `department_head`], hoặc gửi request sửa bài thi khi đã bị Khóa điểm một chiều `is_locked = true`).
 - `404 Not Found`: Không tìm thấy tài nguyên theo ID.
+- `410 Gone`: Phiên luyện tập đã kết thúc tự động do quá thời gian không tương tác (`SessionInactivityTimeoutMinutes = 10` phút). Toàn bộ dữ liệu điểm số và câu trả lời đã làm trước đó được bảo toàn nguyên vẹn, sinh viên không thể tương tác thêm trong phiên này.
 - `422 Unprocessable Entity`: Dữ liệu đúng cú pháp nhưng vi phạm quy tắc nghiệp vụ (ví dụ: Tổng điểm Rubric != 10.0, Model Answer < 50 ký tự, hoặc cập nhật điểm thẩm định mà để trống lý do giải trình).
 - `429 Too Many Requests`: Vi phạm Quota Guard thi thử quá 3 lượt/môn/ngày (kiểm soát bởi PostgreSQL).
 - `500 Internal Server Error`: Lỗi máy chủ chưa được xử lý.
@@ -1254,20 +1255,21 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 {
   "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "courseId": "22222222-0000-0000-0000-000000000001",
-  "difficulty": "progressive",
-  "questionCount": 5,
+  "difficulties": ["easy", "medium"],
   "isFullSession": false,
-  "topic": "Clean Architecture & CQRS"
+  "topic": "Clean Architecture & CQRS",
+  "questionCount": null
 }
 ```
 - **Bảng Đặc tả Tham số Request:**
 | Tên trường | Kiểu | Ràng buộc | Mô tả |
 |:---|:---|:---:|:---|
 | `courseId` | `uuid` | Bắt buộc | ID môn học sinh viên muốn luyện tập |
-| `difficulty` | `string` | Bắt buộc | Mức độ khó: `"easy"`, `"medium"`, `"hard"`, hoặc `"progressive"` (ngẫu nhiên từ Dễ $\to$ Khó) |
-| `questionCount` | `int` | Bắt buộc | Số lượng câu hỏi (1..10; nếu chọn `progressive` bắt buộc từ 3 đến 10 câu do `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` trong `system_configs` quy định) |
-| `isFullSession` | `bool` | Tùy chọn | Mặc định `false`: `false` cho chế độ `[Per-Question]` (luyện từng câu có follow-up khi điểm 4.0–8.0), `true` cho chế độ `[Full-Session]` (luyện trọn gói liền mạch không follow-up) |
-| `topic` | `string` | Tùy chọn | Chủ đề hoặc từ khóa bài học muốn tập trung ôn luyện |
+| `difficulties` | `string[]` | Tùy chọn (Khuyên dùng) | Mảng các mức độ khó muốn luyện tập, ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, hoặc `["easy", "medium", "hard"]` |
+| `difficulty` | `string` | Tùy chọn (Tương thích ngược) | Mức độ khó đơn lẻ: `"easy"`, `"medium"`, `"hard"`, hoặc `"progressive"` (ngẫu nhiên từ Dễ $\to$ Khó, tự động chia đều cả 3 mức `["easy", "medium", "hard"]`) |
+| `questionCount` | `int?` | Tùy chọn / Bắt buộc | **Chế độ [Per-Question]:** Tùy chọn (không bắt buộc truyền hoặc để `null`, cấp ngay Câu 1 khi khởi tạo và sinh viên lấy câu tiếp theo on-demand). <br>**Chế độ [Full-Session] hoặc khi chọn progressive:** Bắt buộc từ 3 đến 10 câu (do `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` trong `system_configs` quy định) |
+| `isFullSession` | `bool` | Tùy chọn | Mặc định `false`: `false` cho chế độ `[Per-Question On-Demand]` (luyện từng câu có follow-up khi điểm 4.0–8.0), `true` cho chế độ `[Full-Session Progressive]` (luyện trọn gói từ Dễ $\to$ Khó không follow-up) |
+| `topic` | `string?` | Tùy chọn | Chủ đề hoặc từ khóa bài học muốn tập trung ôn luyện |
 | `studentId` | `uuid` | Tùy chọn | ID tài khoản sinh viên (mặc định tự động lấy từ JWT Claims nếu để trống) |
 
 - **Response 201 Created (hoặc 200 OK):**
@@ -1376,7 +1378,77 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 3. Nộp câu trả lời luyện tập (Phòng thủ 4 tầng — Hàng đợi Bounded Channel 1,000 slots)
+#### 3. Lấy câu hỏi tiếp theo theo yêu cầu [Per-Question On-Demand]
+- **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/next-question` (hoặc `POST /api/v1/practice/sessions/{sessionId}/next-question?studentId={GUID}`)
+- **Quyền:** `student`
+- **Request Headers:**
+  * `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+- **Path Parameters:**
+  * `sessionId` (*uuid*, bắt buộc): ID phiên luyện tập.
+- **Query Parameters:**
+  * `studentId` (*uuid*, tùy chọn): ID tài khoản sinh viên (mặc định tự lấy từ JWT Claims).
+- **Request Body:** Không có (Empty Body).
+- **Mô tả nghiệp vụ:**
+  * Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` theo nhu cầu (On-Demand).
+  * **Thuật toán Anti-3-Consecutive Randomizer:** Kiểm tra 2 câu hỏi chính liền trước. Nếu cả 2 câu có cùng độ khó $D$ và sinh viên chọn từ 2 mức trở lên, loại trừ mức $D$ để bốc mức khác (đảm bảo tối đa 2 câu cùng mức trong 3 câu liên tiếp).
+  * **Không lặp câu đã làm:** Loại trừ toàn bộ câu hỏi đã làm trong phiên (`Id NOT IN (...)`).
+  * **Lazy Inactivity Timeout:** Kiểm tra nếu thời gian không tương tác vượt quá `SessionInactivityTimeoutMinutes` (10 phút), tự động kết thúc phiên (`status = "completed"`) và trả về mã lỗi HTTP 410 Gone.
+  * Tự động cập nhật `last_activity_at = DateTime.UtcNow` khi bốc câu hỏi thành công.
+- **Response 200 OK (Khi còn câu hỏi khả dụng):**
+```json
+{
+  "hasMoreQuestions": true,
+  "message": null,
+  "question": {
+    "id": "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+    "content": "Giải thích cách hoạt động của Pattern Matching trong C# 12 và so sánh với switch-case truyền thống.",
+    "difficulty": "medium",
+    "questionOrder": 2,
+    "rubricCriteria": [
+      "Khái niệm Pattern Matching và các dạng pattern",
+      "Tính an toàn kiểu dữ liệu so với switch-case",
+      "Ví dụ minh họa code C#"
+    ]
+  }
+}
+```
+- **Response 200 OK (Khi đã hoàn thành toàn bộ câu hỏi theo các mức đã chọn):**
+```json
+{
+  "hasMoreQuestions": false,
+  "message": "Đã hoàn thành toàn bộ câu hỏi khả dụng theo mức độ đã chọn.",
+  "question": null
+}
+```
+- **Response 410 Gone (Session Timed Out RFC 7807):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Session Timed Out",
+  "status": 410,
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+}
+```
+- **Response 404 Not Found (Session Not Found RFC 7807):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Session Not Found",
+  "status": 404,
+  "detail": "Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này."
+}
+```
+- **Response 400 Bad Request (Yêu cầu không hợp lệ RFC 7807):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Yêu cầu không hợp lệ",
+  "status": 400,
+  "detail": "Tính năng bốc câu hỏi theo yêu cầu chỉ áp dụng cho chế độ [Per-Question]."
+}
+```
+
+#### 4. Nộp câu trả lời luyện tập (Phòng thủ 4 tầng — Hàng đợi Bounded Channel 1,000 slots)
 - **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/answers`
 - **Quyền:** `student`
 - **Cơ chế:** Ghi DB `PENDING` (< 100ms), đẩy vào Bounded Channel, phản hồi ngay `202 Accepted`.
@@ -1396,8 +1468,17 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "answerId": "77777777-0000-0000-0000-000000000001"
 }
 ```
+- **Response 410 Gone (Khi phiên bị timeout quá 10 phút không tương tác):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Session Timed Out",
+  "status": 410,
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+}
+```
 
-#### 4. Nộp câu trả lời hàng loạt (Batch Submit cho Full-Session)
+#### 5. Nộp câu trả lời hàng loạt (Batch Submit cho Full-Session)
 - **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/batch-submit`
 - **Quyền:** `student`
 - **Mô tả:** Dùng cho chế độ `[Full-Session]` khi sinh viên hoàn thành toàn bộ các câu hỏi và bấm nộp toàn bộ.
@@ -1418,8 +1499,17 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 - **Response 202 Accepted:** Không có response body (Empty body với status `202 Accepted`). Toàn bộ câu trả lời được đưa vào hàng đợi chấm điểm ngầm.
+- **Response 410 Gone (Khi phiên bị timeout quá 10 phút không tương tác):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7807",
+  "title": "Session Timed Out",
+  "status": 410,
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+}
+```
 
-#### 5. Hoàn tất phiên luyện tập (CompleteSession)
+#### 6. Hoàn tất phiên luyện tập (CompleteSession)
 - **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/complete`
 - **Quyền:** `student`
 - **Mô tả:** Gọi khi sinh viên hoàn thành phiên luyện tập hoặc muốn kết thúc phiên để cập nhật trạng thái `status = "completed"` và ghi nhận `ended_at = DateTime.UtcNow`.
@@ -1432,7 +1522,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 6. Lấy danh sách lịch sử luyện tập (GetStudentHistory)
+#### 7. Lấy danh sách lịch sử luyện tập (GetStudentHistory)
 - **Endpoint:** `GET /api/v1/practice/student/history`
 - **Quyền:** `student`
 - **Query Params:**
@@ -1457,7 +1547,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ]
 ```
 
-#### 7. Tải lên âm thanh nhận diện Whisper STT (Upload Audio Stream)
+#### 8. Tải lên âm thanh nhận diện Whisper STT (Upload Audio Stream)
 - **Endpoint:** `POST /api/v1/storage/upload-audio`
 - **Quyền:** `student`
 - **Content-Type:** `multipart/form-data`
@@ -1470,7 +1560,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 8. Kết nối thời gian thực SignalR Hub
+#### 9. Kết nối thời gian thực SignalR Hub
 - **Hub URL:** `/hubs/practice`
 - **Client Invokes:** `JoinSession(sessionId)`, `LeaveSession(sessionId)`
 - **Sự kiện Realtime Backend phát về Client:**

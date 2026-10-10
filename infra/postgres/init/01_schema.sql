@@ -198,12 +198,15 @@ CREATE TABLE practice_sessions (
     started_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at        TIMESTAMPTZ,
     status              VARCHAR(20) NOT NULL DEFAULT 'in_progress',
+    last_activity_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    selected_difficulties JSONB NOT NULL DEFAULT '[]'::jsonb,
     CONSTRAINT ck_practice_sessions_mode CHECK (practice_mode IN ('per_question', 'full_session')),
-    CONSTRAINT ck_practice_sessions_status CHECK (status IN ('in_progress', 'completed', 'abandoned'))
+    CONSTRAINT ck_practice_sessions_status CHECK (status IN ('in_progress', 'completed', 'abandoned', 'timed_out'))
 );
 
 CREATE INDEX ix_practice_sessions_student ON practice_sessions (student_id, started_at DESC);
 CREATE INDEX ix_practice_sessions_course ON practice_sessions (course_id);
+CREATE INDEX ix_practice_sessions_last_activity ON practice_sessions (status, last_activity_at);
 
 -- 4.2. Bảng Câu trả lời luyện tập (Self-Referencing cho câu hỏi phụ Follow-up)
 CREATE TABLE practice_answers (

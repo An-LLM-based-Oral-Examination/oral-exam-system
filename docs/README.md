@@ -24,7 +24,7 @@
 | 7 | [**`DATABASE_AUDIT_REPORT.md`**](./DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
 | 8 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
 | 9 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
-| 10 | [**`MVP_2_WEEKS_MASTER_PLAN.md`**](./MVP_2_WEEKS_MASTER_PLAN.md) | **Kế hoạch tác chiến Sprint MVP 2 tuần:** Kế hoạch phân công 4 Khối chức năng độc lập cho 4 thành viên Thành, Tốt, Hải, Hoàng. | Cả 4 thành viên |
+| 10 | [**`MVP_2_WEEKS_MASTER_PLAN.md`**](./Task Daily/MVP_2_WEEKS_MASTER_PLAN.md) | **Kế hoạch tác chiến Sprint MVP 2 tuần:** Kế hoạch phân công 4 Khối chức năng độc lập cho 4 thành viên Thành, Tốt, Hải, Hoàng. | Cả 4 thành viên |
 
 ---
 

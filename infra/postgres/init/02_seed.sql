@@ -117,7 +117,8 @@ INSERT INTO system_configs (id, key, value, description, updated_at) VALUES
     ('00000000-0000-0000-0000-000000000028', 'MinMixedPracticeQuestions', '3', 'Số lượng câu hỏi luyện tập tối thiểu cho chế độ Dễ đến Khó', CURRENT_TIMESTAMP),
     ('00000000-0000-0000-0000-000000000029', 'MaxMixedPracticeQuestions', '10', 'Số lượng câu hỏi luyện tập tối đa cho chế độ Dễ đến Khó', CURRENT_TIMESTAMP),
     ('00000000-0000-0000-0000-000000000030', 'TranscriptBufferSeconds', '60', 'Thời gian đệm hiệu đính transcript mặc định (giây)', CURRENT_TIMESTAMP),
-    ('00000000-0000-0000-0000-000000000031', 'MaxPracticeFollowUpQuestions', '2', 'Số lượng câu hỏi follow-up luyện tập tối đa (1-5 câu)', CURRENT_TIMESTAMP)
+    ('00000000-0000-0000-0000-000000000031', 'MaxPracticeFollowUpQuestions', '2', 'Số lượng câu hỏi follow-up luyện tập tối đa (1-5 câu)', CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0000-000000000032', 'SessionInactivityTimeoutMinutes', '10', 'Thời gian timeout không tương tác của phiên luyện tập (phút)', CURRENT_TIMESTAMP)
 ON CONFLICT (key) DO NOTHING;
 
 

@@ -299,8 +299,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.StartedAt).HasColumnName("started_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.CompletedAt).HasColumnName("completed_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("in_progress");
+            entity.Property(e => e.LastActivityAt).HasColumnName("last_activity_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.SelectedDifficulties).HasColumnName("selected_difficulties").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
             entity.HasIndex(e => new { e.StudentId, e.StartedAt }).HasDatabaseName("ix_practice_sessions_student");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_practice_sessions_course");
+            entity.HasIndex(e => new { e.Status, e.LastActivityAt }).HasDatabaseName("ix_practice_sessions_last_activity");
 
             entity.HasOne(d => d.Student)
                 .WithMany(p => p.PracticeSessions)
@@ -904,6 +907,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Key = "MaxPracticeFollowUpQuestions",
                     Value = "2",
                     Description = "Số lượng câu hỏi follow-up luyện tập tối đa do Admin cấu hình (1-5 câu)",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000032"),
+                    Key = "SessionInactivityTimeoutMinutes",
+                    Value = "10",
+                    Description = "Thời gian timeout không tương tác của phiên luyện tập (phút)",
                     UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             );

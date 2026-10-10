@@ -33,6 +33,24 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             return Result<Unit>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
         }
 
+        // Lazy Inactivity Timeout Check (10 phút)
+        var timeoutConfig = await _context.SystemConfigs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
+        int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout))
+            ? parsedTimeout
+            : 10;
+
+        var elapsed = DateTime.UtcNow - session.LastActivityAt;
+        if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        {
+            session.Status = "completed";
+            session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Result<Unit>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút.");
+        }
+
         if (session.Status != "in_progress")
         {
             return Result<Unit>.Failure("Phiên luyện tập đã kết thúc.");
@@ -81,6 +99,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         // 3. Update Session Status
         session.Status = "completed";
         session.CompletedAt = DateTime.UtcNow;
+        session.LastActivityAt = DateTime.UtcNow;
 
         // 4. Bulk Insert & Save
         _context.PracticeAnswers.AddRange(answers);

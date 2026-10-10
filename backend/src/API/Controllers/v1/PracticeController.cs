@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Application.Features.Practice.Commands.SubmitPracticeAnswer;
 using OralExamination.Application.Features.Practice.DTOs;
@@ -53,7 +54,8 @@ public class PracticeController : ControllerBase
             request.Difficulty,
             request.QuestionCount,
             request.IsFullSession,
-            request.Topic
+            request.Topic,
+            request.Difficulties
         );
 
         var result = await _sender.Send(command);
@@ -93,6 +95,58 @@ public class PracticeController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Lấy câu hỏi tiếp theo cho chế độ [Per-Question] theo yêu cầu (On-Demand).
+    /// </summary>
+    [HttpPost("sessions/{sessionId:guid}/next-question")]
+    public async Task<IActionResult> GetNextQuestion(Guid sessionId, [FromQuery] Guid? studentId = null)
+    {
+        var currentUserId = GetCurrentUserId();
+        var targetStudentId = (studentId.HasValue && studentId.Value != Guid.Empty)
+            ? studentId.Value
+            : currentUserId;
+
+        var command = new NextQuestionCommand(sessionId, targetStudentId);
+        var result = await _sender.Send(command);
+
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+            result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+            {
+                Status = StatusCodes.Status410Gone,
+                Title = "Session Timed Out",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        if (result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase) ||
+            result.Error.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Session Not Found",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return BadRequest(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Yêu cầu không hợp lệ",
+            Detail = result.Error,
+            Type = "https://tools.ietf.org/html/rfc7807"
+        });
+    }
+
     [HttpPost("sessions/{sessionId}/answers")]
     public async Task<IActionResult> SubmitAnswer(Guid sessionId, [FromBody] SubmitPracticeAnswerRequest request)
     {
@@ -108,6 +162,17 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Status = StatusCodes.Status410Gone,
+                    Title = "Session Timed Out",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
             return BadRequest(new { error = result.Error });
         }
         return Accepted(new { answerId = result.Value }); // HTTP 202
@@ -125,6 +190,17 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Status = StatusCodes.Status410Gone,
+                    Title = "Session Timed Out",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
             return BadRequest(new { error = result.Error });
         }
         return Accepted(); // HTTP 202

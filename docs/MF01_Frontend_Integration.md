@@ -19,14 +19,17 @@
    - [3.5. Nộp trọn gói [Full-Session] (`POST /api/v1/practice/sessions/{sessionId}/batch-submit`)](#35-nộp-trọn-gói-full-session-post-apiv1practicesessionssessionidbatch-submit)
    - [3.6. Hoàn thành phiên luyện tập (`POST /api/v1/practice/sessions/{sessionId}/complete`)](#36-hoàn-thành-phiên-luyện-tập-post-apiv1practicesessionssessionidcomplete)
    - [3.7. Lấy danh sách lịch sử luyện tập (`GET /api/v1/practice/student/history`)](#37-lấy-danh-sách-lịch-sử-luyện-tập-get-apiv1practicestudenthistory)
+   - [3.8. Lấy câu hỏi tiếp theo theo yêu cầu [Per-Question On-Demand] (`POST /api/v1/practice/sessions/{sessionId}/next-question`)](#38-lấy-câu-hỏi-tiếp-theo-theo-yêu-cầu-per-question-on-demand-post-apiv1practicesessionssessionidnext-question)
 4. [Chuẩn Xử Lý Lỗi RFC 7807 Problem Details](#4-chuẩn-xử-lý-lỗi-rfc-7807-problem-details)
 5. [Tích Hợp Realtime SignalR (`@microsoft/signalr`)](#5-tích-hợp-realtime-signalr-microsoftsignalr)
    - [5.1. Cơ chế SignalR Group & Sự kiện](#51-cơ-chế-signalr-group--sự-kiện)
    - [5.2. Mẫu TypeScript Hook: `usePracticeHub.ts`](#52-mẫu-typescript-hook-usepracticehubts)
    - [5.3. Payload JSON Mẫu Sự Kiện Realtime](#53-payload-json-mẫu-sự-kiện-realtime)
-6. [Đặc Tả Nghiệp Vụ Buffer Screen & Follow-up Engine](#6-đặc-tả-nghiệp-vụ-buffer-screen--follow-up-engine)
+6. [Đặc Tả Nghiệp Vụ Buffer Screen, Follow-up Engine, Anti-Consecutive & Inactivity Timeout](#6-đặc-tả-nghiệp-vụ-buffer-screen-follow-up-engine-anti-consecutive--inactivity-timeout)
    - [6.1. Buffer Screen (Màn hình đệm hiệu đính)](#61-buffer-screen-màn-hình-đệm-hiệu-đính)
    - [6.2. Follow-up Engine (Câu hỏi phụ chuyên sâu)](#62-follow-up-engine-câu-hỏi-phụ-chuyên-sâu)
+   - [6.3. Thuật toán Anti-3-Consecutive Randomizer](#63-thuật-toán-anti-3-consecutive-randomizer)
+   - [6.4. Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)](#64-cơ-chế-timeout-10-phút-không-tương-tác-inactivity-timeout)
 7. [Checklist Tác Chiến Cho Frontend Dev](#7-checklist-tác-chiến-cho-frontend-dev)
 8. [Công Cụ Test Độc Lập Cho Frontend (`docs/MF01_Mini_Tester.html`)](#8-công-cụ-test-độc-lập-cho-frontend-docsmf01_mini_testerhtml)
 
@@ -48,11 +51,11 @@ sequenceDiagram
     participant Hub as SignalR PracticeHub
 
     Student->>API: POST /api/v1/practice/sessions (Khởi tạo phiên)
-    API-->>Student: 200 OK (SessionId, BufferSeconds, Questions)
+    API-->>Student: 200 OK (SessionId, BufferSeconds, Câu 1 / Danh sách câu)
     Student->>Hub: Connect WebSocket /hubs/practice & JoinSession(sessionId)
     
     rect rgb(240, 248, 255)
-    note over Student, Buffer: Chu trình làm từng câu (Per-Question)
+    note over Student, Buffer: Chu trình làm từng câu (Per-Question On-Demand)
     Student->>Student: Thu âm qua Micro (Web Audio API)
     Student->>API: POST /api/v1/storage/upload-audio (Multipart/form-data)
     API->>AI: Cloudflare Whisper STT
@@ -73,21 +76,29 @@ sequenceDiagram
         Hub-->>Student: NeedsFollowUp = true + FollowUpPrompt
         Student->>Student: Làm tiếp câu hỏi phụ đào sâu
     else Score < 4.0 hoặc Score > 8.0
-        Hub-->>Student: NeedsFollowUp = false -> Xem Scorecard
+        Hub-->>Student: NeedsFollowUp = false -> Xem Scorecard câu hiện tại
     end
+    Student->>API: POST /api/v1/practice/sessions/{id}/next-question (Lấy câu tiếp theo On-Demand)
+    API-->>Student: 200 OK (Câu hỏi tiếp theo thỏa mãn luật Anti-3-Consecutive)
     end
 ```
 
 ### 2 Chế Độ Luyện Tập (Practice Modes):
-1. **Luyện từng câu (`[Per-Question]`)**: 
-   - Sinh viên trả lời và nộp từng câu hỏi.
-   - AI chấm ngầm và trả điểm realtime ngay sau khi chấm xong từng câu.
+1. **Luyện từng câu theo yêu cầu (`[Per-Question On-Demand]`)**: 
+   - Sinh viên có thể chọn **đơn lẻ** (`"easy"`, `"medium"`, `"hard"`) hoặc **tổ hợp độ khó** (ví dụ `["easy", "medium"]`, `["easy", "medium", "hard"]`).
+   - Không bắt buộc chốt trước số lượng câu hỏi (`questionCount` là tùy chọn). Phiên cấp câu đầu tiên (Câu 1) khi bắt đầu, sau đó sinh viên trả lời và gọi `POST /next-question` để lấy câu tiếp theo theo nhu cầu (On-Demand) đến khi muốn dừng thì ấn Hoàn thành.
+   - **Luật Random Chặn 3 Câu Cùng Mức (Anti-3-Consecutive Same-Level Rule)**: Trong bất kỳ chuỗi 3 câu liên tiếp nào, tối đa chỉ có 2 câu chung mức độ. Khi 2 câu liền trước cùng độ khó, lần bốc tiếp theo bắt buộc chuyển sang mức khác.
+   - **Không lặp câu**: Tuyệt đối không cấp lại câu hỏi sinh viên đã trả lời trong phiên.
    - **Kích hoạt Follow-up**: Khi điểm số câu trả lời rơi vào ranh giới $4.0 \le \text{Score} \le 8.0$, hệ thống kích hoạt câu hỏi phụ đào sâu (`NeedsFollowUp = true`, kèm `FollowUpPrompt`). Nếu điểm $< 4.0$ hoặc $> 8.0$, hệ thống bỏ qua câu hỏi phụ và mở ngay bảng điểm Scorecard.
-2. **Luyện trọn gói (`[Full-Session]`)**:
-   - Sinh viên trả lời liền mạch tất cả các câu hỏi trong đề luyện tập.
-   - Nộp toàn bộ 1 lần qua endpoint `batch-submit`.
+2. **Luyện trọn gói theo tiến trình (`[Full-Session Progressive]`)**:
+   - Sinh viên nhập số lượng câu hỏi muốn làm từ **3 đến 10 câu** (do `MinMixedPracticeQuestions` và `MaxMixedPracticeQuestions` trong `system_configs` cấu hình).
+   - Hệ thống tự động chia đều theo tiến trình từ Dễ đến Khó: cấp trọn gói toàn bộ câu hỏi và sắp xếp theo thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó.
+   - Nộp toàn bộ 1 lần qua endpoint `batch-submit` hoặc nộp từng câu.
    - **TUYỆT ĐỐI KHÔNG có câu hỏi Follow-up** (`NeedsFollowUp` luôn bằng `false`).
    - Sau khi nộp, hệ thống xử lý chấm toàn bộ và sinh viên nhận bảng điểm Scorecard tổng kết.
+3. **Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)**:
+   - Áp dụng cho cả 2 chế độ: Nếu sinh viên không tương tác (không nộp câu trả lời, không lấy câu tiếp theo) quá `SessionInactivityTimeoutMinutes` (mặc định **10 phút**), phiên tự động kết thúc (`status = "completed"`).
+   - Mọi thao tác tiếp theo sẽ nhận mã lỗi **HTTP 410 Gone** (Session Timed Out). Toàn bộ câu trả lời và điểm số đã hoàn thành trước đó được bảo toàn 100%.
 
 ---
 
@@ -121,18 +132,23 @@ Khởi tạo một phiên luyện tập mới cho sinh viên theo môn học đ�
   {
     "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "courseId": "7b8e5c21-1234-4a56-8bc9-9e8d7c6b5a4f",
-    "difficulty": "progressive",
+    "difficulties": ["easy", "medium"],
     "isFullSession": false,
     "topic": "Clean Architecture & Design Patterns",
-    "questionCount": 5
+    "questionCount": null
   }
   ```
-  * `studentId` (*Guid*, optional/required): ID tài khoản sinh viên đăng nhập (nếu không truyền, backend tự lấy từ JWT).
+  * `studentId` (*Guid*, optional): ID tài khoản sinh viên đăng nhập (nếu không truyền, backend tự lấy từ JWT).
   * `courseId` (*Guid*, required): ID môn học cần luyện tập.
-  * `difficulty` (*string*, required): Mức độ khó của câu hỏi: `"easy"` (Dễ), `"medium"` (Trung bình), `"hard"` (Khó), hoặc `"progressive"` ("Ngẫu nhiên từ dễ đến khó" - chia đều các mức và sắp xếp phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó, yêu cầu từ 3 đến 10 câu do `MinMixedPracticeQuestions` và `MaxMixedPracticeQuestions` trong `system_configs` quy định).
-  * `isFullSession` (*boolean*, optional, default: `false`): `false` cho chế độ `[Per-Question]` (luyện từng câu có câu hỏi phụ follow-up khi điểm 4.0–8.0), `true` cho chế độ `[Full-Session]` (luyện trọn gói liền mạch không follow-up).
+  * `difficulties` (*string[]*, optional/khuyên dùng): Mảng các độ khó muốn luyện tập, ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, hoặc `["easy", "medium", "hard"]`.
+  * `difficulty` (*string*, optional, tương thích ngược): Mức độ khó đơn lẻ (`"easy"`, `"medium"`, `"hard"`) hoặc `"progressive"` ("Ngẫu nhiên từ dễ đến khó", tự động gán cả 3 mức `["easy", "medium", "hard"]`).
+  * `isFullSession` (*boolean*, optional, default: `false`):
+    - `false`: Chế độ **[Per-Question On-Demand]** (luyện từng câu, lấy câu tiếp theo qua `POST /next-question`, có follow-up khi điểm 4.0–8.0).
+    - `true`: Chế độ **[Full-Session Progressive]** (luyện trọn gói liền mạch không follow-up, chia đều tiến trình Dễ $\to$ Trung bình $\to$ Khó).
   * `topic` (*string?*, optional): Chủ đề mong muốn (nếu có).
-  * `questionCount` (*int*, required): Số lượng câu hỏi của phiên (1..10; nếu chọn `progressive` bắt buộc từ 3 đến 10 câu; giới hạn tối đa đọc từ `MaxPracticeQuestionsPerSession` trong `system_configs`).
+  * `questionCount` (*int?*, optional/required):
+    - Đối với `[Per-Question]` (`isFullSession: false`): **Không bắt buộc** (optional). Khi khởi tạo, hệ thống cấp ngay Câu 1 trong mảng `questions`.
+    - Đối với `[Full-Session]` (`isFullSession: true`) hoặc khi `difficulty = "progressive"`: **Bắt buộc** từ 3 đến 10 câu (ràng buộc bởi `MinMixedPracticeQuestions` và `MaxMixedPracticeQuestions` trong `system_configs`). Cấp trọn gói toàn bộ câu hỏi.
 * **Response Success (HTTP 200 OK):**
   ```json
   {
@@ -275,6 +291,15 @@ Nộp câu trả lời cho một câu hỏi cụ thể trong chế độ `[Per-Q
   }
   ```
   > ⚡ **Cơ chế Persist First:** Endpoint trả về ngay `HTTP 202 Accepted` trong $< 100$ms. Kết quả chấm điểm AI sẽ được gửi về qua SignalR Event `ReceiveGradingResult`.
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+  ```json
+  {
+    "type": "https://tools.ietf.org/html/rfc7807",
+    "title": "Session Timed Out",
+    "status": 410,
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  }
+  ```
 
 ---
 
@@ -304,6 +329,15 @@ Nộp toàn bộ câu trả lời của phiên luyện tập trong chế độ `
   }
   ```
 * **Response Success (HTTP 202 Accepted):** Không có response body (Empty body với status `202 Accepted`).
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+  ```json
+  {
+    "type": "https://tools.ietf.org/html/rfc7807",
+    "title": "Session Timed Out",
+    "status": 410,
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  }
+  ```
 ---
 
 ### 3.6. Hoàn Thành Phiên Luyện Tập (`POST /api/v1/practice/sessions/{sessionId}/complete`)
@@ -350,6 +384,61 @@ Lấy toàn bộ lịch sử các phiên luyện tập của sinh viên để hi
 
 ---
 
+### 3.8. Lấy câu hỏi tiếp theo theo yêu cầu [Per-Question On-Demand] (`POST /api/v1/practice/sessions/{sessionId}/next-question`)
+Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` theo nhu cầu (On-Demand), tuân thủ thuật toán chống lặp 3 câu liên tiếp cùng mức và lazy check timeout 10 phút.
+
+* **Method:** `POST`
+* **URL:** `/api/v1/practice/sessions/{sessionId}/next-question` (hoặc `/api/v1/practice/sessions/{sessionId}/next-question?studentId={GUID}`)
+* **Request Headers:**
+  * `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+* **Request Body:** Không có (Empty Body).
+* **Response Success (HTTP 200 OK — Khi còn câu hỏi khả dụng):**
+  ```json
+  {
+    "hasMoreQuestions": true,
+    "message": null,
+    "question": {
+      "id": "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+      "content": "Giải thích cách hoạt động của Pattern Matching trong C# 12 và so sánh với switch-case truyền thống.",
+      "difficulty": "medium",
+      "questionOrder": 2,
+      "rubricCriteria": [
+        "Khái niệm Pattern Matching và các dạng pattern (Type, Relational, Positional)",
+        "Tính rõ ràng và an toàn kiểu dữ liệu so với switch-case",
+        "Ví dụ minh họa code C#"
+      ]
+    }
+  }
+  ```
+* **Response Success (HTTP 200 OK — Khi đã làm hết toàn bộ câu trong kho theo mức độ đã chọn):**
+  ```json
+  {
+    "hasMoreQuestions": false,
+    "message": "Đã hoàn thành toàn bộ câu hỏi khả dụng theo mức độ đã chọn.",
+    "question": null
+  }
+  ```
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+  ```json
+  {
+    "type": "https://tools.ietf.org/html/rfc7807",
+    "title": "Session Timed Out",
+    "status": 410,
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  }
+  ```
+* **Response Error (HTTP 404 Not Found — Không tìm thấy phiên hoặc sai quyền):**
+  ```json
+  {
+    "type": "https://tools.ietf.org/html/rfc7807",
+    "title": "Session Not Found",
+    "status": 404,
+    "detail": "Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này."
+  }
+  ```
+
+---
+
 ## 4. CHUẨN XỬ LÝ LỖI RFC 7807 PROBLEM DETAILS
 
 Backend chuẩn hóa 100% các mã phản hồi lỗi theo chuẩn **RFC 7807 Problem Details**:
@@ -360,7 +449,8 @@ Backend chuẩn hóa 100% các mã phản hồi lỗi theo chuẩn **RFC 7807 Pr
 | **401 Unauthorized** | Token hết hạn hoặc không có Header Authorization | Điều hướng người dùng về trang Đăng nhập (`/login`). |
 | **403 Forbidden** | Cố tình nộp bài của sinh viên khác hoặc can thiệp dữ liệu bị khóa | Hiển thị thông báo "Bạn không có quyền thực hiện hành động này". |
 | **404 Not Found** | Không tìm thấy `sessionId`, `courseId` hoặc câu hỏi tương ứng | Hiển thị Empty State hoặc quay lại màn hình chọn môn học. |
-| **422 Unprocessable Entity** | Lỗi Validation nghiệp vụ (vd: số lượng câu hỏi ngoài khoảng 1..20) | Hiển thị lỗi đỏ trực tiếp dưới ô nhập liệu form. |
+| **410 Gone** | Phiên luyện tập đã bị timeout do không có tương tác quá 10 phút (`SessionInactivityTimeoutMinutes = 10`) | Hiển thị modal: *"Phiên luyện tập đã kết thúc do không tương tác trong hơn 10 phút. Kết quả các câu đã hoàn thành đã được lưu an toàn."* $\to$ Chuyển về màn hình Scorecard/Lịch sử. |
+| **422 Unprocessable Entity** | Lỗi Validation nghiệp vụ (vd: số lượng câu hỏi ngoài khoảng 3..10 trong Full-Session) | Hiển thị lỗi đỏ trực tiếp dưới ô nhập liệu form. |
 | **500 Internal Server Error** | Lỗi nội bộ hệ thống | Báo lỗi thân thiện, khuyến khích thử lại sau ít phút. |
 
 ### Cấu trúc JSON Problem Details mẫu:
@@ -372,7 +462,7 @@ Backend chuẩn hóa 100% các mã phản hồi lỗi theo chuẩn **RFC 7807 Pr
   "detail": "Dữ liệu gửi lên không thỏa mãn quy tắc nghiệp vụ.",
   "errors": {
     "QuestionCount": [
-      "Số lượng câu hỏi luyện tập phải từ 1 đến 20 câu."
+      "Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu."
     ]
   }
 }
@@ -555,7 +645,7 @@ export const usePracticeHub = ({
 
 ---
 
-## 6. ĐẶC TẢ NGHIỆP VỤ BUFFER SCREEN & FOLLOW-UP ENGINE
+## 6. ĐẶC TẢ NGHIỆP VỤ BUFFER SCREEN, FOLLOW-UP ENGINE, ANTI-CONSECUTIVE & INACTIVITY TIMEOUT
 
 ### 6.1. Buffer Screen (Màn hình đệm hiệu đính)
 - **Mục đích:** Khắc phục nhược điểm nhận diện sai các thuật ngữ kỹ thuật chuyên ngành Kỹ thuật Phần mềm (Code-Switching SE Glossary như: *Polymorphism, Asynchronous, Docker, Kubernetes, MediatR, CQRS*).
@@ -584,6 +674,37 @@ export const usePracticeHub = ({
 
 ---
 
+### 6.3. Thuật toán Anti-3-Consecutive Randomizer (Chống lặp 3 câu cùng mức)
+- **Mục tiêu sư phạm:** Đảm bảo tính đa dạng và thách thức liên tục khi sinh viên luyện tập tổ hợp độ khó (ví dụ: `["easy", "medium"]`, `["easy", "medium", "hard"]`).
+- **Quy tắc bất biến:** *Trong bất kỳ 3 câu hỏi chính liên tiếp nào, tối đa chỉ có 2 câu chung mức độ.*
+- **Cơ chế vận hành:**
+  1. Khi sinh viên gọi `POST /api/v1/practice/sessions/{sessionId}/next-question`, backend phân tích 2 câu hỏi gần nhất mà sinh viên đã trả lời trong phiên (`!IsFollowUp`).
+  2. Nếu cả 2 câu liền trước có cùng độ khó $D$ (ví dụ: `easy`, `easy`) và sinh viên đã chọn từ 2 mức độ trở lên:
+     - Hệ thống **tạm thời loại trừ mức độ $D$** khỏi tập ứng viên bốc đề tiếp theo.
+     - Câu tiếp theo bắt buộc thuộc các mức độ còn lại (ví dụ: `medium` hoặc `hard`).
+  3. **Không lặp câu đã làm:** Toàn bộ câu hỏi đã làm trong phiên đều bị loại trừ khỏi kho ứng viên (`Id NOT IN (...)`).
+  4. **Cơ chế Fallback thông minh:** Nếu tất cả các mức còn lại trong tổ hợp đã cạn kiệt câu hỏi chưa làm, hệ thống tự động quay lại bốc các câu còn lại của mức $D$ để không làm gián đoạn bài học của sinh viên.
+  5. **Báo cạn đề:** Nếu toàn bộ các mức độ đã chọn đều không còn câu hỏi nào chưa làm trong môn học, API trả về `hasMoreQuestions: false` kèm thông báo đã hoàn thành.
+
+---
+
+### 6.4. Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)
+- **Mục đích:** Giải phóng tài nguyên hệ thống, bảo vệ an toàn dữ liệu và ngăn chặn tình trạng bỏ quên phiên luyện tập.
+- **Cấu hình động:** Tham số `SessionInactivityTimeoutMinutes = 10` được lưu trong bảng `system_configs`.
+- **Nguyên lý hoạt động (Lazy Validation & Auto-Completion):**
+  1. Thực thể `PracticeSession` duy trì trường `last_activity_at` (TIMESTAMPTZ), tự động cập nhật thời điểm hiện tại (`DateTime.UtcNow`) mỗi khi sinh viên:
+     - Khởi tạo phiên (`StartPracticeSession`).
+     - Lấy câu hỏi tiếp theo (`NextQuestion`).
+     - Nộp câu trả lời (`SubmitAnswer` hoặc `SubmitBatch`).
+  2. Khi có request gọi lên (`NextQuestion`, `SubmitAnswer`, `SubmitBatch`), backend kiểm tra khoảng thời gian trôi qua:
+     $$\Delta t = \text{DateTime.UtcNow} - \text{session.LastActivityAt}$$
+  3. Nếu $\Delta t > 10\text{ phút}$:
+     - Hệ thống tự động chuyển trạng thái phiên thành **`status = "completed"`**, ghi nhận `completed_at = last_activity_at + 10m` và lưu vào CSDL.
+     - Trả về mã lỗi **HTTP 410 Gone** RFC 7807 (`Title = "Session Timed Out"`).
+  4. **Bảo toàn dữ liệu 100%:** Toàn bộ các câu trả lời, điểm số AI chấm và nhận xét đã thực hiện trước thời điểm timeout đều được lưu trữ vĩnh viễn, sinh viên vẫn xem lại được đầy đủ trong lịch sử luyện tập (`/api/v1/practice/student/history`).
+
+---
+
 ## 7. CHECKLIST TÁC CHIẾN CHO FRONTEND DEV
 
 - [ ] **Khởi tạo kết nối SignalR:** Cài đặt package `@microsoft/signalr` và gắn hook `usePracticeHub` vào component màn hình luyện tập.
@@ -591,6 +712,8 @@ export const usePracticeHub = ({
 - [ ] **Giao diện Micro & Waveform:** Tích hợp Web Audio API để ghi âm với chuẩn `audio/webm`, hiển thị sóng âm trực quan khi sinh viên phát biểu.
 - [ ] **Màn hình đệm (Buffer Screen):** Xây dựng bộ đếm ngược thời gian đệm `TranscriptBufferSeconds` (mặc định 60s), cho phép hiệu đính `transcript` và nộp tự động khi hết giờ.
 - [ ] **Hiển thị Feedback & Scorecard:** Render Scorecard Rubric chi tiết theo từng tiêu chí, thanh tiến độ điểm tổng và hiển thị `followUpPrompt` khi `needsFollowUp === true`.
+- [ ] **Tích hợp NextQuestion On-Demand:** Gắn sự kiện nút "Câu Tiếp Theo" gọi `POST /api/v1/practice/sessions/{sessionId}/next-question`, cập nhật nội dung câu hỏi mới hoặc hiển thị modal hoàn thành khi `hasMoreQuestions === false`.
+- [ ] **Bộ đếm Timeout 10 phút:** Thiết lập đếm ngược không tương tác 10 phút ở góc màn hình, tự động reset timer khi sinh viên tương tác mic / nộp bài / lấy câu tiếp theo, và bắt mã lỗi HTTP 410 Gone để hiển thị thông báo phiên hết hạn an toàn.
 - [ ] **Xử lý ngắt kết nối:** Kiểm tra cờ `isConnected` của SignalR, hiển thị thông báo "Đang kết nối lại..." khi mạng chập chờn (`withAutomaticReconnect`).
 
 ---
