@@ -1,5 +1,5 @@
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import React, { lazy, Suspense } from 'react'
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { StudentLayout } from '@/components/layout/StudentLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
@@ -8,10 +8,6 @@ import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 // Pages
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { UnauthorizedPage } from '@/pages/auth/UnauthorizedPage'
-import { LecturerDashboardPage } from '@/pages/lecturer/LecturerDashboardPage'
-import { QuestionStudioPage } from '@/pages/lecturer/QuestionStudioPage'
-import { CreateQuestionPage } from '@/pages/lecturer/CreateQuestionPage'
-import { AuditEvidencePage } from '@/pages/lecturer/AuditEvidencePage'
 import { StudentDashboardPage } from '@/pages/student/StudentDashboardPage'
 import { PracticePage } from '@/pages/student/PracticePage'
 import { PracticeSessionPage } from '@/pages/student/PracticeSessionPage'
@@ -19,6 +15,38 @@ import { MockExamPage } from '@/pages/student/MockExamPage'
 import { MockExamSessionPage } from '@/pages/student/MockExamSessionPage'
 import { OfficialExamPage } from '@/pages/student/OfficialExamPage'
 import { ExamHistoryPage } from '@/pages/student/ExamHistoryPage'
+
+const LecturerDashboardPage = lazy(() =>
+  import('@/pages/lecturer/LecturerDashboardPage').then((module) => ({
+    default: module.LecturerDashboardPage,
+  })),
+)
+const QuestionStudioPage = lazy(() =>
+  import('@/pages/lecturer/QuestionStudioPage').then((module) => ({
+    default: module.QuestionStudioPage,
+  })),
+)
+const CreateQuestionPage = lazy(() =>
+  import('@/pages/lecturer/CreateQuestionPage').then((module) => ({
+    default: module.CreateQuestionPage,
+  })),
+)
+const AuditEvidencePage = lazy(() =>
+  import('@/pages/lecturer/AuditEvidencePage').then((module) => ({
+    default: module.AuditEvidencePage,
+  })),
+)
+
+function InstructorPageFallback() {
+  return (
+    <div className="flex min-h-[55vh] flex-col items-center justify-center" role="status">
+      <span className="size-9 animate-spin rounded-full border-[3px] border-[#d6e1f4] border-t-[#245eea] motion-reduce:animate-none" />
+      <span className="mt-3 text-[11px] font-semibold text-[#64758c]">
+        Đang mở không gian giảng viên...
+      </span>
+    </div>
+  )
+}
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -47,10 +75,18 @@ export const AppRoutes: React.FC = () => {
         {/* Instructor and Admin Portal */}
         <Route element={<ProtectedRoute allowedRoles={['Instructor', 'Admin']} />}>
           <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<LecturerDashboardPage />} />
-            <Route path="/question-bank" element={<QuestionStudioPage />} />
-            <Route path="/question-bank/create" element={<CreateQuestionPage />} />
-            <Route path="/lecturer/audit" element={<AuditEvidencePage />} />
+            <Route
+              element={
+                <Suspense fallback={<InstructorPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              }
+            >
+              <Route path="/dashboard" element={<LecturerDashboardPage />} />
+              <Route path="/question-bank" element={<QuestionStudioPage />} />
+              <Route path="/question-bank/create" element={<CreateQuestionPage />} />
+              <Route path="/lecturer/audit" element={<AuditEvidencePage />} />
+            </Route>
           </Route>
         </Route>
       </Route>

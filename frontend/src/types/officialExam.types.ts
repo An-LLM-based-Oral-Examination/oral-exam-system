@@ -1,33 +1,32 @@
-/**
- * MF-04 Lab Oral Exam Session Contract
- */
-export interface ExamSession {
-  id: string
-  sessionCode: string
-  roomCode: string
-  subjectId: string
-  subjectCode?: string
-  startTime: string
-  endTime: string
-  isCompleted: boolean
-  totalCandidates?: number
+/** MF-04 contracts returned by OfficialExamsController. */
+export type ExamTicketStatus =
+  'SCHEDULED' | 'IN_PROGRESS' | 'SUBMITTED' | 'AI_GRADED' | 'AUDITED' | 'PUBLISHED' | 'LOCKED'
+
+export interface AuditEvidenceItem {
+  ticketId: string
+  studentCode: string
+  fullName: string
+  seatNumber: number
+  status: ExamTicketStatus
+  audioR2Url: string | null
+  audioHashSha256: string | null
+  transcriptWhisper: string | null
+  aiScore: number | null
+  confidenceScore: number | null
+  isSuspicious: boolean
+  suspiciousReason: string | null
+  cotTrace: string | null
+  finalScore: number | null
+  isLocked: boolean
 }
 
-/**
- * Candidate Submission for Lecturer Audit Portal
- */
-export interface CandidateSubmission {
-  id: string
-  sessionId: string
-  studentId: string
-  studentCode: string
-  studentName: string
-  seatNumber: number
-  audioUrl: string
-  audioSha256Hash: string
-  aiProposedScore: number
-  officialScore?: number
-  isLocked: boolean
-  overrideReason?: string
-  lockedAt?: string
+export interface PublishGradesResponse {
+  shiftId: string
+  totalPublished: number
+  publishedAt: string
+  message: string
+}
+
+export interface PublishGradesRequest {
+  lecturerId?: string
 }

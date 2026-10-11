@@ -113,21 +113,22 @@ export function LoginPage() {
   const handleQuickLogin = (role: DemoRole) => {
     const mockUsers = {
       Student: {
-        id: 'usr-stu-01',
-        email: 'student@fpt.edu.vn',
-        fullName: 'Nguyễn Văn Sinh Viên',
+        id: '44444444-4444-4444-4444-444444444444',
+        email: 'hoanglvse170001@fpt.edu.vn',
+        fullName: 'Lê Vũ Hoàng',
         role: 'Student' as const,
+        studentCode: 'SE170001',
       },
       Instructor: {
-        id: 'usr-ins-01',
-        email: 'instructor@fpt.edu.vn',
-        fullName: 'ThS. Nguyễn Thị Cẩm Hương',
+        id: '22222222-2222-2222-2222-222222222222',
+        email: 'totnt@fe.edu.vn',
+        fullName: 'Nguyễn Trọng Tốt',
         role: 'Instructor' as const,
       },
       Admin: {
-        id: 'usr-adm-01',
+        id: '11111111-1111-1111-1111-111111111111',
         email: 'admin@fpt.edu.vn',
-        fullName: 'Quản Trị Viên Hệ Thống',
+        fullName: 'Nguyễn Quang Thành',
         role: 'Admin' as const,
       },
     }
@@ -369,24 +370,26 @@ export function LoginPage() {
                 </p>
               </div>
 
-              <details className="login-demo group mt-4 rounded-lg border border-[#e0e6ef] bg-white/65 text-[10px] text-[#66758b]">
-                <summary className="login-demo-summary flex cursor-pointer list-none items-center justify-center gap-1.5 px-3 py-2.5 font-semibold transition hover:text-[#3658a5] focus-visible:outline-2 focus-visible:outline-[#2b5dde] [&::-webkit-details-marker]:hidden">
-                  Đăng nhập nhanh để kiểm thử
-                  <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="login-demo-grid grid grid-cols-3 gap-2 border-t border-[#e6ebf2] p-2.5">
-                  {DEMO_ROLES.map(({ role, label }) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleQuickLogin(role)}
-                      className="login-demo-button rounded-md border border-[#d8e0ec] bg-white px-2 py-2 font-medium text-[#52637a] transition hover:border-[#93aae2] hover:bg-[#f4f7ff] hover:text-[#2856c4] focus-visible:outline-2 focus-visible:outline-[#2b5dde]"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </details>
+              {import.meta.env.DEV && (
+                <details className="login-demo group mt-4 rounded-lg border border-[#e0e6ef] bg-white/65 text-[10px] text-[#66758b]">
+                  <summary className="login-demo-summary flex cursor-pointer list-none items-center justify-center gap-1.5 px-3 py-2.5 font-semibold transition hover:text-[#3658a5] focus-visible:outline-2 focus-visible:outline-[#2b5dde] [&::-webkit-details-marker]:hidden">
+                    Đăng nhập nhanh để kiểm thử
+                    <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="login-demo-grid grid grid-cols-3 gap-2 border-t border-[#e6ebf2] p-2.5">
+                    {DEMO_ROLES.map(({ role, label }) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleQuickLogin(role)}
+                        className="login-demo-button rounded-md border border-[#d8e0ec] bg-white px-2 py-2 font-medium text-[#52637a] transition hover:border-[#93aae2] hover:bg-[#f4f7ff] hover:text-[#2856c4] focus-visible:outline-2 focus-visible:outline-[#2b5dde]"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           </div>
 

@@ -1,98 +1,142 @@
-import React, { useState } from 'react'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
-import { Button } from '@/components/common/Button'
-import { Badge } from '@/components/common/Badge'
-import { Lock, Save, AlertCircle } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { AlertCircle, CheckCircle2, LockKeyhole, Save } from 'lucide-react'
 
 interface ScoreOverrideFormProps {
+  initialScore?: number | null
   isLocked: boolean
-  onSaveOverride: (newScore: number, reason: string) => void
-  onConfirmLock: () => void
+  isSaving?: boolean
+  persistenceAvailable?: boolean
+  onSaveOverride?: (newScore: number, reason: string) => Promise<void> | void
 }
 
-export const ScoreOverrideForm: React.FC<ScoreOverrideFormProps> = ({
+export function ScoreOverrideForm({
+  initialScore,
   isLocked,
+  isSaving = false,
+  persistenceAvailable = true,
   onSaveOverride,
-  onConfirmLock,
-}) => {
-  const [score, setScore] = useState<number>(8.5)
-  const [reason, setReason] = useState<string>('')
-  const [error, setError] = useState<string>('')
+}: ScoreOverrideFormProps) {
+  const [score, setScore] = useState(initialScore ?? 0)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
 
-  const handleSave = () => {
-    if (!reason.trim()) {
-      setError('Bắt buộc phải nhập lý do giải trình khi điều chỉnh điểm!')
+  const isReadOnly = isLocked || !persistenceAvailable || !onSaveOverride
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (isReadOnly || !onSaveOverride) return
+
+    if (score < 0 || score > 10) {
+      setError('Điểm chính thức phải nằm trong khoảng từ 0 đến 10.')
       return
     }
+    if (!reason.trim()) {
+      setError('Bắt buộc nhập lý do giải trình khi điều chỉnh điểm.')
+      return
+    }
+
     setError('')
-    onSaveOverride(score, reason)
+    await onSaveOverride(score, reason.trim())
   }
 
   return (
-    <Card className="border-slate-200 dark:border-slate-800">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Thẩm Định & Điều Chỉnh Điểm (MF-04)</CardTitle>
+    <form
+      onSubmit={handleSubmit}
+      className="overflow-hidden rounded-2xl border border-[#dce5f1] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]"
+      aria-labelledby="score-review-title"
+    >
+      <div className="flex flex-col gap-3 border-b border-[#e8edf4] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <h3 id="score-review-title" className="text-sm font-bold text-[#13213a]">
+            Điểm hậu kiểm của giảng viên
+          </h3>
+          <p className="mt-1 text-[10px] text-[#728197]">
+            Mọi thay đổi phải có giải trình trước khi công bố điểm toàn ca.
+          </p>
+        </div>
+        <span
+          className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+            isLocked
+              ? 'border border-[#f0c5c9] bg-[#fff1f2] text-[#ad3541]'
+              : 'border border-[#cbdcf7] bg-[#f0f5ff] text-[#275bc3]'
+          }`}
+        >
           {isLocked ? (
-            <Badge variant="danger" className="flex items-center space-x-1">
-              <Lock className="mr-1 h-3 w-3" />
-              Đã Khóa Điểm 1 Chiều (Locked)
-            </Badge>
+            <LockKeyhole className="size-3.5" aria-hidden="true" />
           ) : (
-            <Badge variant="warning">Đang Chờ Duyệt</Badge>
+            <CheckCircle2 className="size-3.5" aria-hidden="true" />
           )}
-        </div>
-      </CardHeader>
+          {isLocked ? 'Đã khóa một chiều' : 'Đang hậu kiểm'}
+        </span>
+      </div>
 
-      <CardContent className="space-y-4">
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">
-            Điểm số chính thức sau thẩm định:
-          </label>
-          <input
-            type="number"
-            min="0"
-            max="10"
-            step="0.5"
-            disabled={isLocked}
-            value={score}
-            onChange={(e) => setScore(parseFloat(e.target.value) || 0)}
-            className="mt-1 w-32 rounded-lg border px-3 py-2 font-mono text-lg font-bold disabled:opacity-50"
-          />
-        </div>
-
-        <div>
-          <label className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase">
-            <span>Lý do giải trình (Bắt buộc nếu override):</span>
-            <span className="text-[10px] text-red-500">* Bắt buộc</span>
-          </label>
-          <textarea
-            disabled={isLocked}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Ví dụ: Sinh viên phát âm tiếng Anh từ mượn tốt, giải thích rõ cơ chế Distributed Cache..."
-            className="mt-1 h-24 w-full resize-none rounded-lg border p-3 text-sm disabled:opacity-50"
-          />
-          {error && (
-            <p className="mt-1 flex items-center text-xs text-red-600">
-              <AlertCircle className="mr-1 h-3.5 w-3.5" />
-              {error}
+      <div className="space-y-4 p-4 sm:p-5">
+        {!persistenceAvailable && !isLocked && (
+          <div className="flex gap-2 rounded-xl border border-[#f0deb9] bg-[#fff9ec] p-3 text-[10px] leading-relaxed text-[#80591d]">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>
+              Chức năng lưu điểm hậu kiểm chưa được kích hoạt trên hệ thống. Biểu mẫu được khóa để
+              tránh hiển thị kết quả chưa được ghi nhận.
             </p>
-          )}
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)]">
+          <label className="block">
+            <span className="text-[10px] font-bold tracking-[0.06em] text-[#63758e] uppercase">
+              Điểm chính thức
+            </span>
+            <div className="mt-1.5 flex items-baseline gap-1 rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 focus-within:border-[#6991ee] focus-within:ring-2 focus-within:ring-[#dce8ff]">
+              <input
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                value={score}
+                onChange={(event) => setScore(Number(event.target.value))}
+                disabled={isReadOnly || isSaving}
+                className="min-w-0 flex-1 bg-transparent font-mono text-lg font-black text-[#10203d] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <span className="text-xs font-bold text-[#7e8ca0]">/10</span>
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.06em] text-[#63758e] uppercase">
+              Lý do điều chỉnh
+              <span className="text-[#b33c48] normal-case">Bắt buộc khi override</span>
+            </span>
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              disabled={isReadOnly || isSaving}
+              placeholder="Đối chiếu audio, transcript và từng tiêu chí rubric trước khi giải trình..."
+              className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-xs leading-relaxed text-[#263850] transition outline-none placeholder:text-[#9aa8ba] focus:border-[#6991ee] focus:ring-2 focus:ring-[#dce8ff] disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </label>
         </div>
-      </CardContent>
 
-      <CardFooter className="justify-between">
-        <Button variant="outline" size="sm" disabled={isLocked} onClick={handleSave}>
-          <Save className="mr-1.5 h-4 w-4" />
-          Lưu điểm thẩm định
-        </Button>
+        {error && (
+          <p
+            className="flex items-center gap-1.5 text-[10px] font-semibold text-[#b23441]"
+            role="alert"
+          >
+            <AlertCircle className="size-3.5" aria-hidden="true" />
+            {error}
+          </p>
+        )}
+      </div>
 
-        <Button variant="danger" size="sm" disabled={isLocked} onClick={onConfirmLock}>
-          <Lock className="mr-1.5 h-4 w-4" />
-          Khóa Điểm Một Chiều (One-Way Lock)
-        </Button>
-      </CardFooter>
-    </Card>
+      <div className="flex justify-end border-t border-[#e8edf4] bg-[#fbfcfe] px-4 py-3 sm:px-5">
+        <button
+          type="submit"
+          disabled={isReadOnly || isSaving}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:bg-[#aab8cb] disabled:shadow-none"
+        >
+          <Save className="size-4" aria-hidden="true" />
+          {isSaving ? 'Đang lưu...' : 'Lưu điểm hậu kiểm'}
+        </button>
+      </div>
+    </form>
   )
 }

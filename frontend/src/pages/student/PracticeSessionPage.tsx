@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import React, { useMemo, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
   CardHeader,
@@ -12,8 +12,49 @@ import { Button } from '@/components/common/Button'
 import { Badge } from '@/components/common/Badge'
 import { BufferScreen } from '@/components/practice/BufferScreen'
 import { ScorecardModal } from '@/components/practice/ScorecardModal'
-import { ArrowLeft, Volume2, Mic, MicOff, Send, Clock, Layers, Sparkles } from 'lucide-react'
-import type { ScorecardPayload } from '@/types/practice.types'
+import {
+  ArrowLeft,
+  Clock,
+  Infinity as InfinityIcon,
+  Layers,
+  LockKeyhole,
+  Mic,
+  MicOff,
+  Send,
+  Sparkles,
+  Square,
+  Volume2,
+  X,
+} from 'lucide-react'
+import type { PracticeDifficulty, PracticeMode, ScorecardPayload } from '@/types/practice.types'
+
+const FULL_SESSION_MIN_QUESTIONS = 3
+const FULL_SESSION_MAX_QUESTIONS = 10
+
+const DIFFICULTY_META: Record<PracticeDifficulty, { label: string; className: string }> = {
+  easy: { label: 'Dễ', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  medium: { label: 'Trung bình', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  hard: { label: 'Khó', className: 'border-rose-200 bg-rose-50 text-rose-700' },
+}
+
+function parseDifficulties(value: string | null): PracticeDifficulty[] {
+  const validDifficulties = new Set<PracticeDifficulty>(['easy', 'medium', 'hard'])
+  const parsed = (value ?? '')
+    .split(',')
+    .filter((difficulty): difficulty is PracticeDifficulty =>
+      validDifficulties.has(difficulty as PracticeDifficulty),
+    )
+  return [...new Set(parsed)].length > 0 ? [...new Set(parsed)] : ['medium']
+}
+
+function getQuestionDifficulty(
+  difficulties: PracticeDifficulty[],
+  questionNumber: number,
+): PracticeDifficulty {
+  if (difficulties.length === 1) return difficulties[0]
+  const pairIndex = Math.floor((questionNumber - 1) / 2)
+  return difficulties[pairIndex % difficulties.length]
+}
 
 const SESSION_DETAILS: Record<string, { subject: string; question: string; rubric: string }> = {
   INT3204: {
@@ -45,19 +86,34 @@ const SESSION_DETAILS: Record<string, { subject: string; question: string; rubri
 }
 
 export const PracticeSessionPage: React.FC = () => {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestedMode = searchParams.get('mode')
   const courseId = searchParams.get('course') ?? 'INT3204'
-  const requestedQuestionCount = Number(searchParams.get('questions'))
-  const questionCount = [3, 5, 10].includes(requestedQuestionCount) ? requestedQuestionCount : 5
+  const requestedQuestionCountValue = searchParams.get('questions')
+  const requestedQuestionCount = Number(requestedQuestionCountValue)
+  const questionCount =
+    requestedQuestionCountValue !== null && Number.isFinite(requestedQuestionCount)
+      ? Math.min(
+          FULL_SESSION_MAX_QUESTIONS,
+          Math.max(FULL_SESSION_MIN_QUESTIONS, Math.round(requestedQuestionCount)),
+        )
+      : 5
   const sessionDetails = SESSION_DETAILS[courseId] ?? SESSION_DETAILS.INT3204
-  const [mode, setMode] = useState<'PER_QUESTION' | 'FULL_SESSION'>(
-    requestedMode === 'FULL_SESSION' ? 'FULL_SESSION' : 'PER_QUESTION',
+  const mode: PracticeMode = requestedMode === 'FULL_SESSION' ? 'FULL_SESSION' : 'PER_QUESTION'
+  const selectedDifficulties = useMemo(
+    () => parseDifficulties(searchParams.get('difficulties')),
+    [searchParams],
   )
+  const [currentQuestionNumber, setCurrentQuestionNumber] = useState(1)
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [showBuffer, setShowBuffer] = useState(false)
   const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null)
+  const [sessionNotice, setSessionNotice] = useState('')
+  const [showStopConfirmation, setShowStopConfirmation] = useState(false)
+  const currentDifficulty = getQuestionDifficulty(selectedDifficulties, currentQuestionNumber)
+  const currentDifficultyMeta = DIFFICULTY_META[currentDifficulty]
 
   const handleFinishSpeaking = () => {
     setIsRecording(false)
@@ -77,8 +133,7 @@ export const PracticeSessionPage: React.FC = () => {
   const handleConfirmSubmit = (finalText: string) => {
     setShowBuffer(false)
     setTranscript(finalText)
-    // Simulate AI grading response
-    setScorecard({
+    const result: ScorecardPayload = {
       submissionId: 'sub-demo-01',
       totalScore: 8.5,
       criteriaScores: [
@@ -100,9 +155,32 @@ export const PracticeSessionPage: React.FC = () => {
       ],
       feedback:
         'Câu trả lời rõ ràng và có cấu trúc. Hãy bổ sung thêm một ví dụ phản biện để phần lập luận thuyết phục hơn.',
-      followUpQuestion:
-        'Nếu điều kiện vận hành thay đổi, bạn sẽ điều chỉnh giải pháp vừa trình bày như thế nào và vì sao?',
-    })
+      ...(mode === 'PER_QUESTION'
+        ? {
+            followUpQuestion:
+              'Nếu điều kiện vận hành thay đổi, bạn sẽ điều chỉnh giải pháp vừa trình bày như thế nào và vì sao?',
+          }
+        : {}),
+    }
+
+    if (mode === 'FULL_SESSION' && currentQuestionNumber < questionCount) {
+      setCurrentQuestionNumber((current) => current + 1)
+      setTranscript('')
+      setSessionNotice(
+        `Đã hoàn thành câu ${currentQuestionNumber}/${questionCount}. Scorecard sẽ hiển thị sau câu cuối cùng.`,
+      )
+      return
+    }
+
+    setSessionNotice('')
+    setScorecard(result)
+  }
+
+  const moveToNextPerQuestion = () => {
+    setScorecard(null)
+    setTranscript('')
+    setCurrentQuestionNumber((current) => current + 1)
+    setSessionNotice('')
   }
 
   return (
@@ -130,43 +208,95 @@ export const PracticeSessionPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Mode Selector */}
-        <div className="flex items-center space-x-2 rounded-lg bg-slate-200 p-1 dark:bg-slate-800">
-          <button
-            onClick={() => setMode('PER_QUESTION')}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              mode === 'PER_QUESTION'
-                ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-900'
-                : 'text-slate-600'
-            }`}
-          >
-            Chấm từng câu
-          </button>
-          <button
-            onClick={() => setMode('FULL_SESSION')}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              mode === 'FULL_SESSION'
-                ? 'bg-white text-orange-600 shadow-sm dark:bg-slate-900'
-                : 'text-slate-600'
-            }`}
-          >
-            Làm bộ câu hỏi
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            {mode === 'PER_QUESTION' ? (
+              <InfinityIcon className="size-4 text-blue-600" />
+            ) : (
+              <Layers className="size-4 text-blue-600" />
+            )}
+            {mode === 'PER_QUESTION'
+              ? 'Luyện từng câu · Không giới hạn'
+              : `Full-Session · ${questionCount} câu`}
+            <LockKeyhole className="size-3 text-slate-400" aria-label="Cấu hình đã khóa" />
+          </div>
+          {mode === 'PER_QUESTION' && (
+            <button
+              type="button"
+              onClick={() => setShowStopConfirmation(true)}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
+            >
+              <Square className="size-3.5 fill-current" />
+              Dừng luyện tập
+            </button>
+          )}
         </div>
       </div>
+
+      {mode === 'PER_QUESTION' && (
+        <section className="flex flex-col gap-3 rounded-xl border border-[#dce5f1] bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[9px] font-bold tracking-[0.06em] text-[#75859a] uppercase">
+              Mức độ đã chọn
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {selectedDifficulties.map((difficulty) => (
+                <span
+                  key={difficulty}
+                  className={`rounded-full border px-2.5 py-1 text-[9px] font-bold ${DIFFICULTY_META[difficulty].className}`}
+                >
+                  {DIFFICULTY_META[difficulty].label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <p className="max-w-lg text-[9px] leading-relaxed text-[#6f7f94] sm:text-right">
+            {selectedDifficulties.length > 1
+              ? 'Mỗi 3 câu liên tiếp có đúng 2 câu cùng mức và 1 câu khác mức; không có 3 câu cùng mức.'
+              : `Toàn bộ câu hỏi ở mức ${DIFFICULTY_META[selectedDifficulties[0]].label}.`}
+          </p>
+        </section>
+      )}
+
+      {sessionNotice && (
+        <div
+          className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700"
+          role="status"
+        >
+          {sessionNotice}
+        </div>
+      )}
 
       {/* Main Question Card */}
       <Card className="border-orange-500/20 shadow-sm">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center space-x-2 text-xs font-bold text-orange-600 uppercase">
               <Layers className="h-4 w-4" />
               <span>
-                Môn: {sessionDetails.subject} — Câu hỏi 1 / {questionCount}
+                Môn: {sessionDetails.subject} — Câu {currentQuestionNumber}
+                {mode === 'FULL_SESSION' ? ` / ${questionCount}` : ' · Không giới hạn'}
               </span>
             </div>
-            <Badge variant="success">Bloom: Vận dụng (Apply)</Badge>
+            <div className="flex items-center gap-2">
+              {mode === 'PER_QUESTION' && (
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[9px] font-bold ${currentDifficultyMeta.className}`}
+                >
+                  Mức: {currentDifficultyMeta.label}
+                </span>
+              )}
+              <Badge variant="success">Bloom: Vận dụng (Apply)</Badge>
+            </div>
           </div>
+          {mode === 'FULL_SESSION' && (
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-[width] duration-300"
+                style={{ width: `${(currentQuestionNumber / questionCount) * 100}%` }}
+              />
+            </div>
+          )}
           <CardTitle className="mt-2 text-lg">{sessionDetails.question}</CardTitle>
           <CardDescription>Barem điểm: {sessionDetails.rubric} = 10.0đ</CardDescription>
         </CardHeader>
@@ -226,7 +356,11 @@ export const PracticeSessionPage: React.FC = () => {
 
           <Button variant="primary" size="md" onClick={() => setShowBuffer(true)}>
             <Send className="mr-2 h-4 w-4" />
-            Nộp câu hỏi để AI chấm
+            {mode === 'PER_QUESTION'
+              ? 'Nộp câu hỏi để AI chấm'
+              : currentQuestionNumber === questionCount
+                ? 'Nộp câu cuối & xem Scorecard'
+                : `Hoàn tất câu ${currentQuestionNumber} & tiếp tục`}
           </Button>
         </CardFooter>
       </Card>
@@ -245,12 +379,67 @@ export const PracticeSessionPage: React.FC = () => {
       {scorecard && (
         <ScorecardModal
           scorecard={scorecard}
-          onClose={() => setScorecard(null)}
-          onNextQuestion={() => {
+          onClose={() => {
             setScorecard(null)
-            setTranscript('')
+            if (mode === 'FULL_SESSION') navigate('/practice')
           }}
+          onNextQuestion={mode === 'PER_QUESTION' ? moveToNextPerQuestion : undefined}
         />
+      )}
+
+      {showStopConfirmation && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          role="presentation"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stop-practice-title"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+              <div className="flex gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                  <Square className="size-4 fill-current" />
+                </span>
+                <div>
+                  <h2 id="stop-practice-title" className="text-sm font-bold text-slate-900">
+                    Dừng phiên luyện từng câu?
+                  </h2>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    Chế độ này không giới hạn số câu. Bạn có thể dừng tại đây hoặc tiếp tục với câu{' '}
+                    {currentQuestionNumber}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStopConfirmation(false)}
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+                aria-label="Đóng xác nhận dừng"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex justify-end gap-2 bg-slate-50 p-4">
+              <button
+                type="button"
+                onClick={() => setShowStopConfirmation(false)}
+                className="min-h-10 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-bold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+              >
+                Tiếp tục luyện
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/practice')}
+                className="min-h-10 rounded-xl bg-rose-600 px-4 text-[10px] font-bold text-white transition hover:bg-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600"
+              >
+                Dừng phiên
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   )

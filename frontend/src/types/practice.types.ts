@@ -3,6 +3,21 @@
  */
 export type SubmissionStatus = 'PENDING' | 'QUEUED' | 'GRADED' | 'PENDING_RETRY' | 'FAILED'
 
+export type PracticeMode = 'PER_QUESTION' | 'FULL_SESSION'
+
+export type PracticeDifficulty = 'easy' | 'medium' | 'hard'
+
+export interface PracticeSessionConfig {
+  courseId: string
+  courseName: string
+  courseCode: string
+  module: string
+  mode: PracticeMode
+  selectedDifficulties: PracticeDifficulty[]
+  questionCount: number | null
+  microphoneName: string
+}
+
 /**
  * AI Criterion Score Detail
  */
@@ -30,7 +45,7 @@ export interface PracticeSession {
   id: string
   userId: string
   subjectId: string
-  mode: 'PER_QUESTION' | 'FULL_SESSION'
+  mode: PracticeMode
   status: string
   createdAt: string
 }

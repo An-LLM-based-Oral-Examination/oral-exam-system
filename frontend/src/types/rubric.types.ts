@@ -1,74 +1,186 @@
 /**
- * Bloom's Taxonomy Cognitive Levels
+ * MF-03 contracts. Values mirror the .NET question-bank DTOs and domain enums.
  */
+export type QuestionApprovalStatus =
+  'DRAFT' | 'SUBMITTED_FOR_REVIEW' | 'APPROVED' | 'NEEDS_REVISION' | 'REJECTED'
+
 export type BloomLevel = 'Remember' | 'Understand' | 'Apply' | 'Analyze' | 'Evaluate' | 'Create'
 
-/**
- * Question Scope Classification
- */
-export type ScopeType = 'PRACTICE_ONLY' | 'EXAM_ONLY' | 'SHARED'
+export type QuestionDifficulty = 'easy' | 'medium' | 'hard'
 
-/**
- * Rubric Criterion Contract (Sum must equal 10.0)
- */
-export interface RubricCriterion {
-  id?: string
-  questionId?: string
-  name: string
+export type QuestionSource = 'manual' | 'flm_api'
+
+export type UsageScope = 'practice' | 'exam' | 'shared'
+
+export interface DifficultyDistribution {
+  easy: number
+  medium: number
+  hard: number
+}
+
+export interface RubricCriterionDraft {
+  criterionName: string
   maxScore: number
-  description?: string
-}
-
-/**
- * Question Entity Contract
- */
-export interface Question {
-  id: string
-  subjectId: string
-  subjectCode?: string
-  chapterId: string
-  chapterTitle?: string
-  title: string
+  weight: number
   bloomLevel: BloomLevel
-  scope: ScopeType
-  sampleAnswer?: string
-  criteria: RubricCriterion[]
-  createdAt?: string
+  description: string
+  orderIndex?: number
 }
 
-/**
- * Subject / Course Contract
- */
-export interface Subject {
-  id: string
-  code: string
+export interface RubricDraft {
   name: string
-  description?: string
+  description?: string | null
+  totalMaxScore: number
+  criteria: RubricCriterionDraft[]
 }
 
-/**
- * Chapter / Module Contract
- */
-export interface Chapter {
+export interface RubricCriterionDetail {
   id: string
-  subjectId: string
-  chapterNumber: number
-  title: string
+  criterionName: string
+  description: string | null
+  maxScore: number
+  weight: number
+  bloomLevel: BloomLevel | null
+  orderIndex: number
 }
 
-/**
- * Create Question Command Payload
- */
-export interface CreateQuestionRequest {
-  subjectId: string
-  chapterId: string
-  title: string
-  bloomLevel: BloomLevel
-  scope: ScopeType
-  sampleAnswer: string
-  criteria: {
-    name: string
-    maxScore: number
-    description: string
-  }[]
+export interface RubricDetail {
+  id: string
+  name: string
+  description: string | null
+  totalMaxScore: number
+  criteria: RubricCriterionDetail[]
 }
+
+export interface QuestionSummary {
+  id: string
+  courseId: string
+  courseCode: string
+  title: string
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  source: QuestionSource
+  approvalStatus: QuestionApprovalStatus
+  submittedBy: string | null
+  approvedBy: string | null
+  createdAt: string
+  totalRubricScore: number
+}
+
+export interface QuestionDetail {
+  id: string
+  courseId: string
+  courseCode: string
+  rubricId: string
+  title: string
+  content: string
+  sampleAnswer: string | null
+  keyPoints: string[]
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  source: QuestionSource
+  approvalStatus: QuestionApprovalStatus
+  submittedBy: string | null
+  submittedByName: string | null
+  approvedBy: string | null
+  approvedByName: string | null
+  reviewNotes: string | null
+  isActive: boolean
+  createdAt: string
+  rubric: RubricDetail
+}
+
+export interface PagedResult<T> {
+  items: T[]
+  totalCount: number
+  pageNumber: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface QuestionFilters {
+  courseId?: string
+  approvalStatus?: QuestionApprovalStatus
+  difficulty?: QuestionDifficulty
+  bloomLevel?: BloomLevel
+  source?: QuestionSource
+  search?: string
+  pageNumber?: number
+  pageSize?: number
+}
+
+export interface CreateDraftQuestionRequest {
+  courseId: string
+  title: string
+  content: string
+  sampleAnswer: string
+  keyPoints: string[]
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  source?: QuestionSource
+  usageScope?: UsageScope
+  hasFollowUp: boolean
+  followUpPrompt?: string | null
+  rubric: RubricDraft
+  lecturerId?: string
+}
+
+export interface CreateDraftQuestionResponse {
+  questionId: string
+}
+
+export interface GeneratedQuestionDraft {
+  tempId: string
+  cloCode: string
+  title: string
+  content: string
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  source: QuestionSource
+  usageScope: UsageScope
+  modelAnswer: string
+  keyPoints: string[]
+  hasFollowUp: boolean
+  followUpPrompt: string | null
+  rubric: RubricDraft
+}
+
+export interface GenerateQuestionsFromFlmRequest {
+  courseId: string
+  selectedCloCodes: string[]
+  topics: string[]
+  numberOfQuestions: number
+  usageScope: UsageScope
+  targetBloomLevels: BloomLevel[]
+  difficultyDistribution: DifficultyDistribution
+  requesterUserId?: string
+}
+
+export interface GenerateQuestionsFromFlmResponse {
+  courseId: string
+  courseCode: string
+  generatedCount: number
+  source: 'flm_api'
+  questions: GeneratedQuestionDraft[]
+}
+
+export interface BatchSubmitForReviewRequest {
+  courseId: string
+  questionIds: string[]
+  submissionNotes?: string | null
+  lecturerId?: string
+}
+
+export interface BatchSubmitForReviewResponse {
+  courseId: string
+  submittedCount: number
+  approvalStatus: 'SUBMITTED_FOR_REVIEW'
+  submittedBy: string
+  submittedAt: string
+  message: string
+}
+
+/** Compatibility aliases for components that use shorter rubric names. */
+export type RubricCriterion = RubricCriterionDetail
+export type Question = QuestionDetail
+export type CreateQuestionRequest = CreateDraftQuestionRequest
