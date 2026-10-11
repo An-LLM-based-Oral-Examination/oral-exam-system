@@ -1,0 +1,75 @@
+# ==============================================================================
+# Production Docker Compose — LLM Oral Exam System (FA26SE166)
+# ==============================================================================
+# Services:
+#   1. postgres: PostgreSQL 16 Alpine (30 tables 3NF, isolated on internal network)
+#   2. backend:  ASP.NET Core 8 Web API (Port 5000, non-root user, healthcheck)
+#   3. frontend: React 19 SPA + Nginx 1.27 Reverse Proxy (Port 80)
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oralexam-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oralexam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in environment}
+      POSTGRES_DB: ${POSTGRES_DB:-oralexam}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - oralexam-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oralexam-backend-prod
+    restart: unless-stopped
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-oralexam};Username=${POSTGRES_USER:-oralexam};Password=${POSTGRES_PASSWORD}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_HTTP_PORTS=5000
+      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+      - Gemini__ApiKey=${GEMINI_API_KEY:-}
+      - Cloudflare__AccountId=${CLOUDFLARE_ACCOUNT_ID:-}
+      - Cloudflare__ApiToken=${CLOUDFLARE_API_TOKEN:-}
+      - Storage__AccessKey=${STORAGE_ACCESS_KEY:-}
+      - Storage__SecretKey=${STORAGE_SECRET_KEY:-}
+      - Storage__ServiceUrl=${STORAGE_SERVICE_URL:-}
+      - Storage__BucketName=${STORAGE_BUCKET_NAME:-oral-exam-bucket}
+      - Storage__PublicUrlPrefix=${STORAGE_PUBLIC_URL_PREFIX:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - oralexam-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: oralexam-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - oralexam-network
+
+networks:
+  oralexam-network:
+    driver: bridge
+
+volumes:
+  postgres_prod_data:
+    name: postgres_prod_data

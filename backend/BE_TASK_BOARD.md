@@ -71,22 +71,24 @@ backend/src/
 
 ### KHỐI 1 (MF-01): LUYỆN TẬP VẤN ĐÁP TƯƠNG TÁC (INTERACTIVE PRACTICE) & VỆ TINH — [x] ĐÃ HOÀN THÀNH 100% (NGUYỄN QUANG THÀNH ĐÃ LÀM)
 
-#### Task BE-1.1: Khởi tạo phiên luyện tập tự do & Tùy chọn Tiến trình Dễ $\to$ Khó — [x] ĐÃ HOÀN TẤT
+#### Task BE-1.1: Khởi tạo phiên luyện tập tự do (Per-Question On-Demand & Full-Session Progressive) — [x] ĐÃ HOÀN TẤT
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `POST /api/v1/practice/sessions`
-* **Tệp liên quan:** `Features/Practice/Commands/StartPracticeSession/*`, `PracticeController.cs`, `SystemConfig.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Đã hỗ trợ bốc đề progressive 3–10 câu chia đều Bloom, đọc cấu hình động `system_configs`, chặn thiếu đề HTTP 400 rõ ràng tiếng Việt, thêm `.AsNoTracking()` tối ưu RAM).
+* **Tệp liên quan:** `Features/Practice/Commands/StartPracticeSession/*`, `PracticeController.cs`, `SystemConfig.cs`, `PracticeSession.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%** (Đã hỗ trợ chọn đơn/tổ hợp mức độ `difficulties: ["easy", "medium"]`, Per-Question On-Demand không ép số câu, Full-Session progressive 3–10 câu chia đều Bloom, đọc cấu hình động `system_configs`, chặn thiếu đề HTTP 400 rõ ràng tiếng Việt, lưu `SelectedDifficulties` và `LastActivityAt`).
 * **Mô tả nghiệp vụ:**
-  - Nhận tham số từ sinh viên: `studentId`, `courseId`, `isFullSession` (`false`: Per-Question, `true`: Full-Session), `difficulty` ("easy", "medium", "hard", "progressive"), `questionCount` (int: 3–10 câu).
-  - Áp dụng cấu hình linh hoạt cho **CẢ 2 CHẾ ĐỘ**: `[Per-Question]` và `[Full-Session]`.
-  - **Thuật toán bốc đề tiến trình ("progressive" - Ngẫu nhiên từ dễ đến khó):**
-    * Bắt buộc sinh viên nhập số câu hỏi trong khoảng 3 đến 10 câu.
-    * Đọc ràng buộc từ bảng `system_configs`: `MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10`.
-    * Query kho câu hỏi luyện tập (`practice_questions`) lọc theo `course_id`, rút đều các mức độ (Dễ, Trung bình, Khó) và **sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó**.
-    * Nếu kho đề không đủ số lượng câu hỏi cho bất kỳ mức nào theo yêu cầu, ném lỗi nghiệp vụ `HTTP 400 Bad Request` tiếng Việt chuẩn (VD: *"Kho đề hiện tại chỉ có 5 câu hỏi Khó, vui lòng chọn số lượng ít hơn"*), không tạo phiên rác.
+  - Nhận tham số từ sinh viên: `studentId`, `courseId`, `isFullSession` (`false`: Per-Question, `true`: Full-Session), `difficulties` (mảng mức độ con: `easy`, `medium`, `hard`) hoặc `difficulty` (chuỗi đơn, backward-compatible), `questionCount` (int? tùy chọn ở Per-Question, bắt buộc 3–10 ở Full-Session).
+  - **Chế độ `[Per-Question On-Demand]`:**
+    * Sinh viên chọn đơn mức độ (`easy`, `medium`, `hard`) hoặc tổ hợp (`["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, `["easy", "medium", "hard"]`).
+    * Không bắt buộc chốt trước số lượng câu hỏi (`questionCount` tùy chọn). Khi khởi tạo, hệ thống cấp ngay Câu 1 trong response, lưu `session.SelectedDifficulties` và `session.LastActivityAt = DateTime.UtcNow`.
+    * Sinh viên làm từng câu và lấy câu tiếp theo on-demand qua `POST /next-question` đến khi muốn dừng.
+  - **Chế độ `[Full-Session Progressive]`:**
+    * Sinh viên nhập số câu hỏi trong khoảng 3 đến 10 câu (ràng buộc bởi `MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10` trong `system_configs`).
+    * Query kho câu hỏi luyện tập (`practice_questions`) lọc theo `course_id`, chia đều các mức độ (Dễ, Trung bình, Khó) và **sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó**, cấp trọn gói toàn bộ câu hỏi.
+    * Nếu kho đề không đủ câu hỏi cho bất kỳ mức nào, ném lỗi nghiệp vụ `HTTP 400 Bad Request` tiếng Việt chuẩn (VD: *"Kho đề hiện tại không đủ câu hỏi để tạo phiên luyện tập Dễ đến Khó: cần 1 Dễ (có 10), 2 Trung bình (có 1), 1 Khó (có 10). Vui lòng liên hệ giảng viên bổ sung câu hỏi."*), không tạo phiên rác.
   - Đọc cấu hình thời gian đệm hiệu đính transcript từ `courses`: `transcript_buffer_seconds` (10–300s, mặc định 60s).
-  - Tạo bản ghi trong `practice_sessions` với trạng thái `in_progress`.
-* **Tiêu chí nghiệm thu (DoD):** Trả về `sessionId`, `transcriptBufferSeconds`, danh sách câu hỏi kèm tóm tắt barem rubric $\sum \equiv 10.0$đ. Unit test bao phủ 2 ca biên: `questionCount` vượt Max của Admin và kho đề thiếu câu hỏi.
+  - Tạo bản ghi trong `practice_sessions` với trạng thái `in_progress`, `last_activity_at = DateTime.UtcNow`.
+* **Tiêu chí nghiệm thu (DoD):** Trả về `sessionId`, `transcriptBufferSeconds`, danh sách câu hỏi kèm tóm tắt barem rubric $\sum \equiv 10.0$đ. Unit test bao phủ các ca biên: single difficulty, multiple difficulties, bounds progressive, kho đề thiếu câu hỏi.
 
 #### Task BE-1.2: Hàng đợi RAM BoundedChannel (1,000 slots RAM) — [x] ĐÃ HOÀN TẤT
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
@@ -161,6 +163,38 @@ backend/src/
     3. **Phân tích độ thành thạo theo Chuẩn Đầu Ra (CLOs):** Tổng hợp điểm số theo từng CLO của các môn học đang theo học (ví dụ: CLO1 đạt 8.5/10, CLO2 đạt 6.0/10) để chỉ ra điểm mạnh và điểm yếu kiến thức của sinh viên.
     4. **Lịch thi sắp tới:** Danh sách các ca thi thật mà sinh viên đã được phân bổ vé thi (`StudentExamTicket`) trong kỳ thi hiện tại (gồm Tên môn, Ngày thi, Phòng lab, Kíp thi, Số ghế).
 * **Tiêu chí nghiệm thu (DoD):** Phản hồi API chuẩn RFC 7807 với thời gian $< 50$ms. Dữ liệu tính toán chính xác từ `practice_sessions`, `mock_exam_sessions`, `ai_evaluation_details` và `student_exam_tickets`.
+
+#### Task BE-1.8: API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer — [x] ĐÃ HOÀN TẤT
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
+* **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/next-question`
+* **Tệp liên quan:** `Features/Practice/Commands/NextQuestion/*`, `PracticeController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%** (Cấp câu hỏi tiếp theo On-Demand, thuật toán chống lặp 3 câu liên tiếp cùng mức, loại trừ câu đã làm, fallback an toàn khi cạn bucket, trả `hasMoreQuestions: false` khi cạn toàn bộ, cập nhật `last_activity_at`).
+* **Mô tả nghiệp vụ:**
+  - Nhận `sessionId` từ route và `studentId` từ JWT/query.
+  - Kiểm tra trạng thái phiên `in_progress` và chế độ `per_question`.
+  - Loại trừ toàn bộ câu hỏi chính đã trả lời trong phiên (`Id NOT IN (answeredIds)`).
+  - **Thuật toán Anti-3-Consecutive Randomizer:**
+    * Phân tích 2 câu hỏi chính gần nhất đã trả lời trong phiên (`!IsFollowUp`).
+    * Nếu 2 câu liền trước cùng độ khó $D$ và phiên chọn $> 1$ độ khó: Tạm thời loại trừ $D$ khỏi candidate pool. Câu tiếp theo bắt buộc bốc sang độ khó khác.
+    * Đảm bảo: *trong bất kỳ chuỗi 3 câu hỏi liên tiếp nào, tối đa chỉ có 2 câu chung mức độ*.
+    * **Fallback thông minh:** Nếu các độ khó khác trong tổ hợp đã hết câu chưa làm, hệ thống tự động fallback cho phép bốc tiếp câu còn lại của $D$.
+    * **Cạn sạch đề:** Nếu toàn bộ câu hỏi trong tất cả các mức đã chọn đều đã làm hết, trả về `hasMoreQuestions: false`, `question: null` kèm thông báo đã hoàn thành.
+  - Cập nhật `session.LastActivityAt = DateTime.UtcNow`.
+* **Tiêu chí nghiệm thu (DoD):** Đã kiểm chứng qua 6 bài unit test trong `NextQuestionCommandHandlerTests.cs` và 4 bài stress test đối kháng trong `NextQuestionAdversarialStressTests.cs` (mô phỏng chuỗi 15 câu với window check trượt, assert không bao giờ có 3 câu cùng mức độ).
+
+#### Task BE-1.9: Cơ chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout) — [x] ĐÃ HOÀN TẤT
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
+* **Tệp liên quan:** `Domain/Entities/PracticeSession.cs`, `Infrastructure/Persistence/OralExamDbContext.cs`, `Features/Practice/Commands/NextQuestion/*`, `Features/Practice/Commands/SubmitPracticeAnswer/*`, `Features/Practice/Commands/SubmitPracticeBatch/*`, `PracticeController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%** (Cấu hình `SessionInactivityTimeoutMinutes = 10` trong `system_configs`, Lazy validation tự động kết thúc phiên `status = "completed"`, trả lỗi HTTP 410 Gone RFC 7807, bảo toàn 100% dữ liệu đã làm).
+* **Mô tả nghiệp vụ:**
+  - Thêm trường `last_activity_at` vào thực thể `PracticeSession` và CSDL (tự động cập nhật mỗi khi tạo phiên, lấy câu tiếp theo, nộp bài).
+  - Seed khóa cấu hình `SessionInactivityTimeoutMinutes = 10` vào `system_configs`.
+  - **Lazy Inactivity Timeout Validation:**
+    * Khi nhận request gọi lên (`NextQuestion`, `SubmitAnswer`, `SubmitBatch`), nếu `DateTime.UtcNow - session.LastActivityAt > 10 phút`:
+    * Tự động cập nhật `session.Status = "completed"`, `session.CompletedAt = session.LastActivityAt + 10m` và lưu vào DB.
+    * Controller trả về mã phản hồi **HTTP 410 Gone** RFC 7807 (`Title = "Session Timed Out"`).
+    * **Bảo toàn dữ liệu:** Giữ nguyên 100% các câu trả lời, điểm số và nhận xét đã thực hiện trước đó trong CSDL.
+* **Tiêu chí nghiệm thu (DoD):** 4 bài unit tests trong `PracticeSessionInactivityTimeoutTests.cs` đạt 100% passed (Lazy check NextQuestion, Lazy check SubmitAnswer, bảo toàn điểm số/nhận xét, cập nhật `LastActivityAt` sau tương tác hợp lệ).
 
 ---
 
@@ -475,7 +509,7 @@ backend/src/
     3. One-Way Lock: Assert ném `HTTP 403 Forbidden` khi sửa ca thi `is_locked = true`.
     4. BoundedChannel: Assert Enqueue/Dequeue FIFO, Backpressure 1,000 slots RAM.
     5. Clean Architecture Integrity: Dùng NetArchTest khóa ranh giới 4 tầng (Domain không dính EF/Infra, Application không dính API, Controller không gọi DbContext trực tiếp).
-* **Tiêu chí nghiệm thu (DoD):** Chạy `dotnet test` đạt **100% tests PASS (514/514 tests pass 100%, Exit Code 0)**, thời gian chạy toàn bộ test suite $< 5$ giây.
+* **Tiêu chí nghiệm thu (DoD):** Chạy `dotnet test` đạt **100% tests PASS (536/536 tests pass 100%, Exit Code 0)**, thời gian chạy toàn bộ test suite $< 5$ giây.
 
 ---
 
@@ -483,13 +517,15 @@ backend/src/
 
 | Mã Task | Tên Phân Hệ & Chức Năng | Kỹ Sư Phụ Trách | Trạng Thái Thực Tế |
 |:---|:---|:---:|:---:|
-| **BE-1.1** | Khởi tạo phiên luyện tập `POST /api/v1/practice/sessions` (Per/Full, Progressive 3-10 câu) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.1** | Khởi tạo phiên luyện tập `POST /api/v1/practice/sessions` (Per/Full, Progressive 3-10 câu, On-Demand) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.2** | Hàng đợi RAM `BoundedGradingQueueChannel` (1,000 slots RAM, `FullMode.Wait`) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.3** | Nộp bài Per/Full Persist First $< 100$ms, Stream Whisper STT (bỏ `AudioUrl`, bỏ R2) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.4** | Background Worker `GradingQueueWorker` & SignalR Realtime Hub `/hubs/practice` | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.5** | Gemini 1.5 Flash CoT 3 bước & Follow-up Engine ($4.0 \le \text{Score} \le 8.0$, 1-5 câu) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.6** | Hoàn tất phiên, Lịch sử luyện tập & Chi tiết Scorecard | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.7** | API Dashboard Sinh viên FE-10 (thống kê buổi tập, điểm TB, độ thành thạo CLO, lịch thi) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
+| **BE-1.8** | API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.9** | Cơ chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout 410 Gone) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-2.1** | Daily Quota Guard MF-02 ($K \le 3$ do Trưởng BM cấu hình, chặn HTTP 429) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
 | **BE-2.2** | Bốc đề thi thử theo Bloom từ kho `practice_questions` (cô lập an toàn `exam_questions`) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
 | **BE-2.3** | Server Master Timer & Voice-First Gate (chỉ lưu transcript, muộn 10s đánh dấu `is_late`) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
@@ -514,4 +550,4 @@ backend/src/
 | **BE-4.11** | API Quản trị Cấu hình Hệ thống Admin (`system_configs`) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
 | **BE-4.12** | API Giám thị Phòng thi & Điểm danh Ca thi Lab (`ProctorRoomMonitorPage.tsx`) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
 | **BE-4.13** | API Tra cứu & Xác thực Bảng điểm Chữ ký số qua QR Code | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
-| **BE-QA** | Bộ Test Suites xUnit & Architecture Tests NetArchTest (516/516 tests pass 100%, Exit Code 0) | **🧑 Tốt** | ⏳ Đang triển khai (Hiện có 516 tests của Khối 1/Architecture; MF-03/04 do Tốt viết tiếp) |
+| **BE-QA** | Bộ Test Suites xUnit & Architecture Tests NetArchTest (536/536 tests pass 100%, Exit Code 0) | **🧑 Tốt** | ⏳ Đang triển khai (Hiện có 536 tests của Khối 1/Architecture; MF-03/04 do Tốt viết tiếp) |

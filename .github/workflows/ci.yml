@@ -1,0 +1,101 @@
+name: Enterprise CI Quality Gate
+
+on:
+  push:
+    branches: [ develop, main, 'feature/**' ]
+  pull_request:
+    branches: [ develop, main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # =========================================================================
+  # Job 1: Backend Quality Gate (.NET 8 Clean Architecture)
+  # =========================================================================
+  backend-ci:
+    name: Backend Quality Gate (.NET 8 Clean Architecture)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore NuGet Dependencies
+        run: dotnet restore backend/OralExamination.sln
+
+      - name: Build Backend Solution (Zero Warnings, Zero Errors)
+        run: dotnet build backend/OralExamination.sln --configuration Release --no-restore -warnaserror -nowarn:NU1900
+
+      - name: Run Unit Tests with Coverage (542 Tests)
+        run: dotnet test backend/OralExamination.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Scan Vulnerable NuGet Packages
+        run: dotnet list backend/OralExamination.sln package --vulnerable --include-transitive
+
+  # =========================================================================
+  # Job 2: Frontend Quality Gate (React 19 & Vite)
+  # =========================================================================
+  frontend-ci:
+    name: Frontend Quality Gate (React 19 & Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint Source Code (oxlint)
+        run: npm run lint
+
+      - name: Type Check (TypeScript strict composite)
+        run: npx tsc -b
+
+      - name: Build Production Bundle (Vite)
+        run: npm run build
+
+  # =========================================================================
+  # Job 3: Commit Message Linter (Conventional Commits v1.0.0)
+  # =========================================================================
+  commitlint:
+    name: Commit Message Linter (Conventional Commits v1.0.0)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Code with Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR Commits with Commitlint
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: commitlint.config.js

@@ -84,12 +84,13 @@ Bảng dưới đây là **Cam kết Kỹ thuật Bất biến (Non-Negotiable S
 | 8 | **Chính sách Polly Retry** | `2s → 4s → 8s` | Tự động thử lại cuộc gọi Gemini AI khi gặp sự cố chập chờn mạng hoặc quá tải API (HTTP 429/503), tối đa 3 lần với hệ số mũ. | Exponential Backoff |
 | 9 | **Tần suất quét Dead-Letter Queue** | `5 phút / lần` | Tiến trình nền `DlqReplayWorker` định kỳ 5 phút quét các bài nộp lỗi cách ly trong bảng `dead_letter_queues` để tự động chấm bù. | Zero Data Loss 100% |
 | 10 | **Định danh file ghi âm phòng Lab** | `STT_MSSV.webm` | Quy tắc đặt tên bất biến: `Số_thứ_tự_máy` + `Mã_sinh_viên`. Ví dụ: `01_SE170123.webm` lưu trữ tại Cloudflare R2, niêm phong bằng SHA-256. | SHA-256 Seal |
-| 11 | **Quy tắc Follow-up MF-01 (Luyện tập)** | `Admin cấu hình (1-5 câu, mặc định 2); Per-Q khi 4.0-8.0đ, Full-Session không` | Giảng viên KHÔNG cấu hình follow-up trong MF-01. Admin cấu hình hệ thống (1–5 câu, mặc định 2 câu). Sinh viên chọn [Per-Question]: kích hoạt câu hỏi follow-up đào sâu khi điểm ranh giới $4.0 \le \text{Score} \le 8.0$; bỏ qua khi $<4.0$ hoặc $>8.0$. Chọn [Full-Session]: KHÔNG có câu hỏi follow-up. Luyện tập không lưu audio (chỉ lưu transcript). | Admin System Config & Score 4.0-8.0 Gate |
+| 11 | **Quy tắc Follow-up MF-01 (Luyện tập)** | `Admin cấu hình (1-5 câu, mặc định 2); Per-Q khi 4.0-8.0đ, Full-Session không` | Giảng viên KHÔNG cấu hình follow-up trong MF-01. Admin cấu hình hệ thống (1–5 câu, mặc định 2 câu). Sinh viên chọn [Per-Question]: On-Demand chọn đơn/tổ hợp mức độ (easy/medium/hard), cấp câu 1 rồi bốc tiếp qua POST /next-question (thuật toán Anti-3-Consecutive); kích hoạt câu hỏi follow-up đào sâu A2 khi điểm ranh giới $4.0 \le \text{Score} \le 8.0$; bỏ qua khi $<4.0$ hoặc $>8.0$. Chọn [Full-Session]: Progressive 3-10 câu Dễ -> Khó, KHÔNG có câu hỏi follow-up. Luyện tập không lưu audio (chỉ lưu transcript). | Admin System Config & Score 4.0-8.0 Gate |
 | 12 | **Quy tắc Follow-up MF-02 & MF-04** | `MF-02: SV tự chọn; MF-04: Trưởng BM cấu hình môn thi (1-5 câu, mặc định 2)` | MF-02: Sinh viên chủ động tự chọn Có/Không Follow-up trước khi thi thử; nếu có, AI hỏi chuyên sâu ngữ cảnh ([Needs Follow-up]) theo nội dung, KHÔNG theo điểm; thời lượng ca thi có follow-up dài hơn do Trưởng BM cấu hình; không lưu audio. MF-04: Trưởng Bộ Môn khởi tạo kỳ thi, gán môn thi, cấu hình ca thi (phòng lab ghi trực tiếp trên ca thi), cấu hình Follow-up môn thi trong kỳ thi (1–5 câu, mặc định 2 câu) và ExamInputMode. | Student Choice (MF-02) / Dept Head Config (MF-04) |
 | 13 | **Instant Feedback Thi Thử (MF-02)** | `Scorecard chi tiết & History` | Sau khi nộp bài thi thử, AI trả về Scorecard chi tiết từng câu (Điểm Rubric, Strengths, Weaknesses, Suggestions) tại màn hình kết quả và lưu vĩnh viễn vào `mock_exam_sessions` phục vụ tra cứu Lịch sử thi. Nguồn đề rút từ kho `practice_questions`. Khi hết giờ tự động nộp bài (câu chưa làm tính là bỏ trống, không chấm). | `HTTP 200 OK` |
 | 14 | **Phương thức làm bài Kiosk (MF-04)** | `ExamInputMode` | Cấu hình cấp môn trong kỳ thi gồm 2 phương thức: `VoiceOnly` (khóa cứng 100% phím Kiosk, chỉ dùng mic) và `VoiceWithTranscriptEdit` (mở đệm sửa từ theo `transcript_buffer_seconds` 10-300s, mặc định 60s do Admin cấu hình). Loại bỏ hoàn toàn `VoiceAndTextInput` khỏi scope hệ thống. | Kiosk Hardware Guard |
 | 15 | **AI Chấm Ngầm, Publish Điểm & Phúc Khảo Nội Bộ (MF-04)** | Kiosk khóa an toàn, Publish, Internal Appeal | Nộp bài Kiosk khóa màn hình lưu an toàn < 100ms; AI chấm ngầm (đầu vào chỉ là transcript) chuyển Giảng viên; Giảng viên Publish điểm khi 100% sinh viên có điểm, kích hoạt One-Way Lock; Xuất báo cáo điểm thi FPT cả 2 định dạng Excel (.xlsx) và PDF; Sinh viên xem điểm Student Portal & nộp đơn phúc khảo nội bộ `AppealRequest` trực tiếp trên hệ thống; Trưởng Bộ Môn tiếp nhận đơn và phân công Giảng viên vào chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`). | `HTTP 200 OK` |
 | 16 | **Chốt chặn AI Doubt Guard & Evidence Panel (MF-04)** | `conf < 0.70 OR is_suspicious` | Cổng Hậu kiểm Giảng viên cung cấp Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT) và tự động chia 2 nhóm: Nhóm 1 Đáng nghi ngờ (`conf < 0.70` hoặc `is_suspicious == true`), Giảng viên bắt buộc đối soát Evidence Panel, nghe Waveform Player và chỉnh điểm; Nhóm 2 Độ tin cậy cao, Giảng viên rà soát nhanh. | Doubt Guard Priority Queue |
+| 17 | **Timeout Không Tương Tác MF-01 (Inactivity Timeout)** | `10 phút (SessionInactivityTimeoutMinutes = 10)` | Quản lý thời gian timeout không tương tác của phiên luyện tập MF-01 qua system_configs. Cập nhật last_activity_at sau mỗi tương tác (tạo phiên, nộp câu trả lời, lấy câu tiếp theo). Quá 10 phút không tương tác, hệ thống tự động kết thúc phiên an toàn (status = 'completed'), bảo toàn 100% điểm các câu đã làm (Full-Session tính các câu chưa làm là 0 điểm). Mọi request tiếp theo trả về HTTP 410 Gone (Session Timed Out). | `HTTP 410 Gone` |
 
 ### <a id="phan-13"></a>1.3. Ma Trận Ngăn Xếp Công Nghệ Đa Ngôn Ngữ (Polyglot Tech Stack)
 
@@ -707,7 +708,7 @@ flowchart TD
 |:---|:---|:---|:---|:---|
 | **Tác nhân chính** | Sinh viên SE (`ACT-01`) | Sinh viên SE (`ACT-01`) | Giảng viên (`ACT-02`) & Trưởng Bộ Môn (`ACT-04`) | Sinh viên (`ACT-01`) & Giảng viên (`ACT-02`) |
 | **Mục tiêu sư phạm** | Formative Assessment (Rèn luyện phản xạ) | Mock Pressure (Tập dượt áp lực thời gian) | Governance & Accreditation (Chuẩn hóa CLOs) | Summative Assessment (Đánh giá học phần lấy điểm) |
-| **Cơ chế kiểm soát** | Tự do chọn chế độ Upfront (`[Per-Q]` vs `[Full]`) | Daily Quota Guard (hạn ngạch theo môn `max_mock_exams_per_day` do Trưởng BM cấu hình); Voice-First Gate; Instant Feedback Scorecard & Lịch sử thi (kho `practice_questions`) | Giảng viên AI Gen + Barem riêng; $\sum \text{Barem} \equiv 10.0$đ; Model Answer $\ge 50$ ký tự; Gửi duyệt Bộ môn (`SUBMITTED_FOR_REVIEW`); Trưởng Bộ Môn Thẩm định & Phê duyệt (`APPROVED`) / Yêu cầu sửa (`NEEDS_REVISION`) / Từ chối (`REJECTED`) | Kiosk Lockdown, Hardware Mic-Check 30s, ExamInputMode, Kiosk khóa an toàn, AI Chấm ngầm chỉ dựa trên transcript, AI Doubt Guard phân 2 nhóm nghi ngờ vs tin cậy, Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT), Giảng viên Publish Điểm khi 100% sinh viên có điểm, One-Way Lock, Phúc khảo Nội Bộ `AppealRequest` |
+| **Cơ chế kiểm soát** | Per-Question: On-Demand chọn đơn/tổ hợp mức độ, không ép số câu, thuật toán Anti-3-Consecutive (tối đa 2 câu cùng mức trong 3 câu liên tiếp). Full-Session: Progressive 3-10 câu do Admin cấu hình (MinMixedPracticeQuestions=3, MaxMixedPracticeQuestions=10), chia đều Dễ -> TB -> Khó, KHÔNG có follow-up. Inactivity Timeout 10 phút (SessionInactivityTimeoutMinutes=10), HTTP 410 Gone, bảo toàn điểm. | Daily Quota Guard (hạn ngạch theo môn `max_mock_exams_per_day` do Trưởng BM cấu hình); Voice-First Gate; Instant Feedback Scorecard & Lịch sử thi (kho `practice_questions`) | Giảng viên AI Gen + Barem riêng; $\sum \text{Barem} \equiv 10.0$đ; Model Answer $\ge 50$ ký tự; Gửi duyệt Bộ môn (`SUBMITTED_FOR_REVIEW`); Trưởng Bộ Môn Thẩm định & Phê duyệt (`APPROVED`) / Yêu cầu sửa (`NEEDS_REVISION`) / Từ chối (`REJECTED`) | Kiosk Lockdown, Hardware Mic-Check 30s, ExamInputMode, Kiosk khóa an toàn, AI Chấm ngầm chỉ dựa trên transcript, AI Doubt Guard phân 2 nhóm nghi ngờ vs tin cậy, Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT), Giảng viên Publish Điểm khi 100% sinh viên có điểm, One-Way Lock, Phúc khảo Nội Bộ `AppealRequest` |
 | **Xử lý âm thanh** | Web Speech STT/TTS (dưới 0.5s) | Voice-First Gate (Bắt buộc nói) | Text-based Barem & Audio Preview | Whisper Large-v3 STT bóc băng có timestamps |
 | **Lưu trữ âm thanh** | Không lưu trữ (tối ưu chi phí) | Không lưu trữ (tối ưu chi phí) | Không áp dụng | Cloudflare R2 (`STT_MSSV.webm`) kèm SHA-256 |
 | **Mô hình AI** | Gemini 1.5 Flash (CoT 3 bước) | Gemini 1.5 Flash (Dual-Path) | Gemini 1.5 Flash (Sinh từ FLM & AI Simulator) | Gemini 1.5 Pro (Chấm ngầm toàn bộ bài thi & Doubt Guard phân loại bài nghi ngờ) |
@@ -726,12 +727,21 @@ flowchart TD
 #### 2. Bộ Quy Tắc Kích Hoạt Follow-up Chuẩn Hóa (R1, R2, R4):
 - 🎯 **Đối với Luồng 1 — Luyện tập tự do (MF-01):**
   - **Giảng viên KHÔNG cấu hình follow-up** trong MF-01.
-  - **Admin cấu hình hệ thống:** Admin là người duy nhất cấu hình số lượng câu hỏi follow-up cho hệ thống luyện tập:
-    - Giá trị mặc định là **2 câu**.
-    - Admin có thể cấu hình linh hoạt từ **1 tới 5 câu** (`1 <= follow_up_questions <= 5`).
-  - **Quy tắc kích hoạt theo chế độ làm bài:**
-    1. Nếu sinh viên chọn **Luyện từng câu (`[Per-Question]`)**: Kích hoạt câu hỏi follow-up chuyên sâu đào sâu (A2) khi điểm số của câu trả lời rơi vào khoảng ranh giới **$4.0 \le \text{Score} \le 8.0$** (số lượng câu hỏi phụ tối đa từ 1 đến 5 câu do Admin cấu hình, mặc định 2 câu). Nếu $\text{Score} < 4.0$ hoặc $\text{Score} > 8.0$, hệ thống bỏ qua câu hỏi phụ và mở ngay bảng điểm Scorecard.
-    2. Nếu sinh viên chọn **Luyện trọn gói (`[Full-Session]`)**: **KHÔNG có câu hỏi follow-up**, tập trung trả lời liền mạch toàn bộ câu hỏi trong bộ đề rồi nhận bảng điểm Scorecard tổng kết.
+  - **Admin cấu hình hệ thống:** Admin là người duy nhất cấu hình số lượng câu hỏi follow-up cho hệ thống luyện tập (`max_follow_up_questions` từ 1–5 câu, mặc định **2 câu**); số câu tiến trình `progressive` (`MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10`); và thời gian timeout không tương tác (`SessionInactivityTimeoutMinutes = 10`, mặc định 10 phút).
+  - **Quy tắc chi tiết theo 2 chế độ làm bài:**
+    1. **Luyện từng câu theo yêu cầu (`[Per-Question On-Demand]`):**
+       - Sinh viên chọn mức độ đơn lẻ (`easy`, `medium`, `hard`) HOẶC bất kỳ tổ hợp nào (`["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, `["easy", "medium", "hard"]`).
+       - **Không ép chốt trước số câu**: Hệ thống cấp câu 1 khi tạo phiên, sau đó sinh viên trả lời và gọi lấy câu tiếp theo theo nhu cầu (On-Demand qua `POST /api/v1/practice/sessions/{id}/next-question`) đến khi chủ động kết thúc phiên.
+       - **Thuật toán Anti-3-Consecutive**: Trong bất kỳ 3 câu hỏi chính liên tiếp nào, tối đa chỉ có 2 câu cùng mức độ (nếu 2 câu liền trước cùng mức $D$, lần bốc tiếp theo loại trừ $D$, chuyển sang mức khác trong danh sách đã chọn). Không lặp lại câu đã làm trong phiên (`Id NOT IN (...)`).
+       - Kích hoạt câu hỏi chuyên sâu đào sâu (A2) khi điểm câu trả lời rơi vào khoảng ranh giới **$4.0 \le \text{Score} \le 8.0$** (1–5 câu do Admin cấu hình, mặc định 2 câu). Bỏ qua khi $\text{Score} < 4.0$ hoặc $\text{Score} > 8.0$.
+    2. **Luyện trọn gói theo tiến trình (`[Full-Session Progressive]`):**
+       - Sinh viên nhập số lượng từ **3 đến 10 câu** (ràng buộc bởi `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10`).
+       - Hệ thống tự động chia đều số câu cho 3 mức (Dễ, Trung bình, Khó), bốc trọn gói toàn bộ ngay khi khởi tạo phiên và sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó.
+       - **TUYỆT ĐỐI KHÔNG có câu hỏi follow-up**. Hỗ trợ nộp từng câu hoặc nộp trọn gói qua `batch-answers` để AI chấm tổng thể và trả bảng điểm tổng kết.
+    3. **Cơ chế Timeout 10 phút không tương tác (Session Inactivity Timeout):**
+       - Quản lý qua `system_configs` với `SessionInactivityTimeoutMinutes = 10` (mặc định 10 phút).
+       - Cập nhật `last_activity_at` (TIMESTAMPTZ) sau mỗi tương tác (tạo phiên, nộp câu trả lời, lấy câu tiếp theo).
+       - Quá 10 phút không tương tác: Hệ thống tự động hoàn tất phiên an toàn (`status = 'completed'`), bảo toàn điểm các câu đã làm (với Full-Session: các câu chưa làm tính là 0 điểm). Mọi request tiếp theo trả về **HTTP 410 Gone** (Session Timed Out).
 - ⏱️ **Đối với Luồng 2 — Thi thử tính giờ (MF-02):**
   - Sinh viên truy cập Student Portal, chọn môn học để thi thử.
   - Trước khi bấm bắt đầu làm bài, sinh viên được **chủ động tự chọn chế độ**:
@@ -756,18 +766,28 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    M1_Start["1. Sinh viên chọn Môn học & Chọn Chế Độ Upfront<br>• [Per-Question]: Chấm tức thời từng câu (tự chọn số câu)<br>• [Full-Session]: Nhập số câu theo mức Dễ/TB/Khó hoặc Progressive (3-10 câu)"]
+    M1_Start["1. Sinh viên chọn Môn học & Chế Độ Làm Bài<br>• [Per-Question On-Demand]: Chọn đơn/tổ hợp mức độ (cấp câu 1, lấy tiếp on-demand)<br>• [Full-Session Progressive]: Nhập 3-10 câu chia đều Dễ -> TB -> Khó"]
     M1_Audio["2. Web Speech Engine tương tác hai chiều<br>• TTS đọc to câu hỏi và nhận diện câu trả lời<br>• Thu âm giọng nói trực tiếp qua trình duyệt"]
     M1_Buffer["3. Màn hình đệm hiệu đính Code-Switching (mặc định 60s)<br>• Bóc băng nháp tức thì dưới 0.5s<br>• Cho phép sinh viên sửa thuật ngữ tiếng Anh trước khi nộp"]
-    M1_Persist["4. Backend tiếp nhận & Phòng thủ 4 tầng Zero Data Loss<br>• Persist-First: Ghi PENDING vào PostgreSQL dưới 100ms<br>• Trả ngay HTTP 202 Accepted cho Client<br>• Đẩy task vào RAM Bounded Channel 1,000 slots"]
+    M1_Persist["4. Backend tiếp nhận & Phòng thủ 4 tầng Zero Data Loss<br>• Cập nhật last_activity_at = NOW()<br>• Persist-First: Ghi PENDING vào PostgreSQL dưới 100ms<br>• Đẩy task vào RAM Bounded Channel 1,000 slots"]
     M1_AI["5. Gemini 1.5 Flash chấm Barem Rubric 10.0đ<br>• Chain-of-Thought 3 bước phân tích luận điểm<br>• Trả kết quả Structured JSON trong 1.8s - 2.5s"]
     M1_FollowUp{"6. Kiểm tra Điều Kiện Follow-up:<br>Chế độ [Per-Question] VÀ 4.0 <= Score <= 8.0?<br>(Full-Session không có follow-up)"}
     M1_A2["7. Kích hoạt Câu Hỏi Follow-up Đào Sâu<br>• AI đào sâu luận điểm yếu của sinh viên (1-5 câu do Admin cấu hình, mặc định 2 câu)"]
     M1_Push["8. SignalR Hub /hubs/practice đẩy Scorecard<br>• Hiển thị điểm từng tiêu chí, nhận xét và Model Answer"]
+    M1_Next{"9. Hành động tiếp theo Per-Question:<br>Bấm 'Câu tiếp theo' hoặc Kết thúc?"}
+    M1_Timeout{"10. Kiểm tra Inactivity Timeout:<br>Thời gian chờ > 10 phút?"}
+    M1_Gone["11. Trả HTTP 410 Gone (Session Timed Out)<br>• Tự động hoàn tất phiên an toàn<br>• Bảo toàn 100% điểm các câu đã làm"]
+    M1_FetchNext["12. POST /next-question (Anti-3-Consecutive)<br>• Bốc câu tiếp theo loại trừ trùng mức 2 câu liền trước<br>• Cập nhật last_activity_at = NOW()"]
+    M1_End["13. Hoàn tất phiên luyện tập<br>• Bảng điểm tổng kết Scorecard"]
 
     M1_Start --> M1_Audio --> M1_Buffer --> M1_Persist --> M1_AI --> M1_FollowUp
     M1_FollowUp -- Thỏa mãn cả 2 điều kiện --> M1_A2 --> M1_Push
     M1_FollowUp -- Không thỏa mãn --> M1_Push
+    M1_Push --> M1_Next
+    M1_Next -- Bấm Kết thúc / Full-Session xong --> M1_End
+    M1_Next -- Bấm 'Câu tiếp theo' --> M1_Timeout
+    M1_Timeout -- Quá 10 phút --> M1_Gone --> M1_End
+    M1_Timeout -- Trong hạn 10 phút --> M1_FetchNext --> M1_Audio
 ```
 
 #### 6.4.2. MF-02: Thi Thử Bấm Giờ (Timed Mock Exam Flowchart TD)
@@ -876,22 +896,28 @@ sequenceDiagram
     participant LLM as Gemini 1.5 Flash (Rubric CoT)
     participant Hub as SignalR PracticeHub
 
-    Note over SV,UI: PHA 1: CHỌN MÔN & PHÁT ĐỀ TỰ LUYỆN
-    SV->>UI: Chọn Môn học và chủ đề luyện tập
-    UI->>API: GET /api/v1/practice/questions?courseId={courseId}
-    API->>DB: Query câu hỏi (PRACTICE_ONLY hoặc SHARED)
-    DB-->>API: Danh sách câu hỏi kèm Barem 10.0đ
-    API-->>UI: HTTP 200 OK
-    UI->>Speech: Đọc to câu hỏi qua loa/tai nghe
+    Note over SV,UI: PHA 1: KHỞI TẠO PHIÊN LUYỆN TẬP (PER-QUESTION ON-DEMAND / FULL-SESSION PROGRESSIVE)
+    SV->>UI: Chọn Môn học, chế độ làm bài & độ khó
+    alt Chế độ Per-Question On-Demand
+        UI->>API: POST /api/v1/practice/sessions { courseId, difficulties: ["easy","medium"], isFullSession: false }
+        API->>DB: Bốc câu 1 theo độ khó đã chọn, INSERT practice_sessions (last_activity_at = NOW())
+        DB-->>API: Câu 1 kèm Barem 10.0đ
+    else Chế độ Full-Session Progressive
+        UI->>API: POST /api/v1/practice/sessions { courseId, questionCount: 6, isFullSession: true }
+        API->>DB: Bốc trọn gói 3-10 câu chia đều Dễ -> TB -> Khó, INSERT practice_sessions (last_activity_at = NOW())
+        DB-->>API: Danh sách câu hỏi kèm Barem 10.0đ
+    end
+    API-->>UI: HTTP 200 OK (Session Data & Question)
+    UI->>Speech: Đọc to câu hỏi qua Web Speech TTS
     Speech-->>SV: Giọng đọc mô phỏng giám khảo viva
 
     Note over SV,UI: PHA 2: TRẢ LỜI & MÀN HÌNH ĐỆM HIỆU ĐÍNH CODE-SWITCHING (MẶC ĐỊNH 60S)
-    SV->>UI: Bấm Bật Micro phát biểu
+    SV->>UI: Bấm Bật Micro phát biểu (hoặc gõ phím)
     UI->>Speech: Khởi tạo Web Speech STT (vi-VN)
     SV->>Speech: Trả lời câu hỏi
     Speech-->>UI: Stream văn bản transcript thời gian thực (< 0.5s)
     SV->>UI: Bấm Hoàn thành nói
-    UI->>UI: Mở màn hình đệm hiệu đính Code-Switching (mặc định 60s theo môn)
+    UI->>UI: Mở màn hình đệm hiệu đính Code-Switching (mặc định 60s theo Admin)
     opt Sửa lỗi chính tả thuật ngữ tiếng Anh
         SV->>UI: Sửa trực tiếp từ ngữ (ví dụ: API, Polymorphism, SQL)
     end
@@ -899,7 +925,7 @@ sequenceDiagram
     Note over UI,Worker: PHA 3: NỘP BÀI & CƠ CHẾ PHÒNG THỦ PERSIST-FIRST
     SV->>UI: Bấm Nộp bài chấm điểm
     UI->>API: POST /api/v1/practice/submit
-    API->>DB: INSERT practice_answers (status='pending') < 100ms
+    API->>DB: INSERT practice_answers (status='pending') & UPDATE last_activity_at = NOW() < 100ms
     DB-->>API: Disk Committed
     API-->>UI: HTTP 202 Accepted
     UI->>Hub: Kết nối lắng nghe kết quả qua SignalR
@@ -925,10 +951,27 @@ sequenceDiagram
     opt Sinh viên trả lời câu hỏi phụ A2 (khi ở chế độ [Per-Question])
         SV->>UI: Bật Micro hoặc gõ phím trả lời phản biện A2
         UI->>API: POST /api/v1/practice/followup/submit
-        API->>DB: INSERT practice_answers (is_follow_up=true, parent_answer_id)
+        API->>DB: INSERT practice_answers (is_follow_up=true, parent_answer_id) & UPDATE last_activity_at = NOW()
         API->>LLM: Chấm điểm & nhận xét câu phản biện A2
         LLM-->>API: Điểm bổ sung & Model Answer hoàn chỉnh
         API-->>UI: Hiển thị nhận xét tổng kết câu hỏi A2
+    end
+
+    Note over SV,API: PHA 5: VÒNG LẶP ON-DEMAND HOẶC TIMEOUT 10 PHÚT
+    opt Sinh viên bấm "Câu tiếp theo" trong chế độ Per-Question
+        SV->>UI: Bấm "Câu tiếp theo" (On-Demand)
+        UI->>API: POST /api/v1/practice/sessions/{id}/next-question
+        alt Quá 10 phút không tương tác (Inactivity Timeout)
+            API->>DB: UPDATE practice_sessions SET status = 'completed'
+            API-->>UI: HTTP 410 Gone (Session Timed Out)
+            UI-->>SV: Thông báo phiên hết hạn an toàn & hiển thị Scorecard bảo toàn điểm
+        else Còn thời hạn hợp lệ
+            API->>DB: Áp dụng thuật toán Anti-3-Consecutive (loại trừ mức nếu 2 câu liền trước cùng độ khó)
+            API->>DB: UPDATE practice_sessions SET last_activity_at = NOW()
+            DB-->>API: Câu hỏi tiếp theo
+            API-->>UI: HTTP 200 OK (question, hasMoreQuestions)
+            UI->>Speech: Đọc to câu hỏi tiếp theo
+        end
     end
 ```
 

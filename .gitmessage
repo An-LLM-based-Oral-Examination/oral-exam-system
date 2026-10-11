@@ -1,0 +1,30 @@
+# <type>(<scope>): <subject>
+# |--- 50 chars limit ----------------------------|
+#
+# <body> (Optional: Explain the 'why', not the 'what')
+# |--- 72 chars limit -------------------------------------------------|
+#
+# <footer> (Optional: BREAKING CHANGE, Closes #123)
+#
+# ----------------------------------------------------------------------
+# Commit Types:
+#   feat:     A new feature for users
+#   fix:      A bug fix
+#   docs:     Documentation only changes
+#   style:    Changes that do not affect the meaning of code (formatting, CSS)
+#   refactor: A code change that neither fixes a bug nor adds a feature
+#   perf:     A code change that improves performance
+#   test:     Adding missing tests or correcting existing tests
+#   build:    Changes that affect the build system or external dependencies
+#   ci:       Changes to CI/CD configuration files and scripts
+#   chore:    Other changes that don't modify src or test files
+#
+# Scopes:
+#   practice, mock-exam, official-exam, rubric, auth, kiosk, db, api, storage
+#
+# Rules:
+#   1. Use imperative mood in subject line ("add", not "added" or "adds").
+#   2. Do not capitalize the first letter of the subject line.
+#   3. Do not place a period (.) at the end of the subject line.
+#   4. Use English 100% for commit messages.
+# ----------------------------------------------------------------------

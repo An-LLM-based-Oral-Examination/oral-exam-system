@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Application.Features.Practice.DTOs;
 using Xunit;
@@ -123,5 +124,125 @@ public class PracticeControllerTests
         problemDetails.Status.Should().Be(StatusCodes.Status400BadRequest);
         problemDetails.Title.Should().Be("Dữ liệu đầu vào không hợp lệ.");
         problemDetails.Detail.Should().Be(errorMessage);
+    }
+
+    [Fact(DisplayName = "3. GetNextQuestion trả về 200 OK cùng NextQuestionResponse khi bốc được câu hỏi thành công")]
+    public async Task GetNextQuestion_Should_Return_200_When_Successful_With_Question()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        var expectedResponse = new NextQuestionResponse
+        {
+            HasMoreQuestions = true,
+            Question = new NextQuestionDto
+            {
+                Id = Guid.NewGuid(),
+                Content = "Nội dung câu hỏi tiếp theo",
+                Difficulty = "medium",
+                QuestionOrder = 2,
+                RubricCriteria = new List<string> { "Tiêu chí 1", "Tiêu chí 2" }
+            }
+        };
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
+                c.SessionId == sessionId && c.StudentId == studentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<NextQuestionResponse>.Success(expectedResponse));
+
+        // Act
+        var actionResult = await _controller.GetNextQuestion(sessionId);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        okResult.Value.Should().BeEquivalentTo(expectedResponse);
+    }
+
+    [Fact(DisplayName = "4. GetNextQuestion trả về 200 OK với HasMoreQuestions = false khi kho đề đã hết câu")]
+    public async Task GetNextQuestion_Should_Return_200_When_HasMoreQuestions_Is_False()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        var expectedResponse = new NextQuestionResponse
+        {
+            HasMoreQuestions = false,
+            Question = null,
+            Message = "Đã hoàn thành toàn bộ câu hỏi khả dụng theo mức độ đã chọn."
+        };
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
+                c.SessionId == sessionId && c.StudentId == studentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<NextQuestionResponse>.Success(expectedResponse));
+
+        // Act
+        var actionResult = await _controller.GetNextQuestion(sessionId);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        okResult.Value.Should().BeEquivalentTo(expectedResponse);
+    }
+
+    [Fact(DisplayName = "5. GetNextQuestion trả về 410 Gone ProblemDetails khi phiên bị timeout quá 10 phút")]
+    public async Task GetNextQuestion_Should_Return_410_Gone_When_Session_Timed_Out()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        const string timeoutMessage = "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút.";
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
+                c.SessionId == sessionId && c.StudentId == studentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<NextQuestionResponse>.Failure(timeoutMessage));
+
+        // Act
+        var actionResult = await _controller.GetNextQuestion(sessionId);
+
+        // Assert
+        var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status410Gone);
+
+        var problemDetails = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problemDetails.Status.Should().Be(StatusCodes.Status410Gone);
+        problemDetails.Title.Should().Be("Session Timed Out");
+        problemDetails.Detail.Should().Be(timeoutMessage);
+    }
+
+    [Fact(DisplayName = "6. GetNextQuestion trả về 404 NotFound ProblemDetails khi không tìm thấy phiên")]
+    public async Task GetNextQuestion_Should_Return_404_NotFound_When_Session_Not_Found()
+    {
+        // Arrange
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        const string notFoundMessage = "Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.";
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
+                c.SessionId == sessionId && c.StudentId == studentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<NextQuestionResponse>.Failure(notFoundMessage));
+
+        // Act
+        var actionResult = await _controller.GetNextQuestion(sessionId);
+
+        // Assert
+        var notFoundResult = actionResult.Should().BeOfType<NotFoundObjectResult>().Subject;
+        notFoundResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+
+        var problemDetails = notFoundResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problemDetails.Status.Should().Be(StatusCodes.Status404NotFound);
+        problemDetails.Title.Should().Be("Session Not Found");
+        problemDetails.Detail.Should().Be(notFoundMessage);
     }
 }

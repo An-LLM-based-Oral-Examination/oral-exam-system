@@ -47,7 +47,7 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 │  [Chịu Lỗi, Cấu Hình & Thông Báo Enterprise]                                                   │
 │  • dead_letter_queues (Zero Data Loss - Phục hồi tự động 4 tầng)                                │
 │  • audit_logs (Lưu vết thay đổi dữ liệu nhạy cảm & điểm số)                                    │
-│  • system_configs (Cấu hình động: Min/Max Practice Questions, TranscriptBufferSeconds)         │
+│  • system_configs (Cấu hình động: Min/Max Practice, Buffer, Follow-up, Inactivity Timeout 10m) │
 │  • notifications (Hộp thư thông báo trong ứng dụng FE-11: 5 sự kiện)                           │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -256,10 +256,12 @@ erDiagram
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính phiên luyện tập |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên thực hiện |
 | `course_id` | `uuid` | FK `courses(id)` ON DELETE CASCADE | Môn học luyện tập |
-| `practice_mode` | `varchar(20)` | NOT NULL, CHECK in (`per_question`, `full_session`) | Chế độ luyện từng câu hay cả đề |
-| `started_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm bắt đầu |
-| `completed_at` | `timestamptz` | NULLABLE | Thời điểm hoàn thành |
-| `status` | `varchar(20)` | NOT NULL, CHECK in (`in_progress`, `completed`, `abandoned`) | Trạng thái phiên |
+| `practice_mode` | `varchar(20)` | NOT NULL, CHECK in (`per_question`, `full_session`) | Chế độ luyện từng câu (`per_question` On-Demand) hay cả đề tiến trình (`full_session`) |
+| `started_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm bắt đầu phiên luyện tập |
+| `completed_at` | `timestamptz` | NULLABLE | Thời điểm hoàn thành phiên |
+| `status` | `varchar(20)` | NOT NULL, Default `'in_progress'`, CHECK in (`'in_progress'`, `'completed'`, `'abandoned'`, `'timed_out'`) | Trạng thái phiên: đang làm, đã hoàn thành, bỏ dở, hoặc quá hạn timeout không tương tác |
+| `last_activity_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tương tác gần nhất của sinh viên (tạo phiên, bốc câu tiếp theo `POST /next-question`, nộp câu trả lời), phục vụ kiểm soát Lazy Timeout 10 phút không tương tác |
+| `selected_difficulties` | `jsonb` | NOT NULL, Default `'[]'::jsonb` | Mảng JSON lưu trữ tổ hợp mức độ khó sinh viên đã chọn (ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "medium", "hard"]`) phục vụ thuật toán bốc đề On-Demand chặn 3 câu liên tiếp cùng mức |
 
 #### Bảng `practice_answers`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
@@ -532,10 +534,20 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi cấu hình |
-| `key` | `varchar(100)` | NOT NULL, UNIQUE | Mã định danh tham số cấu hình hệ thống (`MinMixedPracticeQuestions`, `MaxMixedPracticeQuestions`, `TranscriptBufferSeconds`, `MaxPracticeQuestionsPerSession`) |
-| `value` | `varchar(500)` | NOT NULL | Giá trị thiết lập hiện hành |
+| `key` | `varchar(100)` | NOT NULL, UNIQUE | Mã định danh tham số cấu hình hệ thống (`SessionInactivityTimeoutMinutes`, `MinMixedPracticeQuestions`, `MaxMixedPracticeQuestions`, `TranscriptBufferSeconds`, `MaxPracticeQuestionsPerSession`, `MaxPracticeFollowUpQuestions`) |
+| `value` | `varchar(500)` | NOT NULL | Giá trị thiết lập hiện hành (lưu dạng chuỗi, ứng dụng parse sang kiểu số nguyên/boolean tương ứng) |
 | `description` | `text` | NULLABLE | Mô tả chi tiết mục đích và phạm vi áp dụng của cấu hình |
 | `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối |
+
+##### Danh mục tham số cấu hình mặc định (Default System Configuration Seeds)
+| Khóa cấu hình (`key`) | Giá trị mặc định (`value`) | Kiểu dữ liệu logic | Mô tả nghiệp vụ & Phạm vi áp dụng |
+|:---|:---:|:---:|:---|
+| `SessionInactivityTimeoutMinutes` | `10` | Số nguyên (Integer, phút) | **Thời gian timeout không tương tác của phiên luyện tập MF-01.** Nếu quá 10 phút sinh viên không có tương tác (bốc câu mới hoặc nộp bài), hệ thống tự động kết thúc phiên (`status = 'timed_out'`), trả `HTTP 410 Gone` và bảo toàn kết quả các câu đã làm. |
+| `MaxPracticeQuestionsPerSession` | `10` | Số nguyên (Integer, câu) | Giới hạn số lượng câu hỏi luyện tập tối đa sinh viên có thể thực hiện trong một phiên luyện tập. |
+| `MinMixedPracticeQuestions` | `3` | Số nguyên (Integer, câu) | Số lượng câu hỏi luyện tập tối thiểu cho chế độ Full-Session tự động phân bổ tiến trình từ Dễ đến Khó. |
+| `MaxMixedPracticeQuestions` | `10` | Số nguyên (Integer, câu) | Số lượng câu hỏi luyện tập tối đa cho chế độ Full-Session tự động phân bổ tiến trình từ Dễ đến Khó. |
+| `TranscriptBufferSeconds` | `60` | Số nguyên (Integer, giây) | Thời gian đệm hiệu đính transcript mặc định (từ 10–300s, mặc định 60s) cho màn hình đệm sửa lỗi phát âm kỹ thuật trước khi nộp bài. |
+| `MaxPracticeFollowUpQuestions` | `2` | Số nguyên (Integer, câu) | Số lượng câu hỏi phụ Follow-up tối đa (từ 1–5 câu, mặc định 2 câu) khi điểm số câu trả lời rơi vào khoảng ranh giới 4.0–8.0đ ở chế độ Per-Question. |
 
 ---
 
@@ -568,6 +580,7 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_practice_questions_course` | `practice_questions` | `(course_id, difficulty, is_active)` | Composite B-Tree | Lọc danh sách câu hỏi luyện tập theo môn học và độ khó. |
 | `ix_practice_questions_source` | `practice_questions` | `(course_id, source)` | Composite B-Tree | Tối ưu tra cứu và phân loại câu hỏi sinh từ FLM API (`flm_api`) so với soạn thủ công (`manual`). |
 | `ix_practice_questions_rubric` | `practice_questions` | `(rubric_id)` | B-Tree | Join tức thời bảng Barem khi sinh scorecard luyện tập. |
+| `ix_practice_sessions_last_activity` | `practice_sessions` | `(status, last_activity_at)` | Composite B-Tree | Tối ưu hóa truy vấn lọc các phiên đang mở (`status = 'in_progress'`) có `last_activity_at` vượt quá thời gian timeout (10 phút) để Lazy Validation và Background Worker quét dọn chuyển sang `'timed_out'`. |
 | `ix_exam_questions_course` | `exam_questions` | `(course_id, difficulty, is_active)` | Composite B-Tree | Bốc ngẫu nhiên câu hỏi theo cấu trúc ma trận đề thi MF-02/MF-04. |
 | `ix_exam_questions_source` | `exam_questions` | `(course_id, source)` | Composite B-Tree | Phân loại câu hỏi thi chính thức theo nguồn gốc FLM API. |
 | `ix_exam_questions_approved` | `exam_questions` | `(approved_by)` | B-Tree | Thống kê số lượng câu hỏi do Trưởng Bộ Môn hoặc Giảng viên phê duyệt. |
@@ -607,3 +620,4 @@ Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questio
 - **Ràng buộc Phân loại bài thi Hậu kiểm:** `student_exam_tickets.ai_confidence_score` và `exam_question_submissions.ai_confidence_score` có CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00`. Khi `is_suspicious == true` hoặc `ai_confidence_score < 0.70`, hệ thống tự động gắn cờ xếp vào Nhóm 1 Đáng nghi ngờ trên Cổng Hậu kiểm Giảng viên để ưu tiên nghe lại Waveform Player và thẩm định trước.
 - **Ràng buộc Phê duyệt Câu hỏi:** `practice_questions.approval_status` và `exam_questions.approval_status` có CHECK constraint `approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')`. Chỉ các câu hỏi mang trạng thái `'APPROVED'` do Trưởng Bộ Môn phê duyệt mới được đưa vào ma trận bốc đề thi thật MF-04.
 - **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Giảng viên công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu không chấp nhận kết quả, sinh viên bấm nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal (`POST /api/v1/appeals`) để tạo bản ghi `appeal_requests` gửi tới Trưởng Bộ Môn; Trưởng Bộ Môn tiếp nhận và phân công cho một Giảng viên chấm lại.
+- **Ràng buộc Thời gian không tương tác (Session Inactivity Timeout MF-01):** Tham số `SessionInactivityTimeoutMinutes` trong bảng `system_configs` (mặc định 10 phút) quy định thời gian tối đa một phiên luyện tập được duy trì trạng thái `in_progress` mà không có hoạt động. Mọi request gọi lên (tạo phiên, bốc câu hỏi tiếp theo qua `POST /api/v1/practice/sessions/{id}/next-question`, nộp câu trả lời) đều cập nhật lại mốc thời gian `last_activity_at`. Khi phát hiện quá 10 phút không tương tác, hệ thống tự động đánh dấu phiên là `timed_out`, chấm điểm các câu đã hoàn thành (đối với Full-Session, các câu chưa làm tính 0 điểm; đối với Per-Question, lưu lại các câu đã làm), trả về lỗi `HTTP 410 Gone` (RFC 7807) và tuyệt đối không tạo phiên rác.

@@ -152,7 +152,7 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
         sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))");
     }
 
-    [Fact(DisplayName = "ADV-M1-05: 01_schema.sql tại 05_Source_Code/infra/postgres/init phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
+    [Fact(DisplayName = "ADV-M1-05: 01_schema.sql tại 05_Source_Code/infra/postgres/init (hoặc infra/postgres/init khi chạy CI) phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
     public void Schema_SourceCode_Must_Contain_Correct_ExamInputMode_Definition()
     {
         var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -160,16 +160,23 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
 
         while (currentDir != null)
         {
-            var candidate = Path.Combine(currentDir.FullName, "05_Source_Code", "infra", "postgres", "init", "01_schema.sql");
-            if (File.Exists(candidate))
+            var candidateSourceCode = Path.Combine(currentDir.FullName, "05_Source_Code", "infra", "postgres", "init", "01_schema.sql");
+            var candidateDirect = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "01_schema.sql");
+
+            if (File.Exists(candidateSourceCode))
             {
-                schemaPath = candidate;
+                schemaPath = candidateSourceCode;
+                break;
+            }
+            if (File.Exists(candidateDirect))
+            {
+                schemaPath = candidateDirect;
                 break;
             }
             currentDir = currentDir.Parent;
         }
 
-        schemaPath.Should().NotBeNull("Tệp 05_Source_Code/infra/postgres/init/01_schema.sql phải tồn tại");
+        schemaPath.Should().NotBeNull("Tệp 01_schema.sql phải tồn tại tại 05_Source_Code/infra/postgres/init hoặc infra/postgres/init");
         var sql = File.ReadAllText(schemaPath!);
 
         sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',");

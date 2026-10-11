@@ -31,15 +31,51 @@ git pull origin develop
 git checkout -b feature/tên-tính-năng-của-bạn
 ```
 
-**Bước 3: Viết Code và Commit theo chuẩn Conventional**
-Nội dung commit phải có ý nghĩa. Bắt buộc dùng các tiền tố sau:
-- `feat: ` (Thêm tính năng mới)
-- `fix: ` (Sửa lỗi bug)
-- `refactor: ` (Tối ưu lại code nhưng không làm thay đổi logic)
-- `docs: ` (Cập nhật tài liệu README, MD)
-- `style: ` (Chỉnh sửa UI, CSS, format code không ảnh hưởng logic)
+**Bước 3: Viết Code và Commit theo chuẩn Conventional Commits (v1.0.0)**
 
-Ví dụ: `git commit -m "feat: thêm api validate tổng điểm rubric bằng 10"`
+Dự án áp dụng bắt buộc 100% chuẩn **Conventional Commits v1.0.0** bằng **Tiếng Anh**. Dự án đã tích hợp sẵn template `.gitmessage` và Git Hook kiểm soát (`.git/hooks/commit-msg`).
+
+* **Cú pháp bắt buộc:**
+  ```text
+  <type>(<scope>): <short description in imperative mood>
+
+  [optional body: giải thích nguyên nhân và thay đổi chi tiết]
+  [optional footer: liên kết task/issue/breaking change]
+  ```
+
+* **Bảng danh mục các `<type>` hợp lệ:**
+  - `feat`: Thêm tính năng mới cho người dùng (ví dụ: endpoint mới, cơ chế bốc đề mới).
+  - `fix`: Sửa lỗi, vá bug logic hoặc xử lý ngoại lệ.
+  - `docs`: Cập nhật tài liệu, API contracts, diagrams, README.
+  - `test`: Thêm hoặc cập nhật unit tests, integration tests, stress tests.
+  - `refactor`: Tái cấu trúc code (không đổi logic nghiệp vụ, không thêm feature).
+  - `perf`: Cải thiện hiệu năng, giảm độ trễ I/O hoặc tối ưu bộ nhớ.
+  - `chore`: Cấu hình build, dependencies, migration, CI/CD, seed data.
+  - `style`: Thay đổi format code, CSS, không ảnh hưởng logic.
+
+* **Bảng danh mục các `<scope>` theo Bounded Context:**
+  - `(practice)`: Luồng MF-01 Luyện tập tương tác.
+  - `(mock-exam)`: Luồng MF-02 Thi thử tính giờ.
+  - `(rubric)`: Luồng MF-03 Ngân hàng câu hỏi & Rubric Studio.
+  - `(official-exam)`: Luồng MF-04 Thi thật Kiosk phòng lab & Hậu kiểm.
+  - `(auth)`: Xác thực Google OAuth, RBAC.
+  - `(kiosk)`: Khóa màn hình Kiosk phòng Lab, hardware mic, blur detection.
+  - `(api)`: Cấu hình middleware, routing, Swagger/OpenAPI.
+  - `(db)`: Entity, migrations, schema PostgreSQL.
+  - `(storage)`: Lưu trữ audio, bóc băng Whisper STT.
+
+* **Quy tắc vàng khi viết Commit Message:**
+  1. **100% Tiếng Anh**, dùng thể mệnh lệnh (Imperative mood: `add`, `update`, `implement`, `fix` — không dùng `added`, `fixed`, `updating`).
+  2. Không viết hoa chữ cái đầu sau dấu hai chấm (ví dụ: `feat(practice): add next-question endpoint`, không viết `feat(practice): Add...`).
+  3. Không đặt dấu chấm (`.`) ở cuối dòng tiêu đề (subject line).
+  4. Giới hạn dòng tiêu đề tối đa 50–72 ký tự.
+
+* **Ví dụ mẫu chuẩn Enterprise:**
+  - `feat(practice): update per-question and full-session modes with inactivity timeout`
+  - `fix(practice): resolve timeout calculation for inactive sessions`
+  - `docs(api): update MF-01 integration guide and error codes`
+  - `test(practice): add adversarial stress tests for anti-consecutive difficulty`
+  - `chore(db): add SessionInactivityTimeoutMinutes seed data`
 
 **Bước 4: Đẩy code lên và Mở Pull Request**
 ```bash

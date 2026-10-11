@@ -111,7 +111,7 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
             if (confidenceScore.HasValue && confidenceScore.Value < 0.70m)
             {
                 isSuspicious = true;
-                suspiciousReason = $"Độ tin cậy AI thấp ({confidenceScore.Value:P0} < 70%). Cần đối soát lại phát âm hoặc chất lượng ghi âm.";
+                suspiciousReason = $"Độ tin cậy AI thấp ({(int)Math.Round(confidenceScore.Value * 100, MidpointRounding.AwayFromZero)}% < 70%). Cần đối soát lại phát âm hoặc chất lượng ghi âm.";
             }
             else if (ticket.Submissions.Any(s => s.GradingStatus == "suspicious"))
             {

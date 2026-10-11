@@ -31,6 +31,24 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             return Result<Guid>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
         }
 
+        // Lazy Inactivity Timeout Check (10 phút)
+        var timeoutConfig = await _context.SystemConfigs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
+        int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout))
+            ? parsedTimeout
+            : 10;
+
+        var elapsed = DateTime.UtcNow - session.LastActivityAt;
+        if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        {
+            session.Status = "completed";
+            session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Result<Guid>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút.");
+        }
+
         if (session.Status != "in_progress")
         {
             return Result<Guid>.Failure("Phiên luyện tập đã kết thúc.");
@@ -50,6 +68,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
         };
 
         _context.PracticeAnswers.Add(answer);
+        session.LastActivityAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken); // Tiêu chí: Lưu cực nhanh < 100ms
 
         // 3. Đẩy vào Hàng đợi BoundedChannel để chấm ngầm
