@@ -10,7 +10,6 @@ public partial class PracticeAnswer
     public Guid QuestionId { get; set; }
     public Guid StudentId { get; set; }
     public string AnswerText { get; set; } = null!;
-    public string? AudioUrl { get; set; }
     public bool IsFollowUp { get; set; } = false;
     public Guid? ParentAnswerId { get; set; }
     public string Status { get; set; } = "pending";

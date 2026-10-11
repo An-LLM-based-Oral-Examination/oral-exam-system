@@ -2,7 +2,7 @@
 Tài liệu này quy định cách chia nhánh (Branching) và làm việc nhóm để tránh xung đột mã nguồn (Conflict) cho đội ngũ 4 kỹ sư FA26SE166:
 - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect
 - 🧑 **Nguyễn Trọng Tốt:** Backend Developer, AI Engineer & QA Lead
-- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 28 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)
+- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)
 - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator
 
 Nhánh làm việc chung hiện tại là nhánh `develop`.

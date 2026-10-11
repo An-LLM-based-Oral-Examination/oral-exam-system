@@ -25,13 +25,13 @@ public class DomainEntitiesAndDbContextTests
         return new OralExamDbContext(options);
     }
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 28 thực thể trong Model")]
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 29 thực thể trong Model")]
     public void DbContext_Must_Contain_Exactly_28_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(28, "Hệ thống chuẩn hóa 28 bảng CSDL phân tách Practice - Exam kèm Phúc khảo nội bộ");
+        entityTypes.Should().HaveCount(29, "Hệ thống chuẩn hóa 29 bảng CSDL phân tách Practice - Exam kèm Phúc khảo nội bộ và Cấu hình hệ thống");
 
         var expectedEntities = new[]
         {
@@ -62,7 +62,8 @@ public class DomainEntitiesAndDbContextTests
             typeof(LecturerAuditDetail),
             typeof(AppealRequest),
             typeof(DeadLetterQueue),
-            typeof(AuditLog)
+            typeof(AuditLog),
+            typeof(SystemConfig)
         };
 
         foreach (var type in expectedEntities)
@@ -72,7 +73,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 28 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 29 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -106,7 +107,8 @@ public class DomainEntitiesAndDbContextTests
             (typeof(LecturerAuditDetail), "lecturer_audit_details"),
             (typeof(AppealRequest), "appeal_requests"),
             (typeof(DeadLetterQueue), "dead_letter_queues"),
-            (typeof(AuditLog), "audit_logs")
+            (typeof(AuditLog), "audit_logs"),
+            (typeof(SystemConfig), "system_configs")
         };
 
         foreach (var (entityType, expectedTable) in tableMap)
@@ -148,7 +150,7 @@ public class DomainEntitiesAndDbContextTests
         subUnique.Should().NotBeNull("Mỗi vé thi chỉ có 1 bản nộp duy nhất cho mỗi câu hỏi");
     }
 
-    [Fact(DisplayName = "4. Ràng buộc Check Constraints trong 01_schema.sql cho Rubric 10.0 và Quota thi thử K<=3")]
+    [Fact(DisplayName = "4. Ràng buộc Check Constraints trong 01_schema.sql cho Rubric 10.0 và Quota thi thử động UsedCount >= 0")]
     public void Schema_Must_Configure_Domain_Check_Constraints()
     {
         var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -176,8 +178,8 @@ public class DomainEntitiesAndDbContextTests
         // 2. RubricCriterion MaxScore > 0 AND <= 10.0
         sql.Should().Contain("CONSTRAINT ck_rubric_criteria_score CHECK (max_score > 0 AND max_score <= 10.00)");
 
-        // 3. MockExamQuota UsedCount 0..3
-        sql.Should().Contain("CONSTRAINT ck_mock_exam_quotas_count CHECK (used_count >= 0 AND used_count <= 3)");
+        // 3. MockExamQuota UsedCount >= 0 (Hạn ngạch động theo môn)
+        sql.Should().Contain("CONSTRAINT ck_mock_exam_quotas_count CHECK (used_count >= 0)");
 
         // 4. StudentExamTicket Seat 1..40
         sql.Should().Contain("CONSTRAINT ck_tickets_seat CHECK (seat_number >= 1 AND seat_number <= 40)");

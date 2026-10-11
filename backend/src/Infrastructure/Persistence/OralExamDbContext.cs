@@ -40,6 +40,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AppealRequest> AppealRequests { get; set; }
     public virtual DbSet<DeadLetterQueue> DeadLetterQueues { get; set; }
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
+    public virtual DbSet<SystemConfig> SystemConfigs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,7 +54,6 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
             entity.HasIndex(e => e.Email).IsUnique().HasDatabaseName("ix_users_email");
-            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255);
             entity.Property(e => e.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
             entity.Property(e => e.StudentCode).HasColumnName("student_code").HasMaxLength(20);
             entity.HasIndex(e => e.StudentCode).IsUnique().HasDatabaseName("ix_users_student_code");
@@ -96,7 +96,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ExamInputMode)
                 .HasColumnName("exam_input_mode")
                 .HasMaxLength(30)
-                .HasDefaultValue("VoiceAndTextInput")
+                .HasDefaultValue("VoiceWithTranscriptEdit")
                 .IsRequired();
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -323,7 +323,6 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
             entity.Property(e => e.AnswerText).HasColumnName("answer_text").IsRequired();
-            entity.Property(e => e.AudioUrl).HasColumnName("audio_url");
             entity.Property(e => e.IsFollowUp).HasColumnName("is_follow_up").HasDefaultValue(false);
             entity.Property(e => e.ParentAnswerId).HasColumnName("parent_answer_id");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
@@ -581,7 +580,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ExamDate).HasColumnName("exam_date").IsRequired();
             entity.Property(e => e.HasFollowUp).HasColumnName("has_follow_up").HasDefaultValue(false);
             entity.Property(e => e.MaxFollowUpQuestions).HasColumnName("max_follow_up_questions").HasDefaultValue(1);
-            entity.Property(e => e.ExamInputMode).HasColumnName("exam_input_mode").HasMaxLength(30).HasDefaultValue("VoiceAndTextInput").IsRequired();
+            entity.Property(e => e.ExamInputMode).HasColumnName("exam_input_mode").HasMaxLength(30).HasDefaultValue("VoiceWithTranscriptEdit").IsRequired();
             entity.Property(e => e.TranscriptBufferSeconds).HasColumnName("transcript_buffer_seconds").HasDefaultValue(60);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("scheduled");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
@@ -852,6 +851,62 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany()
                 .HasForeignKey(d => d.ReviewedBy)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // 29. system_configs
+        modelBuilder.Entity<SystemConfig>(entity =>
+        {
+            entity.ToTable("system_configs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Key).HasColumnName("key").HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique().HasDatabaseName("ix_system_configs_key");
+            entity.Property(e => e.Value).HasColumnName("value").HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasData(
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000027"),
+                    Key = "MaxPracticeQuestionsPerSession",
+                    Value = "10",
+                    Description = "Số lượng câu hỏi luyện tập tối đa trong một phiên do Admin cấu hình",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000028"),
+                    Key = "MinMixedPracticeQuestions",
+                    Value = "3",
+                    Description = "Số lượng câu hỏi luyện tập tối thiểu cho chế độ Dễ đến Khó do Admin cấu hình",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000029"),
+                    Key = "MaxMixedPracticeQuestions",
+                    Value = "10",
+                    Description = "Số lượng câu hỏi luyện tập tối đa cho chế độ Dễ đến Khó do Admin cấu hình",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000030"),
+                    Key = "TranscriptBufferSeconds",
+                    Value = "60",
+                    Description = "Thời gian đệm hiệu đính transcript mặc định (giây) do Admin cấu hình",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SystemConfig
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000031"),
+                    Key = "MaxPracticeFollowUpQuestions",
+                    Value = "2",
+                    Description = "Số lượng câu hỏi follow-up luyện tập tối đa do Admin cấu hình (1-5 câu)",
+                    UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            );
         });
     }
 }

@@ -1,0 +1,10 @@
+using System;
+
+namespace OralExamination.Domain.Exceptions;
+
+public class DomainValidationException : Exception
+{
+    public DomainValidationException(string message) : base(message)
+    {
+    }
+}

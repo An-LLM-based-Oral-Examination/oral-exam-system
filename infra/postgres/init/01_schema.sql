@@ -15,7 +15,6 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE users (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(255) NOT NULL UNIQUE,
-    password_hash   VARCHAR(255),
     full_name       VARCHAR(150) NOT NULL,
     student_code    VARCHAR(20) UNIQUE,
     role            VARCHAR(20) NOT NULL DEFAULT 'student',
@@ -52,13 +51,15 @@ CREATE TABLE courses (
     has_follow_up               BOOLEAN NOT NULL DEFAULT FALSE,
     transcript_buffer_seconds   INT NOT NULL DEFAULT 60,
     max_follow_up_questions     INT NOT NULL DEFAULT 2,
-    exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceAndTextInput',
+    max_mock_exams_per_day      INT NOT NULL DEFAULT 3,
+    exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',
     is_active                   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_courses_credits CHECK (credits > 0),
     CONSTRAINT ck_courses_transcript_buffer CHECK (transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300),
     CONSTRAINT ck_courses_max_follow_up CHECK (max_follow_up_questions >= 1 AND max_follow_up_questions <= 5),
-    CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput'))
+    CONSTRAINT ck_courses_mock_quota CHECK (max_mock_exams_per_day >= 1),
+    CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))
 );
 
 CREATE INDEX ix_courses_code ON courses (code);
@@ -211,7 +212,6 @@ CREATE TABLE practice_answers (
     question_id         UUID NOT NULL REFERENCES practice_questions (id) ON DELETE RESTRICT,
     student_id          UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     answer_text         TEXT NOT NULL,
-    audio_url           TEXT,
     is_follow_up        BOOLEAN NOT NULL DEFAULT FALSE,
     parent_answer_id    UUID REFERENCES practice_answers (id) ON DELETE SET NULL,
     status              VARCHAR(20) NOT NULL DEFAULT 'pending',
@@ -302,7 +302,7 @@ CREATE TABLE exam_set_questions (
 CREATE INDEX ix_exam_set_questions_set ON exam_set_questions (exam_set_id);
 CREATE INDEX ix_exam_set_questions_question ON exam_set_questions (exam_question_id);
 
--- 5.4. Bảng Hạn ngạch thi thử bấm giờ (Daily Quota Guard <= 3 lượt/ngày/môn)
+-- 5.4. Bảng Hạn ngạch thi thử bấm giờ (Daily Quota Guard theo môn max_mock_exams_per_day)
 CREATE TABLE mock_exam_quotas (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id          UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -311,7 +311,7 @@ CREATE TABLE mock_exam_quotas (
     used_count          INT NOT NULL DEFAULT 0,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_mock_exam_quotas UNIQUE (student_id, course_id, quota_date),
-    CONSTRAINT ck_mock_exam_quotas_count CHECK (used_count >= 0 AND used_count <= 3)
+    CONSTRAINT ck_mock_exam_quotas_count CHECK (used_count >= 0)
 );
 
 CREATE INDEX ix_mock_exam_quotas_lookup ON mock_exam_quotas (student_id, course_id, quota_date);
@@ -341,7 +341,6 @@ CREATE TABLE mock_exam_answers (
     session_id          UUID NOT NULL REFERENCES mock_exam_sessions (id) ON DELETE CASCADE,
     question_id         UUID NOT NULL REFERENCES practice_questions (id) ON DELETE RESTRICT,
     answer_text         TEXT,
-    audio_url           TEXT,
     time_taken_seconds  INT NOT NULL DEFAULT 0,
     status              VARCHAR(20) NOT NULL DEFAULT 'answered',
     answered_at         TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -363,15 +362,15 @@ CREATE TABLE official_exam_sessions (
     title                       VARCHAR(255) NOT NULL,
     exam_date                   DATE NOT NULL,
     has_follow_up               BOOLEAN NOT NULL DEFAULT FALSE,
-    max_follow_up_questions     INT NOT NULL DEFAULT 1,
-    exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceAndTextInput',
+    max_follow_up_questions     INT NOT NULL DEFAULT 2,
+    exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',
     transcript_buffer_seconds   INT NOT NULL DEFAULT 60,
     status                      VARCHAR(20) NOT NULL DEFAULT 'scheduled',
     created_by                  UUID REFERENCES users (id) ON DELETE SET NULL,
     created_at                  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_official_sessions_status CHECK (status IN ('scheduled', 'in_progress', 'grading', 'auditing', 'concluded')),
-    CONSTRAINT ck_official_sessions_max_follow_up CHECK (max_follow_up_questions >= 1 AND max_follow_up_questions <= 2),
-    CONSTRAINT ck_official_sessions_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput')),
+    CONSTRAINT ck_official_sessions_max_follow_up CHECK (max_follow_up_questions >= 1 AND max_follow_up_questions <= 5),
+    CONSTRAINT ck_official_sessions_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')),
     CONSTRAINT ck_official_sessions_transcript_buffer CHECK (transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300)
 );
 
@@ -409,15 +408,22 @@ CREATE TABLE student_exam_tickets (
     is_locked           BOOLEAN NOT NULL DEFAULT FALSE,
     checked_in_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     submitted_at        TIMESTAMPTZ,
+    ai_confidence_score NUMERIC(5,2),
+    is_suspicious       BOOLEAN NOT NULL DEFAULT FALSE,
+    student_acknowledgement_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    published_at        TIMESTAMPTZ,
+    published_by        UUID REFERENCES users (id) ON DELETE SET NULL,
     CONSTRAINT uq_shift_seat UNIQUE (shift_id, seat_number),
     CONSTRAINT uq_shift_student UNIQUE (shift_id, student_id),
     CONSTRAINT ck_tickets_seat CHECK (seat_number >= 1 AND seat_number <= 40),
-    CONSTRAINT ck_tickets_status CHECK (status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED'))
+    CONSTRAINT ck_tickets_status CHECK (status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')),
+    CONSTRAINT ck_tickets_ack_status CHECK (student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED'))
 );
 
 CREATE INDEX ix_student_exam_tickets_shift ON student_exam_tickets (shift_id);
 CREATE INDEX ix_student_exam_tickets_student ON student_exam_tickets (student_id);
 CREATE INDEX ix_student_exam_tickets_set ON student_exam_tickets (exam_set_id);
+CREATE INDEX ix_student_exam_tickets_published_by ON student_exam_tickets (published_by);
 
 -- 6.4. Bảng Bản nộp âm thanh câu hỏi thi thật (Cloudflare R2: STT_MSSV.webm + SHA-256 seal)
 CREATE TABLE exam_question_submissions (
@@ -543,3 +549,35 @@ CREATE INDEX ix_audit_logs_user ON audit_logs (user_id);
 CREATE INDEX ix_audit_logs_entity ON audit_logs (entity_name, entity_id);
 CREATE INDEX ix_audit_logs_created ON audit_logs (created_at DESC);
 
+-- =============================================================================
+-- PHÂN HỆ 8: CẤU HÌNH HỆ THỐNG ENTERPRISE (SYSTEM CONFIGS)
+-- =============================================================================
+
+CREATE TABLE system_configs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key                 VARCHAR(100) NOT NULL,
+    value               VARCHAR(500) NOT NULL,
+    description         TEXT,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_system_configs_key UNIQUE (key)
+);
+
+CREATE INDEX ix_system_configs_key ON system_configs (key);
+
+-- =============================================================================
+-- PHÂN HỆ 9: THÔNG BÁO TRONG ỨNG DỤNG (IN-APP NOTIFICATIONS - FE-11)
+-- =============================================================================
+
+CREATE TABLE notifications (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    title               VARCHAR(200) NOT NULL,
+    message             TEXT NOT NULL,
+    type                VARCHAR(50) NOT NULL,
+    is_read             BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata            JSONB,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at             TIMESTAMPTZ
+);
+
+CREATE INDEX idx_notifications_user_read ON notifications (user_id, is_read, created_at DESC);

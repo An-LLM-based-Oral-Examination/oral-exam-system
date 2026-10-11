@@ -26,6 +26,29 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy danh sách toàn bộ các môn học đang hoạt động (phục vụ Student Portal & chọn môn luyện tập MF-01).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetCourses()
+    {
+        var query = new OralExamination.Application.Features.Courses.Queries.GetCourses.GetCoursesQuery();
+        var result = await _sender.Send(query);
+
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/courses-query-failed",
+                title = "Bad Request",
+                status = 400,
+                detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Cập nhật cấu hình động của môn học (Mở quyền cho Giảng viên / Trưởng Bộ Môn / Admin).
     /// Giảng viên trực tiếp cấu hình tính năng hỏi chuyên sâu (1–2 câu) và thời gian đệm.
     /// </summary>

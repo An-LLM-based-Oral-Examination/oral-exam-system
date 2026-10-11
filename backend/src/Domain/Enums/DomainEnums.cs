@@ -29,7 +29,19 @@ public static class QuestionDifficulty
     public const string Medium = "medium";
     public const string Hard = "hard";
 
-    public static readonly string[] All = { Easy, Medium, Hard };
+    public const string Progressive = "progressive";
+
+    public static readonly string[] All = { Easy, Medium, Hard, Progressive };
+}
+
+public static class PracticeDifficulty
+{
+    public const string Easy = "easy";
+    public const string Medium = "medium";
+    public const string Hard = "hard";
+    public const string Progressive = "progressive";
+
+    public static readonly string[] All = { Easy, Medium, Hard, Progressive };
 }
 
 public static class QuestionSource
@@ -88,8 +100,31 @@ public static class ExamInputMode
 {
     public const string VoiceOnly = "VoiceOnly";
     public const string VoiceWithTranscriptEdit = "VoiceWithTranscriptEdit";
-    public const string VoiceAndTextInput = "VoiceAndTextInput";
 
-    public static readonly string[] All = { VoiceOnly, VoiceWithTranscriptEdit, VoiceAndTextInput };
+    public static readonly string[] All = { VoiceOnly, VoiceWithTranscriptEdit };
 }
 
+
+public static class PracticeMode
+{
+    public const string PerQuestion = "per_question";
+    public const string FullSession = "full_session";
+    public static readonly string[] All = { PerQuestion, FullSession };
+}
+
+public static class PracticeSessionStatus
+{
+    public const string InProgress = "in_progress";
+    public const string Completed = "completed";
+    public const string Abandoned = "abandoned";
+    public static readonly string[] All = { InProgress, Completed, Abandoned };
+}
+
+public static class PracticeAnswerStatus
+{
+    public const string Pending = "pending";
+    public const string Grading = "grading";
+    public const string Graded = "graded";
+    public const string Failed = "failed";
+    public static readonly string[] All = { Pending, Grading, Graded, Failed };
+}

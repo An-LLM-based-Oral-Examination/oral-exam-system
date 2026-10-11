@@ -3,7 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Infrastructure.Persistence;
-using OralExamination.Infrastructure.Services;
 
 namespace OralExamination.Infrastructure;
 
@@ -28,7 +27,11 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp =>
             sp.GetRequiredService<OralExamDbContext>());
 
-        services.AddScoped<IAiQuestionGenerationService, GeminiQuestionGenerationService>();
+        services.AddHttpClient<IAiQuestionGenerationService, OralExamination.Infrastructure.Services.GeminiQuestionGenerationService>();
+        services.AddHttpClient<IAiGradingService, OralExamination.Infrastructure.Services.GeminiAiGradingService>();
+        services.AddHttpClient<ISpeechToTextService, OralExamination.Infrastructure.Services.CloudflareWhisperService>();
+        services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
+        services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
 
         return services;
     }

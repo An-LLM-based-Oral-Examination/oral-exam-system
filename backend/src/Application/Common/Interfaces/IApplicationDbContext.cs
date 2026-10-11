@@ -37,6 +37,7 @@ public interface IApplicationDbContext
     DbSet<AppealRequest> AppealRequests { get; }
     DbSet<DeadLetterQueue> DeadLetterQueues { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<SystemConfig> SystemConfigs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

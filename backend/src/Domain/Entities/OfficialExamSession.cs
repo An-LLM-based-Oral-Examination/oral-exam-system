@@ -12,7 +12,7 @@ public partial class OfficialExamSession
     public DateOnly ExamDate { get; set; }
     public bool HasFollowUp { get; set; } = false;
     public int MaxFollowUpQuestions { get; set; } = 1;
-    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceAndTextInput;
+    public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public int TranscriptBufferSeconds { get; set; } = 60;
     public string Status { get; set; } = "scheduled";
     public Guid? CreatedBy { get; set; }

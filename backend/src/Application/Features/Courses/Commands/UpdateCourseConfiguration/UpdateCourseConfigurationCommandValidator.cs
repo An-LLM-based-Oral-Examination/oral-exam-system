@@ -30,6 +30,6 @@ public sealed class UpdateCourseConfigurationCommandValidator : AbstractValidato
 
         RuleFor(v => v.ExamInputMode)
             .Must(m => m == null || ExamInputMode.All.Contains(m))
-            .WithMessage("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit, VoiceAndTextInput.");
+            .WithMessage("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit.");
     }
 }

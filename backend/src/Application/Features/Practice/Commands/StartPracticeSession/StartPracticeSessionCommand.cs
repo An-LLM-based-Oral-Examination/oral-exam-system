@@ -1,5 +1,6 @@
 using MediatR;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.DTOs;
 using System;
 
 namespace OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
@@ -7,5 +8,8 @@ namespace OralExamination.Application.Features.Practice.Commands.StartPracticeSe
 public sealed record StartPracticeSessionCommand(
     Guid StudentId,
     Guid CourseId,
-    bool IsFullSession
-) : IRequest<Result<Guid>>;
+    string Difficulty,
+    int QuestionCount,
+    bool IsFullSession = false,
+    string? Topic = null
+) : IRequest<Result<StartPracticeSessionResponse>>;

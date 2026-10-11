@@ -5,6 +5,9 @@ using FluentAssertions;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Entities;
@@ -18,7 +21,7 @@ public class CleanArchitectureRulesTests
     private static readonly Assembly DomainAssembly = typeof(User).Assembly;
     private static readonly Assembly ApplicationAssembly = typeof(Result).Assembly;
     private static readonly Assembly InfrastructureAssembly = typeof(OralExamDbContext).Assembly;
-    private static readonly Assembly ApiAssembly = typeof(API.Controllers.v1.QuestionsController).Assembly;
+    private static readonly Assembly ApiAssembly = typeof(OralExamination.API.Middlewares.GlobalExceptionMiddleware).Assembly;
 
     [Fact(DisplayName = "1. Tầng Domain tuyệt đối không tham chiếu các tầng ngoài (Application, Infrastructure, API)")]
     public void Domain_Assembly_Must_Not_Reference_Outer_Layers()
@@ -220,6 +223,81 @@ public class CleanArchitectureRulesTests
 
             inheritsAbstractValidator.Should().BeTrue(
                 $"Validator {validator.Name} bắt buộc phải kế thừa từ AbstractValidator<T>");
+        }
+    }
+
+    [Fact(DisplayName = "10. MF-01/MF-02 Practice Handlers tuyệt đối KHÔNG phụ thuộc vào IStorageService (Cloudflare R2)")]
+    public void Practice_Handlers_Must_Not_Depend_On_StorageService()
+    {
+        var practiceHandlerTypes = ApplicationAssembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract &&
+                        t.Namespace != null && t.Namespace.Contains("Features.Practice") &&
+                        t.Name.EndsWith("Handler"))
+            .ToList();
+
+        practiceHandlerTypes.Should().NotBeEmpty("Phân hệ Practice phải có các Handlers trong Features.Practice");
+
+        foreach (var handler in practiceHandlerTypes)
+        {
+            var constructors = handler.GetConstructors();
+            foreach (var ctor in constructors)
+            {
+                var parameters = ctor.GetParameters();
+                foreach (var param in parameters)
+                {
+                    param.ParameterType.Should().NotBe(typeof(IStorageService),
+                        $"Handler {handler.Name} trong phân hệ MF-01/02 tuyệt đối không được inject IStorageService (chỉ stream sang Whisper, không lưu R2)");
+                }
+            }
+        }
+    }
+
+    [Fact(DisplayName = "11. Tất cả MediatR Handlers trong Application Layer phải được cấu hình đầy đủ dependencies trong DI")]
+    public void All_MediatR_Handlers_Must_Have_Valid_Dependencies_Registered_In_DI()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        
+        var inMemorySettings = new System.Collections.Generic.Dictionary<string, string?>
+        {
+            {"ConnectionStrings:DefaultConnection", "Host=localhost;Port=5432;Database=oralexam_test_db;Username=test;Password=test"},
+            {"Cloudflare:AccountId", "test-acc"},
+            {"Cloudflare:ApiToken", "test-token"},
+            {"Storage:AccessKey", "test-key"},
+            {"Storage:SecretKey", "test-secret"},
+            {"Storage:ServiceUrl", "https://test.r2.com"},
+            {"Gemini:ApiKey", "test-gemini-key"}
+        };
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        services.AddSingleton<IConfiguration>(config);
+        OralExamination.Application.DependencyInjection.AddApplication(services);
+        OralExamination.Infrastructure.DependencyInjection.AddInfrastructure(services, config);
+        Microsoft.Extensions.DependencyInjection.LoggingServiceCollectionExtensions.AddLogging(services);
+
+        // Build with validation enabled
+        var provider = services.BuildServiceProvider(new Microsoft.Extensions.DependencyInjection.ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true
+        });
+
+        using var scope = provider.CreateScope();
+
+        var handlerTypes = ApplicationAssembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract &&
+                        t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>)))
+            .ToList();
+
+        handlerTypes.Should().NotBeEmpty();
+
+        foreach (var handlerType in handlerTypes)
+        {
+            var interfaceType = handlerType.GetInterfaces()
+                .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>));
+            var resolved = scope.ServiceProvider.GetService(interfaceType);
+            resolved.Should().NotBeNull($"MediatR Handler {handlerType.Name} phải giải quyết được toàn bộ dependencies trong DI container");
         }
     }
 }

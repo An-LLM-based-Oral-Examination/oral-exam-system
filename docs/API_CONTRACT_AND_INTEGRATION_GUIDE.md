@@ -3,13 +3,13 @@
 **Tài liệu này quy định bắt buộc (Mandatory) các chuẩn mực kết nối giữa Frontend (React 19 / Vite) và Backend (.NET 8 Clean Architecture) cho 4 thành viên:**  
 - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead BE Architect (MediatR CQRS, System.Threading.Channels, One-Way Lock, System Integration).  
 - 🧑 **Nguyễn Trọng Tốt:** BE Developer, AI Integration & QA Lead (Gemini 1.5 Flash/Pro CoT, Whisper STT, Barem Rubric 10.0, Unit & Architecture Tests).  
-- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 28 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
+- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
 - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator (React 19 Vite, Tailwind CSS v4, Web Speech API STT/TTS, Buffer Screen, Kiosk Lockdown, Waveform Player, Contract-First API Sync).  
 
 **Quy chuẩn cốt lõi:**  
 - **Tách biệt hoàn toàn:** Kho luyện tập mở (`practice_questions`, `practice_answers`) và kho thi cử bảo mật (`exam_questions`, `mock_exam_*`, `official_exam_*`).  
-- **Buffer Screen:** 30 giây cho phép sinh viên nghe TTS, nói qua Mic, xem transcript Web Speech và chỉnh sửa trước khi nộp bài.  
-- **Quota Guard:** Đếm trực tiếp từ PostgreSQL $\le 3$ lượt/ngày/môn cho thi thử (MF-02).  
+- **Buffer Screen:** Thời gian đệm cấu hình động 10–300 giây (mặc định 60s do Admin cấu hình chung qua `system_configs` cho MF-01) cho phép sinh viên nghe TTS, nói qua Mic, xem transcript Web Speech và chỉnh sửa trước khi nộp bài.  
+- **Quota Guard:** Đếm trực tiếp từ PostgreSQL theo hạn ngạch môn học do Trưởng Bộ Môn cấu hình (`max_mock_exams_per_day`) cho thi thử (MF-02).  
 - **Hàng đợi RAM:** `BoundedChannel` 1,000 slots trả `202 Accepted` trong $< 100$ms, kết quả trả qua WebSocket SignalR `/hubs/practice`.  
 - **Thi thật phòng Lab (MF-04):** Bóc băng Whisper STT Server-side kèm timestamps, Cloudflare R2 lưu `STT_MSSV.webm`, băm SHA-256 niêm phong, và cơ chế Khóa điểm một chiều `OneWayLockInterceptor` (`HTTP 403`).
 
@@ -67,9 +67,9 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 
 ## 4. BẢO MẬT & XÁC THỰC (AUTHENTICATION & JWT CONTRACT)
 
-### 4.1. Đăng nhập hệ thống (Email / Password cho Dev & FPT Google OAuth PKCE)
+### 4.1. Đăng nhập hệ thống (Google OAuth 2.0 PKCE)
 
-#### Đăng nhập FPT Google OAuth 2.0 PKCE (Quy chuẩn Production)
+#### Đăng nhập Google OAuth 2.0 PKCE (Quy chuẩn Toàn Hệ Thống)
 - **Endpoint:** `POST /api/v1/auth/google-login`
 - **Quyền truy cập:** Public
 - **Request Body:**
@@ -96,17 +96,10 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 }
 ```
 
-#### Đăng nhập Email / Mật khẩu nội bộ (Dành cho Dev & Giảng viên)
-- **Endpoint:** `POST /api/v1/auth/login`
-- **Quyền truy cập:** Public
-- **Request Body:**
-```json
-{
-  "email": "totnd@fe.edu.vn",
-  "password": "Password123!"
-}
-```
-- **Response 200 OK:** Trả về `accessToken`, `refreshToken`, và `user` tương tự như trên.
+#### Cơ chế Đăng nhập Xác thực Toàn Hệ Thống
+- Hệ thống áp dụng chuẩn bảo mật **100% Google OAuth 2.0 PKCE** cho toàn bộ 5 vai trò (`student`, `lecturer`, `department_head`, `proctor`, `admin`), hỗ trợ mọi tài khoản email Google hợp lệ.
+- **Tuyệt đối không sử dụng endpoint đăng nhập mật khẩu cục bộ (`POST /api/v1/auth/login`)**: Loại bỏ hoàn toàn nguy cơ lưu trữ hash mật khẩu và tấn công brute-force.
+- Mọi phiên làm việc sau khi xác thực qua Google Callback nhận cặp `accessToken` (JWT 15 phút) và `refreshToken` (7 ngày).
 
 #### Cấp lại Access Token mới (Silent Refresh Token)
 - **Endpoint:** `POST /api/v1/auth/refresh-token`
@@ -150,11 +143,12 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | Giám sát phòng thi Lab MF-04 (`/api/v1/official-exams/shifts/*`) | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Thẩm định điểm & Công bố điểm (Publish Grades) MF-04 | ❌ | ✅ | ✅ | ❌ | ✅ |
 | Sinh viên nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Tra cứu danh sách đơn phúc khảo (`GET /api/v1/appeals`) | ✅ (của mình) | ❌ | ✅ | ❌ | ✅ |
-| Trưởng Bộ Môn thẩm định phúc khảo (`PUT /api/v1/appeals/{id}/review`) | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Tra cứu danh sách đơn phúc khảo (`GET /api/v1/appeals`) | ✅ (của mình) | ✅ (được giao) | ✅ | ❌ | ✅ |
+| Trưởng Bộ Môn giao Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`) | ❌ | ❌ | ✅ | ❌ | ✅ |
+| Giảng viên chấm lại / Thẩm định phúc khảo (`PUT /api/v1/appeals/{id}/review`) | ❌ | ✅ | ✅ | ❌ | ✅ |
 | Quản trị hệ thống, DLQ Replay & Audit Logs (`/api/v1/admin/*`) | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-*Ghi chú quan trọng:* Tính năng AI sinh câu hỏi từ FLM/Syllabus mở quyền sử dụng cho cả **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)**. Giảng viên được tự thiết kế Barem Rubric riêng 10.0đ, tinh chỉnh câu hỏi và sau đó ấn **"Gửi lên cho Bộ Môn"** (`SUBMITTED_FOR_REVIEW`) để Trưởng Bộ Môn thẩm định và phê duyệt chính thức vào ngân hàng đề. Tại MF-04, sau khi kết thúc ca thi, AI chấm điểm ngầm chuyển Giảng viên thẩm định các bài nghi ngờ qua Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT); khi 100% sinh viên có điểm, Giảng viên ấn **"Công Bố Điểm"** (`Publish Grades`); Sinh viên xem điểm trên Student Portal, nếu không đồng ý thì nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) trực tiếp trên Student Portal để chuyển Trưởng Bộ Môn thẩm định.
+*Ghi chú quan trọng:* Tính năng AI sinh câu hỏi từ FLM/Syllabus mở quyền sử dụng cho cả **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)**. Giảng viên được tự thiết kế Barem Rubric riêng 10.0đ, tinh chỉnh câu hỏi và sau đó ấn **"Gửi lên cho Bộ Môn"** (`SUBMITTED_FOR_REVIEW`) để Trưởng Bộ Môn thẩm định và phê duyệt chính thức vào ngân hàng đề. Tại MF-04, sau khi kết thúc ca thi, AI chấm điểm ngầm chuyển Giảng viên thẩm định các bài nghi ngờ qua Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT); khi 100% sinh viên có điểm, Giảng viên ấn **"Công Bố Điểm"** (`Publish Grades`); Sinh viên xem điểm trên Student Portal, nếu không đồng ý thì nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) trực tiếp trên Student Portal để chuyển Trưởng Bộ Môn tiếp nhận và giao cho một Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
 
 ---
 
@@ -173,6 +167,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | 5.8 | Hậu kiểm & Công bố điểm | `/api/v1/official-exams/shifts/*` | Lecturer |
 | 5.9 | Quản trị DLQ & Audit | `/api/v1/admin/*` | Admin |
 | 5.10 | Phúc khảo nội bộ MF-04 | `/api/v1/appeals` | Student, Department Head |
+| 5.11 | Thông báo trong ứng dụng FE-11 | `/api/v1/notifications` | All Roles |
 
 ### 5.1. Quản lý Học thuật: Học kỳ, Môn học, Lớp học & Danh sách Sinh viên
 *(Phân hệ CSDL: `semesters`, `courses`, `classes`, `class_enrollments`)*
@@ -193,6 +188,60 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   }
 ]
 ```
+
+#### Tạo mới học kỳ (FE-08)
+- **Endpoint:** `POST /api/v1/academic/semesters`
+- **Quyền:** `admin`
+- **Request Body:**
+```json
+{
+  "code": "SP27",
+  "name": "Spring 2027",
+  "startDate": "2027-01-05T00:00:00Z",
+  "endDate": "2027-05-15T23:59:59Z",
+  "isActive": true
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "id": "11111111-0000-0000-0000-000000000002",
+  "code": "SP27",
+  "name": "Spring 2027",
+  "startDate": "2027-01-05T00:00:00Z",
+  "endDate": "2027-05-15T23:59:59Z",
+  "isActive": true,
+  "createdAt": "2026-10-10T08:00:00Z"
+}
+```
+- **Response 400 Bad Request:** Nếu mã học kỳ `code` đã tồn tại hoặc `endDate <= startDate`.
+
+#### Cập nhật học kỳ (FE-08)
+- **Endpoint:** `PUT /api/v1/academic/semesters/{id}`
+- **Quyền:** `admin`
+- **Request Body:**
+```json
+{
+  "name": "Spring 2027 (Điều chỉnh)",
+  "startDate": "2027-01-10T00:00:00Z",
+  "endDate": "2027-05-20T23:59:59Z",
+  "isActive": true
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "id": "11111111-0000-0000-0000-000000000002",
+  "code": "SP27",
+  "name": "Spring 2027 (Điều chỉnh)",
+  "startDate": "2027-01-10T00:00:00Z",
+  "endDate": "2027-05-20T23:59:59Z",
+  "isActive": true,
+  "updatedAt": "2026-10-10T08:30:00Z"
+}
+```
+- **Response 404 Not Found:** Nếu không tìm thấy học kỳ tương ứng.
+
 
 #### Lấy danh sách môn học
 - **Endpoint:** `GET /api/v1/academic/courses`
@@ -1199,26 +1248,144 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 #### 1. Khởi tạo phiên luyện tập
 - **Endpoint:** `POST /api/v1/practice/sessions`
 - **Quyền:** `student`
+- **Mô tả:** Khởi tạo phiên luyện tập cho cả 2 chế độ `[Per-Question]` và `[Full-Session]`. Hỗ trợ chọn độ khó cố định (`easy`, `medium`, `hard`) hoặc ngẫu nhiên tăng dần từ Dễ đến Khó (`progressive` với 3 đến 10 câu hỏi, cấu hình động qua `system_configs`).
 - **Request Body:**
 ```json
 {
+  "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "courseId": "22222222-0000-0000-0000-000000000001",
-  "practiceMode": "per_question"
+  "difficulty": "progressive",
+  "questionCount": 5,
+  "isFullSession": false,
+  "topic": "Clean Architecture & CQRS"
 }
 ```
-- **Response 201 Created:** Trả về `sessionId` phiên luyện tập.
+- **Bảng Đặc tả Tham số Request:**
+| Tên trường | Kiểu | Ràng buộc | Mô tả |
+|:---|:---|:---:|:---|
+| `courseId` | `uuid` | Bắt buộc | ID môn học sinh viên muốn luyện tập |
+| `difficulty` | `string` | Bắt buộc | Mức độ khó: `"easy"`, `"medium"`, `"hard"`, hoặc `"progressive"` (ngẫu nhiên từ Dễ $\to$ Khó) |
+| `questionCount` | `int` | Bắt buộc | Số lượng câu hỏi (1..10; nếu chọn `progressive` bắt buộc từ 3 đến 10 câu do `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` trong `system_configs` quy định) |
+| `isFullSession` | `bool` | Tùy chọn | Mặc định `false`: `false` cho chế độ `[Per-Question]` (luyện từng câu có follow-up khi điểm 4.0–8.0), `true` cho chế độ `[Full-Session]` (luyện trọn gói liền mạch không follow-up) |
+| `topic` | `string` | Tùy chọn | Chủ đề hoặc từ khóa bài học muốn tập trung ôn luyện |
+| `studentId` | `uuid` | Tùy chọn | ID tài khoản sinh viên (mặc định tự động lấy từ JWT Claims nếu để trống) |
 
-#### 2. Nộp câu trả lời luyện tập (Phòng thủ 4 tầng — Hàng đợi Bounded Channel 1,000 slots)
-- **Endpoint:** `POST /api/v1/practice/answers`
+- **Response 201 Created (hoặc 200 OK):**
+```json
+{
+  "sessionId": "b4a3c2d1-9876-4abc-9def-0123456789ab",
+  "transcriptBufferSeconds": 60,
+  "questions": [
+    {
+      "questionId": "11111111-2222-3333-4444-555555555555",
+      "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP) trong SOLID và cho ví dụ áp dụng trong .NET 8.",
+      "rubricCriteria": [
+        "Định nghĩa chính xác DIP (High-level không phụ thuộc Low-level)",
+        "Mô tả vai trò của Interface/Abstraction",
+        "Ví dụ triển khai Dependency Injection trong C# / .NET 8"
+      ]
+    },
+    {
+      "questionId": "66666666-7777-8888-9999-000000000000",
+      "content": "Phân biệt sự khác nhau giữa CQRS Command và CQRS Query.",
+      "rubricCriteria": [
+        "Mục đích Command làm thay đổi trạng thái (State change)",
+        "Mục đích Query chỉ đọc dữ liệu (Read-only, AsNoTracking)",
+        "Lợi ích tách biệt hai mô hình"
+      ]
+    }
+  ]
+}
+```
+- **Response 400 Bad Request:** Nếu kho đề không đủ câu hỏi cho các mức độ yêu cầu (kèm thông báo tiếng Việt rõ ràng) hoặc `questionCount` vi phạm ngưỡng cấu hình:
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "Dữ liệu đầu vào không hợp lệ.",
+  "status": 400,
+  "detail": "Kho đề hiện tại chỉ có 2 câu hỏi mức Khó, không đủ để tạo phiên với 5 câu hỏi."
+}
+```
+
+#### 2. Lấy thông tin chi tiết phiên luyện tập
+- **Endpoint:** `GET /api/v1/practice/sessions/{sessionId}`
+- **Quyền:** `student`, `lecturer`, `admin`
+- **Mô tả:** Lấy thông tin chi tiết phiên luyện tập và danh sách câu trả lời đã nộp (kèm điểm số nếu đã chấm xong).
+- **Response 200 OK:**
+```json
+{
+  "sessionId": "b4a3c2d1-9876-4abc-9def-0123456789ab",
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "courseCode": "PRN231",
+  "courseName": "Building Cross-Platform Applications with .NET",
+  "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "studentName": "Lê Vũ Hoàng",
+  "practiceMode": "per_question",
+  "status": "in_progress",
+  "transcriptBufferSeconds": 60,
+  "startedAt": "2026-10-10T08:00:00Z",
+  "endedAt": null,
+  "questions": [
+    {
+      "questionId": "11111111-2222-3333-4444-555555555555",
+      "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP)...",
+      "rubricCriteria": [
+        "Định nghĩa chính xác DIP",
+        "Mô tả vai trò Interface/Abstraction",
+        "Ví dụ triển khai DI trong .NET 8"
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "answerId": "77777777-0000-0000-0000-000000000001",
+      "questionId": "11111111-2222-3333-4444-555555555555",
+      "answerText": "Theo em Dependency Inversion phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp...",
+      "isFollowUp": false,
+      "parentAnswerId": null,
+      "status": "graded",
+      "submittedAt": "2026-10-10T08:00:05Z",
+      "totalScore": 8.50,
+      "feedback": "Bạn nắm vững lý thuyết DIP, đối chiếu chính xác giữa Domain và Infrastructure.",
+      "confidenceScore": 0.94,
+      "isSuspicious": false,
+      "needsFollowUp": false,
+      "followUpPrompt": null,
+      "criteriaScores": [
+        {
+          "criterionId": "aaaaaaaa-0000-0000-0000-000000000001",
+          "criterionName": "Định nghĩa và bản chất nguyên lý DIP",
+          "score": 3.00,
+          "comment": "Chính xác, định nghĩa chuẩn mực"
+        },
+        {
+          "criterionId": "aaaaaaaa-0000-0000-0000-000000000002",
+          "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET",
+          "score": 3.50,
+          "comment": "Giải thích tốt, cần lưu ý thêm về DI Lifetime"
+        },
+        {
+          "criterionId": "aaaaaaaa-0000-0000-0000-000000000003",
+          "criterionName": "Lợi ích Unit Testing và Loose Coupling",
+          "score": 2.00,
+          "comment": "Đã nêu được mock nhưng chưa nhấn mạnh isolation"
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### 3. Nộp câu trả lời luyện tập (Phòng thủ 4 tầng — Hàng đợi Bounded Channel 1,000 slots)
+- **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/answers`
 - **Quyền:** `student`
 - **Cơ chế:** Ghi DB `PENDING` (< 100ms), đẩy vào Bounded Channel, phản hồi ngay `202 Accepted`.
 - **Request Body:**
 ```json
 {
-  "sessionId": "66666666-0000-0000-0000-000000000001",
   "questionId": "55555555-0000-0000-0000-000000000001",
+  "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "answerText": "Theo em Dependency Inversion phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp...",
-  "audioUrl": null,
   "isFollowUp": false,
   "parentAnswerId": null
 }
@@ -1226,44 +1393,136 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - **Response 202 Accepted:**
 ```json
 {
-  "answerId": "77777777-0000-0000-0000-000000000001",
-  "status": "pending",
-  "message": "Bài nộp đã được tiếp nhận vào hàng đợi xử lý. Kết quả chấm điểm AI sẽ được phát qua SignalR."
+  "answerId": "77777777-0000-0000-0000-000000000001"
 }
 ```
 
-#### 3. Kết nối thời gian thực SignalR Hub
+#### 4. Nộp câu trả lời hàng loạt (Batch Submit cho Full-Session)
+- **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/batch-submit`
+- **Quyền:** `student`
+- **Mô tả:** Dùng cho chế độ `[Full-Session]` khi sinh viên hoàn thành toàn bộ các câu hỏi và bấm nộp toàn bộ.
+- **Request Body:**
+```json
+{
+  "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "answers": [
+    {
+      "questionId": "55555555-0000-0000-0000-000000000001",
+      "answerText": "Theo em Dependency Inversion..."
+    },
+    {
+      "questionId": "55555555-0000-0000-0000-000000000002",
+      "answerText": "Sự khác biệt giữa Command và Query..."
+    }
+  ]
+}
+```
+- **Response 202 Accepted:** Không có response body (Empty body với status `202 Accepted`). Toàn bộ câu trả lời được đưa vào hàng đợi chấm điểm ngầm.
+
+#### 5. Hoàn tất phiên luyện tập (CompleteSession)
+- **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/complete`
+- **Quyền:** `student`
+- **Mô tả:** Gọi khi sinh viên hoàn thành phiên luyện tập hoặc muốn kết thúc phiên để cập nhật trạng thái `status = "completed"` và ghi nhận `ended_at = DateTime.UtcNow`.
+- **Request Headers:**
+  * `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+- **Response 200 OK:**
+```json
+{
+  "message": "Phiên luyện tập đã kết thúc thành công."
+}
+```
+
+#### 6. Lấy danh sách lịch sử luyện tập (GetStudentHistory)
+- **Endpoint:** `GET /api/v1/practice/student/history`
+- **Quyền:** `student`
+- **Query Params:**
+  * `studentId`: (*uuid*, optional - nếu không truyền sẽ lấy từ JWT token của sinh viên đang đăng nhập).
+- **Mô tả:** Lấy toàn bộ lịch sử các phiên luyện tập của sinh viên để hiển thị lên Tab Luyện Tập của trang Lịch sử (FE-02) trên Student Portal.
+- **Response 200 OK:**
+```json
+[
+  {
+    "sessionId": "e2a3b4c5-6789-0123-4567-89abcdef0123",
+    "courseId": "22222222-0000-0000-0000-000000000001",
+    "courseCode": "PRN231",
+    "courseName": "Building Cross-Platform Applications with .NET",
+    "practiceMode": "per_question",
+    "status": "completed",
+    "startedAt": "2026-10-08T03:00:00Z",
+    "endedAt": "2026-10-08T03:25:30Z",
+    "totalQuestions": 5,
+    "answeredQuestions": 6,
+    "averageScore": 7.80
+  }
+]
+```
+
+#### 7. Tải lên âm thanh nhận diện Whisper STT (Upload Audio Stream)
+- **Endpoint:** `POST /api/v1/storage/upload-audio`
+- **Quyền:** `student`
+- **Content-Type:** `multipart/form-data`
+- **Mô tả:** Stream âm thanh nhận diện qua Whisper STT server-side để nhận diện và trả về văn bản bóc băng (`transcript`) cho màn hình đệm. MF-01 KHÔNG lưu audio vào Cloudflare R2 hay CSDL.
+- **Response 200 OK:**
+```json
+{
+  "transcript": "Theo em Dependency Inversion phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp...",
+  "durationSeconds": 14.5
+}
+```
+
+#### 8. Kết nối thời gian thực SignalR Hub
 - **Hub URL:** `/hubs/practice`
-- **Event Name:** `ReceiveScorecard`
-- **Payload SignalR phát về Client:**
+- **Client Invokes:** `JoinSession(sessionId)`, `LeaveSession(sessionId)`
+- **Sự kiện Realtime Backend phát về Client:**
+  * 🎯 `ReceiveGradingResult`: Kích hoạt khi AI hoàn tất chấm điểm:
 ```json
 {
   "answerId": "77777777-0000-0000-0000-000000000001",
   "questionId": "55555555-0000-0000-0000-000000000001",
+  "answerText": "Theo em Dependency Inversion phát biểu rằng...",
+  "isFollowUp": false,
+  "parentAnswerId": null,
+  "status": "graded",
+  "submittedAt": "2026-10-10T08:00:05Z",
   "totalScore": 8.50,
-  "confidenceScore": 0.94,
   "feedback": "Bạn nắm vững lý thuyết DIP, đối chiếu chính xác giữa Domain và Infrastructure.",
-  "criteriaDetails": [
-    { "criterionName": "Định nghĩa và bản chất nguyên lý DIP", "score": 3.00, "comment": "Chính xác, định nghĩa chuẩn mực" },
-    { "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET", "score": 3.50, "comment": "Giải thích tốt, cần lưu ý thêm về DI Lifetime" },
-    { "criterionName": "Lợi ích Unit Testing và Loose Coupling", "score": 2.00, "comment": "Đã nêu được mock nhưng chưa nhấn mạnh isolation" }
-  ],
-  "followUpQuestion": {
-    "prompt": "Nếu cần thay đổi thư viện ngoài từ Entity Framework sang Dapper, tầng nào bị ảnh hưởng?",
-    "parentAnswerId": "77777777-0000-0000-0000-000000000001"
-  }
+  "confidenceScore": 0.94,
+  "isSuspicious": false,
+  "needsFollowUp": false,
+  "followUpPrompt": null,
+  "criteriaScores": [
+    {
+      "criterionId": "aaaaaaaa-0000-0000-0000-000000000001",
+      "criterionName": "Định nghĩa và bản chất nguyên lý DIP",
+      "score": 3.00,
+      "comment": "Chính xác, định nghĩa chuẩn mực"
+    },
+    {
+      "criterionId": "aaaaaaaa-0000-0000-0000-000000000002",
+      "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET",
+      "score": 3.50,
+      "comment": "Giải thích tốt, cần lưu ý thêm về DI Lifetime"
+    },
+    {
+      "criterionId": "aaaaaaaa-0000-0000-0000-000000000003",
+      "criterionName": "Lợi ích Unit Testing và Loose Coupling",
+      "score": 2.00,
+      "comment": "Đã nêu được mock nhưng chưa nhấn mạnh isolation"
+    }
+  ]
 }
 ```
+  * ⚠️ `ReceiveGradingError`: `(Guid answerId, string error)` - Phát thông báo khi tác vụ chấm điểm nền gặp lỗi xử lý.
 
 ---
 
 ### 5.6. Thi Thử Bấm Giờ (Mock Exam & Voice-First) — MF-02
 *(Phân hệ CSDL: `exam_structures`, `exam_sets`, `mock_exam_quotas`, `mock_exam_sessions`, `mock_exam_answers`)*
 
-#### 1. Bắt đầu thi thử (Quota Guard $\le 3$ lượt/ngày/môn bằng PostgreSQL)
+#### 1. Bắt đầu thi thử (Hạn ngạch thi thử do Trưởng Bộ Môn cấu hình động bằng PostgreSQL)
 - **Endpoint:** `POST /api/v1/mock-exams/sessions/start`
 - **Quyền:** `student`
-- **Mô tả:** Sinh viên chủ động lựa chọn môn học và chế độ Có/Không Follow-up (`hasFollowUp: true/false`).
+- **Mô tả:** Sinh viên chủ động lựa chọn môn học và chế độ Có/Không Follow-up (`hasFollowUp: true/false`). Hạn ngạch số lượt thi thử trong ngày (`max_mock_exams_per_day`) do Trưởng Bộ Môn cấu hình động theo từng môn học trong bảng `courses`.
 - **Request Body:**
 ```json
 {
@@ -1287,13 +1546,13 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   ]
 }
 ```
-- **Response 429 Too Many Requests (Khi vượt quá 3 lượt thi trong ngày):**
+- **Response 429 Too Many Requests (Khi vượt quá hạn ngạch thi thử trong ngày):**
 ```json
 {
   "type": "https://tools.ietf.org/html/rfc9110#section-15.5.28",
   "title": "Too Many Requests",
   "status": 429,
-  "detail": "Bạn đã sử dụng hết hạn ngạch 3 lượt thi thử trong ngày cho môn PRN231. Vui lòng quay lại vào ngày mai!"
+  "detail": "Bạn đã sử dụng hết hạn ngạch lượt thi thử trong ngày cho môn học PRN231 theo quy định của Bộ Môn. Vui lòng quay lại vào ngày mai!"
 }
 ```
 
@@ -1388,7 +1647,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 #### 0. Khởi tạo kỳ thi & Cấu hình môn thi (Trưởng Bộ Môn)
 - **Endpoint:** `POST /api/v1/official-exams/sessions`
 - **Quyền:** `department_head`, `admin`
-- **Mô tả:** Trưởng Bộ Môn khởi tạo kỳ thi (`OfficialExamSession` / Exam Season), gán môn thi vào kỳ thi, cấu hình Follow-up môn thi trong kỳ thi (`hasFollowUp: boolean`, `maxFollowUpQuestions: 1..2`) và `examInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`, `VoiceAndTextInput`) cùng `transcriptBufferSeconds` (10..300s).
+- **Mô tả:** Trưởng Bộ Môn khởi tạo kỳ thi (`OfficialExamSession` / Exam Season), gán môn thi vào kỳ thi, cấu hình Follow-up môn thi trong kỳ thi (`hasFollowUp: boolean`, `maxFollowUpQuestions: 1..2`) và `examInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`) cùng `transcriptBufferSeconds` (10..300s).
 - **Request Body:**
 ```json
 {
@@ -1420,12 +1679,12 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 1. Tạo ca thi phòng Lab & Import danh sách sinh viên Excel (Định dạng chuẩn FPT)
+#### 1. Tạo ca thi phòng Lab & Gán danh sách thí sinh (Từ lớp học hoặc Import Excel FPT)
 - **Tạo ca thi:** `POST /api/v1/official-exams/shifts`
-- **Import danh sách sinh viên (EPPlus):** `POST /api/v1/official-exams/shifts/{id}/import-roster`
+- **Gán danh sách thí sinh:** Danh sách thí sinh của ca thi được hệ thống tự động trích xuất và gán trực tiếp từ lớp học đã có trong hệ thống (`classes`, `class_enrollments`), hoặc Giám thị / Giảng viên có thể import danh sách dự phòng từ file Excel (EPPlus) qua endpoint: `POST /api/v1/official-exams/shifts/{id}/import-roster`.
 - **Quyền:** `lecturer`, `department_head`, `proctor`, `admin`
-- **Content-Type:** `multipart/form-data`
-- **Cấu hình hình thức thi:** `allowTranscriptEdit: boolean`, `allowTextInput: boolean`, `examInputMode: "VoiceOnly" | "VoiceWithTranscriptEdit" | "VoiceAndTextInput"` (Nếu `VoiceOnly`: Khóa cứng 100% phím máy Kiosk).
+- **Content-Type:** `multipart/form-data` (khi import Excel) hoặc `application/json` (khi gán từ lớp)
+- **Cấu hình hình thức thi:** `allowTranscriptEdit: boolean`, `examInputMode: "VoiceOnly" | "VoiceWithTranscriptEdit"` (Nếu `VoiceOnly`: Khóa cứng 100% phím máy Kiosk, chỉ trả lời qua mic).
 - **Response 200 OK:**
 ```json
 {
@@ -1433,7 +1692,6 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "roomLab": "LAB-302",
   "courseCode": "PRN231",
   "allowTranscriptEdit": false,
-  "allowTextInput": false,
   "examInputMode": "VoiceOnly",
   "totalImported": 40,
   "assignedTickets": [
@@ -1523,7 +1781,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   ],
   "internalAppeal": {
     "canAppeal": true,
-    "instruction": "Trường hợp không đồng ý với kết quả điểm thi vấn đáp đã công bố, sinh viên có thể nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal kèm lý do chi tiết. Đơn phúc khảo sẽ được chuyển thẳng tới Trưởng Bộ Môn để thẩm định lại toàn bộ bài thi.",
+    "instruction": "Trường hợp không đồng ý với kết quả điểm thi vấn đáp đã công bố, sinh viên có thể nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal kèm lý do chi tiết. Đơn phúc khảo sẽ được chuyển tới Trưởng Bộ Môn tiếp nhận và giao cho một Giảng viên chấm lại toàn bộ bài thi.",
     "appealDeadlineDays": 3,
     "appealEndpoint": "POST /api/v1/appeals"
   }
@@ -1565,8 +1823,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | `isKioskLocked` | `boolean` | Bắt buộc | Boolean | Trạng thái khóa màn hình Kiosk |
 | `kioskLockNotice` | `string` | Nullable | Text | Thông báo hiển thị trên màn hình khóa Kiosk |
 | `allowTranscriptEdit` | `boolean` | Bắt buộc | Boolean | Cờ cấu hình môn: Cho phép mở màn hình đệm sửa transcript |
-| `allowTextInput` | `boolean` | Bắt buộc | Boolean | Cờ cấu hình môn: Cho phép nhập văn bản / code |
-| `examInputMode` | `string` | Bắt buộc | Enum 3 chế độ | Phương thức làm bài của môn (`VoiceOnly`, `VoiceWithTranscriptEdit`, `VoiceAndTextInput`) để Kiosk thiết lập khóa cứng bàn phím |
+| `examInputMode` | `string` | Bắt buộc | Enum 2 chế độ | Phương thức làm bài của môn (`VoiceOnly`, `VoiceWithTranscriptEdit`) để Kiosk thiết lập khóa cứng bàn phím |
 
 - **Response 200 OK:**
 ```json
@@ -1579,7 +1836,6 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "isKioskLocked": true,
   "kioskLockNotice": "Bài thi đã được nộp thành công và đang được lưu trữ an toàn.",
   "allowTranscriptEdit": false,
-  "allowTextInput": false,
   "examInputMode": "VoiceOnly"
 }
 ```
@@ -1678,7 +1934,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   1. **Điều kiện tiên quyết bất biến:** Kiểm tra **100% sinh viên trong ca thi đã có điểm hoàn chỉnh** (tất cả các vé thi đều có `final_score` hoặc `ai_score` hợp lệ, không có vé nào còn ở trạng thái chưa chấm). Nếu phát hiện bất kỳ bài thi nào chưa có điểm, hệ thống từ chối và trả về `HTTP 422 Unprocessable Entity`.
   2. Giảng viên sau khi rà soát toàn bộ ca thi trên Cổng Hậu kiểm, bấm nút **"Công Bố Điểm"**.
   3. Hệ thống chuyển trạng thái toàn bộ vé thi trong ca từ `AUDITED` (hoặc `AI_GRADED`) sang `PUBLISHED`.
-  4. Kích hoạt vĩnh viễn cơ chế **Khóa một chiều (One-Way Lock)**: thiết lập `is_locked = true` trên toàn bộ vé thi của ca, kích hoạt `OneWayLockInterceptor`. Sau thời điểm này, mọi thao tác sửa điểm đều bị chặn và trả về `HTTP 403 Forbidden`.
+  4. Kích hoạt vĩnh viễn cơ chế **Khóa một chiều (One-Way Lock)**: thiết lập `is_locked = true` trên toàn bộ vé thi của ca, kích hoạt `OneWayLockInterceptor`. Sau thời điểm này, mọi thao tác sửa điểm đều bị chặn và trả về `HTTP 403 Forbidden` (ngoại trừ duy nhất đường hợp lệ khi Giảng viên được Trưởng Bộ Môn phân công chấm lại đơn phúc khảo nội bộ cập nhật điểm thông qua luồng thẩm định phúc khảo có kiểm soát và ghi log kiểm toán).
   5. Mở quyền cho sinh viên tra cứu điểm trên Student Portal.
 - **Request Body:** `{}`
 - **Response 200 OK:**
@@ -1712,7 +1968,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "type": "https://tools.ietf.org/html/rfc9110#section-15.5.4",
   "title": "Forbidden - One-Way Lock Activated",
   "status": 403,
-  "detail": "Ca thi và bài thi này đã được Giảng viên công bố điểm và khóa một chiều (One-Way Lock). Hồ sơ khảo thí đã niêm phong vĩnh viễn, tuyệt đối không được phép chỉnh sửa."
+  "detail": "Ca thi và bài thi này đã được Giảng viên công bố điểm và khóa một chiều (One-Way Lock). Hồ sơ khảo thí đã niêm phong vĩnh viễn, tuyệt đối không được phép chỉnh sửa trực tiếp (ngoại trừ quy trình chấm lại phúc khảo hợp lệ do Trưởng Bộ Môn phân công cho Giảng viên)."
 }
 ```
 
@@ -1731,7 +1987,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "ticketId": "cccccccc-0000-0000-0000-000000000001",
   "isLocked": true,
   "lockedAt": "2026-10-25T15:00:00Z",
-  "message": "Điểm bài thi đã được khóa một chiều thành công. Hồ sơ khảo thí đã được niêm phong vĩnh viễn."
+  "message": "Điểm bài thi đã được khóa một chiều thành công. Hồ sơ khảo thí đã được niêm phong vĩnh viễn (chỉ mở đường cập nhật điểm khi có quyết định phân công chấm lại phúc khảo từ Trưởng Bộ Môn)."
 }
 ```
 
@@ -1800,7 +2056,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 #### 1. Sinh viên nộp đơn phúc khảo bài thi chính thức
 - **Endpoint:** `POST /api/v1/appeals`
 - **Quyền:** `student` (chính chủ sở hữu vé thi đã công bố điểm)
-- **Mô tả:** Sau khi bài thi được công bố điểm (`PUBLISHED`), nếu sinh viên không đồng ý với kết quả đánh giá, sinh viên nộp đơn phúc khảo trực tiếp trên Student Portal kèm lý do cụ thể. Hệ thống tạo bản ghi `appeal_requests` ở trạng thái `PENDING` và tự động gán cho Trưởng Bộ Môn (`department_head`) của môn học tương ứng để thụ lý thẩm định.
+- **Mô tả:** Sau khi bài thi được công bố điểm (`PUBLISHED`), nếu sinh viên không đồng ý với kết quả đánh giá, sinh viên nộp đơn phúc khảo trực tiếp trên Student Portal kèm lý do cụ thể. Hệ thống tạo bản ghi `appeal_requests` ở trạng thái `PENDING` và chuyển đến Trưởng Bộ Môn (`department_head`) của môn học tương ứng để tiếp nhận và giao cho một Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
 - **Request Body:**
 ```json
 {
@@ -1817,7 +2073,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "status": "PENDING",
   "assignedTo": "e4c5b2a1-0001-4000-8000-000000000003",
   "createdAt": "2026-10-26T08:30:00Z",
-  "message": "Đã tiếp nhận đơn phúc khảo thành công. Đơn đã được chuyển đến Trưởng Bộ Môn để thẩm định lại bài thi."
+  "message": "Đã tiếp nhận đơn phúc khảo thành công. Đơn đã được chuyển đến Trưởng Bộ Môn để tiếp nhận và phân công Giảng viên chấm lại bài thi."
 }
 ```
 - **Response 422 Unprocessable Entity:** Nếu vé thi chưa ở trạng thái `PUBLISHED` hoặc lý do phúc khảo để trống / dưới 10 ký tự.
@@ -1825,9 +2081,9 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 #### 2. Tra cứu danh sách đơn phúc khảo
 - **Endpoint:** `GET /api/v1/appeals`
-- **Quyền:** `department_head`, `admin`, `student` (sinh viên chỉ xem đơn của chính mình)
+- **Quyền:** `department_head`, `admin`, `lecturer` (giảng viên xem đơn được phân công), `student` (sinh viên chỉ xem đơn của chính mình)
 - **Query Params:**
-  - `status`: `"PENDING"` | `"APPROVED"` | `"REJECTED"` (optional)
+  - `status`: `"PENDING"` | `"IN_REVIEW"` | `"APPROVED"` | `"REJECTED"` (optional)
   - `courseId`: UUID môn học (optional)
   - `page`: default 1
   - `pageSize`: default 10
@@ -1857,10 +2113,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 3. Trưởng Bộ Môn ra quyết định thẩm định phúc khảo
+#### 3. Giảng viên được phân công hoặc Trưởng Bộ Môn ra quyết định thẩm định phúc khảo
 - **Endpoint:** `PUT /api/v1/appeals/{id}/review`
-- **Quyền:** `department_head`, `admin`
-- **Mô tả:** Trưởng Bộ Môn trực tiếp nghe lại file ghi âm và đối soát Evidence Panel để đưa ra phán quyết:
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Mô tả:** Giảng viên được phân công chấm lại (hoặc Trưởng Bộ Môn) trực tiếp nghe lại file ghi âm và đối soát Evidence Panel để đưa ra phán quyết:
   - Nếu `decision = "APPROVED"`: Chấp thuận phúc khảo, cập nhật điểm số mới (`proposedScore`), ghi nhận lý do điều chỉnh (`reviewNotes`), mở khóa một chiều có kiểm soát để cập nhật điểm chính thức vào vé thi và ghi log kiểm toán.
   - Nếu `decision = "REJECTED"`: Bác bỏ yêu cầu phúc khảo, giữ nguyên điểm thi, ghi rõ lý do giải trình vào `reviewNotes`.
 - **Request Body:**
@@ -1884,6 +2140,115 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 - **Response 422 Unprocessable Entity:** Nếu thiếu trường `decision`, `reviewNotes` dưới 10 ký tự hoặc `proposedScore` nằm ngoài khoảng 0.0–10.0.
+
+#### 4. Trưởng Bộ Môn giao giảng viên chấm lại đơn phúc khảo
+- **Endpoint:** `PUT /api/v1/appeals/{id}/assign-lecturer`
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn ủy quyền / giao đơn phúc khảo cho Giảng viên chuyên môn thẩm định bài thi trên Evidence Panel và chấm lại. Hệ thống cập nhật `assigned_to = assignedLecturerId`, chuyển trạng thái đơn sang `IN_REVIEW`, và tự động gửi thông báo in-app (FE-11) tới Giảng viên được giao.
+- **Request Body:**
+```json
+{
+  "assignedLecturerId": "33333333-0000-0000-0000-000000000001",
+  "notes": "Nhờ thầy Tốt nghe lại đoạn trả lời 01:25-02:10 và chấm lại cho sinh viên này do micro phòng thi bị rè."
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "appealId": "dddddddd-0000-0000-0000-000000000001",
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "status": "IN_REVIEW",
+  "assignedTo": "33333333-0000-0000-0000-000000000001",
+  "assignedLecturerName": "Nguyen Trong Tot",
+  "assignedAt": "2026-10-26T10:00:00Z",
+  "notes": "Nhờ thầy Tốt nghe lại đoạn trả lời 01:25-02:10 và chấm lại cho sinh viên này do micro phòng thi bị rè.",
+  "message": "Đã phân công giảng viên chấm lại đơn phúc khảo thành công."
+}
+```
+- **Response 404 Not Found:** Nếu không tìm thấy đơn phúc khảo.
+- **Response 422 Unprocessable Entity:** Nếu `assignedLecturerId` rỗng, người được gán không có vai trò `lecturer`, hoặc đơn không ở trạng thái `PENDING`.
+
+---
+
+### 5.11. Hộp thư Thông báo trong Ứng dụng (In-App Notifications) — FE-11
+*(Phân hệ CSDL: `notifications`)*
+
+Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thông báo (Bell Icon) cho 5 vai trò người dùng, hỗ trợ 5 nhóm sự kiện chính:
+1. `EXAM_SCHEDULE_PUBLISHED`: Lịch thi và danh sách ca thi được công bố.
+2. `EXAM_GRADE_PUBLISHED`: Điểm thi chính thức của môn thi được Giảng viên công bố.
+3. `APPEAL_LECTURER_ASSIGNED`: Giảng viên được Trưởng Bộ Môn giao chấm lại đơn phúc khảo.
+4. `QUESTION_REVIEW_SUBMITTED`: Trưởng Bộ Môn nhận được câu hỏi dự thảo do Giảng viên gửi duyệt.
+5. `QUESTION_NEEDS_REVISION`: Giảng viên nhận được yêu cầu hiệu chỉnh câu hỏi từ Trưởng Bộ Môn.
+
+#### 1. Lấy danh sách thông báo của người dùng
+- **Endpoint:** `GET /api/v1/notifications`
+- **Quyền:** Authenticated (`student`, `lecturer`, `department_head`, `proctor`, `admin`)
+- **Query Params:**
+  - `unreadOnly`: `boolean` (mặc định `false`, nếu `true` chỉ lấy thông báo chưa đọc).
+  - `page`: `int` (mặc định 1).
+  - `pageSize`: `int` (mặc định 20, tối đa 50).
+- **Response 200 OK:**
+```json
+{
+  "totalCount": 5,
+  "unreadCount": 2,
+  "page": 1,
+  "pageSize": 20,
+  "items": [
+    {
+      "id": "eeeeeeee-0000-0000-0000-000000000001",
+      "title": "Điểm thi vấn đáp đã được công bố",
+      "message": "Điểm thi môn PRN231 - Ca 1 Sáng đã được Giảng viên công bố chính thức. Sinh viên vui lòng kiểm tra và xác nhận điểm hoặc gửi đơn phúc khảo trong vòng 3 ngày.",
+      "type": "EXAM_GRADE_PUBLISHED",
+      "isRead": false,
+      "metadata": {
+        "ticketId": "cccccccc-0000-0000-0000-000000000001",
+        "courseCode": "PRN231",
+        "shiftId": "bbbbbbbb-0000-0000-0000-000000000001"
+      },
+      "createdAt": "2026-10-25T15:00:00Z",
+      "readAt": null
+    },
+    {
+      "id": "eeeeeeee-0000-0000-0000-000000000002",
+      "title": "Phân công chấm lại đơn phúc khảo",
+      "message": "Trưởng Bộ Môn đã phân công bạn thẩm định lại đơn phúc khảo của sinh viên Lê Vũ Hoàng (SE170001) môn PRN231.",
+      "type": "APPEAL_LECTURER_ASSIGNED",
+      "isRead": false,
+      "metadata": {
+        "appealId": "dddddddd-0000-0000-0000-000000000001",
+        "ticketId": "cccccccc-0000-0000-0000-000000000001"
+      },
+      "createdAt": "2026-10-26T10:00:00Z",
+      "readAt": null
+    }
+  ]
+}
+```
+
+#### 2. Đánh dấu một thông báo đã đọc
+- **Endpoint:** `PUT /api/v1/notifications/{id}/read`
+- **Quyền:** Authenticated (chính chủ sở hữu thông báo)
+- **Response 200 OK:**
+```json
+{
+  "id": "eeeeeeee-0000-0000-0000-000000000001",
+  "isRead": true,
+  "readAt": "2026-10-25T15:05:00Z"
+}
+```
+- **Response 404 Not Found:** Nếu không tìm thấy thông báo hoặc thông báo không thuộc người dùng hiện tại.
+
+#### 3. Đánh dấu tất cả thông báo đã đọc
+- **Endpoint:** `PUT /api/v1/notifications/read-all`
+- **Quyền:** Authenticated
+- **Response 200 OK:**
+```json
+{
+  "updatedCount": 2,
+  "message": "Đã đánh dấu tất cả thông báo là đã đọc."
+}
+```
 
 ---
 *(Hợp đồng giao diện API Contract này là tài liệu pháp lý kỹ thuật bất biến giữa Frontend và Backend, bảo đảm tính toàn vẹn 100% khi tích hợp hệ thống).*

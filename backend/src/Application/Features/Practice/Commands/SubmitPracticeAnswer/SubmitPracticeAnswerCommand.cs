@@ -9,7 +9,6 @@ public sealed record SubmitPracticeAnswerCommand(
     Guid QuestionId,
     Guid StudentId,
     string AnswerText,
-    string? AudioUrl,
     bool IsFollowUp,
     Guid? ParentAnswerId
 ) : IRequest<Result<Guid>>;

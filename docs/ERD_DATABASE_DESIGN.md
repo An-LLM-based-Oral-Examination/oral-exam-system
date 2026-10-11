@@ -9,17 +9,17 @@
 > **Nhóm tác giả & Kỹ sư thực hiện:**  
 > - 🧑 **Nguyễn Quang Thành** — Lead Backend Engineer & System Architect  
 > - 🧑 **Nguyễn Trọng Tốt** — Backend Developer, AI Engineer & QA Lead  
-> - 🧑 **Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 28 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
+> - 🧑 **Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
 > - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator  
-> **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (28 bảng 3NF: 27 bảng lõi + 1 bảng phúc khảo bài thi)  
-> **Tệp sơ đồ Mermaid độc lập:** [`docs/diagrams/ERD_DATABASE_DIAGRAM.mmd`](./diagrams/ERD_DATABASE_DIAGRAM.mmd)  
+> **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (30 bảng 3NF: 27 bảng lõi + 1 bảng phúc khảo + 1 bảng cấu hình hệ thống + 1 bảng thông báo)  
+> **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](./diagrams/KIEN_TRUC_HE_THONG.drawio)  
 > **Bộ mã nguồn SQL DDL & Seed:** [`infra/postgres/init/01_schema.sql`](../infra/postgres/init/01_schema.sql) và [`02_seed.sql`](../infra/postgres/init/02_seed.sql)
 
 ---
 
-## 1. TỔNG QUAN KIẾN TRÚC DỮ LIỆU (6 BOUNDED CONTEXTS — 28 BẢNG 3NF: 27 BẢNG LÕI + 1 BẢNG PHÚC KHẢO)
+## 1. TỔNG QUAN KIẾN TRÚC DỮ LIỆU (6 BOUNDED CONTEXTS — 30 BẢNG 3NF: 27 BẢNG LÕI + 1 BẢNG PHÚC KHẢO + 2 BẢNG HỆ THỐNG & THÔNG BÁO)
 
-Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai thế giới: **Kho tự luyện tập mở (Practice)** và **Kho thi cử bảo mật (Exam)**, giải quyết triệt để nguy cơ lộ đề thi và không phụ thuộc vòng lẫn nhau. Hệ thống bao gồm 28 bảng (27 bảng lõi + 1 bảng phúc khảo) chia thành 6 Bounded Contexts cốt lõi:
+Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai thế giới: **Kho tự luyện tập mở (Practice)** và **Kho thi cử bảo mật (Exam)**, giải quyết triệt để nguy cơ lộ đề thi và không phụ thuộc vòng lẫn nhau. Hệ thống bao gồm 30 bảng (27 bảng lõi + 1 bảng phúc khảo + 1 bảng cấu hình hệ thống + 1 bảng thông báo) chia thành 6 Bounded Contexts cốt lõi và các phân hệ hỗ trợ:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -37,16 +37,18 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 │  • practice_questions (Public) │  • exam_structures (Matrix)   │    (MF-04)                    │
 │  • practice_sessions           │  • exam_sets (Randomized)      │  • exam_questions (Secure)    │
 │  • practice_answers            │  • exam_set_questions         │  • official_exam_sessions     │
-│  • ai_evaluations              │  • mock_exam_quotas (K <= 3)   │  • real_exam_session_shifts   │
-│  • ai_evaluation_details       │  • mock_exam_sessions (Timer)  │  • student_exam_tickets (1-40)│
-│                                │  • mock_exam_answers           │  • exam_question_submissions  │
+│  • ai_evaluations              │  • mock_exam_quotas            │  • real_exam_session_shifts   │
+│  • ai_evaluation_details       │    (Dynamic Quota)             │  • student_exam_tickets (1-40)│
+│                                │  • mock_exam_sessions (Timer)  │  • exam_question_submissions  │
 │                                │    (trỏ practice_questions)   │  • lecturer_audits (Reason)   │
 │                                │                                │  • lecturer_audit_details     │
 │                                │                                │  • appeal_requests (Phúc khảo)│
 ├────────────────────────────────┴────────────────────────────────┴───────────────────────────────┤
-│  [Chịu Lỗi & Kiểm Toán Không Thể Chối Bỏ]                                                       │
+│  [Chịu Lỗi, Cấu Hình & Thông Báo Enterprise]                                                   │
 │  • dead_letter_queues (Zero Data Loss - Phục hồi tự động 4 tầng)                                │
 │  • audit_logs (Lưu vết thay đổi dữ liệu nhạy cảm & điểm số)                                    │
+│  • system_configs (Cấu hình động: Min/Max Practice Questions, TranscriptBufferSeconds)         │
+│  • notifications (Hộp thư thông báo trong ứng dụng FE-11: 5 sự kiện)                           │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -93,7 +95,7 @@ erDiagram
     COURSES ||--o{ EXAM_SETS : "belongs to course"
     EXAM_SETS ||--|{ EXAM_SET_QUESTIONS : "comprises questions"
     EXAM_QUESTIONS ||--o{ EXAM_SET_QUESTIONS : "included in set"
-    USERS ||--o{ MOCK_EXAM_QUOTAS : "enforces daily quota (K<=3)"
+    USERS ||--o{ MOCK_EXAM_QUOTAS : "enforces daily quota"
     COURSES ||--o{ MOCK_EXAM_QUOTAS : "quota per course"
     USERS ||--o{ MOCK_EXAM_SESSIONS : "takes mock exam"
     COURSES ||--o{ MOCK_EXAM_SESSIONS : "mocks course"
@@ -121,15 +123,16 @@ erDiagram
     LECTURER_AUDITS ||--|{ LECTURER_AUDIT_DETAILS : "overrides criteria"
     RUBRIC_CRITERIA ||--o{ LECTURER_AUDIT_DETAILS : "rubric benchmark"
     STUDENT_EXAM_TICKETS ||--o| APPEAL_REQUESTS : "appealed by candidate"
-    USERS ||--o{ APPEAL_REQUESTS : "assigned department head"
+    USERS ||--o{ APPEAL_REQUESTS : "assigned regrading lecturer"
 
-    %% PHÂN HỆ BẢO MẬT & CHỊU LỖI
+    %% PHÂN HỆ BẢO MẬT, CHỊU LỖI & THÔNG BÁO
     USERS ||--o{ AUDIT_LOGS : "performed by user"
+    USERS ||--o{ NOTIFICATIONS : "receives in-app notifications"
 ```
 
 ---
 
-## 3. TỪ ĐIỂN DỮ LIỆU CHI TIẾT (DATA DICTIONARY 28 BẢNG: 27 BẢNG LÕI + 1 BẢNG PHÚC KHẢO)
+## 3. TỪ ĐIỂN DỮ LIỆU CHI TIẾT (DATA DICTIONARY 30 BẢNG: 27 BẢNG LÕI + 1 BẢNG PHÚC KHẢO + 2 BẢNG HỆ THỐNG & THÔNG BÁO)
 
 ### 3.1. Phân hệ 1: Định danh & Phân quyền (Identity & RBAC)
 
@@ -137,8 +140,7 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Định danh người dùng duy nhất toàn hệ thống |
-| `email` | `varchar(255)` | NOT NULL, UNIQUE | Email FPTU (`@fpt.edu.vn` hoặc `@fe.edu.vn`) |
-| `password_hash` | `varchar(255)` | NULLABLE | Hash mật khẩu (BCrypt/Argon2) cho tài khoản cục bộ |
+| `email` | `varchar(255)` | NOT NULL, UNIQUE | Email Google OAuth 2.0 PKCE toàn hệ thống (chấp nhận mọi tài khoản email hợp lệ) |
 | `full_name` | `varchar(150)` | NOT NULL | Họ và tên đầy đủ |
 | `student_code` | `varchar(20)` | UNIQUE, NULLABLE | Mã sinh viên (chỉ có với vai trò `student`, ví dụ: `SE170001`) |
 | `role` | `varchar(20)` | NOT NULL, CHECK in (`admin`, `department_head`, `lecturer`, `proctor`, `student`) | Vai trò người dùng trong hệ thống (`lecturer`: Giảng viên dùng AI sinh đề theo barem và cấu hình môn; `department_head`: Trưởng Bộ Môn duyệt đề và thẩm định phúc khảo) |
@@ -171,9 +173,9 @@ erDiagram
 | `has_follow_up` | `boolean` | NOT NULL, Default `false` | Cờ bật/tắt hỏi xoáy Follow-up cho môn học do Giảng viên cấu hình |
 | `transcript_buffer_seconds` | `int` | NOT NULL, Default `60`, CHECK `transcript_buffer_seconds BETWEEN 10 AND 300` | Thời gian đệm hiệu đính phiên âm theo môn (10–300s, mặc định 60s) |
 | `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 1 AND 5` | Số câu hỏi phụ Follow-up tối đa do Admin cấu hình cho hệ thống luyện tập MF-01 (1–5 câu, mặc định 2 câu) |
+| `max_mock_exams_per_day` | `int` | NOT NULL, Default `3`, CHECK `max_mock_exams_per_day >= 1` | Hạn ngạch thi thử tối đa trong ngày do Trưởng Bộ Môn cấu hình theo môn |
 | `allow_transcript_edit` | `boolean` | NOT NULL, Default `true` | Cho phép mở màn hình đệm sửa transcript sau khi phát biểu qua micro |
-| `allow_text_input` | `boolean` | NOT NULL, Default `true` | Cho phép gõ phím trực tiếp văn bản/code |
-| `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceAndTextInput'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`, `'VoiceAndTextInput'`) | Phương thức trả lời bài thi theo môn (`VoiceOnly` khóa phím Kiosk) |
+| `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceWithTranscriptEdit'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) | Phương thức trả lời bài thi theo môn (`VoiceOnly`: chỉ mic, khóa phím; `VoiceWithTranscriptEdit`: nói mic + mở đệm sửa transcript) |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hoạt động |
 
 #### Bảng `classes`
@@ -267,7 +269,6 @@ erDiagram
 | `question_id` | `uuid` | FK `practice_questions(id)` ON DELETE RESTRICT | Câu hỏi được trả lời |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp bài |
 | `answer_text` | `text` | NOT NULL | Văn bản câu trả lời sau Buffer (mặc định 60s cho MF-01 hoặc theo cấu hình môn) |
-| `audio_url` | `text` | NULLABLE | File ghi âm nếu có |
 | `is_follow_up` | `boolean` | NOT NULL, Default `false` | Có phải câu trả lời cho câu hỏi xoáy A2 |
 | `parent_answer_id` | `uuid` | FK `practice_answers(id)` ON DELETE SET NULL | Liên kết câu trả lời gốc nếu là câu phụ |
 | `status` | `varchar(20)` | NOT NULL, CHECK in (`pending`, `grading`, `graded`, `failed`) | Trạng thái chấm điểm |
@@ -331,14 +332,14 @@ erDiagram
 | `order_index` | `int` | NOT NULL, Default `1` | Thứ tự xuất hiện của câu hỏi trong bộ đề |
 | (UNIQUE) | `uq_exam_set_questions` | UNIQUE `(exam_set_id, exam_question_id)` | Ràng buộc: Một câu hỏi không được trùng lặp trong cùng một bộ đề |
 
-#### Bảng `mock_exam_quotas` (Hạn ngạch Thi Thử Ngày K <= 3)
+#### Bảng `mock_exam_quotas` (Hạn ngạch Thi Thử Ngày Theo Môn)
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi hạn ngạch thi thử |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên thực hiện thi thử |
 | `course_id` | `uuid` | FK `courses(id)` ON DELETE CASCADE | Môn học thi thử áp dụng hạn ngạch |
 | `quota_date` | `date` | NOT NULL | Ngày áp dụng hạn ngạch thi thử |
-| `used_count` | `int` | NOT NULL, Default `0`, CHECK `used_count >= 0 AND used_count <= 3` | Số lượt thi thử đã sử dụng trong ngày (Tối đa $K \le 3$, lượt 4 bị chặn `HTTP 429 Too Many Requests`) |
+| `used_count` | `int` | NOT NULL, Default `0`, CHECK `used_count >= 0` | Số lượt thi thử đã sử dụng trong ngày (Kiểm tra đối chiếu `courses.max_mock_exams_per_day` do Trưởng Bộ Môn cấu hình theo môn, vượt hạn ngạch bị chặn `HTTP 429 Too Many Requests`) |
 | `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật số lượt thi gần nhất |
 | (UNIQUE) | `uq_mock_exam_quotas` | UNIQUE `(student_id, course_id, quota_date)` | Ràng buộc: Mỗi sinh viên chỉ có 1 bản ghi hạn ngạch cho mỗi môn trong một ngày |
 
@@ -365,7 +366,6 @@ erDiagram
 | `question_id` | `uuid` | FK `practice_questions(id)` ON DELETE RESTRICT | Khóa ngoại trỏ sang kho câu hỏi luyện tập chung (`practice_questions`) |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp câu trả lời |
 | `answer_text` | `text` | NOT NULL | Văn bản câu trả lời sau màn hình đệm |
-| `audio_url` | `text` | NULLABLE | Đường dẫn file âm thanh tạm thời (nếu có) |
 | `is_follow_up` | `boolean` | NOT NULL, Default `false` | Có phải câu hỏi phụ Follow-up theo ngữ cảnh |
 | `status` | `varchar(20)` | NOT NULL, Default `'answered'`, CHECK in (`'answered'`, `'graded'`) | Trạng thái chấm điểm câu trả lời |
 | `score` | `numeric(4,2)` | NULLABLE | Điểm câu hỏi thi thử |
@@ -404,8 +404,8 @@ erDiagram
 | `title` | `varchar(255)` | NOT NULL | Tiêu đề đợt thi vấn đáp |
 | `exam_date` | `date` | NOT NULL | Ngày thi chính thức |
 | `has_follow_up` | `boolean` | NOT NULL, Default `true` | Cờ bật/tắt hỏi chuyên sâu do Trưởng Bộ Môn cấu hình cho môn thi trong kỳ thi |
-| `max_follow_up_questions` | `int` | NOT NULL, Default `1`, CHECK `max_follow_up_questions BETWEEN 1 AND 2` | Số câu hỏi phụ tối đa do Trưởng Bộ Môn cấu hình cho môn thi trong kỳ thi (1–2 câu, mặc định 1 câu, áp dụng đồng bộ cho các ca thi) |
-| `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceOnly'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`, `'VoiceAndTextInput'`) | Phương thức làm bài do Trưởng Bộ Môn cấu hình cho môn thi (`VoiceOnly` khóa phím Kiosk) |
+| `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 1 AND 5` | Số câu hỏi phụ tối đa do Trưởng Bộ Môn cấu hình cho môn thi trong kỳ thi (1–5 câu, mặc định 2 câu, áp dụng đồng bộ cho các ca thi) |
+| `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceWithTranscriptEdit'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) | Phương thức làm bài do Trưởng Bộ Môn cấu hình cho môn thi (`VoiceOnly` hoặc `VoiceWithTranscriptEdit`) |
 | `transcript_buffer_seconds` | `int` | NOT NULL, Default `60`, CHECK `transcript_buffer_seconds BETWEEN 10 AND 300` | Thời gian đếm ngược màn hình đệm sửa transcript nếu cho phép (10–300s, mặc định 60s) |
 | `created_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Trưởng Bộ Môn khởi tạo kỳ thi |
 | `status` | `varchar(20)` | NOT NULL, Default `'scheduled'`, CHECK in (`scheduled`, `in_progress`, `grading`, `auditing`, `concluded`) | Trạng thái đợt thi |
@@ -489,11 +489,11 @@ erDiagram
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp đơn phúc khảo |
 | `reason` | `text` | NOT NULL | Lý do chi tiết yêu cầu phúc khảo của sinh viên |
 | `status` | `varchar(20)` | NOT NULL, Default `'PENDING'`, CHECK in (`'PENDING'`, `'APPROVED'`, `'REJECTED'`) | Trạng thái thẩm định đơn: Đang chờ, Đã chấp thuận, Đã từ chối |
-| `assigned_to` | `uuid` | FK `users(id)` ON DELETE RESTRICT | Trưởng Bộ Môn (`department_head`) được phân công thụ lý thẩm định |
+| `assigned_to` | `uuid` | FK `users(id)` ON DELETE RESTRICT | Giảng viên (`lecturer`) được Trưởng Bộ Môn phân công chấm lại bài thi |
 | `proposed_score` | `numeric(4,2)` | NULLABLE, CHECK `proposed_score >= 0.00 AND proposed_score <= 10.00` | Điểm số điều chỉnh sau phúc khảo (nếu được chấp thuận) |
-| `review_notes` | `text` | NULLABLE | Nhận xét giải trình và căn cứ phán quyết của Trưởng Bộ Môn |
+| `review_notes` | `text` | NULLABLE | Nhận xét giải trình của Giảng viên chấm lại và căn cứ phán quyết |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm sinh viên nộp đơn |
-| `reviewed_at` | `timestamptz` | NULLABLE | Thời điểm Trưởng Bộ Môn ra quyết định |
+| `reviewed_at` | `timestamptz` | NULLABLE | Thời điểm Trưởng Bộ Môn phê chuẩn quyết định |
 
 ---
 
@@ -526,6 +526,36 @@ erDiagram
 
 ---
 
+### 3.8. Phân hệ 8: Cấu hình Hệ thống Enterprise (System Configs)
+
+#### Bảng `system_configs`
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
+|:---|:---|:---:|:---|
+| `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi cấu hình |
+| `key` | `varchar(100)` | NOT NULL, UNIQUE | Mã định danh tham số cấu hình hệ thống (`MinMixedPracticeQuestions`, `MaxMixedPracticeQuestions`, `TranscriptBufferSeconds`, `MaxPracticeQuestionsPerSession`) |
+| `value` | `varchar(500)` | NOT NULL | Giá trị thiết lập hiện hành |
+| `description` | `text` | NULLABLE | Mô tả chi tiết mục đích và phạm vi áp dụng của cấu hình |
+| `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối |
+
+---
+
+### 3.9. Phân hệ 9: Hộp thư Thông báo trong Ứng dụng (In-App Notifications - FE-11)
+
+#### Bảng `notifications`
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
+|:---|:---|:---:|:---|
+| `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính thông báo |
+| `user_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Người dùng nhận thông báo |
+| `title` | `varchar(200)` | NOT NULL | Tiêu đề thông báo |
+| `message` | `text` | NOT NULL | Nội dung chi tiết thông báo |
+| `type` | `varchar(50)` | NOT NULL | Phân loại thông báo (5 sự kiện: `EXAM_SCHEDULE_PUBLISHED`, `EXAM_GRADE_PUBLISHED`, `APPEAL_LECTURER_ASSIGNED`, `QUESTION_REVIEW_SUBMITTED`, `QUESTION_NEEDS_REVISION`) |
+| `is_read` | `boolean` | NOT NULL, Default `false` | Trạng thái đã đọc/chưa đọc |
+| `metadata` | `jsonb` | NULLABLE | Dữ liệu phụ trợ đi kèm (ID thực thể liên quan, deep-link, thông tin ca thi/vé thi) |
+| `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm gửi thông báo |
+| `read_at` | `timestamptz` | NULLABLE | Thời điểm người dùng ấn đọc thông báo |
+
+---
+
 ## 4. CHIẾN LƯỢC CHỈ MỤC HIỆU NĂNG & RÀNG BUỘC TOÀN VẸN (INDEXES & CONSTRAINTS MATRIX)
 
 Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính toàn vẹn dữ liệu học thuật, hệ thống thiết lập hệ thống chỉ mục và ràng buộc toàn diện:
@@ -542,12 +572,14 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_exam_questions_source` | `exam_questions` | `(course_id, source)` | Composite B-Tree | Phân loại câu hỏi thi chính thức theo nguồn gốc FLM API. |
 | `ix_exam_questions_approved` | `exam_questions` | `(approved_by)` | B-Tree | Thống kê số lượng câu hỏi do Trưởng Bộ Môn hoặc Giảng viên phê duyệt. |
 | `ix_exam_questions_rubric` | `exam_questions` | `(rubric_id)` | B-Tree | Nạp Barem Rubric đối chiếu chấm thi chính thức. |
-| `ix_mock_exam_quotas_lookup` | `mock_exam_quotas` | `(student_id, course_id, quota_date)` | Unique B-Tree | Quota Guard kiểm tra hạn ngạch thi thử $K \le 3$ lượt/ngày/môn (< 5ms). |
+| `ix_mock_exam_quotas_lookup` | `mock_exam_quotas` | `(student_id, course_id, quota_date)` | Unique B-Tree | Quota Guard kiểm tra hạn ngạch thi thử theo môn `max_mock_exams_per_day` (< 5ms). |
 | `ix_student_exam_tickets_shift` | `student_exam_tickets` | `(shift_id, seat_number)` | Unique B-Tree | Gán duy nhất 1 sinh viên/máy trạm (1-40) trong mỗi ca thi phòng Lab. |
 | `ix_dead_letter_queues_status` | `dead_letter_queues` | `(status, created_at)` | Composite B-Tree | Background worker `DlqReplayWorker` quét các task lỗi định kỳ 5 phút. |
 | `ix_audit_logs_lookup` | `audit_logs` | `(entity_name, entity_id, created_at DESC)` | Composite B-Tree | Truy vết lịch sử sửa đổi điểm và cấu hình ngân hàng câu hỏi. |
 | `ix_appeal_requests_ticket` | `appeal_requests` | `(ticket_id)` | Unique B-Tree | Chặn sinh viên nộp trùng lặp đơn phúc khảo khi vé thi đã có đơn đang xử lý. |
-| `ix_appeal_requests_assigned` | `appeal_requests` | `(assigned_to, status)` | Composite B-Tree | Trưởng Bộ Môn lọc nhanh danh sách đơn phúc khảo PENDING cần thẩm định. |
+| `ix_appeal_requests_assigned` | `appeal_requests` | `(assigned_to, status)` | Composite B-Tree | Giảng viên được phân công lọc nhanh danh sách đơn phúc khảo PENDING cần chấm lại. |
+| `ix_system_configs_key` | `system_configs` | `(key)` UNIQUE | Unique B-Tree | Tra cứu tham số cấu hình hệ thống tức thì (< 2ms). |
+| `idx_notifications_user_read` | `notifications` | `(user_id, is_read, created_at DESC)` | Composite B-Tree | Lọc nhanh danh sách thông báo chưa đọc của người dùng trên thanh thông báo chuông (FE-11). |
 
 ### 4.2. Cơ Chế Điều Phối Lưu Trữ Phạm Vi Câu Hỏi (Storage Dispatching Policy)
 Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questions` (Kho mở) và `exam_questions` (Kho bảo mật), tham số `usageScope` trong API `POST /api/v1/questions/batch-approve` được điều phối lưu trữ như sau:
@@ -567,11 +599,11 @@ Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questio
 - **Ràng buộc nguồn gốc câu hỏi:** `practice_questions.source` và `exam_questions.source` có CHECK constraint `source IN ('manual', 'flm_api')`.
 - **Ràng buộc Barem Rubric 10.0:** Tổng điểm các tiêu chí con trong bảng `rubrics` bắt buộc bằng đúng 10.00: $\sum \text{criteria.max_score} \equiv 10.00$.
 - **Ràng buộc Đáp án mẫu:** `sample_answer` (Model Answer) bắt buộc $\ge 50$ ký tự khi phê duyệt vào kho đề.
-- **Ràng buộc Hạn ngạch thi thử:** `mock_exam_quotas.used_count` có CHECK constraint `used_count <= 3`.
-- **Ràng buộc Khóa điểm một chiều:** Khi `student_exam_tickets.is_locked = true`, EF Core Interceptor chặn 100% câu lệnh `UPDATE`/`DELETE` ở cấp độ CSDL.
-- **Ràng buộc Phương thức thi môn học:** `courses.exam_input_mode` có CHECK constraint `exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceAndTextInput')`.
-- **Ràng buộc Cấu hình động môn học & kỳ thi:** `courses.transcript_buffer_seconds` có CHECK `BETWEEN 10 AND 300` và `courses.max_follow_up_questions` có CHECK `BETWEEN 1 AND 5` (do Admin cấu hình cho hệ thống luyện tập MF-01). Môn thi trong kỳ thi thật MF-04 (`official_exam_sessions`) có `max_follow_up_questions` CHECK `BETWEEN 1 AND 2`, `transcript_buffer_seconds` CHECK `BETWEEN 10 AND 300` và `exam_input_mode` CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`, `'VoiceAndTextInput'`) do Trưởng Bộ Môn thiết lập.
+- **Ràng buộc Hạn ngạch thi thử:** `mock_exam_quotas.used_count` có CHECK constraint `used_count >= 0` (so sánh động với `courses.max_mock_exams_per_day` do Trưởng Bộ Môn cấu hình theo môn, vượt hạn ngạch trả `HTTP 429 Too Many Requests`).
+- **Ràng buộc Khóa điểm một chiều:** Khi `student_exam_tickets.is_locked = true`, EF Core Interceptor chặn 100% câu lệnh `UPDATE`/`DELETE` ở cấp độ CSDL, ngoại trừ trường hợp Giảng viên được Trưởng Bộ Môn phân công chấm lại đơn phúc khảo nội bộ (`AppealRequest`).
+- **Ràng buộc Phương thức thi môn học:** `courses.exam_input_mode` có CHECK constraint `exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')`.
+- **Ràng buộc Cấu hình động môn học & kỳ thi:** `courses.transcript_buffer_seconds` có CHECK `BETWEEN 10 AND 300` và `courses.max_follow_up_questions` có CHECK `BETWEEN 1 AND 5` (do Admin cấu hình cho hệ thống luyện tập MF-01). Môn thi trong kỳ thi thật MF-04 (`official_exam_sessions`) có `max_follow_up_questions` CHECK `BETWEEN 1 AND 5` (mặc định 2 câu), `transcript_buffer_seconds` CHECK `BETWEEN 10 AND 300` và `exam_input_mode` CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) do Trưởng Bộ Môn thiết lập.
 - **Ràng buộc Vòng đời vé thi 7 bước:** `student_exam_tickets.status` có CHECK constraint `status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')`.
 - **Ràng buộc Phân loại bài thi Hậu kiểm:** `student_exam_tickets.ai_confidence_score` và `exam_question_submissions.ai_confidence_score` có CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00`. Khi `is_suspicious == true` hoặc `ai_confidence_score < 0.70`, hệ thống tự động gắn cờ xếp vào Nhóm 1 Đáng nghi ngờ trên Cổng Hậu kiểm Giảng viên để ưu tiên nghe lại Waveform Player và thẩm định trước.
 - **Ràng buộc Phê duyệt Câu hỏi:** `practice_questions.approval_status` và `exam_questions.approval_status` có CHECK constraint `approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')`. Chỉ các câu hỏi mang trạng thái `'APPROVED'` do Trưởng Bộ Môn phê duyệt mới được đưa vào ma trận bốc đề thi thật MF-04.
-- **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Giảng viên công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu không chấp nhận kết quả, sinh viên bấm nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal (`POST /api/v1/appeals`) để tạo bản ghi `appeal_requests` gán cho Trưởng Bộ Môn thẩm định.
+- **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Giảng viên công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu không chấp nhận kết quả, sinh viên bấm nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal (`POST /api/v1/appeals`) để tạo bản ghi `appeal_requests` gửi tới Trưởng Bộ Môn; Trưởng Bộ Môn tiếp nhận và phân công cho một Giảng viên chấm lại.
