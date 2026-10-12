@@ -1,451 +1,322 @@
-# 🖥️ FRONTEND FUNCTIONAL TASK BOARD & SCREEN SPECIFICATIONS (v7.0 — FUNCTIONAL BREAKDOWN THEO 4 KHỐI CHỨC NĂNG ĐỘC LẬP)
+# 🖥️ FRONTEND MASTER TASK BOARD & EXECUTION SPECIFICATIONS (v8.0)
 ## ĐỒ ÁN TỐT NGHIỆP SEP490 (FA26SE166) — HỆ THỐNG LUYỆN THI & ĐÁNH GIÁ VẤN ĐÁP BẰNG LLM
-### KHO MÃ NGUỒN: `05_Source_Code/frontend` | CỔNG DỊCH VỤ DEV: `3000` | BACKEND API: `5000`
+### KHO MÃ NGUỒN: `05_Source_Code/frontend` | CỔNG DEV: `3000` | BACKEND API: `5000` | POSTGRESQL: `5432`
 
 ---
 
 > [!IMPORTANT]
-> **THÔNG TIN DỰ ÁN & PHÂN CÔNG NHÂN SỰ FRONTEND CHUẨN XÁC 100%:**
+> **QUY CHUẨN TỐI THƯỢNG & NGUỒN SỰ THẬT DUY NHẤT (SINGLE SOURCE OF TRUTH):**
 > - **Mã đề tài:** FA26SE166 | **Học kỳ:** Fall 2026 (FA26) — Đại học FPT TP.HCM (FPT SG)
-> - **Tech Stack Frontend:** React 19 (`^19.2.8`), Vite (`^8.3.0`), Tailwind CSS v4, React Router DOM v7, TypeScript 5.8+, Zustand, TanStack React Query v5, `@microsoft/signalr`, Web Speech API (STT/TTS), Web Audio API (Mic dB), Wavesurfer.js (Waveform Audio Player).
-> - **Phân công nhân sự Frontend theo chỉ đạo chính thức:**
->   - 🧑 **Lê Vũ Hoàng (Lead Frontend Architect):**
->     * Kiến trúc nền tảng React 19 SPA, Vite, Tailwind CSS v4, React Router DOM v7 (Route Guards 5 roles: `student`, `lecturer`, `department_head`, `proctor`, `admin`), Axios Client với Interceptor xử lý lỗi RFC 7807 `ProblemDetails`.
->     * Khối 1 (MF-01 UI Core): `PracticePage.tsx` (Per & Full, Progressive 3-10 câu), `BufferScreen.tsx` (màn hình đệm 60s SVG countdown), `FollowUpQuestionCard.tsx`, `ScorecardModal.tsx`, custom hooks `usePracticeHub.ts` (SignalR WebSocket client) và `useSpeechRecognition.ts` (Web Speech API tiếng Việt realtime $< 500$ms).
->     * Khối 4 (MF-04 UI Kiosk & Hậu kiểm): `ProctorRoomMonitorPage.tsx` (FE-P01 ma trận 40 máy lab), `KioskCheckInPage.tsx` (FE-K01 IP Binding), `KioskHardwareMicCheckPage.tsx` (FE-K02 đo dB mic $\ge 60$dB trong 30s), `KioskExamRoomPage.tsx` (FE-K03 Fullscreen lockdown, chặn phím tắt hệ thống, phát hiện mất focus blur $\ge 3$ lần chuyển `KioskSuspendedPage.tsx`, stream audio Cloudflare R2 `STT_MSSV.webm` kèm SHA-256 niêm phong), `KioskSubmittedPage.tsx` (FE-K05 biên nhận niêm phong an toàn: 0% điểm liền, 0% khiếu nại tại chỗ), `AuditEvidencePage.tsx` (FE-L02 Cổng Hậu kiểm Giảng viên: Wavesurfer.js sóng âm R2, tua audio theo transcript, sửa điểm kèm lý do $\ge 10$ ký tự, nút "Công Bố Điểm" Atomic 100%).
->     * UI Vệ tinh: `LoginPage.tsx` (Google OAuth PKCE mở cho mọi email Google), Hộp thư thông báo `NotificationDrawer.tsx` / `NotificationPage.tsx` (FE-11), Dashboard Giảng viên & Sinh viên (FE-10).
->   - 🧑 **Nguyễn Đăng Hải (Frontend Developer & DB Specialist):**
->     * Database: Đã hoàn thành 100% 28 bảng CSDL PostgreSQL 16 trong 6 Bounded Contexts. **Hải tuyệt đối KHÔNG code logic C# Backend** mà chuyển sang **dồn toàn lực phát triển Frontend**:
->     * Khối 2 (MF-02 UI Core): `MockExamPage.tsx` Voice-First (khóa cứng input text, Master Timer đếm ngược to đồng bộ server), `QuotaExceededModal.tsx` (modal cảnh báo đỏ khi gặp lỗi HTTP 429 quá hạn ngạch Trưởng BM đặt), `MockExamScorecardModal.tsx` (Scorecard chi tiết theo chuẩn đầu ra CLO), `ExamHistoryPage.tsx` (FE-02 Tab Thi Thử).
->     * Khối 3 (MF-03 UI Core): `QuestionStudioPage.tsx` (soạn câu hỏi thủ công, AI gen từ FLM Syllabus theo barem riêng, Model Answer $\ge 50$ ký tự), `RubricCriteriaEditor.tsx` (Studio tính tổng điểm real-time 10.0đ: lệch 10.0đ tô đỏ khóa nút gửi, đúng 10.0đ sáng xanh), `QuestionBankSelector.tsx` (checkbox tick chọn 2 kho `practice_questions` / `exam_questions`, nút gửi duyệt Bộ Môn), `QuestionApprovalPage.tsx` (Trưởng Bộ Môn duyệt đề 3 quyết định: `APPROVED`, `NEEDS_REVISION` kèm góp ý, `REJECTED`).
->     * Khối 4 (MF-04 UI Quản trị & Phúc khảo): `ExamSeasonConfigPage.tsx` (Trưởng Bộ Môn khởi tạo kỳ thi, gán môn, cấu hình Ca thi chọn phòng lab trực tiếp trên ca và gán người coi thi, follow-up 1-5 câu, `ExamInputMode` VoiceOnly/VoiceWithTranscriptEdit - loại bỏ hoàn toàn VoiceAndTextInput), `AppealRequestModal.tsx` (Sinh viên nộp đơn phúc khảo nội bộ), `AppealManagementPage.tsx` (Trưởng Bộ Môn tiếp nhận danh sách phúc khảo, xem Evidence Panel và giao một Giảng viên chấm lại hoặc tự chấm).
->     * UI Vệ tinh: `UserManagementPage.tsx` (FE-09 quản lý người dùng 5 roles, khóa/mở tài khoản), `SemesterManagementPage.tsx` (FE-08 CRUD học kỳ), `ExamHistoryPage.tsx` (FE-02 Tab Luyện Tập), `AdminConfigPage.tsx`, `AdminDlqMonitorPage.tsx`, `AuditLogsPage.tsx`.
+> - **Tech Stack Chuẩn:** React 19 (`^19.2.8`), Vite (`^8.3.0`), Tailwind CSS v4, React Router DOM v7, TypeScript 5.8+, Zustand, TanStack Query v5, `@microsoft/signalr`, Web Speech API (STT/TTS), Web Audio API (Mic dB Check), Wavesurfer.js (Waveform Audio Player), Google OAuth 2.0 (Google Identity Services).
+> - **File này là tài liệu duy nhất điều phối toàn bộ công việc Frontend** cho 2 kỹ sư: **Lê Vũ Hoàng** và **Nguyễn Đăng Hải**.
+> - Tuyệt đối tuân thủ 12 cam kết kiến trúc tại `AGENTS.md` và `MASTER_ARCHITECTURE.md`. Không tự ý suy diễn thêm màn hình hoặc phá vỡ API contract.
 
 ---
 
-## 📁 1. CẤU TRÚC THƯ MỤC CHUẨN MỰC (REACT 19 + TAILWIND CSS v4)
+# 📊 PHẦN 1: BẢNG MA TRẬN PHÂN BỔ CÔNG VIỆC (BALANCED 50/50 MATRIX)
+
+| Kỹ sư đảm nhiệm | Chức năng chính (Heavy Core) | Các task vệ tinh ("Râu ria" hoàn thiện) | Thế mạnh chuyên môn |
+| :--- | :--- | :--- | :--- |
+| 🧑 **Lê Vũ Hoàng**<br>*(Lead Frontend Architect)* | **1. Module MF-01: Luyện Tập Tương Tác Giọng Nói**<br>• Practice Flow (Per-Question On-Demand & Full Progressive 3–10)<br>• Buffer Screen 60s đếm ngược SVG<br>• SignalR WebSocket client & Follow-up A2<br>• Scorecard Modal chi tiết Rubric<br><br>**2. Module MF-04 (Nhánh A): An Ninh Kiosk & Giám Thị**<br>• Kiosk Check-In IP Binding STT 1–40 (FE-K01)<br>• Hardware Mic Check $\ge 60$dB trong 30s (FE-K02)<br>• Kiosk Exam Lockdown, Anti-cheat blur $\ge 3$ (FE-K03)<br>• Kiosk Submitted an toàn 0% điểm liền (FE-K05)<br>• Proctor Room Monitor 40 máy lab (FE-P01)<br><br>**3. Module MF-04 (Nhánh B): Cổng Hậu Kiểm Giảng Viên**<br>• Audit Evidence Page (FE-L02)<br>• Waveform Player Wavesurfer.js tua transcript<br>• Form sửa điểm có lý do giải trình $\ge 10$ ký tự<br>• Nút "Công Bố Điểm" One-Way Lock Atomic | **1. Core Architecture & Build:**<br>• Khắc phục triệt để lỗi build Vite & TypeScript (`npm run build` Exit Code 0)<br>• Sửa alias `@/utils/cn` trong `utils.ts` và `separator.tsx`<br>• Gán type chuẩn cho các ThreeScene<br><br>**2. Auth & Session (Google OAuth 2.0):**<br>• Google Login ID Token button<br>• Silent Refresh Token Rotation<br>• Route Guards 5 roles<br><br>**3. Dashboard Sinh viên & Giảng viên (FE-10):**<br>• `StudentDashboardPage.tsx`<br>• `LecturerDashboardPage.tsx`<br><br>**4. Hộp thư Thông báo In-App (FE-11):**<br>• `NotificationDrawer.tsx`<br>• `NotificationPage.tsx` | UX/UI Âm thanh thời gian thực, Web Speech API, SignalR WebSockets, Web Audio API đo dB, Kiosk Lockdown An ninh, Waveform Player. |
+| 🧑 **Nguyễn Đăng Hải**<br>*(Frontend Developer & DB Specialist)* | **1. Module MF-02: Thi Thử Tính Giờ Có Hạn Ngạch**<br>• Mock Exam Voice-First Gate (khóa text input)<br>• Master Countdown Timer đồng bộ server<br>• Quota Modal cảnh báo `HTTP 429` do Trưởng BM đặt<br>• Scorecard chi tiết theo Chuẩn đầu ra CLO<br><br>**2. Module MF-03: Ngân Hàng Đề & Rubric Studio 10.0**<br>• Question Studio: Soạn tay & AI sinh từ FLM CLO<br>• Rubric Criteria Editor: Tính tổng điểm $\sum \equiv 10.0$đ<br>• Checkbox tick 2 kho (`practice` / `exam`)<br>• Question Approval: Trưởng BM duyệt đề (`APPROVED`, `NEEDS_REVISION`, `REJECTED`)<br><br>**3. Module MF-04 (Nhánh Quản Trị): Kỳ Thi & Ca Thi**<br>• Exam Season Config: Tạo kỳ thi, gán môn, follow-up 1–5 câu, `ExamInputMode`<br>• Exam Shift Management: Ca thi phòng lab, kíp thi, phân công giám thị/GV, gán lớp<br><br>**4. Module MF-04 (Nhánh Phúc Khảo): Phúc Khảo Nội Bộ**<br>• Appeal Request Modal: Sinh viên nộp đơn khi xem điểm<br>• Appeal Management Page: Trưởng BM tiếp nhận và giao GV chấm lại | **1. Phân hệ Quản trị Admin (FE-08 & FE-09):**<br>• `UserManagementPage.tsx` (FE-09: Quản lý user 5 roles, khóa/mở tài khoản; không tạo user bằng mật khẩu)<br>• `SemesterManagementPage.tsx` (FE-08: CRUD học kỳ, tạo và sửa, không xóa)<br>• `AdminConfigPage.tsx` (Cấu hình `system_configs` MF-01: progressive, buffer, follow-up, inactivity timeout)<br>• `AuditLogsPage.tsx` & `AdminDlqMonitorPage.tsx` (Xem nhật ký kiểm toán, quản lý DLQ retry)<br><br>**2. Dashboard Trưởng Bộ Môn (FE-10):**<br>• `DepartmentHeadDashboardPage.tsx`<br><br>**3. Lịch sử Luyện tập & Thi thử (FE-02):**<br>• `ExamHistoryPage.tsx` (Tab Thi Thử & Tab Luyện Tập)<br><br>**4. Báo Cáo Khảo Thí Phòng Lab:**<br>• Xuất file Excel (`.xlsx`) & PDF chữ ký số | State Management phức tạp, Form Studio Rubric 10.0đ, Quản trị Kỳ thi/Ca thi, Workflow Thẩm định duyệt đề, Quy trình Phúc khảo, Phân hệ Admin CRUD. |
+
+---
+
+# 📁 PHẦN 2: CẤU TRÚC THƯ MỤC CHUẨN MỰC (`frontend/src/`)
 
 ```text
 frontend/src/
-├── routes/                          # Tuyến đường React Router DOM v7
-│   ├── AppRoutes.tsx                # Khai báo toàn bộ routes của hệ thống theo 4 Khối chức năng
-│   ├── ProtectedRoute.tsx           # Route Guard kiểm tra Auth & Role (student, lecturer, department_head, proctor, admin)
-│   └── RoleBasedRedirect.tsx        # Điều hướng người dùng về đúng Dashboard sau khi login
+├── assets/                          # SVG, Icons, Brand assets
+├── routes/                          # Điều hướng React Router DOM v7
+│   ├── AppRoutes.tsx                # Khai báo tuyến đường 5 roles & Kiosk
+│   ├── ProtectedRoute.tsx           # Route Guard kiểm tra Token & 5 Roles (student, lecturer, department_head, proctor, admin)
+│   └── RoleBasedRedirect.tsx        # Điều hướng người dùng về đúng trang chủ sau login
 ├── types/                           # TypeScript Interfaces khớp 100% Backend DTOs
-│   ├── auth.types.ts
-│   ├── practice.types.ts            # Session, Question, Answer, Scorecard, FollowUp, ProgressiveOption
-│   ├── mockExam.types.ts            # Quota, MockSession, MockAnswer, CloScorecard
-│   ├── officialExam.types.ts        # Season, Shift, Ticket (7 trạng thái HOA), Submission, Audit
-│   ├── rubric.types.ts              # Rubric, RubricCriterion (sum=10.0), QuestionBank
-│   ├── appeal.types.ts              # AppealRequest, AppealDecision, LecturerAssignment
-│   ├── user.types.ts                # UserManagement, UserRole, UserStatus (FE-09)
-│   ├── semester.types.ts            # SemesterDto, CreateSemesterRequest (FE-08)
+│   ├── auth.types.ts                # User, Role, GoogleLoginRequest, TokenPair, ProblemDetails
+│   ├── practice.types.ts            # Session, NextQuestion, Answer, Scorecard, FollowUp, Progressive
+│   ├── mockExam.types.ts            # MockQuota, MockSession, MockAnswer, CloScorecard
+│   ├── rubric.types.ts              # Rubric, RubricCriterion (sum=10.0), QuestionDraft, ReviewDecision
+│   ├── officialExam.types.ts        # Season, Shift, Ticket, Submission, ExamInputMode
+│   ├── appeal.types.ts              # AppealRequest, AppealDecision, AssignLecturerRequest
+│   ├── user.types.ts                # UserDto, UpdateUserRoleRequest, UserStatus (FE-09)
+│   ├── semester.types.ts            # SemesterDto, CreateSemesterRequest, UpdateSemesterRequest (FE-08)
+│   ├── systemConfig.types.ts        # SystemConfigDto, UpdateSystemConfigRequest
 │   └── notification.types.ts        # NotificationDto, NotificationType (FE-11)
-├── services/                        # API Services & WebSocket Client
-│   ├── api.client.ts                # Axios Instance (Base URL: http://localhost:5000/api/v1, RFC 7807 Toast Interceptor)
-│   ├── auth.service.ts
-│   ├── practice.service.ts
-│   ├── mockExam.service.ts
-│   ├── question.service.ts
-│   ├── officialExam.service.ts
-│   ├── appeal.service.ts
-│   ├── user.service.ts              # User Management API FE-09
-│   ├── semester.service.ts          # Semester CRUD API FE-08
-│   ├── notification.service.ts      # In-app Notification API FE-11
+├── services/                        # Axios API Client & SignalR Services
+│   ├── api.client.ts                # Axios Instance (Base URL: /api/v1, Auto Bearer, Token Refresh Interceptor, RFC 7807 Toast)
+│   ├── auth.service.ts              # /api/v1/auth (google-login, refresh-token, sign-out)
+│   ├── practice.service.ts          # /api/v1/practice (sessions, next-question, answers, complete, history)
+│   ├── mockExam.service.ts          # /api/v1/mock-exams (sessions, answers, quota)
+│   ├── question.service.ts          # /api/v1/questions (crud, ai-generate, batch-submit-review, decisions)
+│   ├── officialExam.service.ts      # /api/v1/official-exams (seasons, shifts, tickets, publish-grades, evidence)
+│   ├── appeal.service.ts            # /api/v1/appeals (create, get-list, assign-lecturer, review)
+│   ├── user.service.ts              # /api/v1/admin/users (FE-09)
+│   ├── semester.service.ts          # /api/v1/semesters (FE-08)
+│   ├── systemConfig.service.ts      # /api/v1/admin/system-configs
+│   ├── notification.service.ts      # /api/v1/notifications (FE-11)
 │   └── signalr.service.ts           # SignalR Hub Connection (/hubs/practice)
 ├── stores/                          # Zustand State Stores
-│   ├── useAuthStore.ts              # Token, User profile, Active role
-│   ├── usePracticeStore.ts          # Phiên luyện tập, danh sách câu, trạng thái nộp, scorecard
-│   ├── useKioskStore.ts             # Trạng thái Kiosk, blur_count, mic_level, stream audio
-│   ├── useExamTimerStore.ts         # Đồng hồ đếm ngược đồng bộ Master Timer
-│   └── useNotificationStore.ts      # Unread count, notification list
-├── hooks/                           # Custom Hooks nghiệp vụ
-│   ├── useSpeechRecognition.ts      # Web Speech API bóc băng tiếng Việt thời gian thực (< 500ms)
-│   ├── useAudioRecorder.ts          # MediaRecorder ghi âm .webm, băm SHA-256
-│   ├── useMicrophoneLevel.ts        # Web Audio API đo dB mic (ngưỡng >= 60dB)
-│   ├── useKioskLockdown.ts          # Fullscreen, chặn Alt+Tab, F11, F12, bắt onblur >= 3 lần
+│   ├── useAuthStore.ts              # Token, Refresh Token, User Profile, Active Role
+│   ├── usePracticeStore.ts          # Current Session, Question, Answer, Scorecard, Buffer State
+│   ├── useKioskStore.ts             # Kiosk IP, SeatNumber, Focus blur count, Mic dB level, Audio stream
+│   ├── useExamTimerStore.ts         # Master Timer đếm ngược đồng bộ server
+│   └── useNotificationStore.ts      # Unread count, Notification list
+├── hooks/                           # Custom React Hooks
+│   ├── useSpeechRecognition.ts      # Web Speech API STT bóc băng tiếng Việt realtime (< 500ms) + TTS đọc đề
+│   ├── useMicrophoneLevel.ts        # Web Audio API đo âm lượng mic (ngưỡng >= 60dB)
+│   ├── useKioskLockdown.ts          # Fullscreen, chặn Alt+Tab, F11, F12, bắt blur >= 3 lần
 │   └── usePracticeHub.ts            # SignalR Client hook lắng nghe ReceiveGradingResult, ReceiveGradingError
-├── components/                      # Reusable UI Components
-│   ├── common/                      # Button, Modal, Card, Badge, Toast, Spinner, Input
-│   ├── layout/                      # Navbar, Sidebar, Footer, KioskHeader, ProctorHeader
-│   ├── practice/                    # BufferScreen, FollowUpQuestionCard, ScorecardModal, ModeSelector, ProgressiveSelector
-│   ├── rubric/                      # RubricCriteriaEditor (tính tổng 10.0đ real-time), QuestionBankSelector, QuestionPreviewCard
+├── components/                      # Reusable UI Primitives
+│   ├── common/                      # Button, Input, Card, Badge, Modal, Toast, Spinner, separator
+│   ├── layout/                      # Navbar, Sidebar, Footer, StudentHeader, StudentSidebar, AppLayout
+│   ├── practice/                    # BufferScreen (60s), ScorecardModal, FollowUpQuestionCard, ProgressiveSelector
+│   ├── exam/                        # VoiceFirstGate, CountdownTimer, QuotaExceededModal
+│   ├── rubric/                      # RubricCriteriaEditor (10.0đ real-time), QuestionBankSelector, ScoreOverrideForm
 │   ├── audio/                       # WaveformPlayer (Wavesurfer.js highlight transcript)
-│   ├── kiosk/                       # KioskMicCheck, KioskQuestionViewer, KioskLockdownGuard
-│   ├── appeals/                     # AppealRequestModal, AppealReviewCard, AssignLecturerModal
+│   ├── kiosk/                       # KioskLockdownGuard, KioskHardwareMeter, KioskViolationNotice
+│   ├── appeals/                     # AppealRequestModal, AssignLecturerModal
 │   └── notifications/               # NotificationDrawer, NotificationItem
-└── pages/                           # Các màn hình chính (Phân rã theo 4 Khối Chức Năng)
-    ├── auth/                        # LoginPage.tsx (Google OAuth PKCE mọi email)
-    ├── block1_practice/             # PracticePage.tsx, StudentDashboardPage.tsx, ExamHistoryPage.tsx (Tab Luyện Tập)
-    ├── block2_mock_exam/            # MockExamPage.tsx, ExamHistoryPage.tsx (Tab Thi Thử)
-    ├── block3_rubric_studio/        # QuestionStudioPage.tsx, QuestionApprovalPage.tsx, UserManagementPage.tsx, LecturerDashboardPage.tsx
-    ├── block4_official_exam/        # ExamSeasonConfigPage.tsx, ProctorRoomMonitorPage.tsx, KioskCheckInPage.tsx, KioskHardwareMicCheckPage.tsx, KioskExamRoomPage.tsx, KioskSuspendedPage.tsx, KioskSubmittedPage.tsx, AuditEvidencePage.tsx, AppealManagementPage.tsx, SemesterManagementPage.tsx, NotificationPage.tsx, AdminConfigPage.tsx, AdminDlqMonitorPage.tsx, AuditLogsPage.tsx
-    └── shared/                      # NotFoundPage.tsx, ForbiddenPage.tsx
+├── pages/                           # Màn hình chính phân theo 5 Roles
+│   ├── auth/                        # LoginPage.tsx, UnauthorizedPage.tsx
+│   ├── student/                     # StudentDashboardPage, PracticePage, PracticeSessionPage, MockExamPage, MockExamSessionPage, OfficialExamPage, ExamHistoryPage
+│   ├── lecturer/                    # LecturerDashboardPage, QuestionStudioPage, CreateQuestionPage, AuditEvidencePage
+│   ├── department_head/             # DepartmentHeadDashboardPage, QuestionApprovalPage, ExamSeasonConfigPage, ExamShiftManagementPage, AppealManagementPage
+│   ├── proctor/                     # ProctorRoomMonitorPage
+│   ├── admin/                       # UserManagementPage, SemesterManagementPage, AdminConfigPage, AdminDlqMonitorPage, AuditLogsPage
+│   └── kiosk/                       # KioskCheckInPage, KioskHardwareMicCheckPage, KioskExamRoomPage, KioskSuspendedPage, KioskSubmittedPage
+└── utils/
+    └── cn.ts                        # Utility clsx + twMerge tối ưu Tailwind CSS
 ```
 
 ---
 
-## 🎨 2. CHI TIẾT TỪNG MÀN HÌNH THEO 4 KHỐI CHỨC NĂNG ĐỘC LẬP
+# 🧑‍💻 PHẦN 3: NHIỆM VỤ CHI TIẾT CỦA LÊ VŨ HOÀNG (LEAD FRONTEND ARCHITECT)
+
+### 🌟 KHỐI TRỌNG TÂM 1: MODULE MF-01 — PHÒNG LUYỆN TẬP TƯƠNG TÁC GIỌNG NÓI
+1. **Trang `PracticePage.tsx` & `PracticeSessionPage.tsx` (`/student/practice`):**
+   - **Modal Cài Đặt Đầu Phiên (Pre-Session Setup):**
+     * Chọn môn học.
+     * Chọn chế độ làm bài: `[Per-Question On-Demand]` (luyện từng câu, lấy câu tiếp theo on-demand) hoặc `[Full-Session Progressive]` (luyện trọn gói 3–10 câu từ Dễ $\to$ Khó).
+     * Với Per-Question: Cho phép chọn đơn lẻ hoặc tổ hợp độ khó (`easy`, `medium`, `hard`). Không bắt buộc chốt số câu.
+     * Với Full-Session: Slider nhập số lượng câu hỏi từ **3 đến 10 câu** (ràng buộc bởi `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` từ `system_configs`).
+     * Gọi API `POST /api/v1/practice/sessions` để khởi tạo phiên.
+   - **Giao diện làm bài:**
+     * Hiển thị câu hỏi hiện tại, mức Bloom, và tiêu chí Barem Rubric $\sum \equiv 10.0$đ để sinh viên tham chiếu.
+     * Nút Mic lớn ở trung tâm. Nhấn để thu âm $\to$ Web Speech API bóc băng tiếng Việt hiển thị preview văn bản tức thì.
+     * Nhấn dừng nói $\to$ Tự động chuyển tiếp vào màn hình đệm `BufferScreen.tsx`.
+   - **Inactivity Timeout 10 phút:** Nếu sinh viên không tương tác quá 10 phút, hệ thống tự động khóa phiên, bắt lỗi **HTTP 410 Gone**, hiển thị thông báo phiên đã kết thúc và bảo toàn điểm các câu đã làm.
+   - **Nút "Lấy Câu Tiếp Theo" (Per-Question):** Gọi API `POST /api/v1/practice/sessions/{id}/next-question`. Áp dụng thuật toán Anti-3-Consecutive. Nếu hết câu, hiển thị hoàn tất phiên.
+   - **Nút "Kết Thúc Phiên":** Gọi API `POST /api/v1/practice/sessions/{id}/complete` để hoàn tất và lưu bảng điểm.
+2. **Component `BufferScreen.tsx` (Vùng Đệm Hiệu Đính Transcript 60s):**
+   - **Đồng hồ đếm ngược SVG tròn (Circular Countdown):** Đếm ngược theo giá trị `transcript_buffer_seconds` (Admin cấu hình 10–300s, **mặc định 60 giây**).
+   - Ô soạn thảo text cho phép sinh viên nghe lại TTS câu hỏi và sửa các từ ngữ chuyên ngành SE bị phiên âm sai (Code-Switching: Dependency Injection, Singleton, CQRS, Docker...).
+   - Nút **"Nộp Ngay"**: Lưu bài `practice_answers` (Persist First) và chuyển sang trạng thái chờ AI chấm.
+   - Hết giờ (0s) $\to$ Tự động nộp bài (Auto-submit).
+   - **Lưu ý:** Không stream audio lên R2, không lưu `AudioUrl`.
+3. **Component `FollowUpQuestionCard.tsx` (Câu Hỏi Phụ Đào Sâu A2):**
+   - Kích hoạt khi sinh viên làm chế độ Per-Question và điểm rơi vào khoảng ranh giới **$4.0 \le \text{Score} \le 8.0$**.
+   - Thẻ màu hổ phách Amber nổi bật. Hiển thị câu hỏi phụ do AI Gemini sinh ra để kiểm tra mức độ hiểu sâu.
+   - Cho phép sinh viên bật Mic trả lời và cũng có màn hình đệm 60s trước khi nộp.
+   - Số câu hỏi phụ tối đa: Đọc từ cấu hình `MaxPracticeFollowUpQuestions` (1–5 câu, mặc định 2 câu).
+4. **Component `ScorecardModal.tsx` (Bảng Điểm Rubric Chi Tiết):**
+   - Hiển thị điểm số tổng kết thang điểm 10.0 (Xanh lá $\ge 8.0$, Vàng $5.0–7.9$, Đỏ $< 5.0$).
+   - Accordion chi tiết từng tiêu chí Rubric: Điểm đạt / Điểm tối đa, phân tích điểm mạnh, điểm thiếu sót.
+   - Nhận xét sư phạm của AI kèm nút loa TTS đọc to nhận xét.
+5. **Hook `usePracticeHub.ts` (SignalR WebSocket Client):**
+   - Kết nối endpoint `/hubs/practice`. Tự động `JoinSession(sessionId)`.
+   - Lắng nghe sự kiện `ReceiveGradingResult` để cập nhật điểm và `ReceiveGradingError` để bắt lỗi khi AI quá tải.
 
 ---
 
-### KHỐI 1 (MF-01): LUYỆN TẬP VẤN ĐÁP TƯƠNG TÁC (INTERACTIVE PRACTICE) & VỆ TINH
-
-#### 🖥️ Màn hình FE-1.1: `PracticePage.tsx` (Phòng Luyện Tập Tương Tác MF-01)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Header phòng luyện tập: Tên môn, mã phiên, chế độ làm bài đang chọn (`[Per-Question]` hoặc `[Full-Session]`).
-  - **Modal Cài Đặt Đầu Phiên (Mode & Question Count Selector):**
-    * Chọn chế độ làm bài: `[Per-Question]` (Luyện từng câu, có cơ chế hỏi phụ khi điểm 4.0–8.0) hoặc `[Full-Session]` (Luyện trọn gói, không có hỏi phụ, nhận Scorecard tổng kết sau khi làm hết).
-    * Chọn độ khó: "Dễ", "Trung bình", "Khó", hoặc **"progressive" ("Ngẫu nhiên từ dễ đến khó")**.
-    * Chọn số lượng câu hỏi: Slider hoặc Input Number từ **3 đến 10 câu** (ràng buộc cấu hình `system_configs`).
-    * Nếu kho đề không đủ câu hỏi, hiển thị Toast cảnh báo tiếng Việt rõ ràng từ API: *"Kho đề hiện tại chỉ có 5 câu hỏi Khó, vui lòng chọn số lượng ít hơn"*.
-  - Khu vực hiển thị câu hỏi: Câu hỏi hiện tại ($i/N$), mức Bloom, danh sách các tiêu chí Barem Rubric $\sum \equiv 10.0$đ để sinh viên tham chiếu khi trả lời.
-  - Bộ điều khiển Micro: Nút tròn lớn ở giữa màn hình (nhấn để bắt đầu nói, nhấn lần nữa để kết thúc). Bắt sóng âm thời gian thực bằng Web Speech API bóc băng tiếng Việt trực tiếp lên khung transcript tạm thời.
-  - Sau khi kết thúc nói: Tự động chuyển tiếp sang màn hình đệm `BufferScreen.tsx`.
-
-#### 🖥️ Màn hình FE-1.2: Component `BufferScreen.tsx` (Vùng Đệm Hiệu Đính Transcript)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Layout vùng đệm hiện đại, tập trung cao độ, nền tối dịu mắt.
-  - **Đồng hồ đếm ngược SVG hình tròn (Circular Countdown):** Đếm ngược theo cấu hình động môn học `transcript_buffer_seconds` (từ 10–300s, **giá trị mặc định là 60 giây**).
-  - Khung soạn thảo hiệu đính: Hiển thị văn bản transcript do Whisper/Web Speech nhận diện. Cho phép sinh viên chỉnh sửa các thuật ngữ kỹ thuật tiếng Anh (Code-Switching SE Glossary: Singleton, Microservices, AsNoTracking, CQRS...) bị phiên âm nhầm.
-  - Nút **"Nghe Lại Câu Hỏi"**: Sử dụng Web Speech TTS đọc lại câu hỏi của giảng viên.
-  - Hai nút hành động:
-    * Nút xanh: **"Nộp Ngay"** $\to$ Lưu bài và gửi sang hàng đợi chấm điểm.
-    * Khi đồng hồ đếm ngược về 0: Hệ thống tự động khóa ô gõ và tự động nộp bài (Auto-Submit).
-  - Tối ưu hóa: Stream trực tiếp audio qua Cloudflare Whisper, không upload lên R2, không lưu `AudioUrl`.
-
-#### 🖥️ Màn hình FE-1.3: Component `FollowUpQuestionCard.tsx` (Thẻ Câu Hỏi Phụ Đào Sâu)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Chỉ kích hoạt khi sinh viên chọn chế độ `[Per-Question]` và điểm số của câu trả lời rơi vào khoảng ranh giới **$4.0 \le \text{Score} \le 8.0$**.
-  - Thiết kế thẻ màu vàng cam hổ phách (Amber), nhãn nổi bật: **"AI Follow-up: Câu Hỏi Đào Sâu Chuyên Sâu"** (số lượng câu hỏi phụ tối đa từ 1 đến 5 câu do Admin cấu hình, mặc định 2 câu).
-  - Nội dung câu hỏi phụ do Gemini AI sinh dựa trên chuỗi suy luận CoT nhằm kiểm tra độ hiểu sâu của sinh viên tại các điểm còn mơ hồ.
-  - Micro kích hoạt lại để sinh viên trả lời câu hỏi phụ; tiếp tục mở vùng đệm 60s trước khi nộp.
-
-#### 🖥️ Màn hình FE-1.4: Component `ScorecardModal.tsx` (Bảng Điểm Rubric Chi Tiết)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Modal dạng Glassmorphism hiện đại bung lên khi AI chấm xong.
-  - Vòng tròn điểm tổng kết lớn ở trên cùng (thang điểm 10.0, tô màu xanh lá nếu $\ge 8.0$, màu vàng nếu $5.0–7.9$, màu đỏ nếu $< 5.0$).
-  - Accordion chi tiết từng tiêu chí Barem Rubric: Điểm đạt được / Điểm tối đa của tiêu chí, điểm mạnh, điểm thiếu sót kỹ thuật.
-  - Nhận xét sư phạm tổng quát của AI kèm nút loa **"Nghe Nhận Xét"** sử dụng Web Speech TTS đọc to lời góp ý.
-  - Nút **"Tiếp Tục Câu Tiếp Theo"** (hoặc "Xem Lại Lịch Sử" nếu là câu cuối cùng).
-
-#### 🖥️ Hook FE-1.5: `usePracticeHub.ts` & `useSpeechRecognition.ts`
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả kỹ thuật:**
-  - `usePracticeHub.ts`: Quản lý kết nối SignalR Hub `/hubs/practice`, tự động `JoinSession(sessionId)`, lắng nghe sự kiện `ReceiveGradingResult` để cập nhật trạng thái chấm và bung `ScorecardModal`, bắt lỗi qua `ReceiveGradingError`.
-  - `useSpeechRecognition.ts`: Bóc băng tiếng Việt thời gian thực bằng Web Speech API với độ trễ $< 500$ms, hỗ trợ nhận diện ngắt quãng và tự động phục hồi khi rớt mic.
-
-#### 🖥️ Màn hình FE-1.6 (Vệ tinh): `StudentDashboardPage.tsx` (FE-10: Cổng Thông Tin Sinh Viên)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng (Layout & Core UI) & 🧑 Nguyễn Đăng Hải (Tích hợp Dữ liệu)**
-* **Mô tả giao diện:**
-  - Lời chào sinh viên, MSSV, avatar, chuông thông báo (kèm badge số lượng thông báo chưa đọc).
-  - **Khu vực Thẻ Môn Học:** Render các môn học đang theo học (PRN231, SWD392...). Mỗi thẻ hiển thị: Tên môn, tín chỉ, thời gian đệm `transcript_buffer_seconds`, tổng số câu hỏi luyện tập có sẵn.
-  - Hai nút hành động: Nút xanh **"Luyện Tập Tự Do (MF-01)"** $\to$ Điều hướng sang `PracticePage`; Nút tím **"Thi Thử Bấm Giờ (MF-02)"** $\to$ Mở modal cài đặt thi thử.
-  - **Khu vực Hạn Ngạch Thi Thử Hôm Nay:** Widget hiển thị Quota thi thử hôm nay: *"Đã dùng X/K lượt thi thử hôm nay"* (màu xanh nếu $< K$, màu đỏ rực nếu đã hết hạn ngạch).
-  - **Khu vực Lịch Thi Thật Phòng Lab:** Banner thông báo ca thi phòng Lab sắp diễn ra (Phòng Lab 302, Ghế số 15, Ca thi 08:00).
-
-#### 🖥️ Màn hình FE-1.7 (Vệ tinh): `ExamHistoryPage.tsx` (FE-02: Tab Luyện Tập)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Tab 1: **"Lịch Sử Luyện Tập"** (MF-01).
-  - Bảng danh sách các phiên luyện tập: Mã phiên, Tên môn học, Chế độ (`[Per-Question]` / `[Full-Session]`), Số câu hỏi, Thời gian làm bài, Điểm trung bình.
-  - Nút **"Xem Chi Tiết Scorecard"**: Mở Drawer trượt từ bên phải hiển thị toàn bộ câu hỏi, transcript trả lời của sinh viên, điểm từng tiêu chí rubric và nhận xét AI của từng câu.
+### 🌟 KHỐI TRỌNG TÂM 2: MODULE MF-04 (NHÁNH A) — AN NINH KIOSK PHÒNG THI & GIÁM THỊ
+1. **Trang `KioskCheckInPage.tsx` (`/kiosk/check-in` — FE-K01):**
+   - Giao diện fullscreen Kiosk phòng Lab. Tự động phát hiện IP máy trạm (`ip_address`).
+   - Nhập Mã sinh viên (MSSV) $\to$ Hệ thống đối chiếu số máy Kiosk (SeatNumber 1–40) trùng khớp với Số thứ tự trong danh sách ca thi phòng Lab.
+   - Khóa nút "Tiếp Tục" nếu sinh viên ngồi sai vị trí máy.
+2. **Trang `KioskHardwareMicCheckPage.tsx` (`/kiosk/hardware-check` — FE-K02):**
+   - Tích hợp Web Audio API và `useMicrophoneLevel.ts`.
+   - Sinh viên nói thử vào Micro trong 30 giây. Hiển thị thước đo âm lượng thời gian thực (VU Meter).
+   - Bắt buộc âm lượng đạt ngưỡng **$\ge 60$dB** mới mở khóa nút "Vào Phòng Thi". Nếu micro rè/yếu dưới 60dB, hiển thị cảnh báo đỏ yêu cầu đổi tai nghe hoặc báo giám thị.
+3. **Trang `KioskExamRoomPage.tsx` (`/kiosk/exam` — FE-K03):**
+   - **Chế độ Phong Tỏa Kiosk (Lockdown Mode):** Ép buộc Fullscreen. Vô hiệu hóa 100% phím tắt hệ thống: Alt+Tab, phím Windows, F11, F12, Ctrl+Shift+I, chuột phải.
+   - **Cơ Chế Bắt Mất Focus (Anti-Cheat 3 Strikes):** Hook `useKioskLockdown.ts` lắng nghe `window.onblur`.
+     * Lần 1: Cảnh báo vàng toàn màn hình.
+     * Lần 2: Cảnh báo cam nghiêm trọng.
+     * Lần 3: Lập tức khóa bài thi, tự động chuyển sang trang `KioskSuspendedPage.tsx` thông báo bị đình chỉ thi và gửi còi báo động về máy giám thị.
+   - **Phương thức làm bài (`ExamInputMode`):** Hiển thị theo cấu hình của Trưởng BM: `VoiceOnly` hoặc `VoiceWithTranscriptEdit`.
+   - **Niêm phong âm thanh Cloudflare R2:** Stream audio trực tiếp lên Cloudflare R2 với tên file bất biến **`STT_MSSV.webm`** (ví dụ `01_SE170123.webm`), tính mã băm cryptographic SHA-256 ngay tại Kiosk để niêm phong bài thi.
+4. **Trang `KioskSubmittedPage.tsx` (`/kiosk/submitted` — FE-K05):**
+   - Màn hình biên nhận niêm phong an toàn sau khi sinh viên bấm nộp bài.
+   - Nộp bài Persist First trong $< 100$ms (`SUBMITTED`) kèm mã băm SHA-256 của file audio R2.
+   - Thông báo rõ ràng: *"Bài thi đã được lưu trữ an toàn. Kết quả sẽ do Giảng viên thẩm định và công bố trên hệ thống."*
+   - **Quy tắc bất biến:** **Tuyệt đối không có điểm liền tại Kiosk và không cho khiếu nại tại chỗ**. Sinh viên ký biên bản nộp bài giấy với giám thị rồi ra về.
+5. **Trang `ProctorRoomMonitorPage.tsx` (`/proctor/monitor` — FE-P01):**
+   - Màn hình dành cho Giám thị phòng thi (hoặc Giảng viên được phân công coi thi).
+   - Hiển thị **Ma trận 40 máy lab** (Lưới 40 ô trực quan tương ứng SeatNumber 1–40).
+   - Chức năng điểm danh: Đối chiếu thẻ SV và CCCD thực tế, tick xác nhận sinh viên có mặt trên hệ thống.
+   - Các nút điều khiển ca thi: "Mở Ca Thi", "Bắt Đầu Tính Giờ", "Khóa Ca Thi".
+   - Bảng cảnh báo an ninh thời gian thực: Nếu có máy Kiosk nào vi phạm mất focus (blur) hoặc bị đình chỉ, ô máy đó lập tức nhấp nháy đỏ kèm âm thanh cảnh báo.
 
 ---
 
-### KHỐI 2 (MF-02): THI THỬ VẤN ĐÁP BẤM GIỜ (TIMED MOCK EXAM) & VỆ TINH
-
-#### 🖥️ Màn hình FE-2.1: `MockExamPage.tsx` (Phòng Thi Thử Bấm Giờ MF-02)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - **Modal Khởi Động Thi Thử:**
-    * Sinh viên chọn môn học để thi thử.
-    * Tùy chọn Follow-up chủ động: Sinh viên tick chọn **"Có Follow-up"** (AI hỏi đào sâu ngữ cảnh) hoặc **"Không Follow-up"** (Làm đề thi thẳng tính giờ).
-    * Hiển thị cảnh báo hạn ngạch: *"Lượt thi này sẽ tính vào hạn ngạch K lượt/ngày của bạn"*.
-  - **Giao diện làm bài chính:**
-    * **Đồng hồ Master Timer đếm ngược to ở giữa trên cùng**: Đồng bộ chính xác với Server (`duration_minutes`), hiển thị định dạng `MM:SS`. Khi còn dưới 3 phút chuyển sang màu cam nhấp nháy, dưới 1 phút chuyển màu đỏ rực kèm còi cảnh báo.
-    * Đề bài rút từ ma trận Bloom kho `practice_questions` (cô lập an toàn kho `exam_questions`).
-    * Sinh viên **không chọn topic hay độ khó**, tập trung trả lời câu hỏi xuất hiện trên màn hình.
-
-#### 🖥️ Cổng Kiểm Soát FE-2.2: Voice-First Gate (Khóa Cứng Bàn Phím)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả kỹ thuật:**
-  - Khóa cứng toàn bộ ô nhập văn bản (`disabled` và `readonly`), ẩn ô gõ bàn phím.
-  - Bắt buộc 100% sinh viên phải kích hoạt Micro để trả lời câu hỏi.
-  - Hiển thị trực quan thanh sóng âm (Audio VU Meter) thời gian thực khi sinh viên đang phát biểu.
-
-#### 🖥️ Modal Cảnh Báo FE-2.3: `QuotaExceededModal.tsx` (Chặn Hạn Ngạch HTTP 429)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Kích hoạt khi Backend trả về mã lỗi `HTTP 429 Too Many Requests`.
-  - Thiết kế Modal cảnh báo màu đỏ rực, biểu tượng chiếc khiên chặn hạn ngạch.
-  - Tiêu đề: **"ĐÃ ĐẠT GIỚI HẠN THI THỬ TRONG NGÀY"**.
-  - Nội dung: *"Bạn đã sử dụng hết hạn ngạch K lượt thi thử hôm nay cho môn học này theo quy định của Trưởng Bộ Môn. Vui lòng quay lại vào ngày mai hoặc chuyển sang chế độ Luyện tập tự do (MF-01) để tiếp tục ôn luyện."*.
-  - Nút hành động: Nút xanh **"Chuyển Sang Luyện Tập Tự Do"** và Nút phụ **"Về Trang Chủ"**.
-
-#### 🖥️ Modal Kết Quả FE-2.4: `MockExamScorecardModal.tsx` (Scorecard Chuẩn Đầu Ra CLO)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Bung lên ngay sau khi sinh viên hoàn thành bài thi thử (Instant Feedback).
-  - Hiển thị bảng tổng kết điểm số bám sát ma trận Chuẩn Đầu Ra (CLOs) của môn học:
-    * Điểm tổng kết bài thi thử (Thang điểm 10.0).
-    * Bảng đánh giá mức độ đạt được theo từng CLO: CLO1 (Hiểu kiến trúc), CLO2 (Phân tích thiết kế), CLO3 (Bảo mật & Tối ưu)...
-    * Nhận xét sư phạm từng phần chỉ rõ điểm mạnh và lỗ hổng kiến thức cần củng cố trước kỳ thi thật.
-  - Nút **"Lưu & Xem Lịch Sử"** lưu kết quả vào hồ sơ sinh viên.
-
-#### 🖥️ Màn hình FE-2.5 (Vệ tinh): `ExamHistoryPage.tsx` (FE-02: Tab Thi Thử)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Tab 2: **"Lịch Sử Thi Thử Bấm Giờ"** (MF-02).
-  - Bảng danh sách: Mã bài thi, Ngày thi, Điểm tổng kết, Đánh giá CLO, Trạng thái thời gian (Đúng giờ / Nộp muộn `is_late`).
-  - Xem lại chi tiết từng lượt thi thử để so sánh biểu đồ tiến bộ điểm số qua các ngày.
+### 🌟 KHỐI TRỌNG TÂM 3: MODULE MF-04 (NHÁNH B) — CỔNG HẬU KIỂM GIẢNG VIÊN (AUDIT EVIDENCE)
+1. **Trang `AuditEvidencePage.tsx` (`/lecturer/audit-evidence` — FE-L02):**
+   - Cổng Giảng viên hậu kiểm toàn diện bài thi vấn đáp phòng Lab sau khi AI đã chấm ngầm.
+   - **Tự động phân loại 2 nhóm bài thi:**
+     * **Nhóm 1 (Cần xem lại / Fail / Đáng nghi ngờ):** Các bài có `is_suspicious == true`, `confidence_score < 0.70` (do phòng ồn, phát âm không rõ, mâu thuẫn chuỗi CoT) hoặc bài thi bị fail/điểm liệt. Giảng viên **bắt buộc phải rà soát và nghe lại 100% các bài trong nhóm này**.
+     * **Nhóm 2 (Độ tin cậy cao):** Danh sách các bài thi AI chấm đạt độ tin cậy cao để GV rà soát nhanh.
+   - **Evidence Panel đa chiều:**
+     * Bên trái: Thông tin thí sinh, đề bài, Barem Rubric 10.0đ.
+     * Ở giữa: Bản transcript Whisper bóc băng gốc song song với bản transcript sinh viên đã hiệu đính.
+     * Bên phải: Phân tích chuỗi suy luận CoT (Chain-of-Thought) của AI cho từng tiêu chí rubric.
+2. **Component `WaveformPlayer.tsx` (Trình Phát Sóng Âm R2):**
+   - Tích hợp Wavesurfer.js hiển thị biểu đồ sóng âm chân thực từ file ghi âm `STT_MSSV.webm` trên Cloudflare R2.
+   - Điều khiển tốc độ phát: 1.0x, 1.25x, 1.5x.
+   - Tính năng Interactive Transcript: Click vào bất kỳ câu nào trong transcript, thanh timeline sóng âm sẽ tự động nhảy đến đúng đoạn audio đó để GV nghe kiểm chứng.
+3. **Component `ScoreOverrideForm.tsx` (Form Điều Chỉnh Điểm):**
+   - Giảng viên điều chỉnh lại điểm từng tiêu chí rubric.
+   - Bắt buộc nhập lý do giải trình (`override_reason`) **tối thiểu 10 ký tự** (nếu để trống hoặc ngắn hơn, nút Lưu sẽ bị vô hiệu hóa).
+4. **Nút "Công Bố Điểm" (Publish Grades):**
+   - Chỉ mở khóa khi **100% sinh viên trong ca thi đã có điểm hoàn chỉnh** (đã xử lý xong toàn bộ bài nghi ngờ/fail).
+   - Gọi API `POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`.
+   - Kích hoạt One-Way Lock (`is_locked = true`), chặn mọi thao tác sửa điểm trái phép và gửi điểm về Student Portal.
 
 ---
 
-### KHỐI 3 (MF-03): NGÂN HÀNG ĐỀ & RUBRIC STUDIO 10.0 & VỆ TINH
-
-#### 🖥️ Màn hình FE-3.1 (Vệ tinh): `LoginPage.tsx` (Google OAuth PKCE Mọi Email)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Layout căn giữa hiện đại (Clean Glassmorphism), nền xám xanh FPT (`#F8FAFC`), logo Đại học FPT nổi bật góc trên.
-  - Tiêu đề: *"Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM"*, phụ đề: *"FA26SE166 — Đại học FPT TP.HCM"*.
-  - Nút bấm chính: **"Đăng nhập với tài khoản Google"** có icon Google chuẩn.
-  - **Mở rộng cho mọi email Google:** Không giới hạn domain cứng `@fpt.edu.vn`, cho phép mọi tài khoản Google hợp lệ đăng nhập để kiểm thử và demo bảo vệ đồ án.
-  - Xử lý Google OAuth PKCE: Lưu JWT Token vào `useAuthStore` và tự động điều hướng người dùng về đúng Dashboard theo 1 trong 5 vai trò hệ thống (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
-
-#### 🖥️ Màn hình FE-3.2 (Vệ tinh): `UserManagementPage.tsx` (FE-09: Quản Lý Người Dùng)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Giao diện dành riêng cho `admin`.
-  - Thanh tìm kiếm theo tên, email, bộ lọc vai trò (`student`, `lecturer`, `department_head`, `proctor`, `admin`) và trạng thái (`Active` / `Blocked`).
-  - Bảng người dùng: Avatar, Họ và tên, Email, Vai trò hiện tại, Ngày tham gia, Trạng thái tài khoản.
-  - Cột Hành động:
-    * Nút **"Đổi Vai Trò"**: Dropdown cho phép chuyển đổi vai trò của người dùng sang 1 trong 5 vai trò cố định.
-    * Nút **"Khóa / Mở Khóa"**: Switch bật/tắt kích hoạt tài khoản (`is_active`).
-
-#### 🖥️ Màn hình FE-3.3: `QuestionStudioPage.tsx` (Soạn Đề & AI Sinh Đề Từ FLM)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng (Layout & Preview Studio) & 🧑 Nguyễn Đăng Hải (Editor Logic)**
-* **Mô tả giao diện:**
-  - **Tab 1 — "AI Sinh Đề Tự Động Từ FLM Theo Barem Riêng":**
-    * Giảng viên chọn môn học, nhập nội dung Syllabus FLM hoặc dán đề cương môn học, chọn CLO mục tiêu và mức độ Bloom.
-    * Nhập barem tiêu chí riêng mong muốn của giảng viên.
-    * Nút **"Kích Hoạt AI Sinh Đề"** $\to$ Gọi Gemini AI sinh câu hỏi, Model Answer $\ge 50$ ký tự và barem rubric $\sum \equiv 10.0$đ.
-    * Khung Preview Studio hiển thị kết quả sinh để Giảng viên tự do chỉnh sửa nội dung đề bài, barem và câu trả lời mẫu trước khi lưu.
-  - **Tab 2 — "Soạn Đề Thủ Công":**
-    * Ô nhập nội dung câu hỏi vấn đáp.
-    * Ô nhập câu trả lời mẫu chuẩn (Model Answer, bắt buộc $\ge 50$ ký tự, có bộ đếm ký tự thời gian thực).
-    * Bộ chọn Cấp độ Bloom (Nhận biết, Thông hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo).
-  - Tích hợp `RubricCriteriaEditor.tsx` và `QuestionBankSelector.tsx`.
-
-#### 🖥️ Component FE-3.4: `RubricCriteriaEditor.tsx` (Barem Rubric Studio 10.0đ)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Danh sách các tiêu chí rubric con (Tên tiêu chí, Mô tả đánh giá, Điểm tối đa).
-  - Nút **"Thêm Tiêu Chí Con"** và nút xóa từng tiêu chí.
-  - **Bộ Tính Tổng Điểm Thời Gian Thực (Real-time Rubric Sum Counter):**
-    * Hiển thị tổng điểm lớn góc trên: $\sum = \text{X.X} / 10.0$ điểm.
-    * **Nếu tổng điểm $\ne 10.0$ điểm** (kể cả 9.9đ hay 10.1đ): Khung tổng điểm tô màu đỏ rực, hiển thị dòng cảnh báo: *"Tổng điểm rubric phải đúng bằng 10.0 điểm để đảm bảo chuẩn khảo thí"*, đồng thời **khóa cứng nút "Gửi Duyệt"** (`disabled`).
-    * **Nếu tổng điểm $= 10.0$ điểm**: Khung tổng điểm sáng xanh lục an toàn, mở khóa nút gửi duyệt.
-
-#### 🖥️ Component FE-3.5: `QuestionBankSelector.tsx` (Tick Chọn 2 Kho Đề & Gửi Duyệt)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Hai ô Checkbox lớn trực quan:
-    * [x] **"Lưu vào Kho Câu Hỏi Luyện Tập (`practice_questions`)"**: Dùng cho sinh viên ôn tập tự do và thi thử.
-    * [x] **"Lưu vào Kho Câu Hỏi Thi Thật Phòng Lab (`exam_questions`)"**: Dùng cho các kỳ thi thật chính thức.
-    * Giảng viên có thể tick chọn 1 trong 2 hoặc tick chọn cả 2 kho cùng lúc.
-  - Nút bấm chính: **"Gửi Lên Cho Bộ Môn Duyệt"** (`POST /api/v1/questions/batch-submit-review`). Câu hỏi chuyển trạng thái `SUBMITTED_FOR_REVIEW` và hiển thị Toast thông báo thành công.
-
-#### 🖥️ Màn hình FE-3.6: `QuestionApprovalPage.tsx` (Trưởng Bộ Môn Thẩm Định Đề)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Giao diện dành riêng cho **Trưởng Bộ Môn (`department_head`)**.
-  - Danh sách câu hỏi chờ thẩm định từ các giảng viên gửi lên.
-  - Xem chi tiết từng câu: Đề bài, Giảng viên tạo, Môn học, CLO, Model Answer ($\ge 50$ ký tự), Barem rubric chi tiết ($\sum \equiv 10.0$đ), Kho đề lưu trữ.
-  - **3 Nút Quyết Định Thẩm Định:**
-    1. Nút xanh: **"Phê Duyệt (APPROVED)"** $\to$ Lưu chính thức vào ngân hàng đề môn học.
-    2. Nút vàng: **"Yêu Cầu Chỉnh Sửa (NEEDS_REVISION)"** $\to$ Mở modal yêu cầu nhập góp ý chỉnh sửa $\ge 10$ ký tự, trả về cho giảng viên.
-    3. Nút đỏ: **"Từ Chối (REJECTED)"** $\to$ Mở modal nhập lý do từ chối, loại bỏ câu hỏi.
-
-#### 🖥️ Màn hình FE-3.7 (Vệ tinh): `LecturerDashboardPage.tsx` (FE-10: Cổng Giảng Viên)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Thống kê tổng số câu hỏi đã tạo, số câu hỏi đang chờ Trưởng Bộ Môn duyệt, số câu hỏi đã được phê duyệt, số câu hỏi cần chỉnh sửa.
-  - Danh sách nhanh các ca thi phòng Lab cần hậu kiểm điểm số sau thi.
-  - Lối tắt truy cập nhanh: "Soạn đề mới / AI Gen", "Cổng Hậu kiểm Evidence Panel".
+### 🛠️ CÁC TASK VỆ TINH ("RÂU RIA") CỦA HOÀNG
+1. **Khắc phục lỗi Build & TypeScript:**
+   - Sửa file `src/lib/utils.ts` và `src/components/common/separator.tsx`: Chuyển `from 'cn'` thành `from '@/utils/cn'`.
+   - Cài đặt đầy đủ các package thiếu trong `package.json`: `three`, `@base-ui/react`, `qrcode`.
+   - Gán kiểu tường minh (type casting) cho các tham số `object: any`, `material: any`, `dataUrl: string` trong các ThreeScene để lệnh `npm run build` vượt qua 100% (Exit Code 0).
+2. **Xác thực Google OAuth 2.0 (FE-Auth):**
+   - Hoàn thiện `LoginPage.tsx`: Tích hợp Google Identity Services (Google Sign-In button), lấy Google ID Token gửi `POST /api/v1/auth/google-login`.
+   - Xử lý lưu trữ TokenPair (`accessToken`, `refreshToken`) vào `useAuthStore.ts`.
+   - Triển khai Silent Refresh Token Interceptor trong `api.client.ts`: Tự động gọi `POST /api/v1/auth/refresh-token` trước khi access token hết hạn (Token Rotation).
+   - Hoàn thiện Route Guard `ProtectedRoute.tsx` phân quyền đúng 5 roles (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
+3. **Dashboard Sinh viên & Giảng viên (FE-10):**
+   - `StudentDashboardPage.tsx`: Lời chào, thông tin SV, danh sách môn học, widget hạn ngạch thi thử hôm nay (`X/K`), banner lịch thi phòng lab sắp tới.
+   - `LecturerDashboardPage.tsx`: Thống kê ca thi sắp coi, số bài thi cần hậu kiểm, số câu hỏi đang soạn thảo.
+4. **Hộp Thư Thông Báo In-App (FE-11):**
+   - Xây dựng `NotificationDrawer.tsx` và `NotificationPage.tsx`.
+   - Hiển thị danh sách thông báo: Lịch thi được công bố, điểm thi chính thức đã công bố, đơn phúc khảo được giao chấm, câu hỏi chờ duyệt/bị trả về. Nút "Đánh dấu đã đọc". (Không gửi email).
 
 ---
 
-### KHỐI 4 (MF-04): THI THẬT PHÒNG LAB, CÔNG BỐ ĐIỂM & PHÚC KHẢO NỘI BỘ & VỆ TINH
+# 🧑‍💻 PHẦN 4: NHIỆM VỤ CHI TIẾT CỦA NGUYỄN ĐĂNG HẢI (DB & FE SPECIALIST)
 
-#### 🖥️ Màn hình FE-4.1: `ExamSeasonConfigPage.tsx` (Trưởng BM Cấu Hình Kỳ Thi & Ca Thi)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Giao diện dành cho **Trưởng Bộ Môn (`department_head`)**.
-  - Khởi tạo Kỳ thi (`OfficialExamSession`, ví dụ Kỳ thi Kết thúc môn FA26), chọn danh sách môn thi trong kỳ thi.
-  - **Cấu hình Ca thi (`RealExamSessionShift`):**
-    * Chọn phòng máy lab trực tiếp trên ca thi (Phòng Lab 301, 302...).
-    * Phân công người coi thi trực tiếp (chọn Giám thị `proctor` hoặc Giảng viên `lecturer`).
-    * Thiết lập thời gian ca thi, số lượng máy trạm tối đa (40 máy).
-  - **Cấu hình Môn thi trong kỳ thi:**
-    * Cấu hình Follow-up: Bật/tắt (`has_follow_up`) và số câu hỏi phụ (`max_follow_up_questions`, 1–5 câu, mặc định 2 câu).
-    * Cấu hình phương thức làm bài `ExamInputMode`: Chọn `VoiceOnly` hoặc `VoiceWithTranscriptEdit` (**loại bỏ hoàn toàn lựa chọn `VoiceAndTextInput`**).
-    * Cấu hình thời gian đệm `TranscriptBufferSeconds` (10–300s, mặc định 60s).
-
-#### 🖥️ Màn hình FE-4.2: `ProctorRoomMonitorPage.tsx` (FE-P01: Giám Thị Phòng Thi)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Giao diện dành cho **Giám thị phòng thi (`proctor`)**.
-  - Thanh điều khiển: Nút **"Bắt Đầu Ca Thi"**, nút **"Kết Thúc Ca Thi"**, đồng hồ đếm ngược ca thi phòng Lab.
-  - **Ma Trận Giám Sát 40 Máy Trạm Phòng Lab (Lưới 8x5 tương ứng Ghế 1–40):**
-    * Mỗi ô máy hiển thị: Số ghế (01–40), MSSV, Họ tên thí sinh, Địa chỉ IP máy trạm (`ip_address`), Trạng thái vé thi (7 trạng thái HOA: `SCHEDULED`, `IN_PROGRESS`, `SUBMITTED`...).
-    * Đèn trạng thái máy trạm: Màu xám (Chưa check-in), Màu xanh lá (Đang thi bình thường), Màu vàng (Cảnh báo mất focus), Màu đỏ (Đã bị đình chỉ thi).
-    * Nút hành động trên từng máy: **"Đình Chỉ Thi Thủ Công"** (lập biên bản khi phát hiện gian lận tại chỗ).
-
-#### 🖥️ Màn hình FE-4.3: `KioskCheckInPage.tsx` (FE-K01: Check-in Kiosk IP Binding)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Giao diện máy trạm Kiosk phòng Lab khóa cứng.
-  - Ô nhập: **Số thứ tự ghế ngồi (STT 1–40)** và **Mã số sinh viên (MSSV)**.
-  - Nút **"Xác Nhận Check-in Phòng Thi"**:
-    * Gửi request lên Backend kiểm tra ràng buộc địa chỉ IP máy trạm `ip_address` với số ghế đã đăng ký.
-    * Nếu sai IP: Hiển thị thông báo đỏ rực `HTTP 403 Forbidden`: *"Vị trí máy trạm không khớp với số ghế đã phân công. Vui lòng liên hệ Giám thị phòng thi!"*.
-    * Nếu khớp IP: Chuyển sang màn hình kiểm tra micro phần cứng.
-
-#### 🖥️ Màn hình FE-4.4: `KioskHardwareMicCheckPage.tsx` (FE-K02: Kiểm Tra Micro Phần Cứng)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Bắt buộc kiểm tra micro trong vòng 30 giây trước khi mở đề thi.
-  - **Thanh đo cường độ âm lượng thời gian thực (VU Meter):** Sử dụng Web Audio API phân tích tín hiệu âm thanh từ micro phần cứng.
-  - Yêu cầu thí sinh đọc to đoạn văn mẫu kiểm tra âm thanh: Cường độ âm lượng bắt buộc phải chạm ngưỡng **$\ge 60$ dB**.
-  - Đèn tín hiệu: Chuyển sang màu xanh lục khi đạt $\ge 60$dB. Lúc này nút **"Vào Phòng Thi Chính Thức"** mới sáng lên cho phép click.
-
-#### 🖥️ Màn hình FE-4.5: `KioskExamRoomPage.tsx` (FE-K03: Phòng Thi Kiosk Lockdown)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện & Cơ chế phong tỏa Kiosk:**
-  - Kích hoạt chế độ toàn màn hình Fullscreen Lockdown (`requestFullscreen`), vô hiệu hóa chuột phải, vô hiệu hóa phím tắt hệ thống (Alt+Tab, Windows, F11, F12, DevTools, Esc).
-  - **Cơ chế bắt sự kiện mất tiêu điểm (`window.onblur`):**
-    * Mất focus lần 1: Bung Modal cảnh báo màu vàng: *"CẢNH BÁO VI PHẠM LẦN 1/3: Tuyệt đối không chuyển cửa sổ hoặc click ra ngoài phòng thi!"*.
-    * Mất focus lần 2: Cảnh báo màu cam kèm còi bíp: *"CẢNH BÁO VI PHẠM LẦN 2/3: Lần vi phạm tiếp theo bạn sẽ bị ĐÌNH CHỈ THI ngay lập tức!"*.
-    * **Mất focus lần 3 (`blur_count >= 3`)**: Lập tức chuyển hướng sang `KioskSuspendedPage.tsx`, khóa chết máy trạm và tự động nộp bài lập biên bản vi phạm.
-  - **Luồng thi:** Hiển thị câu hỏi thi thật rút từ kho `exam_questions`.
-  - **Niêm phong âm thanh (Cloudflare R2):** Stream trực tiếp audio lên Cloudflare R2 với tên file bất biến **`STT_MSSV.webm`** (ví dụ `01_SE170123.webm`), tính toán mã băm SHA-256 niêm phong file tại máy trạm.
-  - Nộp bài: Nhận phản hồi Persist First $< 100$ms lưu DB trạng thái `SUBMITTED`.
-
-#### 🖥️ Màn hình FE-4.6: `KioskSuspendedPage.tsx` (FE-K04: Màn Hình Đình Chỉ Thi)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Nền đỏ thẫm toàn màn hình, biểu tượng cảnh báo vi phạm lớn.
-  - Tiêu đề: **"BÀI THI ĐÃ BỊ ĐÌNH CHỈ DO VI PHẠM QUY CHẾ PHÒNG THI"**.
-  - Lý do: *"Hệ thống phát hiện máy trạm mất tiêu điểm (Focus Loss) quá 3 lần quy định"*.
-  - Khóa toàn bộ bàn phím và chuột. Thông báo: *"Thí sinh giữ nguyên vị trí và chờ Giám thị phòng thi lập biên bản"*.
-
-#### 🖥️ Màn hình FE-4.7: `KioskSubmittedPage.tsx` (FE-K05: Biên Nhận Niêm Phong An Toàn)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện (Quy tắc bất biến MF-04):**
-  - Nền xanh dịu an toàn, biểu tượng ổ khóa niêm phong bảo mật.
-  - Tiêu đề: **"BÀI THI ĐÃ ĐƯỢC NIÊM PHONG VÀ LƯU TRỮ AN TOÀN"**.
-  - Thông tin biên nhận điện tử:
-    * Mã thí sinh: `SE170123` | STT: `01`.
-    * File âm thanh niêm phong: `01_SE170123.webm`.
-    * Mã băm toàn vẹn SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
-    * Thời gian nộp: `08:45:22 15/10/2026`.
-  - **Dòng thông báo quan trọng:** *"Bài thi đã được lưu trữ an toàn. Kết quả sẽ do Giảng viên thẩm định và công bố trên hệ thống Student Portal. Thí sinh ký biên bản nộp bài giấy và rời khỏi phòng thi."*
-  - **Cam kết kỹ thuật:** **0% hiển thị điểm liền, 0% khiếu nại tại chỗ**. Tuyệt đối không có nút xem điểm hay phúc khảo trên máy Kiosk.
-
-#### 🖥️ Màn hình FE-4.8: `AuditEvidencePage.tsx` (FE-L02: Cổng Hậu Kiểm Evidence Panel)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Cổng Hậu kiểm dành riêng cho **Giảng viên (`lecturer`)**.
-  - **Tự động phân loại 2 nhóm bài thi:**
-    * **Nhóm 1 (Đáng nghi ngờ / Fail / Cần can thiệp):** Các bài có `is_suspicious == true`, `confidence_score < 0.70`, hoặc bài thi bị fail/điểm liệt. **Sinh viên bắt buộc phải đợi Giảng viên chấm hết toàn bộ các bài trong nhóm này**.
-    * **Nhóm 2 (Độ tin cậy cao):** Các bài thi AI chấm chuẩn xác, giảng viên rà soát nhanh.
-  - **Evidence Panel (Bảng Bằng Chứng Đối Chiếu):**
-    * **Waveform Audio Player (Wavesurfer.js):** Vẽ biểu đồ sóng âm thanh trực tiếp từ Cloudflare R2 (`STT_MSSV.webm`). Click vào từng đoạn văn bản transcript để tua nhanh audio đến đúng vị trí thí sinh đang nói.
-    * Bảng đối chiếu song song: Transcript Whisper gốc vs Chuỗi suy luận AI CoT từng tiêu chí rubric.
-    * Khung điều chỉnh điểm: Cho phép Giảng viên nhập điểm mới, **bắt buộc nhập lý do giải trình (`override_reason`) $\ge 10$ ký tự**.
-  - **Nút "Công Bố Điểm (Publish Grades)" Atomic 100%:**
-    * Chỉ sáng xanh cho phép click khi **100% sinh viên trong ca thi đã có điểm hoàn chỉnh**.
-    * Khi click: Kích hoạt One-Way Lock (`is_locked = true` $\to$ HTTP 403), giải phóng điểm gửi về cho sinh viên trên Student Portal.
-
-#### 🖥️ Component FE-4.9: `AppealRequestModal.tsx` (Nộp Đơn Phúc Khảo Nội Bộ)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Bung lên từ Student Portal sau khi Giảng viên đã công bố điểm chính thức.
-  - Hiển thị thông tin điểm hiện tại và tiêu chí rubric muốn phúc khảo.
-  - Ô nhập lý do khiếu nại (bắt buộc $\ge 20$ ký tự).
-  - Nút **"Nộp Đơn Phúc Khảo"**: Gửi đơn lên hệ thống (`POST /api/v1/appeals`), tạo thực thể `AppealRequest` tự động gán cho Trưởng Bộ Môn thẩm định.
-
-#### 🖥️ Màn hình FE-4.10: `AppealManagementPage.tsx` (Trưởng BM Thẩm Định & Giao Chấm Lại)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Giao diện dành riêng cho **Trưởng Bộ Môn (`department_head`)**.
-  - Danh sách các đơn phúc khảo nội bộ chờ xử lý của sinh viên.
-  - Xem Evidence Panel của bài thi bị khiếu nại (Audio R2, Transcript, Điểm cũ, Lý do khiếu nại).
-  - **Hai phương thức thẩm định:**
-    1. **Giao cho Giảng viên chấm lại:** Mở modal chọn một Giảng viên trong bộ môn (`assign-lecturer`) để thẩm định độc lập. Giảng viên được giao sẽ nhận thông báo in-app và truy cập Evidence Panel để chấm lại.
-    2. **Trưởng Bộ Môn tự ra quyết định:** Nhập điểm mới chấp thuận (`APPROVED`) hoặc giữ nguyên điểm từ chối (`REJECTED`) kèm kết luận thẩm định.
-
-#### 🖥️ Màn hình FE-4.11 (Vệ tinh): `SemesterManagementPage.tsx` (FE-08: Quản Lý Học Kỳ)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - Giao diện dành cho `admin`.
-  - Danh sách các học kỳ: Mã học kỳ (FA26, SP26...), Tên học kỳ, Ngày bắt đầu, Ngày kết thúc, Trạng thái (Đang diễn ra, Sắp tới, Đã kết thúc).
-  - Modal Thêm / Chỉnh sửa học kỳ. Nút đặt làm học kỳ mặc định.
-
-#### 🖥️ Component FE-4.12 (Vệ tinh): `NotificationDrawer.tsx` / `NotificationPage.tsx` (FE-11)
-* **Kỹ sư phụ trách:** 🧑 **Lê Vũ Hoàng**
-* **Mô tả giao diện:**
-  - Hộp thư thông báo in-app hiển thị dạng Drawer trượt từ cạnh phải hoặc trang riêng.
-  - Danh sách thông báo theo thứ tự thời gian: Biểu tượng loại thông báo (Lịch thi, Điểm công bố, Duyệt đề, Phúc khảo), Tiêu đề, Nội dung tóm tắt, Thời gian.
-  - Đánh dấu đã đọc khi click vào thông báo; Nút **"Đánh dấu tất cả là đã đọc"**. Điều hướng nhanh đến trang liên quan khi click thông báo.
-
-#### 🖥️ Màn hình FE-4.13 (Vệ tinh): Admin Configuration, DLQ & Audit Logs
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Đăng Hải**
-* **Mô tả giao diện:**
-  - `AdminConfigPage.tsx`: Cấu hình số câu hỏi follow-up luyện tập MF-01 (1–5 câu, mặc định 2 câu).
-  - `AdminDlqMonitorPage.tsx`: Giám sát hàng đợi chết `dead_letter_queues`, xem chi tiết lỗi và nút "Replay Chấm Bù".
-  - `AuditLogsPage.tsx`: Bảng tra cứu nhật ký kiểm toán hệ thống (ai đã sửa điểm, duyệt đề, thời gian, IP).
+### 🌟 KHỐI TRỌNG TÂM 1: MODULE MF-02 — THI THỬ VẤN ĐÁP TÍNH GIỜ CÓ HẠN NGẠCH
+1. **Trang `MockExamPage.tsx` & `MockExamSessionPage.tsx` (`/student/mock-exam`):**
+   - **Modal Khởi Động Thi Thử:**
+     * Sinh viên chọn môn học cần thi thử.
+     * Tùy chọn Follow-up chủ động: Sinh viên tick chọn **"Có Follow-up"** hoặc **"Không Follow-up"**. Ca thi có follow-up sẽ có thời lượng làm bài dài hơn do Trưởng BM cấu hình.
+     * Sinh viên **không chọn topic, không chọn độ khó**. Đề thi bốc ngẫu nhiên từ kho `practice_questions` theo ma trận Bloom do Trưởng BM cấu hình.
+     * Gọi API `POST /api/v1/mock-exams/sessions` để bắt đầu.
+   - **Xử lý Chặn Hạn Ngạch HTTP 429 (`QuotaExceededModal.tsx`):**
+     * Nếu sinh viên đã dùng hết hạn ngạch thi thử trong ngày (`max_mock_exams_per_day` do Trưởng BM cấu hình cho môn học đó), API trả về `HTTP 429 Too Many Requests`.
+     * Bung Modal cảnh báo màu đỏ: *"Bạn đã dùng hết hạn ngạch K lượt thi thử hôm nay. Vui lòng quay lại vào ngày mai hoặc chuyển sang Luyện tập tự do (MF-01)"*. Kèm nút chuyển nhanh sang Luyện tập.
+2. **Component `VoiceFirstGate.tsx` (Cổng Kiểm Soát Voice-First):**
+   - Khóa cứng toàn bộ ô nhập liệu văn bản (`disabled` và `readonly`), ẩn ô gõ phím.
+   - Bắt buộc sinh viên phải sử dụng Micro để trả lời câu hỏi. Hiển thị sóng âm thời gian thực khi đang nói.
+3. **Component `CountdownTimer.tsx` (Đồng Hồ Đếm Ngược Master Timer):**
+   - Hiển thị đồng hồ đếm ngược `MM:SS` to ở vị trí cố định trên cùng, đồng bộ chính xác với thời lượng server.
+   - Cảnh báo trực quan: Dưới 3 phút đổi sang màu cam nhấp nháy; dưới 1 phút chuyển màu đỏ rực.
+   - **Cơ chế Auto-Submit:** Khi hết giờ (00:00), hệ thống tự động khóa đề và nộp bài. **Các câu chưa làm tính là bỏ trống, 0 điểm**.
+   - **Lưu ý:** Thi thử **không lưu audio**, chỉ lưu bản transcript vào `mock_exam_answers`.
+4. **Modal Kết Quả `MockExamScorecardModal.tsx` (Instant Feedback Theo CLO):**
+   - Bung lên tức thì sau khi hoàn thành bài thi thử.
+   - Hiển thị bảng điểm tổng kết thang điểm 10.0 và đánh giá chi tiết theo từng Chuẩn Đầu Ra (CLOs) của môn học: CLO1 (Kiến trúc), CLO2 (Thiết kế), CLO3 (Tối ưu)...
+   - Nhận xét sư phạm từng tiêu chí giúp sinh viên nhận diện lỗ hổng kiến thức trước kỳ thi thật.
 
 ---
 
-## 📊 3. BẢNG TỔNG HỢP MA TRẬN 28 MÀN HÌNH & PHÂN CÔNG TÁC VỤ FRONTEND
+### 🌟 KHỐI TRỌNG TÂM 2: MODULE MF-03 — NGÂN HÀNG CÂU HỎI & BAREM RUBRIC STUDIO 10.0
+1. **Trang `QuestionStudioPage.tsx` (`/lecturer/questions`):**
+   - Danh sách câu hỏi môn học: Bộ lọc theo Môn học, Mức Bloom, Kho lưu trữ (`practice_questions`, `exam_questions`), Trạng thái (`DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`, `REJECTED`).
+   - Nút **"Gửi Duyệt Bộ Môn"** (`POST /api/v1/questions/batch-submit-review`): Chọn các câu hỏi `DRAFT` và gửi lên Trưởng Bộ Môn thẩm định.
+2. **Trang `CreateQuestionPage.tsx` & Component `RubricCriteriaEditor.tsx`:**
+   - **Tính năng AI Sinh Câu Hỏi Từ FLM Syllabus:**
+     * Nút **"AI Sinh Câu Hỏi Từ Syllabus"**: Gọi API sinh câu hỏi, rubric và câu trả lời mẫu bám sát các CLO có sẵn trên syllabus FLM của môn học.
+     * Giảng viên không bắt buộc chọn từng CLO1, CLO2; có thể chọn Topic để thu hẹp phạm vi trước khi sinh.
+     * Hệ thống chỉ đọc syllabus từ FLM, không ghi ngược lên FLM.
+     * Giảng viên cũng có toàn quyền soạn tay 100% nội dung câu hỏi, rubric và sample answer.
+   - **Rubric Studio 10.0 Chuẩn Hóa:**
+     * Form thêm/bớt các tiêu chí rubric con.
+     * **Client Guard Tổng Điểm Real-Time:** Tính tổng điểm $\sum$ các tiêu chí con. Nếu $\sum \neq 10.0$đ, hiển thị cảnh báo đỏ và khóa cứng nút Lưu; nếu $\sum \equiv 10.0$đ, hiển thị nhãn xanh hợp lệ.
+     * Ràng buộc Model Answer bắt buộc $\ge 50$ ký tự.
+   - **Tick Chọn Kho Câu Hỏi (`QuestionBankSelector.tsx`):**
+     * Hai checkbox riêng biệt: `[ ] Kho Luyện Tập (practice_questions)` và `[ ] Kho Thi Thật (exam_questions)`. Cho phép tick một kho hoặc cả hai kho.
+3. **Trang `QuestionApprovalPage.tsx` (`/department-head/question-approval`):**
+   - Màn hình dành riêng cho Trưởng Bộ Môn để thẩm định đề thi do Giảng viên gửi lên.
+   - Hiển thị chi tiết câu hỏi, CLO tương ứng, Barem Rubric 10.0đ và Câu trả lời mẫu.
+   - **3 Quyết định chính thức:**
+     * Bấm **"Phê duyệt"** (`APPROVED`): Lưu chính thức vào ngân hàng đề môn học.
+     * Bấm **"Yêu cầu chỉnh sửa"** (`NEEDS_REVISION`): Mở popup bắt buộc nhập lý do góp ý để trả về cho Giảng viên sửa.
+     * Bấm **"Từ chối"** (`REJECTED`): Nhập lý do từ chối và loại bỏ câu hỏi.
 
-| Mã Màn Hình | Tên Tệp Component | Phân Hệ / Khối Chức Năng | Kỹ Sư Phụ Trách | Trạng Thái Kỹ Thuật |
-|:---|:---|:---:|:---:|:---:|
-| **FE-1.1** | `PracticePage.tsx` (Per & Full, Progressive 3-10 câu) | Khối 1 (MF-01) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.2** | `BufferScreen.tsx` (Vùng đệm hiệu đính 60s SVG countdown) | Khối 1 (MF-01) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.3** | `FollowUpQuestionCard.tsx` (Hỏi phụ 1-5 câu khi 4.0-8.0) | Khối 1 (MF-01) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.4** | `ScorecardModal.tsx` (Bảng điểm Rubric chi tiết + TTS) | Khối 1 (MF-01) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.5** | `usePracticeHub.ts` & `useSpeechRecognition.ts` (SignalR & STT) | Khối 1 (MF-01) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.6** | `StudentDashboardPage.tsx` (FE-10 Thẻ môn, tiến độ) | Khối 1 (Vệ tinh) | **🧑 Hoàng + Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-1.7** | `ExamHistoryPage.tsx` (FE-02 Tab Luyện Tập) | Khối 1 (Vệ tinh) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-2.1** | `MockExamPage.tsx` (Thi thử Voice-First, Master Timer) | Khối 2 (MF-02) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-2.2** | Voice-First Gate (Khóa cứng input text, chỉ dùng Mic) | Khối 2 (MF-02) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-2.3** | `QuotaExceededModal.tsx` (Chặn Quota HTTP 429) | Khối 2 (MF-02) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-2.4** | `MockExamScorecardModal.tsx` (Scorecard chuẩn đầu ra CLO) | Khối 2 (MF-02) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-2.5** | `ExamHistoryPage.tsx` (FE-02 Tab Thi Thử) | Khối 2 (Vệ tinh) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.1** | `LoginPage.tsx` (Google OAuth PKCE mở mọi email) | Khối 3 (Vệ tinh) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.2** | `UserManagementPage.tsx` (FE-09 Quản lý người dùng 5 roles) | Khối 3 (Vệ tinh) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.3** | `QuestionStudioPage.tsx` (Soạn đề, AI Gen FLM theo barem) | Khối 3 (MF-03) | **🧑 Hoàng + Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.4** | `RubricCriteriaEditor.tsx` (Barem Studio tính tổng 10.0đ) | Khối 3 (MF-03) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.5** | `QuestionBankSelector.tsx` (Tick chọn 2 kho & Gửi duyệt) | Khối 3 (MF-03) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.6** | `QuestionApprovalPage.tsx` (Trưởng BM duyệt 3 quyết định) | Khối 3 (MF-03) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-3.7** | `LecturerDashboardPage.tsx` (FE-10 Cổng Giảng viên) | Khối 3 (Vệ tinh) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.1** | `ExamSeasonConfigPage.tsx` (Trưởng BM cấu hình ca thi, phòng lab) | Khối 4 (MF-04) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.2** | `ProctorRoomMonitorPage.tsx` (FE-P01 Giám sát 40 máy lab) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.3** | `KioskCheckInPage.tsx` (FE-K01 IP Binding ghế 1-40) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.4** | `KioskHardwareMicCheckPage.tsx` (FE-K02 Mic VU Meter >=60dB)| Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.5** | `KioskExamRoomPage.tsx` (FE-K03 Lockdown, blur >=3, R2 audio) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.6** | `KioskSuspendedPage.tsx` (FE-K04 Màn hình đình chỉ thi) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.7** | `KioskSubmittedPage.tsx` (FE-K05 Niêm phong: 0% điểm liền) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.8** | `AuditEvidencePage.tsx` (FE-L02 Wavesurfer.js, Publish Atomic) | Khối 4 (MF-04) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.9** | `AppealRequestModal.tsx` (Sinh viên nộp đơn phúc khảo nội bộ) | Khối 4 (MF-04) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.10** | `AppealManagementPage.tsx` (Trưởng BM giao GV chấm lại) | Khối 4 (MF-04) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.11** | `SemesterManagementPage.tsx` (FE-08 CRUD Học kỳ) | Khối 4 (Vệ tinh) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.12** | `NotificationDrawer.tsx` / `NotificationPage.tsx` (FE-11 In-app) | Khối 4 (Vệ tinh) | **🧑 Lê Vũ Hoàng** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
-| **FE-4.13** | `AdminConfigPage.tsx`, `AdminDlqMonitorPage.tsx`, `AuditLogsPage.tsx` | Khối 4 (Vệ tinh) | **🧑 Nguyễn Đăng Hải** | ⏳ Kế hoạch Sprint (Scaffolding ready, backlog for Sprint) |
+---
+
+### 🌟 KHỐI TRỌNG TÂM 3: MODULE MF-04 (NHÁNH QUẢN TRỊ) — KỲ THI, CA THI & PHÚC KHẢO NỘI BỘ
+1. **Trang `ExamSeasonConfigPage.tsx` (`/department-head/exam-seasons`):**
+   - Trưởng Bộ Môn khởi tạo Kỳ thi chính thức (`OfficialExamSession` / Exam Season).
+   - Đưa danh sách các Môn thi vào kỳ thi.
+   - **Cấu hình Follow-up môn thi trong kỳ thi:** Bật/tắt `has_follow_up` và số câu hỏi phụ tối đa (`max_follow_up_questions` từ 1–5 câu, mặc định 2 câu).
+   - **Cấu hình Phương thức làm bài (`ExamInputMode`):** Chọn 1 trong 2 chế độ trong scope: `VoiceOnly` hoặc `VoiceWithTranscriptEdit` (loại bỏ hoàn toàn `VoiceAndTextInput`).
+   - Cấu hình thời gian đệm sửa transcript của kỳ thi: `TranscriptBufferSeconds` từ 10–300s (mặc định 60s).
+2. **Trang `ExamShiftManagementPage.tsx` (`/department-head/shifts`):**
+   - Quản lý danh sách các Ca thi (`RealExamSessionShift`).
+   - **Ghi phòng lab trực tiếp trên ca thi** (ví dụ: Lab 302, Lab 405; không dùng danh mục phòng riêng).
+   - Cấu hình kíp thi, thời gian bắt đầu / kết thúc ca thi.
+   - **Phân công người coi thi:** Chọn Giảng viên hoặc Giám thị coi thi cho ca đó.
+   - **Gán danh sách thí sinh:** Chọn lớp học đã có trong hệ thống để tự động nạp danh sách sinh viên vào ca thi (Excel chỉ là giải pháp dự phòng khi lớp chưa có trên hệ thống).
+3. **Component `AppealRequestModal.tsx` (Sinh Viên Nộp Đơn Phúc Khảo):**
+   - Hiển thị trên Student Portal khi sinh viên xem bảng điểm chính thức do GV công bố.
+   - Sinh viên không đồng ý với điểm có thể nhấn nút **"Nộp Đơn Phúc Khảo"** (`POST /api/v1/appeals`).
+   - Form nhập lý do khiếu nại, chọn câu hỏi cần phúc khảo và cam kết quy chế.
+4. **Trang `AppealManagementPage.tsx` (`/department-head/appeals`):**
+   - Trưởng Bộ Môn tiếp nhận danh sách các đơn phúc khảo nội bộ (`AppealRequest`).
+   - Xem Evidence Panel của bài thi (Audio Cloudflare R2, Transcript Whisper, Điểm cũ).
+   - **Giao Giảng viên chấm lại:** Nút mở modal `AssignLecturerModal.tsx` chọn một Giảng viên để giao nhiệm vụ chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
+   - Giảng viên được phân công sẽ nhận được thông báo in-app và One-Way Lock mở đường hợp lệ để cập nhật điểm số mới sau phúc khảo.
+
+---
+
+### 🛠️ CÁC TASK VỆ TINH ("RÂU RIA") CỦA HẢI
+1. **Phân hệ Quản trị Admin (FE-08 & FE-09):**
+   - `UserManagementPage.tsx` (FE-09): Xem danh sách người dùng, xem chi tiết, khóa hoặc mở tài khoản, gán vai trò trong 5 roles (`student`, `lecturer`, `department_head`, `proctor`, `admin`). Sinh viên tự đăng ký qua Google, **tuyệt đối không tạo user bằng email/mật khẩu**.
+   - `SemesterManagementPage.tsx` (FE-08): Quản lý học kỳ: Xem danh sách, tạo mới học kỳ, sửa học kỳ (mã, tên, ngày bắt đầu/kết thúc, trạng thái active). **Quy tắc: Không cho phép xóa học kỳ**.
+   - `AdminConfigPage.tsx`: Màn hình Admin cấu hình hệ thống bảng `system_configs`:
+     * Số câu hỏi phụ follow-up MF-01: 1–5 câu (mặc định 2).
+     * Ràng buộc số câu tiến trình progressive MF-01: Min = 3, Max = 10.
+     * Thời gian đệm sửa transcript MF-01: 10–300s (mặc định 60s).
+     * Thời gian timeout không tương tác: `SessionInactivityTimeoutMinutes = 10` (phút).
+   - `AuditLogsPage.tsx` & `AdminDlqMonitorPage.tsx`: Xem nhật ký kiểm toán hệ thống (`GET /api/v1/admin/audit-logs`) và xem danh sách các bài thi AI chấm lỗi trong Dead-Letter Queue để bấm Retry thủ công.
+2. **Dashboard Trưởng Bộ Môn (FE-10):**
+   - `DepartmentHeadDashboardPage.tsx`: Thống kê tổng số môn học phụ trách, số kỳ thi đang mở, số đề thi đang chờ duyệt, và số đơn phúc khảo cần phân công chấm lại.
+3. **Lịch sử Thi Thử & Luyện Tập (FE-02):**
+   - Hoàn thiện `ExamHistoryPage.tsx` với 2 Tab mượt mà:
+     * Tab 1: Lịch sử Luyện Tập (MF-01 qua API `GET /api/v1/practice/student/history`).
+     * Tab 2: Lịch sử Thi Thử (MF-02).
+   - Drawer xem chi tiết bài làm, transcript và điểm từng tiêu chí rubric.
+4. **Module Xuất Báo Cáo Khảo Thí:**
+   - Tại màn hình quản lý ca thi, tích hợp 2 nút hành động:
+     * Nút xanh: **"Xuất Báo Cáo Excel (.xlsx)"** $\to$ Tải về bảng điểm chuẩn mẫu Khảo thí Đại học FPT.
+     * Nút đỏ: **"Xuất Báo Cáo PDF Ký Số"** $\to$ Tải về file PDF tổng kết ca thi có đóng dấu điện tử/chữ ký số.
+
+---
+
+# 🚀 PHẦN 5: CHECKLIST NGHIỆM THU TIÊU CHUẨN (ACCEPTANCE CRITERIA)
+
+| Mã tiêu chí | Nội dung nghiệm thu kỹ thuật | Kỹ sư chịu trách nhiệm | Tiêu chuẩn đạt |
+| :---: | :--- | :---: | :---: |
+| **AC-01** | `npm run build` chạy thành công không có lỗi TypeScript | 🧑 Lê Vũ Hoàng | Exit Code = 0, 0 TS Error |
+| **AC-02** | Đăng nhập Google OAuth 2.0 mở cho mọi email, silent refresh token rotation | 🧑 Lê Vũ Hoàng | Token lưu đúng Store, tự refresh sau 55p |
+| **AC-03** | MF-01 chạy mượt cả Per-Question On-Demand và Full Progressive 3–10 câu | 🧑 Lê Vũ Hoàng | SignalR nhận điểm, Anti-3-consecutive chuẩn |
+| **AC-04** | Buffer Screen SVG đếm ngược đúng 60s, không lưu audio lên R2 | 🧑 Lê Vũ Hoàng | Auto-submit khi 0s, transcript lưu DB |
+| **AC-05** | Kiosk Lockdown chặn phím tắt, vi phạm blur $\ge 3$ chuyển Suspended | 🧑 Lê Vũ Hoàng | 100% fullscreen, mic check $\ge 60$dB |
+| **AC-06** | Hậu kiểm Giảng viên có Wavesurfer.js tua transcript, sửa điểm có lý do $\ge 10$ ký tự | 🧑 Lê Vũ Hoàng | Khóa 1 chiều `is_locked=true` khi công bố |
+| **AC-07** | MF-02 Voice-First Gate khóa text, Timer đếm ngược to, bắt lỗi HTTP 429 Quota | 🧑 Nguyễn Đăng Hải | Hiện modal cảnh báo đỏ khi quá hạn ngạch |
+| **AC-08** | Rubric Studio kiểm soát tổng điểm $\sum \equiv 10.0$đ, AI sinh từ FLM CLO | 🧑 Nguyễn Đăng Hải | Lệch 10.0đ khóa nút gửi, Model Answer $\ge 50$ ký tự |
+| **AC-09** | Trưởng BM duyệt đề (3 quyết định) và cấu hình Ca thi phòng lab, follow-up, kíp thi | 🧑 Nguyễn Đăng Hải | Đề vào kho khi APPROVED, ca thi bind lớp |
+| **AC-10** | Sinh viên nộp phúc khảo nội bộ, Trưởng BM giao GV chấm lại | 🧑 Nguyễn Đăng Hải | One-Way Lock mở đường cho GV được giao |
+| **AC-11** | Admin quản lý User 5 roles (không tạo user bằng mật khẩu), CRUD học kỳ (không xóa) | 🧑 Nguyễn Đăng Hải | UI thao tác mượt, gọi đúng API v1 |
+| **AC-12** | Xuất báo cáo Khảo thí ra cả file Excel (.xlsx) và file PDF có chữ ký số | 🧑 Nguyễn Đăng Hải | Tải đúng định dạng file từ backend |
