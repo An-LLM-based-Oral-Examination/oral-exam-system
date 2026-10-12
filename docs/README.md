@@ -7,75 +7,89 @@
 
 > [!IMPORTANT]
 > **TRUNG TÂM KIẾN TRÚC & TÀI LIỆU HỆ THỐNG (SINGLE SOURCE OF TRUTH - SSOT):**  
-> Thư mục này tập hợp đầy đủ 100% tài liệu kiến trúc, hợp đồng API, thiết kế CSDL 30 bảng 3NF, công cụ kiểm thử độc lập và quy trình nghiệp vụ 4 Main Flows để 4 thành viên (**Thành, Tốt, Hải, Hoàng**) dùng làm kim chỉ nam triển khai code, đối chiếu giao tiếp và bảo vệ trước Hội đồng tốt nghiệp FPTU.
+> Toàn bộ tài liệu kiến trúc, hợp đồng API, thiết kế CSDL 30 bảng 3NF, công cụ kiểm thử độc lập và quy trình nghiệp vụ 4 Main Flows được quy hoạch chuẩn hóa vào **7 phân nhóm thư mục chuyên đề** dưới đây để 4 thành viên (**Thành, Tốt, Hải, Hoàng**) dùng làm kim chỉ nam tác chiến và bảo vệ tốt nghiệp FPTU.
 
 ---
 
-## 🧭 1. BẢN ĐỒ ĐIỀU HƯỚNG TÀI LIỆU TOÀN DỰ ÁN
+## 🧭 BẢN ĐỒ ĐIỀU HƯỚNG TÀI LIỆU (7 PHÂN NHÓM CHUYÊN ĐỀ)
 
-### 🏛️ Nhóm 1: Kiến Trúc Hệ Thống & Đặc Tả Nghiệp Vụ Cốt Lõi
+```text
+docs/
+├── 01_architecture/         # Kiến trúc hệ thống Clean Architecture & Đặc tả 4 luồng nghiệp vụ
+├── 02_database/             # Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF) & Báo cáo kiểm toán
+├── 03_api_and_contracts/    # Hợp đồng API Contract-First, SignalR & Hướng dẫn tích hợp Frontend
+├── 04_devops_and_workflow/  # Hướng dẫn DevOps, Docker Compose, CI/CD Pipeline & Quy trình Git
+├── 05_diagrams/             # Toàn bộ thư viện sơ đồ luồng Draw.io master và chi tiết
+├── 06_testing_tools/        # Bộ công cụ kiểm thử độc lập trực tiếp (HTML Mini-Testers)
+├── 07_reports_and_plans/    # Kế hoạch tác chiến Sprint MVP 2 tuần & Báo cáo tiến độ
+└── README.md                # Trang chủ điều hướng tài liệu toàn hệ thống
+```
+
+---
+
+### 🏛️ Nhóm 1: Kiến Trúc Hệ Thống & Đặc Tả Nghiệp Vụ Cốt Lõi ([`01_architecture/`](./01_architecture/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 1 | [**`MASTER_ARCHITECTURE.md`**](./MASTER_ARCHITECTURE.md) | **Bản kiến trúc tối thượng (8 phần):** Mô hình C4, Kiến trúc 5 tầng chiều dọc, Clean Architecture 4 tầng, Hạ tầng mạng Docker/Nginx, Phòng thủ 4 tầng Zero Data Loss. | Cả 4 thành viên & Hội đồng |
-| 2 | [**`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`**](./MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) | **Đặc tả chi tiết 4 luồng Main Flows (MF-01 đến MF-04):** Bóc băng Whisper STT (không lưu audio MF-01/02), Buffer Screen hiệu đính Code-Switching 60s, Quota thi thử do Trưởng BM cấu hình, Instant Scorecard (MF-02), Barem Rubric $\sum \equiv 10.0$đ & Trưởng Bộ Môn phê duyệt (MF-03), Kiosk Lockdown phòng Lab, Mic-check 30s $\ge 60$dB, AI chấm ngầm, Hậu kiểm 2 nhóm, Công bố điểm One-Way Lock & Phúc khảo nội bộ Trưởng BM giao GV chấm lại (MF-04). | Hoàng (FE), Thành & Tốt (BE) |
-| 3 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
+| 1 | [**`MASTER_ARCHITECTURE.md`**](./01_architecture/MASTER_ARCHITECTURE.md) | **Bản kiến trúc tối thượng (8 phần):** Mô hình C4, Kiến trúc 5 tầng chiều dọc, Clean Architecture 4 tầng, Hạ tầng mạng Docker/Nginx, Phòng thủ 4 tầng Zero Data Loss. | Cả 4 thành viên & Hội đồng |
+| 2 | [**`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`**](./01_architecture/MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) | **Đặc tả chi tiết 4 luồng Main Flows (MF-01 đến MF-04):** Bóc băng Whisper STT (không lưu audio MF-01/02), Buffer Screen hiệu đính Code-Switching 60s, Quota thi thử do Trưởng BM cấu hình, Instant Scorecard (MF-02), Barem Rubric $\sum \equiv 10.0$đ & Trưởng Bộ Môn phê duyệt (MF-03), Kiosk Lockdown phòng Lab, Mic-check 30s $\ge 60$dB, AI chấm ngầm, Hậu kiểm 2 nhóm, Công bố điểm One-Way Lock & Phúc khảo nội bộ Trưởng BM giao GV chấm lại (MF-04). | Hoàng (FE), Thành & Tốt (BE) |
+| 3 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./01_architecture/LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
 
 ---
 
-### 💾 Nhóm 2: Cơ Sở Dữ Liệu PostgreSQL 16 (30 Bảng 3NF)
+### 💾 Nhóm 2: Cơ Sở Dữ Liệu PostgreSQL 16 (30 Bảng 3NF) ([`02_database/`](./02_database/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 4 | [**`ERD_DATABASE_DESIGN.md`**](./ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `refresh_tokens`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục ESR. | Hải (DB & FE), Thành & Tốt (BE) |
-| 5 | [**`DATABASE_AUDIT_REPORT.md`**](./DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
+| 4 | [**`ERD_DATABASE_DESIGN.md`**](./02_database/ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `refresh_tokens`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục ESR. | Hải (DB & FE), Thành & Tốt (BE) |
+| 5 | [**`DATABASE_AUDIT_REPORT.md`**](./02_database/DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
 
 ---
 
-### 🔌 Nhóm 3: Hợp Đồng Giao Tiếp API & Hướng Dẫn Tích Hợp Frontend
+### 🔌 Nhóm 3: Hợp Đồng Giao Tiếp API & Tích Hợp Frontend ([`03_api_and_contracts/`](./03_api_and_contracts/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 6 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
-| 7 | [**`MF01_Frontend_Integration.md`**](./MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
-| 8 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
+| 6 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
+| 7 | [**`MF01_Frontend_Integration.md`**](./03_api_and_contracts/MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
+| 8 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
 
 ---
 
-### ⚙️ Nhóm 4: Vận Hành, CI/CD Pipeline & Quy Trình Git
+### ⚙️ Nhóm 4: Vận Hành, CI/CD Pipeline & Quy Trình Git ([`04_devops_and_workflow/`](./04_devops_and_workflow/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 9 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
-| 10 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
+| 9 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./04_devops_and_workflow/CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
+| 10 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
 
 ---
 
-### 🛠️ Nhóm 5: Bộ Công Cụ Kiểm Thử Độc Lập Trực Tiếp ([`tools/`](./tools/))
-| STT | Công cụ | Định dạng | Mô tả chức năng |
-|:---:|:---|:---|:---|
-| 11 | [**`MF01_Mini_Tester.html`**](./tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
-| 12 | [**`google-id-token.html`**](./tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
-
----
-
-### 🖼️ Nhóm 6: Thư Viện Sơ Đồ Kỹ Thuật Draw.io ([`diagrams/`](./diagrams/))
+### 🖼️ Nhóm 5: Thư Viện Sơ Đồ Kỹ Thuật Draw.io ([`05_diagrams/`](./05_diagrams/))
 > [!TIP]
 > Toàn bộ sơ đồ được lưu trữ độc quyền dưới dạng file **`.drawio`** chuẩn hóa. Bạn có thể mở trực tiếp bằng tiện ích mở rộng **Draw.io Integration** trên VS Code hoặc truy cập [app.diagrams.net](https://app.diagrams.net).
 
-- **Sơ đồ Master gộp 4 luồng (4 Tabs):** [CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio](./diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
-- **MF-01: Luyện tập tự do:** [MF01_Interactive_Practice.drawio](./diagrams/MF01_Interactive_Practice.drawio)
-- **MF-02: Thi thử bấm giờ Voice-First:** [MF02_Timed_Mock_Exam.drawio](./diagrams/MF02_Timed_Mock_Exam.drawio)
-- **MF-03: Ngân hàng câu hỏi & Barem Rubric 10.0:** [MF03_Question_Bank_Rubric.drawio](./diagrams/MF03_Question_Bank_Rubric.drawio)
-- **MF-04: Thi thật phòng Lab Kiosk, Hậu kiểm & Phúc khảo:** [MF04_Lab_Exam_Audit.drawio](./diagrams/MF04_Lab_Exam_Audit.drawio)
-- **Kiến trúc hệ thống tổng thể:** [KIEN_TRUC_HE_THONG.drawio](./diagrams/KIEN_TRUC_HE_THONG.drawio)
+- **Sơ đồ Master gộp 4 luồng (4 Tabs):** [CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio](./05_diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
+- **MF-01: Luyện tập tự do:** [MF01_Interactive_Practice.drawio](./05_diagrams/MF01_Interactive_Practice.drawio)
+- **MF-02: Thi thử bấm giờ Voice-First:** [MF02_Timed_Mock_Exam.drawio](./05_diagrams/MF02_Timed_Mock_Exam.drawio)
+- **MF-03: Ngân hàng câu hỏi & Barem Rubric 10.0:** [MF03_Question_Bank_Rubric.drawio](./05_diagrams/MF03_Question_Bank_Rubric.drawio)
+- **MF-04: Thi thật phòng Lab Kiosk, Hậu kiểm & Phúc khảo:** [MF04_Lab_Exam_Audit.drawio](./05_diagrams/MF04_Lab_Exam_Audit.drawio)
+- **Kiến trúc hệ thống tổng thể:** [KIEN_TRUC_HE_THONG.drawio](./05_diagrams/KIEN_TRUC_HE_THONG.drawio)
 
 ---
 
-### 📅 Nhóm 7: Kế Hoạch Tác Chiến & Báo Cáo Tiến Độ ([`Task Daily/`](./Task%20Daily/) & [`week5/`](./week5/))
-- **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./Task%20Daily/MVP_2_WEEKS_MASTER_PLAN.md)
-- **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./Task%20Daily/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
-- **Báo cáo Report 2 (Markdown & Diagram):** [Thanh_Report2.md](./week5/Thanh_Report2.md) kèm sơ đồ quy trình [figure_2_2_1_project_process.svg](./week5/figure_2_2_1_project_process.svg)
+### 🛠️ Nhóm 6: Bộ Công Cụ Kiểm Thử Độc Lập Trực Tiếp ([`06_testing_tools/`](./06_testing_tools/))
+| STT | Công cụ | Định dạng | Mô tả chức năng |
+|:---:|:---|:---|:---|
+| 11 | [**`MF01_Mini_Tester.html`**](./06_testing_tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
+| 12 | [**`google-id-token.html`**](./06_testing_tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
 
 ---
 
-## 👥 2. PHÂN CÔNG TRÁCH NHIỆM 4 THÀNH VIÊN (FA26SE166)
+### 📅 Nhóm 7: Kế Hoạch Tác Chiến & Báo Cáo Tiến Độ ([`07_reports_and_plans/`](./07_reports_and_plans/))
+- **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./07_reports_and_plans/MVP_2_WEEKS_MASTER_PLAN.md)
+- **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./07_reports_and_plans/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
+- **Báo cáo Report 2 (Markdown & Diagram):** [Thanh_Report2.md](./07_reports_and_plans/week5/Thanh_Report2.md) kèm sơ đồ quy trình [figure_2_2_1_project_process.svg](./07_reports_and_plans/week5/figure_2_2_1_project_process.svg)
+
+---
+
+## 👥 PHÂN CÔNG TRÁCH NHIỆM 4 THÀNH VIÊN (FA26SE166)
 
 | Thành viên | Vai trò | Trách nhiệm chính |
 |:---|:---|:---|
@@ -86,7 +100,7 @@
 
 ---
 
-## ⚡ 3. BỘ LỆNH MỘT CHẠM DÀNH CHO LẬP TRÌNH VIÊN (ONE-CLICK COMMANDS)
+## ⚡ BỘ LỆNH MỘT CHẠM DÀNH CHO LẬP TRÌNH VIÊN (ONE-CLICK COMMANDS)
 
 ```powershell
 # 1. Khởi động Cơ sở dữ liệu PostgreSQL 16 bằng Docker (tại thư mục 05_Source_Code)

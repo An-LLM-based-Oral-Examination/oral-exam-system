@@ -115,15 +115,15 @@ npm run build
 
 Complete technical documentation is maintained under the [`docs/`](docs/README.md) folder:
 - [Developer Documentation Hub](docs/README.md)
-- [Master System Architecture](docs/MASTER_ARCHITECTURE.md)
-- [4 Core Main Flows Specification](docs/MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md)
-- [Database ERD 30 Tables 3NF](docs/ERD_DATABASE_DESIGN.md)
-- [API Contract & Integration Guide](docs/API_CONTRACT_AND_INTEGRATION_GUIDE.md)
-- [Frontend Integration Guide for MF-01](docs/MF01_Frontend_Integration.md)
-- [Frontend Mini Tester (HTML)](docs/MF01_Mini_Tester.html)
-- [Git & Team Workflow](docs/GIT_AND_TEAM_WORKFLOW.md)
-- [Master 4 Main Flows Activity Diagrams (.drawio)](docs/diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
-- [System Architecture Diagram (.drawio)](docs/diagrams/KIEN_TRUC_HE_THONG.drawio)
+- [Master System Architecture](docs/01_architecture/MASTER_ARCHITECTURE.md)
+- [4 Core Main Flows Specification](docs/01_architecture/MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md)
+- [Database ERD 30 Tables 3NF](docs/02_database/ERD_DATABASE_DESIGN.md)
+- [API Contract & Integration Guide](docs/03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md)
+- [Frontend Integration Guide for MF-01](docs/03_api_and_contracts/MF01_Frontend_Integration.md)
+- [Frontend Mini Tester (HTML)](docs/06_testing_tools/MF01_Mini_Tester.html)
+- [Git & Team Workflow](docs/04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md)
+- [Master 4 Main Flows Activity Diagrams (.drawio)](docs/05_diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
+- [System Architecture Diagram (.drawio)](docs/05_diagrams/KIEN_TRUC_HE_THONG.drawio)
 
 ---
 

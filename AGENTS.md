@@ -269,7 +269,7 @@ cd "D:\Đồ Án\05_Source_Code\frontend"; npm run build; cd ..
 
 ## 📚 12. BỘ QUY CHUẨN QUẢN TRỊ TÀI LIỆU TỐI GIẢN (DOCUMENTATION GOVERNANCE)
 
-1. **Kiểm tra trước khi tạo mới (Search & Reuse First):** Khi nhận yêu cầu cập nhật hoặc viết tài liệu/sơ đồ mới, BẮT BUỘC kiểm tra toàn bộ workspace xem đã có tài liệu nào tương tự hoặc phục vụ mục đích đó chưa (`05_Source_Code/docs/MASTER_ARCHITECTURE.md`, `02_Bao_cao_Reports/`, v.v.).
+1. **Kiểm tra trước khi tạo mới (Search & Reuse First):** Khi nhận yêu cầu cập nhật hoặc viết tài liệu/sơ đồ mới, BẮT BUỘC kiểm tra toàn bộ workspace xem đã có tài liệu nào tương tự hoặc phục vụ mục đích đó chưa (`05_Source_Code/docs/01_architecture/MASTER_ARCHITECTURE.md`, `02_Bao_cao_Reports/`, v.v.).
 2. **Cổng tham vấn bắt buộc (Ask Before Creating New):** Nếu đã tồn tại tài liệu liên quan, BẮT BUỘC dừng lại hỏi người dùng: *"Đã có tài liệu [tên_tệp] liên quan đến vấn đề này. Bạn muốn sửa trực tiếp trong tài liệu đó hay tạo tài liệu mới?"*. Tuyệt đối không tự ý đẻ thêm file mới làm rác dự án.
 3. **Quét toàn hệ thống khi có nội dung mới (Zero Blind Spot):** Khi cập nhật bất kỳ kiến thức, logic nghiệp vụ hay sơ đồ mới nào, BẮT BUỘC quét toàn bộ hệ thống (tất cả file `.md`, `.cs`, `.json`) để cập nhật đồng loạt, không để sót bất kỳ tài liệu nào bị cũ hay mâu thuẫn.
-4. **Quy tắc Tối giản & Chống phân mảnh (Anti-Proliferation):** Giữ số lượng file ở mức tối thiểu. Nguồn sự thật duy nhất cho kiến trúc hệ thống là `05_Source_Code/docs/MASTER_ARCHITECTURE.md`. Các file nháp, file trung gian hoặc file đã được hợp nhất 100% phải được chuyển vào `99_Archive/Legacy_Docs/`.
+4. **Quy tắc Tối giản & Chống phân mảnh (Anti-Proliferation):** Giữ số lượng file ở mức tối thiểu. Nguồn sự thật duy nhất cho kiến trúc hệ thống là `05_Source_Code/docs/01_architecture/MASTER_ARCHITECTURE.md`. Các file nháp, file trung gian hoặc file đã được hợp nhất 100% phải được chuyển vào `99_Archive/Legacy_Docs/`.
