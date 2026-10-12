@@ -10,8 +10,8 @@
 > - 🧑 **Nguyễn Trọng Tốt:** Backend Developer, AI Specialist & QA Lead (Auth Google OAuth PKCE, Backend MF-03, TOÀN BỘ Backend MF-04, Backend APIs vệ tinh Semester/Notification/User Mgmt, AI Core & Polly/DLQ, xUnit/NetArchTest)  
 > - 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend; Student Portal Dashboard, Lịch sử luyện tập & thi thử, UI Thi thử Voice-First MF-02, UI Duyệt đề MF-03, UI Ca thi & Thẩm định phúc khảo MF-04, User Mgmt FE-09, Semester CRUD FE-08)  
 > - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator (Kiến trúc Frontend Core React 19 + Tailwind v4, UI Luyện tập MF-01, Màn hình Kiosk phòng Lab MF-04, Màn hình Hậu kiểm Evidence Panel cho Giảng viên, Auth Google UI, Notification in-app FE-11, Dashboard FE-10)  
-> **Thư mục sơ đồ Draw.io:** [**`05_Source_Code/docs/diagrams/`**](./diagrams/)  
-> • Tệp Master 4 Tabs: [`CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`](./diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
+> **Thư mục sơ đồ Draw.io:** [**`05_Source_Code/docs/diagrams/`**](../05_Source_Code/docs/diagrams/)  
+> • Tệp Master 4 Tabs: [`CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`](../05_Source_Code/docs/diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)
 
 ---
 
@@ -29,7 +29,7 @@
 ## PHẦN 1. LUỒNG MF-01: SINH VIÊN LUYỆN TẬP VẤN ĐÁP TƯƠNG TÁC
 *(MF-01: STUDENT INTERACTIVE PRACTICE PROCESS)*
 
-* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](./diagrams/MF01_Interactive_Practice.drawio)
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_Source_Code/docs/diagrams/MF01_Interactive_Practice.drawio)
 
 ### 1.1. Mục Tiêu Nghiệp Vụ
 Giúp sinh viên chủ động luyện phản xạ thi vấn đáp 1-1 với trợ lý ảo AI (Google Gemini 1.5 Flash). Hệ thống hỗ trợ linh hoạt cả hai phương thức trả lời (nói qua micro hoặc gõ phím), cung cấp màn hình đệm do Admin cấu hình (`transcript_buffer_seconds`, từ 10–300s, mặc định 60s) để sinh viên sửa lỗi nhận diện thuật ngữ CNTT tiếng Anh (*Code-Switching*), và trao quyền chọn chế độ làm bài linh hoạt ngay từ đầu:
@@ -144,7 +144,7 @@ Giúp sinh viên chủ động luyện phản xạ thi vấn đáp 1-1 với tr�
 ## PHẦN 2. LUỒNG MF-02: SINH VIÊN THI THỬ VẤN ĐÁP BẤM GIỜ
 *(MF-02: TIMED MOCK EXAM WITH QUOTA & VOICE-FIRST GATE)*
 
-* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](./diagrams/MF02_Timed_Mock_Exam.drawio)
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_Source_Code/docs/diagrams/MF02_Timed_Mock_Exam.drawio)
 
 ### 2.1. Mục Tiêu Nghiệp Vụ
 Mô phỏng áp lực phòng thi vấn đáp chính thức có giới hạn thời gian nghiêm ngặt. Áp dụng hai chốt chặn cốt lõi: **Daily Quota Guard** (hạn ngạch thi thử tối đa trong ngày do Trưởng Bộ Môn cấu hình theo môn `max_mock_exams_per_day` để chống lạm dụng token AI, không khóa cứng K=3) và **Voice-First Gate** (bắt buộc phải phát biểu qua micro, khóa cứng ô nhập liệu văn bản nhằm rèn luyện phản xạ phát âm thực tế dưới áp lực thời gian). Đặc biệt, hệ thống cung cấp **Instant Feedback Scorecard chi tiết** (Điểm từng tiêu chí Rubric, ưu điểm, thiếu sót kiến thức, gợi ý cải thiện) ngay tại màn hình kết quả và lưu trữ vĩnh viễn trong mục **Lịch sử thi** (`Exam History`) để phục vụ ôn tập cá nhân hóa.
@@ -260,7 +260,7 @@ Mô phỏng áp lực phòng thi vấn đáp chính thức có giới hạn th�
 ## PHẦN 3. LUỒNG MF-03: QUẢN LÝ NGÂN HÀNG CÂU HỎI & BAREM RUBRIC
 *(MF-03: QUESTION BANK & RUBRIC STUDIO — NÂNG CẤP FLM AI QUESTION GENERATOR)*
 
-* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](./diagrams/MF03_Question_Bank_Rubric.drawio)
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_Source_Code/docs/diagrams/MF03_Question_Bank_Rubric.drawio)
 
 ### 3.1. Mục Tiêu Nghiệp Vụ
 Cung cấp công cụ chuyên biệt cho **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)** thiết kế, quản lý ngân hàng câu hỏi vấn đáp và barem chấm điểm Rubric theo **chuẩn thang điểm 10.0 bắt buộc ($\sum \equiv 10.0$đ)**.
@@ -410,7 +410,7 @@ Sau khi sinh tự động, Giảng viên được cung cấp giao diện **Xem t
 ## PHẦN 4. LUỒNG MF-04: THI THẬT PHÒNG LAB & CỔNG HẬU KIỂM GIẢNG VIÊN
 *(MF-04: LAB EXAM & LECTURER AUDIT PORTAL PROCESS)*
 
-* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](./diagrams/MF04_Lab_Exam_Audit.drawio)
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_Source_Code/docs/diagrams/MF04_Lab_Exam_Audit.drawio)
 
 #### 4.1. Mục Tiêu Nghiệp Vụ
 Tổ chức kỳ thi vấn đáp kết thúc môn chính thức tại phòng máy lab có kiểm soát an ninh nghiêm ngặt kiểu IELTS. Quy trình xuất phát từ **Pha 0: Trưởng Bộ Môn (`department_head`) khởi tạo kỳ thi (`OfficialExamSession`), gán môn thi vào kỳ thi, cấu hình ca thi (`RealExamSessionShift`: phòng lab ghi ngay trên ca, gán người coi thi là GV hoặc giám thị, danh sách thí sinh lấy từ lớp đã có), cấu hình Follow-up môn thi trong kỳ thi (`has_follow_up`, `max_follow_up_questions` 1–5 câu, mặc định 2 câu) và `ExamInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`)**. Trong phòng thi lab áp dụng các chốt chặn: **Fullscreen Kiosk Lockdown chống gian lận**, **kiểm tra micro phần cứng 30s $\ge 60$dB**, **cấu hình phương thức làm bài theo môn học `ExamInputMode` (`VoiceOnly` khóa cứng 100% bàn phím, `VoiceWithTranscriptEdit` mở đệm sửa transcript)**, **hỏi câu chuyên sâu theo ngữ cảnh khi môn thi bật cờ (1–5 câu do Trưởng BM cấu hình, mặc định 2 câu)**, **niêm phong âm thanh bằng mã băm mật mã SHA-256 stream trực tiếp lên Cloudflare R2 định danh `STT_MSSV.webm`**.
@@ -592,10 +592,10 @@ Tổ chức kỳ thi vấn đáp kết thúc môn chính thức tại phòng má
 
 | Luồng Nghiệp Vụ | Tệp Sơ Đồ Draw.io Chuẩn Hóa | Vị Trí Trong Tài Liệu Master Architecture |
 |:---:|:---|:---|
-| **MF-01** | [`MF01_Interactive_Practice.drawio`](./diagrams/MF01_Interactive_Practice.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.1 / 6.5.1](./MASTER_ARCHITECTURE.md#phan-651) |
-| **MF-02** | [`MF02_Timed_Mock_Exam.drawio`](./diagrams/MF02_Timed_Mock_Exam.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.2 / 6.5.2](./MASTER_ARCHITECTURE.md#phan-652) |
-| **MF-03** | [`MF03_Question_Bank_Rubric.drawio`](./diagrams/MF03_Question_Bank_Rubric.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.3 / 6.5.3](./MASTER_ARCHITECTURE.md#phan-653) |
-| **MF-04** | [`MF04_Lab_Exam_Audit.drawio`](./diagrams/MF04_Lab_Exam_Audit.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.4 / 6.5.4](./MASTER_ARCHITECTURE.md#phan-654) |
+| **MF-01** | [`MF01_Interactive_Practice.drawio`](../05_Source_Code/docs/diagrams/MF01_Interactive_Practice.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.1 / 6.5.1](./MASTER_ARCHITECTURE.md#phan-651) |
+| **MF-02** | [`MF02_Timed_Mock_Exam.drawio`](../05_Source_Code/docs/diagrams/MF02_Timed_Mock_Exam.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.2 / 6.5.2](./MASTER_ARCHITECTURE.md#phan-652) |
+| **MF-03** | [`MF03_Question_Bank_Rubric.drawio`](../05_Source_Code/docs/diagrams/MF03_Question_Bank_Rubric.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.3 / 6.5.3](./MASTER_ARCHITECTURE.md#phan-653) |
+| **MF-04** | [`MF04_Lab_Exam_Audit.drawio`](../05_Source_Code/docs/diagrams/MF04_Lab_Exam_Audit.drawio) | [MASTER_ARCHITECTURE.md Mục 6.4.4 / 6.5.4](./MASTER_ARCHITECTURE.md#phan-654) |
 
 ---
 

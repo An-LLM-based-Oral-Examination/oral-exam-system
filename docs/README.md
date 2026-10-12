@@ -11,25 +11,51 @@
 
 ---
 
-## 🧭 1. DANH MỤC TÀI LIỆU CỐT LÕI (BẤM ĐỂ MỞ NGAY)
+## 🧭 1. BẢN ĐỒ ĐIỀU HƯỚNG TÀI LIỆU TOÀN DỰ ÁN
 
+### 🏛️ Nhóm 1: Kiến Trúc Hệ Thống & Đặc Tả Nghiệp Vụ Cốt Lõi
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
 | 1 | [**`MASTER_ARCHITECTURE.md`**](./MASTER_ARCHITECTURE.md) | **Bản kiến trúc tối thượng (8 phần):** Mô hình C4, Kiến trúc 5 tầng chiều dọc, Clean Architecture 4 tầng, Hạ tầng mạng Docker/Nginx, Phòng thủ 4 tầng Zero Data Loss. | Cả 4 thành viên & Hội đồng |
 | 2 | [**`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`**](./MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) | **Đặc tả chi tiết 4 luồng Main Flows (MF-01 đến MF-04):** Bóc băng Whisper STT (không lưu audio MF-01/02), Buffer Screen hiệu đính Code-Switching 60s, Quota thi thử do Trưởng BM cấu hình, Instant Scorecard (MF-02), Barem Rubric $\sum \equiv 10.0$đ & Trưởng Bộ Môn phê duyệt (MF-03), Kiosk Lockdown phòng Lab, Mic-check 30s $\ge 60$dB, AI chấm ngầm, Hậu kiểm 2 nhóm, Công bố điểm One-Way Lock & Phúc khảo nội bộ Trưởng BM giao GV chấm lại (MF-04). | Hoàng (FE), Thành & Tốt (BE) |
-| 3 | [**`ERD_DATABASE_DESIGN.md`**](./ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `notifications`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục hiệu năng. | Hải (DB & FE), Thành & Tốt (BE) |
-| 4 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
-| 5 | [**`MF01_Frontend_Integration.md`**](./MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
-| 6 | [**`MF01_Mini_Tester.html`**](./MF01_Mini_Tester.html) | **Công cụ kiểm thử độc lập trực tiếp:** Mở trên trình duyệt Chrome/Edge để test toàn bộ chu trình API + SignalR của MF-01 mà không cần mock. | Hoàng, Hải (FE) & QA |
-| 7 | [**`DATABASE_AUDIT_REPORT.md`**](./DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
-| 8 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
-| 9 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
-| 10 | [**`MVP_2_WEEKS_MASTER_PLAN.md`**](./Task Daily/MVP_2_WEEKS_MASTER_PLAN.md) | **Kế hoạch tác chiến Sprint MVP 2 tuần:** Kế hoạch phân công 4 Khối chức năng độc lập cho 4 thành viên Thành, Tốt, Hải, Hoàng. | Cả 4 thành viên |
+| 3 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
 
 ---
 
-## 🖼️ 2. THƯ VIỆN SƠ ĐỒ KỸ THUẬT DRAW.IO ([`diagrams/`](./diagrams/))
+### 💾 Nhóm 2: Cơ Sở Dữ Liệu PostgreSQL 16 (30 Bảng 3NF)
+| STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
+|:---:|:---|:---|:---:|
+| 4 | [**`ERD_DATABASE_DESIGN.md`**](./ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `refresh_tokens`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục ESR. | Hải (DB & FE), Thành & Tốt (BE) |
+| 5 | [**`DATABASE_AUDIT_REPORT.md`**](./DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
 
+---
+
+### 🔌 Nhóm 3: Hợp Đồng Giao Tiếp API & Hướng Dẫn Tích Hợp Frontend
+| STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
+|:---:|:---|:---|:---:|
+| 6 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
+| 7 | [**`MF01_Frontend_Integration.md`**](./MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
+| 8 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
+
+---
+
+### ⚙️ Nhóm 4: Vận Hành, CI/CD Pipeline & Quy Trình Git
+| STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
+|:---:|:---|:---|:---:|
+| 9 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
+| 10 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
+
+---
+
+### 🛠️ Nhóm 5: Bộ Công Cụ Kiểm Thử Độc Lập Trực Tiếp ([`tools/`](./tools/))
+| STT | Công cụ | Định dạng | Mô tả chức năng |
+|:---:|:---|:---|:---|
+| 11 | [**`MF01_Mini_Tester.html`**](./tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
+| 12 | [**`google-id-token.html`**](./tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
+
+---
+
+### 🖼️ Nhóm 6: Thư Viện Sơ Đồ Kỹ Thuật Draw.io ([`diagrams/`](./diagrams/))
 > [!TIP]
 > Toàn bộ sơ đồ được lưu trữ độc quyền dưới dạng file **`.drawio`** chuẩn hóa. Bạn có thể mở trực tiếp bằng tiện ích mở rộng **Draw.io Integration** trên VS Code hoặc truy cập [app.diagrams.net](https://app.diagrams.net).
 
@@ -42,7 +68,14 @@
 
 ---
 
-## 👥 3. PHÂN CÔNG TRÁCH NHIỆM 4 THÀNH VIÊN (FA26SE166)
+### 📅 Nhóm 7: Kế Hoạch Tác Chiến & Báo Cáo Tiến Độ ([`Task Daily/`](./Task%20Daily/) & [`week5/`](./week5/))
+- **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./Task%20Daily/MVP_2_WEEKS_MASTER_PLAN.md)
+- **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./Task%20Daily/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
+- **Báo cáo Report 2 (Markdown & Diagram):** [Thanh_Report2.md](./week5/Thanh_Report2.md) kèm sơ đồ quy trình [figure_2_2_1_project_process.svg](./week5/figure_2_2_1_project_process.svg)
+
+---
+
+## 👥 2. PHÂN CÔNG TRÁCH NHIỆM 4 THÀNH VIÊN (FA26SE166)
 
 | Thành viên | Vai trò | Trách nhiệm chính |
 |:---|:---|:---|
@@ -53,7 +86,7 @@
 
 ---
 
-## ⚡ 4. BỘ LỆNH MỘT CHẠM DÀNH CHO LẬP TRÌNH VIÊN (ONE-CLICK COMMANDS)
+## ⚡ 3. BỘ LỆNH MỘT CHẠM DÀNH CHO LẬP TRÌNH VIÊN (ONE-CLICK COMMANDS)
 
 ```powershell
 # 1. Khởi động Cơ sở dữ liệu PostgreSQL 16 bằng Docker (tại thư mục 05_Source_Code)
