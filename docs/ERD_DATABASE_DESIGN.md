@@ -57,13 +57,8 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 ## 2. SƠ ĐỒ THỰC THỂ LIÊN KẾT (MERMAID ERD DIAGRAM)
 
 ```mermaid
-%%{init: {'theme': 'default', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial' }}}%%
 erDiagram
-    %% =========================================================================
-    %% QUAN HỆ GIỮA CÁC THỰC THỂ (BOUNDED CONTEXTS POSTGRESQL 16)
-    %% =========================================================================
-
-    %% PHÂN HỆ 1 & 2: IDENTITY & ACADEMIC COHORTS
+    %% Identity, RBAC va Academic
     USERS ||--o{ REFRESH_TOKENS : "has sessions"
     SEMESTERS ||--o{ COURSES : "contains"
     SEMESTERS ||--o{ CLASSES : "schedules"
@@ -72,14 +67,14 @@ erDiagram
     CLASSES ||--o{ CLASS_ENROLLMENTS : "enrolls"
     USERS ||--o{ CLASS_ENROLLMENTS : "attends"
 
-    %% PHÂN HỆ 3: RUBRIC & CRITERIA
+    %% Rubric
     COURSES ||--o{ RUBRICS : "defines rubrics"
     RUBRICS ||--|{ RUBRIC_CRITERIA : "contains criteria"
 
-    %% PHÂN HỆ 4: KHO CÂU HỎI & PHIÊN LUYỆN TẬP TỰ DO (MF-01 & MF-03)
+    %% Practice MF-01 va Question Bank MF-03
     COURSES ||--o{ PRACTICE_QUESTIONS : "has practice questions"
     RUBRICS ||--o{ PRACTICE_QUESTIONS : "assesses question"
-    USERS ||--o{ PRACTICE_QUESTIONS : "submits/approves"
+    USERS ||--o{ PRACTICE_QUESTIONS : "submits or approves"
     USERS ||--o{ PRACTICE_SESSIONS : "starts practice"
     COURSES ||--o{ PRACTICE_SESSIONS : "practices course"
     PRACTICE_SESSIONS ||--|{ PRACTICE_ANSWERS : "submits answers"
@@ -89,7 +84,7 @@ erDiagram
     AI_EVALUATIONS ||--|{ AI_EVALUATION_DETAILS : "breaks down criteria"
     RUBRIC_CRITERIA ||--o{ AI_EVALUATION_DETAILS : "benchmarks criterion"
 
-    %% PHÂN HỆ 5: MA TRẬN ĐỀ, BỘ ĐỀ, HẠN NGẠCH & THI THỬ (MF-02)
+    %% Mock exam MF-02
     COURSES ||--o{ EXAM_STRUCTURES : "defines matrix"
     USERS ||--o{ EXAM_STRUCTURES : "creates structure"
     EXAM_STRUCTURES ||--o{ EXAM_SETS : "generates sets"
@@ -104,7 +99,7 @@ erDiagram
     MOCK_EXAM_SESSIONS ||--|{ MOCK_EXAM_ANSWERS : "records answers"
     PRACTICE_QUESTIONS ||--o{ MOCK_EXAM_ANSWERS : "questions answered from practice pool"
 
-    %% PHÂN HỆ 6: KHO CÂU HỎI THI, CA THI LAB, VÉ THI 1-40 & THẨM ĐỊNH (MF-04)
+    %% Official exam MF-04
     COURSES ||--o{ EXAM_QUESTIONS : "has exam questions"
     RUBRICS ||--o{ EXAM_QUESTIONS : "assesses exam question"
     USERS ||--o{ EXAM_QUESTIONS : "approves question"
@@ -113,7 +108,7 @@ erDiagram
     EXAM_STRUCTURES ||--o{ OFFICIAL_EXAM_SESSIONS : "governs exam rules"
     OFFICIAL_EXAM_SESSIONS ||--|{ REAL_EXAM_SESSION_SHIFTS : "divides into shifts"
     USERS ||--o{ REAL_EXAM_SESSION_SHIFTS : "proctors shift"
-    REAL_EXAM_SESSION_SHIFTS ||--|{ STUDENT_EXAM_TICKETS : "allocates booth 1-40"
+    REAL_EXAM_SESSION_SHIFTS ||--|{ STUDENT_EXAM_TICKETS : "allocates booth"
     USERS ||--o{ STUDENT_EXAM_TICKETS : "ticket for candidate"
     USERS ||--o{ STUDENT_EXAM_TICKETS : "publishes grades"
     EXAM_SETS ||--o{ STUDENT_EXAM_TICKETS : "assigned exam set"
@@ -126,7 +121,7 @@ erDiagram
     STUDENT_EXAM_TICKETS ||--o| APPEAL_REQUESTS : "appealed by candidate"
     USERS ||--o{ APPEAL_REQUESTS : "assigned regrading lecturer"
 
-    %% PHÂN HỆ BẢO MẬT, CHỊU LỖI & THÔNG BÁO
+    %% Audit va notification
     USERS ||--o{ AUDIT_LOGS : "performed by user"
     USERS ||--o{ NOTIFICATIONS : "receives in-app notifications"
 ```
