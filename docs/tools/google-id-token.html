@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Lấy Google ID Token</title>
+</head>
+<body>
+  <p>Bấm nút Google, rồi copy chuỗi JWT bên dưới vào Swagger, field <code>idToken</code>.</p>
+  <p><strong>Cách dùng:</strong> <code>npx http-server docs/tools -p 5173 -c-1</code> rồi mở <code>http://localhost:5173/google-id-token.html</code></p>
+  <div id="g_id_onload"
+       data-client_id="277900471147-dgbhvf6qcpsfaj6r06dk11ilb7lhjtv7.apps.googleusercontent.com"
+       data-callback="onGoogleCredential"
+       data-auto_prompt="false"></div>
+  <div class="g_id_signin" data-type="standard"></div>
+  <pre id="token" style="white-space:pre-wrap;word-break:break-all;background:#f0f0f0;padding:12px;margin-top:16px;"></pre>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    function onGoogleCredential(response) {
+      document.getElementById('token').textContent = response.credential;
+    }
+  </script>
+</body>
+</html>

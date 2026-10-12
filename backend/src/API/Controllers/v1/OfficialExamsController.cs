@@ -7,6 +7,8 @@ using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 /// <summary>
@@ -15,6 +17,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Roles = "lecturer,department_head,proctor,admin")]
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;

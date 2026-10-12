@@ -5,14 +5,17 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 /// <summary>
 /// Controller xử lý phân hệ Thi Thử Vấn Đáp Bấm Giờ (MF-02).
-/// Kiểm soát hạn ngạch Daily Quota Guard (K = 3 lượt/ngày/môn).
+/// Kiểm soát hạn ngạch Daily Quota Guard do Trưởng BM cấu hình.
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Roles = "student,lecturer,department_head,admin")]
 public class MockExamsController : ControllerBase
 {
     private readonly ISender _sender;

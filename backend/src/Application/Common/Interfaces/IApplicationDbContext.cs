@@ -5,11 +5,12 @@ namespace OralExamination.Application.Common.Interfaces;
 
 /// <summary>
 /// Abstraction interface cho DbContext phục vụ nguyên lý Dependency Inversion trong Clean Architecture.
-/// Định nghĩa đủ 28 DbSets và SaveChangesAsync cho tầng Application.
+/// Định nghĩa đủ 30 DbSets và SaveChangesAsync cho tầng Application.
 /// </summary>
 public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }
+    DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Semester> Semesters { get; }
     DbSet<Course> Courses { get; }
     DbSet<Class> Classes { get; }

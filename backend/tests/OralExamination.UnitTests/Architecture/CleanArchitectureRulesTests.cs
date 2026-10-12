@@ -265,7 +265,10 @@ public class CleanArchitectureRulesTests
             {"Storage:AccessKey", "test-key"},
             {"Storage:SecretKey", "test-secret"},
             {"Storage:ServiceUrl", "https://test.r2.com"},
-            {"Gemini:ApiKey", "test-gemini-key"}
+            {"Gemini:ApiKey", "test-gemini-key"},
+            {"JWT_SIGNING_KEY", new string('k', 48)},
+            {"Authentication:AccessTokenMinutes", "15"},
+            {"GOOGLE_OAUTH_CLIENT_ID", "test-google-client-id"}
         };
         var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
             .AddInMemoryCollection(inMemorySettings)
@@ -274,6 +277,7 @@ public class CleanArchitectureRulesTests
         services.AddSingleton<IConfiguration>(config);
         OralExamination.Application.DependencyInjection.AddApplication(services);
         OralExamination.Infrastructure.DependencyInjection.AddInfrastructure(services, config);
+        OralExamination.Infrastructure.Authentication.AuthenticationServiceCollectionExtensions.AddOralExamAuthentication(services, config);
         Microsoft.Extensions.DependencyInjection.LoggingServiceCollectionExtensions.AddLogging(services);
 
         // Build with validation enabled

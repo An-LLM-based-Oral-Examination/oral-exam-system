@@ -25,17 +25,18 @@ public class DomainEntitiesAndDbContextTests
         return new OralExamDbContext(options);
     }
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 29 thực thể trong Model")]
-    public void DbContext_Must_Contain_Exactly_28_Entity_Types()
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 30 thực thể trong Model")]
+    public void DbContext_Must_Contain_Exactly_30_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(29, "Hệ thống chuẩn hóa 29 bảng CSDL phân tách Practice - Exam kèm Phúc khảo nội bộ và Cấu hình hệ thống");
+        entityTypes.Should().HaveCount(30, "Hệ thống chuẩn hóa 30 bảng CSDL phân tách Practice - Exam kèm Phúc khảo nội bộ, Cấu hình hệ thống và Refresh Token");
 
         var expectedEntities = new[]
         {
             typeof(User),
+            typeof(RefreshToken),
             typeof(Semester),
             typeof(Course),
             typeof(Class),
@@ -73,7 +74,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 29 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 30 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -81,6 +82,7 @@ public class DomainEntitiesAndDbContextTests
         var tableMap = new (Type EntityType, string ExpectedTable)[]
         {
             (typeof(User), "users"),
+            (typeof(RefreshToken), "refresh_tokens"),
             (typeof(Semester), "semesters"),
             (typeof(Course), "courses"),
             (typeof(Class), "classes"),

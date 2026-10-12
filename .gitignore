@@ -30,6 +30,7 @@ dist-ssr/
 .env.production.local
 appsettings.Local.json
 appsettings.*.local.json
+appsettings.Development.json
 
 # Logs
 npm-debug.log*

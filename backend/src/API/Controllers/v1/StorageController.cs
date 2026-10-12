@@ -4,10 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.Practice.Commands.UploadAudioPractice;
 using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize]
 public class StorageController : ControllerBase
 {
     private readonly ISender _sender;
@@ -23,7 +26,7 @@ public class StorageController : ControllerBase
     /// </summary>
     [HttpPost("upload-audio")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> UploadAudio([FromForm] IFormFile? file)
+    public async Task<IActionResult> UploadAudio(IFormFile? file)
     {
         IFormFile? targetFile = file;
         if (targetFile == null && HttpContext != null && Request != null && Request.HasFormContentType && Request.Form.Files.Count > 0)

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.Practice.Commands.NextQuestion;
@@ -13,6 +14,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Roles = "student,lecturer,department_head,admin")]
 public class PracticeController : ControllerBase
 {
     private readonly ISender _sender;

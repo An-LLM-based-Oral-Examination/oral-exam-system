@@ -26,4 +26,5 @@ public partial class User
     public virtual ICollection<StudentExamTicket> ExamTickets { get; set; } = new List<StudentExamTicket>();
     public virtual ICollection<LecturerAudit> LecturerAudits { get; set; } = new List<LecturerAudit>();
     public virtual ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
+    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

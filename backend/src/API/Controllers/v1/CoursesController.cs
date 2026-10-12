@@ -6,6 +6,8 @@ using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfigur
 using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguration;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 /// <summary>
@@ -16,6 +18,7 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/courses")]
 [Route("api/v1/academic/courses")]
+[Authorize]
 public class CoursesController : ControllerBase
 {
     private readonly ISender _sender;

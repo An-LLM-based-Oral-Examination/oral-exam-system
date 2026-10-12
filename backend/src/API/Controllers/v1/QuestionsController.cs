@@ -11,10 +11,13 @@ using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Application.Features.QuestionBank.Queries.GetQuestionById;
 using OralExamination.Application.Features.QuestionBank.Queries.GetQuestions;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Roles = "lecturer,department_head,admin")]
 public class QuestionsController : ControllerBase
 {
     private readonly ISender _sender;

@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>OralExamination.API</RootNamespace>
     <AssemblyName>OralExamination.API</AssemblyName>
+    <UserSecretsId>001c4860-b182-4ab0-b7ad-05ea36adea70</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

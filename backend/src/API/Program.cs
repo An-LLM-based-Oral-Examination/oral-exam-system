@@ -1,11 +1,16 @@
+using OralExamination.API.Configuration;
 using OralExamination.API.Middlewares;
 using OralExamination.Application;
 using OralExamination.Infrastructure;
+using OralExamination.Infrastructure.Authentication;
+
+DotEnvLoader.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddOralExamAuthentication(builder.Configuration);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
@@ -39,6 +44,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowFrontend");
 app.UseStaticFiles();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
@@ -49,6 +56,7 @@ app.MapGet("/health", () => Results.Ok(new
     service = "OralExamination.API",
     timestamp = DateTime.UtcNow
 }))
+.AllowAnonymous()
 .WithName("GetHealthStatus")
 .WithOpenApi();
 

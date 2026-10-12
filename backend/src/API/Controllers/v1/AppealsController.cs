@@ -9,6 +9,8 @@ using OralExamination.Application.Features.Appeals.DTOs;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealById;
 using OralExamination.Application.Features.Appeals.Queries.GetAppeals;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace API.Controllers.v1;
 
 /// <summary>
@@ -17,6 +19,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize]
 public class AppealsController : ControllerBase
 {
     private readonly ISender _sender;

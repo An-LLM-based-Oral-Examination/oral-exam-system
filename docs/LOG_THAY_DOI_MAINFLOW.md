@@ -34,9 +34,15 @@ Số câu hỏi phụ mặc định là 2. Admin cấu hình trong khoảng 1 đ
 
 Hỏi phụ chỉ khi sinh viên chọn Per-question và điểm từ 4.0 đến 8.0. Full-session không có câu hỏi phụ.
 
-Cấu trúc đề luyện tập full-session: sinh viên chọn Practice, rồi Full-session. Với từng mức Dễ, Trung bình, Khó, sinh viên tự nhập số câu muốn làm. Admin chỉ cấu hình min và max cho phép của từng mức, không đặt sẵn 2 dễ, 2 trung bình, 2 khó. Không mượn mức khác nếu kho thiếu câu. Per-question vẫn làm từng câu, không dùng bộ số này. Cách chấm chọn một lần khi mở phiên. Không do giảng viên đặt.
+Per-question: sinh viên tích một, hai hoặc cả ba mức Dễ, Trung bình, Khó. Hệ thống bốc câu trong các mức đã tích. Trong mỗi ba câu liên tiếp chỉ có tối đa hai câu cùng một mức. Chỉ tích một mức thì mọi câu ở mức đó.
 
-❌ Đang lệch với [MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) dòng 54. Đang ghi sinh viên chọn một độ khó. Chưa có chỗ sinh viên nhập số câu từng mức, cũng chưa có min và max do Admin đặt.
+Full-session: sinh viên chọn mức muốn làm, rồi nhập một tổng số câu. Admin cấu hình min và max của tổng này. Mặc định 3 và 10. Không còn nhập số câu riêng từng mức.
+
+Khi chọn đủ ba mức, hệ thống chia từ Dễ sang Trung bình rồi tới Khó. Chia hết cho 3 thì ba mức bằng nhau. Dư 1 thì thêm một câu Dễ. Dư 2 thì thêm một câu Dễ và một câu Trung bình. Kho thiếu câu ở một mức thì không lấy câu từ mức sinh viên không chọn. Cách chấm chọn một lần khi mở phiên. Không do giảng viên đặt.
+
+❌ Đang lệch với [MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) dòng 54. Đang ghi sinh viên chọn một độ khó.
+
+❌ Đang lệch với [AGENTS.md](../AGENTS.md) dòng 26, 39 và 44. Dòng 44 vẫn cho nhập số câu từng mức, và có lựa chọn `progressive` chia đều. Chưa có dư 1 thêm Dễ, dư 2 thêm Dễ và Trung bình. Chưa có quy tắc ba câu liên tiếp của per-question.
 
 Luyện tập không lưu audio. Chỉ lưu transcript đã sửa.
 
@@ -48,7 +54,7 @@ Thời gian sửa transcript ở phần luyện tập do Admin cấu hình. Kho�
 
 ## MF-02
 
-Cấu trúc đề thi thử, gồm phân bổ Bloom, do trưởng bộ môn cấu hình. Không dùng cách sinh viên tự nhập số câu dễ, trung bình, khó của MF-01.
+Cấu trúc đề thi thử, gồm phân bổ Bloom, do trưởng bộ môn cấu hình. Không dùng cách chia Dễ, Trung bình, Khó của full-session luyện tập.
 
 ❌ Đang lệch với [MASTER_ARCHITECTURE.md](MASTER_ARCHITECTURE.md) dòng 777. Đang ghi bốc đề cân đối cố định theo 6 mức Bloom.
 
@@ -157,6 +163,8 @@ Sau khi có đơn, trưởng bộ môn giao một giảng viên chấm lại. Tr
 ❌ Đang lệch với [MASTER_ARCHITECTURE.md](MASTER_ARCHITECTURE.md) dòng 81 và 405, và [MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) dòng 560 đến 562. Các dòng này khóa điểm vĩnh viễn ngay lúc công bố, chặn mọi sửa điểm. Phúc khảo lại xảy ra sau công bố, nên chỗ khóa phải chừa đường cho giảng viên được giao chấm lại.
 
 Cách làm bài trong scope: `VoiceOnly` và `VoiceWithTranscriptEdit`. `VoiceAndTextInput` không làm bây giờ, để phát triển sau.
+
+Thời gian sửa transcript của kỳ thi thật do trưởng bộ môn cấu hình, cùng chỗ với cách làm bài. Khoảng 10 đến 300 giây, mặc định 60. Không dùng cấu hình luyện tập của Admin. Mục 6 thêm `Configure Examination Transcript Buffer` trong FE-05.
 
 ❌ Đang lệch với [MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) dòng 407, 442 và 485. Đang còn `VoiceAndTextInput`.
 
