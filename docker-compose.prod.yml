@@ -47,6 +47,11 @@ services:
       - Storage__ServiceUrl=${STORAGE_SERVICE_URL:-}
       - Storage__BucketName=${STORAGE_BUCKET_NAME:-oral-exam-bucket}
       - Storage__PublicUrlPrefix=${STORAGE_PUBLIC_URL_PREFIX:-}
+      - Authentication__GoogleClientId=${GOOGLE_OAUTH_CLIENT_ID:?Set GOOGLE_OAUTH_CLIENT_ID in environment}
+      - Authentication__JwtSigningKey=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in environment}
+      - Authentication__JwtIssuer=${JWT_ISSUER:-oral-exam-system}
+      - Authentication__JwtAudience=${JWT_AUDIENCE:-oral-exam-system}
+      - Authentication__AccessTokenMinutes=${ACCESS_TOKEN_MINUTES:-15}
     depends_on:
       postgres:
         condition: service_healthy

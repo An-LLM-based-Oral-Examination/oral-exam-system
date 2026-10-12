@@ -2,7 +2,7 @@
 -- HỆ THỐNG LUYỆN THI & ĐÁNH GIÁ VẤN ĐÁP BẰNG LLM (ORAL EXAM SYSTEM)
 -- ĐỀ TÀI CAPSTONE FA26SE166 — ĐẠI HỌC FPT TP.HCM (FPT SG)
 -- Bản CSDL PostgreSQL 16+ Hợp Nhất Chuẩn Bậc 3 (3NF) & Phân Tách Practice - Exam
--- Khớp 100% với 27 C# Domain Entities, OralExamDbContext và ERD_DATABASE_DESIGN.md
+-- Khớp 100% với 30 C# Domain Entities, OralExamDbContext và ERD_DATABASE_DESIGN.md
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -26,6 +26,20 @@ CREATE TABLE users (
 
 CREATE INDEX ix_users_email ON users (email);
 CREATE INDEX ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+
+-- 1.1b. Bảng Refresh Token (Hỗ trợ multi-device session, revoke từng phiên)
+CREATE TABLE refresh_tokens (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash              VARCHAR(128) NOT NULL UNIQUE,
+    expires_at              TIMESTAMPTZ NOT NULL,
+    revoked_at              TIMESTAMPTZ,
+    replaced_by_token_hash  VARCHAR(128),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_refresh_tokens_user ON refresh_tokens (user_id);
+CREATE INDEX ix_refresh_tokens_expires ON refresh_tokens (expires_at) WHERE revoked_at IS NULL;
 
 -- 1.2. Bảng Học kỳ (FA26, SP27...)
 CREATE TABLE semesters (

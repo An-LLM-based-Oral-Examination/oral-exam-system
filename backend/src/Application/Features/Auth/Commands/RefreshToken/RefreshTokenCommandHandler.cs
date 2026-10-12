@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -50,7 +51,24 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         if (existingToken.IsRevoked)
         {
-            return Result<RefreshTokenResponse>.Failure("Refresh token đã bị thu hồi.");
+            // RFC 6819 §5.2.2.3 — Replay Attack Detection:
+            // Token đã bị thu hồi mà vẫn bị gửi lên → dấu hiệu rò rỉ token.
+            // Thu hồi toàn bộ refresh token đang hoạt động của user để ép đăng nhập lại.
+            var activeTokens = await _context.RefreshTokens
+                .Where(rt => rt.UserId == existingToken.UserId && rt.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+            }
+
+            if (activeTokens.Count > 0)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            return Result<RefreshTokenResponse>.Failure("Refresh token đã bị thu hồi. Toàn bộ phiên đăng nhập đã bị vô hiệu hóa vì phát hiện nghi ngờ rò rỉ token.");
         }
 
         if (existingToken.IsExpired)

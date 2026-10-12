@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -60,21 +61,36 @@ public class RefreshTokenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RevokedToken_ReturnsFailure()
+    public async Task Handle_RevokedToken_RevokesAllUserTokensAndReturnsFailure()
     {
         await using var context = CreateDbContext();
         var user = SeedActiveUser(context);
-        var rawToken = "revoked-token";
-        var token = SeedRefreshToken(context, user.Id, rawToken, DateTime.UtcNow.AddDays(7));
-        token.RevokedAt = DateTime.UtcNow.AddHours(-1);
+
+        // Token đã bị thu hồi (bị hacker dùng lại)
+        var revokedRawToken = "revoked-token";
+        var revokedToken = SeedRefreshToken(context, user.Id, revokedRawToken, DateTime.UtcNow.AddDays(7));
+        revokedToken.RevokedAt = DateTime.UtcNow.AddHours(-1);
+
+        // Token hợp lệ đang active trên thiết bị khác
+        var activeRawToken = "active-on-another-device";
+        SeedRefreshToken(context, user.Id, activeRawToken, DateTime.UtcNow.AddDays(7));
+
         await context.SaveChangesAsync();
 
         var handler = CreateHandler(context, new FakeIssuer());
 
-        var result = await handler.Handle(new RefreshTokenCommand(rawToken), CancellationToken.None);
+        var result = await handler.Handle(new RefreshTokenCommand(revokedRawToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("thu hồi");
+        result.Error.Should().Contain("vô hiệu hóa");
+
+        // RFC 6819: Toàn bộ token của user phải bị revoke
+        var allTokens = await context.RefreshTokens
+            .Where(rt => rt.UserId == user.Id)
+            .ToListAsync();
+        allTokens.Should().OnlyContain(t => t.RevokedAt.HasValue,
+            "tất cả refresh token của user phải bị thu hồi khi phát hiện replay attack");
     }
 
     [Fact]

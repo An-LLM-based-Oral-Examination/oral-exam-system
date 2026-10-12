@@ -30,8 +30,8 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 │    (admin, department_head,    │  • courses (has_follow_up,     │  • rubric_criteria            │
 │     lecturer, proctor,         │    transcript_buffer_seconds,  │    (Weight, Bloom, MaxScore)  │
 │     student, UUID PK)          │    max_follow_up_questions)   │                               │
-│                                │  • classes                     │                               │
-│                                │  • class_enrollments           │                               │
+│  • refresh_tokens              │  • classes                     │                               │
+│    (SHA-256 hash, rotation)    │  • class_enrollments           │                               │
 ├────────────────────────────────┼────────────────────────────────┼───────────────────────────────┤
 │  [4] Practice Module (MF-01)   │  [5] Mock Exam Module (MF-02)  │  [6] Official Exam & Audit    │
 │  • practice_questions (Public) │  • exam_structures (Matrix)   │    (MF-04)                    │
@@ -64,6 +64,7 @@ erDiagram
     %% =========================================================================
 
     %% PHÂN HỆ 1 & 2: IDENTITY & ACADEMIC COHORTS
+    USERS ||--o{ REFRESH_TOKENS : "has sessions"
     SEMESTERS ||--o{ COURSES : "contains"
     SEMESTERS ||--o{ CLASSES : "schedules"
     COURSES ||--o{ CLASSES : "has classes"
@@ -147,6 +148,17 @@ erDiagram
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái kích hoạt tài khoản |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối |
+
+#### Bảng `refresh_tokens`
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
+|:---|:---|:---:|:---|
+| `id` | `uuid` | PK, Default `gen_random_uuid()` | Định danh refresh token |
+| `user_id` | `uuid` | FK → `users(id)`, ON DELETE CASCADE | Người sở hữu token |
+| `token_hash` | `varchar(128)` | NOT NULL, UNIQUE | SHA-256 hash của token gốc (không lưu bản rõ) |
+| `expires_at` | `timestamptz` | NOT NULL | Thời điểm hết hạn (7 ngày sau khi tạo) |
+| `revoked_at` | `timestamptz` | NULLABLE | Thời điểm bị thu hồi (null = đang active) |
+| `replaced_by_token_hash` | `varchar(128)` | NULLABLE | Hash của token mới thay thế (Token Rotation) |
+| `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo |
 
 ---
 

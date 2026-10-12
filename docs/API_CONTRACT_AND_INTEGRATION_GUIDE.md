@@ -121,6 +121,24 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 }
 ```
 
+#### Đăng xuất (Thu hồi Refresh Token phía Server)
+- **Endpoint:** `POST /api/v1/auth/sign-out`
+- **Quyền truy cập:** Public
+- **Request Body:**
+```json
+{
+  "refreshToken": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "message": "Đăng xuất thành công."
+}
+```
+- **Hành vi:** Thu hồi Refresh Token phía server (đặt `revoked_at`). Endpoint là **idempotent** — gọi nhiều lần với cùng token hoặc token không tồn tại đều trả 200 OK. Frontend cần xóa Access Token và Refresh Token khỏi bộ nhớ sau khi gọi.
+- **Response 400 Bad Request:** Khi `refreshToken` rỗng hoặc null.
+
 ### 4.2. Quy ước lưu trữ và gửi Token
 - Frontend lưu `accessToken` vào Memory hoặc Session Storage (tuyệt đối không lưu LocalStorage nhằm phòng chống XSS).
 - Mọi request yêu cầu xác thực phải đính kèm Header:
