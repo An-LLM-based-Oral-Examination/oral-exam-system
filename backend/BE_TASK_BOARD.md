@@ -1,47 +1,45 @@
-# ⚙️ BACKEND FUNCTIONAL TASK BOARD & TECHNICAL SPECIFICATION (v7.0 — FUNCTIONAL BREAKDOWN THEO 4 KHỐI CHỨC NĂNG ĐỘC LẬP)
+# ⚙️ BACKEND MASTER TASK BOARD & EXECUTION SPECIFICATIONS (v8.0)
 ## ĐỒ ÁN TỐT NGHIỆP SEP490 (FA26SE166) — HỆ THỐNG LUYỆN THI & ĐÁNH GIÁ VẤN ĐÁP BẰNG LLM
-### KHO MÃ NGUỒN: `05_Source_Code/backend` | CỔNG DỊCH VỤ API: `5000` | DATABASE: `5432`
+### KHO MÃ NGUỒN: `05_Source_Code/backend` | CỔNG DỊCH VỤ API: `5000` | DATABASE: `5432` | FRONTEND: `3000`
 
 ---
 
 > [!IMPORTANT]
-> **NGUYÊN TẮC VẬN HÀNH & PHÂN BỔ NHÂN SỰ BACKEND CHUẨN XÁC 100%:**
+> **QUY CHUẨN TỐI THƯỢNG & NGUỒN SỰ THẬT DUY NHẤT (SINGLE SOURCE OF TRUTH):**
 > - **Mã đề tài:** FA26SE166 | **Học kỳ:** Fall 2026 (FA26) — Đại học FPT TP.HCM (FPT SG)
-> - **Kiến trúc:** .NET 8 Clean Architecture 4 tầng (Domain, Application, Infrastructure, API) · CQRS MediatR · PostgreSQL 16 (30 bảng 3NF) · SignalR Typed Hubs · BoundedChannel (1,000 slots RAM) · Polly Resilience Pipeline.
-> - **Cân bằng tải nhân sự theo chỉ đạo chính thức:**
->   - 🧑 **Nguyễn Quang Thành (Team Leader & Lead Backend Architect):**
->     * Chủ trì Backend Khối 1 (MF-01: Luyện tập vấn đáp tương tác): Core Luyện tập, Tùy chọn Dễ $\to$ Khó `progressive` 3–10 câu cho cả Per/Full, Bounded Channel 1,000 slots RAM, SignalR `PracticeHub`, Stream Whisper trực tiếp (bỏ `AudioUrl`), `system_configs`.
->     * Chủ trì Backend Khối 2 (MF-02: Thi thử vấn đáp bấm giờ): Quota Guard ($K \le 3$ do Trưởng Bộ Môn cấu hình), Voice-First Gate, Bốc đề Bloom từ kho `practice_questions`, Option Follow-up, Server Master Timer, Fast-Path / Async Grading, Instant Scorecard Rubric.
->     * Module Báo cáo Khảo thí FPT: Xuất bảng điểm chuẩn khảo thí Đại học FPT ra cả 2 định dạng Excel `.xlsx` (EPPlus) VÀ PDF (QuestPDF).
->     * API Vệ tinh: API Dashboard Sinh viên FE-10, API Lịch sử luyện tập FE-02.
->   - 🧑 **Nguyễn Trọng Tốt (Backend Developer, AI Specialist & QA Lead):**
->     * Auth Google OAuth PKCE: Chấp nhận mọi email Google hợp lệ, tự động kích hoạt tài khoản trong `users`, cấp JWT Access/Refresh Token theo 5 roles RBAC, loại bỏ `password_hash`.
->     * Chủ trì Backend Khối 3 (MF-03: Ngân hàng câu hỏi & Rubric Studio 10.0đ): AI sinh câu hỏi từ FLM Syllabus theo CLO, Barem Rubric Studio $\sum \equiv 10.0$đ, Tick chọn 2 kho `practice_questions` / `exam_questions`, Gửi duyệt & Trưởng Bộ Môn phê duyệt 3 quyết định (`APPROVED`, `NEEDS_REVISION`, `REJECTED`).
->     * TOÀN BỘ Backend Khối 4 (MF-04: Thi thật phòng Lab, Công bố điểm & Phúc khảo nội bộ): Cấu hình kỳ thi & ca thi gán phòng lab trực tiếp và người coi thi, Check-in Kiosk IP Binding `ip_address` (Ghế 1–40, HTTP 403), Nộp bài Persist First $< 100$ms lưu DB `SUBMITTED`, Upload audio Cloudflare R2 `STT_MSSV.webm` + SHA-256 niêm phong, BoundedChannel 1000 slots / DLQ chấm ngầm AI CoT, AI Doubt Guard (`is_suspicious = true`), API Evidence Panel cho Giảng viên, Công bố điểm Atomic 100%, Khóa một chiều `OneWayLockInterceptor` (`is_locked = true` $\to$ HTTP 403), Phân hệ Phúc khảo nội bộ `AppealRequest` Trưởng Bộ Môn tiếp nhận và giao Giảng viên chấm lại.
->     * API Vệ tinh: API Quản lý Người dùng User Management FE-09, API Quản lý Học kỳ Semester CRUD FE-08, API Hộp thư Notification in-app FE-11, API Dashboard Giảng viên FE-10, Quản trị DLQ & Audit Logs.
->     * AI Core & QA Lead: Gemini 1.5 Flash CoT Prompting ép khuôn JSON, Whisper STT Server-side `timestamps_json`, Polly Retry 3 lần (2s, 4s, 8s), Dead-Letter Queue worker (`dead_letter_queues`), xUnit / NetArchTest suites (100% PASS).
->   - 🧑 **Nguyễn Đăng Hải (DB Specialist & Frontend Developer):**
->     * **CHỈ LÀM DATABASE**, quản trị trọn vẹn 30 bảng CSDL PostgreSQL 16 (DDL Schema, Check Constraints, Indexes, Seed Data, Docker Compose).
->     * **Hải tuyệt đối KHÔNG code logic C# Backend**, chuyển sang dồn toàn lực phát triển Frontend cùng Hoàng.
+> - **Tech Stack Chuẩn:** .NET 8 Clean Architecture 4 tầng (Domain, Application, Infrastructure, API) · CQRS MediatR · PostgreSQL 16 (30 bảng 3NF) · SignalR Typed Hubs · BoundedChannel (1,000 slots RAM) · Polly Resilience Pipeline · Google Gemini 1.5 Flash/Pro · Cloudflare Whisper STT · Cloudflare R2 Storage.
+> - **Phân định 5 Roles RBAC:** `student`, `lecturer`, `department_head`, `proctor`, `admin`.
+> - **File này là tài liệu duy nhất điều phối toàn bộ công việc Backend** cho 2 kỹ sư: **Nguyễn Quang Thành** và **Nguyễn Trọng Tốt**, cùng sự hỗ trợ CSDL độc lập từ **Nguyễn Đăng Hải**.
+> - Tuyệt đối tuân thủ 12 cam kết kiến trúc tại `AGENTS.md` và `MASTER_ARCHITECTURE.md`. Không tự ý suy diễn hoặc phá vỡ API contracts.
 
 ---
 
-## 📁 1. CẤU TRÚC 30 THỰC THỂ CSDL & BẢNG HỆ THỐNG TRONG 6 BOUNDED CONTEXTS (.NET 8 CLEAN ARCHITECTURE)
+# 📊 PHẦN 1: BẢNG MA TRẬN PHÂN BỔ CÔNG VIỆC (BALANCED 50/50 MATRIX)
 
-Hệ thống quản lý trọn vẹn 30 thực thể chuẩn hóa 3NF tương ứng 30 bảng CSDL PostgreSQL 16 trong 6 Bounded Contexts:
+| Kỹ sư đảm nhiệm | Chức năng chính (Heavy Core) | Các task vệ tinh ("Râu ria" hoàn thiện) | Thế mạnh chuyên môn |
+| :--- | :--- | :--- | :--- |
+| 🧑 **Nguyễn Quang Thành**<br>*(Team Leader & Lead Backend Architect)* | **1. Module MF-01: Luyện Tập Vấn Đáp Tương Tác**<br>• Khởi tạo phiên: `[Per-Question]` On-Demand & `[Full-Session]` Progressive 3–10 câu (BE-1.1)<br>• Hàng đợi RAM BoundedChannel 1,000 slots (`FullMode.Wait`) (BE-1.2)<br>• Nộp bài Persist First $< 100$ms, Stream Whisper STT, bỏ `AudioUrl` & bỏ R2 (BE-1.3)<br>• Background Worker `GradingQueueWorker` & Realtime Hub `/hubs/practice` (BE-1.4)<br>• Gemini 1.5 Flash CoT 3 bước & Follow-up A2 ($4.0 \le \text{Score} \le 8.0$) (BE-1.5)<br>• Hoàn tất phiên, Lịch sử luyện tập & Scorecard Rubric chi tiết (BE-1.6)<br>• API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer (BE-1.7)<br>• Inactivity Timeout 10 phút, Lazy check `HTTP 410 Gone`, bảo toàn điểm (BE-1.8)<br><br>**2. Module MF-02: Thi Thử Vấn Đáp Bấm Giờ**<br>• Daily Quota Guard do Trưởng BM cấu hình, chặn `HTTP 429` (BE-2.1)<br>• Bốc đề ma trận Bloom từ kho `practice_questions` (BE-2.2)<br>• Server Master Timer & Voice-First Gate chỉ lưu transcript (BE-2.3)<br>• Chấm 2 pha / Async Grading, Instant Scorecard theo CLO & Lịch sử thi thử (BE-2.4) | **1. Module Báo Cáo Khảo Thí FPT (BE-V01):**<br>• Xuất bảng điểm Excel `.xlsx` (EPPlus)<br>• Xuất biên bản ca thi PDF (QuestPDF)<br><br>**2. API Public Xác Thực Bảng Điểm (BE-V02):**<br>• Tra cứu chứng chỉ bảng điểm qua QR Code không cần token (`GET /api/v1/verification/grades/{hash}`)<br><br>**3. API Student Dashboard (BE-V03):**<br>• Thống kê buổi tập, điểm TB, độ thành thạo CLO, banner lịch thi phòng Lab (`GET /api/v1/student/dashboard`) | Clean Architecture .NET 8, CQRS MediatR, BoundedChannel RAM Queue, SignalR Typed Hubs, Master Timer, Thuật toán phân bổ đề thi, Export Excel/PDF. |
+| 🧑 **Nguyễn Trọng Tốt**<br>*(Backend Developer, AI Specialist & QA Lead)* | **1. Module MF-03: Ngân Hàng Đề & Rubric Studio 10.0**<br>• AI sinh câu hỏi từ FLM Syllabus theo CLO & Barem riêng 10.0đ (BE-3.1)<br>• Soạn Barem Rubric Studio: FluentValidation $\sum \equiv 10.0$đ (`HTTP 422`), Model Answer $\ge 50$ ký tự (BE-3.2)<br>• Tick chọn 2 kho (`practice_questions` / `exam_questions`) & Gửi duyệt Bộ Môn (BE-3.3)<br>• Trưởng Bộ Môn Thẩm định: 3 quyết định `APPROVED`, `NEEDS_REVISION`, `REJECTED` (BE-3.4)<br><br>**2. Module MF-04: Thi Thật Phòng Lab, Công Bố Điểm & Phúc Khảo**<br>• Quản trị Kỳ thi & Ca thi phòng lab, kíp thi, người coi thi, follow-up (BE-4.1)<br>• Check-in Kiosk IP Binding `ip_address` Ghế 1–40 `HTTP 403`, 7 trạng thái HOA (BE-4.2)<br>• Nộp bài Persist First $< 100$ms `SUBMITTED`, Upload Cloudflare R2 `STT_MSSV.webm` + SHA-256 niêm phong (BE-4.3)<br>• BoundedChannel 1000 slots & DLQ 5m chấm ngầm, AI Doubt Guard (`confidence < 0.70`), Evidence Panel API (BE-4.4)<br>• Công Bố Điểm Atomic 100% & Khóa 1 chiều `OneWayLockInterceptor` (`is_locked = true` $\to$ `HTTP 403`) (BE-4.5)<br>• Phân hệ Phúc khảo nội bộ `AppealRequest`: Trưởng BM tiếp nhận và giao GV chấm lại, Acknowledge điểm (BE-4.6) | **1. Auth Google OAuth PKCE (BE-V04):**<br>• Mở mọi email Google, cấp JWT 5 roles, bỏ `password_hash`<br><br>**2. API Quản lý Người dùng (BE-V05):**<br>• User Management FE-09: khóa/mở user, gán role 5 roles<br><br>**3. API Quản lý Học kỳ (BE-V06):**<br>• Semester CRUD FE-08: tạo/sửa học kỳ, không xóa<br><br>**4. Hộp thư Notification In-App (BE-V07):**<br>• Tự động sinh thông báo theo sự kiện hệ thống<br><br>**5. Cấu hình Hệ thống Admin (BE-V08):**<br>• API quản trị bảng `system_configs` MF-01<br><br>**6. Quản trị DLQ & Audit Logs (BE-V09):**<br>• DLQ Replay Worker 5 phút & API Audit Logs<br><br>**7. API Giám thị Phòng Lab (BE-V10):**<br>• Điểm danh 40 máy lab, đình chỉ thi Kiosk<br><br>**8. API Dashboard Giảng viên (BE-V11):**<br>• Thống kê ca thi, đề thi, tỷ lệ duyệt đề<br><br>**9. Module QA & Testing (BE-QA):**<br>• Test Suites xUnit & NetArchTest Architecture (100% Pass) | AI Prompting CoT (Gemini 1.5 Flash), Whisper STT Server-side, Google OAuth PKCE, RBAC 5 Roles, EF Core Interceptors, Cloudflare R2 Storage, QA Automation & Architecture Tests. |
+| 🧑 **Nguyễn Đăng Hải**<br>*(Database Specialist & Frontend Developer)* | **Quản Trị Toàn Diện CSDL PostgreSQL 16 (30 Bảng 3NF):**<br>• DDL Schema, Foreign Keys, Unique Index, Check Constraints (`RubricCriteria` sum = 10, Bloom Levels, Ticket Statuses)<br>• ESR Indexing (`Equality`, `Sort`, `Range`) tối ưu hóa hiệu năng truy vấn cao tải phòng lab<br>• Seed Data mẫu chuẩn xác (Học kỳ FA26, Users 5 roles, Môn học, Barem Rubric, Kho câu hỏi, `system_configs`)<br>• Cấu hình Docker Compose `postgres:16-alpine` (Port 5432) & Migration Scripts | **Phối Hợp Frontend Toàn Lực:**<br>• **Hải tuyệt đối KHÔNG code logic C# Backend**<br>• Sau khi hoàn thiện tầng CSDL, Hải chuyển sang dồn 100% năng lượng phụ trách các màn hình Frontend (MF-02, MF-03, MF-04 Quản trị, Admin CRUD) cùng Lê Vũ Hoàng theo `FE_TASK_BOARD.md` | Thiết kế CSDL quan hệ 3NF, Tối ưu hóa Index PostgreSQL, Viết DDL & Constraints chặt chẽ, Docker Database Management. |
+
+---
+
+# 📁 PHẦN 2: CẤU TRÚC KIẾN TRÚC & THƯ MỤC CHUẨN MỰC (`backend/src/`)
+
+Hệ thống được thiết kế theo đúng mô hình **.NET 8 Clean Architecture 4 tầng** chuẩn Enterprise, ánh xạ đầy đủ 30 thực thể CSDL trong 6 Bounded Contexts:
 
 ```text
 backend/src/
 ├── Domain/                          # Tầng Core Thuần Khiết (Zero External Dependencies)
 │   ├── Common/                      # BaseEntity.cs, IAggregateRoot.cs, ILockableEntity.cs
-│   ├── Entities/                    # 30 thực thể chuẩn hóa trong 6 Bounded Contexts + Bảng Cấu hình & Thông báo:
+│   ├── Entities/                    # 30 thực thể chuẩn hóa trong 6 Bounded Contexts + Bảng Hệ thống:
 │   │   ├── Identity (1):            User.cs (5 Roles: student, lecturer, department_head, proctor, admin; bỏ password_hash)
 │   │   ├── Academic (4):            Semester.cs, Course.cs (has_follow_up, transcript_buffer_seconds, max_follow_up_questions, exam_input_mode), Class.cs, ClassEnrollment.cs
 │   │   ├── Assessment (2):          Rubric.cs, RubricCriterion.cs (Ràng buộc sum = 10.0đ)
-│   │   ├── Practice [MF-01] (5):    PracticeQuestion.cs, PracticeSession.cs, PracticeAnswer.cs (đã bỏ audio_url), AiEvaluation.cs, AiEvaluationDetail.cs
+│   │   ├── Practice [MF-01] (5):    PracticeQuestion.cs, PracticeSession.cs (last_activity_at, selected_difficulties), PracticeAnswer.cs (bỏ audio_url), AiEvaluation.cs, AiEvaluationDetail.cs
 │   │   ├── Mock Exam [MF-02] (6):   ExamStructure.cs, ExamSet.cs, ExamSetQuestion.cs, MockExamQuota.cs, MockExamSession.cs, MockExamAnswer.cs (Rút từ kho practice_questions)
-│   │   ├── Official Exam [MF-04] (7): ExamQuestion.cs, OfficialExamSession.cs, RealExamSessionShift.cs (phòng lab, người coi thi), StudentExamTicket.cs (ip_address, Seat 1-40), ExamQuestionSubmission.cs, LecturerAudit.cs, LecturerAuditDetail.cs
-│   │   ├── Appeals [MF-04] (1):     AppealRequest.cs (Gán Trưởng Bộ Môn tiếp nhận & giao giảng viên chấm lại)
+│   │   ├── Official Exam [MF-04] (7): ExamQuestion.cs, OfficialExamSession.cs, RealExamSessionShift.cs (phòng lab ghi trực tiếp, người coi thi), StudentExamTicket.cs (ip_address, Seat 1-40), ExamQuestionSubmission.cs, LecturerAudit.cs, LecturerAuditDetail.cs
+│   │   ├── Appeals [MF-04] (1):     AppealRequest.cs (Trưởng Bộ Môn tiếp nhận & giao giảng viên chấm lại)
 │   │   ├── Resilience & Audit (2):  DeadLetterQueue.cs, AuditLog.cs
 │   │   └── System & Notifications (2): SystemConfig.cs (Key-Value), Notification.cs (In-app notifications)
 │   ├── Enums/                       # UserRole, ExamTicketStatus (7 trạng thái HOA), ExamInputMode (VoiceOnly, VoiceWithTranscriptEdit), AppealStatus, BloomLevel
@@ -49,189 +47,170 @@ backend/src/
 ├── Application/                     # MediatR CQRS, FluentValidation, Interfaces
 │   ├── Common/                      # IApplicationDbContext, IGeminiService, IWhisperService, IR2StorageService, IExcelExportService, IPdfExportService
 │   ├── Behaviors/                   # ValidationBehavior.cs, LoggingBehavior.cs, PerformanceBehavior.cs
-│   └── Features/                    # Tổ chức theo 4 Khối Chức Năng Độc Lập
+│   └── Features/                    # Tổ chức CQRS theo từng Phân Hệ Nghiệp Vụ
+│       ├── Auth/                    # Commands: GoogleLogin, RefreshToken
+│       ├── Practice/                # Commands: StartSession, NextQuestion, SubmitAnswer, SubmitBatch, CompleteSession; Queries: GetSession, GetHistory
+│       ├── MockExams/               # Commands: StartMockExam, SubmitMockExam; Queries: GetMockExamHistory, GetMockExamDetail
+│       ├── Questions/               # Commands: GenerateFromFlm, CreateDraft, BatchSubmitReview, ReviewDecision; Queries: GetQuestionsList
+│       ├── OfficialExams/           # Commands: CreateSeason, CreateShift, CheckInKiosk, SubmitOfficialExam, PublishGrades; Queries: ExportReports
+│       ├── Appeals/                 # Commands: CreateAppeal, AssignLecturer, SubmitDecision; Queries: GetAppealsList
+│       ├── Admin/                   # Users, Semesters, SystemConfigs, DlqReplay, AuditLogs
+│       └── Notifications/           # Queries: GetNotifications; Commands: MarkAsRead
 ├── Infrastructure/                  # EF Core, External APIs, Background Workers, SignalR
 │   ├── Persistence/                 # OralExamDbContext.cs, Configurations/ (Fluent API 30 tables), Migrations/
 │   ├── Interceptors/                # OneWayLockInterceptor.cs (Chặn UPDATE/DELETE khi is_locked = true -> HTTP 403)
 │   ├── Channels/                    # BoundedGradingQueueChannel.cs (Capacity = 1,000 slots RAM, FullMode.Wait)
-│   ├── BackgroundJobs/              # GradingQueueWorker.cs (Polly Retry 2s-4s-8s), DlqReplayWorker.cs
+│   ├── BackgroundJobs/              # GradingQueueWorker.cs (Polly Retry 2s-4s-8s), DlqReplayWorker.cs (Quét bù sau 5m)
 │   ├── Hubs/                        # PracticeHub.cs (/hubs/practice)
 │   └── Services/                    # GeminiEvaluationService.cs, CloudflareR2Service.cs, WhisperService.cs, QuotaService.cs, ExcelService.cs, PdfService.cs
-└── API/                             # ASP.NET Core Host Gateway (Port 5000)
-    ├── Controllers/v1/              # AuthController, PracticeController, MockExamsController, QuestionsController, OfficialExamsController, AppealsController, AdminController, SemestersController, NotificationsController, CoursesController
-    ├── Middlewares/                 # GlobalExceptionMiddleware.cs (RFC 7807), RequestLoggingMiddleware.cs
-    └── Program.cs                   # CORS AllowFrontend trước StaticFiles, DI Container, MapHub
+├── API/                             # ASP.NET Core Host Gateway (Port 5000)
+│   ├── Controllers/v1/              # AuthController, PracticeController, MockExamsController, QuestionsController, OfficialExamsController, AppealsController, AdminController, SemestersController, NotificationsController, CoursesController, VerificationController
+│   ├── Middlewares/                 # GlobalExceptionMiddleware.cs (RFC 7807), RequestLoggingMiddleware.cs
+│   └── Program.cs                   # CORS AllowFrontend (3000) trước StaticFiles, DI Container, MapHub
+└── tests/
+    ├── OralExamination.UnitTests/   # xUnit: PracticeTests, MockExamTests, QuestionTests, OfficialExamTests, QuotaTests
+    └── OralExamination.ArchitectureTests/ # NetArchTest: Khóa ranh giới Clean Architecture 4 tầng
 ```
 
 ---
 
-## 🛠️ 2. PHÂN RÃ CHI TIẾT 4 KHỐI CHỨC NĂNG ĐỘC LẬP & TÍNH NĂNG VỆ TINH
+# 🧑‍💻 PHẦN 3: NHIỆM VỤ CHI TIẾT CỦA NGUYỄN QUANG THÀNH (TEAM LEADER & LEAD BACKEND ARCHITECT)
 
----
+### 🌟 KHỐI TRỌNG TÂM 1: MODULE MF-01 — PHÒNG LUYỆN TẬP VẤN ĐÁP TƯƠNG TÁC (INTERACTIVE PRACTICE)
+> **Trạng thái phân hệ:** ✅ **ĐÃ HOÀN THÀNH 100% (NGUYỄN QUANG THÀNH ĐÃ XÂY DỰNG & TEST PASS)**
 
-### KHỐI 1 (MF-01): LUYỆN TẬP VẤN ĐÁP TƯƠNG TÁC (INTERACTIVE PRACTICE) & VỆ TINH — [x] ĐÃ HOÀN THÀNH 100% (NGUYỄN QUANG THÀNH ĐÃ LÀM)
-
-#### Task BE-1.1: Khởi tạo phiên luyện tập tự do (Per-Question On-Demand & Full-Session Progressive) — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.1: Khởi Tạo Phiên Luyện Tập Tự Do (On-Demand & Progressive)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `POST /api/v1/practice/sessions`
 * **Tệp liên quan:** `Features/Practice/Commands/StartPracticeSession/*`, `PracticeController.cs`, `SystemConfig.cs`, `PracticeSession.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Đã hỗ trợ chọn đơn/tổ hợp mức độ `difficulties: ["easy", "medium"]`, Per-Question On-Demand không ép số câu, Full-Session progressive 3–10 câu chia đều Bloom, đọc cấu hình động `system_configs`, chặn thiếu đề HTTP 400 rõ ràng tiếng Việt, lưu `SelectedDifficulties` và `LastActivityAt`).
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Nhận tham số từ sinh viên: `studentId`, `courseId`, `isFullSession` (`false`: Per-Question, `true`: Full-Session), `difficulties` (mảng mức độ con: `easy`, `medium`, `hard`) hoặc `difficulty` (chuỗi đơn, backward-compatible), `questionCount` (int? tùy chọn ở Per-Question, bắt buộc 3–10 ở Full-Session).
+  - Tiếp nhận yêu cầu khởi tạo: `courseId`, `isFullSession` (`false`: Per-Question, `true`: Full-Session), `difficulties` (mảng: `easy`, `medium`, `hard`) hoặc `difficulty` (chuỗi đơn), `questionCount` (int? tùy chọn ở Per-Question, bắt buộc 3–10 ở Full-Session).
   - **Chế độ `[Per-Question On-Demand]`:**
-    * Sinh viên chọn đơn mức độ (`easy`, `medium`, `hard`) hoặc tổ hợp (`["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, `["easy", "medium", "hard"]`).
-    * Không bắt buộc chốt trước số lượng câu hỏi (`questionCount` tùy chọn). Khi khởi tạo, hệ thống cấp ngay Câu 1 trong response, lưu `session.SelectedDifficulties` và `session.LastActivityAt = DateTime.UtcNow`.
-    * Sinh viên làm từng câu và lấy câu tiếp theo on-demand qua `POST /next-question` đến khi muốn dừng.
+    * Cho phép chọn đơn lẻ hoặc tổ hợp bất kỳ: `["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, `["easy", "medium", "hard"]`.
+    * Không bắt buộc chốt số câu. Hệ thống cấp ngay Câu 1 trong response khởi tạo, lưu `session.SelectedDifficulties` và `session.LastActivityAt = DateTime.UtcNow`.
   - **Chế độ `[Full-Session Progressive]`:**
-    * Sinh viên nhập số câu hỏi trong khoảng 3 đến 10 câu (ràng buộc bởi `MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10` trong `system_configs`).
-    * Query kho câu hỏi luyện tập (`practice_questions`) lọc theo `course_id`, chia đều các mức độ (Dễ, Trung bình, Khó) và **sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó**, cấp trọn gói toàn bộ câu hỏi.
-    * Nếu kho đề không đủ câu hỏi cho bất kỳ mức nào, ném lỗi nghiệp vụ `HTTP 400 Bad Request` tiếng Việt chuẩn (VD: *"Kho đề hiện tại không đủ câu hỏi để tạo phiên luyện tập Dễ đến Khó: cần 1 Dễ (có 10), 2 Trung bình (có 1), 1 Khó (có 10). Vui lòng liên hệ giảng viên bổ sung câu hỏi."*), không tạo phiên rác.
-  - Đọc cấu hình thời gian đệm hiệu đính transcript từ `courses`: `transcript_buffer_seconds` (10–300s, mặc định 60s).
-  - Tạo bản ghi trong `practice_sessions` với trạng thái `in_progress`, `last_activity_at = DateTime.UtcNow`.
-* **Tiêu chí nghiệm thu (DoD):** Trả về `sessionId`, `transcriptBufferSeconds`, danh sách câu hỏi kèm tóm tắt barem rubric $\sum \equiv 10.0$đ. Unit test bao phủ các ca biên: single difficulty, multiple difficulties, bounds progressive, kho đề thiếu câu hỏi.
+    * Ràng buộc số lượng từ 3 đến 10 câu qua `system_configs` (`MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10`).
+    * Query kho đề `practice_questions` lọc theo môn, chia đều số câu cho các mức Bloom và **sắp xếp theo tiến trình tăng dần: Dễ $\to$ Trung bình $\to$ Khó**, cấp trọn gói toàn bộ câu hỏi.
+    * Nếu kho đề thiếu câu cho bất kỳ mức nào: Trả lỗi `HTTP 400 Bad Request` tiếng Việt rõ ràng, không tạo phiên rác.
+  - Cung cấp thời gian đệm `transcript_buffer_seconds` (10–300s, mặc định 60s) từ bảng `courses`.
+* **Tiêu chí nghiệm thu (DoD):** Trả về `sessionId`, `transcriptBufferSeconds`, danh sách câu hỏi kèm tóm tắt rubric $\sum \equiv 10.0$đ. Unit test bao phủ ca đơn/tổ hợp mức độ và ca thiếu đề.
 
-#### Task BE-1.2: Hàng đợi RAM BoundedChannel (1,000 slots RAM) — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.2: Hàng Đợi RAM BoundedChannel (1,000 slots RAM)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Tệp liên quan:** `Infrastructure/Channels/BoundedGradingQueueChannel.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Đã cấu hình Singleton BoundedChannel 1000 capacity, FullMode.Wait, Backpressure an toàn).
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Tạo singleton `Channel<GradingTask>` với dung lượng giới hạn `capacity = 1000`, thiết lập `FullMode = BoundedChannelFullMode.Wait`.
-  - Triển khai phương thức non-blocking `TryWrite()` khi còn slot trống và `WriteAsync()` chờ khi queue đầy 1,000 slots.
-  - Ngăn ngừa triệt để nguy cơ tràn bộ nhớ (Out-of-Memory Exception) khi hàng trăm sinh viên cùng nộp bài cùng lúc.
-* **Tiêu chí nghiệm thu (DoD):** Unit test đẩy 1,200 task đồng thời: 1,000 task đầu nhận ngay lập tức, 200 task sau chờ theo cơ chế Backpressure an toàn mà không làm sập tiến trình.
+  - Khởi tạo Singleton `Channel<GradingTask>` dung lượng giới hạn `capacity = 1000`, thiết lập `FullMode = BoundedChannelFullMode.Wait`.
+  - Non-blocking `TryWrite()` khi còn slot trống và `WriteAsync()` chờ khi queue đầy 1,000 slots (Backpressure an toàn).
+  - Chống tràn bộ nhớ OOM khi lượng lớn sinh viên cùng nộp bài đồng thời.
+* **Tiêu chí nghiệm thu (DoD):** Đẩy 1,200 task đồng thời: 1,000 task đầu nhận ngay, 200 task sau chờ theo cơ chế Backpressure mà không làm sập server.
 
-#### Task BE-1.3: Nộp bài Per-Question & Batch Submit Full-Session (Stream Whisper STT) — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.3: Nộp Bài Per-Question & Batch Submit Full-Session (Stream Whisper STT)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `POST /api/v1/storage/upload-audio`, `POST /api/v1/practice/sessions/{id}/answers` và `POST /api/v1/practice/sessions/{id}/batch-submit`
-* **Tệp liên quan:** `Features/Practice/Commands/UploadAudioPractice/*`, `Features/Practice/Commands/SubmitPracticeAnswer/*`, `Features/Practice/Commands/SubmitPracticeBatch/*`, `PracticeController.cs`, `StorageController.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Stream trực tiếp qua Whisper API, bỏ R2, bỏ `AudioUrl`, Persist First < 100ms trả HTTP 202 Accepted).
+* **Endpoint:** `POST /api/v1/practice/sessions/{id}/answers` và `POST /api/v1/practice/sessions/{id}/batch-submit`
+* **Tệp liên quan:** `Features/Practice/Commands/SubmitPracticeAnswer/*`, `Features/Practice/Commands/SubmitPracticeBatch/*`, `PracticeController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - **Tối ưu hóa luồng Audio:** Tiếp nhận file ghi âm `IFormFile` (.webm) từ client và chuyển thẳng trực tiếp dạng stream sang Cloudflare Whisper API để lấy transcript văn bản.
-  - **Quy chuẩn lưu trữ:** Loại bỏ hoàn toàn việc upload audio lên Cloudflare R2 và xóa bỏ cột `AudioUrl` khỏi bảng `practice_answers` (giảm tải 100% chi phí lưu trữ âm thanh cho hệ thống luyện tập; bảo lưu R2 dành riêng cho MF-04).
-  - **Persist First $< 100$ms:** Lưu ngay bản ghi vào bảng `practice_answers` với trạng thái `pending`, sau đó đẩy task vào `BoundedGradingQueueChannel`.
-  - Trả về mã phản hồi `HTTP 202 Accepted` ngay lập tức để giải phóng giao diện cho sinh viên.
-* **Tiêu chí nghiệm thu (DoD):** Thời gian phản hồi API nộp bài $< 100$ms. Bản ghi được lưu bền vững vào PostgreSQL trước khi AI bắt đầu chấm ngầm.
+  - Nhận file ghi âm `.webm`, stream trực tiếp sang Cloudflare Whisper API để lấy transcript văn bản.
+  - **Quy chuẩn lưu trữ:** Loại bỏ upload audio lên Cloudflare R2, xóa cột `AudioUrl` khỏi `practice_answers` (tiết kiệm 100% chi phí lưu trữ cho luyện tập, dành riêng R2 cho MF-04).
+  - **Persist First $< 100$ms:** Lưu bản ghi vào bảng `practice_answers` trạng thái `pending`, sau đó đẩy task vào BoundedChannel. Trả mã phản hồi `HTTP 202 Accepted` ngay lập tức.
+* **Tiêu chí nghiệm thu (DoD):** Thời gian phản hồi API $< 100$ms. Bài làm được lưu an toàn vào PostgreSQL trước khi tiến trình ngầm bắt đầu chấm.
 
-#### Task BE-1.4: Background Worker `GradingQueueWorker` & SignalR `PracticeHub` — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.4: Background Worker `GradingQueueWorker` & SignalR `PracticeHub`
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** Hub WebSocket `/hubs/practice`
+* **Endpoint:** WebSocket `/hubs/practice`
 * **Tệp liên quan:** `API/Workers/GradingQueueWorker.cs`, `API/Hubs/PracticeHub.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Chạy BackgroundService, Polly Retry 3 lần 2s-4s-8s, Circuit Breaker, DLQ isolate khi lỗi, SignalR bắn riêng group `session_{id}`).
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - `GradingQueueWorker` chạy dưới dạng `BackgroundService`, liên tục đọc task từ `BoundedGradingQueueChannel.Reader.ReadAllAsync()`.
-  - Gọi `IAiGradingService` (Gemini 1.5 Flash CoT) để chấm điểm.
-  - Khi có kết quả chấm: Lưu kết quả vào `ai_evaluations`, `ai_evaluation_details`, cập nhật `practice_answers.status = "graded"` và đẩy kết quả realtime qua SignalR Hub tới group `session_{sessionId}` của sinh viên qua event `ReceiveGradingResult`.
-  - Nếu gặp lỗi: Cách ly vào Dead-Letter Queue `dead_letter_queues` và bắn event `ReceiveGradingError` kèm thông báo thân thiện.
-* **Tiêu chí nghiệm thu (DoD):** Kết nối WebSocket ổn định qua `/hubs/practice`. Nhận đúng payload JSON Scorecard ngay sau khi AI chấm xong mà client không cần gửi request polling.
+  - `GradingQueueWorker` chạy dưới dạng `BackgroundService`, liên tục đọc task từ kênh RAM.
+  - Gọi Gemini AI chấm ngầm, lưu kết quả vào `ai_evaluations` và `ai_evaluation_details`, cập nhật `practice_answers.status = "graded"`.
+  - Đẩy kết quả realtime qua SignalR Hub tới group `session_{sessionId}` qua event `ReceiveGradingResult`.
+  - Polly Retry 3 lần (2s, 4s, 8s). Khi lỗi kéo dài: Cách ly vào DLQ `dead_letter_queues` và bắn event `ReceiveGradingError`.
+* **Tiêu chí nghiệm thu (DoD):** WebSocket `/hubs/practice` ổn định, Client nhận đúng JSON Scorecard ngay sau khi AI chấm xong mà không cần polling.
 
-#### Task BE-1.5: Gemini 1.5 Flash CoT 3 Bước & Follow-up Engine Đa Nấc — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.5: Gemini 1.5 Flash CoT 3 Bước & Follow-up Engine Đa Nấc
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Tệp liên quan:** `Infrastructure/Services/GeminiAiGradingService.cs`, `API/Workers/GradingQueueWorker.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Hỗ trợ cấu hình `MaxPracticeFollowUpQuestions` 1–5 câu, mặc định 2 câu; đếm số câu phụ đã có; hỏi phụ khi $4.0 \le \text{Score} \le 8.0$; Full-Session không follow-up).
+* **Tệp liên quan:** `Infrastructure/Services/GeminiAiGradingService.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - System Prompt Chain-of-Thought (CoT) 3 bước nghiêm ngặt ép khuôn JSON:
-    1. Bước 1: Trích xuất các ý kỹ thuật chính từ bản transcript của sinh viên.
-    2. Bước 2: Đối chiếu từng tiêu chí Barem Rubric $\sum \equiv 10.0$đ với Model Answer.
-    3. Bước 3: Tính điểm từng tiêu chí và tổng hợp nhận xét sư phạm theo định dạng JSON schema chuẩn.
-  - **Quy tắc kích hoạt câu hỏi phụ (Follow-up Engine):**
-    * Nếu sinh viên chọn **Luyện từng câu (`[Per-Question]`)**: Kích hoạt hỏi phụ khi điểm số rơi vào khoảng ranh giới **$4.0 \le \text{Score} \le 8.0$**. Đếm số lượng câu hỏi phụ đã trả lời trong phiên, cho phép hỏi tiếp đến tối đa `MaxPracticeFollowUpQuestions` (1–5 câu, mặc định 2 câu do Admin cấu hình trong `system_configs`). Nếu $\text{Score} < 4.0$ hoặc $\text{Score} > 8.0$ hoặc đã đủ số câu phụ, bỏ qua hỏi phụ và trả ngay Scorecard.
-    * Nếu sinh viên chọn **Luyện trọn gói (`[Full-Session]`)**: **KHÔNG CÓ câu hỏi follow-up**, chấm liền mạch toàn bộ đề và trả tổng kết Scorecard.
-* **Tiêu chí nghiệm thu (DoD):** Gemini trả về đúng cấu trúc JSON 100%, không bị vỡ cú pháp markdown. Tỷ lệ kích hoạt câu hỏi phụ chính xác 100% theo khoảng điểm quy định và hạn mức cấu hình.
+  - System Prompt CoT 3 bước ép khuôn JSON: (1) Trích xuất luận điểm kỹ thuật; (2) Đối chiếu Barem Rubric $\sum \equiv 10.0$đ; (3) Cho điểm và nhận xét sư phạm.
+  - **Quy tắc kích hoạt câu hỏi phụ (Follow-up):**
+    * Chế độ **Per-Question**: Kích hoạt khi điểm ranh giới **$4.0 \le \text{Score} \le 8.0$**. Đếm số câu phụ đã hỏi trong phiên, cho phép hỏi tiếp đến tối đa `MaxPracticeFollowUpQuestions` (1–5 câu, mặc định 2 câu do Admin cấu hình trong `system_configs`). Nếu $\text{Score} < 4.0$ hoặc $> 8.0$, bỏ qua hỏi phụ mở ngay Scorecard.
+    * Chế độ **Full-Session**: **TUYỆT ĐỐI KHÔNG có câu hỏi follow-up**, chấm liền mạch toàn bộ đề.
+* **Tiêu chí nghiệm thu (DoD):** Gemini trả về đúng cấu trúc JSON 100%. Tỷ lệ kích hoạt câu hỏi phụ chính xác theo khoảng điểm và hạn mức cấu hình.
 
-#### Task BE-1.6: Hoàn Tất Phiên, Lịch Sử Luyện Tập & Chi Tiết Scorecard — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.6: Hoàn Tất Phiên, Lịch Sử Luyện Tập & Chi Tiết Scorecard
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** 
-  - `POST /api/v1/practice/sessions/{id}/complete` (Hoàn tất phiên)
-  - `GET /api/v1/practice/student/history` (Lịch sử luyện tập sinh viên)
-  - `GET /api/v1/practice/sessions/{id}` (Chi tiết phiên & Scorecard)
-* **Tệp liên quan:** `Features/Practice/Commands/CompletePracticeSession/*`, `Features/Practice/Queries/GetStudentPracticeHistory/*`, `Features/Practice/Queries/GetPracticeSession/*`, `PracticeController.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Cập nhật `Status = "completed"` và `CompletedAt = DateTime.UtcNow`, trả về danh sách lịch sử phiên kèm tính điểm trung bình chính xác, hỗ trợ Tab Luyện Tập trên Student Portal).
+* **Endpoint:** `POST /api/v1/practice/sessions/{id}/complete`, `GET /api/v1/practice/student/history`, `GET /api/v1/practice/sessions/{id}`
+* **Tệp liên quan:** `Features/Practice/Commands/CompletePracticeSession/*`, `Features/Practice/Queries/*`, `PracticeController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - `POST /api/v1/practice/sessions/{id}/complete`: Đóng phiên luyện tập khi sinh viên hoàn thành, cập nhật trạng thái `completed`, ghi nhận `completed_at` (Idempotent).
-  - `GET /api/v1/practice/student/history`: Trả về danh sách các phiên luyện tập của sinh viên kèm chế độ (`Per-Question` / `Full-Session`), thời gian bắt đầu/kết thúc, số câu hỏi, điểm trung bình để phục vụ hiển thị lên Tab Luyện tập ở Student Portal.
-  - `GET /api/v1/practice/sessions/{id}`: Trả về chi tiết toàn bộ Scorecard, câu hỏi, câu trả lời bóc băng và nhận xét của từng tiêu chí rubric.
-* **Tiêu chí nghiệm thu (DoD):** Phản hồi API chuẩn RFC 7807. Đã có 6 bài unit tests trong `CompleteAndHistoryPracticeTests.cs` đạt 100% passed.
+  - `POST /complete`: Đóng phiên, cập nhật `status = "completed"`, `completed_at = DateTime.UtcNow` (Idempotent).
+  - `GET /student/history`: Trả về danh sách phiên luyện tập kèm chế độ (`Per-Question` / `Full-Session`), thời gian, số câu hỏi, điểm trung bình phục vụ Tab Luyện tập ở Student Portal.
+  - `GET /{id}`: Trả về toàn bộ Scorecard, câu hỏi, transcript hiệu đính và nhận xét sư phạm từng tiêu chí rubric.
+* **Tiêu chí nghiệm thu (DoD):** Phản hồi chuẩn RFC 7807. 6 bài unit tests trong `CompleteAndHistoryPracticeTests.cs` đạt 100% passed.
 
-#### Task BE-1.7 (Vệ tinh): API Dashboard Sinh Viên (FE-10 Student Portal)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `GET /api/v1/student/dashboard`
-* **Tệp liên quan:** `Features/Student/Queries/GetStudentDashboard/*`, `StudentController.cs`
-* **Mô tả nghiệp vụ:**
-  - Cung cấp dữ liệu thống kê tổng hợp phục vụ hiển thị trên `StudentDashboardPage.tsx` của sinh viên:
-    1. **Thống kê hoạt động:** Tổng số buổi luyện tập đã tham gia, tổng số bài thi thử đã làm trong học kỳ.
-    2. **Chỉ số học tập:** Điểm trung bình gần nhất của các phiên luyện tập và thi thử.
-    3. **Phân tích độ thành thạo theo Chuẩn Đầu Ra (CLOs):** Tổng hợp điểm số theo từng CLO của các môn học đang theo học (ví dụ: CLO1 đạt 8.5/10, CLO2 đạt 6.0/10) để chỉ ra điểm mạnh và điểm yếu kiến thức của sinh viên.
-    4. **Lịch thi sắp tới:** Danh sách các ca thi thật mà sinh viên đã được phân bổ vé thi (`StudentExamTicket`) trong kỳ thi hiện tại (gồm Tên môn, Ngày thi, Phòng lab, Kíp thi, Số ghế).
-* **Tiêu chí nghiệm thu (DoD):** Phản hồi API chuẩn RFC 7807 với thời gian $< 50$ms. Dữ liệu tính toán chính xác từ `practice_sessions`, `mock_exam_sessions`, `ai_evaluation_details` và `student_exam_tickets`.
-
-#### Task BE-1.8: API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.7: NextQuestion On-Demand & Thuật Toán Anti-3-Consecutive Randomizer
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `POST /api/v1/practice/sessions/{sessionId}/next-question`
 * **Tệp liên quan:** `Features/Practice/Commands/NextQuestion/*`, `PracticeController.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Cấp câu hỏi tiếp theo On-Demand, thuật toán chống lặp 3 câu liên tiếp cùng mức, loại trừ câu đã làm, fallback an toàn khi cạn bucket, trả `hasMoreQuestions: false` khi cạn toàn bộ, cập nhật `last_activity_at`).
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Nhận `sessionId` từ route và `studentId` từ JWT/query.
-  - Kiểm tra trạng thái phiên `in_progress` và chế độ `per_question`.
-  - Loại trừ toàn bộ câu hỏi chính đã trả lời trong phiên (`Id NOT IN (answeredIds)`).
-  - **Thuật toán Anti-3-Consecutive Randomizer:**
-    * Phân tích 2 câu hỏi chính gần nhất đã trả lời trong phiên (`!IsFollowUp`).
-    * Nếu 2 câu liền trước cùng độ khó $D$ và phiên chọn $> 1$ độ khó: Tạm thời loại trừ $D$ khỏi candidate pool. Câu tiếp theo bắt buộc bốc sang độ khó khác.
-    * Đảm bảo: *trong bất kỳ chuỗi 3 câu hỏi liên tiếp nào, tối đa chỉ có 2 câu chung mức độ*.
-    * **Fallback thông minh:** Nếu các độ khó khác trong tổ hợp đã hết câu chưa làm, hệ thống tự động fallback cho phép bốc tiếp câu còn lại của $D$.
-    * **Cạn sạch đề:** Nếu toàn bộ câu hỏi trong tất cả các mức đã chọn đều đã làm hết, trả về `hasMoreQuestions: false`, `question: null` kèm thông báo đã hoàn thành.
+  - Cấp câu hỏi tiếp theo On-Demand cho chế độ `per_question`, loại trừ các câu đã làm trong phiên (`Id NOT IN (...)`).
+  - **Thuật toán Anti-3-Consecutive:** Nếu 2 câu liền trước cùng độ khó $D$ và phiên chọn $> 1$ độ khó $\to$ tạm loại trừ $D$, bốc sang độ khó khác. Đảm bảo *trong bất kỳ chuỗi 3 câu hỏi liên tiếp nào, tối đa chỉ có 2 câu chung mức độ*.
+  - **Fallback an toàn:** Nếu các độ khó khác đã hết câu, tự động fallback cho phép bốc tiếp câu còn lại của $D$. Khi cạn sạch toàn bộ các mức: trả `hasMoreQuestions: false`.
   - Cập nhật `session.LastActivityAt = DateTime.UtcNow`.
-* **Tiêu chí nghiệm thu (DoD):** Đã kiểm chứng qua 6 bài unit test trong `NextQuestionCommandHandlerTests.cs` và 4 bài stress test đối kháng trong `NextQuestionAdversarialStressTests.cs` (mô phỏng chuỗi 15 câu với window check trượt, assert không bao giờ có 3 câu cùng mức độ).
+* **Tiêu chí nghiệm thu (DoD):** 6 unit tests trong `NextQuestionCommandHandlerTests.cs` và 4 stress tests trong `NextQuestionAdversarialStressTests.cs` (assert không bao giờ có 3 câu cùng mức độ) đạt 100% passed.
 
-#### Task BE-1.9: Cơ chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout) — [x] ĐÃ HOÀN TẤT
+#### Module BE-1.8: Cơ Chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Tệp liên quan:** `Domain/Entities/PracticeSession.cs`, `Infrastructure/Persistence/OralExamDbContext.cs`, `Features/Practice/Commands/NextQuestion/*`, `Features/Practice/Commands/SubmitPracticeAnswer/*`, `Features/Practice/Commands/SubmitPracticeBatch/*`, `PracticeController.cs`
-* **Trạng thái:** ✅ **Hoàn thành 100%** (Cấu hình `SessionInactivityTimeoutMinutes = 10` trong `system_configs`, Lazy validation tự động kết thúc phiên `status = "completed"`, trả lỗi HTTP 410 Gone RFC 7807, bảo toàn 100% dữ liệu đã làm).
+* **Tệp liên quan:** `Domain/Entities/PracticeSession.cs`, `Features/Practice/Commands/*`, `PracticeController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Thêm trường `last_activity_at` vào thực thể `PracticeSession` và CSDL (tự động cập nhật mỗi khi tạo phiên, lấy câu tiếp theo, nộp bài).
-  - Seed khóa cấu hình `SessionInactivityTimeoutMinutes = 10` vào `system_configs`.
-  - **Lazy Inactivity Timeout Validation:**
-    * Khi nhận request gọi lên (`NextQuestion`, `SubmitAnswer`, `SubmitBatch`), nếu `DateTime.UtcNow - session.LastActivityAt > 10 phút`:
-    * Tự động cập nhật `session.Status = "completed"`, `session.CompletedAt = session.LastActivityAt + 10m` và lưu vào DB.
-    * Controller trả về mã phản hồi **HTTP 410 Gone** RFC 7807 (`Title = "Session Timed Out"`).
-    * **Bảo toàn dữ liệu:** Giữ nguyên 100% các câu trả lời, điểm số và nhận xét đã thực hiện trước đó trong CSDL.
-* **Tiêu chí nghiệm thu (DoD):** 4 bài unit tests trong `PracticeSessionInactivityTimeoutTests.cs` đạt 100% passed (Lazy check NextQuestion, Lazy check SubmitAnswer, bảo toàn điểm số/nhận xét, cập nhật `LastActivityAt` sau tương tác hợp lệ).
+  - Cấu hình động `SessionInactivityTimeoutMinutes = 10` trong `system_configs`.
+  - Lưu `last_activity_at` (timestamp) cập nhật sau mỗi tương tác (tạo phiên, nộp bài, lấy câu tiếp).
+  - **Lazy Validation:** Nếu `DateTime.UtcNow - LastActivityAt > 10 phút`: Tự động cập nhật `session.Status = "completed"`, trả lỗi **HTTP 410 Gone** RFC 7807 (`Title = "Session Timed Out"`).
+  - **Bảo toàn dữ liệu 100%:** Giữ nguyên toàn bộ câu trả lời, điểm số và nhận xét đã làm trước đó.
+* **Tiêu chí nghiệm thu (DoD):** 4 bài unit tests trong `PracticeSessionInactivityTimeoutTests.cs` đạt 100% passed.
 
 ---
 
-### KHỐI 2 (MF-02): THI THỬ VẤN ĐÁP BẤM GIỜ (TIMED MOCK EXAM) & VỆ TINH — [ ] KẾ HOẠCH TIẾP THEO CỦA NGUYỄN QUANG THÀNH
+### 🌟 KHỐI TRỌNG TÂM 2: MODULE MF-02 — THI THỬ VẤN ĐÁP BẤM GIỜ CÓ HẠN NGẠCH (TIMED MOCK EXAM)
+> **Trạng thái phân hệ:** ⏳ **KẾ HOẠCH TIẾP THEO CỦA NGUYỄN QUANG THÀNH**
 
-#### Task BE-2.1: Daily Quota Guard do Trưởng Bộ Môn Cấu Hình ($K \le 3$)
+#### Module BE-2.1: Daily Quota Guard Do Trưởng Bộ Môn Cấu Hình (HTTP 429)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `POST /api/v1/mock-exams/sessions`
 * **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`, `Infrastructure/Services/QuotaService.cs`, `MockExamsController.cs`
 * **Mô tả nghiệp vụ:**
-  - Hạn ngạch số lượt thi thử trong ngày do **Trưởng Bộ Môn (`department_head`)** cấu hình theo môn học (mặc định $K = 3$ lượt/ngày/môn).
-  - Khi sinh viên bấm bắt đầu thi thử: `QuotaService` kiểm tra số lượt thi đã thực hiện trong ngày (theo múi giờ GMT+7) trong bảng `mock_exam_quotas`.
-  - Nếu đã đủ $K$ lượt: Chặn ngay lập tức từ tầng Application, ném `QuotaExceededException` chuyển đổi thành mã phản hồi **`HTTP 429 Too Many Requests`** kèm RFC 7807 `ProblemDetails`: *"Bạn đã sử dụng hết hạn ngạch thi thử trong ngày cho môn học này (tối đa K lượt/ngày)"*.
-  - Nếu còn hạn ngạch: Tăng bộ đếm lượt thi và cho phép khởi tạo phiên thi.
-* **Tiêu chí nghiệm thu (DoD):** Lượt thứ 1, 2, 3 thành công trả HTTP 200. Lượt thứ 4 chặn đứng tại Gateway trả `HTTP 429`.
+  - Hạn ngạch số lượt thi thử trong ngày do **Trưởng Bộ Môn (`department_head`)** cấu hình theo từng môn học (`max_mock_exams_per_day` trong `courses`, mặc định $K = 3$).
+  - Khi sinh viên bắt đầu thi: `QuotaService` kiểm tra số lượt thi đã thực hiện trong ngày (theo múi giờ GMT+7) trong bảng `mock_exam_quotas`.
+  - Nếu đã đủ hạn ngạch: Ném `QuotaExceededException` chuyển đổi thành mã phản hồi **`HTTP 429 Too Many Requests`** RFC 7807: *"Bạn đã sử dụng hết hạn ngạch thi thử trong ngày cho môn học này (tối đa K lượt/ngày)"*.
+  - Nếu còn hạn ngạch: Tăng bộ đếm và cho phép khởi tạo bài thi.
+* **Tiêu chí nghiệm thu (DoD):** Lượt thứ 1 đến $K$ trả HTTP 200. Lượt $K+1$ chặn đứng tại Gateway trả `HTTP 429`.
 
-#### Task BE-2.2: Bốc Đề Thi Thử Theo Ma Trận Bloom Từ Kho `practice_questions`
+#### Module BE-2.2: Bốc Đề Thi Thử Theo Ma Trận Bloom Từ Kho `practice_questions`
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`
 * **Mô tả nghiệp vụ:**
   - Rút câu hỏi thi thử theo cấu trúc ma trận Bloom (`exam_structures`) do Trưởng Bộ Môn thiết lập.
   - **Quy chuẩn nguồn đề:** Bốc đề hoàn toàn từ kho câu hỏi luyện tập (`practice_questions`). **CÔ LẬP TUYỆT ĐỐI** kho câu hỏi thi thật (`exam_questions`) dành riêng cho MF-04.
-  - Sinh viên **KHÔNG được tự chọn topic hay độ khó** (đề thi thử bốc ngẫu nhiên theo chuẩn đề cương môn học).
+  - Sinh viên **KHÔNG được tự chọn topic hay độ khó** (đề thi bốc ngẫu nhiên theo chuẩn đề cương môn học).
   - Sinh viên chỉ được chủ động lựa chọn: **Có Follow-up** hoặc **Không Follow-up** trước khi bắt đầu bài thi.
-* **Tiêu chí nghiệm thu (DoD):** 100% câu hỏi thi thử được rút từ `practice_questions`, không có bất kỳ câu hỏi nào rò rỉ từ `exam_questions`.
+* **Tiêu chí nghiệm thu (DoD):** 100% câu hỏi thi thử rút từ `practice_questions`, không có câu hỏi nào rò rỉ từ `exam_questions`.
 
-#### Task BE-2.3: Server Master Timer & Voice-First Gate
+#### Module BE-2.3: Server Master Timer & Voice-First Gate
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/submit`
 * **Tệp liên quan:** `Features/MockExams/Commands/SubmitMockExam/*`, `MockExamsController.cs`
 * **Mô tả nghiệp vụ:**
-  - Quản lý đồng hồ thời gian làm bài chuẩn từ Server (`started_at`, `duration_minutes`).
+  - Quản lý đồng hồ làm bài chuẩn từ Server (`started_at`, `duration_minutes`).
   - **Cổng Voice-First Gate:** Yêu cầu sinh viên trả lời hoàn toàn qua micro, backend chỉ nhận stream âm thanh qua Whisper STT lấy transcript. Không lưu file audio lên Cloudflare R2, chỉ lưu transcript vào `mock_exam_answers`.
-  - Kiểm tra thời gian nộp bài: Cho phép độ trễ mạng tối đa 10 giây. Nếu nộp muộn quá 10 giây so với giờ kết thúc của Server: Đánh dấu `is_late = true` và tự động thu bài.
+  - Kiểm tra thời gian nộp bài: Cho phép độ trễ mạng tối đa 10 giây. Nếu nộp muộn quá 10 giây: Đánh dấu `is_late = true` và tự động thu bài.
 * **Tiêu chí nghiệm thu (DoD):** Đồng bộ thời gian chính xác giữa Client và Server; nộp đúng hạn trả HTTP 200, nộp quá hạn tự động khóa và tính điểm đến thời điểm hết giờ.
 
-#### Task BE-2.4: Chấm 2 Pha, Instant Scorecard Rubric & Lịch Sử Thi Thử
+#### Module BE-2.4: Chấm 2 Pha / Async Grading, Instant Scorecard Rubric Theo CLO & Lịch Sử Thi Thử
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
 * **Endpoint:** `GET /api/v1/mock-exams/history`, `GET /api/v1/mock-exams/history/{id}`
 * **Tệp liên quan:** `Features/MockExams/Queries/*`, `MockExamsController.cs`
@@ -243,35 +222,49 @@ backend/src/
 
 ---
 
-### KHỐI 3 (MF-03): NGÂN HÀNG ĐỀ & RUBRIC STUDIO 10.0 & VỆ TINH — [ ] CHƯA BẮT ĐẦU (KẾ HOẠCH SPRINT CỦA NGUYỄN TRỌNG TỐT TỰ CODE)
+### 🛠️ CÁC MODULE VỆ TINH ("RÂU RIA") CỦA NGUYỄN QUANG THÀNH
 
-#### Task BE-3.1 (Vệ tinh): Xác Thực Google OAuth PKCE (Mở Cho Mọi Email)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt (Lead Auth & Security)**
-* **Endpoint:** `POST /api/v1/auth/google-login`
-* **Tệp liên quan:** `Features/Auth/*`, `API/Controllers/v1/AuthController.cs`, `User.cs`
+#### Module BE-V01: Module Báo Cáo Khảo Thí FPT (Excel .xlsx + PDF)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
+* **Endpoint:** `GET /api/v1/official-exams/shifts/{shiftId}/export-excel`, `GET /api/v1/official-exams/shifts/{shiftId}/export-pdf`
+* **Tệp liên quan:** `Features/OfficialExams/Queries/ExportReports/*`, `Infrastructure/Services/ExcelService.cs`, `Infrastructure/Services/PdfService.cs`
 * **Mô tả nghiệp vụ:**
-  - Tiếp nhận Google ID Token từ Frontend (`POST /api/v1/auth/google-login`).
-  - **Mở rộng phạm vi người dùng:** Chấp nhận mọi email Google hợp lệ (loại bỏ ràng buộc cứng chỉ cho phép `@fpt.edu.vn` hoặc `@fe.edu.vn` để phục vụ linh hoạt tài khoản demo và hội đồng chấm bảo vệ).
-  - Tìm kiếm người dùng theo email trong bảng `users`:
-    * Nếu chưa tồn tại: Tự động tạo mới tài khoản với vai trò mặc định `student` (hoặc vai trò do Admin phân quyền trước đó).
-    * Loại bỏ hoàn toàn cột `password_hash` (xác thực thuần OAuth2/OIDC).
-  - Cấp cặp JWT Token:
-    * Access Token: Thời hạn 60 phút, chứa claims `sub` (User ID), `email`, `name`, `role` (1 trong 5 roles: `student`, `lecturer`, `department_head`, `proctor`, `admin`).
-    * Refresh Token: Thời hạn 7 ngày lưu trong DB.
-* **Tiêu chí nghiệm thu (DoD):** Đăng nhập với bất kỳ tài khoản Google hợp lệ nào đều trả về HTTP 200 kèm JWT claims chuẩn. Gọi API không có Bearer token trả `HTTP 401 Unauthorized`.
+  - **Xuất bảng điểm Excel `.xlsx` (EPPlus):** Đúng định dạng mẫu biểu Khảo thí Đại học FPT: Header gồm Bộ Môn, Môn thi, Mã ca thi, Phòng Lab, Ngày thi, Tên Giám thị và Giảng viên chấm. Bảng điểm: Cột STT, MSSV, Họ và tên, Lớp, Điểm AI chấm, Điểm Giảng viên chốt, Lý do điều chỉnh (nếu có), Chữ ký điện tử.
+  - **Xuất biên bản thi PDF (QuestPDF):** Tạo file PDF chuẩn A4 niêm phong kết quả ca thi, có mã QR tra cứu tính toàn vẹn và chữ ký của Trưởng Bộ Môn / Giảng viên.
+* **Tiêu chí nghiệm thu (DoD):** File Excel và PDF tải về mở chuẩn xác, không lỗi font tiếng Việt Unicode, khớp 100% dữ liệu điểm trong CSDL.
 
-#### Task BE-3.2 (Vệ tinh): API Quản Lý Người Dùng User Management (FE-09)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
-* **Endpoint:** `GET /api/v1/admin/users`, `PUT /api/v1/admin/users/{id}/status`, `PUT /api/v1/admin/users/{id}/role`
-* **Tệp liên quan:** `Features/Admin/Users/*`, `AdminController.cs`
+#### Module BE-V02: API Public Tra Cứu & Xác Thực Bảng Điểm Qua QR Code
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
+* **Endpoint:** `GET /api/v1/verification/grades/{certificateHash}` (Public API)
+* **Tệp liên quan:** `Features/Verification/Queries/VerifyGradeCertificate/*`, `VerificationController.cs`
 * **Mô tả nghiệp vụ:**
-  - `GET /api/v1/admin/users`: Trả về danh sách người dùng có phân trang, tìm kiếm theo tên, email, lọc theo role (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
-  - `PUT /api/v1/admin/users/{id}/status`: Khóa hoặc kích hoạt tài khoản người dùng (`is_active = true/false`). Khi bị khóa, JWT của user lập tức bị từ chối.
-  - `PUT /api/v1/admin/users/{id}/role`: Cho phép Admin gán hoặc chuyển đổi vai trò người dùng sang 1 trong 5 vai trò hệ thống.
-* **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `admin` mới được gọi endpoints này (`[Authorize(Roles = "admin")]`). Cập nhật role thành công và phản ánh ngay trong token tiếp theo.
+  - Cung cấp cổng tra cứu công khai (không yêu cầu đăng nhập token) khi quét mã QR trên Báo cáo Khảo thí PDF hoặc Certificate bảng điểm:
+    * Nhận tham số `certificateHash` từ URL mã QR.
+    * Truy vấn và đối chiếu mã băm niêm phong của ca thi trong CSDL.
+    * Trả về thông tin xác thực: Tên trường (Đại học FPT), Tên môn thi, Mã ca thi, Ngày thi, Trạng thái niêm phong hợp lệ (`VALID`), Ngày công bố điểm, và Chữ ký số xác nhận của Trưởng Bộ Môn / Giảng viên.
+* **Tiêu chí nghiệm thu (DoD):** Endpoint public phản hồi $< 30$ms; kiểm tra mã băm giả mạo trả `HTTP 404 Not Found` kèm cảnh báo chứng chỉ không hợp lệ.
 
-#### Task BE-3.3: AI Sinh Câu Hỏi Từ FLM Syllabus Theo CLO & Barem Riêng 10.0đ
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
+#### Module BE-V03: API Student Dashboard (FE-10 Student Portal)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
+* **Endpoint:** `GET /api/v1/student/dashboard`
+* **Tệp liên quan:** `Features/Student/Queries/GetStudentDashboard/*`, `StudentController.cs`
+* **Mô tả nghiệp vụ:**
+  - Cung cấp dữ liệu thống kê tổng hợp phục vụ hiển thị trên `StudentDashboardPage.tsx` của sinh viên:
+    1. **Thống kê hoạt động:** Tổng số buổi luyện tập đã tham gia, tổng số bài thi thử đã làm trong học kỳ.
+    2. **Chỉ số học tập:** Điểm trung bình gần nhất của các phiên luyện tập và thi thử.
+    3. **Phân tích độ thành thạo theo Chuẩn Đầu Ra (CLOs):** Tổng hợp điểm số theo từng CLO của các môn học đang theo học để chỉ ra điểm mạnh và điểm yếu kiến thức của sinh viên.
+    4. **Lịch thi sắp tới:** Danh sách các ca thi thật mà sinh viên đã được phân bổ vé thi (`StudentExamTicket`) trong kỳ thi hiện tại (gồm Tên môn, Ngày thi, Phòng lab, Kíp thi, Số ghế).
+* **Tiêu chí nghiệm thu (DoD):** Phản hồi API chuẩn RFC 7807 với thời gian $< 50$ms. Dữ liệu tính toán chính xác từ CSDL.
+
+---
+
+# 🧑‍💻 PHẦN 4: NHIỆM VỤ CHI TIẾT CỦA NGUYỄN TRỌNG TỐT (BACKEND DEVELOPER, AI SPECIALIST & QA LEAD)
+
+### 🌟 KHỐI TRỌNG TÂM 1: MODULE MF-03 — NGÂN HÀNG ĐỀ & RUBRIC STUDIO 10.0
+> **Trạng thái phân hệ:** ⏳ **KẾ HOẠCH SPRINT CỦA NGUYỄN TRỌNG TỐT TỰ CODE**
+
+#### Module BE-3.1: AI Sinh Câu Hỏi Từ FLM Syllabus Theo CLO & Barem Riêng 10.0đ
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt (AI Specialist)**
 * **Endpoint:** `POST /api/v1/questions/generate-from-flm`
 * **Tệp liên quan:** `Features/Questions/Commands/GenerateQuestionsFromFlm/*`, `QuestionsController.cs`
 * **Mô tả nghiệp vụ:**
@@ -281,7 +274,7 @@ backend/src/
   - Trả về danh sách câu hỏi dự thảo để giảng viên xem trước trên Preview Studio và tùy chỉnh tự do trước khi lưu.
 * **Tiêu chí nghiệm thu (DoD):** AI sinh câu hỏi đầy đủ tiêu chí; Model Answer $\ge 50$ ký tự; các tiêu chí con có tổng điểm luôn bằng 10.0 điểm.
 
-#### Task BE-3.4: Soạn Câu Hỏi & Barem Rubric Studio 10.0đ (FluentValidation)
+#### Module BE-3.2: Soạn Câu Hỏi & Barem Rubric Studio 10.0đ (FluentValidation)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/questions/draft`
 * **Tệp liên quan:** `Features/Questions/Commands/CreateQuestionDraft/*`, `Application/Common/Validators/RubricValidator.cs`
@@ -293,20 +286,20 @@ backend/src/
     * Tối thiểu 2 tiêu chí rubric con, mỗi tiêu chí điểm $> 0$.
 * **Tiêu chí nghiệm thu (DoD):** Barem 10.0đ được lưu thành công vào bảng `rubrics` và `rubric_criteria`. Barem 9.5đ hoặc 10.5đ bị chặn 100% tại tầng Validation Behavior.
 
-#### Task BE-3.5: Tick Chọn 2 Kho Đề & Gửi Duyệt Lên Bộ Môn
+#### Module BE-3.3: Tick Chọn 2 Kho Đề & Gửi Duyệt Lên Bộ Môn
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/questions/batch-submit-review`
 * **Tệp liên quan:** `Features/Questions/Commands/BatchSubmitQuestionsForReview/*`, `QuestionsController.cs`
 * **Mô tả nghiệp vụ:**
-  - Hỗ trợ lựa chọn kho đề thông qua 2 checkbox:
+  - Hỗ trợ lựa chọn kho đề thông qua 2 cờ boolean:
     * `is_for_practice`: Lưu vào kho luyện tập chung (`practice_questions`).
     * `is_for_exam`: Lưu vào kho câu hỏi thi thật phòng Lab (`exam_questions`).
     * Có thể chọn 1 trong 2 hoặc tick chọn cả 2 kho cùng lúc.
   - **Quy trình gửi duyệt:** Mọi câu hỏi do Giảng viên tạo ra đều ở trạng thái ban đầu là `DRAFT`.
-  - Giảng viên bấm **"Gửi lên cho Bộ Môn"** (`batch-submit-review`): Chuyển trạng thái sang `SUBMITTED_FOR_REVIEW`, ghi nhận `submitted_by = lecturerId`, `submitted_at = DateTime.UtcNow`.
-* **Tiêu chí nghiệm thu (DoD):** Câu hỏi chuyển sang `SUBMITTED_FOR_REVIEW`, không thể chỉnh sửa nội dung khi đang chờ duyệt. Tự động gửi thông báo in-app cho Trưởng Bộ Môn.
+  - Giảng viên bấm **"Gửi lên cho Bộ Môn"** (`batch-submit-review`): Chuyển trạng thái sang `SUBMITTED_FOR_REVIEW`, ghi nhận `submitted_by = lecturerId`, `submitted_at = DateTime.UtcNow`. Tự động phát sinh thông báo in-app cho Trưởng Bộ Môn.
+* **Tiêu chí nghiệm thu (DoD):** Câu hỏi chuyển sang `SUBMITTED_FOR_REVIEW`, không thể chỉnh sửa nội dung khi đang chờ duyệt.
 
-#### Task BE-3.6: Trưởng Bộ Môn Thẩm Định & Ra Quyết Định Phê Duyệt
+#### Module BE-3.4: Trưởng Bộ Môn Thẩm Định & Ra Quyết Định Phê Duyệt
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `PUT /api/v1/questions/{id}/review-decision`
 * **Tệp liên quan:** `Features/Questions/Commands/ReviewQuestionDecision/*`, `QuestionsController.cs`
@@ -317,21 +310,12 @@ backend/src/
     3. **Từ chối (`REJECTED`):** Bắt buộc nhập lý do từ chối vào `review_notes`. Câu hỏi bị loại bỏ khỏi danh sách sử dụng.
 * **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `department_head` mới được duyệt câu hỏi. Đầy đủ 3 trạng thái quyết định; ghi nhận `approved_by` và `review_notes` vào CSDL.
 
-#### Task BE-3.7 (Vệ tinh): API Dashboard Giảng Viên (FE-10)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
-* **Endpoint:** `GET /api/v1/lecturer/dashboard`
-* **Tệp liên quan:** `Features/Lecturer/Queries/*`, `QuestionsController.cs`
-* **Mô tả nghiệp vụ:**
-  - Thống kê tổng số câu hỏi giảng viên đã tạo trong từng môn học.
-  - Phân loại số lượng câu hỏi theo trạng thái: `DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`.
-  - Tỷ lệ câu hỏi được duyệt thành công. Danh sách các câu hỏi bị yêu cầu chỉnh sửa cần xử lý gấp.
-* **Tiêu chí nghiệm thu (DoD):** API trả về thống kê tổng hợp chính xác $< 40$ms, phục vụ hiển thị trực quan trên `LecturerDashboardPage.tsx`.
-
 ---
 
-### KHỐI 4 (MF-04): THI THẬT PHÒNG LAB, CÔNG BỐ ĐIỂM & PHÚC KHẢO NỘI BỘ & VỆ TINH — [ ] CHƯA BẮT ĐẦU (KẾ HOẠCH SPRINT CỦA NGUYỄN TRỌNG TỐT TỰ CODE)
+### 🌟 KHỐI TRỌNG TÂM 2: MODULE MF-04 — THI THẬT PHÒNG LAB, CÔNG BỐ ĐIỂM & PHÚC KHẢO NỘI BỘ
+> **Trạng thái phân hệ:** ⏳ **KẾ HOẠCH SPRINT CỦA NGUYỄN TRỌNG TỐT TỰ CODE**
 
-#### Task BE-4.1: Quản Trị Kỳ Thi & Cấu Hình Môn Thi Của Trưởng Bộ Môn
+#### Module BE-4.1: Quản Trị Kỳ Thi & Cấu Hình Môn Thi Của Trưởng Bộ Môn
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/official-exams/seasons`, `POST /api/v1/official-exams/seasons/{id}/shifts`, `PUT /api/v1/courses/{id}/exam-config`
 * **Tệp liên quan:** `Features/OfficialExams/Commands/*`, `OfficialExamsController.cs`
@@ -347,7 +331,7 @@ backend/src/
     * Cấu hình thời gian đệm `TranscriptBufferSeconds`: Từ 10 đến 300 giây (mặc định 60 giây).
 * **Tiêu chí nghiệm thu (DoD):** Ca thi được lưu vào `real_exam_session_shifts` có thông tin phòng lab và người coi thi. Môn thi cập nhật đúng các cờ cấu hình.
 
-#### Task BE-4.2: Check-in Kiosk Phòng Lab Ràng Buộc IP `ip_address` (Ghế 1–40)
+#### Module BE-4.2: Check-in Kiosk Phòng Lab Ràng Buộc IP `ip_address` (Ghế 1–40)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/official-exams/tickets/{id}/check-in`
 * **Tệp liên quan:** `Features/OfficialExams/Commands/CheckInKiosk/*`, `OfficialExamsController.cs`
@@ -360,7 +344,7 @@ backend/src/
   - **Quản lý đúng 7 trạng thái vé thi viết HOA:** `SCHEDULED` $\to$ `IN_PROGRESS` $\to$ `SUBMITTED` $\to$ `AI_GRADED` $\to$ `AUDITED` $\to$ `PUBLISHED` $\to$ `LOCKED`.
 * **Tiêu chí nghiệm thu (DoD):** Check-in sai IP trả HTTP 403; check-in đúng IP cập nhật trạng thái `IN_PROGRESS` và trả về token làm bài của Kiosk.
 
-#### Task BE-4.3: Nộp Bài Persist First $< 100$ms & Upload Audio R2 `STT_MSSV.webm`
+#### Module BE-4.3: Nộp Bài Persist First $< 100$ms & Upload Audio R2 `STT_MSSV.webm`
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/official-exams/tickets/{id}/submit`
 * **Tệp liên quan:** `Features/OfficialExams/Commands/SubmitOfficialExam/*`, `Infrastructure/Services/CloudflareR2Service.cs`
@@ -371,7 +355,7 @@ backend/src/
   - **Quy tắc phòng thi bất biến:** Kiosk khóa màn hình và hiển thị thông báo an toàn: *"Bài thi đã được lưu trữ an toàn. Kết quả sẽ do Giảng viên thẩm định và công bố trên hệ thống."* **Tuyệt đối KHÔNG có điểm liền và KHÔNG khiếu nại tại chỗ**. Thí sinh ký biên bản nộp bài giấy và ra về.
 * **Tiêu chí nghiệm thu (DoD):** Phản hồi API nộp bài $< 100$ms. File âm thanh được lưu an toàn trên Cloudflare R2 với tên `STT_MSSV.webm` kèm SHA-256 niêm phong.
 
-#### Task BE-4.4: BoundedChannel / DLQ Chấm Ngầm, AI Doubt Guard & Evidence Panel
+#### Module BE-4.4: BoundedChannel / DLQ Chấm Ngầm, AI Doubt Guard & Evidence Panel
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt (AI Specialist)**
 * **Endpoint:** `GET /api/v1/audit/shifts/{shiftId}/submissions`, `POST /api/v1/audit/submissions/{id}/override-score`
 * **Tệp liên quan:** `Features/Audit/*`, `Infrastructure/Services/GeminiEvaluationService.cs`, `Infrastructure/BackgroundJobs/GradingQueueWorker.cs`
@@ -387,7 +371,7 @@ backend/src/
     * API Giảng viên điều chỉnh điểm `override-score`: Bắt buộc nhập lý do giải trình bắt buộc (`override_reason`) $\ge 10$ ký tự. Lưu vết vào `lecturer_audits` và `lecturer_audit_details`.
 * **Tiêu chí nghiệm thu (DoD):** Bài thi có `confidence < 0.70` tự động gắn `is_suspicious = true`. Sửa điểm không có lý do bị chặn `HTTP 400`.
 
-#### Task BE-4.5: Công Bố Điểm Atomic & Khóa Một Chiều `OneWayLockInterceptor`
+#### Module BE-4.5: Công Bố Điểm Atomic & Khóa Một Chiều `OneWayLockInterceptor`
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`
 * **Tệp liên quan:** `Features/OfficialExams/Commands/PublishGrades/*`, `Infrastructure/Interceptors/OneWayLockInterceptor.cs`
@@ -401,13 +385,13 @@ backend/src/
   - `OneWayLockInterceptor` (EF Core SaveChangesInterceptor): Chặn đứng 100% mọi câu lệnh `UPDATE` hoặc `DELETE` tác động lên bảng điểm và bài thi đã bị khóa, lập tức ném `OneWayLockException` chuyển đổi thành mã phản hồi **`HTTP 403 Forbidden`**.
 * **Tiêu chí nghiệm thu (DoD):** Điểm chỉ công bố khi 100% sinh viên đã có điểm. Sau khi khóa, mọi thao tác sửa điểm qua API thông thường đều bị chặn `HTTP 403`.
 
-#### Task BE-4.6: Phân Hệ Phúc Khảo Nội Bộ `AppealRequest` & Acknowledge Điểm
+#### Module BE-4.6: Phân Hệ Phúc Khảo Nội Bộ `AppealRequest` & Acknowledge Điểm
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `POST /api/v1/appeals`, `GET /api/v1/appeals`, `PUT /api/v1/appeals/{id}/assign-lecturer`, `PUT /api/v1/appeals/{id}/decision`, `POST /api/v1/official-exams/tickets/{id}/acknowledge`
 * **Tệp liên quan:** `Features/Appeals/*`, `AppealsController.cs`, `OfficialExamsController.cs`
 * **Mô tả nghiệp vụ:**
   - Sau khi Giảng viên công bố điểm, sinh viên ở nhà đăng nhập Student Portal để xem bảng điểm chính thức:
-    * Nếu đồng ý với kết quả: Bấm xác nhận nhận điểm (`POST /api/v1/official-exams/tickets/{id}/acknowledge`), cập nhật trạng thái `student_acknowledgement_status = ACKNOWLEDGED`.
+    * Nếu đồng ý với kết quả: Bấm xác nhận nhận điểm (`POST /acknowledge`), cập nhật trạng thái `student_acknowledgement_status = ACKNOWLEDGED`.
     * Nếu không đồng ý kết quả: Sinh viên làm đơn phúc khảo trực tiếp trên hệ thống (`POST /api/v1/appeals`) kèm lý do khiếu nại cụ thể.
   - Hệ thống tạo entity `AppealRequest` ở trạng thái `PENDING` và tự động gán cho **Trưởng Bộ Môn (`department_head`)** tiếp nhận thẩm định độc lập.
   - **Cơ chế Phân công Chấm lại của Trưởng Bộ Môn:**
@@ -416,17 +400,44 @@ backend/src/
     * Trưởng Bộ Môn đưa ra quyết định cuối cùng (`APPROVED` điều chỉnh điểm / `REJECTED` giữ nguyên điểm) qua `PUT /api/v1/appeals/{id}/decision`.
 * **Tiêu chí nghiệm thu (DoD):** Quy trình phúc khảo nội bộ khép kín 100% trong hệ thống; Trưởng Bộ Môn có toàn quyền tiếp nhận và phân công giảng viên chấm lại; điểm mới được cập nhật có audit log rõ ràng.
 
-#### Task BE-4.7 (Vệ tinh): API Quản Lý Học Kỳ Semester CRUD (FE-08)
+---
+
+### 🛠️ CÁC MODULE VỆ TINH, HỆ THỐNG & QA CỦA NGUYỄN TRỌNG TỐT
+
+#### Module BE-V04: Xác Thực Google OAuth PKCE (Mở Mọi Email)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt (Lead Auth & Security)**
+* **Endpoint:** `POST /api/v1/auth/google-login`, `POST /api/v1/auth/refresh-token`
+* **Tệp liên quan:** `Features/Auth/*`, `API/Controllers/v1/AuthController.cs`, `User.cs`
+* **Mô tả nghiệp vụ:**
+  - Tiếp nhận Google ID Token từ Frontend (`POST /api/v1/auth/google-login`).
+  - **Mở rộng phạm vi người dùng:** Chấp nhận mọi email Google hợp lệ (loại bỏ ràng buộc cứng chỉ cho phép `@fpt.edu.vn` hoặc `@fe.edu.vn` để phục vụ linh hoạt tài khoản demo và hội đồng chấm bảo vệ).
+  - Tìm kiếm người dùng theo email trong bảng `users`: Nếu chưa tồn tại, tự động tạo mới tài khoản với vai trò mặc định `student` (hoặc vai trò do Admin phân quyền trước đó).
+  - Loại bỏ hoàn toàn cột `password_hash` (xác thực thuần OAuth2/OIDC).
+  - Cấp cặp JWT Token: Access Token 60 phút (chứa claims `sub`, `email`, `name`, `role`), Refresh Token 7 ngày lưu trong CSDL.
+* **Tiêu chí nghiệm thu (DoD):** Đăng nhập với bất kỳ tài khoản Google hợp lệ nào đều trả về HTTP 200 kèm JWT claims chuẩn. Gọi API không có Bearer token trả `HTTP 401 Unauthorized`.
+
+#### Module BE-V05: API Quản Lý Người Dùng User Management (FE-09)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
-* **Endpoint:** `GET /api/v1/semesters`, `POST /api/v1/semesters`, `PUT /api/v1/semesters/{id}`, `DELETE /api/v1/semesters/{id}`
+* **Endpoint:** `GET /api/v1/admin/users`, `PUT /api/v1/admin/users/{id}/status`, `PUT /api/v1/admin/users/{id}/role`
+* **Tệp liên quan:** `Features/Admin/Users/*`, `AdminController.cs`
+* **Mô tả nghiệp vụ:**
+  - `GET /api/v1/admin/users`: Trả về danh sách người dùng có phân trang, tìm kiếm theo tên, email, lọc theo role (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
+  - `PUT /api/v1/admin/users/{id}/status`: Khóa hoặc kích hoạt tài khoản người dùng (`is_active = true/false`). Khi bị khóa, JWT của user lập tức bị từ chối.
+  - `PUT /api/v1/admin/users/{id}/role`: Cho phép Admin gán hoặc chuyển đổi vai trò người dùng sang 1 trong 5 vai trò hệ thống. **Không tạo user bằng email/mật khẩu**.
+* **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `admin` mới được gọi endpoints này (`[Authorize(Roles = "admin")]`). Cập nhật role thành công và phản ánh ngay trong token tiếp theo.
+
+#### Module BE-V06: API Quản Lý Học Kỳ Semester CRUD (FE-08)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
+* **Endpoint:** `GET /api/v1/semesters`, `POST /api/v1/semesters`, `PUT /api/v1/semesters/{id}`
 * **Tệp liên quan:** `Features/Semesters/*`, `SemestersController.cs`, `Semester.cs`
 * **Mô tả nghiệp vụ:**
   - `GET /api/v1/semesters`: Lấy danh sách học kỳ (Mã học kỳ: FA26, SP26; Tên: Fall 2026; Ngày bắt đầu, Ngày kết thúc, Trạng thái hoạt động).
   - `POST /api/v1/semesters`: Admin tạo mới học kỳ, validate không trùng mã học kỳ.
   - `PUT /api/v1/semesters/{id}`: Cập nhật thông tin học kỳ hoặc đặt làm học kỳ hiện tại (`is_current = true`).
+  - **Quy tắc bất biến:** **Tuyệt đối KHÔNG có endpoint xóa học kỳ** (bảo toàn lịch sử dữ liệu và các ca thi liên kết).
 * **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `admin` được tạo/sửa học kỳ. API trả về danh sách học kỳ phục vụ chọn kỳ học trên toàn hệ thống.
 
-#### Task BE-4.8 (Vệ tinh): Hộp Thư Notification In-App (FE-11)
+#### Module BE-V07: Hộp Thư Notification In-App (FE-11)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `GET /api/v1/notifications`, `PUT /api/v1/notifications/{id}/read`, `PUT /api/v1/notifications/read-all`
 * **Tệp liên quan:** `Features/Notifications/*`, `NotificationsController.cs`, `Notification.cs`
@@ -442,19 +453,19 @@ backend/src/
     6. Trưởng Bộ Môn giao chấm phúc khảo $\to$ Gửi thông báo cho Giảng viên được phân công.
 * **Tiêu chí nghiệm thu (DoD):** Bảng `notifications` lưu đầy đủ thông báo; API đọc/đánh dấu đã đọc hoạt động $< 30$ms.
 
-#### Task BE-4.9 (Vệ tinh): Module Báo Cáo Khảo Thí FPT (Excel .xlsx + PDF)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `GET /api/v1/official-exams/shifts/{shiftId}/export-excel`, `GET /api/v1/official-exams/shifts/{shiftId}/export-pdf`
-* **Tệp liên quan:** `Features/OfficialExams/Queries/ExportReports/*`, `Infrastructure/Services/ExcelService.cs`, `Infrastructure/Services/PdfService.cs`
+#### Module BE-V08: API Quản Trị Cấu Hình Hệ Thống Admin (`system_configs`)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
+* **Endpoint:** `GET /api/v1/admin/configs`, `PUT /api/v1/admin/configs/{key}`
+* **Tệp liên quan:** `Features/Admin/Configs/*`, `AdminController.cs`, `SystemConfig.cs`
 * **Mô tả nghiệp vụ:**
-  - **Xuất bảng điểm Excel `.xlsx` (EPPlus):**
-    * Đúng định dạng mẫu biểu Khảo thí Đại học FPT: Header gồm Bộ Môn, Môn thi, Mã ca thi, Phòng Lab, Ngày thi, Tên Giám thị và Giảng viên chấm.
-    * Bảng điểm: Cột STT, MSSV, Họ và tên, Lớp, Điểm AI chấm, Điểm Giảng viên chốt, Lý do điều chỉnh (nếu có), Chữ ký điện tử.
-  - **Xuất biên bản thi PDF (QuestPDF):**
-    * Tạo file PDF chuẩn A4 niêm phong kết quả ca thi, có mã QR tra cứu tính toàn vẹn và chữ ký của Trưởng Bộ Môn / Giảng viên.
-* **Tiêu chí nghiệm thu (DoD):** File Excel và PDF tải về mở chuẩn xác, không lỗi font tiếng Việt Unicode, khớp 100% dữ liệu điểm trong CSDL.
+  - Cung cấp API phục vụ màn hình `AdminConfigPage.tsx` của Admin:
+    * `GET /api/v1/admin/configs`: Lấy danh sách các tham số cấu hình động toàn cục của hệ thống (Key-Value): `MaxPracticeQuestionsPerSession`, `MinMixedPracticeQuestions`, `MaxMixedPracticeQuestions`, `TranscriptBufferSeconds`, `MaxPracticeFollowUpQuestions`, `SessionInactivityTimeoutMinutes`.
+    * `PUT /api/v1/admin/configs/{key}`: Admin cập nhật trực tiếp giá trị cấu hình runtime vào bảng `system_configs`.
+    * Cài đặt validation kiểm tra chặt chẽ: `TranscriptBufferSeconds` từ 10 đến 300 giây; `MaxPracticeFollowUpQuestions` từ 1 đến 5 câu; `MinMixedPracticeQuestions` từ 3 đến 5 câu và không vượt quá `MaxMixedPracticeQuestions` (6–10 câu); `SessionInactivityTimeoutMinutes` từ 5 đến 60 phút.
+    * Ghi vết kiểm toán người cập nhật (`updated_by = adminId`) và thời gian cập nhật vào `audit_logs`.
+* **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `admin` được gọi. Cập nhật cấu hình có hiệu lực ngay lập tức cho các phiên luyện tập/thi tiếp theo mà không cần khởi động lại Server.
 
-#### Task BE-4.10: Quản Trị Dead-Letter Queue (DLQ) & Audit Logs
+#### Module BE-V09: Quản Trị Dead-Letter Queue (DLQ Replay 5m) & API Audit Logs
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `GET /api/v1/admin/dlq/tasks`, `POST /api/v1/admin/dlq/tasks/{id}/replay`, `GET /api/v1/admin/audit-logs`
 * **Tệp liên quan:** `Features/Admin/Dlq/*`, `Infrastructure/BackgroundJobs/DlqReplayWorker.cs`, `AdminController.cs`
@@ -465,19 +476,7 @@ backend/src/
   - `GET /api/v1/admin/audit-logs`: Truy vấn nhật ký kiểm toán hệ thống từ bảng `audit_logs` (thao tác đổi điểm, phê duyệt đề, khóa điểm, gán phúc khảo).
 * **Tiêu chí nghiệm thu (DoD):** Cam kết Zero Data Loss 100%, không bài làm nào của sinh viên bị thất lạc kể cả khi dịch vụ AI bên ngoài gặp sự cố kéo dài.
 
-#### Task BE-4.11 (Vệ tinh): API Quản Trị Cấu Hình Hệ Thống Admin (`system_configs`)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
-* **Endpoint:** `GET /api/v1/admin/configs`, `PUT /api/v1/admin/configs/{key}`
-* **Tệp liên quan:** `Features/Admin/Configs/*`, `AdminController.cs`, `SystemConfig.cs`
-* **Mô tả nghiệp vụ:**
-  - Cung cấp API phục vụ màn hình `AdminConfigPage.tsx` của Admin:
-    * `GET /api/v1/admin/configs`: Lấy danh sách các tham số cấu hình động toàn cục của hệ thống (Key-Value): `MaxPracticeQuestionsPerSession`, `MinMixedPracticeQuestions`, `MaxMixedPracticeQuestions`, `TranscriptBufferSeconds`, `MaxPracticeFollowUpQuestions`.
-    * `PUT /api/v1/admin/configs/{key}`: Admin cập nhật trực tiếp giá trị cấu hình runtime vào bảng `system_configs`.
-    * Cài đặt validation kiểm tra chặt chẽ: `TranscriptBufferSeconds` từ 10 đến 300 giây; `MaxPracticeFollowUpQuestions` từ 1 đến 5 câu; `MinMixedPracticeQuestions` từ 3 đến 5 câu và không vượt quá `MaxMixedPracticeQuestions` (6–10 câu).
-    * Ghi vết kiểm toán người cập nhật (`updated_by = adminId`) và thời gian cập nhật vào `audit_logs`.
-* **Tiêu chí nghiệm thu (DoD):** Phân quyền chỉ `admin` được gọi. Cập nhật cấu hình có hiệu lực ngay lập tức cho các phiên luyện tập/thi tiếp theo mà không cần khởi động lại Server.
-
-#### Task BE-4.12: API Giám Thị Phòng Lab & Điểm Danh Ca Thi (Proctor Lab Attendance & Monitor)
+#### Module BE-V10: API Giám Thị Phòng Lab & Điểm Danh Ca Thi (Proctor Monitor)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
 * **Endpoint:** `GET /api/v1/proctor/shifts/{shiftId}/attendance`, `PUT /api/v1/proctor/tickets/{id}/attendance`, `POST /api/v1/proctor/tickets/{id}/suspend`
 * **Tệp liên quan:** `Features/Proctor/*`, `ProctorController.cs`, `StudentExamTicket.cs`
@@ -488,18 +487,17 @@ backend/src/
     * `POST /api/v1/proctor/tickets/{id}/suspend`: Giám thị lập biên bản đình chỉ thi khi phát hiện gian lận hoặc khi Kiosk gửi cảnh báo mất focus quá 3 lần; vé thi chuyển sang trạng thái `SUSPENDED` và khóa máy Kiosk của thí sinh.
 * **Tiêu chí nghiệm thu (DoD):** Phân quyền `proctor` hoặc `lecturer` được phân công coi thi mới được gọi; trạng thái vé thi cập nhật chuẩn xác theo thời gian thực.
 
-#### Task BE-4.13 (Vệ tinh): API Tra Cứu & Xác Thực Tính Toàn Vẹn Bảng Điểm Qua Mã QR (Public Verification)
-* **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `GET /api/v1/verification/grades/{certificateHash}` (Public API)
-* **Tệp liên quan:** `Features/Verification/Queries/VerifyGradeCertificate/*`, `VerificationController.cs`
+#### Module BE-V11: API Dashboard Giảng Viên (FE-10)
+* **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt**
+* **Endpoint:** `GET /api/v1/lecturer/dashboard`
+* **Tệp liên quan:** `Features/Lecturer/Queries/*`, `QuestionsController.cs`
 * **Mô tả nghiệp vụ:**
-  - Cung cấp cổng tra cứu công khai (không yêu cầu đăng nhập token) khi quét mã QR trên Báo cáo Khảo thí PDF hoặc Certificate bảng điểm:
-    * Nhận tham số `certificateHash` từ URL mã QR.
-    * Truy vấn và đối chiếu mã băm niêm phong của ca thi trong CSDL.
-    * Trả về thông tin xác thực: Tên trường (Đại học FPT), Tên môn thi, Mã ca thi, Ngày thi, Trạng thái niêm phong hợp lệ (`VALID`), Ngày công bố điểm, và Chữ ký số xác nhận của Trưởng Bộ Môn / Giảng viên.
-* **Tiêu chí nghiệm thu (DoD):** Endpoint public phản hồi $< 30$ms; kiểm tra mã băm giả mạo trả `HTTP 404 Not Found` kèm cảnh báo chứng chỉ không hợp lệ.
+  - Thống kê tổng số câu hỏi giảng viên đã tạo trong từng môn học.
+  - Phân loại số lượng câu hỏi theo trạng thái: `DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`.
+  - Tỷ lệ câu hỏi được duyệt thành công. Danh sách các câu hỏi bị yêu cầu chỉnh sửa cần xử lý gấp.
+* **Tiêu chí nghiệm thu (DoD):** API trả về thống kê tổng hợp chính xác $< 40$ms, phục vụ hiển thị trực quan trên `LecturerDashboardPage.tsx`.
 
-#### Task BE-QA: Bộ Test Suites xUnit & Architecture Tests NetArchTest
+#### Module BE-QA: Bộ Test Suites xUnit & Architecture Tests NetArchTest
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Trọng Tốt (QA Lead)**
 * **Tệp liên quan:** `tests/OralExamination.UnitTests/*`, `tests/OralExamination.ArchitectureTests/*`
 * **Mô tả nghiệp vụ:**
@@ -513,41 +511,64 @@ backend/src/
 
 ---
 
-## 📊 3. BẢNG TỔNG HỢP TIẾN ĐỘ & PHÂN CÔNG TÁC VỤ BACKEND
+# 🚀 PHẦN 5: CHECKLIST NGHIỆM THU TIÊU CHUẨN KỸ THUẬT (ACCEPTANCE CRITERIA)
 
-| Mã Task | Tên Phân Hệ & Chức Năng | Kỹ Sư Phụ Trách | Trạng Thái Thực Tế |
+| Mã tiêu chí | Nội dung nghiệm thu kỹ thuật | Kỹ sư chịu trách nhiệm | Tiêu chuẩn đạt |
+| :---: | :--- | :---: | :---: |
+| **AC-01** | `dotnet build` và `dotnet test` chạy thành công không có lỗi compile | 🧑 Toàn bộ Team BE | Exit Code = 0, 0 C# Error |
+| **AC-02** | Google OAuth PKCE mở mọi email, cấp JWT 5 roles, bỏ `password_hash` | 🧑 Nguyễn Trọng Tốt | Token trả đúng claims, 401 khi không có Bearer |
+| **AC-03** | MF-01 khởi tạo On-Demand & Progressive 3–10 câu, chặn thiếu đề HTTP 400 | 🧑 Nguyễn Quang Thành | Cấp câu 1 ngay, progressive tăng dần Bloom |
+| **AC-04** | BoundedChannel 1,000 slots RAM, Backpressure an toàn không crash server | 🧑 Nguyễn Quang Thành | Chịu tải 1,200 task đồng thời, 0 OOM |
+| **AC-05** | Whisper Streaming & Persist First $< 100$ms, bỏ AudioUrl & bỏ R2 ở MF-01 | 🧑 Nguyễn Quang Thành | Trả HTTP 202 Accepted $< 100$ms, không lưu file R2 |
+| **AC-06** | Gemini 1.5 Flash CoT 3 bước, Follow-up 4.0–8.0đ, Inactivity Timeout 10m | 🧑 Nguyễn Quang Thành | JSON output chuẩn 100%, trả HTTP 410 khi quá 10m |
+| **AC-07** | MF-02 Quota Guard chặn quá hạn ngạch trả `HTTP 429 Too Many Requests` | 🧑 Nguyễn Quang Thành | Lượt $K+1$ trả RFC 7807 ProblemDetails 429 |
+| **AC-08** | MF-02 Voice-First Gate chỉ nhận transcript, bốc đề cô lập từ `practice_questions` | 🧑 Nguyễn Quang Thành | 0 câu hỏi rò rỉ từ `exam_questions`, timer chuẩn |
+| **AC-09** | Barem Rubric Studio FluentValidation ép $\sum \equiv 10.0$đ (`HTTP 422`) & Model Answer $\ge 50$ | 🧑 Nguyễn Trọng Tốt | Lệch 10.0đ chặn 100%, Model Answer ngắn bị từ chối |
+| **AC-10** | Trưởng BM duyệt đề 3 quyết định (`APPROVED`, `NEEDS_REVISION`, `REJECTED`) | 🧑 Nguyễn Trọng Tốt | NEEDS_REVISION bắt buộc lý do $\ge 10$ ký tự |
+| **AC-11** | Kiosk Check-In IP Binding `ip_address` Ghế 1–40, sai IP trả `HTTP 403` | 🧑 Nguyễn Trọng Tốt | 7 trạng thái vé thi HOA, bảo mật vị trí máy lab |
+| **AC-12** | Nộp bài MF-04 Persist First $< 100$ms `SUBMITTED`, Upload R2 `STT_MSSV.webm` + SHA-256 | 🧑 Nguyễn Trọng Tốt | SHA-256 niêm phong audio, 0% điểm liền tại Kiosk |
+| **AC-13** | Công Bố Điểm Atomic 100% sinh viên, `OneWayLockInterceptor` khóa HTTP 403 | 🧑 Nguyễn Trọng Tốt | Sửa điểm khi locked trả `HTTP 403 Forbidden` |
+| **AC-14** | Phân hệ Phúc khảo nội bộ `AppealRequest`, Trưởng BM giao GV chấm lại | 🧑 Nguyễn Trọng Tốt | One-Way Lock mở đường hợp lệ cho GV được giao |
+| **AC-15** | Báo cáo Khảo thí FPT xuất file Excel `.xlsx` (EPPlus) và PDF (QuestPDF) | 🧑 Nguyễn Quang Thành | Chuẩn mẫu Đại học FPT, không lỗi font Unicode |
+| **AC-16** | Public QR Code tra cứu bảng điểm không cần token, xác thực mã băm | 🧑 Nguyễn Quang Thành | Endpoint public $< 30$ms, giả mạo trả HTTP 404 |
+
+---
+
+# 📊 PHẦN 6: BẢNG MA TRẬN TỔNG HỢP TIẾN ĐỘ SPRINT (LIVE STATUS MATRIX)
+
+| Mã Task | Tên Phân Hệ & Module Chức Năng | Kỹ Sư Phụ Trách | Trạng Thái Thực Tế |
 |:---|:---|:---:|:---:|
-| **BE-1.1** | Khởi tạo phiên luyện tập `POST /api/v1/practice/sessions` (Per/Full, Progressive 3-10 câu, On-Demand) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.1** | Khởi tạo phiên luyện tập `POST /api/v1/practice/sessions` (Per/Full, Progressive 3-10, On-Demand) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.2** | Hàng đợi RAM `BoundedGradingQueueChannel` (1,000 slots RAM, `FullMode.Wait`) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.3** | Nộp bài Per/Full Persist First $< 100$ms, Stream Whisper STT (bỏ `AudioUrl`, bỏ R2) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.4** | Background Worker `GradingQueueWorker` & SignalR Realtime Hub `/hubs/practice` | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-1.5** | Gemini 1.5 Flash CoT 3 bước & Follow-up Engine ($4.0 \le \text{Score} \le 8.0$, 1-5 câu) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
-| **BE-1.6** | Hoàn tất phiên, Lịch sử luyện tập & Chi tiết Scorecard | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
-| **BE-1.7** | API Dashboard Sinh viên FE-10 (thống kê buổi tập, điểm TB, độ thành thạo CLO, lịch thi) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
-| **BE-1.8** | API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
-| **BE-1.9** | Cơ chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout 410 Gone) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.6** | Hoàn tất phiên, Lịch sử luyện tập & Chi tiết Scorecard Rubric | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.7** | API NextQuestion On-Demand & Thuật toán Anti-3-Consecutive Randomizer | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
+| **BE-1.8** | Cơ chế Timeout 10 Phút Không Tương Tác (Session Inactivity Timeout 410 Gone) | **🧑 Thành** | ✅ **Đã hoàn thành 100% (Thành đã làm)** |
 | **BE-2.1** | Daily Quota Guard MF-02 ($K \le 3$ do Trưởng BM cấu hình, chặn HTTP 429) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
 | **BE-2.2** | Bốc đề thi thử theo Bloom từ kho `practice_questions` (cô lập an toàn `exam_questions`) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
 | **BE-2.3** | Server Master Timer & Voice-First Gate (chỉ lưu transcript, muộn 10s đánh dấu `is_late`) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
 | **BE-2.4** | Chấm 2 pha / Async Grading trả Instant Scorecard theo CLO & Lịch sử thi thử | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
-| **BE-3.1** | Auth Google OAuth PKCE mở mọi email, cấp JWT 5 roles, bỏ `password_hash` | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.2** | API Quản lý Người dùng User Management FE-09 (status, role) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.3** | AI sinh câu hỏi từ FLM Syllabus theo CLO & Barem riêng 10.0đ | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.4** | FluentValidation ép Barem Rubric $\sum \equiv 10.0$đ (HTTP 422) & Model Answer $\ge 50$ ký tự | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.5** | Checkbox tick chọn 2 kho `practice_questions`/`exam_questions` & Gửi duyệt Bộ Môn | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.6** | Trưởng Bộ Môn phê duyệt câu hỏi (APPROVED / NEEDS_REVISION / REJECTED) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-3.7** | API Dashboard Giảng viên FE-10 (thống kê đề thi, tỷ lệ duyệt) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.1** | Trưởng BM tạo kỳ thi, cấu hình ca thi (phòng lab, người coi thi), follow-up (1-5 câu) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.2** | Check-in Kiosk IP Binding `ip_address` (Ghế 1-40, HTTP 403, 7 trạng thái vé thi HOA) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.3** | Nộp bài MF-04 Persist First $< 100$ms, Upload R2 `STT_MSSV.webm` + SHA-256 | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.4** | BoundedChannel / DLQ chấm ngầm, AI Doubt Guard (`is_suspicious = true`), Evidence Panel API | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.5** | Công Bố Điểm Atomic 100%, `OneWayLockInterceptor` (`is_locked = true` $\to$ HTTP 403) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.6** | Phân hệ Phúc khảo nội bộ `AppealRequest` Trưởng BM giao giảng viên chấm lại & Acknowledge | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.7** | API Quản lý Học kỳ Semester CRUD FE-08 | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.8** | Hộp thư Notification in-app FE-11 (tự động thông báo lịch thi, điểm, duyệt đề, phúc khảo) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.9** | Module Báo cáo Khảo thí FPT xuất bảng điểm Excel `.xlsx` và PDF | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
-| **BE-4.10** | Quản trị Dead-Letter Queue (DLQ Replay 5m) & API Audit Logs | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.11** | API Quản trị Cấu hình Hệ thống Admin (`system_configs`) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.12** | API Giám thị Phòng thi & Điểm danh Ca thi Lab (`ProctorRoomMonitorPage.tsx`) | **🧑 Tốt** | ⏳ Chưa bắt đầu (Tốt tự code) |
-| **BE-4.13** | API Tra cứu & Xác thực Bảng điểm Chữ ký số qua QR Code | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
+| **BE-V01** | Module Báo cáo Khảo thí FPT xuất bảng điểm Excel `.xlsx` và PDF QuestPDF | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
+| **BE-V02** | API Public Tra cứu & Xác thực Bảng điểm Chữ ký số qua QR Code | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
+| **BE-V03** | API Student Dashboard (thống kê buổi tập, điểm TB, độ thành thạo CLO, banner lịch thi) | **🧑 Thành** | ⏳ Kế hoạch của Thành (Chưa bắt đầu) |
+| **BE-3.1** | AI sinh câu hỏi từ FLM Syllabus theo CLO & Barem riêng 10.0đ | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-3.2** | FluentValidation ép Barem Rubric $\sum \equiv 10.0$đ (`HTTP 422`) & Model Answer $\ge 50$ ký tự | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-3.3** | Checkbox tick chọn 2 kho `practice_questions`/`exam_questions` & Gửi duyệt Bộ Môn | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-3.4** | Trưởng Bộ Môn phê duyệt câu hỏi (APPROVED / NEEDS_REVISION / REJECTED) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.1** | Trưởng BM tạo kỳ thi, cấu hình ca thi (phòng lab, người coi thi), follow-up (1-5 câu) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.2** | Check-in Kiosk IP Binding `ip_address` (Ghế 1-40, HTTP 403, 7 trạng thái vé thi HOA) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.3** | Nộp bài MF-04 Persist First $< 100$ms, Upload R2 `STT_MSSV.webm` + SHA-256 niêm phong | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.4** | BoundedChannel / DLQ chấm ngầm, AI Doubt Guard (`confidence < 0.70`), Evidence Panel API | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.5** | Công Bố Điểm Atomic 100%, `OneWayLockInterceptor` (`is_locked = true` $\to$ HTTP 403) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-4.6** | Phân hệ Phúc khảo nội bộ `AppealRequest` Trưởng BM giao giảng viên chấm lại & Acknowledge | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V04** | Auth Google OAuth PKCE mở mọi email, cấp JWT 5 roles, bỏ `password_hash` | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V05** | API Quản lý Người dùng User Management FE-09 (status, role; không tạo user bằng mật khẩu) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V06** | API Quản lý Học kỳ Semester CRUD FE-08 (tạo/sửa, không xóa) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V07** | Hộp thư Notification in-app FE-11 (tự động thông báo lịch thi, điểm, duyệt đề, phúc khảo) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V08** | API Quản trị Cấu hình Hệ thống Admin (`system_configs`) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V09** | Quản trị Dead-Letter Queue (DLQ Replay 5m) & API Audit Logs | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V10** | API Giám thị Phòng thi & Điểm danh Ca thi Lab (`ProctorRoomMonitorPage.tsx`) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
+| **BE-V11** | API Dashboard Giảng viên FE-10 (thống kê đề thi, tỷ lệ duyệt) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Tự code) |
 | **BE-QA** | Bộ Test Suites xUnit & Architecture Tests NetArchTest (536/536 tests pass 100%, Exit Code 0) | **🧑 Tốt** | ⏳ Đang triển khai (Hiện có 536 tests của Khối 1/Architecture; MF-03/04 do Tốt viết tiếp) |
