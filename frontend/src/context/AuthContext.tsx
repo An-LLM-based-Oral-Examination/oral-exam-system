@@ -1,5 +1,5 @@
 import React, { useState, type ReactNode } from 'react'
-import type { User, LoginRequest, UserRole } from '@/types/auth.types'
+import type { LoginRequest, User, UserRole } from '@/types/auth.types'
 import { authService } from '@/services/auth.service'
 import { AuthContext } from '@/context/auth-context'
 
@@ -24,8 +24,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthState({ user: data.user, token: data.accessToken })
   }
 
-  const logout = () => {
-    authService.logout()
+  const loginWithGoogle = async (idToken: string) => {
+    const data = await authService.loginWithGoogle(idToken)
+    setAuthState({ user: data.user, token: data.accessToken })
+  }
+
+  const logout = async () => {
+    await authService.logout()
     setAuthState({ user: null, token: null })
   }
 
@@ -49,6 +54,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isInstructor,
         isAdmin,
         login,
+        loginWithGoogle,
         logout,
         hasRole,
       }}

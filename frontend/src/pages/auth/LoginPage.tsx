@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AudioLines,
@@ -28,6 +28,7 @@ type DemoRole = 'Student' | 'Instructor' | 'Admin'
 
 const DEFAULT_LOGIN_ERROR = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
 const REMEMBERED_EMAIL_KEY = 'oral_exam_remembered_email'
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 const DEMO_ROLES: { role: DemoRole; label: string }[] = [
   { role: 'Student', label: 'Sinh viên' },
@@ -85,7 +86,9 @@ function getLoginErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
+  const googleButtonRef = useRef<HTMLDivElement>(null)
+  const loginWithGoogleRef = useRef(loginWithGoogle)
   const rememberedEmail = getRememberedEmail()
   const [email, setEmail] = useState(rememberedEmail)
   const [password, setPassword] = useState('')
@@ -93,6 +96,79 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loginWithGoogleRef.current = loginWithGoogle
+  }, [loginWithGoogle])
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return
+
+    let cancelled = false
+    let intervalId = 0
+    let timeoutId = 0
+
+    const renderGoogleButton = () => {
+      const host = googleButtonRef.current
+      const googleId = window.google?.accounts.id
+      if (!host || !googleId) return false
+
+      googleId.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        auto_select: false,
+        callback: (response) => {
+          const credential = response.credential
+          if (!credential) {
+            setError(DEFAULT_LOGIN_ERROR)
+            return
+          }
+
+          setIsLoading(true)
+          setError(null)
+          void loginWithGoogleRef
+            .current(credential)
+            .then(() => {
+              if (!cancelled) navigate('/')
+            })
+            .catch((loginError: unknown) => {
+              if (!cancelled) setError(getLoginErrorMessage(loginError))
+            })
+            .finally(() => {
+              if (!cancelled) setIsLoading(false)
+            })
+        },
+      })
+
+      host.replaceChildren()
+      googleId.renderButton(host, {
+        theme: 'outline',
+        size: 'large',
+        width: Math.min(400, Math.floor(host.offsetWidth) || 360),
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+      })
+      return true
+    }
+
+    if (!renderGoogleButton()) {
+      intervalId = window.setInterval(() => {
+        if (renderGoogleButton()) window.clearInterval(intervalId)
+      }, 100)
+      timeoutId = window.setTimeout(() => {
+        window.clearInterval(intervalId)
+        if (!cancelled && !window.google) {
+          setError('Không tải được Google Sign-In. Kiểm tra kết nối mạng rồi tải lại trang.')
+        }
+      }, 8000)
+    }
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [navigate])
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -359,6 +435,24 @@ export function LoginPage() {
                   {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                 </button>
               </form>
+
+              <div className="mt-4 flex items-center gap-3">
+                <span className="h-px flex-1 bg-[#e5eaf1]" />
+                <span className="text-[10px] font-medium text-[#8b98aa]">hoặc</span>
+                <span className="h-px flex-1 bg-[#e5eaf1]" />
+              </div>
+
+              <div className="mt-4 flex flex-col gap-2">
+                <div
+                  ref={googleButtonRef}
+                  className={`flex min-h-11 w-full items-center justify-center ${isLoading ? 'pointer-events-none opacity-60' : ''}`}
+                />
+                {!GOOGLE_CLIENT_ID && (
+                  <p className="text-center text-[10px] leading-relaxed text-[#b45309]">
+                    Chưa cấu hình VITE_GOOGLE_CLIENT_ID trong frontend/.env.
+                  </p>
+                )}
+              </div>
 
               <div className="login-security mt-5 border-t border-[#e5eaf1] pt-4 text-center">
                 <p className="flex items-center justify-center gap-1.5 text-[9px] text-[#8794a7]">

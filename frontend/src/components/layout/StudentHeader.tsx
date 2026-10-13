@@ -39,8 +39,7 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
   const semesterLabel = getSemesterLabel()
 
   const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
+    void logout().finally(() => navigate('/login', { replace: true }))
   }
 
   return (
