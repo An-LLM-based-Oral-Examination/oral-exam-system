@@ -62,6 +62,50 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasData(
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                    Email = "admin@fpt.edu.vn",
+                    FullName = "Nguyen Quang Thanh",
+                    Role = "admin",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                    Email = "totnt@fe.edu.vn",
+                    FullName = "Nguyen Trong Tot",
+                    Role = "lecturer",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                    Email = "hoanglvse170001@fpt.edu.vn",
+                    FullName = "Le Vu Hoang",
+                    StudentCode = "SE170001",
+                    Role = "student",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000006"),
+                    Email = "maittse170002@fpt.edu.vn",
+                    FullName = "Tran Thi Mai",
+                    StudentCode = "SE170002",
+                    Role = "student",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 1b. refresh_tokens
@@ -98,6 +142,17 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.EndDate).HasColumnName("end_date").IsRequired();
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasData(new Semester
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                Code = "FA26",
+                Name = "Fall 2026",
+                StartDate = new DateOnly(2026, 9, 1),
+                EndDate = new DateOnly(2026, 12, 31),
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 3. courses
@@ -127,6 +182,21 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.Courses)
                 .HasForeignKey(d => d.SemesterId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(new Course
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                Code = "PRN231",
+                Name = "Building Cross-Platform Back-End Applications with .NET",
+                Credits = 3,
+                SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                ExamInputMode = "VoiceWithTranscriptEdit",
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 4. classes
@@ -161,6 +231,18 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.InstructedClasses)
                 .HasForeignKey(d => d.LecturerId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new Class
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000010"),
+                Code = "SE1801-NET",
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                LecturerId = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 5. class_enrollments
@@ -185,6 +267,24 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.Enrollments)
                 .HasForeignKey(d => d.StudentId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasData(
+                new ClassEnrollment
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
+                    StudentId = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                    Status = "enrolled",
+                    EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new ClassEnrollment
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000012"),
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
+                    StudentId = Guid.Parse("00000000-0000-0000-0000-000000000006"),
+                    Status = "enrolled",
+                    EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 6. rubrics
@@ -205,6 +305,17 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.Rubrics)
                 .HasForeignKey(d => d.CourseId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasData(new Rubric
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                Name = "Barem Đánh Giá Kiến Trúc .NET 8",
+                Description = "Đánh giá Clean Architecture",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 7. rubric_criteria
@@ -259,6 +370,22 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.PracticeQuestions)
                 .HasForeignKey(d => d.RubricId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(new PracticeQuestion
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000017"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                Title = "Nguyên lý Dependency Inversion",
+                Content = "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.",
+                SampleAnswer = "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.",
+                KeyPoints = "[]",
+                Difficulty = "medium",
+                BloomLevel = "Understand",
+                HasFollowUp = false,
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 9. exam_questions

@@ -2,7 +2,7 @@
 # Production Docker Compose — LLM Oral Exam System (FA26SE166)
 # ==============================================================================
 # Services:
-#   1. postgres: PostgreSQL 16 Alpine (30 tables 3NF, isolated on internal network)
+#   1. postgres: PostgreSQL 16 Alpine (schema from EF Core migrations, isolated on internal network)
 #   2. backend:  ASP.NET Core 8 Web API (Port 5000, non-root user, healthcheck)
 #   3. frontend: React 19 SPA + Nginx 1.27 Reverse Proxy (Port 80)
 # ==============================================================================
@@ -19,7 +19,6 @@ services:
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -62,6 +61,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_SIGNALR_HUB_URL: /hubs/practice
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
     container_name: oralexam-frontend-prod
     restart: unless-stopped
     ports:

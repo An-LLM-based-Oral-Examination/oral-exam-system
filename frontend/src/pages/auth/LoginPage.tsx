@@ -449,7 +449,7 @@ export function LoginPage() {
                 />
                 {!GOOGLE_CLIENT_ID && (
                   <p className="text-center text-[10px] leading-relaxed text-[#b45309]">
-                    Chưa cấu hình VITE_GOOGLE_CLIENT_ID trong frontend/.env.
+                    Chưa cấu hình VITE_GOOGLE_CLIENT_ID trong file .env ở thư mục oral-exam-system.
                   </p>
                 )}
               </div>
