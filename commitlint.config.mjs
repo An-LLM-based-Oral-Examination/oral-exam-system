@@ -7,7 +7,7 @@
  * - 05_Source_Code/.git/hooks/commit-msg
  */
 
-module.exports = {
+export default {
   extends: ['@commitlint/config-conventional'],
   rules: {
     // 1. Commit Types (11 valid types)
