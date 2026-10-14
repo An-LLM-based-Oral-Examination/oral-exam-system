@@ -13,6 +13,7 @@ public sealed class CourseDto
     public int Credits { get; set; }
     public int TranscriptBufferSeconds { get; set; }
     public int MaxFollowUpQuestions { get; set; }
+    public int MaxMockExamsPerDay { get; set; } = 3;
     public bool HasFollowUp { get; set; }
     public string ExamInputMode { get; set; } = string.Empty;
     public bool IsActive { get; set; }

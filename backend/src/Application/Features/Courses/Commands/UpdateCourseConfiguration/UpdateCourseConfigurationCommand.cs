@@ -14,4 +14,7 @@ public sealed record UpdateCourseConfigurationCommand(
     int MaxFollowUpQuestions,
     bool? HasFollowUp,
     string? ExamInputMode = null
-) : IRequest<Result<CourseConfigurationDto>>;
+) : IRequest<Result<CourseConfigurationDto>>
+{
+    public int? MaxMockExamsPerDay { get; init; }
+}

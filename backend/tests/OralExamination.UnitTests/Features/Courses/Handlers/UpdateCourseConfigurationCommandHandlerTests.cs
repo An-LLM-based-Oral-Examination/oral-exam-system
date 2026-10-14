@@ -129,4 +129,31 @@ public class UpdateCourseConfigurationCommandHandlerTests
         updatedCourse.TranscriptBufferSeconds.Should().Be(45);
         updatedCourse.MaxFollowUpQuestions.Should().Be(2);
     }
+
+    [Fact(DisplayName = "4. Handle cập nhật MaxMockExamsPerDay khi Trưởng Bộ Môn cấu hình hạn ngạch thi thử")]
+    public async Task Handle_Should_Update_MaxMockExamsPerDay_When_Provided()
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+
+        var handler = new UpdateCourseConfigurationCommandHandler(context);
+        var command = new UpdateCourseConfigurationCommand(
+            CourseId: course.Id,
+            TranscriptBufferSeconds: 60,
+            MaxFollowUpQuestions: 2,
+            HasFollowUp: true,
+            ExamInputMode: "VoiceOnly"
+        )
+        {
+            MaxMockExamsPerDay = 5
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.MaxMockExamsPerDay.Should().Be(5);
+
+        var updatedCourse = await context.Courses.FindAsync(course.Id);
+        updatedCourse!.MaxMockExamsPerDay.Should().Be(5);
+    }
 }

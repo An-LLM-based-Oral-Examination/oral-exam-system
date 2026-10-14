@@ -57,6 +57,19 @@ public class GlobalExceptionMiddleware
                 problemDetails.Title = "Vượt quá hạn ngạch cho phép.";
                 problemDetails.Type = "https://tools.ietf.org/html/rfc6585#section-4";
                 break;
+            case FluentValidation.ValidationException fvEx:
+                statusCode = StatusCodes.Status400BadRequest;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Dữ liệu đầu vào không hợp lệ.";
+                problemDetails.Detail = string.Join("; ", fvEx.Errors.Select(e => e.ErrorMessage));
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1";
+                problemDetails.Extensions["errors"] = fvEx.Errors
+                    .GroupBy(e => e.PropertyName)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(e => e.ErrorMessage).ToArray()
+                    );
+                break;
             case DomainValidationException:
             case ArgumentException:
             case InvalidOperationException: // For interceptor thrown exception if it throws IOE instead of OWLE

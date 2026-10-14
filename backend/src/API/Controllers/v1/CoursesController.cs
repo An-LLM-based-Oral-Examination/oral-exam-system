@@ -64,7 +64,10 @@ public class CoursesController : ControllerBase
             request.MaxFollowUpQuestions,
             request.HasFollowUp,
             request.ExamInputMode
-        );
+        )
+        {
+            MaxMockExamsPerDay = request.MaxMockExamsPerDay
+        };
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)

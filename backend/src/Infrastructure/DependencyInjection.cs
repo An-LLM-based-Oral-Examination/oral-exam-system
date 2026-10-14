@@ -20,7 +20,8 @@ public static class DependencyInjection
 
         services.AddDbContext<OralExamDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql =>
+                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
             options.AddInterceptors(sp.GetRequiredService<OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor>());
         });
 

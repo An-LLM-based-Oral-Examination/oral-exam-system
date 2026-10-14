@@ -33,6 +33,7 @@ public sealed class GetCoursesQueryHandler : IRequestHandler<GetCoursesQuery, Re
                 Credits = c.Credits,
                 TranscriptBufferSeconds = c.TranscriptBufferSeconds,
                 MaxFollowUpQuestions = c.MaxFollowUpQuestions,
+                MaxMockExamsPerDay = c.MaxMockExamsPerDay,
                 HasFollowUp = c.HasFollowUp,
                 ExamInputMode = c.ExamInputMode,
                 IsActive = c.IsActive

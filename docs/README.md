@@ -49,15 +49,16 @@ docs/
 |:---:|:---|:---|:---:|
 | 6 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
 | 7 | [**`MF01_Frontend_Integration.md`**](./03_api_and_contracts/MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
-| 8 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
+| 8 | [**`MF02_Frontend_Integration.md`**](./03_api_and_contracts/MF02_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-02 (Thi thử bấm giờ):** Đặc tả 6 API endpoints (Quota Guard, Start Session, Voice-First Answer, Instant Scorecard, Lịch sử), mã lỗi RFC 7807 (429, 410) và code mẫu MediaRecorder. | Hải & Hoàng (FE) |
+| 9 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
 
 ---
 
 ### ⚙️ Nhóm 4: Vận Hành, CI/CD Pipeline & Quy Trình Git ([`04_devops_and_workflow/`](./04_devops_and_workflow/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 9 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./04_devops_and_workflow/CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
-| 10 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
+| 10 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./04_devops_and_workflow/CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
+| 11 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
 
 ---
 
@@ -77,12 +78,14 @@ docs/
 ### 🛠️ Nhóm 6: Bộ Công Cụ Kiểm Thử Độc Lập Trực Tiếp ([`06_testing_tools/`](./06_testing_tools/))
 | STT | Công cụ | Định dạng | Mô tả chức năng |
 |:---:|:---|:---|:---|
-| 11 | [**`MF01_Mini_Tester.html`**](./06_testing_tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
-| 12 | [**`google-id-token.html`**](./06_testing_tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
+| 12 | [**`MF01_Mini_Tester.html`**](./06_testing_tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
+| 13 | [**`google-id-token.html`**](./06_testing_tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
 
 ---
 
-### 📅 Nhóm 7: Kế Hoạch Tác Chiến & Báo Cáo Tiến Độ ([`07_reports_and_plans/`](./07_reports_and_plans/))
+### 📅 Nhóm 7: Kế Hoạch Tác Chiến, Bảng Phân Công & Báo Cáo Tiến Độ ([`07_reports_and_plans/`](./07_reports_and_plans/))
+- **Bảng Phân Công & Tiến Độ Backend (Master v8.0):** [BE_TASK_BOARD.md](./07_reports_and_plans/BE_TASK_BOARD.md)
+- **Bảng Phân Công & Tiến Độ Frontend (Master v8.0):** [FE_TASK_BOARD.md](./07_reports_and_plans/week5/FE_TASK_BOARD.md)
 - **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./07_reports_and_plans/MVP_2_WEEKS_MASTER_PLAN.md)
 - **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./07_reports_and_plans/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
 - **Báo cáo Report 2 (Markdown & Diagram):** [Thanh_Report2.md](./07_reports_and_plans/week5/Thanh_Report2.md) kèm sơ đồ quy trình [figure_2_2_1_project_process.svg](./07_reports_and_plans/week5/figure_2_2_1_project_process.svg)

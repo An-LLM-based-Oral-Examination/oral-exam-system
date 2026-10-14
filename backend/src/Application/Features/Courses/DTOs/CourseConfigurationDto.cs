@@ -13,6 +13,7 @@ public sealed class CourseConfigurationDto
     public string CourseName { get; set; } = null!;
     public int TranscriptBufferSeconds { get; set; }
     public int MaxFollowUpQuestions { get; set; }
+    public int MaxMockExamsPerDay { get; set; } = 3;
     public bool HasFollowUp { get; set; }
     public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public bool IsActive { get; set; }
@@ -27,5 +28,6 @@ public sealed class UpdateCourseConfigRequestDto
     public int MaxFollowUpQuestions { get; set; }
     public bool? HasFollowUp { get; set; }
     public string? ExamInputMode { get; set; }
+    public int? MaxMockExamsPerDay { get; set; }
 }
 

@@ -1625,12 +1625,30 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ---
 
 ### 5.6. Thi Thử Bấm Giờ (Mock Exam & Voice-First) — MF-02
-*(Phân hệ CSDL: `exam_structures`, `exam_sets`, `mock_exam_quotas`, `mock_exam_sessions`, `mock_exam_answers`)*
+*(Phân hệ CSDL: `courses`, `exam_structures`, `exam_sets`, `mock_exam_quotas`, `mock_exam_sessions`, `mock_exam_answers`, `ai_evaluations`, `ai_evaluation_details`)*  
+*(Xem tài liệu tích hợp chi tiết tại: [`MF02_Frontend_Integration.md`](file:///d:/Đồ%20Án/05_Source_Code/docs/03_api_and_contracts/MF02_Frontend_Integration.md))*
 
-#### 1. Bắt đầu thi thử (Hạn ngạch thi thử do Trưởng Bộ Môn cấu hình động bằng PostgreSQL)
-- **Endpoint:** `POST /api/v1/mock-exams/sessions/start`
+#### 1. Tra cứu hạn ngạch thi thử trong ngày (Dynamic Daily Quota)
+- **Endpoint:** `GET /api/v1/mock-exams/quota?courseId={courseId}`
+- **Quyền:** `student`, `lecturer`, `department_head`, `admin`
+- **Mô tả:** Kiểm tra số lượt thi thử sinh viên đã dùng và còn lại trong ngày hôm nay (theo giờ Việt Nam GMT+7) đối với môn học `courseId`. Hạn ngạch tối đa mỗi ngày (`max_mock_exams_per_day`) do Trưởng Bộ Môn cấu hình động trên từng môn học (mặc định $K = 3$).
+- **Response 200 OK:**
+```json
+{
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "studentId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "quotaDate": "2026-10-14",
+  "usedCount": 1,
+  "remainingCount": 2,
+  "maxDailyQuota": 3,
+  "canStartExam": true
+}
+```
+
+#### 2. Khởi tạo ca thi thử (Bốc đề từ kho `practice_questions` theo ma trận Bloom)
+- **Endpoint:** `POST /api/v1/mock-exams/sessions`
 - **Quyền:** `student`
-- **Mô tả:** Sinh viên chủ động lựa chọn môn học và chế độ Có/Không Follow-up (`hasFollowUp: true/false`). Hạn ngạch số lượt thi thử trong ngày (`max_mock_exams_per_day`) do Trưởng Bộ Môn cấu hình động theo từng môn học trong bảng `courses`.
+- **Mô tả:** Sinh viên chọn môn học và tùy chọn Có/Không Follow-up (`hasFollowUp: true/false`). Hệ thống kiểm tra hạn ngạch ngày, trừ 1 lượt thi thử, và bốc đề ngẫu nhiên từ kho `practice_questions` (tuyệt đối cô lập khỏi kho `exam_questions`) theo phân bổ ma trận Bloom của môn học. Thời gian làm bài: 30 phút (không follow-up) hoặc 45 phút (có follow-up).
 - **Request Body:**
 ```json
 {
@@ -1642,110 +1660,149 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ```json
 {
   "sessionId": "88888888-0000-0000-0000-000000000001",
+  "courseId": "22222222-0000-0000-0000-000000000001",
   "courseCode": "PRN231",
-  "examSetCode": "SET-PRN231-01",
+  "courseName": "Building Cross-Platform Applications with .NET",
   "hasFollowUp": true,
-  "remainingDailyQuota": 2,
-  "durationMinutes": 30,
-  "startedAt": "2026-10-10T14:00:00Z",
-  "expiresAt": "2026-10-10T14:30:00Z",
+  "durationMinutes": 45,
+  "startedAt": "2026-10-14T14:00:00Z",
+  "expiresAt": "2026-10-14T14:45:00Z",
+  "usedQuota": 2,
+  "remainingQuota": 1,
+  "maxDailyQuota": 3,
   "questions": [
-    { "orderIndex": 1, "id": "99999999-0000-0000-0000-000000000001", "title": "Phân tích nguyên lý DIP...", "bloomLevel": "Analyze" }
+    {
+      "id": "99999999-0000-0000-0000-000000000001",
+      "orderIndex": 1,
+      "title": "Phân tích nguyên lý DIP trong Clean Architecture",
+      "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc của 4 phân tầng trong Clean Architecture.",
+      "bloomLevel": "Analyze",
+      "difficulty": "medium",
+      "rubricCriteria": [
+        { "name": "Hiểu rõ 4 phân tầng", "maxScore": 5.0 },
+        { "name": "Quy tắc phụ thuộc một chiều", "maxScore": 5.0 }
+      ]
+    }
   ]
 }
 ```
 - **Response 429 Too Many Requests (Khi vượt quá hạn ngạch thi thử trong ngày):**
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.28",
+  "type": "https://oralexam.fpt.edu.vn/errors/quota-exceeded",
   "title": "Too Many Requests",
   "status": 429,
-  "detail": "Bạn đã sử dụng hết hạn ngạch lượt thi thử trong ngày cho môn học PRN231 theo quy định của Bộ Môn. Vui lòng quay lại vào ngày mai!"
+  "detail": "Bạn đã sử dụng hết hạn ngạch thi thử trong ngày (3/3 lượt) cho môn học này."
 }
 ```
 
-#### 2. Nộp bài thi thử (Kiểm tra Server-side Master Timer & Trả Instant Feedback Scorecard)
-- **Endpoint:** `POST /api/v1/mock-exams/sessions/submit`
+#### 3. Nộp câu trả lời Voice-First qua Micro (Stream Whisper STT — Không lưu R2)
+- **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/answers`
 - **Quyền:** `student`
-- **Quy tắc:** Server kiểm tra `Now <= ExpiresAt + 10s`. Nếu trễ > 10s $\rightarrow$ Server từ chối tính điểm.
-- **Request Body:**
+- **Content-Type:** `multipart/form-data`
+- **Form Data Fields:**
+  - `QuestionId` (`Guid`, bắt buộc): Mã câu hỏi trong đề thi.
+  - `File` (`IFormFile`, bắt buộc nếu không truyền `Transcript`): File âm thanh `.webm`, `.mp3`, `.wav`, `.ogg` (tối đa 25MB).
+  - `TimeTakenSeconds` (`int`, bắt buộc): Thời gian trả lời câu hỏi (giây).
+  - `Transcript` (`string`, tùy chọn): Bản văn bản hiệu đính.
+- **Quy tắc bất biến:** Stream trực tiếp vào Cloudflare Whisper STT trong RAM, **tuyệt đối KHÔNG lưu file audio lên Cloudflare R2**, chỉ lưu transcript vào `mock_exam_answers` (`audio_url = null`). Nếu quá hạn `ExpiresAt + 10s`, trả về `HTTP 410 Gone`.
+- **Response 200 OK:**
 ```json
 {
-  "sessionId": "88888888-0000-0000-0000-000000000001",
-  "answers": [
-    {
-      "examQuestionId": "99999999-0000-0000-0000-000000000001",
-      "answerText": "Câu trả lời của sinh viên...",
-      "timeTakenSeconds": 180
-    }
-  ]
+  "answerId": "123e4567-e89b-12d3-a456-426614174000",
+  "questionId": "99999999-0000-0000-0000-000000000001",
+  "transcript": "Clean Architecture có 4 tầng chính: Domain chứa entities, Application điều phối use case...",
+  "status": "answered",
+  "answeredAt": "2026-10-14T14:15:30Z"
 }
 ```
+
+#### 4. Nộp bài thi thử chính thức & Nhận Instant Feedback Scorecard (3–5s)
+- **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/submit`
+- **Quyền:** `student`
+- **Quy tắc:** Kiểm tra Server Master Timer (`DateTime.UtcNow <= ExpiresAt + 10s`). Nếu nộp quá hạn, đánh dấu `isOverdue = true`, tự động khóa ca thi, chấm các câu đã trả lời trước đó và gán 0 điểm cho các câu bỏ trống. Chấm điểm đồng thời song song (`Task.WhenAll`) qua Google Gemini 1.5 Flash theo Barem Rubric 10.0đ CLO và trả về Scorecard tức thì.
 - **Response 200 OK:**
 ```json
 {
   "sessionId": "88888888-0000-0000-0000-000000000001",
+  "courseId": "22222222-0000-0000-0000-000000000001",
   "courseCode": "PRN231",
-  "totalScore": 8.20,
-  "status": "GRADED",
-  "submittedAt": "2026-10-10T14:28:30Z",
-  "detailedScorecard": [
+  "courseName": "Building Cross-Platform Applications with .NET",
+  "totalScore": 8.75,
+  "classification": "Giỏi",
+  "totalQuestions": 5,
+  "answeredQuestions": 5,
+  "durationMinutes": 45,
+  "isOverdue": false,
+  "startedAt": "2026-10-14T14:00:00Z",
+  "submittedAt": "2026-10-14T14:28:30Z",
+  "questions": [
     {
       "questionId": "99999999-0000-0000-0000-000000000001",
+      "orderIndex": 1,
       "title": "Phân tích nguyên lý DIP trong Clean Architecture",
-      "score": 8.50,
+      "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc của 4 phân tầng trong Clean Architecture.",
+      "bloomLevel": "Analyze",
+      "difficulty": "medium",
+      "transcript": "Clean Architecture có 4 tầng chính...",
+      "score": 8.75,
+      "feedback": "Nắm vững nguyên lý Dependency Inversion, liên hệ chính xác với tầng Infrastructure.",
+      "confidenceScore": 0.96,
       "criteriaScores": [
-        { "criterionName": "Khái niệm và bản chất DIP", "score": 2.80, "maxScore": 3.00, "comment": "Giải thích chuẩn xác" },
-        { "criterionName": "Hiện thực hóa DIP trong Clean Architecture", "score": 3.50, "maxScore": 4.00, "comment": "Tốt, cần nêu thêm DI Lifetime" },
-        { "criterionName": "Lợi ích Unit Testing", "score": 2.20, "maxScore": 3.00, "comment": "Đã nêu được mock interface" }
-      ],
-      "strengths": "Nắm vững nguyên lý Dependency Inversion, liên hệ chính xác với tầng Infrastructure.",
-      "weaknesses": "Chưa làm rõ cơ chế quản lý vòng đời phụ thuộc (Scoped vs Singleton).",
-      "improvementSuggestions": "Nên ôn lại bài giảng về Service Lifetime trong ASP.NET Core để câu trả lời trọn vẹn hơn."
-    }
-  ]
-}
-```
-
-#### 3. Tra cứu lịch sử thi thử và Instant Feedback Scorecard
-- **Endpoint:** `GET /api/v1/mock-exams/history`
-- **Quyền:** `student`
-- **Query Params:** `courseId` (UUID, optional), `page` (default 1), `pageSize` (default 10)
-- **Response 200 OK:**
-```json
-{
-  "totalSessions": 12,
-  "page": 1,
-  "pageSize": 10,
-  "sessions": [
-    {
-      "sessionId": "88888888-0000-0000-0000-000000000001",
-      "courseCode": "PRN231",
-      "courseName": "Building Cross-Platform Applications with .NET",
-      "examSetCode": "SET-PRN231-01",
-      "totalScore": 8.20,
-      "status": "GRADED",
-      "submittedAt": "2026-10-10T14:28:30Z",
-      "questionsCount": 3,
-      "detailedScorecard": [
         {
-          "questionId": "99999999-0000-0000-0000-000000000001",
-          "title": "Phân tích nguyên lý DIP trong Clean Architecture",
-          "score": 8.50,
-          "criteriaScores": [
-            { "criterionName": "Khái niệm và bản chất DIP", "score": 2.80, "maxScore": 3.00, "comment": "Giải thích chuẩn xác" },
-            { "criterionName": "Hiện thực hóa DIP trong Clean Architecture", "score": 3.50, "maxScore": 4.00, "comment": "Tốt, cần nêu thêm DI Lifetime" },
-            { "criterionName": "Lợi ích Unit Testing", "score": 2.20, "maxScore": 3.00, "comment": "Đã nêu được mock interface" }
-          ],
-          "strengths": "Nắm vững nguyên lý Dependency Inversion, liên hệ chính xác với tầng Infrastructure.",
-          "weaknesses": "Chưa làm rõ cơ chế quản lý vòng đời phụ thuộc (Scoped vs Singleton).",
-          "improvementSuggestions": "Nên ôn lại bài giảng về Service Lifetime trong ASP.NET Core để câu trả lời trọn vẹn hơn."
+          "criterionId": "912ec803-b7b4-4b55-8855-467f5fe00111",
+          "criterionName": "Hiểu rõ 4 phân tầng",
+          "bloomLevel": "Understand",
+          "maxScore": 5.0,
+          "score": 4.5,
+          "comment": "Liệt kê chính xác trách nhiệm của cả 4 tầng."
+        },
+        {
+          "criterionId": "912ec803-b7b4-4b55-8855-467f5fe00222",
+          "criterionName": "Quy tắc phụ thuộc một chiều",
+          "bloomLevel": "Apply",
+          "maxScore": 5.0,
+          "score": 4.25,
+          "comment": "Nêu đúng Dependency Rule hướng tâm."
         }
       ]
     }
   ]
 }
 ```
+
+#### 5. Tra cứu danh sách lịch sử thi thử (Student Portal — FE-02)
+- **Endpoint:** `GET /api/v1/mock-exams/history?courseId={guid}&pageIndex=1&pageSize=10`
+- **Quyền:** `student`
+- **Query Params:** `courseId` (UUID, optional), `pageIndex` (default 1), `pageSize` (default 10)
+- **Response 200 OK:**
+```json
+{
+  "items": [
+    {
+      "sessionId": "88888888-0000-0000-0000-000000000001",
+      "courseId": "22222222-0000-0000-0000-000000000001",
+      "courseCode": "PRN231",
+      "courseName": "Building Cross-Platform Applications with .NET",
+      "startedAt": "2026-10-14T14:00:00Z",
+      "durationMinutes": 45,
+      "totalScore": 8.75,
+      "status": "graded",
+      "answeredQuestions": 5,
+      "totalQuestions": 5
+    }
+  ],
+  "pageIndex": 1,
+  "pageSize": 10,
+  "totalCount": 1,
+  "totalPages": 1
+}
+```
+
+#### 6. Xem lại chi tiết bài thi thử & Scorecard trong quá khứ
+- **Endpoint:** `GET /api/v1/mock-exams/history/{sessionId}`
+- **Quyền:** `student`
+- **Mô tả:** Trả về toàn bộ đề thi, transcript câu trả lời và Scorecard nhận xét chi tiết của AI cho bài thi thử `sessionId` (cấu trúc JSON giống hệt `MockExamScorecardDto` ở mục 4).
 
 ---
 

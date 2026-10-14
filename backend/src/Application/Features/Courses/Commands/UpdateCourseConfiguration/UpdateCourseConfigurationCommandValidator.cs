@@ -31,5 +31,12 @@ public sealed class UpdateCourseConfigurationCommandValidator : AbstractValidato
         RuleFor(v => v.ExamInputMode)
             .Must(m => m == null || ExamInputMode.All.Contains(m))
             .WithMessage("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit.");
+
+        When(v => v.MaxMockExamsPerDay.HasValue, () =>
+        {
+            RuleFor(v => v.MaxMockExamsPerDay!.Value)
+                .InclusiveBetween(1, 20)
+                .WithMessage("Hạn ngạch thi thử mỗi ngày phải nằm trong khoảng từ 1 đến 20 lượt.");
+        });
     }
 }

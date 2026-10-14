@@ -86,4 +86,27 @@ public class UpdateCourseConfigurationCommandValidatorTests
         var result = _validator.Validate(command);
         result.IsValid.Should().BeTrue();
     }
+
+    [Theory(DisplayName = "7. Fail khi MaxMockExamsPerDay nằm ngoài đoạn [1, 20]")]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(21)]
+    public void Validate_Should_Fail_When_MaxMockExamsPerDay_Is_Out_Of_Range(int maxQuota)
+    {
+        var command = CreateValidCommand() with { MaxMockExamsPerDay = maxQuota };
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Theory(DisplayName = "8. Pass khi MaxMockExamsPerDay nằm trong đoạn [1, 20]")]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(10)]
+    [InlineData(20)]
+    public void Validate_Should_Pass_When_MaxMockExamsPerDay_Is_In_Range(int maxQuota)
+    {
+        var command = CreateValidCommand() with { MaxMockExamsPerDay = maxQuota };
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeTrue();
+    }
 }

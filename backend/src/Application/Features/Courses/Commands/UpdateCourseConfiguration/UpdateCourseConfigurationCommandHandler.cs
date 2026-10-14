@@ -38,6 +38,11 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
             course.ExamInputMode = request.ExamInputMode;
         }
 
+        if (request.MaxMockExamsPerDay.HasValue)
+        {
+            course.MaxMockExamsPerDay = request.MaxMockExamsPerDay.Value;
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new CourseConfigurationDto
@@ -47,6 +52,7 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
             CourseName = course.Name,
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,
             MaxFollowUpQuestions = course.MaxFollowUpQuestions,
+            MaxMockExamsPerDay = course.MaxMockExamsPerDay,
             HasFollowUp = course.HasFollowUp,
             ExamInputMode = course.ExamInputMode,
             IsActive = course.IsActive

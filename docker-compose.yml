@@ -1,9 +1,15 @@
-# Local / team PostgreSQL for Oral Exam System (FA26SE166)
-# Usage:
-#   docker compose up -d
-#   docker compose logs -f postgres
+# Local stack: PostgreSQL 16 + API.
+# Schema comes from EF Core migrations applied when the API starts.
+#
+#   docker compose up --build
+#   docker compose logs -f web-api
 #   docker compose down          # stop
 #   docker compose down -v       # stop + wipe data volume
+#
+# Generate a migration on the host, from oral-exam-system/backend:
+#   dotnet ef migrations add TenThayDoi -p src/Infrastructure -s src/API
+# Then rebuild so the API image contains the new migration:
+#   docker compose up --build
 
 services:
   postgres:
@@ -16,16 +22,42 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       TZ: Asia/Ho_Chi_Minh
     ports:
-      # Local only — do not publish 5432 on production hosts.
+      # Published so host-side `dotnet ef database update` can reach this database.
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - oralexam_pgdata:/var/lib/postgresql/data
-      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  web-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oralexam-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "5000"
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      Gemini__ApiKey: ${Gemini__ApiKey:-}
+      Gemini__ApiUrl: ${Gemini__ApiUrl:-}
+      Cloudflare__AccountId: ${Cloudflare__AccountId:-}
+      Cloudflare__ApiToken: ${Cloudflare__ApiToken:-}
+      Storage__AccessKey: ${Storage__AccessKey:-}
+      Storage__SecretKey: ${Storage__SecretKey:-}
+      Storage__ServiceUrl: ${Storage__ServiceUrl:-}
+      Storage__BucketName: ${Storage__BucketName:-oral-exam-bucket}
+      Storage__PublicUrlPrefix: ${Storage__PublicUrlPrefix:-}
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   oralexam_pgdata:

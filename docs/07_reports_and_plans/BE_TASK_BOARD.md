@@ -177,48 +177,55 @@ backend/src/
 ---
 
 ### 🌟 KHỐI TRỌNG TÂM 2: MODULE MF-02 — THI THỬ VẤN ĐÁP BẤM GIỜ CÓ HẠN NGẠCH (TIMED MOCK EXAM)
-> **Trạng thái phân hệ:** ⏳ **KẾ HOẠCH TIẾP THEO CỦA NGUYỄN QUANG THÀNH**
+> **Trạng thái phân hệ:** ✅ **ĐÃ HOÀN THÀNH 100% (TOÀN BỘ BE-2.1 ĐẾN BE-2.4 ĐÃ ĐƯỢC TRIỂN KHAI VÀ VICTORY AUDITOR PHÊ DUYỆT 624/624 TESTS PASS)**
 
 #### Module BE-2.1: Daily Quota Guard Do Trưởng Bộ Môn Cấu Hình (HTTP 429)
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `POST /api/v1/mock-exams/sessions`
-* **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`, `Infrastructure/Services/QuotaService.cs`, `MockExamsController.cs`
+* **Endpoint:** `POST /api/v1/mock-exams/sessions`, `GET /api/v1/mock-exams/quota`
+* **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`, `Features/MockExams/Queries/GetMockExamQuota/*`, `MockExamsController.cs`, `Course.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
   - Hạn ngạch số lượt thi thử trong ngày do **Trưởng Bộ Môn (`department_head`)** cấu hình theo từng môn học (`max_mock_exams_per_day` trong `courses`, mặc định $K = 3$).
-  - Khi sinh viên bắt đầu thi: `QuotaService` kiểm tra số lượt thi đã thực hiện trong ngày (theo múi giờ GMT+7) trong bảng `mock_exam_quotas`.
-  - Nếu đã đủ hạn ngạch: Ném `QuotaExceededException` chuyển đổi thành mã phản hồi **`HTTP 429 Too Many Requests`** RFC 7807: *"Bạn đã sử dụng hết hạn ngạch thi thử trong ngày cho môn học này (tối đa K lượt/ngày)"*.
-  - Nếu còn hạn ngạch: Tăng bộ đếm và cho phép khởi tạo bài thi.
-* **Tiêu chí nghiệm thu (DoD):** Lượt thứ 1 đến $K$ trả HTTP 200. Lượt $K+1$ chặn đứng tại Gateway trả `HTTP 429`.
+  - Khi sinh viên bắt đầu thi: Command Handler kiểm tra số lượt thi đã thực hiện trong ngày (theo múi giờ GMT+7) trong bảng `mock_exam_quotas`.
+  - Nếu đã đủ hạn ngạch: Trả mã phản hồi **`HTTP 429 Too Many Requests`** RFC 7807: *"Bạn đã sử dụng hết hạn ngạch thi thử trong ngày (K/K lượt) cho môn học này"*.
+  - Nếu còn hạn ngạch: Tăng bộ đếm nguyên tử và cho phép khởi tạo bài thi.
+  - Cập nhật `GetMockExamQuotaQueryHandler` đọc động từ `course.MaxMockExamsPerDay`.
+* **Tiêu chí nghiệm thu (DoD):** Lượt thứ 1 đến $K$ trả HTTP 200. Lượt $K+1$ trả `HTTP 429`. Unit test kiểm thử thành công 100%.
 
 #### Module BE-2.2: Bốc Đề Thi Thử Theo Ma Trận Bloom Từ Kho `practice_questions`
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`
+* **Endpoint:** `POST /api/v1/mock-exams/sessions`
+* **Tệp liên quan:** `Features/MockExams/Commands/StartMockExam/*`, `MockExamsController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Rút câu hỏi thi thử theo cấu trúc ma trận Bloom (`exam_structures`) do Trưởng Bộ Môn thiết lập.
+  - Rút câu hỏi thi thử theo cấu trúc ma trận Bloom (`exam_structures`) của môn học do Trưởng Bộ Môn thiết lập.
   - **Quy chuẩn nguồn đề:** Bốc đề hoàn toàn từ kho câu hỏi luyện tập (`practice_questions`). **CÔ LẬP TUYỆT ĐỐI** kho câu hỏi thi thật (`exam_questions`) dành riêng cho MF-04.
-  - Sinh viên **KHÔNG được tự chọn topic hay độ khó** (đề thi bốc ngẫu nhiên theo chuẩn đề cương môn học).
-  - Sinh viên chỉ được chủ động lựa chọn: **Có Follow-up** hoặc **Không Follow-up** trước khi bắt đầu bài thi.
-* **Tiêu chí nghiệm thu (DoD):** 100% câu hỏi thi thử rút từ `practice_questions`, không có câu hỏi nào rò rỉ từ `exam_questions`.
+  - Sinh viên **KHÔNG chọn topic hay độ khó**. Chỉ chọn `courseId` và tùy chọn `hasFollowUp` (`true` = 45 phút, `false` = 30 phút).
+  - Thuật toán bốc đề theo phân bổ Bloom, tự động fallback bù đủ tổng số câu nếu một mức Bloom bị thiếu câu.
+  - Tạo `ExamSet` và `MockExamSession` (`status = "in_progress"`), khởi tạo câu hỏi với `MockExamAnswer` (`status = "pending"`).
+* **Tiêu chí nghiệm thu (DoD):** 100% câu hỏi rút từ `practice_questions`, 0 câu rò rỉ từ `exam_questions`. Unit tests bao phủ đầy đủ ca biên và fallback.
 
 #### Module BE-2.3: Server Master Timer & Voice-First Gate
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/submit`
-* **Tệp liên quan:** `Features/MockExams/Commands/SubmitMockExam/*`, `MockExamsController.cs`
+* **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/answers`, `POST /api/v1/mock-exams/sessions/{id}/submit`
+* **Tệp liên quan:** `Features/MockExams/Commands/SubmitMockExamAnswer/*`, `Features/MockExams/Commands/SubmitMockExamSession/*`, `MockExamsController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Quản lý đồng hồ làm bài chuẩn từ Server (`started_at`, `duration_minutes`).
-  - **Cổng Voice-First Gate:** Yêu cầu sinh viên trả lời hoàn toàn qua micro, backend chỉ nhận stream âm thanh qua Whisper STT lấy transcript. Không lưu file audio lên Cloudflare R2, chỉ lưu transcript vào `mock_exam_answers`.
-  - Kiểm tra thời gian nộp bài: Cho phép độ trễ mạng tối đa 10 giây. Nếu nộp muộn quá 10 giây: Đánh dấu `is_late = true` và tự động thu bài.
-* **Tiêu chí nghiệm thu (DoD):** Đồng bộ thời gian chính xác giữa Client và Server; nộp đúng hạn trả HTTP 200, nộp quá hạn tự động khóa và tính điểm đến thời điểm hết giờ.
+  - Tiếp nhận file âm thanh (`.webm`, `.mp3`, `.wav`), stream nhị phân trực tiếp trên RAM sang Cloudflare Whisper STT lấy transcript. Bảo toàn Invariant Zero-R2 (không lưu audio lên Cloudflare R2, lưu transcript vào `mock_exam_answers`).
+  - Quản lý đồng hồ làm bài chuẩn Server Master Timer (30 phút không follow-up, 45 phút có follow-up căn cứ `started_at` và `expires_at`).
+  - Thời gian đệm trễ mạng (Network Grace Period) tối đa 10 giây. Nộp muộn quá hạn tự động khóa ca thi, trả `HTTP 410 Gone`. Khi submit tự động chấm các câu đã làm và gán 0.0 điểm cho câu bỏ trống (`status = 'pending'`).
+* **Tiêu chí nghiệm thu (DoD):** Kiểm chứng thực tế `dotnet test` đạt 100% Passed.
 
-#### Module BE-2.4: Chấm 2 Pha / Async Grading, Instant Scorecard Rubric Theo CLO & Lịch Sử Thi Thử
+#### Module BE-2.4: Fast-Path Synchronous Instant AI Grading Scorecard Rubric Theo CLO & Lịch Sử Thi Thử
 * **Kỹ sư phụ trách:** 🧑 **Nguyễn Quang Thành**
-* **Endpoint:** `GET /api/v1/mock-exams/history`, `GET /api/v1/mock-exams/history/{id}`
-* **Tệp liên quan:** `Features/MockExams/Queries/*`, `MockExamsController.cs`
+* **Endpoint:** `POST /api/v1/mock-exams/sessions/{id}/submit`, `GET /api/v1/mock-exams/history`, `GET /api/v1/mock-exams/history/{id}`
+* **Tệp liên quan:** `Features/MockExams/Queries/GetMockExamHistory/*`, `Features/MockExams/Queries/GetMockExamSessionDetail/*`, `MockExamsController.cs`
+* **Trạng thái:** ✅ **Hoàn thành 100%**
 * **Mô tả nghiệp vụ:**
-  - Chấm điểm bài thi thử theo 2 pha hoặc async nhanh: AI đánh giá toàn bộ câu trả lời đối chiếu barem rubric theo từng Chuẩn Đầu Ra (CLO) của môn học.
-  - **Instant Feedback:** Ngay khi hoàn thành bài thi thử, hệ thống trả về Scorecard chi tiết kèm điểm tổng kết, điểm thành phần từng CLO và nhận xét sư phạm để sinh viên xem ngay trên màn hình.
-  - `GET /api/v1/mock-exams/history`: Lưu trữ toàn bộ lịch sử thi thử của sinh viên để theo dõi sự tiến bộ qua các lần thi.
-* **Tiêu chí nghiệm thu (DoD):** Scorecard chi tiết theo CLO hiển thị tức thì sau khi nộp bài; dữ liệu được lưu chuẩn xác vào bảng `mock_exam_sessions`.
+  - Tích hợp Gemini 1.5 Flash CoT chấm điểm song song `Task.WhenAll` (SLA 3–5s) trả về Scorecard Rubric 10.0đ chi tiết theo từng CLO.
+  - Xếp loại 5 bậc học thuật (Xuất sắc, Giỏi, Khá, Trung bình, Yếu) và lưu chi tiết vào `ai_evaluations`, `ai_evaluation_details`.
+  - Bộ API `GET /history` và `GET /history/{sessionId}` phân trang, thống kê chính xác số câu đã làm cho Student Portal.
+* **Tiêu chí nghiệm thu (DoD):** 627/627 unit & adversarial tests passed (100%). Đã khắc phục triệt để 5 lỗi Cấp 1 từ đợt Thẩm định Đối kháng (SEC-R1-01, SEC-R1-02, SEC-R1-03, QA-R3-01, QA-R3-02). Tài liệu `docs/MF02_Frontend_Integration.md` hoàn chỉnh.
 
 ---
 

@@ -29,15 +29,15 @@ public class QuestionsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("sub")?.Value;
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value;
 
         if (Guid.TryParse(claim, out var id))
         {
             return id;
         }
 
-        if (Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
+        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
         {
             return headerId;
         }

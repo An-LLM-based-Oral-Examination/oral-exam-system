@@ -25,24 +25,27 @@ public sealed class GetMockExamQuotaQueryHandler : IRequestHandler<GetMockExamQu
 
     public async Task<Result<MockExamQuotaDto>> Handle(GetMockExamQuotaQuery request, CancellationToken cancellationToken)
     {
-        var courseExists = await _context.Courses
-            .AnyAsync(c => c.Id == request.CourseId, cancellationToken);
+        var course = await _context.Courses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
 
-        if (!courseExists)
+        if (course is null)
         {
             return Result<MockExamQuotaDto>.Failure("Môn học không tồn tại trong hệ thống.");
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
 
         var quota = await _context.MockExamQuotas
+            .AsNoTracking()
             .FirstOrDefaultAsync(q => q.StudentId == request.StudentId 
                                    && q.CourseId == request.CourseId 
                                    && q.QuotaDate == today, cancellationToken);
 
         var usedCount = quota?.UsedCount ?? 0;
-        var remainingCount = Math.Max(0, MaxDailyQuota - usedCount);
-        var canStartExam = usedCount < MaxDailyQuota;
+        var remainingCount = Math.Max(0, maxDailyQuota - usedCount);
+        var canStartExam = usedCount < maxDailyQuota;
 
         var dto = new MockExamQuotaDto(
             request.CourseId,
@@ -50,7 +53,7 @@ public sealed class GetMockExamQuotaQueryHandler : IRequestHandler<GetMockExamQu
             today,
             usedCount,
             remainingCount,
-            MaxDailyQuota,
+            maxDailyQuota,
             canStartExam
         );
 
