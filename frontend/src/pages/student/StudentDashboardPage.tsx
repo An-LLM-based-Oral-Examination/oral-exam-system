@@ -27,6 +27,13 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import type { ProblemDetails } from '@/types/auth.types'
+import {
+  studentOverviewService,
+  type CourseSummary,
+  type MockExamQuota,
+  type PracticeHistoryItem,
+} from '@/services/studentOverview.service'
 
 const StudentOverviewThreeScene = lazy(() =>
   import('./StudentOverviewThreeScene').then((module) => ({
@@ -50,91 +57,150 @@ interface RecentActivity {
   typeLabel: string
   title: string
   completedLabel: string
-  score: number
+  score: number | null
   icon: LucideIcon
   destination: string
 }
 
-const OVERVIEW_STATS: OverviewStat[] = [
-  {
-    label: 'Môn học kích hoạt',
-    value: '04',
-    suffix: 'Môn',
-    helper: '2 bài kiểm tra sắp diễn ra',
-    icon: BookOpenCheck,
-    iconClassName: 'bg-[#eef3ff] text-[#3568df]',
-  },
-  {
-    label: 'Phiên luyện tập đã hoàn thành',
-    value: '18',
-    suffix: 'Phiên',
-    helper: '86.5% đánh giá đạt chuẩn',
-    icon: Mic2,
-    iconClassName: 'bg-[#ebeefe] text-[#5b62e8]',
-  },
-  {
-    label: 'Điểm trung bình AI',
-    value: '8.8',
-    suffix: '/10',
-    helper: '+0.4 so với tuần trước',
-    trend: '+0.4',
-    icon: Gauge,
-    iconClassName: 'bg-[#eef8f7] text-[#168f86]',
-  },
-]
+const ACTIVITY_ICONS = [Network, Database, Code2, Target, ShieldCheck]
 
-const RECENT_ACTIVITIES: RecentActivity[] = [
-  {
-    id: 'practice-networking',
-    type: 'practice',
-    typeLabel: 'Luyện tập tự do',
-    title: 'Mạng máy tính: Giao thức TCP/UDP',
-    completedLabel: 'Hoàn thành 2 giờ trước',
-    score: 9.0,
-    icon: Network,
-    destination: '/practice',
-  },
-  {
-    id: 'mock-database',
-    type: 'mock',
-    typeLabel: 'Thi thử Mock Exam',
-    title: 'Cơ sở dữ liệu: Chuẩn hóa 3NF/BCNF',
-    completedLabel: 'Hoàn thành hôm qua',
-    score: 8.5,
-    icon: Database,
-    destination: '/mock-exam',
-  },
-  {
-    id: 'practice-oop',
-    type: 'guided',
-    typeLabel: 'Luyện tập theo bộ',
-    title: 'Lập trình hướng đối tượng: Đa hình',
-    completedLabel: 'Hoàn thành 3 ngày trước',
-    score: 9.2,
-    icon: Code2,
-    destination: '/practice',
-  },
-  {
-    id: 'practice-design-patterns',
-    type: 'practice',
-    typeLabel: 'Luyện tập tự do',
-    title: 'Mẫu thiết kế: Strategy và Factory Method',
-    completedLabel: 'Hoàn thành 5 ngày trước',
-    score: 8.7,
-    icon: Target,
-    destination: '/practice',
-  },
-  {
-    id: 'mock-web-api',
-    type: 'mock',
-    typeLabel: 'Thi thử Mock Exam',
-    title: 'Phát triển Web API: REST và bảo mật JWT',
-    completedLabel: 'Hoàn thành 1 tuần trước',
-    score: 8.9,
-    icon: ShieldCheck,
-    destination: '/mock-exam',
-  },
-]
+function padCount(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function getLoadErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') return 'Không tải được dữ liệu tổng quan.'
+  const problem = error as Partial<ProblemDetails>
+  return problem.detail || problem.title || 'Không tải được dữ liệu tổng quan.'
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function formatScore(score: number) {
+  return score.toFixed(1)
+}
+
+function formatSignedDelta(delta: number) {
+  const rounded = Math.round(delta * 10) / 10
+  const prefix = rounded > 0 ? '+' : ''
+  return `${prefix}${rounded.toFixed(1)}`
+}
+
+function formatRelativeCompletion(iso: string | null, now: Date, inProgress: boolean) {
+  if (inProgress) return 'Đang diễn ra'
+  if (!iso) return 'Chưa có thời điểm hoàn thành'
+
+  const then = new Date(iso)
+  if (Number.isNaN(then.getTime())) return 'Đã ghi nhận'
+
+  const minutes = Math.round((now.getTime() - then.getTime()) / 60_000)
+  if (minutes < 1) return 'Hoàn thành vừa xong'
+  if (minutes < 60) return `Hoàn thành ${minutes} phút trước`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `Hoàn thành ${hours} giờ trước`
+  const days = Math.round(hours / 24)
+  if (days === 1) return 'Hoàn thành hôm qua'
+  if (days < 7) return `Hoàn thành ${days} ngày trước`
+  const weeks = Math.round(days / 7)
+  return `Hoàn thành ${weeks} tuần trước`
+}
+
+function buildOverviewStats(
+  courses: CourseSummary[],
+  history: PracticeHistoryItem[],
+  quotas: MockExamQuota[],
+  now: Date,
+): OverviewStat[] {
+  const completed = history.filter((item) => item.status === 'completed')
+  const scored = completed.filter(
+    (item): item is PracticeHistoryItem & { averageScore: number } => item.averageScore !== null,
+  )
+  const overallAverage = average(scored.map((item) => item.averageScore))
+  const passingCount = scored.filter((item) => item.averageScore >= 5).length
+  const passRate = scored.length > 0 ? Math.round((passingCount / scored.length) * 1000) / 10 : null
+
+  const weekMs = 7 * 24 * 60 * 60 * 1000
+  const recentScores = scored
+    .filter((item) => now.getTime() - new Date(item.endedAt ?? item.startedAt).getTime() <= weekMs)
+    .map((item) => item.averageScore)
+  const previousScores = scored
+    .filter((item) => {
+      const age = now.getTime() - new Date(item.endedAt ?? item.startedAt).getTime()
+      return age > weekMs && age <= weekMs * 2
+    })
+    .map((item) => item.averageScore)
+  const recentAverage = average(recentScores)
+  const previousAverage = average(previousScores)
+  const scoreDelta =
+    recentAverage !== null && previousAverage !== null ? recentAverage - previousAverage : null
+
+  const quotaRemaining = quotas.reduce((sum, quota) => sum + quota.remainingCount, 0)
+  const quotaLimit = quotas.reduce((sum, quota) => sum + quota.maxDailyQuota, 0)
+  const courseCodes = courses
+    .map((course) => course.code)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ')
+
+  return [
+    {
+      label: 'Môn học kích hoạt',
+      value: padCount(courses.length),
+      suffix: 'Môn',
+      helper:
+        quotaLimit > 0
+          ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
+          : courseCodes || 'Chưa có môn học đang mở',
+      icon: BookOpenCheck,
+      iconClassName: 'bg-[#eef3ff] text-[#3568df]',
+    },
+    {
+      label: 'Phiên luyện tập đã hoàn thành',
+      value: padCount(completed.length),
+      suffix: 'Phiên',
+      helper:
+        passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% đánh giá đạt từ 5.0 điểm`,
+      icon: Mic2,
+      iconClassName: 'bg-[#ebeefe] text-[#5b62e8]',
+    },
+    {
+      label: 'Điểm trung bình AI',
+      value: overallAverage === null ? '—' : formatScore(overallAverage),
+      suffix: overallAverage === null ? undefined : '/10',
+      helper:
+        scoreDelta === null
+          ? 'Tính trên các phiên đã hoàn thành'
+          : `${formatSignedDelta(scoreDelta)} so với tuần trước`,
+      trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
+      icon: Gauge,
+      iconClassName: 'bg-[#eef8f7] text-[#168f86]',
+    },
+  ]
+}
+
+function buildRecentActivities(history: PracticeHistoryItem[], now: Date): RecentActivity[] {
+  return history.map((item, index) => {
+    const inProgress = item.status !== 'completed'
+    const isFullSession = item.practiceMode === 'full_session'
+    return {
+      id: item.sessionId,
+      type: isFullSession ? 'guided' : 'practice',
+      typeLabel: isFullSession ? 'Luyện tập cả phiên' : 'Luyện tập theo câu',
+      title: [item.courseCode, item.courseName].filter(Boolean).join(': ') || 'Phiên luyện tập',
+      completedLabel: formatRelativeCompletion(
+        item.endedAt ?? item.startedAt,
+        now,
+        inProgress,
+      ),
+      score: item.averageScore,
+      icon: ACTIVITY_ICONS[index % ACTIVITY_ICONS.length],
+      destination: inProgress ? '/practice' : '/results',
+    }
+  })
+}
 
 function getGreeting(hour: number) {
   if (hour >= 5 && hour < 12) return 'Chào buổi sáng'
@@ -148,21 +214,6 @@ function getSemesterLabel(date: Date) {
   return `${semester} ${date.getFullYear()}`
 }
 
-function getNextExamDate(now: Date) {
-  const nextExam = new Date(now)
-  nextExam.setDate(nextExam.getDate() + 1)
-  nextExam.setHours(14, 0, 0, 0)
-  return nextExam
-}
-
-function formatExamDate(date: Date) {
-  return new Intl.DateTimeFormat('vi-VN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-  }).format(date)
-}
-
 function getActivityBadgeClass(type: RecentActivity['type']) {
   if (type === 'mock') return 'bg-[#fff5df] text-[#9a6411]'
   if (type === 'guided') return 'bg-[#f1edff] text-[#6546bd]'
@@ -173,14 +224,74 @@ export function StudentDashboardPage() {
   const { user } = useAuth()
   const [now, setNow] = useState(() => new Date())
   const [showAllActivities, setShowAllActivities] = useState(false)
+  const [courses, setCourses] = useState<CourseSummary[]>([])
+  const [history, setHistory] = useState<PracticeHistoryItem[]>([])
+  const [quotas, setQuotas] = useState<MockExamQuota[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
     return () => window.clearInterval(timer)
   }, [])
 
-  const nextExam = useMemo(() => getNextExamDate(now), [now])
-  const displayedActivities = showAllActivities ? RECENT_ACTIVITIES : RECENT_ACTIVITIES.slice(0, 3)
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      const [coursesResult, historyResult] = await Promise.allSettled([
+        studentOverviewService.getCourses(),
+        studentOverviewService.getPracticeHistory(),
+      ])
+
+      if (cancelled) return
+
+      const nextCourses = coursesResult.status === 'fulfilled' ? coursesResult.value : []
+      const nextHistory = historyResult.status === 'fulfilled' ? historyResult.value : []
+      setCourses(nextCourses)
+      setHistory(nextHistory)
+
+      if (coursesResult.status === 'rejected' && historyResult.status === 'rejected') {
+        setLoadError(getLoadErrorMessage(coursesResult.reason))
+        setQuotas([])
+        setIsLoading(false)
+        return
+      }
+
+      if (coursesResult.status === 'rejected' || historyResult.status === 'rejected') {
+        const reason = coursesResult.status === 'rejected' ? coursesResult.reason : historyResult.reason
+        setLoadError(getLoadErrorMessage(reason))
+      }
+
+      const quotaResults = await Promise.all(
+        nextCourses.map(async (course) => {
+          try {
+            return await studentOverviewService.getMockExamQuota(course.id)
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (cancelled) return
+      setQuotas(quotaResults.filter((quota): quota is MockExamQuota => quota !== null))
+      setIsLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const overviewStats = useMemo(
+    () => buildOverviewStats(courses, history, quotas, now),
+    [courses, history, quotas, now],
+  )
+  const recentActivities = useMemo(
+    () => buildRecentActivities(history, now),
+    [history, now],
+  )
+  const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 3)
   const studentName = user?.fullName ?? 'Sinh viên'
   const studentIdentifier = user?.studentCode ?? user?.email ?? user?.id ?? 'Student'
 
@@ -267,11 +378,11 @@ export function StudentDashboardPage() {
                     Lịch thi gần nhất
                   </p>
                   <p className="truncate text-[11px] font-bold text-[#25344b] sm:text-[12px]">
-                    Kiến trúc Máy tính & Hệ điều hành — Phòng Lab B402
+                    Chưa có ca thi phòng lab được công bố
                   </p>
                   <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[#2860d9]">
                     <Clock3 className="size-3" />
-                    14:00 · {formatExamDate(nextExam)} · Kiosk 08
+                    Lịch sẽ hiện khi nhà trường công bố ca thi
                   </p>
                 </div>
               </div>
@@ -312,8 +423,24 @@ export function StudentDashboardPage() {
         </div>
       </section>
 
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] leading-relaxed text-red-700"
+        >
+          {loadError}
+        </div>
+      )}
+
       <section aria-label="Tóm tắt học tập" className="grid gap-3 md:grid-cols-3">
-        {OVERVIEW_STATS.map(
+        {(isLoading
+          ? buildOverviewStats([], [], [], now).map((stat) => ({
+              ...stat,
+              value: '…',
+              helper: 'Đang tải',
+            }))
+          : overviewStats
+        ).map(
           ({ label, value, suffix, helper, icon: Icon, iconClassName, trend }) => (
             <article
               key={label}
@@ -361,7 +488,7 @@ export function StudentDashboardPage() {
                 Hoạt động luyện tập gần đây
               </h2>
               <span className="hidden rounded-full bg-[#edf3ff] px-2 py-0.5 text-[9px] font-semibold text-[#2c5dc8] sm:inline">
-                {RECENT_ACTIVITIES.length} phiên
+                {isLoading ? '…' : recentActivities.length} phiên
               </span>
             </div>
             <p className="mt-1 text-[10px] text-[#7b889b]">
@@ -383,6 +510,11 @@ export function StudentDashboardPage() {
         </div>
 
         <div className="divide-y divide-[#edf1f6] px-4 sm:px-5">
+          {!isLoading && displayedActivities.length === 0 && (
+            <p className="py-6 text-center text-[11px] text-[#7b889b]">
+              Chưa có phiên luyện tập. Bắt đầu ở mục Luyện tập để xem lịch sử tại đây.
+            </p>
+          )}
           {displayedActivities.map((activity) => {
             const Icon = activity.icon
 
@@ -417,9 +549,9 @@ export function StudentDashboardPage() {
                   <p className="text-[10px] text-[#69778b]">
                     Điểm AI:{' '}
                     <strong className="text-[12px] text-[#173c83]">
-                      {activity.score.toFixed(1)}
+                      {activity.score === null ? '—' : activity.score.toFixed(1)}
                     </strong>
-                    <span className="text-[9px]"> /10</span>
+                    {activity.score !== null && <span className="text-[9px]"> /10</span>}
                   </p>
                   <Link
                     to={activity.destination}

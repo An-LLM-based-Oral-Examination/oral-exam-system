@@ -1,5 +1,6 @@
 /**
- * Role-Based Access Control (RBAC) User Roles
+ * Role-Based Access Control (RBAC) User Roles used by the portals.
+ * Backend returns lowercase roles; the client maps them onto these three portals.
  */
 export type UserRole = 'Student' | 'Instructor' | 'Admin'
 
@@ -32,6 +33,33 @@ export interface LoginResponse {
   tokenType: string
   expiresIn: number
   user: User
+}
+
+/**
+ * Google login response from POST /auth/google-login
+ */
+export interface GoogleLoginResponse {
+  accessToken: string
+  refreshToken: string
+  tokenType: string
+  expiresIn: number
+  user: {
+    id: string
+    email: string
+    fullName: string
+    studentCode?: string | null
+    role: string
+  }
+}
+
+/**
+ * Silent refresh response from POST /auth/refresh-token
+ */
+export interface RefreshTokenResponse {
+  accessToken: string
+  refreshToken: string
+  tokenType: string
+  expiresIn: number
 }
 
 /**

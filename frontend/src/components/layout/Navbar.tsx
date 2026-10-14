@@ -37,8 +37,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const roleLabel = user?.role === 'Admin' ? 'Quản trị viên' : 'Giảng viên'
 
   const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
+    void logout().finally(() => navigate('/login', { replace: true }))
   }
 
   return (
