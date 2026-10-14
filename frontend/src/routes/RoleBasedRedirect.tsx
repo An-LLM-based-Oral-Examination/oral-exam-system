@@ -8,7 +8,11 @@ export function RoleBasedRedirect() {
     return <Navigate to="/student/overview" replace />
   }
 
-  return <Navigate to="/dashboard" replace />
+  if (user?.role === 'Instructor' || user?.role === 'DepartmentHead' || user?.role === 'Admin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <Navigate to="/unauthorized" replace />
 }
 
 export { RoleBasedRedirect as RoleHomeRedirect }

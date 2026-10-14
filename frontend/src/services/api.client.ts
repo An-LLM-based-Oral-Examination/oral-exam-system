@@ -1,121 +1,117 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { ProblemDetails } from '@/types/auth.types'
 
-type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean }
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    _retry?: boolean
+    _skipAuthRefresh?: boolean
+  }
+}
 
-/**
- * Enterprise Axios Instance configured for .NET 8 Web API
- */
+type JsonRecord = Record<string, unknown>
+type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRefresh?: boolean }
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readString(record: JsonRecord, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return undefined
+}
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
 })
 
-function toProblem(error: AxiosError<ProblemDetails>): ProblemDetails {
-  if (error.response?.data && typeof error.response.data === 'object') {
-    const problem = error.response.data
-    return {
-      ...problem,
-      status: problem.status || error.response.status,
-      title: problem.title || 'API Error',
-      detail: problem.detail || problem.title || error.message,
-    }
-  }
-
-  return {
-    status: error.response?.status || 500,
-    title: 'Network or Server Error',
-    detail: error.message || 'Unable to connect to the backend server.',
-  }
-}
-
-function isAuthEndpoint(url: string | undefined) {
-  if (!url) return false
-  return (
-    url.includes('/auth/google-login') ||
-    url.includes('/auth/refresh-token') ||
-    url.includes('/auth/sign-out')
-  )
-}
-
-// Request Interceptor: Attach JWT Bearer Token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = sessionStorage.getItem('access_token')
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    if (token && config.headers) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => Promise.reject(error),
 )
 
-let isRefreshing = false
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (error: unknown) => void }> = []
+let refreshPromise: Promise<string> | null = null
 
-function processQueue(error: unknown, token: string | null = null) {
-  failedQueue.forEach((pending) => {
-    if (error || !token) {
-      pending.reject(error ?? new Error('Refresh failed'))
-    } else {
-      pending.resolve(token)
-    }
-  })
-  failedQueue = []
+async function refreshAccessToken(): Promise<string> {
+  const refreshToken = sessionStorage.getItem('refresh_token')
+  if (!refreshToken) throw new Error('Không có refresh token')
+
+  const response = await apiClient.post<{ accessToken: string; refreshToken: string }>(
+    '/auth/refresh-token',
+    { refreshToken },
+    { _skipAuthRefresh: true },
+  )
+  if (!response.data.accessToken || !response.data.refreshToken) {
+    throw new Error('Backend không trả về token mới hợp lệ')
+  }
+
+  sessionStorage.setItem('access_token', response.data.accessToken)
+  sessionStorage.setItem('refresh_token', response.data.refreshToken)
+  return response.data.accessToken
 }
 
-// Response Interceptor: refresh once on 401, then surface RFC 7807 ProblemDetails
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<ProblemDetails>) => {
-    const originalRequest = error.config as RetriableRequest | undefined
-    const shouldRefresh =
-      error.response?.status === 401 &&
-      originalRequest &&
-      !originalRequest._retry &&
-      !isAuthEndpoint(originalRequest.url)
+  async (error: AxiosError<unknown>) => {
+    const config = error.config as RetryConfig | undefined
+    const status = error.response?.status
+    const url = config?.url ?? ''
+    const isAuthEndpoint =
+      url.includes('/auth/login') ||
+      url.includes('/auth/refresh-token') ||
+      url.includes('/auth/google-login') ||
+      url.includes('/auth/sign-out')
 
-    if (shouldRefresh && originalRequest) {
-      if (isRefreshing) {
-        return new Promise<string>((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return apiClient(originalRequest)
-        })
-      }
-
-      originalRequest._retry = true
-      isRefreshing = true
-
+    if (
+      status === 401 &&
+      config &&
+      !config._retry &&
+      !config._skipAuthRefresh &&
+      !isAuthEndpoint &&
+      sessionStorage.getItem('refresh_token')
+    ) {
+      config._retry = true
       try {
-        const { authService } = await import('./auth.service')
-        const data = await authService.refreshAccessToken()
-        processQueue(null, data.accessToken)
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
-        return apiClient(originalRequest)
-      } catch (refreshError) {
-        processQueue(refreshError, null)
-        const { authService } = await import('./auth.service')
-        await authService.logout()
-        if (!window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login')
-        }
-        return Promise.reject(
-          refreshError && typeof refreshError === 'object' && 'detail' in refreshError
-            ? refreshError
-            : toProblem(error),
-        )
-      } finally {
-        isRefreshing = false
+        refreshPromise ??= refreshAccessToken().finally(() => {
+          refreshPromise = null
+        })
+        const token = await refreshPromise
+        if (config.headers) config.headers.Authorization = `Bearer ${token}`
+        return apiClient.request(config)
+      } catch {
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
+        sessionStorage.removeItem('user_profile')
+        window.dispatchEvent(new Event('auth:session-expired'))
       }
     }
 
-    const problem = toProblem(error)
-    console.warn(`[API Error ${problem.status}]: ${problem.detail || problem.title}`)
+    const responseStatus = error.response?.status ?? 500
+    const responseData = error.response?.data
+    const payload = isRecord(responseData) ? responseData : {}
+    const payloadStatus = payload.status ?? payload.Status
+    const normalizedStatus =
+      typeof payloadStatus === 'number' && Number.isFinite(payloadStatus)
+        ? payloadStatus
+        : responseStatus
+    const detail =
+      readString(payload, 'detail', 'Detail', 'error', 'Error', 'message', 'Message') ??
+      error.message ??
+      'Không thể kết nối đến máy chủ.'
+    const title =
+      readString(payload, 'title', 'Title') ??
+      (error.response ? 'Không thể xử lý yêu cầu' : 'Lỗi kết nối hoặc máy chủ')
+
+    const problem: ProblemDetails = { ...payload, status: normalizedStatus, title, detail }
+    console.warn(`[API Error ${normalizedStatus}]: ${detail}`)
     return Promise.reject(problem)
   },
 )

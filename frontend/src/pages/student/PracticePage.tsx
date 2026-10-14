@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
+  AlertCircle,
   AudioLines,
   BookOpenText,
   Check,
@@ -10,7 +11,6 @@ import {
   Clock3,
   Headphones,
   History,
-  Infinity as InfinityIcon,
   Lightbulb,
   LoaderCircle,
   Mic2,
@@ -24,8 +24,14 @@ import {
   Volume2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
+import { courseService } from '@/services/course.service'
+import { practiceService } from '@/services/practice.service'
+import { savePracticeRuntime } from '@/utils/practiceSessionStorage'
 import type {
+  CourseDto,
   PracticeDifficulty,
+  PracticeHistoryItem,
   PracticeMode,
   PracticeSessionConfig,
 } from '@/types/practice.types'
@@ -40,6 +46,7 @@ type MicrophoneState = 'idle' | 'checking' | 'ready' | 'error' | 'unsupported'
 
 const FULL_SESSION_MIN_QUESTIONS = 3
 const FULL_SESSION_MAX_QUESTIONS = 10
+const PER_QUESTION_MIN_QUESTIONS = 1
 
 const DIFFICULTY_OPTIONS: Array<{
   value: PracticeDifficulty
@@ -68,80 +75,6 @@ const DIFFICULTY_OPTIONS: Array<{
     helper: 'Phân tích chuyên sâu',
     selectedClassName: 'border-[#e9a9b0] bg-[#fff5f6] shadow-[0_0_0_2px_rgba(184,64,75,0.07)]',
     badgeClassName: 'bg-[#ffe3e6] text-[#a23945]',
-  },
-]
-
-interface CourseOption {
-  id: string
-  code: string
-  name: string
-  module: string
-}
-
-interface PracticeHistoryItem {
-  id: string
-  course: string
-  topic: string
-  date: string
-  mode: string
-  score: number
-  feedback: string
-}
-
-const COURSE_OPTIONS: CourseOption[] = [
-  {
-    id: 'INT3204',
-    code: 'INT3204',
-    name: 'Mạng máy tính',
-    module: 'Module 3: Routing Protocols (OSPF, BGP)',
-  },
-  {
-    id: 'DSA201',
-    code: 'DSA201',
-    name: 'Cấu trúc dữ liệu và giải thuật',
-    module: 'Module 5: Cây AVL và B-Tree',
-  },
-  {
-    id: 'OS202',
-    code: 'OS202',
-    name: 'Hệ điều hành',
-    module: 'Module 4: Đồng bộ tiến trình',
-  },
-  {
-    id: 'SWE301',
-    code: 'SWE301',
-    name: 'Thiết kế phần mềm',
-    module: 'Module 2: Design Patterns',
-  },
-]
-
-const PRACTICE_HISTORY: PracticeHistoryItem[] = [
-  {
-    id: 'history-network-01',
-    course: 'Mạng máy tính',
-    topic: 'Định tuyến OSPF và BGP',
-    date: '20/05/2026',
-    mode: 'Chấm từng câu',
-    score: 8.8,
-    feedback: 'Lập luận rõ. Cần phân biệt kỹ hơn vai trò của iBGP và eBGP.',
-  },
-  {
-    id: 'history-dsa-01',
-    course: 'Cấu trúc dữ liệu',
-    topic: 'Cây AVL và phép quay cân bằng',
-    date: '18/05/2026',
-    mode: 'Cả bộ đề',
-    score: 8,
-    feedback: 'Nắm đúng nguyên lý cân bằng, ví dụ minh họa nên ngắn gọn hơn.',
-  },
-  {
-    id: 'history-os-01',
-    course: 'Hệ điều hành',
-    topic: 'Đồng bộ tiến trình',
-    date: '15/05/2026',
-    mode: 'Chấm từng câu',
-    score: 9.2,
-    feedback: 'Giải thích tốt race condition, mutex và semaphore bằng tình huống thực tế.',
   },
 ]
 
@@ -191,9 +124,24 @@ function getMicrophoneStatus(state: MicrophoneState) {
   }
 }
 
+function formatPracticeDate(value: string) {
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
+function getPracticeModeLabel(mode: PracticeHistoryItem['practiceMode']) {
+  return mode === 'per_question' ? 'Luyện từng câu' : 'Full-Session'
+}
+
 export function PracticePage() {
   const navigate = useNavigate()
-  const [selectedCourseId, setSelectedCourseId] = useState(COURSE_OPTIONS[0].id)
+  const { user } = useAuth()
+  const [courses, setCourses] = useState<CourseDto[]>([])
+  const [practiceHistory, setPracticeHistory] = useState<PracticeHistoryItem[]>([])
+  const [selectedCourseId, setSelectedCourseId] = useState('')
   const [feedbackMode, setFeedbackMode] = useState<PracticeMode>('PER_QUESTION')
   const [selectedDifficulties, setSelectedDifficulties] = useState<PracticeDifficulty[]>(['medium'])
   const [questionCount, setQuestionCount] = useState(5)
@@ -203,19 +151,70 @@ export function PracticePage() {
   const [voicePreviewMessage, setVoicePreviewMessage] = useState('')
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [tipIndex, setTipIndex] = useState(0)
+  const [isLoadingData, setIsLoadingData] = useState(true)
+  const [isStarting, setIsStarting] = useState(false)
+  const [pageError, setPageError] = useState('')
+  const [errorSource, setErrorSource] = useState<'load' | 'start' | null>(null)
 
   const selectedCourse = useMemo(
-    () => COURSE_OPTIONS.find((course) => course.id === selectedCourseId) ?? COURSE_OPTIONS[0],
-    [selectedCourseId],
+    () => courses.find((course) => course.id === selectedCourseId) ?? null,
+    [courses, selectedCourseId],
   )
   const estimatedMinutes = questionCount * 3
-  const selectedDifficultyOptions = DIFFICULTY_OPTIONS.filter((option) =>
-    selectedDifficulties.includes(option.value),
-  )
-  const primaryDifficulty = selectedDifficultyOptions[0] ?? DIFFICULTY_OPTIONS[1]
-  const secondaryDifficulty = selectedDifficultyOptions[1] ?? primaryDifficulty
-  const difficultyPreview = [primaryDifficulty, primaryDifficulty, secondaryDifficulty]
   const microphoneStatus = getMicrophoneStatus(microphoneState)
+
+  const loadPracticeData = useCallback(async () => {
+    if (!user) return
+    setIsLoadingData(true)
+    setPageError('')
+    setErrorSource(null)
+
+    try {
+      const [coursesResult, historyResult] = await Promise.allSettled([
+        courseService.getCourses(),
+        practiceService.getStudentHistory(user.id),
+      ])
+      if (coursesResult.status === 'rejected') throw coursesResult.reason
+
+      const availableCourses = coursesResult.value
+      setCourses(availableCourses)
+      if (historyResult.status === 'fulfilled') {
+        setPracticeHistory(historyResult.value.slice(0, 3))
+      } else {
+        setPracticeHistory([])
+        const historyProblem = historyResult.reason as Partial<{
+          detail: string
+          error: string
+          message: string
+        }>
+        setPageError(
+          historyProblem.detail ||
+            historyProblem.error ||
+            historyProblem.message ||
+            'Đã tải danh sách môn học nhưng chưa thể tải lịch sử luyện tập.',
+        )
+        setErrorSource('load')
+      }
+      setSelectedCourseId((current) =>
+        availableCourses.some((course) => course.id === current)
+          ? current
+          : (availableCourses[0]?.id ?? ''),
+      )
+    } catch (loadError) {
+      const problem = loadError as Partial<{ detail: string; error: string; message: string }>
+      setPageError(
+        problem.detail || problem.error || problem.message || 'Không thể tải dữ liệu luyện tập.',
+      )
+      setErrorSource('load')
+    } finally {
+      setIsLoadingData(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => void loadPracticeData(), 0)
+    return () => window.clearTimeout(loadTimer)
+  }, [loadPracticeData])
 
   useEffect(() => {
     return () => {
@@ -226,6 +225,7 @@ export function PracticePage() {
   }, [isVoicePreviewPlaying])
 
   const handleVoicePreview = () => {
+    if (!selectedCourse) return
     if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
       setVoicePreviewMessage('Trình duyệt chưa hỗ trợ phát giọng nói.')
       return
@@ -304,40 +304,93 @@ export function PracticePage() {
     })
   }
 
-  const updateQuestionCount = (nextValue: number) => {
+  const updateFullSessionQuestionCount = (nextValue: number) => {
+    if (!Number.isFinite(nextValue)) return
     setQuestionCount(
-      Math.min(FULL_SESSION_MAX_QUESTIONS, Math.max(FULL_SESSION_MIN_QUESTIONS, nextValue)),
+      Math.min(
+        FULL_SESSION_MAX_QUESTIONS,
+        Math.max(FULL_SESSION_MIN_QUESTIONS, Math.round(nextValue)),
+      ),
     )
   }
 
-  const handleStartPractice = () => {
+  const updatePerQuestionCount = (nextValue: number) => {
+    if (!Number.isFinite(nextValue)) return
+    setQuestionCount(Math.max(PER_QUESTION_MIN_QUESTIONS, Math.round(nextValue)))
+  }
+
+  const selectFeedbackMode = (mode: PracticeMode) => {
+    setFeedbackMode(mode)
+    if (mode === 'FULL_SESSION') {
+      setQuestionCount((current) =>
+        Math.min(FULL_SESSION_MAX_QUESTIONS, Math.max(FULL_SESSION_MIN_QUESTIONS, current)),
+      )
+    }
+  }
+
+  const handleStartPractice = async () => {
+    if (!selectedCourse || !user || isStarting) return
+
+    setIsStarting(true)
+    setPageError('')
+    setErrorSource(null)
     const config: PracticeSessionConfig = {
       courseId: selectedCourse.id,
       courseName: selectedCourse.name,
       courseCode: selectedCourse.code,
-      module: selectedCourse.module,
       mode: feedbackMode,
       selectedDifficulties: feedbackMode === 'PER_QUESTION' ? selectedDifficulties : [],
-      questionCount: feedbackMode === 'FULL_SESSION' ? questionCount : null,
+      questionCount,
       microphoneName,
     }
 
     try {
-      window.sessionStorage.setItem('practice_session_config', JSON.stringify(config))
-    } catch {
-      // Query parameters below still preserve the important session configuration.
-    }
+      const session = await practiceService.startSession({
+        courseId: selectedCourse.id,
+        studentId: user.id,
+        difficulty: feedbackMode === 'FULL_SESSION' ? 'progressive' : null,
+        difficulties: feedbackMode === 'PER_QUESTION' ? selectedDifficulties : null,
+        questionCount,
+        isFullSession: feedbackMode === 'FULL_SESSION',
+      })
 
-    const search = new URLSearchParams({
-      course: selectedCourse.id,
-      mode: feedbackMode,
-    })
-    if (feedbackMode === 'FULL_SESSION') {
-      search.set('questions', String(questionCount))
-    } else {
-      search.set('difficulties', selectedDifficulties.join(','))
+      if (session.questions.length === 0) {
+        throw new Error('Backend không trả về câu hỏi nào cho phiên luyện tập.')
+      }
+
+      savePracticeRuntime({
+        version: 1,
+        sessionId: session.sessionId,
+        studentId: user.id,
+        transcriptBufferSeconds: session.transcriptBufferSeconds,
+        config,
+        questions: session.questions,
+        drafts: [],
+        currentQuestionIndex: 0,
+        mainQuestionsCompleted: 0,
+        questionDifficulties: {},
+        activeFollowUp: null,
+        pendingSubmission: null,
+        pendingAnswerId: null,
+        resolvedAnswer: null,
+        submittedAnswerIdsByQuestion: {},
+        fullSessionSubmitted: false,
+        draftAnswerText: '',
+        draftAnswerMode: 'voice',
+        showBuffer: false,
+        bufferDeadlineTimestamp: null,
+      })
+
+      navigate(`/practice/session?session=${session.sessionId}`)
+    } catch (startError) {
+      const problem = startError as Partial<{ detail: string; error: string; message: string }>
+      setPageError(
+        problem.detail || problem.error || problem.message || 'Không thể bắt đầu phiên luyện tập.',
+      )
+      setErrorSource('start')
+    } finally {
+      setIsStarting(false)
     }
-    navigate(`/practice/session?${search.toString()}`)
   }
 
   return (
@@ -391,6 +444,27 @@ export function PracticePage() {
         </div>
       </section>
 
+      {pageError && (
+        <div
+          className="flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
+          role="alert"
+        >
+          <div className="flex items-start gap-2 text-[10px] leading-relaxed font-semibold">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{pageError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              errorSource === 'start' ? void handleStartPractice() : void loadPracticeData()
+            }
+            className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[9px] font-bold transition hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-500"
+          >
+            {errorSource === 'start' ? 'Thử bắt đầu lại' : 'Thử tải lại'}
+          </button>
+        </div>
+      )}
+
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.78fr)]">
         <section className="overflow-hidden rounded-2xl border border-[#e0e7f0] bg-white shadow-[0_10px_32px_rgba(31,61,105,0.055)]">
           <div className="flex items-center justify-between gap-4 border-b border-[#edf1f6] px-5 py-4 sm:px-6">
@@ -424,11 +498,17 @@ export function PracticePage() {
                   id="practice-course"
                   value={selectedCourseId}
                   onChange={(event) => setSelectedCourseId(event.target.value)}
+                  disabled={isLoadingData || courses.length === 0}
                   className="min-h-12 w-full appearance-none rounded-xl border border-[#dfe6f0] bg-[#f8faff] py-2 pr-10 pl-10 text-[11px] font-semibold text-[#26364d] transition hover:border-[#bdcce0] focus:border-[#4c78e8] focus:ring-3 focus:ring-[#245eea]/10 focus:outline-none sm:text-[12px]"
                 >
-                  {COURSE_OPTIONS.map((course) => (
+                  {courses.length === 0 && (
+                    <option value="">
+                      {isLoadingData ? 'Đang tải danh sách môn học…' : 'Chưa có môn học khả dụng'}
+                    </option>
+                  )}
+                  {courses.map((course) => (
                     <option key={course.id} value={course.id}>
-                      {course.name} ({course.code}) — {course.module}
+                      {course.name} ({course.code}) — {course.credits} tín chỉ
                     </option>
                   ))}
                 </select>
@@ -443,7 +523,7 @@ export function PracticePage() {
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#245eea] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
                     feedbackMode === 'PER_QUESTION'
                       ? 'border-[#8db0ff] bg-[#f5f8ff] shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
                       : 'border-[#e2e8f1] bg-[#fafbfd]',
@@ -454,7 +534,7 @@ export function PracticePage() {
                     name="feedback-mode"
                     value="PER_QUESTION"
                     checked={feedbackMode === 'PER_QUESTION'}
-                    onChange={() => setFeedbackMode('PER_QUESTION')}
+                    onChange={() => selectFeedbackMode('PER_QUESTION')}
                     className="sr-only"
                   />
                   <div className="flex items-start justify-between gap-3">
@@ -474,17 +554,16 @@ export function PracticePage() {
                   </div>
                   <h3 className="mt-3 text-[12px] font-bold text-[#20314a]">Luyện từng câu</h3>
                   <p className="mt-1 text-[9px] leading-relaxed text-[#6f7e92] sm:text-[10px]">
-                    Chọn một hoặc nhiều mức độ, nhận phản hồi sau từng câu và luyện liên tục đến khi
-                    bạn chủ động dừng.
+                    Chọn một hoặc nhiều mức độ, số câu cần luyện và nhận phản hồi sau từng câu.
                   </p>
                   <span className="mt-3 inline-flex items-center gap-1 text-[9px] font-semibold text-[#245eea]">
-                    <InfinityIcon className="size-3" /> Không giới hạn số câu
+                    <Radio className="size-3" /> {questionCount} câu chính · Có follow-up theo điểm
                   </span>
                 </label>
 
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#245eea] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
                     feedbackMode === 'FULL_SESSION'
                       ? 'border-[#8db0ff] bg-[#f5f8ff] shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
                       : 'border-[#e2e8f1] bg-[#fafbfd]',
@@ -495,7 +574,7 @@ export function PracticePage() {
                     name="feedback-mode"
                     value="FULL_SESSION"
                     checked={feedbackMode === 'FULL_SESSION'}
-                    onChange={() => setFeedbackMode('FULL_SESSION')}
+                    onChange={() => selectFeedbackMode('FULL_SESSION')}
                     className="sr-only"
                   />
                   <div className="flex items-start justify-between gap-3">
@@ -594,43 +673,39 @@ export function PracticePage() {
                   })}
                 </div>
 
-                <div className="grid gap-3 rounded-xl border border-[#d9e5f7] bg-white p-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-                  <div className="flex items-center gap-1.5">
-                    {difficultyPreview.map((option, index) => (
-                      <span
-                        key={`${option.value}-${index}`}
-                        className={cn(
-                          'rounded-lg px-2 py-1 text-[8px] font-bold',
-                          option.badgeClassName,
-                        )}
-                      >
-                        {option.label}
-                      </span>
-                    ))}
+                <div className="flex flex-col gap-3 rounded-xl border border-[#cfe8df] bg-[#f0faf6] p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#168367] shadow-sm">
+                      <Radio className="size-4" />
+                    </span>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#176f58]">Số câu luyện từng câu</p>
+                      <p className="mt-0.5 text-[8px] text-[#65847a]">
+                        Follow-up không tính vào số câu chính đã chọn.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[9px] font-bold text-[#304763]">
-                      {selectedDifficulties.length > 1
-                        ? 'Quy tắc phân phối theo mỗi 3 câu liên tiếp'
-                        : `Phiên chỉ sử dụng mức ${primaryDifficulty.label}`}
-                    </p>
-                    <p className="mt-0.5 text-[8px] leading-relaxed text-[#75859a]">
-                      {selectedDifficulties.length > 1
-                        ? 'Luôn có đúng 2 câu cùng mức và 1 câu khác mức; tuyệt đối không có 3 câu liên tiếp cùng mức.'
-                        : 'Quy tắc phối hợp độ khó chỉ áp dụng khi bạn chọn từ hai mức trở lên.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-xl border border-[#cfe8df] bg-[#f0faf6] p-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#168367] shadow-sm">
-                    <InfinityIcon className="size-4" />
-                  </span>
-                  <div>
-                    <p className="text-[9px] font-bold text-[#176f58]">Số câu không giới hạn</p>
-                    <p className="mt-0.5 text-[8px] text-[#65847a]">
-                      Hệ thống tiếp tục đưa câu hỏi cho đến khi bạn bấm Dừng luyện tập.
-                    </p>
+                  <div className="flex items-center gap-2 rounded-xl border border-[#cfe8df] bg-white p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updatePerQuestionCount(questionCount - 1)}
+                      disabled={questionCount <= PER_QUESTION_MIN_QUESTIONS}
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf8f4] hover:text-[#168367] focus-visible:outline-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label="Giảm một câu luyện từng câu"
+                    >
+                      <Minus className="size-3.5" />
+                    </button>
+                    <span className="min-w-12 text-center font-mono text-sm font-black text-[#168367]">
+                      {questionCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => updatePerQuestionCount(questionCount + 1)}
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf8f4] hover:text-[#168367] focus-visible:outline-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:opacity-35"
+                      aria-label="Tăng một câu luyện từng câu"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
                   </div>
                 </div>
               </section>
@@ -643,13 +718,13 @@ export function PracticePage() {
                     </div>
                     <div>
                       <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a879a] uppercase">
-                        Số câu Full-Session
+                        Progressive · Dễ → Trung bình → Khó
                       </p>
                       <p className="mt-0.5 text-[11px] font-bold text-[#24344c]">
                         {questionCount} câu · khoảng {estimatedMinutes} phút
                       </p>
                       <p className="mt-1 text-[8px] text-[#8290a2]">
-                        Giới hạn hiện hành do Admin cấu hình: {FULL_SESSION_MIN_QUESTIONS}–
+                        Khoảng số câu backend hiện hỗ trợ: {FULL_SESSION_MIN_QUESTIONS}–
                         {FULL_SESSION_MAX_QUESTIONS} câu.
                       </p>
                     </div>
@@ -658,7 +733,7 @@ export function PracticePage() {
                   <div className="flex items-center gap-2 rounded-xl border border-[#dce3ed] bg-white p-1.5">
                     <button
                       type="button"
-                      onClick={() => updateQuestionCount(questionCount - 1)}
+                      onClick={() => updateFullSessionQuestionCount(questionCount - 1)}
                       disabled={questionCount <= FULL_SESSION_MIN_QUESTIONS}
                       className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf3ff] hover:text-[#245eea] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Giảm một câu"
@@ -672,14 +747,16 @@ export function PracticePage() {
                         min={FULL_SESSION_MIN_QUESTIONS}
                         max={FULL_SESSION_MAX_QUESTIONS}
                         value={questionCount}
-                        onChange={(event) => updateQuestionCount(Number(event.target.value))}
-                        className="w-8 bg-transparent text-center font-mono text-sm font-black text-[#245eea] outline-none"
+                        onChange={(event) =>
+                          updateFullSessionQuestionCount(Number(event.target.value))
+                        }
+                        className="w-8 rounded bg-transparent text-center font-mono text-sm font-black text-[#245eea] outline-none focus-visible:ring-2 focus-visible:ring-[#245eea]"
                       />
                       <span className="text-[8px] font-semibold text-[#7e8b9d]">câu</span>
                     </label>
                     <button
                       type="button"
-                      onClick={() => updateQuestionCount(questionCount + 1)}
+                      onClick={() => updateFullSessionQuestionCount(questionCount + 1)}
                       disabled={questionCount >= FULL_SESSION_MAX_QUESTIONS}
                       className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf3ff] hover:text-[#245eea] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Tăng một câu"
@@ -694,7 +771,7 @@ export function PracticePage() {
                   min={FULL_SESSION_MIN_QUESTIONS}
                   max={FULL_SESSION_MAX_QUESTIONS}
                   value={questionCount}
-                  onChange={(event) => updateQuestionCount(Number(event.target.value))}
+                  onChange={(event) => updateFullSessionQuestionCount(Number(event.target.value))}
                   className="mt-4 h-1.5 w-full cursor-pointer accent-[#245eea]"
                   aria-label="Chọn số câu hỏi từ 3 đến 10"
                 />
@@ -747,13 +824,20 @@ export function PracticePage() {
 
             <button
               type="button"
-              onClick={handleStartPractice}
-              className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_12px_28px_rgba(36,94,234,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-[0_16px_34px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] motion-reduce:transform-none"
+              onClick={() => void handleStartPractice()}
+              disabled={isStarting || isLoadingData || !selectedCourse}
+              className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_12px_28px_rgba(36,94,234,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-[0_16px_34px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
             >
-              <Mic2 className="size-4" />
-              {feedbackMode === 'PER_QUESTION'
-                ? 'Bắt đầu luyện từng câu'
-                : `Bắt đầu Full-Session · ${questionCount} câu`}
+              {isStarting ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Mic2 className="size-4" />
+              )}
+              {isStarting
+                ? 'Đang tạo phiên luyện tập…'
+                : feedbackMode === 'PER_QUESTION'
+                  ? `Bắt đầu luyện từng câu · ${questionCount} câu`
+                  : `Bắt đầu Full-Session · ${questionCount} câu`}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
             </button>
           </div>
@@ -766,58 +850,79 @@ export function PracticePage() {
                 <History className="size-4 text-[#245eea]" />
                 <h2 className="text-[12px] font-bold text-[#23334a]">Lịch sử luyện tập</h2>
               </div>
-              <span className="text-[8px] font-semibold text-[#8995a6]">3 phiên gần nhất</span>
+              <span className="text-[8px] font-semibold text-[#8995a6]">
+                {practiceHistory.length} phiên gần nhất
+              </span>
             </div>
 
             <div className="space-y-2.5 p-3">
-              {PRACTICE_HISTORY.map((item) => {
-                const isExpanded = expandedHistoryId === item.id
+              {isLoadingData && (
+                <div className="flex items-center justify-center gap-2 py-8 text-[9px] font-semibold text-[#75859a]">
+                  <LoaderCircle className="size-4 animate-spin" /> Đang tải lịch sử…
+                </div>
+              )}
+              {!isLoadingData && practiceHistory.length === 0 && (
+                <p className="py-8 text-center text-[9px] leading-relaxed text-[#7b899c]">
+                  Chưa có phiên luyện tập nào.
+                </p>
+              )}
+              {!isLoadingData &&
+                practiceHistory.map((item) => {
+                  const isExpanded = expandedHistoryId === item.sessionId
 
-                return (
-                  <article
-                    key={item.id}
-                    className={cn(
-                      'rounded-xl border bg-[#f8faff] transition',
-                      isExpanded ? 'border-[#b9cdf6] shadow-sm' : 'border-[#e8edf4]',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
-                      className="w-full p-3 text-left focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-[#245eea]"
-                      aria-expanded={isExpanded}
+                  return (
+                    <article
+                      key={item.sessionId}
+                      className={cn(
+                        'rounded-xl border bg-[#f8faff] transition',
+                        isExpanded ? 'border-[#b9cdf6] shadow-sm' : 'border-[#e8edf4]',
+                      )}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-[10px] font-bold text-[#28384e]">
-                            {item.course} — {item.topic}
-                          </p>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[8px] text-[#8190a3]">
-                            <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-[#60718a]">
-                              {item.mode}
-                            </span>
-                            <span>{item.date}</span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedHistoryId(isExpanded ? null : item.sessionId)}
+                        className="w-full p-3 text-left focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                        aria-expanded={isExpanded}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-[10px] font-bold text-[#28384e]">
+                              {item.courseName} ({item.courseCode})
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[8px] text-[#8190a3]">
+                              <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-[#60718a]">
+                                {getPracticeModeLabel(item.practiceMode)}
+                              </span>
+                              <span>{formatPracticeDate(item.startedAt)}</span>
+                            </div>
                           </div>
+                          <strong className="shrink-0 text-[11px] text-[#159378]">
+                            {item.averageScore === null
+                              ? 'Đang chấm'
+                              : `${item.averageScore.toFixed(1)}/10`}
+                          </strong>
                         </div>
-                        <strong className="shrink-0 text-[11px] text-[#159378]">
-                          {item.score.toFixed(1)}/10
-                        </strong>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-[8px] font-semibold text-[#3162cc]">
-                        <span>{isExpanded ? 'Thu gọn nhận xét' : 'Xem lại câu trả lời'}</span>
-                        <ChevronRight
-                          className={cn('size-3 transition-transform', isExpanded && 'rotate-90')}
-                        />
-                      </div>
-                    </button>
-                    {isExpanded && (
-                      <div className="border-t border-[#e2e9f3] px-3 py-2.5 text-[9px] leading-relaxed text-[#64748a]">
-                        {item.feedback}
-                      </div>
-                    )}
-                  </article>
-                )
-              })}
+                        <div className="mt-2 flex items-center justify-between text-[8px] font-semibold text-[#3162cc]">
+                          <span>{isExpanded ? 'Thu gọn chi tiết' : 'Xem chi tiết phiên'}</span>
+                          <ChevronRight
+                            className={cn('size-3 transition-transform', isExpanded && 'rotate-90')}
+                          />
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t border-[#e2e9f3] px-3 py-2.5 text-[9px] leading-relaxed text-[#64748a]">
+                          Đã trả lời {item.answeredQuestions} lượt cho {item.totalQuestions} câu
+                          chính.{' '}
+                          {item.status === 'completed'
+                            ? 'Phiên đã hoàn tất.'
+                            : item.status === 'abandoned'
+                              ? 'Phiên đã bị hủy hoặc bỏ dở.'
+                              : 'Phiên vẫn đang được thực hiện.'}
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
             </div>
           </section>
 

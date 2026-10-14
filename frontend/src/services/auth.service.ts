@@ -1,153 +1,118 @@
 import apiClient from './api.client'
 import type {
-  GoogleLoginResponse,
-  LoginRequest,
+  GoogleLoginRequest,
   LoginResponse,
   ProblemDetails,
-  RefreshTokenResponse,
   User,
   UserRole,
 } from '@/types/auth.types'
-
-const ACCESS_TOKEN_KEY = 'access_token'
-const REFRESH_TOKEN_KEY = 'refresh_token'
-const USER_PROFILE_KEY = 'user_profile'
+import { clearPracticeRuntimes } from '@/utils/practiceSessionStorage'
 
 function normalizePortalRole(role: unknown): UserRole | null {
   if (role === 'Student' || role === 'student') return 'Student'
+  if (role === 'Instructor' || role === 'instructor' || role === 'lecturer') return 'Instructor'
   if (
-    role === 'Instructor' ||
-    role === 'instructor' ||
-    role === 'lecturer' ||
-    role === 'proctor'
+    role === 'DepartmentHead' ||
+    role === 'department_head' ||
+    role === 'Department_Head' ||
+    role === 'head'
   ) {
-    return 'Instructor'
+    return 'DepartmentHead'
   }
-  if (role === 'Admin' || role === 'admin' || role === 'department_head') return 'Admin'
+  if (role === 'Proctor' || role === 'proctor') return 'Proctor'
+  if (role === 'Admin' || role === 'admin') return 'Admin'
   return null
 }
 
 const LEGACY_DEV_USER_IDS: Record<string, string> = {
-  'usr-stu-01': '44444444-4444-4444-4444-444444444444',
+  'usr-stu-01': '00000000-0000-0000-0000-000000000005',
+  '44444444-4444-4444-4444-444444444444': '00000000-0000-0000-0000-000000000005',
   'usr-ins-01': '22222222-2222-2222-2222-222222222222',
   'usr-adm-01': '11111111-1111-1111-1111-111111111111',
 }
 
-function persistSession(accessToken: string, refreshToken: string, user: User) {
-  sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
-  sessionStorage.setItem(USER_PROFILE_KEY, JSON.stringify(user))
+function normalizeResponse(data: LoginResponse): LoginResponse {
+  const role = normalizePortalRole(data.user?.role)
+  if (!data.accessToken || !data.refreshToken || !data.user || !role) {
+    throw {
+      status: 502,
+      title: 'Phản hồi đăng nhập không hợp lệ',
+      detail: 'Backend không trả về đủ token hoặc vai trò người dùng được hỗ trợ.',
+    } satisfies ProblemDetails
+  }
+
+  return { ...data, user: { ...data.user, role } }
 }
 
-function clearSession() {
-  sessionStorage.removeItem(ACCESS_TOKEN_KEY)
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY)
-  sessionStorage.removeItem(USER_PROFILE_KEY)
+function persistSession(data: LoginResponse): LoginResponse {
+  const normalized = normalizeResponse(data)
+  clearPracticeRuntimes()
+  sessionStorage.setItem('access_token', normalized.accessToken)
+  sessionStorage.setItem('refresh_token', normalized.refreshToken)
+  sessionStorage.setItem('user_profile', JSON.stringify(normalized.user))
+  return normalized
 }
 
 export const authService = {
-  /**
-   * Authenticate with email & password
-   */
-  async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await apiClient.post<LoginResponse>('/auth/login', credentials)
-    const role = normalizePortalRole(response.data.user?.role)
-    if (!response.data.accessToken || !response.data.user || !role) {
-      throw {
-        status: 502,
-        title: 'Phản hồi đăng nhập không hợp lệ',
-        detail: 'Backend không trả về phiên đăng nhập hoặc vai trò được cổng hiện tại hỗ trợ.',
-      } satisfies ProblemDetails
-    }
-
-    const user: User = { ...response.data.user, role }
-    const data: LoginResponse = { ...response.data, user }
-    if (data.refreshToken) {
-      persistSession(data.accessToken, data.refreshToken, user)
-    } else {
-      sessionStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
-      sessionStorage.setItem(USER_PROFILE_KEY, JSON.stringify(user))
-    }
-    return data
+  async googleLogin(request: GoogleLoginRequest): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>('/auth/google-login', request)
+    return persistSession(response.data)
   },
 
-  /**
-   * Exchange a Google ID token for an application session.
-   */
-  async loginWithGoogle(idToken: string): Promise<GoogleLoginResponse & { user: User }> {
-    const response = await apiClient.post<GoogleLoginResponse>('/auth/google-login', { idToken })
-    const role = normalizePortalRole(response.data.user?.role)
-    if (!response.data.accessToken || !response.data.refreshToken || !response.data.user || !role) {
-      throw {
-        status: 502,
-        title: 'Phản hồi đăng nhập không hợp lệ',
-        detail: 'Backend không trả về phiên đăng nhập hoặc vai trò được cổng hiện tại hỗ trợ.',
-      } satisfies ProblemDetails
-    }
+  async refreshToken(): Promise<LoginResponse> {
+    const refreshToken = sessionStorage.getItem('refresh_token')
+    if (!refreshToken) throw new Error('Không có refresh token')
 
-    const user: User = {
-      id: response.data.user.id,
-      email: response.data.user.email,
-      fullName: response.data.user.fullName,
-      role,
-      studentCode: response.data.user.studentCode ?? undefined,
-    }
-    persistSession(response.data.accessToken, response.data.refreshToken, user)
-    return { ...response.data, user }
-  },
-
-  /**
-   * Rotate the refresh token and store the new pair.
-   */
-  async refreshAccessToken(): Promise<RefreshTokenResponse> {
-    const currentRefreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY)
-    if (!currentRefreshToken) {
-      throw {
-        status: 401,
-        title: 'Token không hợp lệ.',
-        detail: 'Không có refresh token để làm mới phiên đăng nhập.',
-      } satisfies ProblemDetails
-    }
-
-    const response = await apiClient.post<RefreshTokenResponse>('/auth/refresh-token', {
-      refreshToken: currentRefreshToken,
-    })
+    const response = await apiClient.post<
+      Pick<LoginResponse, 'accessToken' | 'refreshToken' | 'tokenType' | 'expiresIn'>
+    >('/auth/refresh-token', { refreshToken }, { _skipAuthRefresh: true })
 
     if (!response.data.accessToken || !response.data.refreshToken) {
-      throw {
-        status: 502,
-        title: 'Phản hồi làm mới phiên không hợp lệ',
-        detail: 'Backend không trả về cặp token mới.',
-      } satisfies ProblemDetails
+      throw new Error('Backend không trả về token mới hợp lệ')
     }
 
-    sessionStorage.setItem(ACCESS_TOKEN_KEY, response.data.accessToken)
-    sessionStorage.setItem(REFRESH_TOKEN_KEY, response.data.refreshToken)
-    return response.data
+    const user = this.getCurrentUser()
+    if (!user) throw new Error('Không có hồ sơ người dùng')
+    return persistSession({ ...response.data, user })
   },
 
-  /**
-   * Revoke the refresh token on the server, then clear the local session.
-   */
+  // Giữ tên tương thích với các interceptor hoặc màn hình tích hợp ở nhánh develop.
+  async refreshAccessToken(): Promise<
+    Pick<LoginResponse, 'accessToken' | 'refreshToken' | 'tokenType' | 'expiresIn'>
+  > {
+    const data = await this.refreshToken()
+    return {
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      tokenType: data.tokenType,
+      expiresIn: data.expiresIn,
+    }
+  },
+
   async logout(): Promise<void> {
-    const refreshToken = sessionStorage.getItem(REFRESH_TOKEN_KEY)
+    const refreshToken = sessionStorage.getItem('refresh_token')
     try {
       if (refreshToken) {
-        await apiClient.post('/auth/sign-out', { refreshToken })
+        await apiClient.post('/auth/sign-out', { refreshToken }, { _skipAuthRefresh: true })
       }
     } catch {
-      // Local session is cleared even when the network call fails.
+      // Luôn xoá phiên cục bộ kể cả khi máy chủ không còn khả dụng.
     } finally {
-      clearSession()
+      this.clearSession()
     }
   },
 
-  /**
-   * Get cached user profile from session
-   */
+  clearSession(): void {
+    clearPracticeRuntimes()
+    sessionStorage.removeItem('access_token')
+    sessionStorage.removeItem('refresh_token')
+    sessionStorage.removeItem('user_profile')
+  },
+
   getCurrentUser(): User | null {
-    const userStr = sessionStorage.getItem(USER_PROFILE_KEY)
+    const userStr = sessionStorage.getItem('user_profile')
     if (!userStr) return null
+
     try {
       const parsed = JSON.parse(userStr) as Partial<User> & { role?: unknown }
       const role = normalizePortalRole(parsed.role)
@@ -165,7 +130,7 @@ export const authService = {
         : parsed.id
       const user: User = { ...parsed, id: migratedId, role } as User
       if (migratedId !== parsed.id || role !== parsed.role) {
-        sessionStorage.setItem(USER_PROFILE_KEY, JSON.stringify(user))
+        sessionStorage.setItem('user_profile', JSON.stringify(user))
       }
       return user
     } catch {
@@ -173,10 +138,7 @@ export const authService = {
     }
   },
 
-  /**
-   * Get raw access token
-   */
   getToken(): string | null {
-    return sessionStorage.getItem(ACCESS_TOKEN_KEY)
+    return sessionStorage.getItem('access_token')
   },
 }

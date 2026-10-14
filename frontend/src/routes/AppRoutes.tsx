@@ -72,8 +72,8 @@ export const AppRoutes: React.FC = () => {
           </Route>
         </Route>
 
-        {/* Instructor and Admin Portal */}
-        <Route element={<ProtectedRoute allowedRoles={['Instructor', 'Admin']} />}>
+        {/* Instructor, Department Head and Admin portal. Proctor has no standalone portal. */}
+        <Route element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}>
           <Route element={<AppLayout />}>
             <Route
               element={

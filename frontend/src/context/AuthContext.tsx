@@ -1,5 +1,5 @@
-import React, { useState, type ReactNode } from 'react'
-import type { LoginRequest, User, UserRole } from '@/types/auth.types'
+import React, { useCallback, useEffect, useState, type ReactNode } from 'react'
+import type { User, UserRole } from '@/types/auth.types'
 import { authService } from '@/services/auth.service'
 import { AuthContext } from '@/context/auth-context'
 
@@ -19,15 +19,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [authState, setAuthState] = useState<AuthState>(getInitialAuthState)
   const { user, token } = authState
 
-  const login = async (credentials: LoginRequest) => {
-    const data = await authService.login(credentials)
-    setAuthState({ user: data.user, token: data.accessToken })
-  }
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      authService.clearSession()
+      setAuthState({ user: null, token: null })
+    }
 
-  const loginWithGoogle = async (idToken: string) => {
-    const data = await authService.loginWithGoogle(idToken)
+    window.addEventListener('auth:session-expired', handleSessionExpired)
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired)
+  }, [])
+
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const data = await authService.googleLogin({ idToken })
     setAuthState({ user: data.user, token: data.accessToken })
-  }
+  }, [])
 
   const logout = async () => {
     await authService.logout()
@@ -41,6 +46,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isStudent = user?.role === 'Student'
   const isInstructor = user?.role === 'Instructor'
+  const isDepartmentHead = user?.role === 'DepartmentHead'
+  const isProctor = user?.role === 'Proctor'
   const isAdmin = user?.role === 'Admin'
   const isAuthenticated = !!token && !!user
 
@@ -52,8 +59,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAuthenticated,
         isStudent,
         isInstructor,
+        isDepartmentHead,
+        isProctor,
         isAdmin,
-        login,
         loginWithGoogle,
         logout,
         hasRole,

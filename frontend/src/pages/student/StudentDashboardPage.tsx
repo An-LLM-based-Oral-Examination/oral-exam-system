@@ -50,7 +50,6 @@ interface OverviewStat {
   iconClassName: string
   trend?: string
 }
-
 interface RecentActivity {
   id: string
   type: 'practice' | 'mock' | 'guided'
@@ -197,7 +196,9 @@ function buildRecentActivities(history: PracticeHistoryItem[], now: Date): Recen
       ),
       score: item.averageScore,
       icon: ACTIVITY_ICONS[index % ACTIVITY_ICONS.length],
-      destination: inProgress ? '/practice' : '/results',
+      destination: inProgress
+        ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
+        : '/results',
     }
   })
 }
@@ -258,9 +259,10 @@ export function StudentDashboardPage() {
         return
       }
 
-      if (coursesResult.status === 'rejected' || historyResult.status === 'rejected') {
-        const reason = coursesResult.status === 'rejected' ? coursesResult.reason : historyResult.reason
-        setLoadError(getLoadErrorMessage(reason))
+      if (coursesResult.status === 'rejected') {
+        setLoadError(getLoadErrorMessage(coursesResult.reason))
+      } else if (historyResult.status === 'rejected') {
+        setLoadError(getLoadErrorMessage(historyResult.reason))
       }
 
       const quotaResults = await Promise.all(
