@@ -1,8 +1,10 @@
+using Microsoft.EntityFrameworkCore;
 using OralExamination.API.Configuration;
 using OralExamination.API.Middlewares;
 using OralExamination.Application;
 using OralExamination.Infrastructure;
 using OralExamination.Infrastructure.Authentication;
+using OralExamination.Infrastructure.Persistence;
 
 DotEnvLoader.Load();
 
@@ -60,4 +62,47 @@ app.MapGet("/health", () => Results.Ok(new
 .WithName("GetHealthStatus")
 .WithOpenApi();
 
+await ApplyMigrationsAsync(app);
+
 app.Run();
+
+static async Task ApplyMigrationsAsync(WebApplication app)
+{
+    const int maxAttempts = 5;
+    var delay = TimeSpan.FromSeconds(2);
+    var logger = app.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DatabaseMigration");
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+
+            if (!context.Database.IsRelational())
+            {
+                return;
+            }
+
+            logger.LogInformation(
+                "Applying EF Core migrations (attempt {Attempt}/{MaxAttempts}).",
+                attempt,
+                maxAttempts);
+
+            await context.Database.MigrateAsync();
+
+            logger.LogInformation("EF Core migrations applied.");
+            return;
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            logger.LogWarning(
+                ex,
+                "Database is not ready. Retrying in {DelaySeconds} seconds.",
+                delay.TotalSeconds);
+
+            await Task.Delay(delay);
+        }
+    }
+}

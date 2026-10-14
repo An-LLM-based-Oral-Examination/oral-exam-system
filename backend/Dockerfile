@@ -44,7 +44,7 @@ USER appuser
 EXPOSE 5000
 
 # Healthcheck endpoint kiểm tra /health định kỳ qua wget của BusyBox
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
 
 ENTRYPOINT ["dotnet", "OralExamination.API.dll"]
