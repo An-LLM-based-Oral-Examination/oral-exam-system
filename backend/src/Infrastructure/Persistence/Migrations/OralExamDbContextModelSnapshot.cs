@@ -217,6 +217,21 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_appeal_requests_status");
 
                     b.ToTable("appeal_requests", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000026"),
+                            AssignedTo = new Guid("00000000-0000-0000-0000-000000000003"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            OriginalScore = 7.50m,
+                            Reason = "Em xin phúc khảo phần phát biểu về nguyên lý Dependency Inversion bị ồn mic",
+                            SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
+                            Status = "PENDING",
+                            StudentId = new Guid("00000000-0000-0000-0000-000000000005"),
+                            TicketId = new Guid("00000000-0000-0000-0000-000000000024"),
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AuditLog", b =>
@@ -508,6 +523,20 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Name = "Building Cross-Platform Back-End Applications with .NET",
                             SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
                             TranscriptBufferSeconds = 60
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000009"),
+                            Code = "SWD392",
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Credits = 3,
+                            ExamInputMode = "VoiceWithTranscriptEdit",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            MaxFollowUpQuestions = 2,
+                            Name = "Software Architecture and Design",
+                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
+                            TranscriptBufferSeconds = 60
                         });
                 });
 
@@ -679,6 +708,25 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_exam_questions_course");
 
                     b.ToTable("exam_questions", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000020"),
+                            ApprovalStatus = "APPROVED",
+                            ApprovedBy = new Guid("00000000-0000-0000-0000-000000000002"),
+                            BloomLevel = "Analyze",
+                            Content = "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "hard",
+                            IsActive = true,
+                            KeyPoints = "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.",
+                            Source = "manual",
+                            Title = "Phân biệt BackgroundService và IHostedService trong .NET 8"
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestionSubmission", b =>
@@ -802,6 +850,17 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_exam_sets_structure");
 
                     b.ToTable("exam_sets", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000019"),
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            SetCode = "PRN231-SET01",
+                            StructureId = new Guid("00000000-0000-0000-0000-000000000018")
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetQuestion", b =>
@@ -839,6 +898,15 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("uq_exam_set_questions");
 
                     b.ToTable("exam_set_questions", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000021"),
+                            ExamQuestionId = new Guid("00000000-0000-0000-0000-000000000020"),
+                            ExamSetId = new Guid("00000000-0000-0000-0000-000000000019"),
+                            OrderIndex = 1
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
@@ -903,6 +971,20 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_exam_structures_created_by");
 
                     b.ToTable("exam_structures", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000018"),
+                            BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = new Guid("00000000-0000-0000-0000-000000000003"),
+                            DurationMinutes = 30,
+                            IsActive = true,
+                            Name = "Cấu trúc Đề thi Vấn đáp Cuối kỳ PRN231 (FA26)",
+                            TotalQuestions = 5
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAudit", b =>
@@ -1248,6 +1330,22 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_official_exam_sessions_structure");
 
                     b.ToTable("official_exam_sessions", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000022"),
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ExamDate = new DateOnly(2026, 10, 15),
+                            ExamInputMode = "VoiceWithTranscriptEdit",
+                            ExamStructureId = new Guid("00000000-0000-0000-0000-000000000018"),
+                            HasFollowUp = true,
+                            MaxFollowUpQuestions = 2,
+                            Status = "scheduled",
+                            Title = "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng",
+                            TranscriptBufferSeconds = 60
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
@@ -1406,17 +1504,98 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000017"),
-                            BloomLevel = "Understand",
+                            BloomLevel = "Apply",
                             Content = "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.",
                             CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
                             CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Difficulty = "medium",
-                            HasFollowUp = false,
+                            FollowUpPrompt = "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?",
+                            HasFollowUp = true,
                             IsActive = true,
-                            KeyPoints = "[]",
+                            KeyPoints = "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]",
                             RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
                             SampleAnswer = "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.",
                             Title = "Nguyên lý Dependency Inversion"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000101"),
+                            BloomLevel = "Understand",
+                            Content = "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "easy",
+                            FollowUpPrompt = "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            KeyPoints = "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.",
+                            Title = "Vai trò tầng Domain trong Clean Architecture"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000102"),
+                            BloomLevel = "Understand",
+                            Content = "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "easy",
+                            FollowUpPrompt = "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            KeyPoints = "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.",
+                            Title = "Phân biệt Command và Query trong mẫu CQRS"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000103"),
+                            BloomLevel = "Apply",
+                            Content = "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "medium",
+                            FollowUpPrompt = "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            KeyPoints = "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.",
+                            Title = "Cơ chế Pipeline Behavior với FluentValidation"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000104"),
+                            BloomLevel = "Analyze",
+                            Content = "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "hard",
+                            FollowUpPrompt = "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            KeyPoints = "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.",
+                            Title = "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000105"),
+                            BloomLevel = "Analyze",
+                            Content = "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.",
+                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Difficulty = "hard",
+                            FollowUpPrompt = "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?",
+                            HasFollowUp = true,
+                            IsActive = true,
+                            KeyPoints = "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]",
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            SampleAnswer = "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).",
+                            Title = "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query"
                         });
                 });
 
@@ -1548,6 +1727,20 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_real_exam_shifts_session");
 
                     b.ToTable("real_exam_session_shifts", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000023"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            EndTime = new DateTime(2026, 10, 15, 2, 30, 0, 0, DateTimeKind.Utc),
+                            ProctorUserId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            RoomLab = "Lab 301",
+                            SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
+                            ShiftName = "Kíp 1 (08h00 - 09h30)",
+                            StartTime = new DateTime(2026, 10, 15, 1, 0, 0, 0, DateTimeKind.Utc),
+                            Status = "scheduled"
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RefreshToken", b =>
@@ -1715,6 +1908,44 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_rubric_criteria_rubric");
 
                     b.ToTable("rubric_criteria", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000014"),
+                            BloomLevel = "Understand",
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CriterionName = "Khái niệm & Ranh giới 4 tầng Clean Architecture",
+                            Description = "Hiểu rõ vai trò Domain, Application, Infrastructure, API. Domain không phụ thuộc tầng nào.",
+                            MaxScore = 3.00m,
+                            OrderIndex = 1,
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            Weight = 0.30m
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000015"),
+                            BloomLevel = "Apply",
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CriterionName = "Nguyên lý Dependency Inversion & CQRS MediatR",
+                            Description = "Áp dụng tách biệt Command và Query, sử dụng Interface và Dependency Injection Container.",
+                            MaxScore = 4.00m,
+                            OrderIndex = 2,
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            Weight = 0.40m
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000016"),
+                            BloomLevel = "Analyze",
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CriterionName = "Xử lý Ngoại lệ & Kiến trúc chịu lỗi (Resilience)",
+                            Description = "Trình bày cơ chế Global Exception RFC 7807, Bounded Channel và xử lý retry Polly.",
+                            MaxScore = 3.00m,
+                            OrderIndex = 3,
+                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
+                            Weight = 0.30m
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Semester", b =>
@@ -1851,6 +2082,32 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("uq_tickets_student");
 
                     b.ToTable("student_exam_tickets", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000024"),
+                            CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ExamSetId = new Guid("00000000-0000-0000-0000-000000000019"),
+                            IpAddress = "192.168.1.101",
+                            IsLocked = false,
+                            SeatNumber = 1,
+                            ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
+                            Status = "SCHEDULED",
+                            StudentId = new Guid("00000000-0000-0000-0000-000000000005")
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000025"),
+                            CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ExamSetId = new Guid("00000000-0000-0000-0000-000000000019"),
+                            IpAddress = "192.168.1.102",
+                            IsLocked = false,
+                            SeatNumber = 2,
+                            ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
+                            Status = "SCHEDULED",
+                            StudentId = new Guid("00000000-0000-0000-0000-000000000006")
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.SystemConfig", b =>
@@ -2018,12 +2275,32 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            Id = new Guid("00000000-0000-0000-0000-000000000002"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "headse@fe.edu.vn",
+                            FullName = "Tran Van Truong",
+                            IsActive = true,
+                            Role = "department_head",
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Id = new Guid("00000000-0000-0000-0000-000000000003"),
                             CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "totnt@fe.edu.vn",
                             FullName = "Nguyen Trong Tot",
                             IsActive = true,
                             Role = "lecturer",
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000004"),
+                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "haind@fe.edu.vn",
+                            FullName = "Nguyen Dang Hai",
+                            IsActive = true,
+                            Role = "proctor",
                             UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new

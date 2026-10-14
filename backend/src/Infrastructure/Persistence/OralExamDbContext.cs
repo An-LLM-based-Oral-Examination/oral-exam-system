@@ -76,10 +76,30 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 },
                 new User
                 {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                    Email = "headse@fe.edu.vn",
+                    FullName = "Tran Van Truong",
+                    Role = "department_head",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
                     Email = "totnt@fe.edu.vn",
                     FullName = "Nguyen Trong Tot",
                     Role = "lecturer",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000004"),
+                    Email = "haind@fe.edu.vn",
+                    FullName = "Nguyen Dang Hai",
+                    Role = "proctor",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
                     UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
@@ -183,20 +203,35 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.SemesterId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasData(new Course
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000008"),
-                Code = "PRN231",
-                Name = "Building Cross-Platform Back-End Applications with .NET",
-                Credits = 3,
-                SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
-                HasFollowUp = true,
-                TranscriptBufferSeconds = 60,
-                MaxFollowUpQuestions = 2,
-                ExamInputMode = "VoiceWithTranscriptEdit",
-                IsActive = true,
-                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+            entity.HasData(
+                new Course
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    Code = "PRN231",
+                    Name = "Building Cross-Platform Back-End Applications with .NET",
+                    Credits = 3,
+                    SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    HasFollowUp = true,
+                    TranscriptBufferSeconds = 60,
+                    MaxFollowUpQuestions = 2,
+                    ExamInputMode = "VoiceWithTranscriptEdit",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new Course
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000009"),
+                    Code = "SWD392",
+                    Name = "Software Architecture and Design",
+                    Credits = 3,
+                    SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    HasFollowUp = true,
+                    TranscriptBufferSeconds = 60,
+                    MaxFollowUpQuestions = 2,
+                    ExamInputMode = "VoiceWithTranscriptEdit",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 4. classes
@@ -338,6 +373,44 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.Criteria)
                 .HasForeignKey(d => d.RubricId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasData(
+                new RubricCriterion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000014"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    CriterionName = "Khái niệm & Ranh giới 4 tầng Clean Architecture",
+                    Description = "Hiểu rõ vai trò Domain, Application, Infrastructure, API. Domain không phụ thuộc tầng nào.",
+                    MaxScore = 3.00m,
+                    Weight = 0.30m,
+                    BloomLevel = "Understand",
+                    OrderIndex = 1,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new RubricCriterion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000015"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    CriterionName = "Nguyên lý Dependency Inversion & CQRS MediatR",
+                    Description = "Áp dụng tách biệt Command và Query, sử dụng Interface và Dependency Injection Container.",
+                    MaxScore = 4.00m,
+                    Weight = 0.40m,
+                    BloomLevel = "Apply",
+                    OrderIndex = 2,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new RubricCriterion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000016"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    CriterionName = "Xử lý Ngoại lệ & Kiến trúc chịu lỗi (Resilience)",
+                    Description = "Trình bày cơ chế Global Exception RFC 7807, Bounded Channel và xử lý retry Polly.",
+                    MaxScore = 3.00m,
+                    Weight = 0.30m,
+                    BloomLevel = "Analyze",
+                    OrderIndex = 3,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 8. practice_questions
@@ -371,21 +444,103 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.RubricId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasData(new PracticeQuestion
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000017"),
-                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
-                RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
-                Title = "Nguyên lý Dependency Inversion",
-                Content = "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.",
-                SampleAnswer = "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.",
-                KeyPoints = "[]",
-                Difficulty = "medium",
-                BloomLevel = "Understand",
-                HasFollowUp = false,
-                IsActive = true,
-                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+            entity.HasData(
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000017"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Nguyên lý Dependency Inversion",
+                    Content = "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.",
+                    SampleAnswer = "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.",
+                    KeyPoints = "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]",
+                    Difficulty = "medium",
+                    BloomLevel = "Apply",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000101"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Vai trò tầng Domain trong Clean Architecture",
+                    Content = "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
+                    SampleAnswer = "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.",
+                    KeyPoints = "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]",
+                    Difficulty = "easy",
+                    BloomLevel = "Understand",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000102"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Phân biệt Command và Query trong mẫu CQRS",
+                    Content = "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.",
+                    SampleAnswer = "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.",
+                    KeyPoints = "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]",
+                    Difficulty = "easy",
+                    BloomLevel = "Understand",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000103"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Cơ chế Pipeline Behavior với FluentValidation",
+                    Content = "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?",
+                    SampleAnswer = "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.",
+                    KeyPoints = "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]",
+                    Difficulty = "medium",
+                    BloomLevel = "Apply",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000104"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue",
+                    Content = "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.",
+                    SampleAnswer = "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.",
+                    KeyPoints = "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]",
+                    Difficulty = "hard",
+                    BloomLevel = "Analyze",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new PracticeQuestion
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000105"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                    Title = "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query",
+                    Content = "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.",
+                    SampleAnswer = "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).",
+                    KeyPoints = "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]",
+                    Difficulty = "hard",
+                    BloomLevel = "Analyze",
+                    HasFollowUp = true,
+                    FollowUpPrompt = "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 9. exam_questions
@@ -434,6 +589,24 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany()
                 .HasForeignKey(d => d.SubmittedBy)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new ExamQuestion
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000020"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                RubricId = Guid.Parse("00000000-0000-0000-0000-000000000013"),
+                Title = "Phân biệt BackgroundService và IHostedService trong .NET 8",
+                Content = "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?",
+                SampleAnswer = "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.",
+                KeyPoints = "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]",
+                Difficulty = "hard",
+                BloomLevel = "Analyze",
+                ApprovedBy = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                Source = "manual",
+                ApprovalStatus = "APPROVED",
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 10. practice_sessions
@@ -583,6 +756,19 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.CreatedExamStructures)
                 .HasForeignKey(d => d.CreatedBy)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(new ExamStructure
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000018"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                CreatedBy = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                Name = "Cấu trúc Đề thi Vấn đáp Cuối kỳ PRN231 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 30,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 15. exam_sets
@@ -608,6 +794,16 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.ExamSets)
                 .HasForeignKey(d => d.CourseId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasData(new ExamSet
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000019"),
+                StructureId = Guid.Parse("00000000-0000-0000-0000-000000000018"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                SetCode = "PRN231-SET01",
+                GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                IsActive = true
+            });
         });
 
         // 16. exam_set_questions
@@ -632,6 +828,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.ExamSetQuestions)
                 .HasForeignKey(d => d.ExamQuestionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(new ExamSetQuestion
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000021"),
+                ExamSetId = Guid.Parse("00000000-0000-0000-0000-000000000019"),
+                ExamQuestionId = Guid.Parse("00000000-0000-0000-0000-000000000020"),
+                OrderIndex = 1
+            });
         });
 
         // 17. mock_exam_quotas
@@ -755,6 +959,21 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany()
                 .HasForeignKey(d => d.CreatedBy)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new OfficialExamSession
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                ExamStructureId = Guid.Parse("00000000-0000-0000-0000-000000000018"),
+                Title = "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng",
+                ExamDate = new DateOnly(2026, 10, 15),
+                HasFollowUp = true,
+                MaxFollowUpQuestions = 2,
+                ExamInputMode = "VoiceWithTranscriptEdit",
+                TranscriptBufferSeconds = 60,
+                Status = "scheduled",
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 21. real_exam_session_shifts
@@ -783,6 +1002,19 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.ProctoredShifts)
                 .HasForeignKey(d => d.ProctorUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new RealExamSessionShift
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000023"),
+                SessionId = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                ShiftName = "Kíp 1 (08h00 - 09h30)",
+                RoomLab = "Lab 301",
+                StartTime = new DateTime(2026, 10, 15, 1, 0, 0, DateTimeKind.Utc),
+                EndTime = new DateTime(2026, 10, 15, 2, 30, 0, DateTimeKind.Utc),
+                ProctorUserId = Guid.Parse("00000000-0000-0000-0000-000000000004"),
+                Status = "scheduled",
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 22. student_exam_tickets
@@ -820,6 +1052,32 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.StudentExamTickets)
                 .HasForeignKey(d => d.ExamSetId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(
+                new StudentExamTicket
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000024"),
+                    ShiftId = Guid.Parse("00000000-0000-0000-0000-000000000023"),
+                    StudentId = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                    ExamSetId = Guid.Parse("00000000-0000-0000-0000-000000000019"),
+                    SeatNumber = 1,
+                    IpAddress = "192.168.1.101",
+                    Status = "SCHEDULED",
+                    IsLocked = false,
+                    CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new StudentExamTicket
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000025"),
+                    ShiftId = Guid.Parse("00000000-0000-0000-0000-000000000023"),
+                    StudentId = Guid.Parse("00000000-0000-0000-0000-000000000006"),
+                    ExamSetId = Guid.Parse("00000000-0000-0000-0000-000000000019"),
+                    SeatNumber = 2,
+                    IpAddress = "192.168.1.102",
+                    Status = "SCHEDULED",
+                    IsLocked = false,
+                    CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
         });
 
         // 23. exam_question_submissions
@@ -1003,6 +1261,20 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany()
                 .HasForeignKey(d => d.ReviewedBy)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasData(new AppealRequest
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000026"),
+                TicketId = Guid.Parse("00000000-0000-0000-0000-000000000024"),
+                StudentId = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                SessionId = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                Reason = "Em xin phúc khảo phần phát biểu về nguyên lý Dependency Inversion bị ồn mic",
+                Status = "PENDING",
+                AssignedTo = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                OriginalScore = 7.50m,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
         // 29. system_configs

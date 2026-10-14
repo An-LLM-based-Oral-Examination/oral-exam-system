@@ -80,6 +80,11 @@ static async Task ApplyMigrationsAsync(WebApplication app)
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
 
+            if (!context.Database.IsRelational())
+            {
+                return;
+            }
+
             logger.LogInformation(
                 "Applying EF Core migrations (attempt {Attempt}/{MaxAttempts}).",
                 attempt,
