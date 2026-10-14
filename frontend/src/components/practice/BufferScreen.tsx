@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Clock, CheckCircle, Edit3 } from 'lucide-react'
@@ -6,82 +6,304 @@ import { Clock, CheckCircle, Edit3 } from 'lucide-react'
 interface BufferScreenProps {
   initialTranscript: string
   durationSeconds?: number
+  deadlineTimestamp?: number | null
   onConfirmSubmit: (finalText: string) => void
-  onCancel?: () => void
+  onTranscriptChange?: (text: string) => void
+  onCancel?: (currentTranscript: string) => void
+  isSubmitting?: boolean
+  errorMessage?: string
 }
 
 export const BufferScreen: React.FC<BufferScreenProps> = ({
   initialTranscript,
-  durationSeconds = 30,
+  durationSeconds = 60,
+  deadlineTimestamp = null,
   onConfirmSubmit,
+  onTranscriptChange,
   onCancel,
+  isSubmitting = false,
+  errorMessage,
 }) => {
-  const [timeLeft, setTimeLeft] = useState(durationSeconds)
+  const safeDuration = Math.min(300, Math.max(10, Math.round(durationSeconds)))
+  const getTimeLeft = useCallback(
+    () =>
+      deadlineTimestamp === null
+        ? safeDuration
+        : Math.max(0, Math.ceil((deadlineTimestamp - Date.now()) / 1_000)),
+    [deadlineTimestamp, safeDuration],
+  )
+  const [timeLeft, setTimeLeft] = useState(getTimeLeft)
   const [transcript, setTranscript] = useState(initialTranscript)
+  const [validationMessage, setValidationMessage] = useState('')
+  const hasSubmittedRef = useRef(false)
+  const hasReachedDeadlineRef = useRef(false)
+  const transcriptRef = useRef(initialTranscript)
+  const isSubmittingRef = useRef(isSubmitting)
+  const onConfirmSubmitRef = useRef(onConfirmSubmit)
+  const transcriptElementRef = useRef<HTMLTextAreaElement>(null)
+  const dialogContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting
+    onConfirmSubmitRef.current = onConfirmSubmit
+  }, [isSubmitting, onConfirmSubmit])
+
+  useEffect(() => {
+    if (errorMessage) hasSubmittedRef.current = false
+  }, [errorMessage])
+
+  useEffect(() => {
+    const previouslyFocusedElement =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    transcriptElementRef.current?.focus()
+
+    const handleDialogKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onCancel && !isSubmittingRef.current) {
+        onCancel(transcriptRef.current)
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const focusableElements = Array.from(
+        dialogContainerRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.getAttribute('aria-hidden') !== 'true')
+
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        dialogContainerRef.current?.focus()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+    window.addEventListener('keydown', handleDialogKeyboard)
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeyboard)
+      document.body.style.overflow = previousBodyOverflow
+      previouslyFocusedElement?.focus()
+    }
+  }, [onCancel])
+
+  const handleConfirm = useCallback(() => {
+    const finalText = transcriptRef.current.trim()
+    if (finalText.length < 10) {
+      setValidationMessage('Câu trả lời cần ít nhất 10 ký tự trước khi nộp.')
+      return
+    }
+    if (hasSubmittedRef.current || isSubmittingRef.current) return
+
+    hasSubmittedRef.current = true
+    setValidationMessage('')
+    onConfirmSubmitRef.current(finalText)
+  }, [])
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      onConfirmSubmit(transcript)
-      return
+      if (!hasReachedDeadlineRef.current) {
+        hasReachedDeadlineRef.current = true
+        handleConfirm()
+      }
+      return undefined
     }
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1)
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [timeLeft, transcript, onConfirmSubmit])
+    const timer = window.setTimeout(
+      () => setTimeLeft(deadlineTimestamp === null ? (current) => current - 1 : getTimeLeft()),
+      1_000,
+    )
+    return () => window.clearTimeout(timer)
+  }, [deadlineTimestamp, getTimeLeft, handleConfirm, timeLeft])
 
-  const progressPercent = Math.max(0, (timeLeft / durationSeconds) * 100)
+  const progressPercent = Math.max(0, (timeLeft / safeDuration) * 100)
+  const minutes = Math.floor(timeLeft / 60)
+  const seconds = timeLeft % 60
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <Card className="w-full max-w-2xl border-orange-500/20 shadow-2xl">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-orange-600">
-              <Edit3 className="h-5 w-5" />
-              <CardTitle>Màn Hình Đệm Rà Soát (Buffer Screen - 30s)</CardTitle>
+    <div
+      ref={dialogContainerRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#06152d]/76 p-3 backdrop-blur-md outline-none sm:p-6"
+    >
+      <div
+        className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(115,181,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(115,181,255,0.12)_1px,transparent_1px)] [background-size:32px_32px] opacity-30"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute top-[-12rem] right-[-10rem] size-[30rem] rounded-full bg-[#2e6dff]/20 blur-3xl"
+        aria-hidden="true"
+      />
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="buffer-screen-title"
+        aria-describedby="buffer-screen-description"
+        className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[22px] border border-white/70 bg-white shadow-[0_32px_90px_rgba(2,18,45,0.34)] sm:max-h-[calc(100dvh-3rem)]"
+      >
+        <CardHeader className="shrink-0 space-y-0 border-b border-[#e7edf6] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_100%)] p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#245eea] text-white shadow-[0_8px_20px_rgba(36,94,234,0.24)] sm:size-11">
+                <Edit3 className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold tracking-[0.1em] text-[#52709c] uppercase">
+                  Rà soát trước khi nộp
+                </p>
+                <CardTitle
+                  id="buffer-screen-title"
+                  className="mt-1 text-lg leading-tight font-bold text-[#12213b] sm:text-xl"
+                >
+                  Hiệu đính bản trả lời
+                </CardTitle>
+                <p
+                  id="buffer-screen-description"
+                  className="mt-1.5 max-w-xl text-xs leading-relaxed text-[#62738c] sm:text-[13px]"
+                >
+                  Kiểm tra nội dung lần cuối trước khi hệ thống tự động nộp câu trả lời khi hết thời
+                  gian.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center space-x-1.5 rounded-md bg-orange-50 px-2.5 py-1 font-mono text-sm font-bold text-orange-600 dark:bg-orange-950/50">
-              <Clock className="h-4 w-4 animate-pulse" />
-              <span>00:{timeLeft < 10 ? `0${timeLeft}` : timeLeft}</span>
+
+            <div
+              role="timer"
+              aria-label={`Còn ${minutes} phút ${seconds} giây để hiệu đính`}
+              className={`flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border px-3.5 font-mono text-sm font-black tabular-nums shadow-sm sm:min-w-28 ${
+                timeLeft <= 10
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : timeLeft <= safeDuration / 3
+                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                    : 'border-[#cddcff] bg-white text-[#245eea]'
+              }`}
+            >
+              <Clock
+                className="size-4 animate-pulse motion-reduce:animate-none"
+                aria-hidden="true"
+              />
+              <span aria-hidden="true">
+                {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+              </span>
             </div>
           </div>
-          {/* Progress bar */}
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+
+          <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-[#dce6f5]">
             <div
-              className="h-full bg-orange-600 transition-all duration-1000 ease-linear"
+              role="progressbar"
+              aria-label="Thời gian hiệu đính bản trả lời còn lại"
+              aria-valuemin={0}
+              aria-valuemax={safeDuration}
+              aria-valuenow={timeLeft}
+              aria-valuetext={`Còn ${minutes} phút ${seconds} giây`}
+              className={`h-full rounded-full transition-[width] duration-1000 ease-linear motion-reduce:transition-none ${
+                timeLeft <= 10
+                  ? 'bg-rose-500'
+                  : timeLeft <= safeDuration / 3
+                    ? 'bg-amber-500'
+                    : 'bg-[linear-gradient(90deg,#245eea,#43bde8)]'
+              }`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Bạn có 30 giây để sửa lỗi nhận diện thuật ngữ tiếng Anh chuyên ngành (Code-Switching)
-            trước khi hệ thống nộp bài lên AI.
-          </p>
         </CardHeader>
 
-        <CardContent className="space-y-3">
-          <label className="text-xs font-semibold text-slate-600 uppercase dark:text-slate-400">
-            Nội dung câu trả lời bóc băng:
-          </label>
-          <textarea
-            className="h-44 w-full rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Nội dung câu trả lời..."
-          />
+        <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-white p-4 sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <label
+                htmlFor="practice-transcript-editor"
+                className="text-xs font-bold text-[#273953] sm:text-[13px]"
+              >
+                Bản trả lời của bạn
+              </label>
+              <p className="mt-1 text-[11px] leading-relaxed text-[#78879a]">
+                Bạn có thể sửa lỗi phiên âm hoặc lỗi nhập liệu trước khi xác nhận nộp.
+              </p>
+            </div>
+            <span className="shrink-0 text-[11px] font-semibold text-[#8794a6]" aria-live="polite">
+              {transcript.trim().length} ký tự
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-[#dce5f2] bg-[#f8faff] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus-within:border-[#7fa4ff] focus-within:ring-3 focus-within:ring-[#245eea]/10">
+            <textarea
+              ref={transcriptElementRef}
+              id="practice-transcript-editor"
+              aria-invalid={Boolean(validationMessage || errorMessage)}
+              aria-describedby={
+                validationMessage || errorMessage
+                  ? 'practice-transcript-help practice-transcript-error'
+                  : 'practice-transcript-help'
+              }
+              className="min-h-44 w-full resize-y rounded-xl border-0 bg-white p-3.5 text-sm leading-6 text-[#24344c] shadow-sm outline-none placeholder:text-[#a1adbd] disabled:cursor-wait disabled:bg-[#f6f8fb] sm:min-h-56 sm:p-4"
+              value={transcript}
+              onChange={(event) => {
+                setTranscript(event.target.value)
+                transcriptRef.current = event.target.value
+                onTranscriptChange?.(event.target.value)
+                setValidationMessage('')
+                hasSubmittedRef.current = false
+              }}
+              placeholder="Nội dung câu trả lời…"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div
+            id="practice-transcript-help"
+            className="flex items-start gap-2.5 rounded-xl border border-[#d8e5f8] bg-[#f3f7ff] px-3.5 py-3 text-[11px] leading-relaxed text-[#536a8a]"
+          >
+            <CheckCircle className="mt-0.5 size-4 shrink-0 text-[#245eea]" aria-hidden="true" />
+            <span>
+              Hãy chú ý tên công nghệ, từ viết tắt và thuật ngữ tiếng Anh. Hệ thống chỉ lưu nội dung
+              văn bản cuối cùng trong phiên luyện tập.
+            </span>
+          </div>
+
+          {(validationMessage || errorMessage) && (
+            <p
+              id="practice-transcript-error"
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-xs font-semibold text-rose-700"
+              role="alert"
+            >
+              {validationMessage || errorMessage}
+            </p>
+          )}
         </CardContent>
 
-        <CardFooter className="justify-between">
+        <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#e7edf6] bg-[#f8faff] p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
           {onCancel ? (
-            <Button variant="outline" size="sm" onClick={onCancel}>
-              Hủy bỏ
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onCancel(transcriptRef.current)}
+              disabled={isSubmitting}
+              className="min-h-11 w-full rounded-xl border-[#cfd9e7] bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#245eea] sm:w-auto"
+            >
+              Quay lại câu hỏi
             </Button>
           ) : (
             <div />
           )}
-          <Button variant="primary" size="md" onClick={() => onConfirmSubmit(transcript)}>
-            <CheckCircle className="mr-2 h-4 w-4" />
-            Xác nhận nộp ngay
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleConfirm}
+            isLoading={isSubmitting}
+            disabled={transcript.trim().length < 10}
+            className="min-h-11 w-full rounded-xl bg-[#245eea] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#194fce] focus:ring-[#245eea] disabled:shadow-none sm:w-auto"
+          >
+            <CheckCircle className="size-4" aria-hidden="true" />
+            {isSubmitting ? 'Đang nộp câu trả lời…' : 'Xác nhận nộp ngay'}
           </Button>
         </CardFooter>
       </Card>

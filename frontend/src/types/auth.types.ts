@@ -2,7 +2,7 @@
  * Role-Based Access Control (RBAC) User Roles used by the portals.
  * Backend returns lowercase roles; the client maps them onto these three portals.
  */
-export type UserRole = 'Student' | 'Instructor' | 'Admin'
+export type UserRole = 'Student' | 'Instructor' | 'DepartmentHead' | 'Proctor' | 'Admin'
 
 /**
  * Authenticated User Profile Contract
@@ -19,6 +19,10 @@ export interface User {
 /**
  * Login Request Payload
  */
+export interface GoogleLoginRequest {
+  idToken: string
+}
+
 export interface LoginRequest {
   email: string
   password: string

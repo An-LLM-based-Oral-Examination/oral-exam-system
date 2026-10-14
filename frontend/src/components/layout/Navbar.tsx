@@ -34,7 +34,14 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const navigate = useNavigate()
   const pageLabel = PAGE_LABELS[location.pathname] ?? 'Cổng giảng viên'
   const semesterLabel = getSemesterLabel()
-  const roleLabel = user?.role === 'Admin' ? 'Quản trị viên' : 'Giảng viên'
+  const roleLabel =
+    user?.role === 'Admin'
+      ? 'Quản trị viên'
+      : user?.role === 'DepartmentHead'
+        ? 'Trưởng Bộ môn'
+        : user?.role === 'Proctor'
+          ? 'Giám thị'
+          : 'Giảng viên'
 
   const handleLogout = () => {
     void logout().finally(() => navigate('/login', { replace: true }))

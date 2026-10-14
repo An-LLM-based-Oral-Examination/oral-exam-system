@@ -1,5 +1,5 @@
 import { createContext } from 'react'
-import type { LoginRequest, User, UserRole } from '@/types/auth.types'
+import type { User, UserRole } from '@/types/auth.types'
 
 export interface AuthContextType {
   user: User | null
@@ -7,8 +7,9 @@ export interface AuthContextType {
   isAuthenticated: boolean
   isStudent: boolean
   isInstructor: boolean
+  isDepartmentHead: boolean
+  isProctor: boolean
   isAdmin: boolean
-  login: (credentials: LoginRequest) => Promise<void>
   loginWithGoogle: (idToken: string) => Promise<void>
   logout: () => Promise<void>
   hasRole: (roles: UserRole[]) => boolean

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import {
@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useKioskLockdown } from '@/hooks/useKioskLockdown'
 import { cn } from '@/lib/utils'
 import type { ExamSceneState } from './OfficialExamThreeScene'
 
@@ -216,6 +217,7 @@ export function OfficialExamPage() {
   const [confirmedAtKiosk, setConfirmedAtKiosk] = useState(false)
   const [micState, setMicState] = useState<MicState>('idle')
   const [micDeviceLabel, setMicDeviceLabel] = useState('')
+  const [micCheckSecondsRemaining, setMicCheckSecondsRemaining] = useState(0)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [qrError, setQrError] = useState(false)
@@ -236,6 +238,12 @@ export function OfficialExamPage() {
   const studentCode = user?.studentCode ?? 'SE172428'
   const sceneState: ExamSceneState =
     micState === 'checking' ? 'checking' : micState === 'ready' ? 'ready' : 'waiting'
+  const handleKioskLockdown = useCallback(() => setMicState('error'), [])
+  const kioskLockdown = useKioskLockdown(
+    3,
+    handleKioskLockdown,
+    confirmedAtKiosk && micState === 'ready' && phase === 'in-progress',
+  )
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000)
@@ -356,6 +364,7 @@ export function OfficialExamPage() {
 
     setMicState('checking')
     setMicDeviceLabel('')
+    setMicCheckSecondsRemaining(30)
     let stream: MediaStream | null = null
     let audioContext: AudioContext | null = null
     let sourceNode: MediaStreamAudioSourceNode | null = null
@@ -382,10 +391,11 @@ export function OfficialExamPage() {
       sourceNode.connect(analyser)
 
       const samples = new Uint8Array(analyser.fftSize)
-      const signalDeadline = performance.now() + 2200
+      const signalDeadline = performance.now() + 30_000
+      let lastCountdownUpdate = 0
       let peakRms = 0
 
-      while (performance.now() < signalDeadline && peakRms < 0.012) {
+      while (performance.now() < signalDeadline) {
         analyser.getByteTimeDomainData(samples)
         let squareSum = 0
         for (const sample of samples) {
@@ -393,10 +403,14 @@ export function OfficialExamPage() {
           squareSum += normalized * normalized
         }
         peakRms = Math.max(peakRms, Math.sqrt(squareSum / samples.length))
-        if (peakRms < 0.012) {
-          await new Promise((resolve) => window.setTimeout(resolve, 90))
+        const currentTime = performance.now()
+        if (currentTime - lastCountdownUpdate >= 200) {
+          setMicCheckSecondsRemaining(Math.ceil(Math.max(0, signalDeadline - currentTime) / 1000))
+          lastCountdownUpdate = currentTime
         }
+        await new Promise((resolve) => window.setTimeout(resolve, 90))
       }
+      setMicCheckSecondsRemaining(0)
 
       if (audioTrack.muted || peakRms < 0.008) {
         throw new Error('No microphone signal detected')
@@ -405,6 +419,7 @@ export function OfficialExamPage() {
       setMicDeviceLabel(audioTrack.label || 'Microphone mặc định của Kiosk')
       setMicState('ready')
     } catch {
+      setMicCheckSecondsRemaining(0)
       setMicState('error')
     } finally {
       sourceNode?.disconnect()
@@ -419,6 +434,7 @@ export function OfficialExamPage() {
     setSelectedId(assignmentId)
     setMicState('idle')
     setMicDeviceLabel('')
+    setMicCheckSecondsRemaining(0)
     setConfirmedAtKiosk(false)
     setCopyState('idle')
     setQrDataUrl('')
@@ -649,6 +665,32 @@ export function OfficialExamPage() {
           {selectedExam.room} · Kiosk {selectedExam.kioskNumber}
         </div>
       </section>
+
+      {(kioskLockdown.violations > 0 || kioskLockdown.isLocked) && (
+        <section
+          role="alert"
+          className={cn(
+            'rounded-2xl border px-4 py-3 text-[11px] shadow-sm',
+            kioskLockdown.isLocked
+              ? 'border-rose-200 bg-rose-50 text-rose-800'
+              : 'border-amber-200 bg-amber-50 text-amber-800',
+          )}
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-bold">
+                {kioskLockdown.isLocked ? 'Kiosk đã đình chỉ phiên thi' : 'Cảnh báo an ninh Kiosk'}
+              </p>
+              <p className="mt-1 leading-relaxed">
+                {kioskLockdown.isLocked
+                  ? 'Đã ghi nhận từ 3 lần mất focus hoặc thao tác bị cấm. Hãy báo giám thị để lập biên bản.'
+                  : `Đã ghi nhận ${kioskLockdown.violations}/3 cảnh báo; còn ${kioskLockdown.remainingStrikes} lần trước khi đình chỉ.`}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="flex items-start gap-3 rounded-2xl border border-[#d9e4f0] bg-white p-4 shadow-[0_7px_24px_rgba(31,61,105,0.045)] sm:px-5">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#edf3ff] text-[#315ed0]">
@@ -916,7 +958,14 @@ export function OfficialExamPage() {
                   <input
                     type="checkbox"
                     checked={confirmedAtKiosk}
-                    onChange={(event) => setConfirmedAtKiosk(event.target.checked)}
+                    onChange={(event) => {
+                      setConfirmedAtKiosk(event.target.checked)
+                      if (!event.target.checked && micState !== 'checking') {
+                        setMicState('idle')
+                        setMicDeviceLabel('')
+                        setMicCheckSecondsRemaining(0)
+                      }
+                    }}
                     className="mt-0.5 size-4 accent-[#245eea]"
                   />
                   Tôi xác nhận đang ngồi tại {selectedExam.room}, Kiosk {selectedExam.kioskNumber}{' '}
@@ -941,6 +990,11 @@ export function OfficialExamPage() {
                       <p className="mt-1 text-[9px] leading-relaxed break-words opacity-80">
                         {micStatus.helper}
                       </p>
+                      {micState === 'checking' && (
+                        <p className="mt-1 text-[9px] font-bold text-[#315eca]" role="timer" aria-live="polite">
+                          Còn {micCheckSecondsRemaining} giây kiểm tra tín hiệu
+                        </p>
+                      )}
                     </div>
                   </div>
                   <button

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AudioLines,
@@ -6,13 +6,7 @@ import {
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
-  Eye,
-  EyeOff,
-  KeyRound,
-  LoaderCircle,
   LockKeyhole,
-  LogIn,
-  Mail,
   ShieldCheck,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
@@ -20,21 +14,24 @@ import { useAuth } from '@/hooks/useAuth'
 import type { ProblemDetails } from '@/types/auth.types'
 import './LoginPage.css'
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void
+          renderButton: (element: HTMLElement, options: Record<string, string | number>) => void
+          cancel: () => void
+        }
+      }
+    }
+  }
+}
 const LoginThreeScene = lazy(() =>
   import('./LoginThreeScene').then((module) => ({ default: module.LoginThreeScene })),
 )
 
-type DemoRole = 'Student' | 'Instructor' | 'Admin'
-
 const DEFAULT_LOGIN_ERROR = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.'
-const REMEMBERED_EMAIL_KEY = 'oral_exam_remembered_email'
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
-
-const DEMO_ROLES: { role: DemoRole; label: string }[] = [
-  { role: 'Student', label: 'Sinh viên' },
-  { role: 'Instructor', label: 'Giảng viên' },
-  { role: 'Admin', label: 'Quản trị viên' },
-]
 
 const FEATURE_ITEMS = [
   {
@@ -57,26 +54,6 @@ const FEATURE_ITEMS = [
   },
 ]
 
-function getRememberedEmail() {
-  try {
-    return window.localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function saveRememberedEmail(email: string | null) {
-  try {
-    if (email) {
-      window.localStorage.setItem(REMEMBERED_EMAIL_KEY, email)
-    } else {
-      window.localStorage.removeItem(REMEMBERED_EMAIL_KEY)
-    }
-  } catch {
-    // Login must still succeed when browser storage is unavailable.
-  }
-}
-
 function getLoginErrorMessage(error: unknown): string {
   if (!error || typeof error !== 'object') return DEFAULT_LOGIN_ERROR
 
@@ -86,133 +63,57 @@ function getLoginErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { login, loginWithGoogle } = useAuth()
-  const googleButtonRef = useRef<HTMLDivElement>(null)
-  const loginWithGoogleRef = useRef(loginWithGoogle)
-  const rememberedEmail = getRememberedEmail()
-  const [email, setEmail] = useState(rememberedEmail)
-  const [password, setPassword] = useState('')
-  const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
-  const [showPassword, setShowPassword] = useState(false)
+  const { loginWithGoogle } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const googleButtonRef = useRef<HTMLDivElement>(null)
+  const [googleConfigured, setGoogleConfigured] = useState(Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID))
 
   useEffect(() => {
-    loginWithGoogleRef.current = loginWithGoogle
-  }, [loginWithGoogle])
-
-  useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) return
-
-    let cancelled = false
-    let intervalId = 0
-    let timeoutId = 0
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+    if (!clientId || !googleButtonRef.current) return
 
     const renderGoogleButton = () => {
-      const host = googleButtonRef.current
-      const googleId = window.google?.accounts.id
-      if (!host || !googleId) return false
-
-      googleId.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        auto_select: false,
-        callback: (response) => {
-          const credential = response.credential
-          if (!credential) {
-            setError(DEFAULT_LOGIN_ERROR)
-            return
-          }
-
+      if (!window.google || !googleButtonRef.current) return
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: ({ credential }) => {
           setIsLoading(true)
           setError(null)
-          void loginWithGoogleRef
-            .current(credential)
-            .then(() => {
-              if (!cancelled) navigate('/')
-            })
-            .catch((loginError: unknown) => {
-              if (!cancelled) setError(getLoginErrorMessage(loginError))
-            })
-            .finally(() => {
-              if (!cancelled) setIsLoading(false)
-            })
+          void loginWithGoogle(credential)
+            .then(() => navigate('/'))
+            .catch((loginError: unknown) => setError(getLoginErrorMessage(loginError)))
+            .finally(() => setIsLoading(false))
         },
       })
-
-      host.replaceChildren()
-      googleId.renderButton(host, {
+      googleButtonRef.current.replaceChildren()
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
         theme: 'outline',
         size: 'large',
-        width: Math.min(400, Math.floor(host.offsetWidth) || 360),
+        width: '360',
         text: 'signin_with',
         shape: 'rectangular',
-        logo_alignment: 'left',
       })
-      return true
+      setGoogleConfigured(true)
     }
 
-    if (!renderGoogleButton()) {
-      intervalId = window.setInterval(() => {
-        if (renderGoogleButton()) window.clearInterval(intervalId)
-      }, 100)
-      timeoutId = window.setTimeout(() => {
-        window.clearInterval(intervalId)
-        if (!cancelled && !window.google) {
-          setError('Không tải được Google Sign-In. Kiểm tra kết nối mạng rồi tải lại trang.')
-        }
-      }, 8000)
+    if (window.google) {
+      renderGoogleButton()
+      return
     }
 
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      window.clearTimeout(timeoutId)
+    const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-identity]')
+    const script = existingScript ?? document.createElement('script')
+    if (!existingScript) {
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      script.dataset.googleIdentity = 'true'
+      document.head.appendChild(script)
     }
-  }, [navigate])
-
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      await login({ email, password })
-      saveRememberedEmail(rememberEmail ? email : null)
-      navigate('/')
-    } catch (loginError: unknown) {
-      setError(getLoginErrorMessage(loginError))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleQuickLogin = (role: DemoRole) => {
-    const mockUsers = {
-      Student: {
-        id: '44444444-4444-4444-4444-444444444444',
-        email: 'hoanglvse170001@fpt.edu.vn',
-        fullName: 'Lê Vũ Hoàng',
-        role: 'Student' as const,
-        studentCode: 'SE170001',
-      },
-      Instructor: {
-        id: '22222222-2222-2222-2222-222222222222',
-        email: 'totnt@fe.edu.vn',
-        fullName: 'Nguyễn Trọng Tốt',
-        role: 'Instructor' as const,
-      },
-      Admin: {
-        id: '11111111-1111-1111-1111-111111111111',
-        email: 'admin@fpt.edu.vn',
-        fullName: 'Nguyễn Quang Thành',
-        role: 'Admin' as const,
-      },
-    }
-
-    sessionStorage.setItem('access_token', 'mock_dev_jwt_token')
-    sessionStorage.setItem('user_profile', JSON.stringify(mockUsers[role]))
-    window.location.assign('/')
-  }
+    script.addEventListener('load', renderGoogleButton)
+    return () => script.removeEventListener('load', renderGoogleButton)
+  }, [loginWithGoogle, navigate])
 
   return (
     <main className="login-page-shell min-h-dvh w-full bg-[#7868ef] p-0.5">
@@ -328,129 +229,32 @@ export function LoginPage() {
                 </p>
               </div>
 
-              <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <div className="mb-5 rounded-xl border border-[#dce6f3] bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold text-[#253653]">Đăng nhập bằng Google</p>
+                    <p className="mt-0.5 text-[9px] text-[#7b8ba1]">Xác thực OAuth 2.0 theo tài khoản đã được cấp quyền.</p>
+                  </div>
+                  <ShieldCheck className="size-4 shrink-0 text-[#2f70d9]" />
+                </div>
+                <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
+                {isLoading && (
+                  <p className="mt-2 text-center text-[9px] font-semibold text-[#4a6dcc]">
+                    Đang xác thực tài khoản Google…
+                  </p>
+                )}
+                {!googleConfigured && (
+                  <p className="mt-2 text-center text-[9px] text-[#a16a16]">
+                    Chưa cấu hình VITE_GOOGLE_CLIENT_ID cho môi trường này.
+                  </p>
+                )}
                 {error && (
                   <div
                     role="alert"
-                    className="login-alert rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
+                    className="login-alert mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
                   >
                     {error}
                   </div>
-                )}
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="login-email" className="text-[11px] font-semibold text-[#344258]">
-                    Email FPT <span className="text-[#ef4e68]">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail
-                      className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#97a5b8]"
-                      strokeWidth={1.7}
-                    />
-                    <input
-                      id="login-email"
-                      name="email"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="ten@fpt.edu.vn"
-                      autoComplete="email"
-                      required
-                      disabled={isLoading}
-                      className="login-input h-11 w-full rounded-lg border border-[#d7e0eb] bg-white pr-3.5 pl-10 text-[12px] text-[#15223a] shadow-[0_2px_8px_rgba(30,64,112,0.035)] transition outline-none placeholder:text-[#a7b1c0] hover:border-[#becbdd] focus:border-[#4a72de] focus:ring-3 focus:ring-[#4a72de]/12 disabled:cursor-not-allowed disabled:bg-slate-50"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label
-                    htmlFor="login-password"
-                    className="text-[11px] font-semibold text-[#344258]"
-                  >
-                    Mật khẩu <span className="text-[#ef4e68]">*</span>
-                  </label>
-                  <div className="relative">
-                    <KeyRound
-                      className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#97a5b8]"
-                      strokeWidth={1.7}
-                    />
-                    <input
-                      id="login-password"
-                      name="password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="Nhập mật khẩu"
-                      autoComplete="current-password"
-                      required
-                      disabled={isLoading}
-                      className="login-input login-password-input h-11 w-full rounded-lg border border-[#d7e0eb] bg-white pr-11 pl-10 text-[12px] text-[#15223a] shadow-[0_2px_8px_rgba(30,64,112,0.035)] transition outline-none placeholder:text-[#a7b1c0] hover:border-[#becbdd] focus:border-[#4a72de] focus:ring-3 focus:ring-[#4a72de]/12 disabled:cursor-not-allowed disabled:bg-slate-50"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((isVisible) => !isVisible)}
-                      disabled={isLoading}
-                      className="absolute top-1/2 right-3 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-[#91a0b3] transition hover:bg-[#edf2f8] hover:text-[#445875] focus-visible:outline-2 focus-visible:outline-[#4a72de] disabled:cursor-not-allowed"
-                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                      aria-pressed={showPassword}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="size-4" strokeWidth={1.7} />
-                      ) : (
-                        <Eye className="size-4" strokeWidth={1.7} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 text-[10px]">
-                  <label className="flex cursor-pointer items-center gap-2 text-[#64748b]">
-                    <input
-                      type="checkbox"
-                      checked={rememberEmail}
-                      onChange={(event) => setRememberEmail(event.target.checked)}
-                      disabled={isLoading}
-                      className="size-3.5 rounded border-[#cbd5e1] accent-[#2b5dde]"
-                    />
-                    Ghi nhớ email
-                  </label>
-                  <a
-                    href="#login-support"
-                    className="font-semibold text-[#2858d7] transition hover:text-[#1d47b7] hover:underline focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde]"
-                  >
-                    Quên mật khẩu?
-                  </a>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="login-submit flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#2859d8] px-4 text-[12px] font-semibold text-white shadow-[0_8px_20px_rgba(40,89,216,0.22)] transition hover:bg-[#204fc7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2859d8] disabled:cursor-not-allowed disabled:opacity-65"
-                >
-                  {isLoading ? (
-                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <LogIn className="size-3.5" aria-hidden="true" />
-                  )}
-                  {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-                </button>
-              </form>
-
-              <div className="mt-4 flex items-center gap-3">
-                <span className="h-px flex-1 bg-[#e5eaf1]" />
-                <span className="text-[10px] font-medium text-[#8b98aa]">hoặc</span>
-                <span className="h-px flex-1 bg-[#e5eaf1]" />
-              </div>
-
-              <div className="mt-4 flex flex-col gap-2">
-                <div
-                  ref={googleButtonRef}
-                  className={`flex min-h-11 w-full items-center justify-center ${isLoading ? 'pointer-events-none opacity-60' : ''}`}
-                />
-                {!GOOGLE_CLIENT_ID && (
-                  <p className="text-center text-[10px] leading-relaxed text-[#b45309]">
-                    Chưa cấu hình VITE_GOOGLE_CLIENT_ID trong file .env ở thư mục oral-exam-system.
-                  </p>
                 )}
               </div>
 
@@ -464,26 +268,6 @@ export function LoginPage() {
                 </p>
               </div>
 
-              {import.meta.env.DEV && (
-                <details className="login-demo group mt-4 rounded-lg border border-[#e0e6ef] bg-white/65 text-[10px] text-[#66758b]">
-                  <summary className="login-demo-summary flex cursor-pointer list-none items-center justify-center gap-1.5 px-3 py-2.5 font-semibold transition hover:text-[#3658a5] focus-visible:outline-2 focus-visible:outline-[#2b5dde] [&::-webkit-details-marker]:hidden">
-                    Đăng nhập nhanh để kiểm thử
-                    <ChevronDown className="size-3 transition-transform group-open:rotate-180" />
-                  </summary>
-                  <div className="login-demo-grid grid grid-cols-3 gap-2 border-t border-[#e6ebf2] p-2.5">
-                    {DEMO_ROLES.map(({ role, label }) => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => handleQuickLogin(role)}
-                        className="login-demo-button rounded-md border border-[#d8e0ec] bg-white px-2 py-2 font-medium text-[#52637a] transition hover:border-[#93aae2] hover:bg-[#f4f7ff] hover:text-[#2856c4] focus-visible:outline-2 focus-visible:outline-[#2b5dde]"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              )}
             </div>
           </div>
 

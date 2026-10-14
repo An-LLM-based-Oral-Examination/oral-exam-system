@@ -30,7 +30,7 @@ export function ScoreOverrideForm({
       setError('Điểm chính thức phải nằm trong khoảng từ 0 đến 10.')
       return
     }
-    if (!reason.trim()) {
+    if (reason.trim().length < 10) {
       setError('Bắt buộc nhập lý do giải trình khi điều chỉnh điểm.')
       return
     }
@@ -110,6 +110,9 @@ export function ScoreOverrideForm({
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               disabled={isReadOnly || isSaving}
+              minLength={10}
+              maxLength={2000}
+              aria-invalid={Boolean(error)}
               placeholder="Đối chiếu audio, transcript và từng tiêu chí rubric trước khi giải trình..."
               className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-xs leading-relaxed text-[#263850] transition outline-none placeholder:text-[#9aa8ba] focus:border-[#6991ee] focus:ring-2 focus:ring-[#dce8ff] disabled:cursor-not-allowed disabled:opacity-60"
             />

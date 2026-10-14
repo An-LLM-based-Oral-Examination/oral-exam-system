@@ -94,9 +94,9 @@ export function LecturerDashboardPage() {
           ...remainingResults.flatMap((page) => (Array.isArray(page.items) ? page.items : [])),
         ]
         const visibleQuestions =
-          user?.role === 'Admin'
-            ? allQuestions
-            : allQuestions.filter((question) => isOwnedByUser(question, user?.id))
+          user?.role === 'Instructor'
+            ? allQuestions.filter((question) => isOwnedByUser(question, user?.id))
+            : allQuestions
 
         if (isActive) setQuestions(visibleQuestions)
       } catch (loadError) {
