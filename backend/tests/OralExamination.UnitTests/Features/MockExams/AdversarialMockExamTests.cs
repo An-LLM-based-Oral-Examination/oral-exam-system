@@ -387,7 +387,7 @@ public class AdversarialMockExamTests
     [Fact(DisplayName = "ADV-06: Khóa bất biến Zero-R2: Entity MockExamAnswer không có thuộc tính AudioUrl và bảng mock_exam_answers không lưu audio")]
     public async Task ZeroR2Invariant_MockExamAnswer_HasNoAudioUrlProperty()
     {
-        // 1. Kiểm tra Entity Domain tuyệt đối không có thuộc tính AudioUrl (khớp 100% 01_schema.sql)
+        // 1. Kiểm tra Entity Domain tuyệt đối không có thuộc tính AudioUrl (khớp 100% EF Core Code-First DbContext)
         var prop = typeof(MockExamAnswer).GetProperty("AudioUrl");
         prop.Should().BeNull("Cột AudioUrl tuyệt đối không tồn tại trong entity MockExamAnswer để bảo đảm bất biến Zero-R2 cho MF-02.");
 

@@ -16,7 +16,7 @@
 ```text
 docs/
 ├── 01_architecture/         # Kiến trúc hệ thống Clean Architecture & Đặc tả 4 luồng nghiệp vụ
-├── 02_database/             # Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF) & Báo cáo kiểm toán
+├── 02_database/             # Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF) & EF Core Code-First
 ├── 03_api_and_contracts/    # Hợp đồng API Contract-First, SignalR & Hướng dẫn tích hợp Frontend
 ├── 04_devops_and_workflow/  # Hướng dẫn DevOps, Docker Compose, CI/CD Pipeline & Quy trình Git
 ├── 05_diagrams/             # Toàn bộ thư viện sơ đồ luồng Draw.io master và chi tiết
@@ -32,33 +32,31 @@ docs/
 |:---:|:---|:---|:---:|
 | 1 | [**`MASTER_ARCHITECTURE.md`**](./01_architecture/MASTER_ARCHITECTURE.md) | **Bản kiến trúc tối thượng (8 phần):** Mô hình C4, Kiến trúc 5 tầng chiều dọc, Clean Architecture 4 tầng, Hạ tầng mạng Docker/Nginx, Phòng thủ 4 tầng Zero Data Loss. | Cả 4 thành viên & Hội đồng |
 | 2 | [**`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`**](./01_architecture/MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md) | **Đặc tả chi tiết 4 luồng Main Flows (MF-01 đến MF-04):** Bóc băng Whisper STT (không lưu audio MF-01/02), Buffer Screen hiệu đính Code-Switching 60s, Quota thi thử do Trưởng BM cấu hình, Instant Scorecard (MF-02), Barem Rubric $\sum \equiv 10.0$đ & Trưởng Bộ Môn phê duyệt (MF-03), Kiosk Lockdown phòng Lab, Mic-check 30s $\ge 60$dB, AI chấm ngầm, Hậu kiểm 2 nhóm, Công bố điểm One-Way Lock & Phúc khảo nội bộ Trưởng BM giao GV chấm lại (MF-04). | Hoàng (FE), Thành & Tốt (BE) |
-| 3 | [**`LOG_THAY_DOI_MAINFLOW.md`**](./01_architecture/LOG_THAY_DOI_MAINFLOW.md) | **Nhật ký thay đổi & Chốt kỹ thuật:** Ghi nhận toàn bộ quyết định kỹ thuật Đợt 1 (Tốt chốt 07/10) và Đợt 2 (Thành chốt 08/10). | Cả 4 thành viên |
 
 ---
 
 ### 💾 Nhóm 2: Cơ Sở Dữ Liệu PostgreSQL 16 (30 Bảng 3NF) ([`02_database/`](./02_database/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 4 | [**`ERD_DATABASE_DESIGN.md`**](./02_database/ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `refresh_tokens`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục ESR. | Hải (DB & FE), Thành & Tốt (BE) |
-| 5 | [**`DATABASE_AUDIT_REPORT.md`**](./02_database/DATABASE_AUDIT_REPORT.md) | **Báo cáo kiểm định toàn diện CSDL:** Báo cáo thẩm định chuẩn hóa 3NF, tính toàn vẹn khóa ngoại và chiến lược phân vùng/chỉ mục. | Hải & Thành |
+| 3 | [**`ERD_DATABASE_DESIGN.md`**](./02_database/ERD_DATABASE_DESIGN.md) | **Thiết kế CSDL 30 bảng PostgreSQL 16 (3NF):** 6 Bounded Contexts, bảng `system_configs`, bảng `refresh_tokens`, chuẩn hóa `ip_address`, loại bỏ `password_hash`, từ điển dữ liệu và chỉ mục ESR. Nguồn sự thật duy nhất qua EF Core Code-First (`OralExamDbContext.cs` và `Persistence/Migrations/`). | Hải (DB & FE), Thành & Tốt (BE) |
 
 ---
 
 ### 🔌 Nhóm 3: Hợp Đồng Giao Tiếp API & Tích Hợp Frontend ([`03_api_and_contracts/`](./03_api_and_contracts/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 6 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
-| 7 | [**`MF01_Frontend_Integration.md`**](./03_api_and_contracts/MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
-| 8 | [**`MF02_Frontend_Integration.md`**](./03_api_and_contracts/MF02_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-02 (Thi thử bấm giờ):** Đặc tả 6 API endpoints (Quota Guard, Start Session, Voice-First Answer, Instant Scorecard, Lịch sử), mã lỗi RFC 7807 (429, 410) và code mẫu MediaRecorder. | Hải & Hoàng (FE) |
-| 9 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
+| 4 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice`, Google OAuth PKCE, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
+| 5 | [**`MF01_Frontend_Integration.md`**](./03_api_and_contracts/MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
+| 6 | [**`MF02_Frontend_Integration.md`**](./03_api_and_contracts/MF02_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-02 (Thi thử bấm giờ):** Đặc tả 6 API endpoints (Quota Guard, Start Session, Voice-First Answer, Instant Scorecard, Lịch sử), mã lỗi RFC 7807 (429, 410) và code mẫu MediaRecorder. | Hải & Hoàng (FE) |
+| 7 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0:** Đăng nhập bằng Google ID Token, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
 
 ---
 
 ### ⚙️ Nhóm 4: Vận Hành, CI/CD Pipeline & Quy Trình Git ([`04_devops_and_workflow/`](./04_devops_and_workflow/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 10 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./04_devops_and_workflow/CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
-| 11 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
+| 8 | [**`CICD_AND_DEVOPS_GUIDE.md`**](./04_devops_and_workflow/CICD_AND_DEVOPS_GUIDE.md) | **Hướng dẫn DevOps & Containerization:** Multi-stage Dockerfile cho Backend (.NET 8) và Frontend (Vite/Nginx), Docker Compose Production, Enterprise GitHub Actions CI/CD Pipeline. | Cả 4 thành viên |
+| 9 | [**`GIT_AND_TEAM_WORKFLOW.md`**](./04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md) | **Quy trình GitFlow & PR Review:** Quy ước đặt tên nhánh, commit Conventional, quy tắc review duyệt chéo và giải quyết Conflict. | Cả 4 thành viên |
 
 ---
 
@@ -78,8 +76,8 @@ docs/
 ### 🛠️ Nhóm 6: Bộ Công Cụ Kiểm Thử Độc Lập Trực Tiếp ([`06_testing_tools/`](./06_testing_tools/))
 | STT | Công cụ | Định dạng | Mô tả chức năng |
 |:---:|:---|:---|:---|
-| 12 | [**`MF01_Mini_Tester.html`**](./06_testing_tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
-| 13 | [**`google-id-token.html`**](./06_testing_tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
+| 10 | [**`MF01_Mini_Tester.html`**](./06_testing_tools/MF01_Mini_Tester.html) | HTML / JS độc lập | Mở trực tiếp trên Chrome/Edge để test toàn bộ chu trình MF-01 (Khởi tạo phiên, Whisper STT, Buffer Screen 60s, SignalR chấm ngầm, Follow-up A2, Lịch sử) không cần mock. |
+| 11 | [**`google-id-token.html`**](./06_testing_tools/google-id-token.html) | HTML / JS độc lập | Mở trực tiếp trên trình duyệt để đăng nhập Google và copy Google ID Token phục vụ test API Auth trên Swagger hoặc Postman. |
 
 ---
 

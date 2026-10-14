@@ -5,6 +5,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OralExamination.Domain.Entities;
@@ -24,6 +26,7 @@ public class DomainEntitiesAndDbContextTests
 
         return new OralExamDbContext(options);
     }
+
 
     [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 30 thực thể trong Model")]
     public void DbContext_Must_Contain_Exactly_30_Entity_Types()
@@ -152,42 +155,48 @@ public class DomainEntitiesAndDbContextTests
         subUnique.Should().NotBeNull("Mỗi vé thi chỉ có 1 bản nộp duy nhất cho mỗi câu hỏi");
     }
 
-    [Fact(DisplayName = "4. Ràng buộc Check Constraints trong 01_schema.sql cho Rubric 10.0 và Quota thi thử động UsedCount >= 0")]
-    public void Schema_Must_Configure_Domain_Check_Constraints()
+    [Fact(DisplayName = "4. Ràng buộc Check Constraints trong EF Core Code-First DbContext cho Rubric 10.0 và Quota thi thử động UsedCount >= 0")]
+    public void DbContext_Must_Configure_Domain_Check_Constraints()
     {
-        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
-        string? schemaPath = null;
-
-        while (currentDir != null)
-        {
-            var candidate = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "01_schema.sql");
-            if (File.Exists(candidate))
-            {
-                schemaPath = candidate;
-                break;
-            }
-            currentDir = currentDir.Parent;
-        }
-
-        schemaPath.Should().NotBeNull("File 01_schema.sql phải được tìm thấy từ thư mục giải pháp");
-        File.Exists(schemaPath).Should().BeTrue();
-
-        var sql = File.ReadAllText(schemaPath!);
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
 
         // 1. Rubric TotalMaxScore = 10.0
-        sql.Should().Contain("CONSTRAINT ck_rubrics_total_score CHECK (total_max_score = 10.00)");
+        var rubricType = model.FindEntityType(typeof(Rubric))!;
+        var rubricCheck = rubricType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_rubrics_total_score");
+        rubricCheck.Should().NotBeNull("Rubric phải có Check Constraint ck_rubrics_total_score");
+        rubricCheck!.Sql.Should().Be("total_max_score = 10.00");
 
         // 2. RubricCriterion MaxScore > 0 AND <= 10.0
-        sql.Should().Contain("CONSTRAINT ck_rubric_criteria_score CHECK (max_score > 0 AND max_score <= 10.00)");
+        var criterionType = model.FindEntityType(typeof(RubricCriterion))!;
+        var critCheck = criterionType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_rubric_criteria_score");
+        critCheck.Should().NotBeNull("RubricCriterion phải có Check Constraint ck_rubric_criteria_score");
+        critCheck!.Sql.Should().Be("max_score > 0 AND max_score <= 10.00");
 
         // 3. MockExamQuota UsedCount >= 0 (Hạn ngạch động theo môn)
-        sql.Should().Contain("CONSTRAINT ck_mock_exam_quotas_count CHECK (used_count >= 0)");
+        var quotaType = model.FindEntityType(typeof(MockExamQuota))!;
+        var quotaCheck = quotaType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_mock_exam_quotas_count");
+        quotaCheck.Should().NotBeNull("MockExamQuota phải có Check Constraint ck_mock_exam_quotas_count");
+        quotaCheck!.Sql.Should().Be("used_count >= 0");
 
         // 4. StudentExamTicket Seat 1..40
-        sql.Should().Contain("CONSTRAINT ck_tickets_seat CHECK (seat_number >= 1 AND seat_number <= 40)");
+        var ticketType = model.FindEntityType(typeof(StudentExamTicket))!;
+        var ticketCheck = ticketType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_tickets_seat");
+        ticketCheck.Should().NotBeNull("StudentExamTicket phải có Check Constraint ck_tickets_seat");
+        ticketCheck!.Sql.Should().Be("seat_number >= 1 AND seat_number <= 40");
 
         // 5. DeadLetterQueue status check
-        sql.Should().Contain("CONSTRAINT ck_dlq_status CHECK (status IN ('pending', 'resolved', 'abandoned'))");
+        var dlqType = model.FindEntityType(typeof(DeadLetterQueue))!;
+        var dlqCheck = dlqType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_dlq_status");
+        dlqCheck.Should().NotBeNull("DeadLetterQueue phải có Check Constraint ck_dlq_status");
+        dlqCheck!.Sql.Should().Be("status IN ('pending', 'resolved', 'abandoned')");
+
+        // 6. Toàn bộ 42 Check Constraints từ 30 bảng phải được cấu hình đầy đủ với SQL biểu thức hợp lệ
+        var allCheckConstraints = model.GetEntityTypes()
+            .SelectMany(e => e.GetCheckConstraints())
+            .ToList();
+        allCheckConstraints.Count.Should().Be(42, "Hệ thống phải có đúng 42 check constraints được cấu hình trong EF Core Code-First");
+        allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
     [Fact(DisplayName = "5. Thực thể có thể lưu trữ và truy vấn in-memory mà không xung đột")]
@@ -264,36 +273,38 @@ public class DomainEntitiesAndDbContextTests
         submissionsNav!.IsCollection.Should().BeTrue();
     }
 
-    [Fact(DisplayName = "7. Dữ liệu mẫu (Seed Data) trong 02_seed.sql sử dụng 100% UUID hợp lệ theo chuẩn RFC 4122")]
+    [Fact(DisplayName = "7. Dữ liệu mẫu (Seed Data) trong EF Core Code-First sử dụng 100% UUID hợp lệ theo chuẩn RFC 4122")]
     public void SeedData_Must_Only_Use_Valid_Hexadecimal_UUIDs()
     {
-        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
-        string? seedPath = null;
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
 
-        while (currentDir != null)
+        var entityTypes = model.GetEntityTypes();
+        var seedGuids = new List<Guid>();
+
+        foreach (var entityType in entityTypes)
         {
-            var candidate = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "02_seed.sql");
-            if (File.Exists(candidate))
+            var seedData = entityType.GetSeedData();
+            foreach (var data in seedData)
             {
-                seedPath = candidate;
-                break;
+                foreach (var val in data.Values)
+                {
+                    if (val is Guid g)
+                    {
+                        seedGuids.Add(g);
+                    }
+                }
             }
-            currentDir = currentDir.Parent;
         }
 
-        seedPath.Should().NotBeNull("File 02_seed.sql phải được tìm thấy");
-        File.Exists(seedPath).Should().BeTrue();
+        seedGuids.Count.Should().BeGreaterThan(0, "EF Core Code-First Seed Data phải có chứa các giá trị UUID");
 
-        var sql = File.ReadAllText(seedPath!);
-        var matches = Regex.Matches(sql, @"'([0-9a-zA-Z]{8}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{12})'");
-
-        matches.Count.Should().BeGreaterThan(0, "02_seed.sql phải có chứa các giá trị UUID");
-
-        foreach (Match m in matches)
+        foreach (var guid in seedGuids)
         {
-            var uuidStr = m.Groups[1].Value;
+            var uuidStr = guid.ToString();
             var isValid = Guid.TryParse(uuidStr, out _);
-            isValid.Should().BeTrue($"Chuỗi UUID '{uuidStr}' trong 02_seed.sql bắt buộc phải là số hex hợp lệ để tránh crash PostgreSQL");
+            isValid.Should().BeTrue($"Chuỗi UUID '{uuidStr}' trong EF Core Seed Data bắt buộc phải là số hex hợp lệ theo RFC 4122");
+            guid.Should().NotBe(Guid.Empty, "UUID của dữ liệu mẫu không được là Guid.Empty");
         }
     }
 
@@ -488,43 +499,47 @@ public class DomainEntitiesAndDbContextTests
         appealType.FindNavigation(nameof(AppealRequest.AssignedToUser)).Should().NotBeNull();
     }
 
-    [Fact(DisplayName = "14. Ràng buộc Check Constraints cho appeal_requests và cấu hình động trong 01_schema.sql")]
-    public void Schema_Must_Configure_AppealRequests_And_DynamicConfig_Constraints()
+    [Fact(DisplayName = "14. Ràng buộc Check Constraints cho appeal_requests và cấu hình động trong EF Core Code-First DbContext")]
+    public void DbContext_Must_Configure_AppealRequests_And_DynamicConfig_Constraints()
     {
-        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
-        string? schemaPath = null;
-
-        while (currentDir != null)
-        {
-            var candidate = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "01_schema.sql");
-            if (File.Exists(candidate))
-            {
-                schemaPath = candidate;
-                break;
-            }
-            currentDir = currentDir.Parent;
-        }
-
-        schemaPath.Should().NotBeNull();
-        var sql = File.ReadAllText(schemaPath!);
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
 
         // 1. courses constraints
-        sql.Should().Contain("CONSTRAINT ck_courses_transcript_buffer CHECK (transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300)");
-        sql.Should().Contain("CONSTRAINT ck_courses_max_follow_up CHECK (max_follow_up_questions >= 1 AND max_follow_up_questions <= 5)");
+        var courseType = model.FindEntityType(typeof(Course))!;
+        var bufferCheck = courseType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_courses_transcript_buffer");
+        bufferCheck.Should().NotBeNull("Course phải có ck_courses_transcript_buffer");
+        bufferCheck!.Sql.Should().Be("transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
+
+        var followUpCheck = courseType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_courses_max_follow_up");
+        followUpCheck.Should().NotBeNull("Course phải có ck_courses_max_follow_up");
+        followUpCheck!.Sql.Should().Be("max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
 
         // 2. appeal_requests constraints
-        sql.Should().Contain("CONSTRAINT ck_appeal_requests_status");
-        sql.Should().Contain("CHECK (status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'))");
-        sql.Should().Contain("CONSTRAINT ck_appeal_requests_scores");
+        var appealType = model.FindEntityType(typeof(AppealRequest))!;
+        var appealStatusCheck = appealType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_appeal_requests_status");
+        appealStatusCheck.Should().NotBeNull("AppealRequest phải có ck_appeal_requests_status");
+        appealStatusCheck!.Sql.Should().Be("status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+
+        var appealScoresCheck = appealType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_appeal_requests_scores");
+        appealScoresCheck.Should().NotBeNull("AppealRequest phải có ck_appeal_requests_scores");
+        appealScoresCheck!.Sql.Should().Be("(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
 
         // 3. ai_evaluations cot_trace
-        sql.Should().Contain("cot_trace           TEXT");
+        var aiEvalType = model.FindEntityType(typeof(AiEvaluation))!;
+        var cotTraceProp = aiEvalType.FindProperty(nameof(AiEvaluation.CotTrace));
+        cotTraceProp.Should().NotBeNull("AiEvaluation phải có trường CotTrace");
+        cotTraceProp!.GetColumnName().Should().Be("cot_trace");
 
         // 4. mock_exam_answers -> practice_questions
-        sql.Should().Contain("question_id         UUID NOT NULL REFERENCES practice_questions (id) ON DELETE RESTRICT");
+        var mockAnswerType = model.FindEntityType(typeof(MockExamAnswer))!;
+        var questionFk = mockAnswerType.GetForeignKeys()
+            .FirstOrDefault(fk => fk.PrincipalEntityType.ClrType == typeof(PracticeQuestion));
+        questionFk.Should().NotBeNull("MockExamAnswer phải có khóa ngoại trỏ tới PracticeQuestion");
+        questionFk!.DeleteBehavior.Should().Be(DeleteBehavior.Restrict);
     }
 
-    [Fact(DisplayName = "15. MockExamAnswer ánh xạ chính xác tới PracticeQuestion thay vì ExamQuestion theo 01_schema.sql")]
+    [Fact(DisplayName = "15. MockExamAnswer ánh xạ chính xác tới PracticeQuestion thay vì ExamQuestion theo EF Core DbContext Model")]
     public void MockExamAnswer_Must_Reference_PracticeQuestion_Properly()
     {
         using var context = CreateDbContext();

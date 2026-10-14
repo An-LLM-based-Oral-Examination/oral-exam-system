@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -19,10 +21,10 @@ namespace OralExamination.UnitTests.Features.Adversarial;
 /// 1. Kiểm tra tính toàn vẹn của mô hình EF Core:
 ///    - Thuộc tính ExamInputMode trong thực thể Course: kiểu CLR string, giá trị mặc định VoiceWithTranscriptEdit.
 ///    - Cấu hình Fluent API trong OralExamDbContext: cột exam_input_mode, độ dài tối đa 30, IsRequired = true, DefaultValue = "VoiceWithTranscriptEdit".
-/// 2. Kiểm tra tính tương thích giữa Course.cs và 01_schema.sql (bảng courses):
-///    - Định nghĩa cột exam_input_mode VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit' ở cả 2 tệp schema.
-///    - Ràng buộc CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit', 'VoiceWithTranscriptEdit')).
-///    - Khớp 100% giữa DomainEnums.ExamInputMode.All và SQL CHECK constraint.
+/// 2. Kiểm tra tính tương thích giữa Course.cs và EF Core Code-First DbContext (bảng courses):
+///    - Định nghĩa cột exam_input_mode VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit' trong DbContext.
+///    - Ràng buộc CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')).
+///    - Khớp 100% giữa DomainEnums.ExamInputMode.All và EF Core CHECK constraint.
 /// 3. Kiểm thử ca biên Validator và Persistence:
 ///    - Khả năng lưu và đọc lại qua EF Core với cả 2 giá trị ExamInputMode.
 ///    - Chặn các giá trị lạ, sai hoa thường hoặc khoảng trắng qua UpdateCourseConfigurationCommandValidator.
@@ -39,6 +41,7 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
 
         return new OralExamDbContext(options);
     }
+
 
     #region 1. EF Core Model Metadata & Configuration Integrity
 
@@ -126,64 +129,59 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
 
     #endregion
 
-    #region 2. SQL Schema Compatibility (01_schema.sql)
+    #region 2. EF Core Code-First DbContext Schema Compatibility
 
-    [Fact(DisplayName = "ADV-M1-04: 01_schema.sql tại infra/postgres/init phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
-    public void Schema_Infra_Must_Contain_Correct_ExamInputMode_Definition()
+    [Fact(DisplayName = "ADV-M1-04: EF Core Code-First Course entity phải chứa đúng định nghĩa exam_input_mode và CHECK constraint ck_courses_input_mode")]
+    public void DbContext_Course_Must_Contain_Correct_ExamInputMode_Definition_And_Constraint()
     {
-        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
-        string? schemaPath = null;
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
 
-        while (currentDir != null)
-        {
-            var candidate = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "01_schema.sql");
-            if (File.Exists(candidate))
-            {
-                schemaPath = candidate;
-                break;
-            }
-            currentDir = currentDir.Parent;
-        }
+        var courseType = model.FindEntityType(typeof(Course));
+        courseType.Should().NotBeNull("Thực thể Course phải tồn tại trong DbContext Model");
 
-        schemaPath.Should().NotBeNull("Tệp infra/postgres/init/01_schema.sql phải tồn tại");
-        var sql = File.ReadAllText(schemaPath!);
+        var prop = courseType!.FindProperty(nameof(Course.ExamInputMode));
+        prop.Should().NotBeNull("Thuộc tính ExamInputMode phải tồn tại trong entity Course");
+        prop!.GetColumnName().Should().Be("exam_input_mode");
+        prop!.GetMaxLength().Should().Be(30);
+        prop!.GetDefaultValue().Should().Be("VoiceWithTranscriptEdit");
+        prop!.IsNullable.Should().BeFalse();
 
-        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',");
-        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))");
+        var checkConstraint = courseType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_courses_input_mode");
+        checkConstraint.Should().NotBeNull("Bảng courses phải có CHECK constraint ck_courses_input_mode");
+        checkConstraint!.Sql.Should().Be("exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
     }
 
-    [Fact(DisplayName = "ADV-M1-05: 01_schema.sql tại 05_Source_Code/infra/postgres/init (hoặc infra/postgres/init khi chạy CI) phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
-    public void Schema_SourceCode_Must_Contain_Correct_ExamInputMode_Definition()
+    [Fact(DisplayName = "ADV-M1-05: EF Core Code-First OfficialExamSession entity và Migrations phải chứa đúng định nghĩa exam_input_mode và CHECK constraint")]
+    public void DbContext_OfficialExamSession_Must_Contain_Correct_ExamInputMode_Definition_And_Constraint()
     {
-        var currentDir = new DirectoryInfo(AppContext.BaseDirectory);
-        string? schemaPath = null;
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
 
-        while (currentDir != null)
-        {
-            var candidateSourceCode = Path.Combine(currentDir.FullName, "05_Source_Code", "infra", "postgres", "init", "01_schema.sql");
-            var candidateDirect = Path.Combine(currentDir.FullName, "infra", "postgres", "init", "01_schema.sql");
+        var sessionType = model.FindEntityType(typeof(OfficialExamSession));
+        sessionType.Should().NotBeNull("Thực thể OfficialExamSession phải tồn tại trong DbContext Model");
 
-            if (File.Exists(candidateSourceCode))
-            {
-                schemaPath = candidateSourceCode;
-                break;
-            }
-            if (File.Exists(candidateDirect))
-            {
-                schemaPath = candidateDirect;
-                break;
-            }
-            currentDir = currentDir.Parent;
-        }
+        var prop = sessionType!.FindProperty(nameof(OfficialExamSession.ExamInputMode));
+        prop.Should().NotBeNull("Thuộc tính ExamInputMode phải tồn tại trong entity OfficialExamSession");
+        prop!.GetColumnName().Should().Be("exam_input_mode");
+        prop!.GetMaxLength().Should().Be(30);
+        prop!.GetDefaultValue().Should().Be("VoiceWithTranscriptEdit");
+        prop!.IsNullable.Should().BeFalse();
 
-        schemaPath.Should().NotBeNull("Tệp 01_schema.sql phải tồn tại tại 05_Source_Code/infra/postgres/init hoặc infra/postgres/init");
-        var sql = File.ReadAllText(schemaPath!);
+        var checkConstraint = sessionType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_official_sessions_input_mode");
+        checkConstraint.Should().NotBeNull("Bảng official_exam_sessions phải có CHECK constraint ck_official_sessions_input_mode");
+        checkConstraint!.Sql.Should().Be("exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
 
-        sql.Should().Contain("exam_input_mode             VARCHAR(30) NOT NULL DEFAULT 'VoiceWithTranscriptEdit',");
-        sql.Should().Contain("CONSTRAINT ck_courses_input_mode CHECK (exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit'))");
+        var migrationTypes = typeof(OralExamDbContext).Assembly.GetTypes()
+            .Where(t => typeof(Microsoft.EntityFrameworkCore.Migrations.Migration).IsAssignableFrom(t) && !t.IsAbstract)
+            .Select(t => t.Name)
+            .ToList();
+        migrationTypes.Should().Contain(
+            name => name.Contains("AddModelCheckConstraints"),
+            "Bản migration AddModelCheckConstraints phải tồn tại để áp dụng các check constraints vào CSDL PostgreSQL");
     }
 
-    [Fact(DisplayName = "ADV-M1-06: DomainEnums.ExamInputMode phải khớp chính xác 100% với 2 giá trị trong SQL CHECK constraint")]
+    [Fact(DisplayName = "ADV-M1-06: DomainEnums.ExamInputMode phải khớp chính xác 100% với 2 giá trị trong EF Core CHECK constraint")]
     public void DomainEnums_ExamInputMode_Must_Match_SQL_Check_Constraint()
     {
         ExamInputMode.VoiceOnly.Should().Be("VoiceOnly");

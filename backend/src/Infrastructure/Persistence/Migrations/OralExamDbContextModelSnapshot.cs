@@ -83,7 +83,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("PracticeAnswerId")
                         .HasDatabaseName("ix_ai_evaluations_practice_answer");
 
-                    b.ToTable("ai_evaluations", (string)null);
+                    b.ToTable("ai_evaluations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
+
+                            t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'exam')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluationDetail", b =>
@@ -119,7 +124,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("EvaluationId")
                         .HasDatabaseName("ix_ai_eval_details_evaluation");
 
-                    b.ToTable("ai_evaluation_details", (string)null);
+                    b.ToTable("ai_evaluation_details", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ai_eval_detail_score", "score >= 0");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AppealRequest", b =>
@@ -223,7 +231,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_appeal_requests_status");
 
-                    b.ToTable("appeal_requests", (string)null);
+                    b.ToTable("appeal_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
+
+                            t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                        });
 
                     b.HasData(
                         new
@@ -361,7 +374,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("SemesterId")
                         .HasDatabaseName("ix_classes_semester");
 
-                    b.ToTable("classes", (string)null);
+                    b.ToTable("classes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_classes_max_students", "max_students > 0");
+                        });
 
                     b.HasData(
                         new
@@ -416,7 +432,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_class_enrollments");
 
-                    b.ToTable("class_enrollments", (string)null);
+                    b.ToTable("class_enrollments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_class_enrollment_status", "status IN ('enrolled', 'dropped', 'completed')");
+                        });
 
                     b.HasData(
                         new
@@ -520,7 +539,18 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("SemesterId")
                         .HasDatabaseName("ix_courses_semester");
 
-                    b.ToTable("courses", (string)null);
+                    b.ToTable("courses", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_courses_credits", "credits > 0");
+
+                            t.HasCheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+
+                            t.HasCheckConstraint("ck_courses_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+
+                            t.HasCheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
+
+                            t.HasCheckConstraint("ck_courses_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
+                        });
 
                     b.HasData(
                         new
@@ -608,7 +638,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_dead_letter_queues_status");
 
-                    b.ToTable("dead_letter_queues", (string)null);
+                    b.ToTable("dead_letter_queues", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_dlq_status", "status IN ('pending', 'resolved', 'abandoned')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
@@ -722,7 +755,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_exam_questions_course");
 
-                    b.ToTable("exam_questions", (string)null);
+                    b.ToTable("exam_questions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+
+                            t.HasCheckConstraint("ck_exam_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
+                        });
 
                     b.HasData(
                         new
@@ -819,7 +857,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_ticket_question");
 
-                    b.ToTable("exam_question_submissions", (string)null);
+                    b.ToTable("exam_question_submissions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_submissions_grading_status", "grading_status IN ('pending', 'transcribing', 'transcribed', 'ai_graded', 'audited', 'failed')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamSet", b =>
@@ -985,7 +1026,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_exam_structures_created_by");
 
-                    b.ToTable("exam_structures", (string)null);
+                    b.ToTable("exam_structures", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_struct_duration", "duration_minutes > 0");
+
+                            t.HasCheckConstraint("ck_exam_struct_questions", "total_questions > 0");
+                        });
 
                     b.HasData(
                         new
@@ -1054,7 +1100,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_lecturer_audits_ticket");
 
-                    b.ToTable("lecturer_audits", (string)null);
+                    b.ToTable("lecturer_audits", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_lecturer_audits_scores", "original_ai_score >= 0 AND audited_score >= 0");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.LecturerAuditDetail", b =>
@@ -1095,7 +1144,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("CriterionId")
                         .HasDatabaseName("ix_lecturer_audit_details_criterion");
 
-                    b.ToTable("lecturer_audit_details", (string)null);
+                    b.ToTable("lecturer_audit_details", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_audit_details_scores", "ai_score >= 0 AND audited_score >= 0");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
@@ -1146,7 +1198,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("SessionId")
                         .HasDatabaseName("ix_mock_exam_answers_session");
 
-                    b.ToTable("mock_exam_answers", (string)null);
+                    b.ToTable("mock_exam_answers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_mock_answers_status", "status IN ('pending', 'answered', 'graded', 'failed')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamQuota", b =>
@@ -1189,7 +1244,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_mock_exam_quotas_lookup");
 
-                    b.ToTable("mock_exam_quotas", (string)null);
+                    b.ToTable("mock_exam_quotas", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_mock_exam_quotas_count", "used_count >= 0");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamSession", b =>
@@ -1256,7 +1314,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("StudentId", "StartedAt")
                         .HasDatabaseName("ix_mock_exam_sessions_student");
 
-                    b.ToTable("mock_exam_sessions", (string)null);
+                    b.ToTable("mock_exam_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_mock_sessions_status", "status IN ('in_progress', 'submitted', 'graded', 'abandoned')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.OfficialExamSession", b =>
@@ -1340,7 +1401,16 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("ExamStructureId")
                         .HasDatabaseName("ix_official_exam_sessions_structure");
 
-                    b.ToTable("official_exam_sessions", (string)null);
+                    b.ToTable("official_exam_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_official_sessions_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+
+                            t.HasCheckConstraint("ck_official_sessions_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+
+                            t.HasCheckConstraint("ck_official_sessions_status", "status IN ('scheduled', 'in_progress', 'grading', 'auditing', 'concluded')");
+
+                            t.HasCheckConstraint("ck_official_sessions_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
+                        });
 
                     b.HasData(
                         new
@@ -1422,7 +1492,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("StudentId")
                         .HasDatabaseName("ix_practice_answers_student");
 
-                    b.ToTable("practice_answers", (string)null);
+                    b.ToTable("practice_answers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_practice_answers_status", "status IN ('pending', 'grading', 'graded', 'failed')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeQuestion", b =>
@@ -1509,7 +1582,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_practice_questions_course");
 
-                    b.ToTable("practice_questions", (string)null);
+                    b.ToTable("practice_questions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_practice_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+
+                            t.HasCheckConstraint("ck_practice_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
+                        });
 
                     b.HasData(
                         new
@@ -1676,7 +1754,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("StudentId", "StartedAt")
                         .HasDatabaseName("ix_practice_sessions_student");
 
-                    b.ToTable("practice_sessions", (string)null);
+                    b.ToTable("practice_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_practice_sessions_mode", "practice_mode IN ('per_question', 'full_session')");
+
+                            t.HasCheckConstraint("ck_practice_sessions_status", "status IN ('in_progress', 'completed', 'abandoned', 'timed_out')");
+                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
@@ -1737,7 +1820,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("SessionId")
                         .HasDatabaseName("ix_real_exam_shifts_session");
 
-                    b.ToTable("real_exam_session_shifts", (string)null);
+                    b.ToTable("real_exam_session_shifts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+
+                            t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
+                        });
 
                     b.HasData(
                         new
@@ -1849,7 +1937,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_rubrics_course");
 
-                    b.ToTable("rubrics", (string)null);
+                    b.ToTable("rubrics", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_rubrics_total_score", "total_max_score = 10.00");
+                        });
 
                     b.HasData(
                         new
@@ -1918,7 +2009,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("RubricId")
                         .HasDatabaseName("ix_rubric_criteria_rubric");
 
-                    b.ToTable("rubric_criteria", (string)null);
+                    b.ToTable("rubric_criteria", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_rubric_criteria_score", "max_score > 0 AND max_score <= 10.00");
+
+                            t.HasCheckConstraint("ck_rubric_criteria_weight", "weight > 0 AND weight <= 1.00");
+                        });
 
                     b.HasData(
                         new
@@ -2005,7 +2101,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_semesters_code");
 
-                    b.ToTable("semesters", (string)null);
+                    b.ToTable("semesters", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_semesters_dates", "end_date >= start_date");
+                        });
 
                     b.HasData(
                         new
@@ -2092,7 +2191,14 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("uq_tickets_student");
 
-                    b.ToTable("student_exam_tickets", (string)null);
+                    b.ToTable("student_exam_tickets", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tickets_ack_status", "student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')");
+
+                            t.HasCheckConstraint("ck_tickets_seat", "seat_number >= 1 AND seat_number <= 40");
+
+                            t.HasCheckConstraint("ck_tickets_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')");
+                        });
 
                     b.HasData(
                         new
@@ -2271,7 +2377,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_users_student_code");
 
-                    b.ToTable("users", (string)null);
+                    b.ToTable("users", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_users_role", "role IN ('admin', 'department_head', 'lecturer', 'proctor', 'student')");
+                        });
 
                     b.HasData(
                         new

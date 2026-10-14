@@ -50,7 +50,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 1. users
         modelBuilder.Entity<User>(entity =>
         {
-            entity.ToTable("users");
+            entity.ToTable("users", t =>
+            {
+                t.HasCheckConstraint("ck_users_role", "role IN ('admin', 'department_head', 'lecturer', 'proctor', 'student')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
@@ -152,7 +155,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 2. semesters
         modelBuilder.Entity<Semester>(entity =>
         {
-            entity.ToTable("semesters");
+            entity.ToTable("semesters", t =>
+            {
+                t.HasCheckConstraint("ck_semesters_dates", "end_date >= start_date");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
@@ -178,7 +184,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 3. courses
         modelBuilder.Entity<Course>(entity =>
         {
-            entity.ToTable("courses");
+            entity.ToTable("courses", t =>
+            {
+                t.HasCheckConstraint("ck_courses_credits", "credits > 0");
+                t.HasCheckConstraint("ck_courses_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
+                t.HasCheckConstraint("ck_courses_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+                t.HasCheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
+                t.HasCheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
@@ -240,7 +253,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 4. classes
         modelBuilder.Entity<Class>(entity =>
         {
-            entity.ToTable("classes");
+            entity.ToTable("classes", t =>
+            {
+                t.HasCheckConstraint("ck_classes_max_students", "max_students > 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
@@ -286,7 +302,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 5. class_enrollments
         modelBuilder.Entity<ClassEnrollment>(entity =>
         {
-            entity.ToTable("class_enrollments");
+            entity.ToTable("class_enrollments", t =>
+            {
+                t.HasCheckConstraint("ck_class_enrollment_status", "status IN ('enrolled', 'dropped', 'completed')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.ClassId).HasColumnName("class_id").IsRequired();
@@ -328,7 +347,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 6. rubrics
         modelBuilder.Entity<Rubric>(entity =>
         {
-            entity.ToTable("rubrics");
+            entity.ToTable("rubrics", t =>
+            {
+                t.HasCheckConstraint("ck_rubrics_total_score", "total_max_score = 10.00");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
@@ -359,7 +381,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 7. rubric_criteria
         modelBuilder.Entity<RubricCriterion>(entity =>
         {
-            entity.ToTable("rubric_criteria");
+            entity.ToTable("rubric_criteria", t =>
+            {
+                t.HasCheckConstraint("ck_rubric_criteria_score", "max_score > 0 AND max_score <= 10.00");
+                t.HasCheckConstraint("ck_rubric_criteria_weight", "weight > 0 AND weight <= 1.00");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.RubricId).HasColumnName("rubric_id").IsRequired();
@@ -419,7 +445,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 8. practice_questions
         modelBuilder.Entity<PracticeQuestion>(entity =>
         {
-            entity.ToTable("practice_questions");
+            entity.ToTable("practice_questions", t =>
+            {
+                t.HasCheckConstraint("ck_practice_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
+                t.HasCheckConstraint("ck_practice_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
@@ -549,7 +579,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 9. exam_questions
         modelBuilder.Entity<ExamQuestion>(entity =>
         {
-            entity.ToTable("exam_questions");
+            entity.ToTable("exam_questions", t =>
+            {
+                t.HasCheckConstraint("ck_exam_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
+                t.HasCheckConstraint("ck_exam_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
@@ -615,7 +649,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 10. practice_sessions
         modelBuilder.Entity<PracticeSession>(entity =>
         {
-            entity.ToTable("practice_sessions");
+            entity.ToTable("practice_sessions", t =>
+            {
+                t.HasCheckConstraint("ck_practice_sessions_mode", "practice_mode IN ('per_question', 'full_session')");
+                t.HasCheckConstraint("ck_practice_sessions_status", "status IN ('in_progress', 'completed', 'abandoned', 'timed_out')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
@@ -644,7 +682,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 11. practice_answers
         modelBuilder.Entity<PracticeAnswer>(entity =>
         {
-            entity.ToTable("practice_answers");
+            entity.ToTable("practice_answers", t =>
+            {
+                t.HasCheckConstraint("ck_practice_answers_status", "status IN ('pending', 'grading', 'graded', 'failed')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
@@ -684,7 +725,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 12. ai_evaluations
         modelBuilder.Entity<AiEvaluation>(entity =>
         {
-            entity.ToTable("ai_evaluations");
+            entity.ToTable("ai_evaluations", t =>
+            {
+                t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'exam')");
+                t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.AnswerType).HasColumnName("answer_type").HasMaxLength(20).IsRequired();
@@ -719,7 +764,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 13. ai_evaluation_details
         modelBuilder.Entity<AiEvaluationDetail>(entity =>
         {
-            entity.ToTable("ai_evaluation_details");
+            entity.ToTable("ai_evaluation_details", t =>
+            {
+                t.HasCheckConstraint("ck_ai_eval_detail_score", "score >= 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.EvaluationId).HasColumnName("evaluation_id").IsRequired();
@@ -743,7 +791,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 14. exam_structures
         modelBuilder.Entity<ExamStructure>(entity =>
         {
-            entity.ToTable("exam_structures");
+            entity.ToTable("exam_structures", t =>
+            {
+                t.HasCheckConstraint("ck_exam_struct_duration", "duration_minutes > 0");
+                t.HasCheckConstraint("ck_exam_struct_questions", "total_questions > 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
@@ -851,7 +903,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 17. mock_exam_quotas
         modelBuilder.Entity<MockExamQuota>(entity =>
         {
-            entity.ToTable("mock_exam_quotas");
+            entity.ToTable("mock_exam_quotas", t =>
+            {
+                t.HasCheckConstraint("ck_mock_exam_quotas_count", "used_count >= 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
@@ -875,7 +930,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 18. mock_exam_sessions
         modelBuilder.Entity<MockExamSession>(entity =>
         {
-            entity.ToTable("mock_exam_sessions");
+            entity.ToTable("mock_exam_sessions", t =>
+            {
+                t.HasCheckConstraint("ck_mock_sessions_status", "status IN ('in_progress', 'submitted', 'graded', 'abandoned')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
@@ -910,7 +968,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 19. mock_exam_answers
         modelBuilder.Entity<MockExamAnswer>(entity =>
         {
-            entity.ToTable("mock_exam_answers");
+            entity.ToTable("mock_exam_answers", t =>
+            {
+                t.HasCheckConstraint("ck_mock_answers_status", "status IN ('pending', 'answered', 'graded', 'failed')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
@@ -936,7 +997,13 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 20. official_exam_sessions
         modelBuilder.Entity<OfficialExamSession>(entity =>
         {
-            entity.ToTable("official_exam_sessions");
+            entity.ToTable("official_exam_sessions", t =>
+            {
+                t.HasCheckConstraint("ck_official_sessions_status", "status IN ('scheduled', 'in_progress', 'grading', 'auditing', 'concluded')");
+                t.HasCheckConstraint("ck_official_sessions_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+                t.HasCheckConstraint("ck_official_sessions_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+                t.HasCheckConstraint("ck_official_sessions_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
@@ -988,7 +1055,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 21. real_exam_session_shifts
         modelBuilder.Entity<RealExamSessionShift>(entity =>
         {
-            entity.ToTable("real_exam_session_shifts");
+            entity.ToTable("real_exam_session_shifts", t =>
+            {
+                t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
+                t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
@@ -1029,7 +1100,12 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 22. student_exam_tickets
         modelBuilder.Entity<StudentExamTicket>(entity =>
         {
-            entity.ToTable("student_exam_tickets");
+            entity.ToTable("student_exam_tickets", t =>
+            {
+                t.HasCheckConstraint("ck_tickets_seat", "seat_number >= 1 AND seat_number <= 40");
+                t.HasCheckConstraint("ck_tickets_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')");
+                t.HasCheckConstraint("ck_tickets_ack_status", "student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.ShiftId).HasColumnName("shift_id").IsRequired();
@@ -1092,7 +1168,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 23. exam_question_submissions
         modelBuilder.Entity<ExamQuestionSubmission>(entity =>
         {
-            entity.ToTable("exam_question_submissions");
+            entity.ToTable("exam_question_submissions", t =>
+            {
+                t.HasCheckConstraint("ck_submissions_grading_status", "grading_status IN ('pending', 'transcribing', 'transcribed', 'ai_graded', 'audited', 'failed')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.TicketId).HasColumnName("ticket_id").IsRequired();
@@ -1124,7 +1203,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 24. lecturer_audits
         modelBuilder.Entity<LecturerAudit>(entity =>
         {
-            entity.ToTable("lecturer_audits");
+            entity.ToTable("lecturer_audits", t =>
+            {
+                t.HasCheckConstraint("ck_lecturer_audits_scores", "original_ai_score >= 0 AND audited_score >= 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.TicketId).HasColumnName("ticket_id").IsRequired();
@@ -1151,7 +1233,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 25. lecturer_audit_details
         modelBuilder.Entity<LecturerAuditDetail>(entity =>
         {
-            entity.ToTable("lecturer_audit_details");
+            entity.ToTable("lecturer_audit_details", t =>
+            {
+                t.HasCheckConstraint("ck_audit_details_scores", "ai_score >= 0 AND audited_score >= 0");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.AuditId).HasColumnName("audit_id").IsRequired();
@@ -1176,7 +1261,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 26. dead_letter_queues
         modelBuilder.Entity<DeadLetterQueue>(entity =>
         {
-            entity.ToTable("dead_letter_queues");
+            entity.ToTable("dead_letter_queues", t =>
+            {
+                t.HasCheckConstraint("ck_dlq_status", "status IN ('pending', 'resolved', 'abandoned')");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.TaskType).HasColumnName("task_type").HasMaxLength(50).IsRequired();
@@ -1216,7 +1304,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         // 28. appeal_requests
         modelBuilder.Entity<AppealRequest>(entity =>
         {
-            entity.ToTable("appeal_requests");
+            entity.ToTable("appeal_requests", t =>
+            {
+                t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                t.HasCheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.TicketId).HasColumnName("ticket_id").IsRequired();

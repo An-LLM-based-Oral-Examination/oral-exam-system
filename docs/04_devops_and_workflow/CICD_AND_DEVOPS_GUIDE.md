@@ -207,7 +207,7 @@ graph TB
             subgraph Container_Database ["Container: oralexam-postgres-prod (PostgreSQL 16-alpine)"]
                 PGServer[PostgreSQL Database Engine: Port 5432 internal]
                 PGData[(Volume: postgres_prod_data)]
-                InitScripts[Init DB: 01_schema.sql 30 tables + 02_seed.sql]
+                EFCoreMigrations[EF Core Code-First Migrations: 30 tables 3NF]
             end
         end
     end
@@ -230,7 +230,7 @@ graph TB
     RestControllers -->|Nội bộ: Host=postgres Port=5432| PGServer
     SignalRHub -->|Truy vấn dữ liệu| PGServer
     PGServer --- PGData
-    PGServer --- InitScripts
+    PGServer --- EFCoreMigrations
 
     RestControllers -->|HTTPS API Key| CloudGemini
     RestControllers -->|S3 API Hashing SHA-256| CloudR2

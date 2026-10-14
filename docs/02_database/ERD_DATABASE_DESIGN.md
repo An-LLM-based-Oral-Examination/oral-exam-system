@@ -13,7 +13,7 @@
 > - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator  
 > **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (30 bảng 3NF: 27 bảng lõi + 1 bảng phúc khảo + 1 bảng cấu hình hệ thống + 1 bảng thông báo)  
 > **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](./diagrams/KIEN_TRUC_HE_THONG.drawio)  
-> **Bộ mã nguồn SQL DDL & Seed:** [`infra/postgres/init/01_schema.sql`](../infra/postgres/init/01_schema.sql) và [`02_seed.sql`](../infra/postgres/init/02_seed.sql)
+> **Nguồn sự thật CSDL duy nhất (Single Source of Truth):** EF Core Code-First ([`backend/src/Infrastructure/Persistence/OralExamDbContext.cs`](../../backend/src/Infrastructure/Persistence/OralExamDbContext.cs)) và các bản Migrations ([`backend/src/Infrastructure/Persistence/Migrations/`](../../backend/src/Infrastructure/Persistence/Migrations/))
 
 ---
 
