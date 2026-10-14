@@ -143,6 +143,42 @@ public class GradingQueueWorker : BackgroundService
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
 
+        var orderedCriteria = question.Rubric.Criteria
+            .OrderBy(c => c.OrderIndex)
+            .ToList();
+
+        var evalDetails = new System.Collections.Generic.List<AiEvaluationDetail>();
+        var criteriaScoreDtos = new System.Collections.Generic.List<PracticeEvaluationDetailDto>();
+        var rawDetails = gradingResult.Details ?? new System.Collections.Generic.List<GradingDetailDto>();
+
+        for (int i = 0; i < orderedCriteria.Count; i++)
+        {
+            var criterion = orderedCriteria[i];
+            var matchedDetail = rawDetails.FirstOrDefault(d =>
+                string.Equals(d.CriterionId?.Trim(), criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                ?? (i < rawDetails.Count ? rawDetails[i] : null);
+
+            var clampedScore = matchedDetail != null
+                ? Math.Clamp(matchedDetail.Score, 0.0m, criterion.MaxScore)
+                : 0.0m;
+            var comment = matchedDetail?.Comment ?? string.Empty;
+
+            evalDetails.Add(new AiEvaluationDetail
+            {
+                CriterionId = criterion.Id,
+                Score = clampedScore,
+                Comment = comment
+            });
+
+            criteriaScoreDtos.Add(new PracticeEvaluationDetailDto
+            {
+                CriterionId = criterion.Id,
+                CriterionName = criterion.CriterionName,
+                Score = clampedScore,
+                Comment = comment
+            });
+        }
+
         var evaluation = new AiEvaluation
         {
             AnswerType = "practice",
@@ -151,12 +187,7 @@ public class GradingQueueWorker : BackgroundService
             ConfidenceScore = gradingResult.ConfidenceScore,
             Feedback = gradingResult.Feedback,
             CotTrace = gradingResult.CotTrace,
-            Details = gradingResult.Details.Select(d => new AiEvaluationDetail
-            {
-                CriterionId = Guid.TryParse(d.CriterionId, out var parsedGuid) ? parsedGuid : question.Rubric.Criteria.FirstOrDefault()?.Id ?? Guid.Empty,
-                Score = d.Score,
-                Comment = d.Comment
-            }).ToList()
+            Details = evalDetails
         };
 
         dbContext.AiEvaluations.Add(evaluation);
@@ -178,22 +209,12 @@ public class GradingQueueWorker : BackgroundService
             IsFollowUp = gradingTask.IsFollowUp,
             ParentAnswerId = gradingTask.ParentAnswerId,
             Status = "graded",
+            SubmittedAt = answer?.SubmittedAt ?? DateTime.UtcNow,
             TotalScore = evaluation.TotalScore,
             Feedback = evaluation.Feedback,
             IsSuspicious = gradingResult.IsSuspicious,
             ConfidenceScore = evaluation.ConfidenceScore,
-            CriteriaScores = gradingResult.Details.Select(d => 
-            {
-                var critId = Guid.TryParse(d.CriterionId, out var parsedGuid) ? parsedGuid : Guid.Empty;
-                var critName = question.Rubric.Criteria.FirstOrDefault(c => c.Id == critId)?.CriterionName ?? string.Empty;
-                return new PracticeEvaluationDetailDto
-                {
-                    CriterionId = critId,
-                    CriterionName = critName,
-                    Score = d.Score,
-                    Comment = d.Comment
-                };
-            }).ToList()
+            CriteriaScores = criteriaScoreDtos
         };
 
         // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question

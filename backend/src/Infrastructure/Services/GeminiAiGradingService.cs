@@ -25,8 +25,8 @@ public class GeminiAiGradingService : IAiGradingService
     [
         DefaultGeminiApiUrl,
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     ];
 
     private readonly HttpClient _httpClient;
@@ -55,7 +55,7 @@ TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 Dưới đây là chi tiết:
 - Câu hỏi: {request.QuestionContent}
 - Đáp án mẫu (Model Answer) của Giảng viên để đối chiếu: {request.SampleAnswer ?? "Không có sẵn"}
-- Barem Rubric (gồm tên tiêu chí, mô tả, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
+- Barem Rubric (gồm Id, tên tiêu chí Name, mô tả Description, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
 
 DƯỚI ĐÂY LÀ BẢN GHI ÂM/TRANSCRIPT CỦA SINH VIÊN (ĐƯỢC BỌC TRONG THẺ XML):
 <student_transcript>
@@ -68,6 +68,7 @@ Quy trình suy luận (Chain-of-Thought):
 2. Với mỗi tiêu chí, ghi nhận bằng chứng (Evidence), chỉ ra điểm đạt và điểm thiếu sót.
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng các tiêu chí (tối đa 10.0).
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn, lạc đề hoặc nghi ngờ, đặt IsSuspicious = true.
+5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -79,7 +80,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
   ""Details"": [
     {{
-      ""CriterionId"": ""guid"",
+      ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
       ""Score"": 3.0,
       ""Comment"": ""Đạt yêu cầu...""
     }}
@@ -103,8 +104,9 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         var candidateUrls = new System.Collections.Generic.List<string>();
 
         if (!string.IsNullOrWhiteSpace(_apiUrl) &&
-            !_apiUrl.Contains("gemini-1.5-flash", StringComparison.OrdinalIgnoreCase) &&
-            !_apiUrl.Contains("gemini-2.5-flash:", StringComparison.OrdinalIgnoreCase))
+            !_apiUrl.Contains("gemini-1.5-", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-2.0-", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-2.5-", StringComparison.OrdinalIgnoreCase))
         {
             candidateUrls.Add(_apiUrl);
         }

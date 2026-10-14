@@ -181,6 +181,7 @@ public class PracticeController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId}/batch-submit")]
+    [HttpPost("sessions/{sessionId}/batch-answers")]
     public async Task<IActionResult> SubmitBatch(Guid sessionId, [FromBody] SubmitPracticeBatchRequest request)
     {
         var command = new OralExamination.Application.Features.Practice.Commands.SubmitPracticeBatch.SubmitPracticeBatchCommand(
