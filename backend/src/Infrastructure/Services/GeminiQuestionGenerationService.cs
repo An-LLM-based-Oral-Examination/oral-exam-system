@@ -73,7 +73,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         AiQuestionGenerationParams parameters,
         CancellationToken cancellationToken)
     {
-        string[] candidateModels = { "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash" };
+        string[] candidateModels = { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3.5-flash" };
         var prompt = BuildPrompt(parameters);
 
         var payload = new

@@ -19,6 +19,16 @@ public class GeminiAiGradingService : IAiGradingService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
+
+    private static readonly string[] FallbackApiUrls =
+    [
+        DefaultGeminiApiUrl,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+    ];
+
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _apiUrl;
@@ -27,7 +37,7 @@ public class GeminiAiGradingService : IAiGradingService
     {
         _httpClient = httpClient;
         _apiKey = configuration["Gemini:ApiKey"] ?? string.Empty;
-        _apiUrl = configuration["Gemini:ApiUrl"] ?? "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        _apiUrl = configuration["Gemini:ApiUrl"] ?? DefaultGeminiApiUrl;
     }
 
     public async Task<AiGradingResult> GradeAnswerAsync(AiGradingRequest request, CancellationToken cancellationToken = default)
@@ -89,13 +99,43 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
         };
 
-        var requestBody = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync($"{_apiUrl}?key={_apiKey}", requestBody, cancellationToken);
+        var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
+        var candidateUrls = new System.Collections.Generic.List<string>();
 
-        if (!response.IsSuccessStatusCode)
+        if (!string.IsNullOrWhiteSpace(_apiUrl) &&
+            !_apiUrl.Contains("gemini-1.5-flash", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-2.5-flash:", StringComparison.OrdinalIgnoreCase))
         {
-            var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            return CreateFallbackResult($"Gemini API HTTP Error {response.StatusCode}: {error}");
+            candidateUrls.Add(_apiUrl);
+        }
+
+        foreach (var fallbackUrl in FallbackApiUrls)
+        {
+            if (!candidateUrls.Contains(fallbackUrl))
+            {
+                candidateUrls.Add(fallbackUrl);
+            }
+        }
+
+        HttpResponseMessage? response = null;
+        string lastError = string.Empty;
+
+        foreach (var targetUrl in candidateUrls)
+        {
+            using var requestBody = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+            response = await _httpClient.PostAsync($"{targetUrl}?key={_apiKey}", requestBody, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                break;
+            }
+
+            lastError = $"Gemini API HTTP Error {response.StatusCode}: {await response.Content.ReadAsStringAsync(cancellationToken)}";
+        }
+
+        if (response == null || !response.IsSuccessStatusCode)
+        {
+            return CreateFallbackResult(lastError);
         }
 
         var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);
