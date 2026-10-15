@@ -2348,6 +2348,17 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("MustChangePassword")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("must_change_password");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("password_hash");
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2367,6 +2378,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<string>("Username")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("username");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
@@ -2376,6 +2392,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     b.HasIndex("StudentCode")
                         .IsUnique()
                         .HasDatabaseName("ix_users_student_code");
+
+                    b.HasIndex("Username")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_username");
 
                     b.ToTable("users", null, t =>
                         {
@@ -2390,8 +2410,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "admin@fpt.edu.vn",
                             FullName = "Nguyen Quang Thanh",
                             IsActive = true,
+                            MustChangePassword = false,
+                            PasswordHash = "pbkdf2-sha256.210000.5K2wrCgwPiV5n+ABUXfgiA==.008qe4tj/RRL8pPAl4EYA+A5+pfxVetYA6GDQh/R0mY=",
                             Role = "admin",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "admin"
                         },
                         new
                         {
@@ -2400,8 +2423,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "headse@fe.edu.vn",
                             FullName = "Tran Van Truong",
                             IsActive = true,
+                            MustChangePassword = false,
+                            PasswordHash = "pbkdf2-sha256.210000.HpTuTN7YNAPOdlxcQWqpHA==.ZwGxFXu923/XOLQOpsxyOeQVE5WyKcnaoz26ljezdsM=",
                             Role = "department_head",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "headse"
                         },
                         new
                         {
@@ -2410,8 +2436,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "totnt@fe.edu.vn",
                             FullName = "Nguyen Trong Tot",
                             IsActive = true,
+                            MustChangePassword = false,
+                            PasswordHash = "pbkdf2-sha256.210000.NAemlIZmGVkenMK0C4M/nA==.QMwd1s/sMi+q+NaEjyE4zZmnjyaaoiXq/fPgSa/Bxrk=",
                             Role = "lecturer",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "totnt"
                         },
                         new
                         {
@@ -2420,8 +2449,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "haind@fe.edu.vn",
                             FullName = "Nguyen Dang Hai",
                             IsActive = true,
+                            MustChangePassword = false,
+                            PasswordHash = "pbkdf2-sha256.210000.XWSrNfAl9MJ4kGLb8pTU3Q==.3Qk6V00ldedgCY86HSofmJWukSF1OjCzPzAphfouT30=",
                             Role = "proctor",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "haind"
                         },
                         new
                         {
@@ -2430,9 +2462,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "hoanglvse170001@fpt.edu.vn",
                             FullName = "Le Vu Hoang",
                             IsActive = true,
+                            MustChangePassword = true,
+                            PasswordHash = "pbkdf2-sha256.210000.0GiJlqUca2B7Yifgm2O6Fw==.IC/G1GWasnB5RNxlTCiIoHblv2PZ7+4UcrZCloAEpTQ=",
                             Role = "student",
                             StudentCode = "SE170001",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "hoalvse170001"
                         },
                         new
                         {
@@ -2441,9 +2476,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             Email = "maittse170002@fpt.edu.vn",
                             FullName = "Tran Thi Mai",
                             IsActive = true,
+                            MustChangePassword = true,
+                            PasswordHash = "pbkdf2-sha256.210000.vgos1dwrA89Q/KbEtKvbdQ==.CCAyM2KcWJkAXVkOAIiUHDJUl0wi5L8FZRhnQBXjbZQ=",
                             Role = "student",
                             StudentCode = "SE170002",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Username = "maittse170002"
                         });
                 });
 

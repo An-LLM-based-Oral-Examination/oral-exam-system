@@ -2,7 +2,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.Auth;
+using OralExamination.Application.Features.Auth.Commands.ChangePassword;
 using OralExamination.Application.Features.Auth.Commands.GoogleLogin;
+using OralExamination.Application.Features.Auth.Commands.PasswordLogin;
 using OralExamination.Application.Features.Auth.Commands.RefreshToken;
 using OralExamination.Application.Features.Auth.Commands.SignOut;
 using OralExamination.Application.Features.Auth.DTOs;
@@ -120,5 +123,70 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { message = "Đăng xuất thành công." });
+    }
+
+    /// <summary>
+    /// Đăng nhập bằng cột users.username và mật khẩu. Role lấy từ database, không đọc từ body.
+    /// </summary>
+    [HttpPost("password-login")]
+    [AllowAnonymous]
+    public async Task<IActionResult> PasswordLogin([FromBody] PasswordLoginRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new PasswordLoginCommand(request.Username, request.Password), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return AuthProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Đổi mật khẩu của chính người đang đăng nhập. UserId lấy từ claim sub.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new ChangePasswordCommand(userId, request.CurrentPassword, request.NewPassword),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return AuthProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    private IActionResult AuthProblem(string error)
+    {
+        var statusCode = error switch
+        {
+            AuthErrors.AccountNotFound => StatusCodes.Status404NotFound,
+            AuthErrors.WrongPassword or AuthErrors.CurrentPasswordWrong => StatusCodes.Status401Unauthorized,
+            AuthErrors.AccountLocked => StatusCodes.Status403Forbidden,
+            _ => StatusCodes.Status400BadRequest
+        };
+
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status404NotFound => "Không tìm thấy tài khoản.",
+                StatusCodes.Status401Unauthorized => "Không xác thực được.",
+                StatusCodes.Status403Forbidden => "Tài khoản bị khóa.",
+                _ => "Dữ liệu đầu vào không hợp lệ."
+            },
+            Detail = error,
+            Type = "https://tools.ietf.org/html/rfc7231"
+        });
     }
 }

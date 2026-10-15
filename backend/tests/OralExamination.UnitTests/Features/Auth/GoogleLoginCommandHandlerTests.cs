@@ -188,7 +188,7 @@ public class GoogleLoginCommandHandlerTests
     {
         public int Calls { get; private set; }
 
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
         {
             Calls++;
             return new IssuedAccessToken("access-token", 900);

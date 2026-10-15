@@ -41,6 +41,7 @@ public static class AuthenticationServiceCollectionExtensions
 
         services.AddSingleton<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         return services;
     }
 }

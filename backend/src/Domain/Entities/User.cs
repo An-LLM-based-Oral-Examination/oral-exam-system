@@ -9,7 +9,10 @@ public partial class User
     public string Email { get; set; } = null!;
     public string FullName { get; set; } = null!;
     public string? StudentCode { get; set; }
+    public string? Username { get; set; }
     public string Role { get; set; } = "student";
+    public string? PasswordHash { get; set; }
+    public bool MustChangePassword { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
