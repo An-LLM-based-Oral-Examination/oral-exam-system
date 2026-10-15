@@ -17,8 +17,6 @@ Report 3 nộp cuối Tuần 7. Ba ngày dưới đây là lịch review. Sau 21
 | Check ngày 3 — xong | 21:00, 16/10/2026 |
 
 
-
-
 ## Quy tắc
 
 1. Mỗi người chỉ viết các mục được giao. Không sửa mục của người khác.
@@ -68,8 +66,6 @@ Thành không vẽ context diagram, use case diagram, Conceptual ERD, Logical ER
 | 16/10 | Mục 2.2.2 nốt: 6.1–6.14, 7.1–7.18, 8.1–8.19. Mục 3.5: đặc tả function 8.1–8.19 (mục đích, actor, input, output, ràng buộc, ngoại lệ). Mục 3.1.1: một screen flow cấu hình hệ thống. Mục 3.1.2 và 3.1.3 của các màn hình đó. Mục 5.1 và 5.3 của System configuration. Mục 5.2 Common Requirements.            |
 
 
-
-
 ## Hải
 
 Hải vẽ đủ ba diagram hệ thống trong hai ngày đầu để cả nhóm review hình trước khi viết nốt đặc tả.
@@ -80,8 +76,6 @@ Hải vẽ đủ ba diagram hệ thống trong hai ngày đầu để cả nhóm
 | 14/10 | Mục 1: context diagram và chú thích từng khối. Mục 2.2.1: một use case diagram cả đề tài, mức 11 feature, không vẽ từng function. Mục 4.1 External Interfaces: chữ cho Google, FLM, Gemini, Whisper, Cloudflare R2. |
 | 15/10 | Mục 3.1.5: Conceptual ERD (entity và quan hệ, chưa kẻ cột). Mục 3.1.1: ba screen flow — đăng nhập, cấu hình kỳ thi, dashboard. Mục 3.1.2 và 3.1.3 của các màn hình đó.                                              |
 | 16/10 | Mục 3.4: đặc tả function 1.1–1.4, 5.1–5.11, 9.1–9.5, 10.1–10.3, 11.1–11.3. Mục 5.1 và 5.3 của các feature này.                                                                                                      |
-
-
 
 
 ## Hoàng

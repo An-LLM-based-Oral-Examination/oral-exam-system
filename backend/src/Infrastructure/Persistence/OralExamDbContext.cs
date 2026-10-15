@@ -2,6 +2,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Domain.Entities;
+using OralExamination.Infrastructure.Authentication;
 
 namespace OralExamination.Infrastructure.Persistence;
 
@@ -61,7 +62,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
             entity.Property(e => e.StudentCode).HasColumnName("student_code").HasMaxLength(20);
             entity.HasIndex(e => e.StudentCode).IsUnique().HasDatabaseName("ix_users_student_code");
+            entity.Property(e => e.Username).HasColumnName("username").HasMaxLength(32);
+            entity.HasIndex(e => e.Username).IsUnique().HasDatabaseName("ix_users_username");
             entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(20).HasDefaultValue("student").IsRequired();
+            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(256);
+            entity.Property(e => e.MustChangePassword).HasColumnName("must_change_password").HasDefaultValue(false);
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -72,6 +77,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
                     Email = "admin@fpt.edu.vn",
                     FullName = "Nguyen Quang Thanh",
+                    Username = "admin",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Admin!", "admin"),
+                    MustChangePassword = false,
                     Role = "admin",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -82,6 +90,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
                     Email = "headse@fe.edu.vn",
                     FullName = "Tran Van Truong",
+                    Username = "headse",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Head!", "headse"),
+                    MustChangePassword = false,
                     Role = "department_head",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -92,6 +103,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
                     Email = "totnt@fe.edu.vn",
                     FullName = "Nguyen Trong Tot",
+                    Username = "totnt",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Lecturer!", "totnt"),
+                    MustChangePassword = false,
                     Role = "lecturer",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -102,6 +116,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000004"),
                     Email = "haind@fe.edu.vn",
                     FullName = "Nguyen Dang Hai",
+                    Username = "haind",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Proctor!", "haind"),
+                    MustChangePassword = false,
                     Role = "proctor",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -113,6 +130,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Email = "hoanglvse170001@fpt.edu.vn",
                     FullName = "Le Vu Hoang",
                     StudentCode = "SE170001",
+                    Username = "hoalvse170001",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-SE170001!", "SE170001"),
+                    MustChangePassword = true,
                     Role = "student",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -124,6 +144,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Email = "maittse170002@fpt.edu.vn",
                     FullName = "Tran Thi Mai",
                     StudentCode = "SE170002",
+                    Username = "maittse170002",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-SE170002!", "SE170002"),
+                    MustChangePassword = true,
                     Role = "student",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),

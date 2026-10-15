@@ -44,3 +44,77 @@ public sealed class PublishGradesResponseDto
     public DateTime PublishedAt { get; set; }
     public string Message { get; set; } = string.Empty;
 }
+
+public sealed class CreateOfficialExamSessionRequest
+{
+    public Guid CourseId { get; set; }
+    public Guid ExamStructureId { get; set; }
+    public string? Title { get; set; }
+    public DateOnly ExamDate { get; set; }
+    public bool HasFollowUp { get; set; }
+    public int MaxFollowUpQuestions { get; set; } = 2;
+    public string? ExamInputMode { get; set; }
+    public int TranscriptBufferSeconds { get; set; } = 60;
+}
+
+public sealed record OfficialExamSessionResponse(
+    Guid Id,
+    Guid CourseId,
+    Guid ExamStructureId,
+    string Title,
+    DateOnly ExamDate,
+    bool HasFollowUp,
+    int MaxFollowUpQuestions,
+    string ExamInputMode,
+    int TranscriptBufferSeconds,
+    string Status);
+
+public sealed class OpenExamShiftRequest
+{
+    public Guid SessionId { get; set; }
+    public string? ShiftName { get; set; }
+    public string? RoomLab { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public Guid ProctorUserId { get; set; }
+}
+
+public sealed record ExamShiftResponse(
+    Guid Id,
+    Guid SessionId,
+    string ShiftName,
+    string RoomLab,
+    DateTime StartTime,
+    DateTime EndTime,
+    Guid? ProctorUserId,
+    string Status);
+
+public sealed class AssignExamTicketRequest
+{
+    public Guid ShiftId { get; set; }
+    public Guid StudentId { get; set; }
+    public int SeatNumber { get; set; }
+    public string? IpAddress { get; set; }
+}
+
+public sealed record ExamTicketResponse(
+    Guid Id,
+    Guid ShiftId,
+    Guid StudentId,
+    int SeatNumber,
+    string? IpAddress,
+    string Status,
+    DateTime CheckedInAt);
+
+public sealed record StudentWorkstationTicketResponse(
+    Guid Id,
+    Guid ShiftId,
+    string ShiftName,
+    string RoomLab,
+    DateTime StartTime,
+    DateTime EndTime,
+    string ShiftStatus,
+    string SessionTitle,
+    Guid StudentId,
+    int SeatNumber,
+    string Status);

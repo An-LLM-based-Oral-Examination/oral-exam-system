@@ -19,6 +19,16 @@ public class GeminiAiGradingService : IAiGradingService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
+
+    private static readonly string[] FallbackApiUrls =
+    [
+        DefaultGeminiApiUrl,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+    ];
+
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly string _apiUrl;
@@ -27,7 +37,7 @@ public class GeminiAiGradingService : IAiGradingService
     {
         _httpClient = httpClient;
         _apiKey = configuration["Gemini:ApiKey"] ?? string.Empty;
-        _apiUrl = configuration["Gemini:ApiUrl"] ?? "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        _apiUrl = configuration["Gemini:ApiUrl"] ?? DefaultGeminiApiUrl;
     }
 
     public async Task<AiGradingResult> GradeAnswerAsync(AiGradingRequest request, CancellationToken cancellationToken = default)
@@ -45,7 +55,7 @@ TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 Dưới đây là chi tiết:
 - Câu hỏi: {request.QuestionContent}
 - Đáp án mẫu (Model Answer) của Giảng viên để đối chiếu: {request.SampleAnswer ?? "Không có sẵn"}
-- Barem Rubric (gồm tên tiêu chí, mô tả, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
+- Barem Rubric (gồm Id, tên tiêu chí Name, mô tả Description, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
 
 DƯỚI ĐÂY LÀ BẢN GHI ÂM/TRANSCRIPT CỦA SINH VIÊN (ĐƯỢC BỌC TRONG THẺ XML):
 <student_transcript>
@@ -58,6 +68,7 @@ Quy trình suy luận (Chain-of-Thought):
 2. Với mỗi tiêu chí, ghi nhận bằng chứng (Evidence), chỉ ra điểm đạt và điểm thiếu sót.
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng các tiêu chí (tối đa 10.0).
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn, lạc đề hoặc nghi ngờ, đặt IsSuspicious = true.
+5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -69,7 +80,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
   ""Details"": [
     {{
-      ""CriterionId"": ""guid"",
+      ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
       ""Score"": 3.0,
       ""Comment"": ""Đạt yêu cầu...""
     }}
@@ -89,13 +100,44 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
         };
 
-        var requestBody = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync($"{_apiUrl}?key={_apiKey}", requestBody, cancellationToken);
+        var payloadJson = JsonSerializer.Serialize(payload, JsonOptions);
+        var candidateUrls = new System.Collections.Generic.List<string>();
 
-        if (!response.IsSuccessStatusCode)
+        if (!string.IsNullOrWhiteSpace(_apiUrl) &&
+            !_apiUrl.Contains("gemini-1.5-", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-2.0-", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-2.5-", StringComparison.OrdinalIgnoreCase))
         {
-            var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            return CreateFallbackResult($"Gemini API HTTP Error {response.StatusCode}: {error}");
+            candidateUrls.Add(_apiUrl);
+        }
+
+        foreach (var fallbackUrl in FallbackApiUrls)
+        {
+            if (!candidateUrls.Contains(fallbackUrl))
+            {
+                candidateUrls.Add(fallbackUrl);
+            }
+        }
+
+        HttpResponseMessage? response = null;
+        string lastError = string.Empty;
+
+        foreach (var targetUrl in candidateUrls)
+        {
+            using var requestBody = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+            response = await _httpClient.PostAsync($"{targetUrl}?key={_apiKey}", requestBody, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                break;
+            }
+
+            lastError = $"Gemini API HTTP Error {response.StatusCode}: {await response.Content.ReadAsStringAsync(cancellationToken)}";
+        }
+
+        if (response == null || !response.IsSuccessStatusCode)
+        {
+            return CreateFallbackResult(lastError);
         }
 
         var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);

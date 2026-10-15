@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
 
 namespace OralExamination.Infrastructure.Authentication;
@@ -17,7 +18,7 @@ public sealed class JwtAccessTokenIssuer : IAccessTokenIssuer
         _configuration = configuration;
     }
 
-    public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role)
+    public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
     {
         var signingKey = AuthConfiguration.JwtSigningKey(_configuration);
         if (string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)
@@ -32,16 +33,22 @@ public sealed class JwtAccessTokenIssuer : IAccessTokenIssuer
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
             SecurityAlgorithms.HmacSha256);
 
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Name, fullName),
+            new("role", role)
+        };
+        if (mustChangePassword)
+        {
+            claims.Add(new Claim(AuthTokenDefaults.MustChangePasswordClaim, "true"));
+        }
+
         var token = new JwtSecurityToken(
             issuer: AuthConfiguration.JwtIssuer(_configuration),
             audience: AuthConfiguration.JwtAudience(_configuration),
-            claims: new[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, email),
-                new Claim(JwtRegisteredClaimNames.Name, fullName),
-                new Claim("role", role)
-            },
+            claims: claims,
             expires: expires,
             signingCredentials: credentials);
 

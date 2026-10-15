@@ -100,7 +100,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         _context.RefreshTokens.Add(newRefreshToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var accessToken = _accessTokenIssuer.Issue(user.Id, user.Email, user.FullName, user.Role);
+        var accessToken = _accessTokenIssuer.Issue(
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.Role,
+            user.MustChangePassword);
 
         return Result<RefreshTokenResponse>.Success(new RefreshTokenResponse(
             accessToken.Token,
