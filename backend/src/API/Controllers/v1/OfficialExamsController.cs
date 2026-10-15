@@ -3,6 +3,10 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
+using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficialExamSession;
+using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
@@ -97,5 +101,115 @@ public class OfficialExamsController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn tạo kỳ thi thật. Role lấy từ tài khoản trong database.
+    /// </summary>
+    [HttpPost("sessions")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> CreateSession([FromBody] CreateOfficialExamSessionRequest request, CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new CreateOfficialExamSessionCommand(
+            actorId.Value,
+            request.CourseId,
+            request.ExamStructureId,
+            request.Title,
+            request.ExamDate,
+            request.HasFollowUp,
+            request.MaxFollowUpQuestions,
+            request.ExamInputMode,
+            request.TranscriptBufferSeconds), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
+    /// </summary>
+    [HttpPost("shifts")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> OpenShift([FromBody] OpenExamShiftRequest request, CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new OpenExamShiftCommand(
+            actorId.Value,
+            request.SessionId,
+            request.ShiftName,
+            request.RoomLab,
+            request.StartTime,
+            request.EndTime,
+            request.ProctorUserId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
+    /// </summary>
+    [HttpPost("tickets")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> AssignTicket([FromBody] AssignExamTicketRequest request, CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new AssignExamTicketCommand(
+            actorId.Value,
+            request.ShiftId,
+            request.StudentId,
+            request.SeatNumber,
+            request.IpAddress), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    private Guid? GetActorId()
+    {
+        var claim = User.FindFirst("sub")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
+
+    private IActionResult OfficialExamProblem(string error)
+    {
+        var statusCode = error switch
+        {
+            OfficialExamErrors.Forbidden or OfficialExamErrors.WrongWorkstation => StatusCodes.Status403Forbidden,
+            OfficialExamErrors.CourseNotFound
+                or OfficialExamErrors.StructureNotFound
+                or OfficialExamErrors.SessionNotFound
+                or OfficialExamErrors.ShiftNotFound
+                or OfficialExamErrors.TicketNotFound
+                or OfficialExamErrors.StudentNotFound => StatusCodes.Status404NotFound,
+            _ => StatusCodes.Status400BadRequest
+        };
+
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status403Forbidden => "Không được phép.",
+                StatusCodes.Status404NotFound => "Không tìm thấy.",
+                _ => "Dữ liệu đầu vào không hợp lệ."
+            },
+            Detail = error,
+            Type = "https://tools.ietf.org/html/rfc7231"
+        });
     }
 }
