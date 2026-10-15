@@ -61,19 +61,21 @@ export const AppRoutes: React.FC = () => {
 
         {/* Student Portal */}
         <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
+          <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
           <Route element={<StudentLayout />}>
             <Route path="/student/overview" element={<StudentDashboardPage />} />
             <Route path="/practice" element={<PracticePage />} />
             <Route path="/practice/session" element={<PracticeSessionPage />} />
             <Route path="/mock-exam" element={<MockExamPage />} />
-            <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
             <Route path="/exam" element={<OfficialExamPage />} />
             <Route path="/results" element={<ExamHistoryPage />} />
           </Route>
         </Route>
 
         {/* Instructor, Department Head and Admin portal. Proctor has no standalone portal. */}
-        <Route element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}>
+        <Route
+          element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}
+        >
           <Route element={<AppLayout />}>
             <Route
               element={

@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace OralExamination.Infrastructure.Persistence.Migrations
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
+namespace OralExamination.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialBaseline27Tables : Migration
+    public partial class InitialDB : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -27,6 +29,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_dead_letter_queues", x => x.id);
+                    table.CheckConstraint("ck_dlq_status", "status IN ('pending', 'resolved', 'abandoned')");
                 });
 
             migrationBuilder.CreateTable(
@@ -44,6 +47,22 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_semesters", x => x.id);
+                    table.CheckConstraint("ck_semesters_dates", "end_date >= start_date");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "system_configs",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    value = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    description = table.Column<string>(type: "text", nullable: true),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_system_configs", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -52,7 +71,6 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    password_hash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
                     full_name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
                     student_code = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
                     role = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "student"),
@@ -63,6 +81,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_users", x => x.id);
+                    table.CheckConstraint("ck_users_role", "role IN ('admin', 'department_head', 'lecturer', 'proctor', 'student')");
                 });
 
             migrationBuilder.CreateTable(
@@ -75,12 +94,21 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     credits = table.Column<int>(type: "integer", nullable: false, defaultValue: 3),
                     semester_id = table.Column<Guid>(type: "uuid", nullable: false),
                     has_follow_up = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    transcript_buffer_seconds = table.Column<int>(type: "integer", nullable: false, defaultValue: 60),
+                    max_follow_up_questions = table.Column<int>(type: "integer", nullable: false, defaultValue: 2),
+                    max_mock_exams_per_day = table.Column<int>(type: "integer", nullable: false, defaultValue: 3),
+                    exam_input_mode = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false, defaultValue: "VoiceWithTranscriptEdit"),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_courses", x => x.id);
+                    table.CheckConstraint("ck_courses_credits", "credits > 0");
+                    table.CheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+                    table.CheckConstraint("ck_courses_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+                    table.CheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
+                    table.CheckConstraint("ck_courses_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
                     table.ForeignKey(
                         name: "FK_courses_semesters_semester_id",
                         column: x => x.semester_id,
@@ -115,6 +143,29 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "refresh_tokens",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    token_hash = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    revoked_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    replaced_by_token_hash = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_refresh_tokens", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_refresh_tokens_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "classes",
                 columns: table => new
                 {
@@ -130,6 +181,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_classes", x => x.id);
+                    table.CheckConstraint("ck_classes_max_students", "max_students > 0");
                     table.ForeignKey(
                         name: "FK_classes_courses_course_id",
                         column: x => x.course_id,
@@ -167,6 +219,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_exam_structures", x => x.id);
+                    table.CheckConstraint("ck_exam_struct_duration", "duration_minutes > 0");
+                    table.CheckConstraint("ck_exam_struct_questions", "total_questions > 0");
                     table.ForeignKey(
                         name: "FK_exam_structures_courses_course_id",
                         column: x => x.course_id,
@@ -195,6 +249,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_mock_exam_quotas", x => x.id);
+                    table.CheckConstraint("ck_mock_exam_quotas_count", "used_count >= 0");
                     table.ForeignKey(
                         name: "FK_mock_exam_quotas_courses_course_id",
                         column: x => x.course_id,
@@ -219,11 +274,15 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     practice_mode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "per_question"),
                     started_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     completed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "in_progress")
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "in_progress"),
+                    last_activity_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    selected_difficulties = table.Column<string>(type: "jsonb", nullable: false, defaultValueSql: "'[]'::jsonb")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_practice_sessions", x => x.id);
+                    table.CheckConstraint("ck_practice_sessions_mode", "practice_mode IN ('per_question', 'full_session')");
+                    table.CheckConstraint("ck_practice_sessions_status", "status IN ('in_progress', 'completed', 'abandoned', 'timed_out')");
                     table.ForeignKey(
                         name: "FK_practice_sessions_courses_course_id",
                         column: x => x.course_id,
@@ -253,6 +312,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_rubrics", x => x.id);
+                    table.CheckConstraint("ck_rubrics_total_score", "total_max_score = 10.00");
                     table.ForeignKey(
                         name: "FK_rubrics_courses_course_id",
                         column: x => x.course_id,
@@ -274,6 +334,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_class_enrollments", x => x.id);
+                    table.CheckConstraint("ck_class_enrollment_status", "status IN ('enrolled', 'dropped', 'completed')");
                     table.ForeignKey(
                         name: "FK_class_enrollments_classes_class_id",
                         column: x => x.class_id,
@@ -325,12 +386,21 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     exam_structure_id = table.Column<Guid>(type: "uuid", nullable: false),
                     title = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     exam_date = table.Column<DateOnly>(type: "date", nullable: false),
+                    has_follow_up = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    max_follow_up_questions = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
+                    exam_input_mode = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false, defaultValue: "VoiceWithTranscriptEdit"),
+                    transcript_buffer_seconds = table.Column<int>(type: "integer", nullable: false, defaultValue: 60),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "scheduled"),
+                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_official_exam_sessions", x => x.id);
+                    table.CheckConstraint("ck_official_sessions_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
+                    table.CheckConstraint("ck_official_sessions_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+                    table.CheckConstraint("ck_official_sessions_status", "status IN ('scheduled', 'in_progress', 'grading', 'auditing', 'concluded')");
+                    table.CheckConstraint("ck_official_sessions_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
                     table.ForeignKey(
                         name: "FK_official_exam_sessions_courses_course_id",
                         column: x => x.course_id,
@@ -343,6 +413,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         principalTable: "exam_structures",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_official_exam_sessions_users_created_by",
+                        column: x => x.created_by,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -359,12 +435,18 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     difficulty = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "medium"),
                     bloom_level = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Understand"),
                     approved_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    source = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false, defaultValue: "manual"),
+                    approval_status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false, defaultValue: "DRAFT"),
+                    submitted_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    review_notes = table.Column<string>(type: "text", nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_exam_questions", x => x.id);
+                    table.CheckConstraint("ck_exam_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+                    table.CheckConstraint("ck_exam_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
                     table.ForeignKey(
                         name: "FK_exam_questions_courses_course_id",
                         column: x => x.course_id,
@@ -380,6 +462,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     table.ForeignKey(
                         name: "FK_exam_questions_users_approved_by",
                         column: x => x.approved_by,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_exam_questions_users_submitted_by",
+                        column: x => x.submitted_by,
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.SetNull);
@@ -406,6 +494,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_practice_questions", x => x.id);
+                    table.CheckConstraint("ck_practice_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+                    table.CheckConstraint("ck_practice_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
                     table.ForeignKey(
                         name: "FK_practice_questions_courses_course_id",
                         column: x => x.course_id,
@@ -437,6 +527,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_rubric_criteria", x => x.id);
+                    table.CheckConstraint("ck_rubric_criteria_score", "max_score > 0 AND max_score <= 10.00");
+                    table.CheckConstraint("ck_rubric_criteria_weight", "weight > 0 AND weight <= 1.00");
                     table.ForeignKey(
                         name: "FK_rubric_criteria_rubrics_rubric_id",
                         column: x => x.rubric_id,
@@ -453,6 +545,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     student_id = table.Column<Guid>(type: "uuid", nullable: false),
                     exam_set_id = table.Column<Guid>(type: "uuid", nullable: false),
                     course_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    has_follow_up = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     started_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     submitted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -462,6 +555,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_mock_exam_sessions", x => x.id);
+                    table.CheckConstraint("ck_mock_sessions_status", "status IN ('in_progress', 'submitted', 'graded', 'abandoned')");
                     table.ForeignKey(
                         name: "FK_mock_exam_sessions_courses_course_id",
                         column: x => x.course_id,
@@ -499,6 +593,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_real_exam_session_shifts", x => x.id);
+                    table.CheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+                    table.CheckConstraint("ck_shifts_time", "end_time > start_time");
                     table.ForeignKey(
                         name: "FK_real_exam_session_shifts_official_exam_sessions_session_id",
                         column: x => x.session_id,
@@ -548,7 +644,6 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     question_id = table.Column<Guid>(type: "uuid", nullable: false),
                     student_id = table.Column<Guid>(type: "uuid", nullable: false),
                     answer_text = table.Column<string>(type: "text", nullable: false),
-                    audio_url = table.Column<string>(type: "text", nullable: true),
                     is_follow_up = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     parent_answer_id = table.Column<Guid>(type: "uuid", nullable: true),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "pending"),
@@ -557,6 +652,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_practice_answers", x => x.id);
+                    table.CheckConstraint("ck_practice_answers_status", "status IN ('pending', 'grading', 'graded', 'failed')");
                     table.ForeignKey(
                         name: "FK_practice_answers_practice_answers_parent_answer_id",
                         column: x => x.parent_answer_id,
@@ -589,9 +685,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     session_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    exam_question_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    question_id = table.Column<Guid>(type: "uuid", nullable: false),
                     answer_text = table.Column<string>(type: "text", nullable: true),
-                    audio_url = table.Column<string>(type: "text", nullable: true),
                     time_taken_seconds = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "answered"),
                     answered_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
@@ -599,18 +694,19 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_mock_exam_answers", x => x.id);
-                    table.ForeignKey(
-                        name: "FK_mock_exam_answers_exam_questions_exam_question_id",
-                        column: x => x.exam_question_id,
-                        principalTable: "exam_questions",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
+                    table.CheckConstraint("ck_mock_answers_status", "status IN ('pending', 'answered', 'graded', 'failed')");
                     table.ForeignKey(
                         name: "FK_mock_exam_answers_mock_exam_sessions_session_id",
                         column: x => x.session_id,
                         principalTable: "mock_exam_sessions",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_mock_exam_answers_practice_questions_question_id",
+                        column: x => x.question_id,
+                        principalTable: "practice_questions",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -623,7 +719,8 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     exam_set_id = table.Column<Guid>(type: "uuid", nullable: true),
                     seat_number = table.Column<int>(type: "integer", nullable: false),
                     ip_address = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
-                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "checked_in"),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "SCHEDULED"),
+                    student_acknowledgement_status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "PENDING"),
                     is_locked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     checked_in_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     submitted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
@@ -631,6 +728,9 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_student_exam_tickets", x => x.id);
+                    table.CheckConstraint("ck_tickets_ack_status", "student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')");
+                    table.CheckConstraint("ck_tickets_seat", "seat_number >= 1 AND seat_number <= 40");
+                    table.CheckConstraint("ck_tickets_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')");
                     table.ForeignKey(
                         name: "FK_student_exam_tickets_exam_sets_exam_set_id",
                         column: x => x.exam_set_id,
@@ -671,6 +771,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_exam_question_submissions", x => x.id);
+                    table.CheckConstraint("ck_submissions_grading_status", "grading_status IN ('pending', 'transcribing', 'transcribed', 'ai_graded', 'audited', 'failed')");
                     table.ForeignKey(
                         name: "FK_exam_question_submissions_exam_questions_exam_question_id",
                         column: x => x.exam_question_id,
@@ -701,6 +802,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_lecturer_audits", x => x.id);
+                    table.CheckConstraint("ck_lecturer_audits_scores", "original_ai_score >= 0 AND audited_score >= 0");
                     table.ForeignKey(
                         name: "FK_lecturer_audits_student_exam_tickets_ticket_id",
                         column: x => x.ticket_id,
@@ -723,14 +825,18 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                     answer_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     practice_answer_id = table.Column<Guid>(type: "uuid", nullable: true),
                     exam_submission_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    mock_exam_answer_id = table.Column<Guid>(type: "uuid", nullable: true),
                     total_score = table.Column<decimal>(type: "numeric(4,2)", precision: 4, scale: 2, nullable: false),
                     feedback = table.Column<string>(type: "text", nullable: true),
                     confidence_score = table.Column<decimal>(type: "numeric(3,2)", precision: 3, scale: 2, nullable: true),
+                    cot_trace = table.Column<string>(type: "text", nullable: true),
                     evaluated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ai_evaluations", x => x.id);
+                    table.CheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
+                    table.CheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'exam')");
                     table.ForeignKey(
                         name: "FK_ai_evaluations_exam_question_submissions_exam_submission_id",
                         column: x => x.exam_submission_id,
@@ -738,9 +844,79 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
+                        name: "FK_ai_evaluations_mock_exam_answers_mock_exam_answer_id",
+                        column: x => x.mock_exam_answer_id,
+                        principalTable: "mock_exam_answers",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
                         name: "FK_ai_evaluations_practice_answers_practice_answer_id",
                         column: x => x.practice_answer_id,
                         principalTable: "practice_answers",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "appeal_requests",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    ticket_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    student_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    session_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    submission_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    reason = table.Column<string>(type: "text", nullable: false),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "PENDING"),
+                    assigned_to = table.Column<Guid>(type: "uuid", nullable: false),
+                    reviewed_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    decision = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    original_score = table.Column<decimal>(type: "numeric(4,2)", precision: 4, scale: 2, nullable: true),
+                    proposed_score = table.Column<decimal>(type: "numeric(4,2)", precision: 4, scale: 2, nullable: true),
+                    review_notes = table.Column<string>(type: "text", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    resolved_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_appeal_requests", x => x.id);
+                    table.CheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
+                    table.CheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_exam_question_submissions_submission_id",
+                        column: x => x.submission_id,
+                        principalTable: "exam_question_submissions",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_official_exam_sessions_session_id",
+                        column: x => x.session_id,
+                        principalTable: "official_exam_sessions",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_student_exam_tickets_ticket_id",
+                        column: x => x.ticket_id,
+                        principalTable: "student_exam_tickets",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_users_assigned_to",
+                        column: x => x.assigned_to,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_users_reviewed_by",
+                        column: x => x.reviewed_by,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_appeal_requests_users_student_id",
+                        column: x => x.student_id,
+                        principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -759,6 +935,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_lecturer_audit_details", x => x.id);
+                    table.CheckConstraint("ck_audit_details_scores", "ai_score >= 0 AND audited_score >= 0");
                     table.ForeignKey(
                         name: "FK_lecturer_audit_details_lecturer_audits_audit_id",
                         column: x => x.audit_id,
@@ -786,6 +963,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ai_evaluation_details", x => x.id);
+                    table.CheckConstraint("ck_ai_eval_detail_score", "score >= 0");
                     table.ForeignKey(
                         name: "FK_ai_evaluation_details_ai_evaluations_evaluation_id",
                         column: x => x.evaluation_id,
@@ -799,6 +977,132 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
+
+            migrationBuilder.InsertData(
+                table: "semesters",
+                columns: new[] { "id", "code", "created_at", "end_date", "is_active", "name", "start_date" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000007"), "FA26", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new DateOnly(2026, 12, 31), true, "Fall 2026", new DateOnly(2026, 9, 1) });
+
+            migrationBuilder.InsertData(
+                table: "system_configs",
+                columns: new[] { "id", "description", "key", "updated_at", "value" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000027"), "Số lượng câu hỏi luyện tập tối đa trong một phiên do Admin cấu hình", "MaxPracticeQuestionsPerSession", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "10" },
+                    { new Guid("00000000-0000-0000-0000-000000000028"), "Số lượng câu hỏi luyện tập tối thiểu cho chế độ Dễ đến Khó do Admin cấu hình", "MinMixedPracticeQuestions", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "3" },
+                    { new Guid("00000000-0000-0000-0000-000000000029"), "Số lượng câu hỏi luyện tập tối đa cho chế độ Dễ đến Khó do Admin cấu hình", "MaxMixedPracticeQuestions", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "10" },
+                    { new Guid("00000000-0000-0000-0000-000000000030"), "Thời gian đệm hiệu đính transcript mặc định (giây) do Admin cấu hình", "TranscriptBufferSeconds", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "60" },
+                    { new Guid("00000000-0000-0000-0000-000000000031"), "Số lượng câu hỏi follow-up luyện tập tối đa do Admin cấu hình (1-5 câu)", "MaxPracticeFollowUpQuestions", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "2" },
+                    { new Guid("00000000-0000-0000-0000-000000000032"), "Thời gian timeout không tương tác của phiên luyện tập (phút)", "SessionInactivityTimeoutMinutes", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "10" }
+                });
+
+            migrationBuilder.InsertData(
+                table: "users",
+                columns: new[] { "id", "created_at", "email", "full_name", "is_active", "role", "student_code", "updated_at" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000001"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@fpt.edu.vn", "Nguyen Quang Thanh", true, "admin", null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("00000000-0000-0000-0000-000000000002"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "headse@fe.edu.vn", "Tran Van Truong", true, "department_head", null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("00000000-0000-0000-0000-000000000003"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "totnt@fe.edu.vn", "Nguyen Trong Tot", true, "lecturer", null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("00000000-0000-0000-0000-000000000004"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "haind@fe.edu.vn", "Nguyen Dang Hai", true, "proctor", null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("00000000-0000-0000-0000-000000000005"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hoanglvse170001@fpt.edu.vn", "Le Vu Hoang", true, "student", "SE170001", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { new Guid("00000000-0000-0000-0000-000000000006"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "maittse170002@fpt.edu.vn", "Tran Thi Mai", true, "student", "SE170002", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) }
+                });
+
+            migrationBuilder.InsertData(
+                table: "courses",
+                columns: new[] { "id", "code", "created_at", "credits", "exam_input_mode", "has_follow_up", "is_active", "max_follow_up_questions", "max_mock_exams_per_day", "name", "semester_id", "transcript_buffer_seconds" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000008"), "PRN231", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), 3, "VoiceWithTranscriptEdit", true, true, 2, 3, "Building Cross-Platform Back-End Applications with .NET", new Guid("00000000-0000-0000-0000-000000000007"), 60 },
+                    { new Guid("00000000-0000-0000-0000-000000000009"), "SWD392", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), 3, "VoiceWithTranscriptEdit", true, true, 2, 3, "Software Architecture and Design", new Guid("00000000-0000-0000-0000-000000000007"), 60 }
+                });
+
+            migrationBuilder.InsertData(
+                table: "classes",
+                columns: new[] { "id", "code", "course_id", "created_at", "is_active", "lecturer_id", "max_students", "semester_id" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000010"), "SE1801-NET", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), true, new Guid("00000000-0000-0000-0000-000000000003"), 35, new Guid("00000000-0000-0000-0000-000000000007") });
+
+            migrationBuilder.InsertData(
+                table: "exam_structures",
+                columns: new[] { "id", "bloom_distribution", "course_id", "created_at", "created_by", "duration_minutes", "is_active", "name", "total_questions" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000018"), "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000003"), 30, true, "Cấu trúc Đề thi Vấn đáp Cuối kỳ PRN231 (FA26)", 5 });
+
+            migrationBuilder.InsertData(
+                table: "rubrics",
+                columns: new[] { "id", "course_id", "created_at", "description", "is_active", "name", "total_max_score" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000013"), new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Đánh giá Clean Architecture", true, "Barem Đánh Giá Kiến Trúc .NET 8", 10.00m });
+
+            migrationBuilder.InsertData(
+                table: "class_enrollments",
+                columns: new[] { "id", "class_id", "enrolled_at", "status", "student_id" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000011"), new Guid("00000000-0000-0000-0000-000000000010"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "enrolled", new Guid("00000000-0000-0000-0000-000000000005") },
+                    { new Guid("00000000-0000-0000-0000-000000000012"), new Guid("00000000-0000-0000-0000-000000000010"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "enrolled", new Guid("00000000-0000-0000-0000-000000000006") }
+                });
+
+            migrationBuilder.InsertData(
+                table: "exam_questions",
+                columns: new[] { "id", "approval_status", "approved_by", "bloom_level", "content", "course_id", "created_at", "difficulty", "is_active", "key_points", "review_notes", "rubric_id", "sample_answer", "source", "submitted_by", "title" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000020"), "APPROVED", new Guid("00000000-0000-0000-0000-000000000002"), "Analyze", "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", true, "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]", null, new Guid("00000000-0000-0000-0000-000000000013"), "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.", "manual", null, "Phân biệt BackgroundService và IHostedService trong .NET 8" });
+
+            migrationBuilder.InsertData(
+                table: "exam_sets",
+                columns: new[] { "id", "course_id", "generated_at", "is_active", "set_code", "structure_id" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000019"), new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), true, "PRN231-SET01", new Guid("00000000-0000-0000-0000-000000000018") });
+
+            migrationBuilder.InsertData(
+                table: "official_exam_sessions",
+                columns: new[] { "id", "course_id", "created_at", "created_by", "exam_date", "exam_input_mode", "exam_structure_id", "has_follow_up", "max_follow_up_questions", "status", "title", "transcript_buffer_seconds" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000022"), new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, new DateOnly(2026, 10, 15), "VoiceWithTranscriptEdit", new Guid("00000000-0000-0000-0000-000000000018"), true, 2, "scheduled", "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng", 60 });
+
+            migrationBuilder.InsertData(
+                table: "practice_questions",
+                columns: new[] { "id", "bloom_level", "content", "course_id", "created_at", "difficulty", "follow_up_prompt", "has_follow_up", "is_active", "key_points", "rubric_id", "sample_answer", "title" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000017"), "Apply", "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?", true, true, "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.", "Nguyên lý Dependency Inversion" },
+                    { new Guid("00000000-0000-0000-0000-000000000101"), "Understand", "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?", true, true, "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.", "Vai trò tầng Domain trong Clean Architecture" },
+                    { new Guid("00000000-0000-0000-0000-000000000102"), "Understand", "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?", true, true, "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.", "Phân biệt Command và Query trong mẫu CQRS" },
+                    { new Guid("00000000-0000-0000-0000-000000000103"), "Apply", "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?", true, true, "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]", new Guid("00000000-0000-0000-0000-000000000013"), "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.", "Cơ chế Pipeline Behavior với FluentValidation" },
+                    { new Guid("00000000-0000-0000-0000-000000000104"), "Analyze", "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?", true, true, "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]", new Guid("00000000-0000-0000-0000-000000000013"), "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.", "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue" },
+                    { new Guid("00000000-0000-0000-0000-000000000105"), "Analyze", "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?", true, true, "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).", "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query" }
+                });
+
+            migrationBuilder.InsertData(
+                table: "rubric_criteria",
+                columns: new[] { "id", "bloom_level", "created_at", "criterion_name", "description", "max_score", "order_index", "rubric_id", "weight" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000014"), "Understand", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Khái niệm & Ranh giới 4 tầng Clean Architecture", "Hiểu rõ vai trò Domain, Application, Infrastructure, API. Domain không phụ thuộc tầng nào.", 3.00m, 1, new Guid("00000000-0000-0000-0000-000000000013"), 0.30m },
+                    { new Guid("00000000-0000-0000-0000-000000000015"), "Apply", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Nguyên lý Dependency Inversion & CQRS MediatR", "Áp dụng tách biệt Command và Query, sử dụng Interface và Dependency Injection Container.", 4.00m, 2, new Guid("00000000-0000-0000-0000-000000000013"), 0.40m },
+                    { new Guid("00000000-0000-0000-0000-000000000016"), "Analyze", new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Xử lý Ngoại lệ & Kiến trúc chịu lỗi (Resilience)", "Trình bày cơ chế Global Exception RFC 7807, Bounded Channel và xử lý retry Polly.", 3.00m, 3, new Guid("00000000-0000-0000-0000-000000000013"), 0.30m }
+                });
+
+            migrationBuilder.InsertData(
+                table: "exam_set_questions",
+                columns: new[] { "id", "exam_question_id", "exam_set_id", "order_index" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000021"), new Guid("00000000-0000-0000-0000-000000000020"), new Guid("00000000-0000-0000-0000-000000000019"), 1 });
+
+            migrationBuilder.InsertData(
+                table: "real_exam_session_shifts",
+                columns: new[] { "id", "created_at", "end_time", "proctor_user_id", "room_lab", "session_id", "shift_name", "start_time", "status" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000023"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 15, 2, 30, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000004"), "Lab 301", new Guid("00000000-0000-0000-0000-000000000022"), "Kíp 1 (08h00 - 09h30)", new DateTime(2026, 10, 15, 1, 0, 0, 0, DateTimeKind.Utc), "scheduled" });
+
+            migrationBuilder.InsertData(
+                table: "student_exam_tickets",
+                columns: new[] { "id", "checked_in_at", "exam_set_id", "ip_address", "seat_number", "shift_id", "status", "student_acknowledgement_status", "student_id", "submitted_at" },
+                values: new object[,]
+                {
+                    { new Guid("00000000-0000-0000-0000-000000000024"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.101", 1, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000005"), null },
+                    { new Guid("00000000-0000-0000-0000-000000000025"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.102", 2, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000006"), null }
+                });
+
+            migrationBuilder.InsertData(
+                table: "appeal_requests",
+                columns: new[] { "id", "assigned_to", "created_at", "decision", "original_score", "proposed_score", "reason", "resolved_at", "review_notes", "reviewed_by", "session_id", "status", "student_id", "submission_id", "ticket_id", "updated_at" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000026"), new Guid("00000000-0000-0000-0000-000000000003"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 7.50m, null, "Em xin phúc khảo phần phát biểu về nguyên lý Dependency Inversion bị ồn mic", null, null, null, new Guid("00000000-0000-0000-0000-000000000022"), "PENDING", new Guid("00000000-0000-0000-0000-000000000005"), null, new Guid("00000000-0000-0000-0000-000000000024"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc) });
 
             migrationBuilder.CreateIndex(
                 name: "ix_ai_eval_details_criterion",
@@ -816,9 +1120,49 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 column: "exam_submission_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_ai_evaluations_mock_exam_answer",
+                table: "ai_evaluations",
+                column: "mock_exam_answer_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_ai_evaluations_practice_answer",
                 table: "ai_evaluations",
                 column: "practice_answer_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_appeal_requests_assigned",
+                table: "appeal_requests",
+                columns: new[] { "assigned_to", "status" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_appeal_requests_reviewed_by",
+                table: "appeal_requests",
+                column: "reviewed_by");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_appeal_requests_session",
+                table: "appeal_requests",
+                column: "session_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_appeal_requests_status",
+                table: "appeal_requests",
+                columns: new[] { "status", "created_at" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_appeal_requests_student",
+                table: "appeal_requests",
+                column: "student_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_appeal_requests_submission_id",
+                table: "appeal_requests",
+                column: "submission_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_appeal_requests_ticket",
+                table: "appeal_requests",
+                column: "ticket_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_audit_logs_created",
@@ -900,6 +1244,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "ix_exam_questions_approval_status",
+                table: "exam_questions",
+                column: "approval_status");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_exam_questions_approved",
                 table: "exam_questions",
                 column: "approved_by");
@@ -913,6 +1262,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "ix_exam_questions_rubric",
                 table: "exam_questions",
                 column: "rubric_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_exam_questions_submitted",
+                table: "exam_questions",
+                column: "submitted_by");
 
             migrationBuilder.CreateIndex(
                 name: "ix_exam_set_questions_question",
@@ -974,7 +1328,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "ix_mock_exam_answers_question",
                 table: "mock_exam_answers",
-                column: "exam_question_id");
+                column: "question_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_mock_exam_answers_session",
@@ -1011,6 +1365,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "ix_official_exam_sessions_course",
                 table: "official_exam_sessions",
                 column: "course_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_official_exam_sessions_creator",
+                table: "official_exam_sessions",
+                column: "created_by");
 
             migrationBuilder.CreateIndex(
                 name: "ix_official_exam_sessions_structure",
@@ -1053,6 +1412,11 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 column: "course_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_practice_sessions_last_activity",
+                table: "practice_sessions",
+                columns: new[] { "status", "last_activity_at" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_practice_sessions_student",
                 table: "practice_sessions",
                 columns: new[] { "student_id", "started_at" });
@@ -1066,6 +1430,17 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "ix_real_exam_shifts_session",
                 table: "real_exam_session_shifts",
                 column: "session_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_refresh_tokens_token_hash",
+                table: "refresh_tokens",
+                column: "token_hash",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_refresh_tokens_user",
+                table: "refresh_tokens",
+                column: "user_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_rubric_criteria_rubric",
@@ -1111,6 +1486,12 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "ix_system_configs_key",
+                table: "system_configs",
+                column: "key",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_users_email",
                 table: "users",
                 column: "email",
@@ -1130,6 +1511,9 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "ai_evaluation_details");
 
             migrationBuilder.DropTable(
+                name: "appeal_requests");
+
+            migrationBuilder.DropTable(
                 name: "audit_logs");
 
             migrationBuilder.DropTable(
@@ -1145,10 +1529,13 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "lecturer_audit_details");
 
             migrationBuilder.DropTable(
-                name: "mock_exam_answers");
+                name: "mock_exam_quotas");
 
             migrationBuilder.DropTable(
-                name: "mock_exam_quotas");
+                name: "refresh_tokens");
+
+            migrationBuilder.DropTable(
+                name: "system_configs");
 
             migrationBuilder.DropTable(
                 name: "ai_evaluations");
@@ -1163,10 +1550,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "rubric_criteria");
 
             migrationBuilder.DropTable(
-                name: "mock_exam_sessions");
+                name: "exam_question_submissions");
 
             migrationBuilder.DropTable(
-                name: "exam_question_submissions");
+                name: "mock_exam_answers");
 
             migrationBuilder.DropTable(
                 name: "practice_answers");
@@ -1178,16 +1565,19 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                 name: "student_exam_tickets");
 
             migrationBuilder.DropTable(
+                name: "mock_exam_sessions");
+
+            migrationBuilder.DropTable(
                 name: "practice_questions");
 
             migrationBuilder.DropTable(
                 name: "practice_sessions");
 
             migrationBuilder.DropTable(
-                name: "exam_sets");
+                name: "real_exam_session_shifts");
 
             migrationBuilder.DropTable(
-                name: "real_exam_session_shifts");
+                name: "exam_sets");
 
             migrationBuilder.DropTable(
                 name: "rubrics");

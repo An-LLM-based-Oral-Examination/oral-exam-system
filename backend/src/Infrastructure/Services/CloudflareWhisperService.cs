@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using OralExamination.Application.Common.Interfaces;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +17,9 @@ namespace OralExamination.Infrastructure.Services;
 
 public class CloudflareWhisperService : ISpeechToTextService
 {
+    private const string WhisperModel = "@cf/openai/whisper-large-v3-turbo";
+    private const string TranscriptionLanguage = "vi";
+
     private readonly HttpClient _httpClient;
     private readonly string _accountId;
     private readonly string _apiToken;
@@ -80,16 +85,20 @@ public class CloudflareWhisperService : ISpeechToTextService
             return string.Empty;
         }
 
-        var url = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/@cf/openai/whisper";
+        var url = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
+        var payload = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["audio"] = Convert.ToBase64String(audioBytes),
+            ["task"] = "transcribe",
+            ["language"] = TranscriptionLanguage,
+            ["initial_prompt"] = "Đây là câu trả lời vấn đáp bằng tiếng Việt, có thể xen thuật ngữ tiếng Anh."
+        });
 
         var responseString = await _resiliencePipeline.ExecuteAsync(async ct =>
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-
-            var content = new ByteArrayContent(audioBytes);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            request.Content = content;
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);

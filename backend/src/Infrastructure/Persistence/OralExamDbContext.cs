@@ -1114,6 +1114,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number").IsRequired();
             entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED");
+            entity.Property(e => e.StudentAcknowledgementStatus)
+                .HasColumnName("student_acknowledgement_status")
+                .HasMaxLength(20)
+                .HasDefaultValue("PENDING")
+                .IsRequired();
             entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false);
             entity.Property(e => e.CheckedInAt).HasColumnName("checked_in_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
@@ -1148,6 +1153,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     SeatNumber = 1,
                     IpAddress = "192.168.1.101",
                     Status = "SCHEDULED",
+                    StudentAcknowledgementStatus = "PENDING",
                     IsLocked = false,
                     CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -1160,6 +1166,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     SeatNumber = 2,
                     IpAddress = "192.168.1.102",
                     Status = "SCHEDULED",
+                    StudentAcknowledgementStatus = "PENDING",
                     IsLocked = false,
                     CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 });

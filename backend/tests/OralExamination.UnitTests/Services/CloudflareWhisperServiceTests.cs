@@ -110,13 +110,12 @@ public class CloudflareWhisperServiceTests
         using var stream = new MemoryStream(audioBytes);
         stream.Position = stream.Length; // Position at end
 
-        byte[]? receivedBytes = null;
+        string? requestBody = null;
         var handler = new MockHttpMessageHandler(async (req, ct) =>
         {
-            if (req.Content != null)
-            {
-                receivedBytes = await req.Content.ReadAsByteArrayAsync(ct);
-            }
+            req.RequestUri!.AbsolutePath.Should().Contain("whisper-large-v3-turbo");
+            req.Content!.Headers.ContentType!.MediaType.Should().Be("application/json");
+            requestBody = await req.Content.ReadAsStringAsync(ct);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"result\":{\"text\":\"Bóc băng từ stream đã tự động rewind\"}}", Encoding.UTF8, "application/json")
@@ -128,8 +127,11 @@ public class CloudflareWhisperServiceTests
         var result = await service.TranscribeAudioAsync(stream, "test.webm", CancellationToken.None);
 
         result.Should().Be("Bóc băng từ stream đã tự động rewind");
-        receivedBytes.Should().NotBeNull();
-        receivedBytes.Should().BeEquivalentTo(audioBytes);
+        requestBody.Should().NotBeNull();
+        using var document = System.Text.Json.JsonDocument.Parse(requestBody!);
+        document.RootElement.GetProperty("language").GetString().Should().Be("vi");
+        document.RootElement.GetProperty("task").GetString().Should().Be("transcribe");
+        Convert.FromBase64String(document.RootElement.GetProperty("audio").GetString()!).Should().BeEquivalentTo(audioBytes);
     }
 
     [Fact(DisplayName = "6. Cloudflare trả về HTTP 200 phân tích đúng JSON result.text")]

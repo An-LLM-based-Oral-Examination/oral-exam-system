@@ -6,6 +6,7 @@ import type {
   User,
   UserRole,
 } from '@/types/auth.types'
+import { clearMockExamSession } from '@/utils/mockExamSessionStorage'
 import { clearPracticeRuntimes } from '@/utils/practiceSessionStorage'
 
 function normalizePortalRole(role: unknown): UserRole | null {
@@ -56,6 +57,7 @@ function persistSession(data: LoginResponse): LoginResponse {
 export const authService = {
   async googleLogin(request: GoogleLoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/auth/google-login', request)
+    clearMockExamSession()
     return persistSession(response.data)
   },
 
@@ -104,6 +106,7 @@ export const authService = {
 
   clearSession(): void {
     clearPracticeRuntimes()
+    clearMockExamSession()
     sessionStorage.removeItem('access_token')
     sessionStorage.removeItem('refresh_token')
     sessionStorage.removeItem('user_profile')

@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OralExamination.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace OralExamination.Infrastructure.Persistence.Migrations
+namespace OralExamination.Infrastructure.Migrations
 {
     [DbContext(typeof(OralExamDbContext))]
-    partial class OralExamDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261014131658_InitialDB")]
+    partial class InitialDB
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2164,6 +2167,14 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("SCHEDULED")
                         .HasColumnName("status");
 
+                    b.Property<string>("StudentAcknowledgementStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("PENDING")
+                        .HasColumnName("student_acknowledgement_status");
+
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
@@ -2211,6 +2222,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             SeatNumber = 1,
                             ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
                             Status = "SCHEDULED",
+                            StudentAcknowledgementStatus = "PENDING",
                             StudentId = new Guid("00000000-0000-0000-0000-000000000005")
                         },
                         new
@@ -2223,6 +2235,7 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
                             SeatNumber = 2,
                             ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
                             Status = "SCHEDULED",
+                            StudentAcknowledgementStatus = "PENDING",
                             StudentId = new Guid("00000000-0000-0000-0000-000000000006")
                         });
                 });
