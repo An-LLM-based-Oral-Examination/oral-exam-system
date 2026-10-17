@@ -151,6 +151,20 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
                     UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-00000000000b"),
+                    Email = "thanhnqse184236@fpt.edu.vn",
+                    FullName = "Nguyen Quang Thanh",
+                    StudentCode = "SE184236",
+                    Username = "thanhnqse184236",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-SE184236!", "SE184236"),
+                    MustChangePassword = false,
+                    Role = "student",
+                    IsActive = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 });
         });
 
@@ -1137,6 +1151,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number").IsRequired();
             entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED");
+            entity.Property(e => e.StudentAcknowledgementStatus).HasColumnName("student_acknowledgement_status").HasMaxLength(20).HasDefaultValue("PENDING").IsRequired();
             entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false);
             entity.Property(e => e.CheckedInAt).HasColumnName("checked_in_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
@@ -1458,7 +1473,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 {
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000032"),
                     Key = "SessionInactivityTimeoutMinutes",
-                    Value = "10",
+                    Value = "5",
                     Description = "Thời gian timeout không tương tác của phiên luyện tập (phút)",
                     UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }

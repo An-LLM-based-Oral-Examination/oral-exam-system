@@ -62,16 +62,77 @@ public sealed class SubmitMockExamAnswerCommandHandler(
             return Result<SubmitMockExamAnswerResponse>.Failure("Câu hỏi không thuộc đề thi này.");
         }
 
-        // 4. Trích xuất transcript từ âm thanh hoặc dùng transcript trực tiếp
-        string transcript;
-        if (!string.IsNullOrWhiteSpace(request.DirectTranscript))
-        {
-            transcript = request.DirectTranscript.Trim();
-        }
-        else if (request.AudioStream != null && request.AudioStream.Length > 0)
+        // 4. Trích xuất transcript từ âm thanh hoặc dùng transcript trực tiếp (hỗ trợ Hybrid Fallback)
+        string transcript = string.Empty;
+        if (request.AudioStream != null && request.AudioStream.Length > 0)
         {
             var fileName = !string.IsNullOrWhiteSpace(request.FileName) ? request.FileName : "audio.webm";
-            transcript = await _speechToTextService.TranscribeAudioAsync(request.AudioStream, fileName, cancellationToken);
+            Exception? sttException = null;
+
+            try
+            {
+                var questionHint = await _context.PracticeQuestions
+                    .AsNoTracking()
+                    .Where(q => q.Id == request.QuestionId)
+                    .Select(q => q.Title + ". " + q.Content)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                OralExamination.Application.Common.Models.SpeechTranscriptionResult? detailed = null;
+                // Luôn gọi TranscribeDetailedAsync ngay cả khi questionHint rỗng/null
+                detailed = await _speechToTextService.TranscribeDetailedAsync(
+                    request.AudioStream,
+                    fileName,
+                    questionHint,
+                    cancellationToken);
+                transcript = detailed?.Text ?? string.Empty;
+
+                // Chỉ gọi TranscribeAudioAsync khi chưa chạy TranscribeDetailedAsync (hoặc mock unit test trả về null)
+                if (detailed is null && string.IsNullOrWhiteSpace(transcript))
+                {
+                    if (request.AudioStream.CanSeek)
+                    {
+                        request.AudioStream.Position = 0;
+                    }
+                    transcript = await _speechToTextService.TranscribeAudioAsync(request.AudioStream, fileName, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                sttException = ex;
+            }
+
+            var normalizedServer = !string.IsNullOrWhiteSpace(transcript)
+                ? (_speechToTextService.NormalizeTranscript(transcript) ?? transcript.Trim())
+                : string.Empty;
+            var normalizedClient = !string.IsNullOrWhiteSpace(request.DirectTranscript)
+                ? (_speechToTextService.NormalizeTranscript(request.DirectTranscript) ?? request.DirectTranscript.Trim())
+                : string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(normalizedServer))
+            {
+                transcript = normalizedServer;
+            }
+            else if (!string.IsNullOrWhiteSpace(normalizedClient))
+            {
+                transcript = normalizedClient;
+            }
+            else if (sttException != null)
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure($"Lỗi khi bóc băng âm thanh: {sttException.Message}");
+            }
+            else
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.DirectTranscript))
+        {
+            var normalized = _speechToTextService.NormalizeTranscript(request.DirectTranscript) ?? request.DirectTranscript.Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
+            }
+            transcript = normalized;
         }
         else
         {

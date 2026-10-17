@@ -10,9 +10,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Commands.CompletePracticeSession;
 using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Application.Features.Practice.DTOs;
+using OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
+using OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Controllers;
@@ -190,7 +193,7 @@ public class PracticeControllerTests
         okResult.Value.Should().BeEquivalentTo(expectedResponse);
     }
 
-    [Fact(DisplayName = "5. GetNextQuestion trả về 410 Gone ProblemDetails khi phiên bị timeout quá 10 phút")]
+    [Fact(DisplayName = "5. GetNextQuestion trả về 410 Gone ProblemDetails khi phiên bị timeout quá 5 phút")]
     public async Task GetNextQuestion_Should_Return_410_Gone_When_Session_Timed_Out()
     {
         // Arrange
@@ -198,7 +201,7 @@ public class PracticeControllerTests
         var sessionId = Guid.NewGuid();
         SetUserContext(studentId);
 
-        const string timeoutMessage = "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút.";
+        const string timeoutMessage = "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.";
 
         _senderMock
             .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
@@ -244,5 +247,167 @@ public class PracticeControllerTests
         problemDetails.Status.Should().Be(StatusCodes.Status404NotFound);
         problemDetails.Title.Should().Be("Session Not Found");
         problemDetails.Detail.Should().Be(notFoundMessage);
+    }
+
+    [Fact(DisplayName = "7. StartSession: Khi caller có role student, phớt lờ StudentId trong body và ghim vào CurrentUserId")]
+    public async Task StartSession_WhenStudentRole_IgnoresBodyStudentIdAndPinsToCurrentUserId()
+    {
+        // Arrange
+        var currentStudentId = Guid.NewGuid();
+        var spoofedStudentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        SetUserContext(currentStudentId, role: "student");
+
+        var request = new StartPracticeSessionRequest(
+            StudentId: spoofedStudentId,
+            CourseId: courseId,
+            Difficulty: "per_question",
+            QuestionCount: 5,
+            IsFullSession: false,
+            Topic: null
+        );
+
+        var expectedResponse = new StartPracticeSessionResponse(
+            SessionId: Guid.NewGuid(),
+            TranscriptBufferSeconds: 60,
+            Questions: new List<PracticeQuestionDto>()
+        );
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<StartPracticeSessionCommand>(c =>
+                c.StudentId == currentStudentId &&
+                c.CourseId == courseId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StartPracticeSessionResponse>.Success(expectedResponse));
+
+        // Act
+        var actionResult = await _controller.StartSession(request);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        _senderMock.Verify(s => s.Send(
+            It.Is<StartPracticeSessionCommand>(c => c.StudentId == currentStudentId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "8. GetSession: Trả về 403 Forbidden khi người dùng không có quyền truy cập phiên luyện tập")]
+    public async Task GetSession_WhenForbidden_Returns403Forbidden()
+    {
+        // Arrange
+        var studentAId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentAId, role: "student");
+
+        const string forbiddenMessage = "Bạn không có quyền truy cập phiên luyện tập này.";
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<GetPracticeSessionQuery>(q =>
+                q.SessionId == sessionId &&
+                q.RequestingUserId == studentAId &&
+                q.IsElevatedRole == false), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<PracticeSessionDetailDto>.Failure(forbiddenMessage));
+
+        // Act
+        var actionResult = await _controller.GetSession(sessionId);
+
+        // Assert
+        var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        var problemDetails = objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problemDetails.Status.Should().Be(StatusCodes.Status403Forbidden);
+        problemDetails.Title.Should().Be("Forbidden");
+        problemDetails.Detail.Should().Be(forbiddenMessage);
+    }
+
+    [Fact(DisplayName = "9. GetNextQuestion: Khi caller có role student, phớt lờ studentId query param và ghim vào CurrentUserId")]
+    public async Task GetNextQuestion_WhenStudentRole_PinsToCurrentUserId()
+    {
+        // Arrange
+        var currentStudentId = Guid.NewGuid();
+        var spoofedStudentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(currentStudentId, role: "student");
+
+        var expectedResponse = new NextQuestionResponse
+        {
+            HasMoreQuestions = true,
+            Question = new NextQuestionDto
+            {
+                Id = Guid.NewGuid(),
+                Content = "Câu hỏi tiếp theo",
+                Difficulty = "easy",
+                QuestionOrder = 1,
+                RubricCriteria = new List<string>()
+            }
+        };
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<NextQuestionCommand>(c =>
+                c.SessionId == sessionId &&
+                c.StudentId == currentStudentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<NextQuestionResponse>.Success(expectedResponse));
+
+        // Act
+        var actionResult = await _controller.GetNextQuestion(sessionId, studentId: spoofedStudentId);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        _senderMock.Verify(s => s.Send(
+            It.Is<NextQuestionCommand>(c => c.SessionId == sessionId && c.StudentId == currentStudentId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "10. CompleteSession: Khi caller có role student, phớt lờ studentId query param và ghim vào CurrentUserId")]
+    public async Task CompleteSession_WhenStudentRole_PinsToCurrentUserId()
+    {
+        // Arrange
+        var currentStudentId = Guid.NewGuid();
+        var spoofedStudentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(currentStudentId, role: "student");
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<CompletePracticeSessionCommand>(c =>
+                c.SessionId == sessionId &&
+                c.StudentId == currentStudentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        // Act
+        var actionResult = await _controller.CompleteSession(sessionId, studentId: spoofedStudentId);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        _senderMock.Verify(s => s.Send(
+            It.Is<CompletePracticeSessionCommand>(c => c.SessionId == sessionId && c.StudentId == currentStudentId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "11. GetStudentHistory: Khi caller có role student, phớt lờ studentId query param và ghim vào CurrentUserId")]
+    public async Task GetStudentHistory_WhenStudentRole_PinsToCurrentUserId()
+    {
+        // Arrange
+        var currentStudentId = Guid.NewGuid();
+        var spoofedStudentId = Guid.NewGuid();
+        SetUserContext(currentStudentId, role: "student");
+
+        var expectedHistory = new List<PracticeHistoryItemDto>();
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<GetStudentPracticeHistoryQuery>(q =>
+                q.StudentId == currentStudentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<List<PracticeHistoryItemDto>>.Success(expectedHistory));
+
+        // Act
+        var actionResult = await _controller.GetStudentHistory(studentId: spoofedStudentId);
+
+        // Assert
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        _senderMock.Verify(s => s.Send(
+            It.Is<GetStudentPracticeHistoryQuery>(q => q.StudentId == currentStudentId),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

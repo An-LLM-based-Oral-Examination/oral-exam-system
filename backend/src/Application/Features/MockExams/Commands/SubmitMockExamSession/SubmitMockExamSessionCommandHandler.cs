@@ -125,12 +125,27 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var criterionScores = new List<MockExamCriterionScoreDto>();
             var evalDetails = new List<AiEvaluationDetail>();
             var evalId = Guid.NewGuid();
+            var orderedCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
+            var rawDetails = gradingResult.Details ?? new List<GradingDetailDto>();
 
-            foreach (var c in q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex) ?? Enumerable.Empty<RubricCriterion>())
+            for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
             {
-                var detailDto = gradingResult.Details?.FirstOrDefault(d => d.CriterionId == c.Id.ToString());
-                var score = detailDto != null ? Math.Clamp(detailDto.Score, 0.0m, c.MaxScore) : 0.0m;
-                var comment = detailDto?.Comment ?? string.Empty;
+                var c = orderedCriteria[critIndex];
+                var detailDto = rawDetails.FirstOrDefault(d =>
+                        string.Equals(d.CriterionId?.Trim(), c.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                    ?? rawDetails.FirstOrDefault(d =>
+                        !string.IsNullOrWhiteSpace(c.CriterionName) &&
+                        string.Equals(d.CriterionId?.Trim(), c.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    ?? (critIndex < rawDetails.Count ? rawDetails[critIndex] : null);
+
+                var score = detailDto != null
+                    ? Math.Clamp(Math.Round(detailDto.Score, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore)
+                    : 0.0m;
+                var comment = !string.IsNullOrWhiteSpace(detailDto?.Comment)
+                    ? detailDto!.Comment
+                    : score > 0.0m
+                        ? $"Đạt {score:0.0}/{c.MaxScore:0.0}đ cho tiêu chí '{c.CriterionName}'."
+                        : $"Chưa đáp ứng tiêu chí '{c.CriterionName}' (0.0/{c.MaxScore:0.0}đ).";
 
                 criterionScores.Add(new MockExamCriterionScoreDto(
                     c.Id,
@@ -151,6 +166,10 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 });
             }
 
+            var finalQuestionScore = rawDetails.Count > 0 && criterionScores.Count > 0
+                ? Math.Clamp(Math.Round(criterionScores.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+
             var questionScoreDto = new MockExamQuestionScoreDto(
                 q.Id,
                 orderIndex,
@@ -159,7 +178,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 q.BloomLevel ?? "Remember",
                 q.Difficulty,
                 a.AnswerText,
-                gradingResult.Score,
+                finalQuestionScore,
                 gradingResult.Feedback,
                 gradingResult.ConfidenceScore,
                 criterionScores
@@ -172,7 +191,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 PracticeAnswerId = null,
                 ExamSubmissionId = null,
                 MockExamAnswerId = a.Id,
-                TotalScore = gradingResult.Score,
+                TotalScore = finalQuestionScore,
                 Feedback = gradingResult.Feedback,
                 ConfidenceScore = gradingResult.ConfidenceScore,
                 CotTrace = gradingResult.CotTrace,

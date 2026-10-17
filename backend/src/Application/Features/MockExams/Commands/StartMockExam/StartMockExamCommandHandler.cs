@@ -34,7 +34,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             return Result<StartMockExamResponse>.Failure("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
-        // 2. Kiểm tra Daily Quota Guard do Trưởng BM cấu hình (Múi giờ GMT+7)
+        // 2. Kiểm tra Daily Quota Guard do Quản trị viên (Admin) cấu hình (Múi giờ GMT+7)
         var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
 

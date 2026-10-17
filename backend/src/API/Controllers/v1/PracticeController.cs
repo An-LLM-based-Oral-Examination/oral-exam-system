@@ -42,13 +42,27 @@ public class PracticeController : ControllerBase
         return Guid.Empty;
     }
 
+    private bool IsElevatedRole() =>
+        User?.IsInRole("lecturer") == true ||
+        User?.IsInRole("department_head") == true ||
+        User?.IsInRole("admin") == true;
+
+    private Guid ResolveEffectiveStudentId(Guid? requestedStudentId)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (User?.IsInRole("student") == true)
+        {
+            return currentUserId;
+        }
+        return (requestedStudentId.HasValue && requestedStudentId.Value != Guid.Empty)
+            ? requestedStudentId.Value
+            : currentUserId;
+    }
+
     [HttpPost("sessions")]
     public async Task<IActionResult> StartSession([FromBody] StartPracticeSessionRequest request)
     {
-        var currentUserId = GetCurrentUserId();
-        var studentId = (request.StudentId.HasValue && request.StudentId.Value != Guid.Empty)
-            ? request.StudentId.Value
-            : (currentUserId != Guid.Empty ? currentUserId : Guid.Empty);
+        var studentId = ResolveEffectiveStudentId(request.StudentId);
 
         var command = new StartPracticeSessionCommand(
             studentId,
@@ -80,11 +94,27 @@ public class PracticeController : ControllerBase
     [HttpGet("sessions/{sessionId:guid}")]
     public async Task<IActionResult> GetSession(Guid sessionId)
     {
-        var query = new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQuery(sessionId);
+        var currentUserId = GetCurrentUserId();
+        var query = new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQuery(
+            sessionId,
+            currentUserId,
+            IsElevatedRole()
+        );
         var result = await _sender.Send(query);
 
         if (!result.IsSuccess)
         {
+            if (result.Error.Contains("không có quyền", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return NotFound(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/session-not-found",
@@ -103,10 +133,7 @@ public class PracticeController : ControllerBase
     [HttpPost("sessions/{sessionId:guid}/next-question")]
     public async Task<IActionResult> GetNextQuestion(Guid sessionId, [FromQuery] Guid? studentId = null)
     {
-        var currentUserId = GetCurrentUserId();
-        var targetStudentId = (studentId.HasValue && studentId.Value != Guid.Empty)
-            ? studentId.Value
-            : currentUserId;
+        var targetStudentId = ResolveEffectiveStudentId(studentId);
 
         var command = new NextQuestionCommand(sessionId, targetStudentId);
         var result = await _sender.Send(command);
@@ -116,7 +143,7 @@ public class PracticeController : ControllerBase
             return Ok(result.Value);
         }
 
-        if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+        if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
             result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
@@ -152,10 +179,12 @@ public class PracticeController : ControllerBase
     [HttpPost("sessions/{sessionId}/answers")]
     public async Task<IActionResult> SubmitAnswer(Guid sessionId, [FromBody] SubmitPracticeAnswerRequest request)
     {
+        var targetStudentId = ResolveEffectiveStudentId(request.StudentId);
+
         var command = new SubmitPracticeAnswerCommand(
             sessionId,
             request.QuestionId,
-            request.StudentId,
+            targetStudentId,
             request.AnswerText,
             request.IsFollowUp,
             request.ParentAnswerId
@@ -164,7 +193,7 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+            if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
@@ -184,16 +213,18 @@ public class PracticeController : ControllerBase
     [HttpPost("sessions/{sessionId}/batch-answers")]
     public async Task<IActionResult> SubmitBatch(Guid sessionId, [FromBody] SubmitPracticeBatchRequest request)
     {
+        var targetStudentId = ResolveEffectiveStudentId(request.StudentId);
+
         var command = new OralExamination.Application.Features.Practice.Commands.SubmitPracticeBatch.SubmitPracticeBatchCommand(
             sessionId,
-            request.StudentId,
+            targetStudentId,
             request.Answers
         );
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("không có tương tác trong hơn 10 phút", StringComparison.OrdinalIgnoreCase) ||
+            if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
@@ -212,10 +243,7 @@ public class PracticeController : ControllerBase
     [HttpPost("sessions/{sessionId:guid}/complete")]
     public async Task<IActionResult> CompleteSession(Guid sessionId, [FromQuery] Guid? studentId = null)
     {
-        var currentUserId = GetCurrentUserId();
-        var targetStudentId = (studentId.HasValue && studentId.Value != Guid.Empty)
-            ? studentId.Value
-            : currentUserId;
+        var targetStudentId = ResolveEffectiveStudentId(studentId);
 
         var command = new OralExamination.Application.Features.Practice.Commands.CompletePracticeSession.CompletePracticeSessionCommand(
             sessionId,
@@ -234,10 +262,7 @@ public class PracticeController : ControllerBase
     [HttpGet("student/history")]
     public async Task<IActionResult> GetStudentHistory([FromQuery] Guid? studentId)
     {
-        var currentUserId = GetCurrentUserId();
-        var targetStudentId = studentId.HasValue && studentId.Value != Guid.Empty
-            ? studentId.Value
-            : currentUserId;
+        var targetStudentId = ResolveEffectiveStudentId(studentId);
 
         if (targetStudentId == Guid.Empty)
         {

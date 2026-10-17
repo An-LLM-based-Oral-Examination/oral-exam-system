@@ -12,6 +12,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
 using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguration;
+using System.Security.Claims;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Controllers;
@@ -176,5 +177,83 @@ public class CoursesControllerTests
         capturedCommand.ExamInputMode.Should().Be("VoiceOnly");
         capturedCommand.TranscriptBufferSeconds.Should().Be(60);
         capturedCommand.MaxFollowUpQuestions.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "7. UpdateConfiguration trả về 403 Forbidden khi người dùng không phải Admin cố gắng cấu hình MaxMockExamsPerDay")]
+    public async Task UpdateConfiguration_WhenNonAdminSetsMaxMockExamsPerDay_Should_Return_403Forbidden()
+    {
+        var courseId = Guid.NewGuid();
+        var request = new UpdateCourseConfigRequestDto
+        {
+            TranscriptBufferSeconds = 60,
+            MaxFollowUpQuestions = 2,
+            HasFollowUp = true,
+            MaxMockExamsPerDay = 5
+        };
+
+        // Arrange non-admin context (department_head role)
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, "department_head")
+        }, "TestAuth"));
+
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = user }
+        };
+
+        var actionResult = await _controller.UpdateConfiguration(courseId, request);
+
+        var forbiddenResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        forbiddenResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        var problemDetails = forbiddenResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problemDetails.Detail.Should().Contain("Chỉ có Quản trị viên (Admin) mới có quyền cấu hình hạn ngạch thi thử");
+    }
+
+    [Fact(DisplayName = "8. UpdateConfiguration trả về 200 OK khi Admin cấu hình MaxMockExamsPerDay")]
+    public async Task UpdateConfiguration_WhenAdminSetsMaxMockExamsPerDay_Should_Return_200OK()
+    {
+        var courseId = Guid.NewGuid();
+        var request = new UpdateCourseConfigRequestDto
+        {
+            TranscriptBufferSeconds = 60,
+            MaxFollowUpQuestions = 2,
+            HasFollowUp = true,
+            MaxMockExamsPerDay = 5
+        };
+
+        var responseDto = new CourseConfigurationDto
+        {
+            CourseId = courseId,
+            CourseCode = "PRN231",
+            CourseName = "Building Cross-Platform Back-End Applications with .NET",
+            TranscriptBufferSeconds = 60,
+            MaxFollowUpQuestions = 2,
+            HasFollowUp = true,
+            MaxMockExamsPerDay = 5,
+            IsActive = true
+        };
+
+        // Arrange admin context
+        var user = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, "admin")
+        }, "TestAuth"));
+
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = user }
+        };
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<UpdateCourseConfigurationCommand>(c => c.MaxMockExamsPerDay == 5), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<CourseConfigurationDto>.Success(responseDto));
+
+        var actionResult = await _controller.UpdateConfiguration(courseId, request);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 }

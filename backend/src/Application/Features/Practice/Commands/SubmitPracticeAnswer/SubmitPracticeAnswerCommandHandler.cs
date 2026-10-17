@@ -31,13 +31,13 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             return Result<Guid>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
         }
 
-        // Lazy Inactivity Timeout Check (10 phút)
+        // Lazy Inactivity Timeout Check (5 phút)
         var timeoutConfig = await _context.SystemConfigs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
         int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout))
             ? parsedTimeout
-            : 10;
+            : 5;
 
         var elapsed = DateTime.UtcNow - session.LastActivityAt;
         if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
@@ -46,7 +46,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
             await _context.SaveChangesAsync(cancellationToken);
 
-            return Result<Guid>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút.");
+            return Result<Guid>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
         }
 
         if (session.Status != "in_progress")

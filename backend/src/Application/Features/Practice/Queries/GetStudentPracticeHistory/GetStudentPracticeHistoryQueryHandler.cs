@@ -34,12 +34,20 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
         var result = sessions.Select(s =>
         {
             var answers = s.Answers ?? new List<OralExamination.Domain.Entities.PracticeAnswer>();
-            var evaluations = answers
-                .SelectMany(a => a.AiEvaluations ?? new List<OralExamination.Domain.Entities.AiEvaluation>())
+            var mainScoredAnswers = answers
+                .Where(a => !a.IsFollowUp && a.AiEvaluations != null && a.AiEvaluations.Any())
+                .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
                 .ToList();
 
-            decimal? avgScore = evaluations.Any()
-                ? Math.Round(evaluations.Average(e => e.TotalScore), 2)
+            var latestScores = mainScoredAnswers.Any()
+                ? mainScoredAnswers
+                : answers
+                    .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+                    .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                    .ToList();
+
+            decimal? avgScore = latestScores.Any()
+                ? Math.Round(latestScores.Average(), 2, MidpointRounding.AwayFromZero)
                 : null;
 
             return new PracticeHistoryItemDto

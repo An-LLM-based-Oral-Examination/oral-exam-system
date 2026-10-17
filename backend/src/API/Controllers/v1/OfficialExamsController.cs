@@ -9,9 +9,12 @@ using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficial
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
+using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
 
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 
 namespace API.Controllers.v1;
 
@@ -104,6 +107,76 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã băm chữ ký số SHA-256 (BE-V01).
+    /// </summary>
+    [HttpGet("shifts/{shiftId:guid}/export-excel")]
+    [HttpGet("/api/v1/audit/export-excel")]
+    public async Task<IActionResult> ExportShiftExcel([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
+    {
+        var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
+        if (resolvedShiftId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Dữ liệu đầu vào không hợp lệ.",
+                Detail = "ShiftId không được để trống.",
+                Type = "https://oralexam.fpt.edu.vn/errors/invalid-shift-id"
+            });
+        }
+
+        var result = await _sender.Send(new ExportShiftExcelQuery(resolvedShiftId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Not Found",
+                Detail = result.Error,
+                Type = "https://oralexam.fpt.edu.vn/errors/shift-not-found"
+            });
+        }
+
+        Response?.Headers.Append("X-Certificate-Hash", result.Value.CertificateHash);
+        return File(result.Value.FileContents, result.Value.ContentType, result.Value.FileName);
+    }
+
+    /// <summary>
+    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp PDF có đóng dấu chữ ký số SHA-256 và mã QR (BE-V01).
+    /// </summary>
+    [HttpGet("shifts/{shiftId:guid}/export-pdf")]
+    [HttpGet("/api/v1/audit/export-pdf")]
+    public async Task<IActionResult> ExportShiftPdf([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
+    {
+        var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
+        if (resolvedShiftId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Dữ liệu đầu vào không hợp lệ.",
+                Detail = "ShiftId không được để trống.",
+                Type = "https://oralexam.fpt.edu.vn/errors/invalid-shift-id"
+            });
+        }
+
+        var result = await _sender.Send(new ExportShiftPdfQuery(resolvedShiftId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Not Found",
+                Detail = result.Error,
+                Type = "https://oralexam.fpt.edu.vn/errors/shift-not-found"
+            });
+        }
+
+        Response?.Headers.Append("X-Certificate-Hash", result.Value.CertificateHash);
+        return File(result.Value.FileContents, result.Value.ContentType, result.Value.FileName);
+    }
+
+    /// <summary>
     /// Trưởng bộ môn tạo kỳ thi thật. Role lấy từ tài khoản trong database.
     /// </summary>
     [HttpPost("sessions")]
@@ -176,6 +249,65 @@ public class OfficialExamsController : ControllerBase
             request.IpAddress), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Giám thị hoặc Sinh viên điểm danh mở vé thi tại máy trạm phòng Lab (Check-in Ticket -> IN_PROGRESS).
+    /// Đối chiếu địa chỉ IP máy trạm (ip_address) và khung giờ ca thi.
+    /// </summary>
+    [HttpPost("tickets/{ticketId:guid}/check-in")]
+    [Authorize(Roles = "student,proctor,lecturer,department_head,admin")]
+    public async Task<IActionResult> CheckInTicket([FromRoute] Guid ticketId, CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var remoteIp = ResolveRemoteIpAddress();
+        var result = await _sender.Send(new OralExamination.Application.Features.OfficialExams.Commands.CheckInExamTicket.CheckInExamTicketCommand(
+            actorId.Value,
+            ticketId,
+            remoteIp,
+            DateTime.UtcNow), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Sinh viên tại máy trạm Kiosk lấy thông tin vé thi hiện tại khớp với địa chỉ IP máy trạm (ip_address).
+    /// </summary>
+    [HttpGet("tickets/my-workstation")]
+    [HttpGet("workstation/ticket")]
+    [Authorize(Roles = "student,proctor,lecturer,department_head,admin")]
+    public async Task<IActionResult> GetMyWorkstationTicket(CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var remoteIp = ResolveRemoteIpAddress();
+        var result = await _sender.Send(new OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkstationTicket.GetMyWorkstationTicketQuery(
+            actorId.Value,
+            remoteIp,
+            DateTime.UtcNow), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    private string? ResolveRemoteIpAddress()
+    {
+        if (Request?.Headers != null &&
+            Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) &&
+            !string.IsNullOrWhiteSpace(forwarded))
+        {
+            return forwarded.ToString().Split(',')[0].Trim();
+        }
+
+        return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 
     private Guid? GetActorId()

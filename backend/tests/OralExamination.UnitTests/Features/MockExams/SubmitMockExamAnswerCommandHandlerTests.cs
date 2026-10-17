@@ -286,4 +286,363 @@ public class SubmitMockExamAnswerCommandHandlerTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(SubmitMockExamAnswerCommand.QuestionId));
         result.Errors.Should().Contain(e => e.PropertyName == nameof(SubmitMockExamAnswerCommand.TimeTakenSeconds));
     }
+
+    [Fact(DisplayName = "7. Nộp câu trả lời âm thanh im lặng/nhiễu: trả về Failure với thông báo tiếng Việt chuẩn và không gọi lại TranscribeAudioAsync")]
+    public async Task Handle_WithSilenceAudio_ReturnsFailure_AndDoesNotCallTranscribeAudioAsync()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: string.Empty,
+                RawText: string.Empty,
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.0));
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("silence-audio-bytes"));
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "silence.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 30,
+            DirectTranscript: null
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
+
+        // Tuyệt đối không được gọi lại TranscribeAudioAsync khi đã xác định âm thanh im lặng
+        sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        // Bản ghi câu trả lời không được đánh dấu answered với text rỗng
+        var dbAnswer = await context.MockExamAnswers.FindAsync(answer.Id);
+        dbAnswer!.Status.Should().Be("pending");
+        dbAnswer.AnswerText.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "8. Nộp câu trả lời âm thanh im lặng nhưng có DirectTranscript từ client: fallback sang DirectTranscript và không gọi TranscribeAudioAsync")]
+    public async Task Handle_WithSilenceAudioAndDirectTranscript_FallsBackToDirectTranscript_WithoutCallingTranscribeAudioAsync()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: string.Empty,
+                RawText: string.Empty,
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.0));
+        sttMock.Setup(x => x.NormalizeTranscript(It.IsAny<string>()))
+            .Returns<string>(s => s);
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("noisy-audio-bytes"));
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "noisy.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 35,
+            DirectTranscript: "Em giải thích về nguyên lý Dependency Inversion"
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Transcript.Should().Be("Em giải thích về nguyên lý Dependency Inversion");
+        sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var dbAnswer = await context.MockExamAnswers.FindAsync(answer.Id);
+        dbAnswer!.Status.Should().Be("answered");
+        dbAnswer.AnswerText.Should().Be("Em giải thích về nguyên lý Dependency Inversion");
+    }
+
+    [Fact(DisplayName = "9. Cấu hình loose Moq (detailed is null): kích hoạt fallback sang TranscribeAudioAsync mượt mà không crash")]
+    public async Task Handle_WithLooseMoq_DetailedNull_FallsBackToTranscribeAudioAsync_Successfully()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        // TranscribeDetailedAsync returns null (loose mock default behavior)
+        sttMock.Setup(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((OralExamination.Application.Common.Models.SpeechTranscriptionResult)null!);
+
+        sttMock.Setup(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Kết quả fallback từ TranscribeAudioAsync qua loose Moq");
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("voice-stream-data"));
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "loose_moq.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 40
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Transcript.Should().Be("Kết quả fallback từ TranscribeAudioAsync qua loose Moq");
+        sttMock.Verify(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), "loose_moq.webm", null, It.IsAny<CancellationToken>()), Times.Once);
+        sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), "loose_moq.webm", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "10. Khi câu hỏi có trong PracticeQuestions: trích xuất questionHint (Title + Content) truyền cho TranscribeDetailedAsync")]
+    public async Task Handle_WhenQuestionHintExists_PassesTitleAndContentToTranscribeDetailedAsync()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var practiceQuestion = new PracticeQuestion
+        {
+            Id = questionId,
+            CourseId = courseId,
+            RubricId = Guid.NewGuid(),
+            Title = "Nguyên lý Single Responsibility",
+            Content = "Giải thích tại sao một class chỉ nên có một lý do để thay đổi.",
+            Difficulty = "easy",
+            BloomLevel = "Understand",
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(practiceQuestion);
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        string? capturedHint = null;
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Stream, string, string?, CancellationToken>((s, fn, hint, ct) => capturedHint = hint)
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: "Mỗi class chỉ nên đảm nhiệm một trách nhiệm duy nhất.",
+                RawText: "Mỗi class chỉ nên đảm nhiệm một trách nhiệm duy nhất.",
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.95));
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("voice-stream-data"));
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "srp.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 30
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedHint.Should().Be("Nguyên lý Single Responsibility. Giải thích tại sao một class chỉ nên có một lý do để thay đổi.");
+        sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "11. Stress test: nộp câu trả lời liên tục 10 lần với null vocabulary hint và audio stream độc lập không bị memory leak hay lỗi vị trí stream")]
+    public async Task Handle_StressTest_RepeatedSubmissionsWithNullHint_AllSucceed()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var questionIds = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid()).ToList();
+        foreach (var qId in questionIds)
+        {
+            session.Answers.Add(new MockExamAnswer
+            {
+                Id = Guid.NewGuid(),
+                SessionId = session.Id,
+                QuestionId = qId,
+                Status = "pending",
+                TimeTakenSeconds = 0,
+                AnswerText = null
+            });
+        }
+
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Stream s, string fn, string? h, CancellationToken ct) =>
+                new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                    Text: $"Bóc băng câu hỏi tại vị trí {s.Position}",
+                    RawText: $"Bóc băng câu hỏi tại vị trí {s.Position}",
+                    Provider: "CloudflareWhisper",
+                    UsedFallback: false,
+                    ConfidenceScore: 0.92));
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        for (int i = 0; i < questionIds.Count; i++)
+        {
+            using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes($"audio-payload-{i}"));
+            var command = new SubmitMockExamAnswerCommand(
+                SessionId: session.Id,
+                StudentId: studentId,
+                QuestionId: questionIds[i],
+                AudioStream: audioStream,
+                FileName: $"answer_{i}.webm",
+                ContentType: "audio/webm",
+                TimeTakenSeconds: 20 + i
+            );
+
+            var result = await handler.Handle(command, CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Transcript.Should().Be("Bóc băng câu hỏi tại vị trí 0");
+        }
+
+        sttMock.Verify(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Exactly(10));
+        sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var updatedAnswers = await context.MockExamAnswers.Where(a => a.SessionId == session.Id).ToListAsync();
+        updatedAnswers.Should().HaveCount(10);
+        updatedAnswers.Should().OnlyContain(a => a.Status == "answered" && a.AnswerText != null);
+    }
 }

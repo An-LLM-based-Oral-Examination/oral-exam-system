@@ -13,31 +13,23 @@ namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamQuot
 /// Handler xử lý nghiệp vụ tra cứu hạn ngạch thi thử trong ngày (MF-02).
 /// Áp dụng Daily Quota Guard (K = 3 lượt/ngày/môn).
 /// </summary>
-public sealed class GetMockExamQuotaQueryHandler : IRequestHandler<GetMockExamQuotaQuery, Result<MockExamQuotaDto>>
+public class GetMockExamQuotaQueryHandler(IApplicationDbContext context) : IRequestHandler<GetMockExamQuotaQuery, Result<MockExamQuotaDto>>
 {
-    private const int MaxDailyQuota = 3;
-    private readonly IApplicationDbContext _context;
-
-    public GetMockExamQuotaQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
-
     public async Task<Result<MockExamQuotaDto>> Handle(GetMockExamQuotaQuery request, CancellationToken cancellationToken)
     {
-        var course = await _context.Courses
+        var course = await context.Courses
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
 
         if (course is null)
         {
-            return Result<MockExamQuotaDto>.Failure("Môn học không tồn tại trong hệ thống.");
+            return Result<MockExamQuotaDto>.Failure("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
         var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
 
-        var quota = await _context.MockExamQuotas
+        var quota = await context.MockExamQuotas
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.StudentId == request.StudentId 
                                    && q.CourseId == request.CourseId 

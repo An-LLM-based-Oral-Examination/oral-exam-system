@@ -155,13 +155,20 @@ public class GradingQueueWorker : BackgroundService
         {
             var criterion = orderedCriteria[i];
             var matchedDetail = rawDetails.FirstOrDefault(d =>
-                string.Equals(d.CriterionId?.Trim(), criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                    string.Equals(d.CriterionId?.Trim(), criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                ?? rawDetails.FirstOrDefault(d =>
+                    !string.IsNullOrWhiteSpace(criterion.CriterionName) &&
+                    string.Equals(d.CriterionId?.Trim(), criterion.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
                 ?? (i < rawDetails.Count ? rawDetails[i] : null);
 
             var clampedScore = matchedDetail != null
-                ? Math.Clamp(matchedDetail.Score, 0.0m, criterion.MaxScore)
+                ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
                 : 0.0m;
-            var comment = matchedDetail?.Comment ?? string.Empty;
+            var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
+                ? matchedDetail!.Comment
+                : clampedScore > 0.0m
+                    ? $"Đạt {clampedScore:0.0}/{criterion.MaxScore:0.0}đ cho tiêu chí '{criterion.CriterionName}'."
+                    : $"Chưa đáp ứng tiêu chí '{criterion.CriterionName}' (0.0/{criterion.MaxScore:0.0}đ).";
 
             evalDetails.Add(new AiEvaluationDetail
             {
@@ -179,11 +186,15 @@ public class GradingQueueWorker : BackgroundService
             });
         }
 
+        var finalTotalScore = rawDetails.Count > 0 && evalDetails.Count > 0
+            ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+            : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+
         var evaluation = new AiEvaluation
         {
             AnswerType = "practice",
             PracticeAnswerId = gradingTask.AnswerId,
-            TotalScore = gradingResult.Score,
+            TotalScore = finalTotalScore,
             ConfidenceScore = gradingResult.ConfidenceScore,
             Feedback = gradingResult.Feedback,
             CotTrace = gradingResult.CotTrace,

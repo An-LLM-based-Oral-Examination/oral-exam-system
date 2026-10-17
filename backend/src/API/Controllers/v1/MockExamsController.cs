@@ -18,7 +18,7 @@ namespace API.Controllers.v1;
 
 /// <summary>
 /// Controller xử lý phân hệ Thi Thử Vấn Đáp Bấm Giờ (MF-02).
-/// Kiểm soát hạn ngạch Daily Quota Guard do Trưởng BM cấu hình.
+/// Kiểm soát hạn ngạch Daily Quota Guard do Quản trị viên (Admin) cấu hình.
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
@@ -53,7 +53,7 @@ public class MockExamsController : ControllerBase
 
     /// <summary>
     /// Tra cứu hạn ngạch thi thử trong ngày của sinh viên cho một môn học cụ thể (MF-02).
-    /// Hạn ngạch tối đa do Trưởng BM cấu hình trong Course.MaxMockExamsPerDay (mặc định K = 3).
+    /// Hạn ngạch tối đa do Quản trị viên (Admin) cấu hình trong Course.MaxMockExamsPerDay (mặc định K = 3).
     /// </summary>
     [HttpGet("quota")]
     public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId)
@@ -80,7 +80,7 @@ public class MockExamsController : ControllerBase
 
     /// <summary>
     /// Khởi tạo ca thi thử bấm giờ có hạn ngạch (MF-02).
-    /// Hạn ngạch K lượt/ngày do Trưởng BM cấu hình.
+    /// Hạn ngạch K lượt/ngày do Quản trị viên (Admin) cấu hình.
     /// Bốc đề từ kho practice_questions theo ma trận Bloom (cô lập 100% với exam_questions).
     /// </summary>
     [HttpPost("sessions")]

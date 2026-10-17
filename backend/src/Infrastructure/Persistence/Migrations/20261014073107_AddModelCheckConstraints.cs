@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -10,6 +10,14 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<string>(
+                name: "student_acknowledgement_status",
+                table: "student_exam_tickets",
+                type: "character varying(20)",
+                maxLength: 20,
+                nullable: false,
+                defaultValue: "PENDING");
+
             migrationBuilder.AddCheckConstraint(
                 name: "ck_users_role",
                 table: "users",
@@ -391,6 +399,10 @@ namespace OralExamination.Infrastructure.Persistence.Migrations
             migrationBuilder.DropCheckConstraint(
                 name: "ck_ai_eval_detail_score",
                 table: "ai_evaluation_details");
+
+            migrationBuilder.DropColumn(
+                name: "student_acknowledgement_status",
+                table: "student_exam_tickets");
         }
     }
 }

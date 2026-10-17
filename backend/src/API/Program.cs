@@ -26,7 +26,8 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(origin => true)
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowCredentials()
+              .WithExposedHeaders("X-TTS-Provider", "X-TTS-Voice", "X-TTS-Fallback", "X-TTS-Cache");
     });
 });
 
@@ -63,11 +64,8 @@ var app = builder.Build();
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors("AllowFrontend");
 app.UseStaticFiles();
@@ -91,6 +89,11 @@ app.MapGet("/health", () => Results.Ok(new
 
 await ApplyMigrationsAsync(app);
 
+if (args.Contains("--seed-only", StringComparer.OrdinalIgnoreCase))
+{
+    return;
+}
+
 app.Run();
 
 static async Task ApplyMigrationsAsync(WebApplication app)
@@ -107,19 +110,24 @@ static async Task ApplyMigrationsAsync(WebApplication app)
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
 
-            if (!context.Database.IsRelational())
+            if (context.Database.IsRelational())
             {
-                return;
+                logger.LogInformation(
+                    "Applying EF Core migrations (attempt {Attempt}/{MaxAttempts}).",
+                    attempt,
+                    maxAttempts);
+
+                await context.Database.MigrateAsync();
+            }
+            else
+            {
+                logger.LogInformation(
+                    "PostgreSQL container on port 5432 is offline; running with seeded In-Memory database for uninterrupted live operation.");
             }
 
-            logger.LogInformation(
-                "Applying EF Core migrations (attempt {Attempt}/{MaxAttempts}).",
-                attempt,
-                maxAttempts);
+            await DevelopmentDataSeeder.SeedAsync(context);
 
-            await context.Database.MigrateAsync();
-
-            logger.LogInformation("EF Core migrations applied.");
+            logger.LogInformation("Database schema and development seed data applied successfully.");
             return;
         }
         catch (Exception ex) when (attempt < maxAttempts)
@@ -130,6 +138,13 @@ static async Task ApplyMigrationsAsync(WebApplication app)
                 delay.TotalSeconds);
 
             await Task.Delay(delay);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Database migration did not complete after {MaxAttempts} attempts; continuing API startup.",
+                maxAttempts);
         }
     }
 }

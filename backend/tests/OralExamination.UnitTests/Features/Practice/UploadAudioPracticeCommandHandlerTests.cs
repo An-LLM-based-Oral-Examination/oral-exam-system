@@ -176,6 +176,131 @@ public class UploadAudioPracticeCommandHandlerTests
         result.Error.Should().Contain("Lỗi khi bóc băng âm thanh");
         result.Error.Should().Contain("HTTP 429");
     }
+
+    [Fact(DisplayName = "9. Stress test: tải lên audio 15 lần liên tiếp với null VocabularyHint, kiểm tra không lỗi, gọi đúng TranscribeDetailedAsync")]
+    public async Task Handle_RepeatedUploadsWithNullVocabularyHint_StressLoop_AllSucceedAndDisposeCleanly()
+    {
+        // Setup mock STT service
+        _sttServiceMock
+            .Setup(s => s.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Stream s, string fn, string? h, CancellationToken ct) =>
+                new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                    Text: $"Bóc băng thành công tại stream position {s.Position}",
+                    RawText: $"Bóc băng thành công tại stream position {s.Position}",
+                    Provider: "CloudflareWhisper",
+                    UsedFallback: false,
+                    ConfidenceScore: 0.95));
+
+        for (int i = 0; i < 15; i++)
+        {
+            var audioBytes = Encoding.UTF8.GetBytes($"audio-loop-payload-{i}");
+            using var stream = new MemoryStream(audioBytes);
+            var command = new UploadAudioPracticeCommand(stream, $"loop_{i}.webm", "audio/webm", VocabularyHint: null);
+
+            var result = await _handler.Handle(command, CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            result.Value.Should().NotBeNull();
+            result.Value.Transcript.Should().Be("Bóc băng thành công tại stream position 0");
+        }
+
+        _sttServiceMock.Verify(s => s.TranscribeDetailedAsync(
+            It.IsAny<Stream>(),
+            It.IsAny<string>(),
+            null,
+            It.IsAny<CancellationToken>()), Times.Exactly(15));
+        _sttServiceMock.Verify(s => s.TranscribeAudioAsync(
+            It.IsAny<Stream>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "10. Khi STT trả về kết quả im lặng/nhiễu nhưng client có ClientTranscript: fallback sang ClientTranscript và không gọi TranscribeAudioAsync")]
+    public async Task Handle_SilenceWithClientTranscript_FallsBackToClientTranscript_AndDoesNotCallTranscribeAudioAsync()
+    {
+        _sttServiceMock
+            .Setup(s => s.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: string.Empty,
+                RawText: string.Empty,
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.0));
+
+        _sttServiceMock
+            .Setup(s => s.NormalizeTranscript(It.IsAny<string>()))
+            .Returns<string>(s => s);
+
+        var audioBytes = Encoding.UTF8.GetBytes("silence-audio");
+        using var stream = new MemoryStream(audioBytes);
+        var command = new UploadAudioPracticeCommand(
+            FileStream: stream,
+            FileName: "silence.webm",
+            ContentType: "audio/webm",
+            ClientTranscript: "Em giải thích về kiến trúc Microservices"
+        );
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Transcript.Should().Be("Em giải thích về kiến trúc Microservices");
+
+        _sttServiceMock.Verify(s => s.TranscribeAudioAsync(
+            It.IsAny<Stream>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "11. Loose Moq (detailed is null) với seekable stream có Position > 0: tự động tua stream và gọi TranscribeAudioAsync dự phòng")]
+    public async Task Handle_LooseMoq_DetailedNull_StreamCanSeek_RewindsAndCallsTranscribeAudioAsync()
+    {
+        // TranscribeDetailedAsync returns null (loose mock)
+        _sttServiceMock
+            .Setup(s => s.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((OralExamination.Application.Common.Models.SpeechTranscriptionResult)null!);
+
+        var expectedFallbackTranscript = "Fallback transcript từ TranscribeAudioAsync qua loose Moq";
+        _sttServiceMock
+            .Setup(s => s.TranscribeAudioAsync(
+                It.IsAny<Stream>(),
+                "test_seek.webm",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedFallbackTranscript);
+
+        var audioBytes = Encoding.UTF8.GetBytes("stream-payload-bytes");
+        using var stream = new MemoryStream(audioBytes);
+        stream.Position = 5; // Simulating pre-read position
+
+        var command = new UploadAudioPracticeCommand(stream, "test_seek.webm", "audio/webm");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Transcript.Should().Be(expectedFallbackTranscript);
+        stream.Position.Should().Be(0);
+
+        _sttServiceMock.Verify(s => s.TranscribeDetailedAsync(
+            It.IsAny<Stream>(),
+            "test_seek.webm",
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+        _sttServiceMock.Verify(s => s.TranscribeAudioAsync(
+            It.IsAny<Stream>(),
+            "test_seek.webm",
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
 
 public class NonSeekableTestStream : Stream

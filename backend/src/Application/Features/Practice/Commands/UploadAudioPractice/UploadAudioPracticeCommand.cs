@@ -7,7 +7,9 @@ namespace OralExamination.Application.Features.Practice.Commands.UploadAudioPrac
 public sealed record UploadAudioPracticeCommand(
     Stream FileStream,
     string FileName,
-    string ContentType
+    string ContentType,
+    string? ClientTranscript = null,
+    string? VocabularyHint = null
 ) : IRequest<Result<UploadAudioPracticeResponse>>;
 
 public sealed record UploadAudioPracticeResponse(
