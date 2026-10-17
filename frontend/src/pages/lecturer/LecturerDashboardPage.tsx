@@ -1,20 +1,15 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   BookOpenCheck,
   CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
+  Eye,
   FileClock,
   FilePenLine,
+  LoaderCircle,
+  Plus,
   RefreshCw,
   ScanSearch,
   ShieldCheck,
@@ -22,16 +17,15 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from 'lucide-react'
+import { OverlayDrawer, OverlayModal } from '@/components/ui/OverlayDrawer'
 import { useAuth } from '@/hooks/useAuth'
 import { questionService } from '@/services/question.service'
-import type { QuestionSummary } from '@/types/rubric.types'
+import type {
+  QuestionApprovalStatus,
+  QuestionDetail,
+  QuestionSummary,
+} from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
-
-const LecturerOverviewThreeScene = lazy(() =>
-  import('./LecturerOverviewThreeScene').then((module) => ({
-    default: module.LecturerOverviewThreeScene,
-  })),
-)
 
 interface DashboardMetric {
   label: string
@@ -39,6 +33,26 @@ interface DashboardMetric {
   helper: string
   icon: LucideIcon
   tone: string
+}
+
+const STATUS_META: Record<QuestionApprovalStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Bản nháp', className: 'border-[#CBD5E1] bg-[#F8FAFC] text-[#475569]' },
+  SUBMITTED_FOR_REVIEW: {
+    label: 'Chờ duyệt',
+    className: 'border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]',
+  },
+  APPROVED: {
+    label: 'Đã phê duyệt',
+    className: 'border-emerald-200 bg-emerald-50 text-[#047857]',
+  },
+  NEEDS_REVISION: {
+    label: 'Cần chỉnh sửa',
+    className: 'border-rose-200 bg-rose-50 text-[#BE123C]',
+  },
+  REJECTED: {
+    label: 'Đã từ chối',
+    className: 'border-rose-200 bg-rose-50 text-[#9F1239]',
+  },
 }
 
 function getErrorMessage(error: unknown) {
@@ -65,12 +79,29 @@ function getGreeting(hour: number) {
   return 'Chào buổi tối'
 }
 
+function formatDate(value?: string) {
+  if (!value) return 'Chưa xác định'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Chưa xác định'
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
+}
+
 export function LecturerDashboardPage() {
   const { user } = useAuth()
   const [questions, setQuestions] = useState<QuestionSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+
+  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false)
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null)
+  const [questionDetail, setQuestionDetail] = useState<QuestionDetail | null>(null)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
 
   useEffect(() => {
     let isActive = true
@@ -115,6 +146,21 @@ export function LecturerDashboardPage() {
     }
   }, [reloadKey, user?.id, user?.role])
 
+  const openQuickView = async (questionId: string) => {
+    setSelectedQuestionId(questionId)
+    setQuestionDetail(null)
+    setDetailError('')
+    setIsDetailLoading(true)
+    try {
+      const loaded = await questionService.getQuestionById(questionId)
+      setQuestionDetail(loaded)
+    } catch (loadErr) {
+      setDetailError(getErrorMessage(loadErr))
+    } finally {
+      setIsDetailLoading(false)
+    }
+  }
+
   const metrics = useMemo<DashboardMetric[]>(
     () => [
       {
@@ -122,157 +168,100 @@ export function LecturerDashboardPage() {
         value: countStatus(questions, 'DRAFT'),
         helper: 'Có thể chọn và gửi duyệt theo môn',
         icon: FilePenLine,
-        tone: 'bg-[#edf3ff] text-[#245eea]',
+        tone: 'border border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]',
       },
       {
         label: 'Đang chờ Bộ môn duyệt',
         value: countStatus(questions, 'SUBMITTED_FOR_REVIEW'),
         helper: 'Theo dõi phản hồi trước khi sử dụng',
         icon: FileClock,
-        tone: 'bg-[#fff6e5] text-[#a66c12]',
+        tone: 'border border-amber-200 bg-amber-50 text-[#B45309]',
       },
       {
         label: 'Cần chỉnh sửa',
         value: countStatus(questions, 'NEEDS_REVISION'),
         helper: 'Ưu tiên xử lý góp ý đã nhận',
         icon: TriangleAlert,
-        tone: 'bg-[#fff0f1] text-[#b8404b]',
+        tone: 'border border-rose-200 bg-rose-50 text-[#BE123C]',
       },
       {
         label: 'Đã được phê duyệt',
         value: countStatus(questions, 'APPROVED'),
         helper: 'Sẵn sàng trong ngân hàng đề chính thức',
         icon: CheckCircle2,
-        tone: 'bg-[#ecfaf5] text-[#168367]',
+        tone: 'border border-emerald-200 bg-emerald-50 text-[#047857]',
       },
     ],
     [questions],
   )
 
-  const handleHeroPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2
-    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2
-    event.currentTarget.style.setProperty('--lecturer-scene-x', `${x * 7}px`)
-    event.currentTarget.style.setProperty('--lecturer-scene-y', `${y * 5}px`)
-    event.currentTarget.style.setProperty('--lecturer-grid-x', `${x * -3}px`)
-    event.currentTarget.style.setProperty('--lecturer-grid-y', `${y * -2}px`)
-  }
-
-  const resetHeroParallax = (event: ReactPointerEvent<HTMLElement>) => {
-    event.currentTarget.style.setProperty('--lecturer-scene-x', '0px')
-    event.currentTarget.style.setProperty('--lecturer-scene-y', '0px')
-    event.currentTarget.style.setProperty('--lecturer-grid-x', '0px')
-    event.currentTarget.style.setProperty('--lecturer-grid-y', '0px')
-  }
-
+  const recentQuestions = useMemo(() => questions.slice(0, 6), [questions])
   const now = new Date()
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <section
-        className="relative isolate overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_16px_50px_rgba(30,65,115,0.08)]"
-        onPointerMove={handleHeroPointerMove}
-        onPointerLeave={resetHeroParallax}
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70 transition-transform duration-300 ease-out motion-reduce:transform-none"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(69,104,164,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(69,104,164,0.035) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            transform:
-              'translate3d(var(--lecturer-grid-x, 0px), var(--lecturer-grid-y, 0px), 0) scale(1.03)',
-          }}
-        />
-        <div className="pointer-events-none absolute -top-28 -right-20 size-80 rounded-full bg-[#57dcff]/12 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 left-[34%] size-80 rounded-full bg-[#7357ff]/9 blur-3xl" />
-
-        <div className="relative grid min-h-[320px] lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-          <div className="relative z-10 flex flex-col justify-center px-5 py-7 sm:px-7 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-[10px] font-semibold">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dce8f6] bg-[#f5f9ff] px-2.5 py-1 text-[#225bc9]">
-                <Sparkles className="size-3" aria-hidden="true" />
-                Không gian giảng viên
+      <section className="overflow-hidden rounded-2xl border border-[#E2E8F0] border-t-4 border-t-[#F26F21] bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FED7AA] bg-[#FFF7ED] px-3 py-1 font-bold text-[#C2410C]">
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                Không gian Giảng viên · FPT Education
               </span>
-              <span className="inline-flex items-center gap-1.5 text-[#25856e]">
-                <span className="size-1.5 rounded-full bg-[#35c992]" />
-                Rubric Studio sẵn sàng
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[#047857]">
+                <span className="size-2 rounded-full bg-[#10B981]" />
+                Hệ thống Khảo thí & Ngân hàng đề
               </span>
             </div>
 
-            <p className="text-[10px] font-semibold tracking-[0.09em] text-[#657b98] uppercase">
-              MF-03 · MF-04
-            </p>
-            <h1 className="mt-2 max-w-2xl text-[clamp(1.65rem,3.2vw,2.55rem)] leading-[1.1] font-bold tracking-[-0.045em] text-[#0b1830]">
+            <h1 className="text-xl font-bold tracking-tight text-[#1E293B] sm:text-2xl">
               {getGreeting(now.getHours())},{' '}
-              <span className="text-[#245eea]">{user?.fullName ?? 'Giảng viên'}</span>
+              <span className="text-[#F26F21]">{user?.fullName ?? 'Giảng viên'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-[12px] leading-relaxed text-[#5f6f85] sm:text-[13px]">
-              Biên soạn câu hỏi theo Barem Rubric 10.0, gửi Trưởng Bộ môn thẩm định và hậu kiểm bằng
-              chứng trước khi công bố điểm chính thức.
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[#475569] sm:text-sm">
+              Quản lý ngân hàng câu hỏi chuẩn Barem Rubric 10.0 điểm và hậu kiểm bằng chứng ca thi.
             </p>
-
-            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
-              <Link
-                to="/question-bank/create"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
-              >
-                <FilePenLine className="size-4" aria-hidden="true" />
-                Soạn câu hỏi mới
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </Link>
-              <Link
-                to="/lecturer/audit"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cfdaea] bg-white/80 px-4 text-[11px] font-bold text-[#314968] backdrop-blur-md transition hover:-translate-y-0.5 hover:border-[#aebfda] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
-              >
-                <ScanSearch className="size-4 text-[#5c62da]" aria-hidden="true" />
-                Mở cổng hậu kiểm
-              </Link>
-            </div>
           </div>
 
-          <div className="relative min-h-[250px] overflow-hidden lg:min-h-full">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(76,206,245,0.16),transparent_50%)]" />
-            <div
-              className="absolute inset-[-7%] transition-transform duration-200 ease-out motion-reduce:transform-none"
-              style={{
-                transform:
-                  'translate3d(var(--lecturer-scene-x, 0px), var(--lecturer-scene-y, 0px), 0)',
-              }}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsWorkflowModalOpen(true)}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3.5 text-xs font-bold text-[#C2410C] transition hover:bg-[#FFEDD5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F26F21] sm:text-sm"
             >
-              <Suspense
-                fallback={
-                  <div className="flex size-full items-center justify-center" aria-hidden="true">
-                    <div className="size-28 animate-pulse rounded-3xl border border-[#7cdff4]/40 bg-[#dffaff]/30 motion-reduce:animate-none" />
-                  </div>
-                }
-              >
-                <LecturerOverviewThreeScene />
-              </Suspense>
-            </div>
-            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#d8e8f3] bg-white/76 px-3 py-1.5 text-[9px] font-semibold text-[#5b708c] shadow-sm backdrop-blur-md sm:flex">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#38cfa0] motion-reduce:animate-none" />
-              Rubric 10.0 → Hậu kiểm
-            </div>
+              📋 Xem quy trình khảo thí
+            </button>
+            <Link
+              to="/lecturer/audit?shiftId=00000000-0000-0000-0000-000000000023"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3.5 text-xs font-bold text-[#1E293B] shadow-2xs transition hover:border-[#FED7AA] hover:bg-[#FFF7ED] hover:text-[#C2410C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F26F21] sm:text-sm"
+            >
+              <ScanSearch className="size-4 text-[#F26F21]" aria-hidden="true" />
+              Mở Cổng Hậu kiểm
+            </Link>
+            <Link
+              to="/question-bank/create"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#F26F21] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#D95B16] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F26F21] sm:text-sm"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Tạo câu hỏi & Rubric
+            </Link>
           </div>
         </div>
       </section>
 
       {error && (
         <div
-          className="flex flex-col gap-3 rounded-2xl border border-[#f0d1d5] bg-[#fff7f7] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-[#FECDD3] bg-[#FFF1F2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           role="alert"
         >
-          <p className="flex items-center gap-2 text-[11px] font-semibold text-[#9e3742]">
+          <p className="flex items-center gap-2 text-xs font-semibold text-[#9F1239] sm:text-sm">
             <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
             {error}
           </p>
           <button
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[#e4bfc4] bg-white px-3 text-[10px] font-bold text-[#963743] transition hover:bg-[#fff0f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b8404b]"
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[#FDA4AF] bg-white px-3 text-xs font-bold text-[#9F1239] transition hover:bg-[#FFE4E6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#BE123C]"
           >
             <RefreshCw className="size-3.5" aria-hidden="true" />
             Thử lại
@@ -282,120 +271,350 @@ export function LecturerDashboardPage() {
 
       <section
         aria-label="Tình trạng ngân hàng câu hỏi"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4"
       >
         {metrics.map(({ label, value, helper, icon: Icon, tone }) => (
           <article
             key={label}
-            className="group rounded-2xl border border-[#e1e7f0] bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#cfdbeb] hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)]"
+            className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:border-[#FED7AA]"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-medium text-[#64748b]">{label}</p>
+                <p className="text-xs font-semibold text-[#475569]">{label}</p>
                 <strong
                   className={cn(
-                    'mt-3 block text-[1.7rem] font-bold tracking-[-0.045em] text-[#0b1830]',
-                    isLoading && 'animate-pulse text-[#a8b4c4] motion-reduce:animate-none',
+                    'mt-2 block text-2xl font-bold tracking-tight text-[#1E293B] sm:text-3xl',
+                    isLoading && 'animate-pulse text-[#94A3B8] motion-reduce:animate-none',
                   )}
                 >
                   {isLoading ? '—' : String(value).padStart(2, '0')}
                 </strong>
               </div>
-              <span className={cn('flex size-9 items-center justify-center rounded-xl', tone)}>
-                <Icon className="size-4" aria-hidden="true" />
+              <span className={cn('flex size-10 items-center justify-center rounded-xl', tone)}>
+                <Icon className="size-5" aria-hidden="true" />
               </span>
             </div>
-            <p className="mt-1.5 text-[9px] leading-relaxed text-[#758399]">{helper}</p>
+            <p className="mt-2 text-xs leading-relaxed text-[#64748B]">{helper}</p>
           </article>
         ))}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.28fr)_minmax(300px,0.72fr)]">
-        <article className="overflow-hidden rounded-2xl border border-[#e1e7f0] bg-white shadow-[0_8px_30px_rgba(31,61,105,0.05)]">
-          <div className="flex items-center justify-between border-b border-[#e8edf4] px-5 py-4">
-            <div>
-              <p className="text-[9px] font-bold tracking-[0.09em] text-[#56759d] uppercase">
-                Không gian nghiệp vụ
-              </p>
-              <h2 className="mt-1 text-sm font-bold text-[#13213a]">Công việc của giảng viên</h2>
-            </div>
-            <span className="rounded-full bg-[#eef3ff] px-2.5 py-1 text-[9px] font-bold text-[#3562c8]">
-              2 Main Flows
-            </span>
+      <section className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-[#E2E8F0] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold tracking-wider text-[#C2410C] uppercase">
+              Ngân hàng câu hỏi gần đây
+            </p>
+            <h2 className="mt-0.5 text-base font-bold text-[#1E293B]">
+              Danh sách câu hỏi mới nhất
+            </h2>
           </div>
-
-          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 text-xs font-semibold text-[#475569] transition hover:border-[#FED7AA] hover:bg-[#FFF7ED] hover:text-[#C2410C]"
+            >
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              Làm mới
+            </button>
             <Link
               to="/question-bank"
-              className="group rounded-2xl border border-[#dce5f1] bg-[#fbfcff] p-4 transition hover:-translate-y-0.5 hover:border-[#afc5ec] hover:bg-[#f6f9ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3.5 text-xs font-bold text-[#C2410C] transition hover:bg-[#FFEDD5]"
             >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[#eaf1ff] text-[#245eea]">
-                  <BookOpenCheck className="size-[18px]" aria-hidden="true" />
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 font-mono text-[9px] font-bold text-[#50709a] shadow-sm">
-                  MF-03
-                </span>
-              </div>
-              <h3 className="mt-4 text-sm font-bold text-[#172640]">Ngân hàng đề & Rubric</h3>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-[#6d7d92]">
-                Tạo thủ công hoặc dùng AI/FLM, chuẩn hóa Rubric 10.0 và gửi Trưởng Bộ môn phê duyệt.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold text-[#245eea]">
-                Mở ngân hàng đề
-                <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-              </span>
+              Mở toàn bộ Ngân hàng đề
+              <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>
+          </div>
+        </div>
 
+        {isLoading ? (
+          <div className="flex min-h-56 flex-col items-center justify-center px-5 text-center">
+            <LoaderCircle className="size-6 animate-spin text-[#F26F21]" />
+            <p className="mt-2.5 text-xs font-semibold text-[#475569] sm:text-sm">
+              Đang tải danh sách câu hỏi...
+            </p>
+          </div>
+        ) : recentQuestions.length === 0 ? (
+          <div className="flex min-h-56 flex-col items-center justify-center px-5 text-center">
+            <BookOpenCheck className="size-8 text-[#F26F21]" />
+            <h3 className="mt-2.5 text-sm font-bold text-[#1E293B] sm:text-base">
+              Chưa có câu hỏi nào trong danh sách
+            </h3>
+            <p className="mt-1 max-w-md text-xs text-[#64748B] sm:text-sm">
+              Hãy bắt đầu tạo câu hỏi thủ công hoặc sinh tự động từ FLM Syllabus theo CLO.
+            </p>
             <Link
-              to="/lecturer/audit"
-              className="group rounded-2xl border border-[#dce5f1] bg-[#fbfcff] p-4 transition hover:-translate-y-0.5 hover:border-[#c2b9ee] hover:bg-[#faf8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5c62da]"
+              to="/question-bank/create"
+              className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#F26F21] px-4 text-xs font-bold text-white transition hover:bg-[#D95B16]"
             >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[#f0edff] text-[#6458cf]">
-                  <ClipboardCheck className="size-[18px]" aria-hidden="true" />
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 font-mono text-[9px] font-bold text-[#6b5fa5] shadow-sm">
-                  MF-04
-                </span>
-              </div>
-              <h3 className="mt-4 text-sm font-bold text-[#172640]">Hậu kiểm & công bố điểm</h3>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-[#6d7d92]">
-                Ưu tiên bài nghi ngờ, đối chiếu audio và transcript trước khi công bố điểm toàn ca.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-[10px] font-bold text-[#5c55c5]">
-                Mở cổng hậu kiểm
-                <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-              </span>
+              <Plus className="size-4" />
+              Tạo câu hỏi đầu tiên
             </Link>
           </div>
-        </article>
+        ) : (
+          <div className="divide-y divide-[#E2E8F0]">
+            {recentQuestions.map((question) => {
+              const statusMeta = STATUS_META[question.approvalStatus]
+              return (
+                <article
+                  key={question.id}
+                  className="flex flex-col gap-3 px-5 py-3.5 transition hover:bg-[#FFF7ED]/50 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md border border-[#FED7AA] bg-[#FFF7ED] px-2 py-0.5 font-mono text-xs font-bold text-[#C2410C]">
+                        {question.courseCode}
+                      </span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
+                          statusMeta.className,
+                        )}
+                      >
+                        {statusMeta.label}
+                      </span>
+                      <span className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] px-2 py-0.5 text-xs font-semibold text-[#475569]">
+                        {question.bloomLevel}
+                      </span>
+                      <span className="text-xs text-[#64748B]">
+                        {formatDate(question.createdAt)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void openQuickView(question.id)}
+                      className="mt-1.5 block max-w-full truncate text-left text-sm font-bold text-[#1E293B] transition hover:text-[#F26F21] focus-visible:outline-2 focus-visible:outline-[#F26F21]"
+                    >
+                      {question.title}
+                    </button>
+                  </div>
 
-        <aside className="rounded-2xl border border-[#dce5f1] bg-[#0b1d38] p-5 text-white shadow-[0_14px_36px_rgba(9,30,62,0.16)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.08em] text-[#80e4ee] uppercase">
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            Cổng kiểm soát
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className={cn(
+                        'rounded-lg px-2.5 py-1 font-mono text-xs font-black',
+                        question.totalRubricScore === 10
+                          ? 'bg-emerald-50 text-[#047857]'
+                          : 'bg-rose-50 text-[#BE123C]',
+                      )}
+                    >
+                      {question.totalRubricScore.toFixed(1)} / 10đ
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void openQuickView(question.id)}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3 text-xs font-bold text-[#C2410C] transition hover:bg-[#F26F21] hover:text-white"
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      Xem nhanh
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
           </div>
-          <h2 className="mt-3 text-base font-bold tracking-[-0.025em]">Trước khi công bố điểm</h2>
-          <ol className="mt-4 space-y-3">
-            {[
-              'Rà soát toàn bộ bài được đánh dấu nghi ngờ hoặc confidence dưới 0.70.',
-              'Đối chiếu Audio R2, transcript Whisper và bằng chứng chấm theo rubric.',
-              'Chỉ công bố khi 100% thí sinh đã có điểm hoàn chỉnh.',
-            ].map((item, index) => (
-              <li key={item} className="flex gap-3 text-[10px] leading-relaxed text-[#c2d0e4]">
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[#3f5b80] bg-[#112b4d] font-mono text-[9px] font-bold text-[#74dce8]">
-                  {index + 1}
-                </span>
-                {item}
-              </li>
-            ))}
-          </ol>
-          <p className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3 text-[9px] leading-relaxed text-[#93a9c5]">
-            Sau khi công bố, One-Way Lock chặn mọi thao tác cập nhật hoặc xóa điểm.
-          </p>
-        </aside>
+        )}
       </section>
+
+      <OverlayDrawer
+        open={Boolean(selectedQuestionId)}
+        onClose={() => setSelectedQuestionId(null)}
+        title={questionDetail?.title ?? 'Chi tiết câu hỏi & Barem Rubric'}
+        subtitle={
+          questionDetail
+            ? `Học phần ${questionDetail.courseCode} · Bậc Bloom: ${questionDetail.bloomLevel}`
+            : 'Đang tải thông tin câu hỏi từ ngân hàng đề...'
+        }
+        badge={questionDetail ? STATUS_META[questionDetail.approvalStatus].label : 'Xem nhanh'}
+        width="xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedQuestionId(null)}
+              className="inline-flex min-h-9 items-center justify-center rounded-xl border border-[#CBD5E1] bg-white px-4 text-xs font-bold text-[#475569] transition hover:bg-[#F8FAFC]"
+            >
+              Đóng
+            </button>
+            <Link
+              to="/question-bank"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#F26F21] px-4 text-xs font-bold text-white shadow-xs transition hover:bg-[#D95B16]"
+            >
+              Quản lý tại Ngân hàng đề
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        }
+      >
+        {isDetailLoading ? (
+          <div className="flex min-h-60 flex-col items-center justify-center text-center">
+            <LoaderCircle className="size-7 animate-spin text-[#F26F21]" />
+            <p className="mt-2.5 text-xs font-semibold text-[#475569]">
+              Đang tải nội dung câu hỏi và Rubric...
+            </p>
+          </div>
+        ) : detailError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-[#BE123C]">
+            {detailError}
+          </div>
+        ) : questionDetail ? (
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+              <p className="text-xs font-bold tracking-wider text-[#C2410C] uppercase">
+                Nội dung câu hỏi vấn đáp
+              </p>
+              <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#1E293B]">
+                {questionDetail.content}
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-[#E2E8F0] bg-white p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold tracking-wider text-[#64748B] uppercase">
+                    Barem Rubric chuẩn hóa
+                  </p>
+                  <h3 className="mt-0.5 text-sm font-bold text-[#1E293B]">
+                    {questionDetail.rubric.name}
+                  </h3>
+                </div>
+                <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-black text-[#047857]">
+                  Tổng: {questionDetail.rubric.totalMaxScore.toFixed(1)} / 10.0đ
+                </span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {questionDetail.rubric.criteria.map((criterion, index) => (
+                  <div
+                    key={criterion.id}
+                    className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-bold text-[#1E293B] sm:text-sm">
+                        {index + 1}. {criterion.criterionName}
+                      </p>
+                      <span className="shrink-0 font-mono text-xs font-black text-[#C2410C]">
+                        {criterion.maxScore.toFixed(1)}đ
+                      </span>
+                    </div>
+                    {criterion.description && (
+                      <p className="mt-1 text-xs leading-relaxed text-[#475569]">
+                        {criterion.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-[#E2E8F0] bg-white p-4">
+              <p className="text-xs font-bold tracking-wider text-[#64748B] uppercase">
+                Đáp án mẫu (Model Answer)
+              </p>
+              <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#334155] sm:text-sm">
+                {questionDetail.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
+              </p>
+            </section>
+
+            {questionDetail.reviewNotes && (
+              <section className="rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-4">
+                <p className="text-xs font-bold text-[#C2410C] uppercase">
+                  Phản hồi thẩm định của Trưởng Bộ môn
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed whitespace-pre-wrap text-[#7C2D12] sm:text-sm">
+                  {questionDetail.reviewNotes}
+                </p>
+              </section>
+            )}
+          </div>
+        ) : null}
+      </OverlayDrawer>
+
+      <OverlayModal
+        open={isWorkflowModalOpen}
+        onClose={() => setIsWorkflowModalOpen(false)}
+        title="Quy trình Biên soạn Đề & Chấm duyệt Khảo thí"
+        subtitle="Hướng dẫn biên soạn ngân hàng đề, chuẩn hóa Barem Rubric 10.0 và hậu kiểm ca thi chính thức."
+        badge="Cổng kiểm soát học thuật"
+        size="lg"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsWorkflowModalOpen(false)}
+              className="inline-flex min-h-9 items-center justify-center rounded-xl bg-[#F26F21] px-4 text-xs font-bold text-white transition hover:bg-[#D95B16]"
+            >
+              Đã hiểu quy trình
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="rounded-2xl border border-[#FED7AA] bg-[#FFF7ED]/60 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex size-9 items-center justify-center rounded-xl border border-[#FED7AA] bg-white text-[#C2410C]">
+                  <BookOpenCheck className="size-4" />
+                </span>
+                <span className="rounded-full border border-[#FED7AA] bg-white px-2.5 py-0.5 font-mono text-xs font-bold text-[#C2410C]">
+                  Biên soạn đề
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[#1E293B]">
+                Ngân hàng đề & Rubric Studio 10.0
+              </h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#475569]">
+                Biên soạn thủ công hoặc dùng AI sinh câu hỏi từ FLM Syllabus theo CLO. Barem Rubric
+                bắt buộc có tổng điểm chính xác 10.0 điểm và Model Answer tối thiểu 50 ký tự trước
+                khi gửi Trưởng Bộ môn phê duyệt.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex size-9 items-center justify-center rounded-xl border border-[#FED7AA] bg-[#FFF7ED] text-[#F26F21]">
+                  <ClipboardCheck className="size-4" />
+                </span>
+                <span className="rounded-full border border-[#E2E8F0] bg-white px-2.5 py-0.5 font-mono text-xs font-bold text-[#475569]">
+                  Hậu kiểm & Công bố
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[#1E293B]">
+                Hậu kiểm bằng chứng & Công bố điểm
+              </h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#475569]">
+                Ưu tiên kiểm tra Nhóm 1 (bài nghi ngờ hoặc độ tin cậy AI &lt; 0.70), nghe lại Audio
+                R2 (`STT_MSSV.webm`), đối chiếu Transcript Whisper & AI CoT trước khi bấm Công bố
+                điểm.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-4">
+            <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-[#C2410C] uppercase">
+              <ShieldCheck className="size-4" aria-hidden="true" />3 nguyên tắc bắt buộc trước khi
+              công bố điểm
+            </div>
+            <ol className="mt-3 space-y-2.5">
+              {[
+                'Rà soát toàn bộ bài được đánh dấu nghi ngờ hoặc confidence dưới 0.70.',
+                'Đối chiếu Audio R2, transcript Whisper và lập luận chấm điểm theo Rubric.',
+                'Chỉ công bố khi 100% thí sinh đã có điểm hoàn chỉnh. Sau khi công bố, niêm phong bảng điểm chính thức sẽ khóa chỉnh sửa trái phép.',
+              ].map((item, index) => (
+                <li
+                  key={item}
+                  className="flex gap-2.5 text-xs leading-relaxed text-[#7C2D12] sm:text-sm"
+                >
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[#F26F21]/40 bg-white font-mono text-xs font-bold text-[#C2410C]">
+                    {index + 1}
+                  </span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </OverlayModal>
     </div>
   )
 }

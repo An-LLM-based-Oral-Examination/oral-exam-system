@@ -11,6 +11,8 @@ export interface AuthContextType {
   isProctor: boolean
   isAdmin: boolean
   loginWithGoogle: (idToken: string) => Promise<void>
+  loginWithPassword: (username: string, password: string) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
   hasRole: (roles: UserRole[]) => boolean
 }

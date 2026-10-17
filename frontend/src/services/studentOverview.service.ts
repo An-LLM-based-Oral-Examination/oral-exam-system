@@ -1,4 +1,5 @@
 import apiClient from './api.client'
+import { mockExamService } from './mockExam.service'
 
 export interface CourseSummary {
   id: string
@@ -98,18 +99,6 @@ function mapHistory(record: JsonRecord): PracticeHistoryItem | null {
   }
 }
 
-function mapQuota(record: JsonRecord): MockExamQuota | null {
-  const courseId = readString(record, 'courseId', 'CourseId')
-  if (!courseId) return null
-  return {
-    courseId,
-    usedCount: readNumber(record, 'usedCount', 'UsedCount') ?? 0,
-    remainingCount: readNumber(record, 'remainingCount', 'RemainingCount') ?? 0,
-    maxDailyQuota: readNumber(record, 'maxDailyQuota', 'MaxDailyQuota') ?? 0,
-    canStartExam: readBoolean(record, 'canStartExam', 'CanStartExam'),
-  }
-}
-
 export const studentOverviewService = {
   async getCourses(): Promise<CourseSummary[]> {
     const response = await apiClient.get<unknown>('/courses')
@@ -126,18 +115,6 @@ export const studentOverviewService = {
   },
 
   async getMockExamQuota(courseId: string): Promise<MockExamQuota> {
-    const response = await apiClient.get<unknown>('/mockexams/quota', {
-      params: { courseId },
-    })
-    const record = isRecord(response.data) ? response.data : null
-    const quota = record ? mapQuota(record) : null
-    if (!quota) {
-      throw {
-        status: 502,
-        title: 'Phản hồi hạn ngạch không hợp lệ',
-        detail: 'Backend không trả về hạn ngạch thi thử.',
-      }
-    }
-    return quota
+    return mockExamService.getQuota(courseId)
   },
 }

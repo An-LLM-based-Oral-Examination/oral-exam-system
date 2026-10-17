@@ -50,12 +50,12 @@ export function ScoreOverrideForm({
           <h3 id="score-review-title" className="text-sm font-bold text-[#13213a]">
             Điểm hậu kiểm của giảng viên
           </h3>
-          <p className="mt-1 text-[10px] text-[#728197]">
+          <p className="mt-1 text-xs text-[#728197]">
             Mọi thay đổi phải có giải trình trước khi công bố điểm toàn ca.
           </p>
         </div>
         <span
-          className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+          className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
             isLocked
               ? 'border border-[#f0c5c9] bg-[#fff1f2] text-[#ad3541]'
               : 'border border-[#cbdcf7] bg-[#f0f5ff] text-[#275bc3]'
@@ -72,7 +72,7 @@ export function ScoreOverrideForm({
 
       <div className="space-y-4 p-4 sm:p-5">
         {!persistenceAvailable && !isLocked && (
-          <div className="flex gap-2 rounded-xl border border-[#f0deb9] bg-[#fff9ec] p-3 text-[10px] leading-relaxed text-[#80591d]">
+          <div className="flex gap-2 rounded-xl border border-[#f0deb9] bg-[#fff9ec] p-3 text-xs leading-relaxed text-[#80591d]">
             <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <p>
               Chức năng lưu điểm hậu kiểm chưa được kích hoạt trên hệ thống. Biểu mẫu được khóa để
@@ -83,7 +83,7 @@ export function ScoreOverrideForm({
 
         <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)]">
           <label className="block">
-            <span className="text-[10px] font-bold tracking-[0.06em] text-[#63758e] uppercase">
+            <span className="text-xs font-bold tracking-[0.06em] text-[#63758e] uppercase">
               Điểm chính thức
             </span>
             <div className="mt-1.5 flex items-baseline gap-1 rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 focus-within:border-[#6991ee] focus-within:ring-2 focus-within:ring-[#dce8ff]">
@@ -102,7 +102,7 @@ export function ScoreOverrideForm({
           </label>
 
           <label className="block">
-            <span className="flex items-center justify-between gap-2 text-[10px] font-bold tracking-[0.06em] text-[#63758e] uppercase">
+            <span className="flex items-center justify-between gap-2 text-xs font-bold tracking-[0.06em] text-[#63758e] uppercase">
               Lý do điều chỉnh
               <span className="text-[#b33c48] normal-case">Bắt buộc khi override</span>
             </span>
@@ -121,7 +121,7 @@ export function ScoreOverrideForm({
 
         {error && (
           <p
-            className="flex items-center gap-1.5 text-[10px] font-semibold text-[#b23441]"
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#b23441]"
             role="alert"
           >
             <AlertCircle className="size-3.5" aria-hidden="true" />

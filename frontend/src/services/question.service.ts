@@ -161,4 +161,36 @@ export const questionService = {
     const response = await apiClient.post<unknown>('/questions/batch-submit-review', payload)
     return normalizeBatchResponse(response.data)
   },
+
+  async reviewDecision(
+    id: string,
+    payload: {
+      decision: 'APPROVED' | 'NEEDS_REVISION' | 'REJECTED'
+      reviewNotes?: string
+      targetUsageScope?: 'exam' | 'practice' | 'both'
+    },
+  ): Promise<{
+    questionId: string
+    approvalStatus: string
+    reviewNotes?: string | null
+    message: string
+  }> {
+    const response = await apiClient.post<unknown>(`/questions/${id}/review-decision`, payload)
+    const candidate = unwrapRecord(response.data)
+    return {
+      questionId:
+        (candidate && typeof candidate.questionId === 'string' ? candidate.questionId : null) ?? id,
+      approvalStatus:
+        (candidate && typeof candidate.approvalStatus === 'string'
+          ? candidate.approvalStatus
+          : null) ?? payload.decision,
+      reviewNotes:
+        candidate && typeof candidate.reviewNotes === 'string'
+          ? candidate.reviewNotes
+          : (payload.reviewNotes ?? null),
+      message:
+        (candidate && typeof candidate.message === 'string' ? candidate.message : null) ??
+        `Đã cập nhật trạng thái thẩm định câu hỏi thành ${payload.decision}.`,
+    }
+  },
 }

@@ -9,7 +9,7 @@ export function StudentLayout() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-dvh bg-[#f4f7fc] text-[#10203d]">
+    <div className="min-h-dvh bg-[#F8FAFC] text-[#1E293B]">
       <StudentSidebar
         collapsed={isSidebarCollapsed}
         mobileOpen={isMobileSidebarOpen}
@@ -19,14 +19,14 @@ export function StudentLayout() {
 
       <div
         className={cn(
-          'min-h-dvh transition-[padding] duration-300 ease-out',
-          isSidebarCollapsed ? 'md:pl-20' : 'md:pl-[220px] xl:pl-[240px]',
+          'min-h-dvh transition-[padding] duration-200 ease-out',
+          isSidebarCollapsed ? 'md:pl-18' : 'md:pl-56',
         )}
       >
         <StudentHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
 
-        <main className="px-4 py-5 sm:px-6 sm:py-6 xl:px-8">
-          <div className="mx-auto w-full max-w-[1380px]">
+        <main className="px-4 py-6 sm:px-6 xl:px-8">
+          <div className="mx-auto w-full max-w-6xl">
             <Outlet />
           </div>
         </main>

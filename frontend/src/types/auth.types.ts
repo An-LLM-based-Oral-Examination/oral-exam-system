@@ -12,15 +12,27 @@ export interface User {
   email: string
   fullName: string
   role: UserRole
+  username?: string
   studentCode?: string
+  mustChangePassword?: boolean
   createdAt?: string
 }
 
 /**
- * Login Request Payload
+ * Login Request Payloads
  */
 export interface GoogleLoginRequest {
   idToken: string
+}
+
+export interface PasswordLoginRequest {
+  username: string
+  password: string
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
 }
 
 export interface LoginRequest {
@@ -36,6 +48,7 @@ export interface LoginResponse {
   refreshToken: string
   tokenType: string
   expiresIn: number
+  mustChangePassword?: boolean
   user: User
 }
 

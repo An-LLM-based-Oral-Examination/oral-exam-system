@@ -1,12 +1,136 @@
 /**
- * MF-02 Mock Exam Session Contract
+ * Hợp đồng MF-02 — thi thử vấn đáp bấm giờ có hạn ngạch.
  */
-export interface MockExamSession {
+
+export interface MockExamQuota {
+  courseId: string
+  studentId: string
+  quotaDate: string
+  usedCount: number
+  remainingCount: number
+  maxDailyQuota: number
+  canStartExam: boolean
+}
+
+export interface MockExamRubricCriterion {
+  name: string
+  maxScore: number
+}
+
+export interface MockExamQuestion {
   id: string
-  userId: string
-  subjectId: string
-  startTime: string
-  maxDurationSeconds: number
+  orderIndex: number
+  title: string
+  content: string
+  bloomLevel: string
+  difficulty: string
+  rubricCriteria: MockExamRubricCriterion[]
+}
+
+export interface StartMockExamRequest {
+  courseId: string
+  hasFollowUp: boolean
+}
+
+export interface StartMockExamResponse {
+  sessionId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  hasFollowUp: boolean
+  durationMinutes: number
+  startedAt: string
+  expiresAt: string
+  usedQuota: number
+  remainingQuota: number
+  maxDailyQuota: number
+  questions: MockExamQuestion[]
+}
+
+export interface SubmitMockExamAnswerRequest {
+  questionId: string
+  file?: Blob | null
+  fileName?: string
+  timeTakenSeconds: number
+  transcript?: string
+}
+
+export interface SubmitMockExamAnswerResponse {
+  answerId: string
+  questionId: string
+  transcript: string
   status: string
-  dailyQuotaRemaining?: number
+  answeredAt: string
+}
+
+export interface MockExamCriterionScore {
+  criterionId: string
+  criterionName: string
+  bloomLevel: string | null
+  maxScore: number
+  score: number
+  comment: string | null
+}
+
+export interface MockExamQuestionScore {
+  questionId: string
+  orderIndex: number
+  title: string
+  content: string
+  bloomLevel: string
+  difficulty: string
+  transcript: string | null
+  score: number
+  feedback: string | null
+  confidenceScore: number | null
+  criteriaScores: MockExamCriterionScore[]
+}
+
+export interface MockExamScorecard {
+  sessionId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  totalScore: number
+  classification: string
+  totalQuestions: number
+  answeredQuestions: number
+  durationMinutes: number
+  isOverdue: boolean
+  startedAt: string
+  submittedAt: string
+  questions: MockExamQuestionScore[]
+}
+
+export interface MockExamHistoryItem {
+  sessionId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  startedAt: string
+  durationMinutes: number
+  totalScore: number | null
+  status: string
+  answeredQuestions: number
+  totalQuestions: number
+}
+
+export interface MockExamHistoryPage {
+  items: MockExamHistoryItem[]
+  pageIndex: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+}
+
+export interface StoredMockExamAnswer {
+  questionId: string
+  transcript: string
+  timeTakenSeconds: number
+  answerId: string
+  answeredAt: string
+}
+
+export interface StoredMockExamSession extends StartMockExamResponse {
+  answers: StoredMockExamAnswer[]
 }

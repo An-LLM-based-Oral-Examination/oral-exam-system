@@ -2,17 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
-  AudioLines,
   ArrowLeft,
+  AudioLines,
   BookOpenText,
   CheckCircle2,
   Clock,
-  Headphones,
   Keyboard,
-  Layers,
   ListChecks,
   LoaderCircle,
-  LockKeyhole,
   Mic,
   MicOff,
   Radio,
@@ -26,12 +23,19 @@ import {
   WifiOff,
   X,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { BufferScreen } from '@/components/practice/BufferScreen'
 import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
+import {
+  speechService,
+  TTS_RATE_OPTIONS,
+  TTS_VOICE_OPTIONS,
+  type NeuralVoiceId,
+} from '@/services/speech.service'
 import { storageService } from '@/services/storage.service'
 import type {
   PracticeAnswerDetail,
@@ -48,8 +52,8 @@ import {
 } from '@/utils/practiceSessionStorage'
 
 const DIFFICULTY_META: Record<PracticeDifficulty, { label: string; className: string }> = {
-  easy: { label: 'Dễ', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  medium: { label: 'Trung bình', className: 'border-amber-200 bg-amber-50 text-amber-700' },
+  easy: { label: 'Dễ', className: 'border-emerald-200 bg-emerald-50 text-[#16A34A]' },
+  medium: { label: 'Trung bình', className: 'border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C]' },
   hard: { label: 'Khó', className: 'border-rose-200 bg-rose-50 text-rose-700' },
 }
 
@@ -254,6 +258,8 @@ export const PracticeSessionPage: React.FC = () => {
   const [scorecardTitle, setScorecardTitle] = useState('Bảng điểm câu trả lời')
   const [latestResult, setLatestResult] = useState<PracticeAnswerDetail | null>(null)
   const [syncedResults, setSyncedResults] = useState<PracticeAnswerDetail[]>([])
+  const [speechPrefs, setSpeechPrefs] = useState(() => speechService.getPreferences())
+  const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const processedAnswerIds = useRef(new Set<string>())
   const isTransitioningRef = useRef(false)
   const syncInFlightRef = useRef(false)
@@ -264,6 +270,7 @@ export const PracticeSessionPage: React.FC = () => {
 
   const {
     isRecording,
+    liveTranscript,
     error: recorderError,
     startRecording,
     stopRecording,
@@ -291,7 +298,12 @@ export const PracticeSessionPage: React.FC = () => {
   )
 
   const persistAnswerDraft = useCallback(
-    (text: string, inputMode: AnswerInputMode, bufferVisible = showBuffer, deadline = bufferDeadlineTimestamp) => {
+    (
+      text: string,
+      inputMode: AnswerInputMode,
+      bufferVisible = showBuffer,
+      deadline = bufferDeadlineTimestamp,
+    ) => {
       updateRuntime((current) => ({
         ...current,
         draftAnswerText: text,
@@ -495,9 +507,9 @@ export const PracticeSessionPage: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      speechService.stopSpeaking()
     }
-  }, [])
+  }, [activePrompt])
 
   useEffect(() => {
     if (!runtime) return
@@ -559,12 +571,49 @@ export const PracticeSessionPage: React.FC = () => {
   }, [showStopConfirmation])
 
   const handleReadQuestion = () => {
-    if (!activePrompt || !('speechSynthesis' in window)) return
-    const utterance = new SpeechSynthesisUtterance(activePrompt)
-    utterance.lang = 'vi-VN'
-    utterance.rate = 0.95
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+    if (!activePrompt) return
+    if (isReadingQuestion) {
+      speechService.stopSpeaking()
+      setIsReadingQuestion(false)
+      return
+    }
+
+    setIsReadingQuestion(true)
+    void speechService.speakText(activePrompt, {
+      voiceName: speechPrefs.voiceName,
+      speakingRate: speechPrefs.speakingRate,
+      onStart: () => setIsReadingQuestion(true),
+      onEnd: () => setIsReadingQuestion(false),
+      onError: () => setIsReadingQuestion(false),
+    })
+  }
+
+  const handleSelectVoice = (voiceName: NeuralVoiceId) => {
+    const updated = speechService.savePreferences({ voiceName })
+    setSpeechPrefs(updated)
+    if (isReadingQuestion && activePrompt) {
+      void speechService.speakText(activePrompt, {
+        voiceName: updated.voiceName,
+        speakingRate: updated.speakingRate,
+        onStart: () => setIsReadingQuestion(true),
+        onEnd: () => setIsReadingQuestion(false),
+        onError: () => setIsReadingQuestion(false),
+      })
+    }
+  }
+
+  const handleSelectRate = (speakingRate: number) => {
+    const updated = speechService.savePreferences({ speakingRate })
+    setSpeechPrefs(updated)
+    if (isReadingQuestion && activePrompt) {
+      void speechService.speakText(activePrompt, {
+        voiceName: updated.voiceName,
+        speakingRate: updated.speakingRate,
+        onStart: () => setIsReadingQuestion(true),
+        onEnd: () => setIsReadingQuestion(false),
+        onError: () => setIsReadingQuestion(false),
+      })
+    }
   }
 
   const handleRecording = async () => {
@@ -573,7 +622,8 @@ export const PracticeSessionPage: React.FC = () => {
     setBufferError('')
 
     if (!isRecording) {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      speechService.stopSpeaking()
+      setIsReadingQuestion(false)
       setTranscript('')
       setBufferDeadlineTimestamp(null)
       setShowBuffer(false)
@@ -592,7 +642,21 @@ export const PracticeSessionPage: React.FC = () => {
     setSessionNotice('Đang chuyển giọng nói thành văn bản…')
     try {
       const audio = await stopRecording()
-      const response = await storageService.uploadPracticeAudio(audio)
+      const capturedClientTranscript =
+        (audio as { clientTranscript?: string }).clientTranscript || liveTranscript
+      const questionVocabularyHint = [
+        runtime.config.courseCode,
+        runtime.config.courseName,
+        activePrompt,
+        ...(currentQuestion?.rubricCriteria ?? []),
+      ]
+        .filter(Boolean)
+        .join('. ')
+      const response = await storageService.uploadPracticeAudio(
+        audio,
+        capturedClientTranscript,
+        questionVocabularyHint,
+      )
       const nextDeadline = Date.now() + runtime.transcriptBufferSeconds * 1_000
       setTranscript(response.transcript)
       setBufferDeadlineTimestamp(nextDeadline)
@@ -673,6 +737,8 @@ export const PracticeSessionPage: React.FC = () => {
         setBufferDeadlineTimestamp(null)
         setTranscript('')
         setTextAnswer('')
+        speechService.stopSpeaking()
+        setIsReadingQuestion(false)
 
         if (!isLastQuestion) {
           setSessionNotice(
@@ -725,6 +791,8 @@ export const PracticeSessionPage: React.FC = () => {
       setBufferDeadlineTimestamp(null)
       setTranscript('')
       setTextAnswer('')
+      speechService.stopSpeaking()
+      setIsReadingQuestion(false)
       setSessionNotice('Câu trả lời đã được lưu. Đang chờ AI chấm điểm…')
     },
     [updateRuntime],
@@ -959,6 +1027,8 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
     isTransitioningRef.current = true
+    speechService.stopSpeaking()
+    setIsReadingQuestion(false)
 
     setPageError('')
 
@@ -986,11 +1056,6 @@ export const PracticeSessionPage: React.FC = () => {
     }
 
     const completedQuestions = runtime.mainQuestionsCompleted + 1
-    if (completedQuestions >= runtime.config.questionCount) {
-      await completeAndExit()
-      isTransitioningRef.current = false
-      return
-    }
 
     setIsSubmitting(true)
     try {
@@ -1040,28 +1105,32 @@ export const PracticeSessionPage: React.FC = () => {
 
   if (!runtime || !sessionId || !currentQuestion || !user || runtime.studentId !== user.id) {
     return (
-      <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#efcbd1] bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
-        <div className="bg-[linear-gradient(135deg,#fff8f9,#f7faff)] px-6 py-8">
-          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-[#d3485f] shadow-[0_10px_28px_rgba(211,72,95,0.12)]">
-            <AlertCircle className="size-7" />
-          </span>
-          <div className="mt-4">
-            <h1 className="text-lg font-bold text-[#17243a]">Không thể mở phiên luyện tập</h1>
-            <p className="mx-auto mt-2 max-w-md text-[11px] leading-relaxed text-[#68778b]">
-              {pageError || runtimeIssue || 'Dữ liệu phiên luyện tập không đầy đủ hoặc đã bị xóa.'}
-            </p>
+      <div className="flex min-h-dvh items-center justify-center bg-[#F8FAFC] px-4 text-[#1E293B]">
+        <section className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-center shadow-sm">
+          <div className="bg-[#FFF7ED] px-6 py-8">
+            <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-[#F26F21] shadow-xs">
+              <AlertCircle className="size-7" />
+            </span>
+            <div className="mt-4">
+              <h1 className="text-lg font-bold text-[#1E293B] sm:text-xl">
+                Không thể mở phiên luyện tập
+              </h1>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#475569]">
+                {pageError || runtimeIssue || 'Dữ liệu phiên luyện tập không đầy đủ hoặc đã bị xóa.'}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="border-t border-[#edf1f6] bg-white p-4">
-          <button
-            type="button"
-            onClick={() => navigate('/practice')}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:bg-[#194fce] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
-          >
-            <ArrowLeft className="size-4" /> Tạo phiên mới
-          </button>
-        </div>
-      </section>
+          <div className="border-t border-[#E2E8F0] bg-white p-4">
+            <button
+              type="button"
+              onClick={() => navigate('/practice')}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#F26F21] px-5 text-sm font-bold text-white shadow-xs transition hover:bg-[#D95B16] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F26F21]"
+            >
+              <ArrowLeft className="size-4" /> Tạo phiên mới
+            </button>
+          </div>
+        </section>
+      </div>
     )
   }
 
@@ -1078,10 +1147,11 @@ export const PracticeSessionPage: React.FC = () => {
     (mode !== 'PER_QUESTION' || isHubConnected)
   const totalMainQuestions =
     mode === 'FULL_SESSION' ? runtime.questions.length : runtime.config.questionCount
-  const completedMainQuestions = Math.min(runtime.mainQuestionsCompleted, totalMainQuestions)
-  const progressPercentage =
-    totalMainQuestions > 0 ? Math.round((completedMainQuestions / totalMainQuestions) * 100) : 0
-  const modeLabel = mode === 'PER_QUESTION' ? 'Luyện từng câu' : 'Luyện trọn gói · Tăng dần độ khó'
+  const completedMainQuestions =
+    mode === 'FULL_SESSION'
+      ? Math.min(runtime.mainQuestionsCompleted, totalMainQuestions)
+      : runtime.mainQuestionsCompleted
+  const modeLabel = mode === 'PER_QUESTION' ? 'Luyện từng câu' : 'Theo bộ câu hỏi'
   const answerState = isVerifyingSubmission
     ? 'Đang xác minh lần nộp câu trả lời'
     : isRecording
@@ -1110,59 +1180,108 @@ export const PracticeSessionPage: React.FC = () => {
             : 'Kiểm tra nội dung lần cuối; câu trả lời sẽ được gửi trực tiếp để chấm điểm.'
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section className="relative isolate overflow-hidden rounded-[22px] border border-[#23467a] bg-[linear-gradient(120deg,#071a35_0%,#102e5a_58%,#24528f_100%)] px-5 py-5 text-white shadow-[0_18px_46px_rgba(16,44,88,0.18)] sm:px-7 sm:py-6">
-        <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(126,218,247,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(126,218,247,0.16)_1px,transparent_1px)] [background-size:32px_32px] opacity-20" />
-        <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#48d9ef]/16 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#477bff]/18 blur-3xl" />
+    <div className="min-h-dvh bg-[#F8FAFC] text-[#1E293B]">
+      <header className="sticky top-0 z-20 border-b border-[#E2E8F0] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={openStopConfirmation}
+              disabled={isTranscribing || isVerifyingSubmission}
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#475569] transition hover:border-[#FED7AA] hover:bg-[#FFF7ED] hover:text-[#C2410C] disabled:opacity-50"
+              aria-label="Quay lại trang thiết lập luyện tập"
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+            <span className="shrink-0 rounded-full border border-[#FED7AA] bg-[#FFF7ED] px-3 py-1 text-xs font-bold text-[#C2410C]">
+              {runtime.config.courseCode}
+            </span>
+            <span className="hidden max-w-56 truncate text-sm font-bold text-[#1E293B] sm:inline md:max-w-xs">
+              {runtime.config.courseName}
+            </span>
+          </div>
 
-        <div className="relative z-10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#6de4f1]/20 bg-[#0d477f]/72 px-3 py-1 text-[10px] font-bold tracking-[0.08em] text-[#bcf6fb] uppercase backdrop-blur-sm">
-                  <Radio className="size-3" /> Phiên luyện tập đang diễn ra
-                </span>
-                <span
-                  role="status"
-                  aria-live="polite"
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold backdrop-blur-sm ${
-                    hubStatus === 'connected'
-                      ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
-                      : 'border-amber-300/25 bg-amber-300/10 text-amber-100'
-                  }`}
-                >
-                  {hubStatus === 'connected' ? (
-                    <Wifi className="size-3" />
-                  ) : (
-                    <WifiOff className="size-3" />
-                  )}
-                  {hubStatus === 'connected'
-                    ? 'Kết nối ổn định'
-                    : hubStatus === 'reconnecting'
-                      ? 'Đang kết nối lại…'
-                      : hubStatus === 'offline'
-                        ? 'Mất kết nối · đang thử lại…'
-                        : 'Đang kết nối…'}
-                </span>
-              </div>
-
-              <p className="mt-4 text-[10px] font-semibold tracking-[0.08em] text-[#9fc4ef] uppercase">
-                {runtime.config.courseCode}
-              </p>
-              <h1 className="mt-1 max-w-3xl text-[clamp(1.35rem,2.5vw,2rem)] leading-tight font-bold tracking-[-0.035em] text-white">
-                {runtime.config.courseName}
-              </h1>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-[#d7e8fb]">
-                <span className="inline-flex items-center gap-1.5">
-                  <LockKeyhole className="size-3.5 text-[#69e1ef]" /> {modeLabel}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-[#69e1ef]" /> Hiệu đính trong{' '}
-                  {runtime.transcriptBufferSeconds} giây
-                </span>
-              </div>
+          {mode === 'PER_QUESTION' ? (
+            <div
+              className="order-3 flex w-full items-center justify-center gap-2.5 md:order-2 md:w-auto"
+              role="status"
+              aria-label="Tiến độ phiên luyện tập từng câu"
+            >
+              <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                Câu {currentQuestionNumber}
+              </span>
+              <span className="text-xs font-semibold text-[#475569]">
+                Đã làm {completedMainQuestions} câu
+              </span>
             </div>
+          ) : (
+            <div
+              className="order-3 flex w-full items-center gap-3 md:order-2 md:w-auto md:max-w-md md:flex-1"
+              role="progressbar"
+              aria-label="Tiến độ phiên luyện tập"
+              aria-valuemin={0}
+              aria-valuemax={totalMainQuestions}
+              aria-valuenow={completedMainQuestions}
+            >
+              <span className="shrink-0 text-xs font-bold text-[#1E293B]">
+                Câu {currentQuestionNumber} / {totalMainQuestions}
+              </span>
+              <div className="flex h-2 min-w-0 flex-1 gap-1.5">
+                {Array.from({ length: totalMainQuestions }).map((_, index) => {
+                  const isDone = index < completedMainQuestions
+                  const isCurrent = index === currentQuestionNumber - 1
+                  return (
+                    <span
+                      key={index}
+                      className={cn(
+                        'h-full flex-1 rounded-full transition-colors',
+                        isDone
+                          ? 'bg-[#16A34A]'
+                          : isCurrent
+                            ? 'bg-[#F26F21]'
+                            : 'bg-[#E2E8F0]',
+                      )}
+                    />
+                  )
+                })}
+              </div>
+              <span className="shrink-0 text-xs font-semibold text-[#475569]">
+                {completedMainQuestions}/{totalMainQuestions} hoàn thành
+              </span>
+            </div>
+          )}
+
+          <div className="order-2 flex items-center gap-2 md:order-3">
+            <span
+              role="status"
+              aria-live="polite"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold',
+                hubStatus === 'connected'
+                  ? 'border-emerald-200 bg-emerald-50 text-[#16A34A]'
+                  : 'border-amber-200 bg-amber-50 text-amber-700',
+              )}
+            >
+              {hubStatus === 'connected' ? (
+                <Wifi className="size-3.5" />
+              ) : (
+                <WifiOff className="size-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {hubStatus === 'connected'
+                  ? 'Kết nối ổn định'
+                  : hubStatus === 'reconnecting'
+                    ? 'Đang kết nối lại…'
+                    : hubStatus === 'offline'
+                      ? 'Mất kết nối · đang thử lại…'
+                      : 'Đang kết nối…'}
+              </span>
+            </span>
+
+            <span className="hidden items-center gap-1.5 rounded-full border border-[#FED7AA] bg-[#FFF7ED] px-3 py-1.5 text-xs font-semibold text-[#C2410C] lg:inline-flex">
+              <Radio className="size-3.5 text-[#F26F21]" />
+              {modeLabel}
+            </span>
 
             <button
               type="button"
@@ -1171,570 +1290,467 @@ export const PracticeSessionPage: React.FC = () => {
               title={
                 isVerifyingSubmission ? 'Hãy xác minh lần nộp trước khi kết thúc phiên.' : undefined
               }
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-rose-200/25 bg-rose-400/10 px-4 text-[11px] font-bold text-rose-100 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-rose-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-200 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
+              className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700 transition hover:bg-rose-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Square className="size-3.5 fill-current" /> Kết thúc phiên
             </button>
           </div>
+        </div>
+      </header>
 
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.07] p-3.5 backdrop-blur-sm sm:p-4">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-semibold text-[#b7d0eb]">Tiến độ câu hỏi chính</p>
-                <p className="mt-0.5 text-sm font-bold text-white">
-                  Đã hoàn thành {completedMainQuestions}/{totalMainQuestions} câu
-                </p>
-              </div>
-              <strong className="font-mono text-lg text-[#7be6f2]">{progressPercentage}%</strong>
-            </div>
-            <div
-              className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"
-              role="progressbar"
-              aria-label="Tiến độ phiên luyện tập"
-              aria-valuemin={0}
-              aria-valuemax={totalMainQuestions}
-              aria-valuenow={completedMainQuestions}
-            >
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#50dce9,#75a8ff)] shadow-[0_0_16px_rgba(80,220,233,0.5)] transition-[width] duration-500 motion-reduce:transition-none"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-3 sm:px-6 lg:h-[calc(100dvh-4.5rem)] lg:overflow-hidden">
+        {(pageError || recorderError) && (
+          <div
+            className="mb-2.5 flex shrink-0 items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-xs font-semibold text-rose-700 sm:text-sm"
+            role="alert"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-rose-600 shadow-2xs">
+              <AlertCircle className="size-4" />
+            </span>
+            <span className="pt-0.5 leading-relaxed">{pageError || recorderError}</span>
           </div>
-        </div>
-      </section>
+        )}
 
-      {(pageError || recorderError) && (
-        <div
-          className="flex items-start gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3.5 text-[11px] font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
-          role="alert"
-        >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
-            <AlertCircle className="size-4" />
-          </span>
-          <span className="pt-1.5 leading-relaxed">{pageError || recorderError}</span>
-        </div>
-      )}
+        {sessionNotice && (
+          <div
+            className="mb-2.5 flex shrink-0 items-start gap-3 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] px-4 py-2.5 text-xs font-semibold text-[#C2410C] sm:text-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#F26F21] shadow-2xs">
+              {isSubmitting || isTranscribing || isAnswerLocked ? (
+                <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <CheckCircle2 className="size-4" />
+              )}
+            </span>
+            <span className="pt-0.5 leading-relaxed">{sessionNotice}</span>
+          </div>
+        )}
 
-      {sessionNotice && (
-        <div
-          className="flex items-start gap-3 rounded-2xl border border-[#cfe0fb] bg-[#f3f7ff] px-4 py-3.5 text-[11px] font-semibold text-[#2859bf]"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
-            {isSubmitting || isTranscribing || isAnswerLocked ? (
-              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <CheckCircle2 className="size-4" />
-            )}
-          </span>
-          <span className="pt-1.5 leading-relaxed">{sessionNotice}</span>
-        </div>
-      )}
+        {runtime.pendingSubmission && (
+          <div className="mb-2.5 flex shrink-0 justify-center">
+            <button
+              type="button"
+              onClick={() => void reconcilePendingSubmission(runtime)}
+              disabled={isSubmitting}
+              className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-xs font-bold text-amber-700 shadow-xs transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw
+                className={`size-3.5 ${isSubmitting ? 'animate-spin motion-reduce:animate-none' : ''}`}
+              />
+              {isSubmitting ? 'Đang xác minh lần nộp…' : 'Xác minh câu trả lời đã nộp'}
+            </button>
+          </div>
+        )}
 
-      {runtime.pendingSubmission && (
-        <button
-          type="button"
-          onClick={() => void reconcilePendingSubmission(runtime)}
-          disabled={isSubmitting}
-          className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-[11px] font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60"
-        >
-          <RefreshCw
-            className={`size-4 ${isSubmitting ? 'animate-spin motion-reduce:animate-none' : ''}`}
-          />
-          {isSubmitting ? 'Đang xác minh lần nộp…' : 'Xác minh câu trả lời đã nộp'}
-        </button>
-      )}
-
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.72fr)]">
-        <div className="min-w-0 space-y-4">
-          <article className="overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="border-b border-[#edf1f6] px-5 py-4 sm:px-6 sm:py-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Khung 2 cột Zero-Scroll: Nhìn câu hỏi bên trái, bấm trả lời bên phải ngay lập tức */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+          {/* Cột trái: Thẻ Câu hỏi & Tiêu chí Rubric */}
+          <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xs lg:col-span-6 xl:col-span-7">
+            <div className="shrink-0 border-b border-[#E2E8F0] bg-white px-5 py-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#edf3ff] px-2.5 py-1.5 text-[10px] font-bold text-[#245eea]">
-                    <BookOpenText className="size-3.5" />
+                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#FED7AA] bg-[#FFF7ED] px-2.5 py-1 text-xs font-bold text-[#C2410C]">
+                    <BookOpenText className="size-3.5 text-[#F26F21]" />
                     {runtime.activeFollowUp
                       ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
-                      : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
+                      : mode === 'PER_QUESTION'
+                        ? `Câu ${currentQuestionNumber}`
+                        : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
                   </span>
                   {runtime.activeFollowUp && (
-                    <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[10px] font-bold text-violet-700">
-                      Đào sâu theo câu trả lời
+                    <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                      Đào sâu
                     </span>
                   )}
-                </div>
-                {currentDifficulty && (
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${DIFFICULTY_META[currentDifficulty].className}`}
-                  >
-                    {DIFFICULTY_META[currentDifficulty].label}
-                  </span>
-                )}
-              </div>
-
-              <h2 className="mt-5 text-[clamp(1.15rem,2.1vw,1.55rem)] leading-[1.45] font-bold tracking-[-0.025em] text-[#14233d]">
-                {activePrompt}
-              </h2>
-
-              <button
-                type="button"
-                onClick={handleReadQuestion}
-                disabled={isRecording}
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8e3f3] bg-[#f8faff] px-4 text-[11px] font-bold text-[#315fbd] transition hover:border-[#b7c9e4] hover:bg-[#eef4ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Volume2 className="size-4" /> Nghe đọc câu hỏi
-              </button>
-            </div>
-
-            <div className="bg-[#fbfcfe] px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.05em] text-[#6d7d92] uppercase">
-                <ListChecks className="size-4 text-[#5276bc]" /> Tiêu chí cần thể hiện
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {currentQuestion.rubricCriteria.length > 0 ? (
-                  currentQuestion.rubricCriteria.map((criterion, index) => (
+                  {currentDifficulty && (
                     <span
-                      key={`${criterion}-${index}`}
-                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#e0e7f0] bg-white px-3 py-2 text-[10px] leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${DIFFICULTY_META[currentDifficulty].className}`}
                     >
-                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#299b7d]" />
-                      {criterion}
+                      {DIFFICULTY_META[currentDifficulty].label}
                     </span>
-                  ))
-                ) : (
-                  <span className="text-[11px] text-[#78879a]">
-                    Trả lời đầy đủ, đúng trọng tâm và trình bày mạch lạc.
-                  </span>
-                )}
-              </div>
-            </div>
-          </article>
-
-          <section className="overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="flex flex-col gap-3 border-b border-[#edf1f6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div className="flex items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf2ff] text-[#245eea]">
-                  {answerInputMode === 'voice' ? (
-                    <Mic className="size-5" />
-                  ) : (
-                    <Keyboard className="size-5" />
                   )}
-                </span>
-                <div>
-                  <h2 className="text-sm font-bold text-[#1b2c46]">Khu vực trả lời</h2>
-                  <p className="mt-0.5 text-[10px] leading-relaxed text-[#7a899c]">
-                    {answerInputMode === 'voice'
-                      ? 'Nói tự nhiên; bạn sẽ được hiệu đính bản nhận diện trước khi nộp.'
-                      : 'Nhập câu trả lời trực tiếp và kiểm tra nội dung trước khi gửi.'}
-                  </p>
                 </div>
-              </div>
-              <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-[#d9e8e3] bg-[#f1faf7] px-3 py-1.5 text-[9px] font-bold text-[#19785f] sm:self-auto">
-                <ShieldCheck className="size-3.5" />
-                {answerInputMode === 'voice' ? 'Không lưu bản ghi âm' : 'Chỉ lưu nội dung văn bản'}
-              </span>
-            </div>
 
-            <div className="space-y-4 p-5 sm:p-6">
-              <div
-                role="group"
-                aria-label="Chọn hình thức trả lời"
-                className="grid gap-2 rounded-2xl border border-[#dfe7f2] bg-[#f5f8fc] p-1.5 sm:grid-cols-2"
-              >
-                {(
-                  [
-                    {
-                      value: 'voice' as const,
-                      label: 'Trả lời bằng giọng nói',
-                      description: 'Ghi âm và bóc băng bằng Whisper',
-                      icon: Mic,
-                    },
-                    {
-                      value: 'text' as const,
-                      label: 'Nhập câu trả lời',
-                      description: 'Soạn nội dung trực tiếp bằng bàn phím',
-                      icon: Keyboard,
-                    },
-                  ] satisfies Array<{
-                    value: AnswerInputMode
-                    label: string
-                    description: string
-                    icon: typeof Mic
-                  }>
-                ).map((option) => {
-                  const OptionIcon = option.icon
-                  const isSelected = answerInputMode === option.value
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setAnswerInputMode(option.value)
-                        const nextDraft = option.value === 'voice' ? transcript : textAnswer
-                        persistAnswerDraft(nextDraft, option.value)
-                        setPageError('')
-                        setBufferError('')
-                        setSessionNotice(
-                          option.value === 'voice'
-                            ? 'Đã chọn trả lời bằng giọng nói.'
-                            : 'Đã chọn nhập câu trả lời bằng văn bản.',
-                        )
-                      }}
-                      disabled={isInputModeLocked}
-                      className={`flex min-h-16 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60 ${
-                        isSelected
-                          ? 'border-[#8aabff] bg-white text-[#1f57d5] shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
-                          : 'border-transparent text-[#63738a] hover:border-[#d2deef] hover:bg-white/80'
-                      }`}
-                    >
-                      <span
-                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                          isSelected ? 'bg-[#eaf1ff] text-[#245eea]' : 'bg-white text-[#7b8da6]'
-                        }`}
-                      >
-                        <OptionIcon className="size-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[11px] font-bold">{option.label}</span>
-                        <span className="mt-0.5 block text-[9px] leading-relaxed opacity-75">
-                          {option.description}
-                        </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={`ml-auto size-3.5 shrink-0 rounded-full border-2 ${
-                          isSelected
-                            ? 'border-[#245eea] bg-[#245eea] shadow-[inset_0_0_0_3px_white]'
-                            : 'border-[#b9c7da]'
-                        }`}
-                      />
-                    </button>
-                  )
-                })}
-              </div>
-
-              {answerInputMode === 'voice' && (
-                <div
-                  className={`relative overflow-hidden rounded-2xl border p-5 text-center transition-colors sm:p-6 ${
-                    isRecording
-                      ? 'border-[#f1a9b5] bg-[linear-gradient(145deg,#fff7f8,#fff1f3)]'
-                      : isTranscribing || isAnswerLocked
-                        ? 'border-[#cdddfa] bg-[linear-gradient(145deg,#f6f9ff,#eef4ff)]'
-                        : 'border-[#d8e4f3] bg-[linear-gradient(145deg,#f9fbff,#f3f7fc)]'
-                  }`}
-                >
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,#6fcfe3,transparent)] opacity-60" />
+                <div className="flex flex-wrap items-center gap-1.5">
                   <div
-                    className={`mx-auto flex size-16 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(31,61,105,0.12)] transition ${
-                      isRecording
-                        ? 'bg-[#e94f68] text-white shadow-[0_12px_34px_rgba(233,79,104,0.28)]'
-                        : 'bg-white text-[#245eea]'
-                    }`}
+                    role="group"
+                    aria-label="Chọn giọng đọc AI"
+                    className="inline-flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-0.5"
                   >
-                    {isTranscribing || isAnswerLocked ? (
-                      <LoaderCircle className="size-7 animate-spin motion-reduce:animate-none" />
-                    ) : isRecording ? (
-                      <MicOff className="size-7" />
-                    ) : (
-                      <Mic className="size-7" />
-                    )}
+                    {TTS_VOICE_OPTIONS.map((option) => {
+                      const isSelected = speechPrefs.voiceName === option.voiceId
+                      return (
+                        <button
+                          key={option.voiceId}
+                          type="button"
+                          aria-pressed={isSelected}
+                          disabled={isRecording}
+                          onClick={() => handleSelectVoice(option.voiceId)}
+                          className={cn(
+                            'rounded-lg px-2 py-0.5 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#F26F21] disabled:cursor-not-allowed disabled:opacity-50',
+                            isSelected
+                              ? 'bg-white text-[#C2410C] shadow-2xs ring-1 ring-[#FED7AA]'
+                              : 'text-[#475569] hover:text-[#1E293B]',
+                          )}
+                        >
+                          {option.voiceId === 'vi-VN-HoaiMyNeural' ? 'Nữ' : 'Nam'}
+                        </button>
+                      )
+                    })}
                   </div>
 
-                  <p className="mt-4 text-sm font-bold text-[#21324a]" aria-live="polite">
-                    {answerState}
-                  </p>
-                  <p className="mx-auto mt-1 max-w-md text-[10px] leading-relaxed text-[#728197]">
-                    {isVerifyingSubmission
-                      ? 'Không nộp lại hoặc kết thúc phiên cho tới khi trạng thái được xác minh.'
-                      : isRecording
-                        ? 'Hãy giữ khoảng cách ổn định với micro và nói rõ từng ý.'
-                        : isTranscribing
-                          ? 'Hệ thống đang nhận diện nội dung. Vui lòng không tải lại trang.'
-                          : isWaitingForGrade
-                            ? 'Câu trả lời đã được khóa để tránh gửi trùng trong lúc chấm.'
-                            : 'Kiểm tra môi trường yên tĩnh trước khi bắt đầu.'}
-                  </p>
-
                   <div
-                    className="mt-4 flex h-7 items-center justify-center gap-1"
-                    aria-hidden="true"
+                    role="group"
+                    aria-label="Chọn tốc độ đọc"
+                    className="inline-flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-0.5"
                   >
-                    {[12, 20, 28, 17, 25, 14, 30, 21, 12].map((height, index) => (
-                      <span
-                        key={`${height}-${index}`}
-                        className={`w-1 rounded-full transition-all ${
-                          isRecording
-                            ? 'animate-pulse bg-[#e94f68] motion-reduce:animate-none'
-                            : 'bg-[#b9c9df]'
-                        }`}
-                        style={{
-                          height: `${isRecording ? height : Math.max(5, Math.round(height / 3))}px`,
-                          animationDelay: `${index * 90}ms`,
-                        }}
-                      />
-                    ))}
+                    {TTS_RATE_OPTIONS.map((rateOption) => {
+                      const isSelected = Math.abs(speechPrefs.speakingRate - rateOption.value) < 0.01
+                      return (
+                        <button
+                          key={rateOption.value}
+                          type="button"
+                          aria-pressed={isSelected}
+                          disabled={isRecording}
+                          onClick={() => handleSelectRate(rateOption.value)}
+                          className={cn(
+                            'rounded-lg px-1.5 py-0.5 font-mono text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#F26F21] disabled:cursor-not-allowed disabled:opacity-50',
+                            isSelected
+                              ? 'bg-white text-[#C2410C] shadow-2xs ring-1 ring-[#FED7AA]'
+                              : 'text-[#475569] hover:text-[#1E293B]',
+                          )}
+                        >
+                          {rateOption.value}x
+                        </button>
+                      )
+                    })}
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => void handleRecording()}
-                    disabled={isTranscribing || isSubmitting || isAnswerLocked}
-                    className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-[11px] font-bold text-white shadow-lg transition sm:w-auto sm:min-w-52 ${
-                      isRecording
-                        ? 'bg-[#df405b] shadow-[#df405b]/20 hover:bg-[#c9344d]'
-                        : 'bg-[#245eea] shadow-[#245eea]/20 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-xl'
-                    } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
-                  >
-                    {isTranscribing ? (
-                      <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                    ) : isRecording ? (
-                      <Square className="size-3.5 fill-current" />
-                    ) : (
-                      <Mic className="size-4" />
+                    onClick={handleReadQuestion}
+                    disabled={isRecording}
+                    className={cn(
+                      'inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#F26F21] disabled:cursor-not-allowed disabled:opacity-50',
+                      isReadingQuestion
+                        ? 'border-[#F26F21] bg-[#F26F21] text-white hover:bg-[#D95B16]'
+                        : 'border-[#FED7AA] bg-[#FFF7ED] text-[#C2410C] hover:bg-[#FFEDD5]',
                     )}
-                    {isTranscribing
-                      ? 'Đang nhận diện nội dung…'
-                      : isRecording
-                        ? 'Dừng ghi và tạo bản trả lời'
-                        : transcript.trim()
-                          ? 'Ghi lại câu trả lời'
-                          : 'Bắt đầu trả lời'}
+                  >
+                    {isReadingQuestion ? (
+                      <>
+                        <AudioLines className="size-3.5 animate-pulse motion-reduce:animate-none" />
+                        <span>Dừng đọc</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="size-3.5 text-[#F26F21]" />
+                        <span>Nghe đọc</span>
+                      </>
+                    )}
                   </button>
                 </div>
-              )}
+              </div>
+            </div>
 
-              <div className="rounded-2xl border border-[#dfe6f0] bg-[#fbfcfe] p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-[#33445b]">
-                      {answerInputMode === 'voice'
-                        ? 'Bản trả lời nhận diện từ giọng nói'
-                        : 'Câu trả lời bằng văn bản'}
-                    </p>
-                    <p className="mt-0.5 text-[9px] text-[#8390a2]">
-                      {answerInputMode === 'voice'
-                        ? 'Bạn có thể hiệu đính thuật ngữ kỹ thuật ở bước tiếp theo.'
-                        : 'Trình bày đầy đủ ý chính và sử dụng thuật ngữ chuyên ngành chính xác.'}
-                    </p>
-                  </div>
-                  {currentAnswerDraft.trim() && (
-                    <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#eaf8f4] px-2.5 py-1 text-[9px] font-bold text-[#188267] sm:self-auto">
-                      <CheckCircle2 className="size-3" />
-                      {answerInputMode === 'voice'
-                        ? 'Đã nhận diện'
-                        : `${textAnswer.trim().length} ký tự`}
+            <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
+              <h1 className="text-lg leading-relaxed font-bold text-[#1E293B] sm:text-xl md:text-2xl">
+                {activePrompt}
+              </h1>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 sm:p-4">
+                <div className="flex items-center gap-2 text-xs font-bold tracking-wider text-[#475569] uppercase">
+                  <ListChecks className="size-4 text-[#F26F21]" /> Tiêu chí Rubric cần thể hiện
+                </div>
+                <div className="mt-2.5 space-y-2">
+                  {currentQuestion.rubricCriteria.length > 0 ? (
+                    currentQuestion.rubricCriteria.map((criterion, index) => (
+                      <div
+                        key={`${criterion}-${index}`}
+                        className="flex items-start gap-2.5 rounded-xl border border-[#E2E8F0] bg-white px-3 py-2 text-xs text-[#1E293B] sm:text-sm"
+                      >
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#16A34A]" />
+                        <span className="leading-relaxed">{criterion}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-xs text-[#475569] sm:text-sm">
+                      Trả lời đầy đủ, đúng trọng tâm và trình bày mạch lạc theo cấu trúc Định nghĩa – Cơ
+                      chế – Ví dụ.
                     </span>
                   )}
                 </div>
-                <textarea
-                  aria-label={
-                    answerInputMode === 'voice'
-                      ? 'Bản trả lời được nhận diện từ giọng nói'
-                      : 'Nhập câu trả lời bằng văn bản'
-                  }
-                  className={`mt-3 min-h-32 w-full rounded-xl border border-[#dce4ef] bg-white p-3.5 text-[13px] leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa] ${
-                    answerInputMode === 'text'
-                      ? 'resize-y focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#245eea]/10'
-                      : 'resize-none'
-                  }`}
-                  value={currentAnswerDraft}
-                  onChange={(event) => {
-                    if (answerInputMode !== 'text') return
-                    setTextAnswer(event.target.value)
-                    persistAnswerDraft(event.target.value, 'text')
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between border-t border-[#E2E8F0] bg-[#F8FAFC] px-5 py-2.5 text-xs text-[#64748B]">
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="size-3.5 text-[#F26F21]" />
+                Thời gian hiệu đính: {runtime.transcriptBufferSeconds}s
+              </span>
+              <span>Cấu trúc: Định nghĩa &rarr; Cơ chế &rarr; Ví dụ thực tiễn</span>
+            </div>
+          </article>
+
+          {/* Cột phải: Khu vực Trả lời (Voice / Text) — Trực diện trong cùng một tầm mắt */}
+          <section className="flex h-full flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xs lg:col-span-6 xl:col-span-5">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#E2E8F0] bg-white px-4 py-3 sm:px-5">
+              <div
+                role="group"
+                aria-label="Chọn hình thức trả lời"
+                className="inline-flex rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-1"
+              >
+                <button
+                  type="button"
+                  aria-pressed={answerInputMode === 'voice'}
+                  onClick={() => {
+                    setAnswerInputMode('voice')
+                    persistAnswerDraft(transcript, 'voice')
                     setPageError('')
                     setBufferError('')
                   }}
-                  readOnly={answerInputMode === 'voice'}
-                  disabled={answerInputMode === 'text' && isInputModeLocked}
-                  placeholder={
+                  disabled={isInputModeLocked}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition disabled:opacity-50',
                     answerInputMode === 'voice'
-                      ? 'Nội dung câu trả lời sẽ xuất hiện tại đây sau khi bạn dừng ghi âm…'
-                      : 'Nhập câu trả lời của bạn tại đây…'
-                  }
-                />
-                {answerInputMode === 'text' && (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[9px]">
-                    <span className="text-[#7d8a9d]">Tối thiểu 10 ký tự để gửi câu trả lời.</span>
+                      ? 'bg-white text-[#C2410C] shadow-2xs ring-1 ring-[#FED7AA]'
+                      : 'text-[#475569] hover:text-[#1E293B]',
+                  )}
+                >
+                  <Mic className="size-3.5" /> Giọng nói
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={answerInputMode === 'text'}
+                  onClick={() => {
+                    setAnswerInputMode('text')
+                    persistAnswerDraft(textAnswer, 'text')
+                    setPageError('')
+                    setBufferError('')
+                  }}
+                  disabled={isInputModeLocked}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition disabled:opacity-50',
+                    answerInputMode === 'text'
+                      ? 'bg-white text-[#C2410C] shadow-2xs ring-1 ring-[#FED7AA]'
+                      : 'text-[#475569] hover:text-[#1E293B]',
+                  )}
+                >
+                  <Keyboard className="size-3.5" /> Văn bản
+                </button>
+              </div>
+
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-[#16A34A]">
+                <ShieldCheck className="size-3.5" />
+                {answerInputMode === 'voice' ? 'Không lưu audio' : 'Chỉ lưu text'}
+              </span>
+            </div>
+
+            <div className="flex flex-1 flex-col justify-between space-y-3 overflow-y-auto p-4 sm:p-5">
+              {answerInputMode === 'voice' ? (
+                <>
+                  <div
+                    className={cn(
+                      'rounded-2xl border p-4 text-center transition-colors',
+                      isRecording
+                        ? 'border-rose-200 bg-rose-50/70'
+                        : isTranscribing || isAnswerLocked
+                          ? 'border-[#FED7AA] bg-[#FFF7ED]/70'
+                          : 'border-[#E2E8F0] bg-[#F8FAFC]',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'mx-auto flex size-12 items-center justify-center rounded-2xl shadow-xs transition',
+                        isRecording
+                          ? 'bg-rose-600 text-white'
+                          : 'border border-[#FED7AA] bg-white text-[#F26F21]',
+                      )}
+                    >
+                      {isTranscribing || isAnswerLocked ? (
+                        <LoaderCircle className="size-6 animate-spin motion-reduce:animate-none" />
+                      ) : isRecording ? (
+                        <MicOff className="size-6" />
+                      ) : (
+                        <Mic className="size-6" />
+                      )}
+                    </div>
+
+                    <p className="mt-2 text-sm font-bold text-[#1E293B]" aria-live="polite">
+                      {answerState}
+                    </p>
+                    <p className="mx-auto mt-0.5 text-xs text-[#64748B]">
+                      {isRecording
+                        ? 'Đang ghi âm · Trình bày rõ ràng từng ý chính'
+                        : isTranscribing
+                          ? 'Hệ thống đang chuyển đổi giọng nói sang văn bản…'
+                          : 'Bấm nút bên dưới để bắt đầu trả lời'}
+                    </p>
+
+                    <div
+                      className="mt-2 flex h-6 items-center justify-center gap-1"
+                      aria-hidden="true"
+                    >
+                      {[10, 18, 24, 15, 22, 13, 26, 19, 10].map((height, index) => (
+                        <span
+                          key={`${height}-${index}`}
+                          className={cn(
+                            'w-1 rounded-full transition-all',
+                            isRecording
+                              ? 'animate-pulse bg-rose-600 motion-reduce:animate-none'
+                              : 'bg-[#CBD5E1]',
+                          )}
+                          style={{
+                            height: `${isRecording ? height : Math.max(4, Math.round(height / 3))}px`,
+                            animationDelay: `${index * 90}ms`,
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {isRecording && liveTranscript.trim() && (
+                      <div
+                        className="mt-2.5 rounded-xl border border-rose-200 bg-white/90 px-3 py-2 text-left text-xs leading-relaxed text-[#1E293B] shadow-2xs"
+                        aria-live="polite"
+                      >
+                        <span className="font-bold text-rose-700">Đang nhận diện trực tiếp: </span>
+                        <span>{liveTranscript}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => void handleRecording()}
+                      disabled={isTranscribing || isSubmitting || isAnswerLocked}
+                      className={cn(
+                        'mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold text-white shadow-xs transition',
+                        isRecording
+                          ? 'bg-rose-600 hover:bg-rose-700'
+                          : 'bg-[#F26F21] hover:bg-[#D95B16]',
+                        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F26F21] disabled:cursor-not-allowed disabled:opacity-55',
+                      )}
+                    >
+                      {isTranscribing ? (
+                        <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                      ) : isRecording ? (
+                        <Square className="size-3.5 fill-current" />
+                      ) : (
+                        <Mic className="size-4" />
+                      )}
+                      {isTranscribing
+                        ? 'Đang nhận diện nội dung…'
+                        : isRecording
+                          ? 'Dừng ghi và tạo bản trả lời'
+                          : transcript.trim()
+                            ? 'Ghi lại câu trả lời'
+                            : 'Bắt đầu trả lời'}
+                    </button>
+                  </div>
+
+                  <div className="flex min-h-24 flex-1 flex-col rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-[#1E293B]">
+                        Bản trả lời nhận diện
+                      </span>
+                      {currentAnswerDraft.trim() && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-[#16A34A]">
+                          <CheckCircle2 className="size-3" /> Đã nhận diện ({currentAnswerDraft.trim().length} ký tự)
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      aria-label="Bản trả lời được nhận diện từ giọng nói"
+                      readOnly
+                      rows={3}
+                      placeholder="Nội dung câu trả lời sẽ xuất hiện tại đây sau khi bạn dừng ghi âm…"
+                      value={currentAnswerDraft}
+                      className="mt-2 w-full flex-1 resize-none rounded-lg border border-[#E2E8F0] bg-white p-2.5 text-xs leading-relaxed text-[#1E293B] outline-none placeholder:text-[#94A3B8]"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[#1E293B]">Soạn câu trả lời văn bản</span>
                     <span
                       className={
                         textAnswer.trim().length >= 10
-                          ? 'font-bold text-[#188267]'
-                          : 'font-semibold text-[#9b7b32]'
+                          ? 'text-xs font-bold text-[#16A34A]'
+                          : 'text-xs font-semibold text-amber-700'
                       }
                     >
                       {textAnswer.trim().length}/10 ký tự tối thiểu
                     </span>
                   </div>
-                )}
-              </div>
+                  <textarea
+                    aria-label="Nhập câu trả lời bằng văn bản"
+                    rows={8}
+                    placeholder="Nhập câu trả lời của bạn tại đây…"
+                    value={currentAnswerDraft}
+                    onChange={(event) => {
+                      setTextAnswer(event.target.value)
+                      persistAnswerDraft(event.target.value, 'text')
+                      setPageError('')
+                      setBufferError('')
+                    }}
+                    disabled={isInputModeLocked}
+                    className="mt-2 w-full flex-1 resize-none rounded-lg border border-[#E2E8F0] bg-white p-3 text-xs leading-relaxed text-[#1E293B] outline-none focus:border-[#F26F21] focus:ring-2 focus:ring-[#F26F21]/20 disabled:cursor-not-allowed disabled:bg-[#F8FAFC]"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-[#edf1f6] bg-[#fbfcfe] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div className="flex min-w-0 items-start gap-2 text-[10px] leading-relaxed text-[#6d7d92]">
-                <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#4d73d3]" />
-                <span>{reviewHint}</span>
+            <div className="flex shrink-0 flex-col gap-2.5 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex min-w-0 items-center gap-1.5 text-xs text-[#475569]">
+                <Sparkles className="size-3.5 shrink-0 text-[#F26F21]" />
+                <span className="truncate">{reviewHint}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (answerInputMode === 'text') {
-                    void handleConfirmSubmit(textAnswer)
-                    return
-                  }
-                  const nextDeadline =
-                    bufferDeadlineTimestamp ?? Date.now() + runtime.transcriptBufferSeconds * 1_000
-                  setBufferDeadlineTimestamp(nextDeadline)
-                  setShowBuffer(true)
-                  persistAnswerDraft(transcript, 'voice', true, nextDeadline)
-                }}
-                disabled={!canOpenBuffer}
-                className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:-translate-y-0.5 hover:bg-[#194fce] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none sm:w-auto"
-              >
-                {isSubmitting ? (
-                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Send className="size-4" />
+              <div className="flex items-center gap-2">
+                {runtime.fullSessionSubmitted && !scorecard && (
+                  <button
+                    type="button"
+                    onClick={() => void synchronizeSession(true)}
+                    disabled={isManualSyncing}
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3 text-xs font-bold text-[#C2410C] transition hover:bg-[#FFEDD5] disabled:opacity-60"
+                  >
+                    <RefreshCw className={`size-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
+                    Kiểm tra tiến độ
+                  </button>
                 )}
-                {isSubmitting
-                  ? 'Đang gửi câu trả lời…'
-                  : answerInputMode === 'voice'
-                    ? 'Rà soát và gửi câu trả lời'
-                    : 'Gửi câu trả lời bằng văn bản'}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (answerInputMode === 'text') {
+                      void handleConfirmSubmit(textAnswer)
+                      return
+                    }
+                    const nextDeadline =
+                      bufferDeadlineTimestamp ?? Date.now() + runtime.transcriptBufferSeconds * 1_000
+                    setBufferDeadlineTimestamp(nextDeadline)
+                    setShowBuffer(true)
+                    persistAnswerDraft(transcript, 'voice', true, nextDeadline)
+                  }}
+                  disabled={!canOpenBuffer}
+                  className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#F26F21] px-5 text-sm font-bold text-white shadow-xs transition hover:bg-[#D95B16] focus-visible:outline-2 focus-visible:outline-[#F26F21] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+                >
+                  {isSubmitting ? (
+                    <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {isSubmitting
+                    ? 'Đang gửi…'
+                    : answerInputMode === 'voice'
+                      ? 'Rà soát và gửi'
+                      : 'Gửi câu trả lời'}
+                </button>
+              </div>
             </div>
           </section>
         </div>
-
-        <aside className="space-y-4 xl:sticky xl:top-24">
-          <section className="overflow-hidden rounded-2xl border border-[#dce5f1] bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
-            <div className="border-b border-[#edf1f6] px-4 py-3.5">
-              <div className="flex items-center gap-2">
-                <Layers className="size-4 text-[#245eea]" />
-                <h2 className="text-[12px] font-bold text-[#23334a]">Tóm tắt phiên luyện tập</h2>
-              </div>
-            </div>
-            <div className="space-y-4 p-4">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#f8faff] p-3">
-                  <p className="text-[9px] font-semibold text-[#8190a3]">Câu hiện tại</p>
-                  <p className="mt-1 text-sm font-black text-[#245eea]">
-                    {currentQuestionNumber}/{totalMainQuestions}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#f8faff] p-3">
-                  <p className="text-[9px] font-semibold text-[#8190a3]">Đã hoàn thành</p>
-                  <p className="mt-1 text-sm font-black text-[#168367]">
-                    {completedMainQuestions}/{totalMainQuestions}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a889b] uppercase">
-                  Chế độ
-                </p>
-                <p className="mt-1.5 text-[11px] font-bold text-[#304159]">{modeLabel}</p>
-                <p className="mt-1 text-[9px] leading-relaxed text-[#7b899c]">
-                  {mode === 'PER_QUESTION'
-                    ? 'Nhận phản hồi sau từng câu; câu đào sâu không tính vào số câu chính.'
-                    : 'Hoàn thành toàn bộ câu hỏi trước khi nhận bảng điểm tổng kết.'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a889b] uppercase">
-                  Mức độ trong phiên
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {runtime.config.selectedDifficulties.map((difficulty) => (
-                    <span
-                      key={difficulty}
-                      className={`rounded-full border px-2.5 py-1 text-[9px] font-bold ${DIFFICULTY_META[difficulty].className}`}
-                    >
-                      {DIFFICULTY_META[difficulty].label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-[#dce5f1] bg-white p-4 shadow-[0_10px_30px_rgba(31,61,105,0.05)]">
-            <div className="flex items-center gap-2">
-              <AudioLines className="size-4 text-[#245eea]" />
-              <h2 className="text-[12px] font-bold text-[#23334a]">Ba bước trả lời</h2>
-            </div>
-            <ol className="mt-4 space-y-3">
-              {(answerInputMode === 'voice'
-                ? [
-                    ['1', 'Trả lời bằng giọng nói', 'Nói rõ ràng và đúng trọng tâm.'],
-                    [
-                      '2',
-                      'Rà soát nội dung',
-                      `Hiệu đính trong ${runtime.transcriptBufferSeconds} giây.`,
-                    ],
-                    ['3', 'Nhận phản hồi', 'Hệ thống chấm theo tiêu chí của câu hỏi.'],
-                  ]
-                : [
-                    ['1', 'Nhập câu trả lời', 'Soạn nội dung trực tiếp bằng bàn phím.'],
-                    ['2', 'Kiểm tra và gửi', 'Đảm bảo câu trả lời đầy đủ và đúng trọng tâm.'],
-                    ['3', 'Nhận phản hồi', 'Hệ thống chấm theo tiêu chí của câu hỏi.'],
-                  ]
-              ).map(([step, title, description]) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#cbd9ef] bg-[#f2f6ff] text-[9px] font-black text-[#245eea]">
-                    {step}
-                  </span>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#33445b]">{title}</p>
-                    <p className="mt-0.5 text-[9px] leading-relaxed text-[#7e8c9e]">
-                      {description}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section className="rounded-2xl border border-[#cfe7e5] bg-[linear-gradient(145deg,#f6fcfc,#eff9f8)] p-4">
-            <div className="flex gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#168c91] shadow-sm">
-                {answerInputMode === 'voice' ? (
-                  <Headphones className="size-4" />
-                ) : (
-                  <Keyboard className="size-4" />
-                )}
-              </span>
-              <div>
-                <p className="text-[10px] font-bold text-[#266368]">Quyền riêng tư được bảo vệ</p>
-                <p className="mt-1 text-[9px] leading-relaxed text-[#627d82]">
-                  {answerInputMode === 'voice'
-                    ? 'Bản ghi chỉ dùng để nhận diện giọng nói và được xóa sau khi tạo văn bản.'
-                    : 'Hệ thống chỉ lưu nội dung văn bản cuối cùng mà bạn gửi.'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {runtime.fullSessionSubmitted && !scorecard && (
-            <button
-              type="button"
-              onClick={() => void synchronizeSession(true)}
-              disabled={isManualSyncing}
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#cbdaf4] bg-white px-4 text-[10px] font-bold text-[#245bd2] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-wait disabled:opacity-60"
-            >
-              <RefreshCw
-                className={`size-3.5 ${isManualSyncing ? 'animate-spin motion-reduce:animate-none' : ''}`}
-              />
-              {isManualSyncing ? 'Đang kiểm tra…' : 'Kiểm tra tiến độ chấm'}
-            </button>
-          )}
-        </aside>
-      </div>
+      </main>
 
       {showBuffer && (
         <BufferScreen
@@ -1755,19 +1771,13 @@ export const PracticeSessionPage: React.FC = () => {
         <ScorecardModal
           scorecard={scorecard}
           title={scorecardTitle}
-          onClose={() => {
-            if (mode === 'FULL_SESSION') {
-              void completeAndExit()
-            } else {
-              void moveAfterScorecard()
-            }
-          }}
+          onClose={() => void completeAndExit()}
           onNextQuestion={mode === 'PER_QUESTION' ? () => void moveAfterScorecard() : undefined}
           nextActionLabel={
-            latestResult?.needsFollowUp
-              ? 'Trả lời câu hỏi đào sâu'
-              : runtime.mainQuestionsCompleted + 1 >= runtime.config.questionCount
-                ? 'Hoàn tất phiên'
+            mode === 'FULL_SESSION'
+              ? 'Hoàn tất phiên'
+              : latestResult?.needsFollowUp
+                ? 'Trả lời câu hỏi đào sâu'
                 : 'Câu chính tiếp theo'
           }
           errorMessage={pageError}
@@ -1776,28 +1786,28 @@ export const PracticeSessionPage: React.FC = () => {
       )}
 
       {showStopConfirmation && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#07172e]/70 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-xs">
           <section
             ref={stopDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="stop-practice-title"
             tabIndex={-1}
-            className="w-full max-w-md overflow-hidden rounded-[22px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(7,23,46,0.3)] outline-none"
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-[#FED7AA] border-t-4 border-t-[#F26F21] bg-white shadow-2xl outline-none"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-[#edf1f6] p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-4 border-b border-[#E2E8F0] p-5 sm:p-6">
               <div className="flex gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#fff0f2] text-[#d9465f]">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
                   <Square className="size-4 fill-current" />
                 </span>
                 <div>
-                  <p className="text-[9px] font-bold tracking-[0.08em] text-[#d9465f] uppercase">
+                  <p className="text-xs font-bold tracking-wider text-rose-600 uppercase">
                     Xác nhận kết thúc
                   </p>
-                  <h2 id="stop-practice-title" className="mt-1 text-base font-bold text-[#17243a]">
+                  <h2 id="stop-practice-title" className="mt-1 text-base font-bold text-[#1E293B]">
                     Kết thúc phiên luyện tập?
                   </h2>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[#66768b]">
+                  <p className="mt-2 text-xs leading-relaxed text-[#475569] sm:text-sm">
                     {isRecording
                       ? 'Bản ghi đang thực hiện sẽ bị xóa. Các câu trả lời đã nộp trước đó vẫn được lưu.'
                       : mode === 'FULL_SESSION' && !runtime.fullSessionSubmitted
@@ -1809,18 +1819,18 @@ export const PracticeSessionPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowStopConfirmation(false)}
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#6f7e92] transition hover:bg-[#f1f4f8] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl text-[#475569] transition hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-[#F26F21]"
                 aria-label="Đóng xác nhận dừng"
               >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="flex flex-col-reverse gap-2 bg-[#f8fafd] p-4 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 bg-[#F8FAFC] p-4 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => setShowStopConfirmation(false)}
                 disabled={isCompleting}
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#d8e1ec] bg-white px-4 text-[11px] font-bold text-[#53657d] transition hover:bg-[#f1f4f8] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:opacity-50"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-bold text-[#475569] transition hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-[#F26F21] disabled:opacity-50"
               >
                 Tiếp tục luyện
               </button>
@@ -1828,7 +1838,7 @@ export const PracticeSessionPage: React.FC = () => {
                 type="button"
                 onClick={() => void completeAndExit()}
                 disabled={isCompleting || isVerifyingSubmission}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#d9465f] px-4 text-[11px] font-bold text-white shadow-[0_8px_20px_rgba(217,70,95,0.2)] transition hover:bg-[#c23850] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d9465f] disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-bold text-white shadow-xs transition hover:bg-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 disabled:cursor-wait disabled:opacity-60"
               >
                 {isCompleting && (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />

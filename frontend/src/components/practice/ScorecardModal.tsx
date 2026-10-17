@@ -75,88 +75,90 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
       aria-describedby="scorecard-modal-description"
       aria-busy={isActionPending}
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#06142b]/70 px-3 py-4 backdrop-blur-[3px] outline-none sm:p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/35 px-3 py-4 backdrop-blur-xs outline-none sm:p-6"
     >
-      <Card className="flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white text-[#10203d] shadow-[0_28px_80px_rgba(4,20,48,0.3)]">
-        <CardHeader className="relative space-y-0 overflow-hidden border-b border-white/10 bg-[linear-gradient(125deg,#071a35_0%,#123263_58%,#24528e_100%)] p-0 text-white">
-          <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(129,220,255,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(129,220,255,0.18)_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.13]" />
-          <div className="pointer-events-none absolute -top-20 -right-12 size-56 rounded-full bg-[#5de0f2]/16 blur-3xl" />
-
-          <div className="relative flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <Card className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#FED7AA] border-t-4 border-t-[#F26F21] bg-white text-[#1E293B] shadow-2xl">
+        <CardHeader className="relative space-y-0 border-b border-[#E2E8F0] bg-[#FFF7ED]/60 p-0">
+          <div className="relative flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-white/10 text-[#72e6f3] shadow-[0_10px_28px_rgba(2,15,38,0.2)] backdrop-blur-sm">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#FED7AA] bg-white text-[#F26F21] shadow-2xs">
                 <Award className="size-5" aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="text-[9px] font-bold tracking-[0.1em] text-[#9cecf5] uppercase">
-                  Phản hồi luyện tập từ AI
+                <p className="text-xs font-bold tracking-wider text-[#C2410C] uppercase">
+                  Kết quả đánh giá câu trả lời
                 </p>
                 <CardTitle
                   id="scorecard-modal-title"
-                  className="mt-1.5 text-base leading-tight font-bold tracking-[-0.025em] text-white sm:text-lg"
+                  className="mt-0.5 text-base leading-tight font-bold text-[#1E293B] sm:text-lg"
                 >
                   {title}
                 </CardTitle>
                 <p
                   id="scorecard-modal-description"
-                  className="mt-1.5 text-[10px] leading-relaxed text-[#c7d9ee]"
+                  className="mt-0.5 text-xs leading-relaxed text-[#64748B]"
                 >
-                  Đối chiếu điểm theo từng tiêu chí và nhận xét để cải thiện câu trả lời tiếp theo.
+                  Đối chiếu điểm theo từng tiêu chí Rubric và nhận xét của AI.
                 </p>
               </div>
             </div>
 
             <div
-              className="flex shrink-0 items-end gap-1 self-start rounded-2xl border border-white/12 bg-white/10 px-4 py-3 shadow-[0_10px_28px_rgba(2,15,38,0.16)] backdrop-blur-sm sm:self-auto"
+              className="flex shrink-0 items-end gap-1.5 self-start rounded-2xl border border-[#FED7AA] bg-white px-4 py-2.5 shadow-2xs sm:self-auto"
               aria-label={`Điểm tổng ${scorecard.totalScore.toFixed(1)} trên 10`}
             >
-              <span className="text-[9px] font-semibold tracking-[0.06em] text-[#b9cee7] uppercase">
+              <span className="text-xs font-semibold tracking-wider text-[#64748B] uppercase">
                 Điểm
               </span>
-              <span className="ml-1 text-3xl leading-none font-black tracking-[-0.05em] text-white">
+              <span className="ml-1 text-2xl leading-none font-black tracking-tight text-[#C2410C]">
                 {scorecard.totalScore.toFixed(1)}
               </span>
-              <span className="pb-0.5 text-[11px] font-semibold text-[#a9c1df]">/10.0</span>
+              <span className="pb-0.5 text-xs font-semibold text-[#64748B]">/10.0</span>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#f8faff] p-4 sm:p-5">
+        <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-white p-4 sm:p-5">
+          <section
+            aria-labelledby="scorecard-feedback-title"
+            className="rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3.5"
+          >
+            <h4
+              id="scorecard-feedback-title"
+              className="text-xs font-bold tracking-wider text-[#C2410C] uppercase"
+            >
+              Nhận xét sư phạm tổng quan
+            </h4>
+            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#1E293B]">
+              {scorecard.feedback}
+            </p>
+          </section>
+
           <section aria-labelledby="scorecard-rubric-title">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h4
-                  id="scorecard-rubric-title"
-                  className="text-[10px] font-bold tracking-[0.08em] text-[#52647d] uppercase"
-                >
-                  Chi tiết tiêu chí chấm
-                </h4>
-                <p className="mt-1 text-[9px] text-[#8592a5]">
-                  Điểm và nhận xét được phân tích theo từng tiêu chí đánh giá.
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full border border-[#dce6f4] bg-white px-2.5 py-1 text-[9px] font-bold text-[#315fc4]">
-                {scorecard.criteriaScores.length} tiêu chí
-              </span>
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <h4
+                id="scorecard-rubric-title"
+                className="text-xs font-bold tracking-wider text-[#1E293B] uppercase"
+              >
+                Chi tiết tiêu chí chấm Rubric ({scorecard.criteriaScores.length})
+              </h4>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {scorecard.criteriaScores.map((item, idx) => (
                 <article
                   key={idx}
-                  className="flex flex-col gap-3 rounded-xl border border-[#e0e7f0] bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)] sm:flex-row sm:items-start sm:justify-between"
+                  className="flex flex-col gap-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3.5 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-[#25364e] sm:text-xs">
+                    <p className="text-sm font-bold text-[#1E293B]">
                       {item.criterionName || `Tiêu chí: ${item.criterionId}`}
                     </p>
-                    <p className="mt-1.5 text-[10px] leading-relaxed text-[#65758b] sm:text-[11px]">
-                      {item.comment}
-                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#475569]">{item.comment}</p>
                   </div>
                   <Badge
                     variant="success"
-                    className="w-fit shrink-0 border border-[#cfe8df] bg-[#effaf6] px-2.5 py-1 font-mono text-[10px] font-bold text-[#168367]"
+                    className="w-fit shrink-0 border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-mono text-xs font-bold text-[#16A34A]"
                   >
                     {item.score.toFixed(1)} đ
                   </Badge>
@@ -165,32 +167,15 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
             </div>
           </section>
 
-          <section
-            aria-labelledby="scorecard-feedback-title"
-            className="rounded-xl border border-[#d7e4f7] bg-[linear-gradient(135deg,#f4f8ff_0%,#eef5ff_100%)] p-4"
-          >
-            <h4
-              id="scorecard-feedback-title"
-              className="text-[10px] font-bold tracking-[0.08em] text-[#315fbd] uppercase"
-            >
-              Nhận xét sư phạm
-            </h4>
-            <p className="mt-2 text-[10px] leading-relaxed whitespace-pre-line text-[#4e617a] sm:text-[11px]">
-              {scorecard.feedback}
-            </p>
-          </section>
-
           {(scorecard.followUpPrompt || scorecard.followUpQuestion) && (
-            <section className="rounded-xl border border-[#cde8ed] bg-[#f1fbfc] p-4">
-              <div className="flex items-center gap-2 text-[#17778a]">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
-                  <HelpCircle className="size-4" aria-hidden="true" />
-                </span>
-                <h4 className="text-[10px] font-bold tracking-[0.07em] uppercase">
+            <section className="rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3.5">
+              <div className="flex items-center gap-2 text-[#C2410C]">
+                <HelpCircle className="size-4 text-[#F26F21]" aria-hidden="true" />
+                <h4 className="text-xs font-bold tracking-wider uppercase">
                   Câu hỏi đào sâu tiếp theo
                 </h4>
               </div>
-              <p className="mt-3 text-[11px] leading-relaxed font-semibold text-[#31566a] italic">
+              <p className="mt-1.5 text-sm leading-relaxed font-semibold text-[#1E293B] italic">
                 “{scorecard.followUpPrompt || scorecard.followUpQuestion}”
               </p>
             </section>
@@ -198,7 +183,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
 
           {errorMessage && (
             <p
-              className="rounded-xl border border-[#f1c7ce] bg-[#fff5f6] p-3 text-[10px] leading-relaxed font-semibold text-[#ae3d50]"
+              className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-relaxed font-semibold text-rose-700"
               role="alert"
             >
               {errorMessage}
@@ -206,28 +191,39 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
           )}
         </CardContent>
 
-        <CardFooter className="mt-0 flex-col-reverse justify-end gap-2 border-t border-[#e8edf4] bg-white p-4 sm:flex-row sm:px-5">
+        <CardFooter className="mt-0 flex-col-reverse justify-end gap-2.5 border-t border-[#E2E8F0] bg-[#F8FAFC] p-4 sm:flex-row sm:px-5">
           {onNextQuestion ? (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={onNextQuestion}
-              isLoading={isActionPending}
-              className="min-h-11 w-full rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#194fce] focus:ring-[#245eea] sm:w-auto"
-            >
-              {nextActionLabel ||
-                (scorecard.needsFollowUp ? 'Trả lời câu hỏi đào sâu' : 'Luyện tập câu tiếp theo')}
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                disabled={isActionPending}
+                className="min-h-10 w-full rounded-xl border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-700 hover:bg-rose-100 focus:ring-rose-500 sm:w-auto"
+              >
+                Kết thúc phiên luyện tập
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onNextQuestion}
+                isLoading={isActionPending}
+                className="min-h-10 w-full rounded-xl bg-[#F26F21] px-5 text-xs font-bold text-white shadow-xs hover:bg-[#D95B16] focus:ring-[#F26F21] sm:w-auto"
+              >
+                {nextActionLabel ||
+                  (scorecard.needsFollowUp ? 'Trả lời câu hỏi đào sâu' : 'Luyện tập câu tiếp theo')}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Button>
+            </>
           ) : (
             <Button
               variant="outline"
               size="sm"
               onClick={onClose}
               disabled={isActionPending}
-              className="min-h-10 w-full rounded-xl border-[#dce4ef] bg-white px-4 text-[10px] font-bold text-[#42536d] hover:bg-[#f4f7fb] focus:ring-[#245eea] sm:w-auto"
+              className="min-h-10 w-full rounded-xl border-[#E2E8F0] bg-white px-4 text-xs font-bold text-[#1E293B] hover:bg-[#F8FAFC] focus:ring-[#F26F21] sm:w-auto"
             >
-              <Check className="size-4 text-[#168367]" aria-hidden="true" />
+              <Check className="size-4 text-[#16A34A]" aria-hidden="true" />
               {nextActionLabel ?? 'Đóng bảng điểm'}
             </Button>
           )}

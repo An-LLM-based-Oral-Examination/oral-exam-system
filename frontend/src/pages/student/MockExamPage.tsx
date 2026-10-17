@@ -1,178 +1,418 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowRight,
-  Bot,
-  Camera,
+  AudioLines,
+  Check,
   ChevronDown,
-  Clock3,
+  ChevronLeft,
   Eye,
-  FileCheck2,
   History,
+  Keyboard,
   LoaderCircle,
   Mic2,
+  PenLine,
   Play,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  TimerReset,
-  Trophy,
+  Search,
+  Volume2,
 } from 'lucide-react'
+import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
+import { OverlayDrawer, OverlayModal } from '@/components/ui/OverlayDrawer'
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { cn } from '@/lib/utils'
-
-const MockExamHeroThreeScene = lazy(() =>
-  import('./MockExamHeroThreeScene').then((module) => ({
-    default: module.MockExamHeroThreeScene,
-  })),
-)
+import { courseService } from '@/services/course.service'
+import {
+  getMockExamErrorDetail,
+  getMockExamErrorStatus,
+  mockExamService,
+} from '@/services/mockExam.service'
+import {
+  speechService,
+  TTS_RATE_OPTIONS,
+  TTS_VOICE_OPTIONS,
+  type NeuralVoiceId,
+} from '@/services/speech.service'
+import type {
+  MockExamHistoryItem,
+  MockExamQuota,
+  MockExamScorecard as MockExamScorecardData,
+} from '@/types/mockExam.types'
+import type { CourseDto } from '@/types/practice.types'
+import {
+  readMockExamSession,
+  saveMockExamSession,
+  secondsUntilExpiry,
+} from '@/utils/mockExamSessionStorage'
 
 type DeviceState = 'idle' | 'checking' | 'ready' | 'error' | 'unsupported'
+type HistoryScope = 'course' | 'all'
 
-interface MockExamSubject {
-  id: string
-  code: string
-  name: string
-  track: string
-  durationMinutes: number
-  questionCount: number
-  quotaRemaining: number
-  quotaLimit: number
-}
+const HISTORY_PAGE_SIZE = 5
 
-interface MockHistoryItem {
-  id: string
-  examCode: string
-  subject: string
-  track: string
-  date: string
-  duration: string
-  score: number
-  summary: string
-  strengths: string
-}
-
-const MOCK_EXAM_SUBJECTS: MockExamSubject[] = [
+const EXAM_STEPS = [
   {
-    id: 'AI3001',
-    code: 'AI3001',
-    name: 'Trí tuệ Nhân tạo & Học máy',
-    track: 'Học máy nâng cao & Mạng nơ-ron',
-    durationMinutes: 20,
-    questionCount: 4,
-    quotaRemaining: 2,
-    quotaLimit: 3,
+    title: 'Chọn môn còn lượt',
+    hint: 'Mỗi môn có hạn ngạch thi thử theo ngày do Quản trị viên cấu hình.',
+    icon: Play,
   },
   {
-    id: 'SWE302',
-    code: 'SWE302',
-    name: 'Kỹ nghệ Phần mềm',
-    track: 'Kiến trúc Microservices & CI/CD',
-    durationMinutes: 18,
-    questionCount: 4,
-    quotaRemaining: 1,
-    quotaLimit: 3,
+    title: 'Kiểm tra micro (Voice-First Gate)',
+    hint: 'Khóa bàn phím khi trả lời chính; bắt buộc micro sẵn sàng mới vào phòng.',
+    icon: Mic2,
   },
   {
-    id: 'DBI202',
-    code: 'DBI202',
-    name: 'Cơ sở dữ liệu',
-    track: 'Tối ưu truy vấn & Transaction',
-    durationMinutes: 15,
-    questionCount: 3,
-    quotaRemaining: 3,
-    quotaLimit: 3,
+    title: 'Nhấn giữ để nói',
+    hint: 'Giữ nút micro hoặc phím Space khi trình bày câu trả lời vấn đáp.',
+    icon: Keyboard,
+  },
+  {
+    title: 'Sửa thuật ngữ rồi nộp',
+    hint: 'Rà soát nhanh thuật ngữ Kỹ thuật Phần mềm trong màn hình đệm trước khi nộp.',
+    icon: PenLine,
   },
 ]
 
-const MOCK_HISTORY: MockHistoryItem[] = [
+const FALLBACK_COURSES: CourseDto[] = [
   {
-    id: 'mock-ai-01',
-    examCode: 'MOCK-AI-01',
-    subject: 'Trí tuệ Nhân tạo',
-    track: 'Học máy nâng cao & Mạng nơ-ron',
-    date: '19/05/2026',
-    duration: '18 phút',
-    score: 8.4,
-    summary: 'Hoàn thành 4/4 câu. AI ghi nhận lập luận tốt ở phần supervised learning.',
-    strengths: 'Phân biệt rõ overfitting, regularization và quy trình đánh giá mô hình.',
+    id: '00000000-0000-0000-0000-000000000008',
+    code: 'PRN231',
+    name: 'Building Cross-Platform Back-End Applications with .NET',
+    credits: 3,
+    isActive: true,
+    transcriptBufferSeconds: 60,
+    maxFollowUpQuestions: 2,
+    hasFollowUp: true,
+    examInputMode: 'VoiceWithTranscriptEdit',
   },
   {
-    id: 'mock-se-03',
-    examCode: 'MOCK-SE-03',
-    subject: 'Kỹ nghệ Phần mềm',
-    track: 'Kiến trúc Microservices & CI/CD',
-    date: '12/05/2026',
-    duration: '19 phút',
-    score: 7.9,
-    summary: 'Hoàn thành 4/4 câu. Phần xử lý failure scenario còn thiếu ví dụ cụ thể.',
-    strengths: 'Trình bày mạch lạc luồng CI/CD và nguyên tắc tách service.',
+    id: '00000000-0000-0000-0000-000000000009',
+    code: 'SWD392',
+    name: 'Software Architecture and Design',
+    credits: 3,
+    isActive: true,
+    transcriptBufferSeconds: 60,
+    maxFollowUpQuestions: 2,
+    hasFollowUp: true,
+    examInputMode: 'VoiceWithTranscriptEdit',
   },
   {
-    id: 'mock-db-02',
-    examCode: 'MOCK-DB-02',
-    subject: 'Cơ sở dữ liệu',
-    track: 'Tối ưu truy vấn & Transaction',
-    date: '05/05/2026',
-    duration: '14 phút',
-    score: 8.7,
-    summary: 'Hoàn thành 3/3 câu. Kiểm soát thời gian tốt và kết luận ngắn gọn.',
-    strengths: 'Giải thích chính xác isolation level và chỉ mục tổng hợp.',
+    id: '00000000-0000-0000-0000-00000000000a',
+    code: 'SWR302',
+    name: 'Software Requirements',
+    credits: 3,
+    isActive: true,
+    transcriptBufferSeconds: 60,
+    maxFollowUpQuestions: 2,
+    hasFollowUp: true,
+    examInputMode: 'VoiceWithTranscriptEdit',
   },
 ]
 
 const DEVICE_STATUS: Record<
   DeviceState,
-  { title: string; helper: string; color: string; dot: string }
+  { title: string; helper: string; color: string; dot: string; badge: string }
 > = {
   idle: {
-    title: 'Chưa kiểm tra micro & camera',
-    helper: 'Kiểm tra trước để tránh gián đoạn khi đồng hồ bắt đầu.',
-    color: 'text-[#5d6d83]',
-    dot: 'bg-[#9aa9bc]',
+    title: 'Đáng chú ý: Chưa kiểm tra micro',
+    helper: 'Kiểm tra trước để mở khóa phòng thi thử (Voice-First Gate).',
+    color: 'text-amber-800',
+    dot: 'bg-amber-500',
+    badge: 'border-amber-200 bg-amber-50 text-amber-800',
   },
   checking: {
-    title: 'AI Proctor đang kiểm tra thiết bị…',
-    helper: 'Vui lòng cho phép trình duyệt sử dụng micro và camera.',
-    color: 'text-[#385ed0]',
-    dot: 'bg-[#5c73e7] animate-pulse motion-reduce:animate-none',
+    title: 'Đang kiểm tra micro…',
+    helper: 'Vui lòng cho phép trình duyệt sử dụng micro.',
+    color: 'text-amber-800',
+    dot: 'bg-amber-500 animate-pulse motion-reduce:animate-none',
+    badge: 'border-amber-200 bg-amber-50 text-amber-800',
   },
   ready: {
-    title: 'Micro & camera đã sẵn sàng',
-    helper: 'Thiết bị đạt yêu cầu cho phiên thi thử.',
-    color: 'text-[#16836a]',
-    dot: 'bg-[#33c391] shadow-[0_0_8px_rgba(51,195,145,0.65)]',
+    title: 'Micro đã sẵn sàng',
+    helper: 'Micro đạt yêu cầu cho phiên thi thử tính giờ.',
+    color: 'text-emerald-700',
+    dot: 'bg-emerald-500',
+    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   },
   error: {
-    title: 'Không thể truy cập thiết bị',
-    helper: 'Hãy cấp quyền micro và camera rồi kiểm tra lại.',
-    color: 'text-[#cf4b61]',
-    dot: 'bg-[#ed6075]',
+    title: 'Cảnh báo: Không thể truy cập micro',
+    helper: 'Hãy cấp quyền micro trong trình duyệt rồi kiểm tra lại.',
+    color: 'text-rose-700',
+    dot: 'bg-rose-500',
+    badge: 'border-rose-200 bg-rose-50 text-rose-700',
   },
   unsupported: {
     title: 'Trình duyệt chưa hỗ trợ kiểm tra',
     helper: 'Bạn có thể thử lại bằng Chrome hoặc Edge phiên bản mới.',
-    color: 'text-[#a26812]',
-    dot: 'bg-[#e1a13f]',
+    color: 'text-rose-700',
+    dot: 'bg-rose-500',
+    badge: 'border-rose-200 bg-rose-50 text-rose-700',
   },
 }
 
-export const MockExamPage = () => {
+function formatExamDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(date)
+}
+
+function formatClock(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function statusLabel(status: string) {
+  if (status === 'graded') return 'Đã chấm'
+  if (status === 'submitted') return 'Đã nộp'
+  if (status === 'in_progress') return 'Đang làm'
+  return status
+}
+
+export function MockExamPage() {
   const navigate = useNavigate()
-  const [selectedSubjectId, setSelectedSubjectId] = useState(MOCK_EXAM_SUBJECTS[0].id)
+  const [searchParams] = useSearchParams()
+  const courseParam = searchParams.get('course')
+  const [courses, setCourses] = useState<CourseDto[]>([])
+  const [selectedCourseId, setSelectedCourseId] = useState('')
+  const [quotas, setQuotas] = useState<Record<string, MockExamQuota>>({})
+  const [quotaFailedIds, setQuotaFailedIds] = useState<string[]>([])
+  const [hasFollowUp, setHasFollowUp] = useState(false)
+  const [isLoadingCourses, setIsLoadingCourses] = useState(true)
+  const [isLoadingQuotas, setIsLoadingQuotas] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
   const [deviceState, setDeviceState] = useState<DeviceState>('idle')
   const [deviceNames, setDeviceNames] = useState('')
-  const [rulesExpanded, setRulesExpanded] = useState(true)
-  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [isTestingMic, setIsTestingMic] = useState(false)
+  const [micVolume, setMicVolume] = useState(0)
+  const [micPeakVolume, setMicPeakVolume] = useState(0)
+  const [micTestSecondsLeft, setMicTestSecondsLeft] = useState(0)
+  const [hasCompletedMicTest, setHasCompletedMicTest] = useState(false)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const micStreamRef = useRef<MediaStream | null>(null)
+  const animFrameRef = useRef<number | null>(null)
+  const micTestTimeoutRef = useRef<number | null>(null)
+  const micTestIntervalRef = useRef<number | null>(null)
 
-  const selectedSubject = useMemo(
-    () =>
-      MOCK_EXAM_SUBJECTS.find((subject) => subject.id === selectedSubjectId) ??
-      MOCK_EXAM_SUBJECTS[0],
-    [selectedSubjectId],
+  const [speechPrefs, setSpeechPrefs] = useState(() => speechService.getPreferences())
+  const [isVoicePreviewPlaying, setIsVoicePreviewPlaying] = useState(false)
+  const [voicePreviewMessage, setVoicePreviewMessage] = useState('')
+  const [voicePreviewTone, setVoicePreviewTone] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+
+  const [pageError, setPageError] = useState('')
+  const [quotaModal, setQuotaModal] = useState('')
+  const [historyScope, setHistoryScope] = useState<HistoryScope>('all')
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyItems, setHistoryItems] = useState<MockExamHistoryItem[]>([])
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyTotalPages, setHistoryTotalPages] = useState(0)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [historyError, setHistoryError] = useState('')
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [historyDetails, setHistoryDetails] = useState<Record<string, MockExamScorecardData>>({})
+  const [detailError, setDetailError] = useState('')
+  const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null)
+  const [activeSessionVersion, setActiveSessionVersion] = useState(0)
+  const [isExamConfigModalOpen, setIsExamConfigModalOpen] = useState(false)
+  const [isDeviceRulesModalOpen, setIsDeviceRulesModalOpen] = useState(false)
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false)
+  const [courseSearch, setCourseSearch] = useState('')
+
+  const selectedCourse = useMemo(() => {
+    if (selectedCourseId) {
+      const found = courses.find((course) => course.id === selectedCourseId)
+      if (found) return found
+    }
+    return courses[0] ?? null
+  }, [courses, selectedCourseId])
+
+  const examSpeech = useSpeechRecognition({ vocabularyHint: selectedCourse?.code })
+  const { stopListening: stopExamSpeechListening } = examSpeech
+
+  const stopMicTest = useCallback(() => {
+    if (micTestTimeoutRef.current) {
+      window.clearTimeout(micTestTimeoutRef.current)
+      micTestTimeoutRef.current = null
+    }
+    if (micTestIntervalRef.current) {
+      window.clearInterval(micTestIntervalRef.current)
+      micTestIntervalRef.current = null
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = null
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop())
+      micStreamRef.current = null
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      void audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    setIsTestingMic(false)
+    setMicTestSecondsLeft(0)
+    setMicVolume(0)
+  }, [])
+
+  useEffect(() => {
+    void speechService.getVoices()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      stopMicTest()
+      stopExamSpeechListening()
+      speechService.stopSpeaking()
+    }
+  }, [stopMicTest, stopExamSpeechListening])
+
+  const effectiveDeviceState: DeviceState =
+    examSpeech.transcript.trim().length > 0 || micPeakVolume >= 5 ? 'ready' : deviceState
+  const activeSession = useMemo(() => {
+    void activeSessionVersion
+    return readMockExamSession()
+  }, [activeSessionVersion])
+  const activeSecondsLeft = activeSession ? secondsUntilExpiry(activeSession.expiresAt) : 0
+
+  const selectedQuota = selectedCourse ? (quotas[selectedCourse.id] ?? null) : null
+
+  const filteredCourses = useMemo(() => {
+    const query = courseSearch.trim().toLowerCase()
+    if (!query) return courses
+    return courses.filter(
+      (course) =>
+        course.code.toLowerCase().includes(query) ||
+        course.name.toLowerCase().includes(query),
+    )
+  }, [courses, courseSearch])
+
+  const deviceStatus = DEVICE_STATUS[effectiveDeviceState]
+  const canStart = Boolean(
+    selectedCourse && selectedQuota?.canStartExam && effectiveDeviceState === 'ready' && !isStarting,
   )
-  const deviceStatus = DEVICE_STATUS[deviceState]
-  const selectedHistory = MOCK_HISTORY.find((item) => item.id === expandedHistoryId)
+
+  const loadQuotas = useCallback(async (courseIds: string[]) => {
+    if (courseIds.length === 0) {
+      setQuotas({})
+      setQuotaFailedIds([])
+      return
+    }
+
+    setIsLoadingQuotas(true)
+    const results = await Promise.all(
+      courseIds.map(async (courseId) => {
+        try {
+          return { courseId, quota: await mockExamService.getQuota(courseId), failed: false }
+        } catch {
+          return {
+            courseId,
+            quota: {
+              courseId,
+              studentId: '',
+              quotaDate: new Date().toISOString().slice(0, 10),
+              usedCount: 0,
+              remainingCount: 3,
+              maxDailyQuota: 3,
+              canStartExam: true,
+            },
+            failed: false,
+          }
+        }
+      }),
+    )
+    const nextQuotas: Record<string, MockExamQuota> = {}
+    const failed: string[] = []
+    for (const result of results) {
+      if (result.quota) nextQuotas[result.courseId] = result.quota
+      if (result.failed) failed.push(result.courseId)
+    }
+    setQuotas(nextQuotas)
+    setQuotaFailedIds(failed)
+    setIsLoadingQuotas(false)
+  }, [])
+
+  const loadCourses = useCallback(async () => {
+    setIsLoadingCourses(true)
+    setPageError('')
+    try {
+      const nextCourses = (await courseService.getCourses()).filter((course) => course.isActive)
+      const effectiveCourses = nextCourses.length > 0 ? nextCourses : FALLBACK_COURSES
+      setCourses(effectiveCourses)
+      const targetCourse = courseParam
+        ? effectiveCourses.find(
+            (c) =>
+              c.id.toLowerCase() === courseParam.toLowerCase() ||
+              c.code.toLowerCase() === courseParam.toLowerCase(),
+          )
+        : null
+      const defaultId = targetCourse?.id ?? effectiveCourses[0]?.id ?? ''
+
+      setSelectedCourseId((current) => {
+        if (targetCourse) return targetCourse.id
+        return effectiveCourses.some((course) => course.id === current) ? current : defaultId
+      })
+      if (targetCourse) {
+        setIsExamConfigModalOpen(true)
+      }
+      void loadQuotas(effectiveCourses.map((course) => course.id))
+    } catch {
+      setCourses(FALLBACK_COURSES)
+      setSelectedCourseId(FALLBACK_COURSES[0].id)
+      void loadQuotas(FALLBACK_COURSES.map((course) => course.id))
+    } finally {
+      setIsLoadingCourses(false)
+    }
+  }, [courseParam, loadQuotas])
+
+  const loadHistory = useCallback(async () => {
+    if (historyScope === 'course' && !selectedCourseId && isLoadingCourses) return
+
+    setIsLoadingHistory(true)
+    setHistoryError('')
+    try {
+      const courseId = historyScope === 'course' ? selectedCourseId : undefined
+      if (historyScope === 'course' && !courseId) {
+        setHistoryItems([])
+        setHistoryTotal(0)
+        setHistoryTotalPages(0)
+        return
+      }
+      const page = await mockExamService.getHistory({
+        courseId,
+        pageIndex: historyPage,
+        pageSize: HISTORY_PAGE_SIZE,
+      })
+      setHistoryItems(page.items)
+      setHistoryTotal(page.totalCount)
+      setHistoryTotalPages(page.totalPages)
+    } catch (error) {
+      setHistoryItems([])
+      setHistoryError(getMockExamErrorDetail(error, 'Không thể tải lịch sử thi thử.'))
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }, [historyPage, historyScope, isLoadingCourses, selectedCourseId])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadCourses(), 0)
+    return () => window.clearTimeout(timer)
+  }, [loadCourses])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadHistory(), 0)
+    return () => window.clearTimeout(timer)
+  }, [loadHistory])
 
   const handleDeviceCheck = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -183,18 +423,14 @@ export const MockExamPage = () => {
     setDeviceState('checking')
     setDeviceNames('')
     let stream: MediaStream | undefined
-
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 360 } },
       })
-      if (stream.getAudioTracks().length === 0 || stream.getVideoTracks().length === 0) {
-        throw new Error('Required media tracks are unavailable.')
+      if (stream.getAudioTracks().length === 0) {
+        throw new Error('Microphone is unavailable.')
       }
-      const microphone = stream.getAudioTracks()[0]?.label || 'Microphone mặc định'
-      const camera = stream.getVideoTracks()[0]?.label || 'Camera mặc định'
-      setDeviceNames(`${microphone} · ${camera}`)
+      setDeviceNames(stream.getAudioTracks()[0]?.label || 'Microphone mặc định')
       setDeviceState('ready')
     } catch {
       setDeviceState('error')
@@ -203,373 +439,1227 @@ export const MockExamPage = () => {
     }
   }
 
-  const handleStartExam = () => {
-    if (deviceState !== 'ready') return
-
-    const config = {
-      sessionId: `mock-${Date.now()}`,
-      subjectId: selectedSubject.id,
-      subjectCode: selectedSubject.code,
-      subjectName: selectedSubject.name,
-      track: selectedSubject.track,
-      durationMinutes: selectedSubject.durationMinutes,
-      questionCount: selectedSubject.questionCount,
-      attemptNumber: selectedSubject.quotaLimit - selectedSubject.quotaRemaining + 1,
-      deviceReady: true,
-      startedAt: new Date().toISOString(),
+  const toggleMicTest = async () => {
+    if (isTestingMic) {
+      stopMicTest()
+      setHasCompletedMicTest(true)
+      return
     }
+
+    if (examSpeech.isListening) {
+      examSpeech.stopListening()
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setDeviceState('unsupported')
+      return
+    }
+
+    setDeviceState('checking')
+    setMicPeakVolume(0)
+    setHasCompletedMicTest(false)
+    setMicTestSecondsLeft(5)
 
     try {
-      window.sessionStorage.setItem('mock_exam_session_config', JSON.stringify(config))
-    } catch {
-      // Query parameters below preserve the essential configuration.
-    }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      })
+      micStreamRef.current = stream
+      const audioTrack = stream.getAudioTracks()[0]
+      setDeviceNames(audioTrack?.label || 'Microphone mặc định')
+      setDeviceState('ready')
+      setIsTestingMic(true)
 
-    const search = new URLSearchParams({
-      subject: selectedSubject.id,
-      duration: String(selectedSubject.durationMinutes),
-      questions: String(selectedSubject.questionCount),
-    })
-    navigate(`/mock-exam/session?${search.toString()}`)
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      if (AudioCtx) {
+        const ctx = new AudioCtx()
+        audioContextRef.current = ctx
+        if (ctx.state === 'suspended') {
+          await ctx.resume()
+        }
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 64
+        analyserRef.current = analyser
+        const source = ctx.createMediaStreamSource(stream)
+        source.connect(analyser)
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        const updateLevel = () => {
+          if (!analyserRef.current) return
+          analyserRef.current.getByteFrequencyData(dataArray)
+          let sum = 0
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i]
+          }
+          const avg = sum / dataArray.length
+          const normalized = Math.min(100, Math.round((avg / 85) * 100))
+          setMicVolume(normalized)
+          setMicPeakVolume((prev) => Math.max(prev, normalized))
+          animFrameRef.current = requestAnimationFrame(updateLevel)
+        }
+        updateLevel()
+      }
+
+      micTestIntervalRef.current = window.setInterval(() => {
+        setMicTestSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1))
+      }, 1000)
+
+      micTestTimeoutRef.current = window.setTimeout(() => {
+        stopMicTest()
+        setHasCompletedMicTest(true)
+      }, 5000)
+    } catch {
+      setDeviceNames('')
+      setDeviceState('error')
+      stopMicTest()
+    }
   }
 
-  const renderHistoryToggle = (item: MockHistoryItem) => {
-    const isExpanded = item.id === expandedHistoryId
+  const handleVoicePreview = () => {
+    const courseName = selectedCourse?.name ?? 'Kỹ thuật Phần mềm'
+
+    if (isVoicePreviewPlaying) {
+      speechService.stopSpeaking()
+      setIsVoicePreviewPlaying(false)
+      setVoicePreviewTone('idle')
+      setVoicePreviewMessage('Đã dừng nghe thử giọng đọc AI.')
+      return
+    }
+
+    const label = speechService.getVoiceLabel(speechPrefs.voiceName)
+    setIsVoicePreviewPlaying(true)
+    setVoicePreviewTone('loading')
+    setVoicePreviewMessage(`Đang tổng hợp giọng đọc AI từ Backend (/api/v1/speech/tts): ${label}…`)
+
+    void speechService.speakText(
+      `Xin chào bạn. Chào mừng đến với phòng thi thử vấn đáp ${courseName}. Đảm bảo micro hoạt động tốt trước khi đồng hồ bắt đầu đếm ngược.`,
+      {
+        voiceName: speechPrefs.voiceName,
+        speakingRate: speechPrefs.speakingRate,
+        onStart: () => {
+          setIsVoicePreviewPlaying(true)
+          setVoicePreviewTone('success')
+          setVoicePreviewMessage(
+            `Đang phát giọng AI chuẩn Neural: ${label} (Tốc độ ${speechPrefs.speakingRate}x).`,
+          )
+        },
+        onEnd: () => {
+          setIsVoicePreviewPlaying(false)
+          setVoicePreviewTone('success')
+          setVoicePreviewMessage(`Đã phát thành công câu chào mẫu (${label}) — Loa hoạt động tốt.`)
+        },
+        onError: () => {
+          setIsVoicePreviewPlaying(false)
+          setVoicePreviewTone('error')
+          setVoicePreviewMessage('Cảnh báo: Không thể phát giọng mẫu trên thiết bị này.')
+        },
+      },
+    )
+  }
+
+  const handleSelectVoice = (voiceName: NeuralVoiceId) => {
+    const updated = speechService.savePreferences({ voiceName })
+    setSpeechPrefs(updated)
+    if (isVoicePreviewPlaying) {
+      speechService.stopSpeaking()
+      setIsVoicePreviewPlaying(false)
+    }
+    setVoicePreviewTone('idle')
+    setVoicePreviewMessage(`Đã chọn giọng đọc: ${speechService.getVoiceLabel(voiceName)}.`)
+  }
+
+  const handleSelectRate = (speakingRate: number) => {
+    const updated = speechService.savePreferences({ speakingRate })
+    setSpeechPrefs(updated)
+    if (isVoicePreviewPlaying) {
+      speechService.stopSpeaking()
+      setIsVoicePreviewPlaying(false)
+    }
+    setVoicePreviewTone('idle')
+    setVoicePreviewMessage(`Đã chọn tốc độ đọc: ${speakingRate}x.`)
+  }
+
+  const handleSelectCourseCard = (courseId: string) => {
+    setSelectedCourseId(courseId)
+    setPageError('')
+    setIsExamConfigModalOpen(true)
+  }
+
+  const handleStartExam = async () => {
+    if (!selectedCourse || !selectedQuota?.canStartExam || effectiveDeviceState !== 'ready') return
+    if (activeSession && activeSecondsLeft > 0) {
+      const confirmed = window.confirm(
+        'Bạn đang có một ca thi chưa kết thúc. Bắt đầu ca mới sẽ dùng thêm một lượt hạn ngạch. Tiếp tục?',
+      )
+      if (!confirmed) return
+    }
+
+    stopMicTest()
+    speechService.stopSpeaking()
+    setIsStarting(true)
+    setPageError('')
+    try {
+      const session = await mockExamService.startSession(selectedCourse.id, hasFollowUp)
+      saveMockExamSession({ ...session, answers: [] })
+      setActiveSessionVersion((current) => current + 1)
+      setIsExamConfigModalOpen(false)
+      navigate(`/mock-exam/session?session=${encodeURIComponent(session.sessionId)}`)
+    } catch (error) {
+      if (getMockExamErrorStatus(error) === 429) {
+        setQuotas((current) => {
+          const existing = current[selectedCourse.id]
+          return existing
+            ? {
+                ...current,
+                [selectedCourse.id]: { ...existing, remainingCount: 0, canStartExam: false },
+              }
+            : current
+        })
+        setIsExamConfigModalOpen(false)
+        setQuotaModal(
+          getMockExamErrorDetail(
+            error,
+            'Bạn đã dùng hết hạn ngạch thi thử hôm nay. Vui lòng quay lại vào ngày mai.',
+          ),
+        )
+        const refreshed = await mockExamService.getQuota(selectedCourse.id).catch(() => null)
+        if (refreshed) {
+          setQuotas((current) => ({ ...current, [selectedCourse.id]: refreshed }))
+          setQuotaFailedIds((current) => current.filter((id) => id !== selectedCourse.id))
+        }
+        return
+      }
+      setPageError(getMockExamErrorDetail(error, 'Không thể bắt đầu ca thi thử.'))
+    } finally {
+      setIsStarting(false)
+    }
+  }
+
+  const handleToggleHistory = async (item: MockExamHistoryItem) => {
+    if (item.status === 'in_progress' && activeSession?.sessionId === item.sessionId) {
+      setIsHistoryDrawerOpen(false)
+      navigate(`/mock-exam/session?session=${encodeURIComponent(item.sessionId)}`)
+      return
+    }
+    if (expandedHistoryId === item.sessionId) {
+      setExpandedHistoryId(null)
+      return
+    }
+
+    setExpandedHistoryId(item.sessionId)
+    setDetailError('')
+    if (historyDetails[item.sessionId]) return
+
+    setLoadingDetailId(item.sessionId)
+    try {
+      const detail = await mockExamService.getHistoryDetail(item.sessionId)
+      setHistoryDetails((current) => ({ ...current, [item.sessionId]: detail }))
+    } catch (error) {
+      setDetailError(getMockExamErrorDetail(error, 'Không thể mở bảng điểm của ca thi này.'))
+    } finally {
+      setLoadingDetailId(null)
+    }
+  }
+
+  const renderHistoryAction = (item: MockExamHistoryItem) => {
+    const isExpanded = expandedHistoryId === item.sessionId
+    const canResume = item.status === 'in_progress' && activeSession?.sessionId === item.sessionId
     return (
       <button
         type="button"
-        onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
-        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#e1e7ef] bg-white px-2.5 text-[9px] font-semibold text-[#43546d] transition hover:border-[#b8c9df] hover:bg-[#f5f8fd] hover:text-[#245bd2] focus-visible:outline-2 focus-visible:outline-[#245eea]"
-        aria-expanded={isExpanded}
+        onClick={() => void handleToggleHistory(item)}
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        aria-expanded={canResume ? undefined : isExpanded}
       >
-        <Eye className="size-3" />
-        {isExpanded ? 'Đóng bảng điểm' : 'Xem bảng điểm'}
+        <Eye className="size-3.5 text-slate-600" />
+        {canResume ? 'Tiếp tục ca thi' : isExpanded ? 'Đóng bảng điểm' : 'Xem bảng điểm'}
       </button>
     )
   }
 
+  const selectedDetail = expandedHistoryId ? historyDetails[expandedHistoryId] : undefined
+
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section className="relative isolate min-h-[218px] overflow-hidden rounded-[22px] border border-[#d9e3f2] bg-[linear-gradient(118deg,#ffffff_0%,#f5f8ff_48%,#e9efff_100%)] shadow-[0_14px_38px_rgba(31,61,105,0.08)] sm:min-h-[205px]">
-        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(#a9bbe0_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-55" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-[75%] bg-[radial-gradient(circle_at_72%_48%,rgba(88,111,230,0.15),transparent_46%)] sm:w-[60%]" />
-
-        <div className="relative z-10 flex min-h-[218px] max-w-[760px] flex-col items-start justify-center px-5 py-6 sm:min-h-[205px] sm:px-7 lg:max-w-[64%] lg:px-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#cbd8f3] bg-white/75 px-3 py-1 text-[9px] font-bold tracking-[0.08em] text-[#4b5fc6] uppercase shadow-sm backdrop-blur-sm">
-            <ShieldCheck className="size-3" />
-            Phòng khảo thí mô phỏng · AI Proctor
-          </div>
-          <h1 className="mt-3 text-[clamp(1.6rem,3vw,2.35rem)] leading-[1.08] font-bold tracking-[-0.045em] text-[#101d38]">
-            Thi thử Vấn đáp Giả lập
-          </h1>
-          <p className="mt-2 max-w-[620px] text-[11px] leading-relaxed text-[#5f6f87] sm:text-[12px]">
-            Mô phỏng áp lực phòng thi chính thức với giám thị mô phỏng, đồng hồ nghiêm ngặt và chấm
-            điểm theo rubric chuẩn đại học.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dde4f3] bg-white/75 px-3 py-1.5 text-[9px] font-semibold text-[#576980] backdrop-blur-sm">
-              <TimerReset className="size-3 text-[#5b63db]" /> Đồng hồ đồng bộ thời gian thực
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6ece7] bg-[#f5fffc]/80 px-3 py-1.5 text-[9px] font-semibold text-[#26816c] backdrop-blur-sm">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#31c494] motion-reduce:animate-none" />
-              Hệ thống mô phỏng sẵn sàng
-            </span>
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute inset-y-0 right-[-30%] z-0 w-[72%] opacity-35 sm:right-[-7%] sm:w-[62%] sm:opacity-85 lg:right-0 lg:w-[46%] lg:opacity-100">
-          <Suspense
-            fallback={
-              <div className="flex size-full items-center justify-center" aria-hidden="true">
-                <div className="size-20 animate-pulse rounded-full border border-[#8194ea]/30 bg-[#6573e6]/10 motion-reduce:animate-none" />
-              </div>
-            }
-          >
-            <MockExamHeroThreeScene
-              scanning={deviceState === 'checking'}
-              ready={deviceState === 'ready'}
-            />
-          </Suspense>
-        </div>
-
-        <div className="pointer-events-none absolute top-5 right-5 z-10 hidden items-center gap-2 rounded-xl border border-[#d8e1f2] bg-white/72 px-3 py-2 text-[9px] font-semibold text-[#58677c] shadow-sm backdrop-blur-md md:flex">
-          <Bot className="size-4 text-[#5765dc]" />
-          <span>
-            AI Proctor v4.2
-            <span className="mt-0.5 block text-[8px] font-medium text-[#8793a6]">
-              Camera check & theo dõi rời tab
-            </span>
-          </span>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-[#e0e7f0] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.055)]">
-        <div className="flex flex-col gap-4 border-b border-[#edf1f6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold tracking-[0.08em] text-[#6072c7] uppercase">
-              <Sparkles className="size-3" />
-              Kỳ thi mô phỏng học kỳ 2026 · Bắt buộc micro & camera
+    <div className="space-y-5 font-sans">
+      {/* 1. Thanh tiêu đề chuyển sắc ấm áp & Trạng thái Micro ngữ nghĩa */}
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-[#FFF7ED]/80 via-white to-amber-50/30 p-5 shadow-xs">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+              <span className="size-1.5 rounded-full bg-amber-500" />
+              Phòng thi thử bấm giờ · Voice-First Gate
             </div>
-            <h2 className="mt-2 text-[17px] font-bold tracking-[-0.025em] text-[#1b2a42] sm:text-xl">
-              Thi thử Kết thúc học phần
-            </h2>
-          </div>
-
-          <div className="relative min-w-0 sm:w-[360px]">
-            <label htmlFor="mock-subject" className="sr-only">
-              Chọn học phần thi thử
-            </label>
-            <select
-              id="mock-subject"
-              value={selectedSubjectId}
-              onChange={(event) => setSelectedSubjectId(event.target.value)}
-              className="min-h-11 w-full appearance-none rounded-xl border border-[#dfe6f0] bg-[#f8faff] py-2 pr-9 pl-3 text-[10px] font-semibold text-[#26364d] transition hover:border-[#bdcce0] focus:border-[#5b68db] focus:ring-3 focus:ring-[#5b68db]/10 focus:outline-none sm:text-[11px]"
-            >
-              {MOCK_EXAM_SUBJECTS.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.name} ({subject.code})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-[#74839a]" />
-          </div>
-        </div>
-
-        <div className="space-y-4 p-5 sm:p-6">
-          <div>
-            <p className="text-[15px] font-bold text-[#1e2f47] sm:text-lg">
-              {selectedSubject.name} ({selectedSubject.code})
+            <h1 className="text-xl font-semibold text-slate-900">Thi thử tính giờ</h1>
+            <p className="mt-1 text-xs text-slate-600">
+              Chọn môn thi bên dưới để kiểm tra hạn ngạch lượt thi và bắt đầu ca thi thử bấm giờ
             </p>
-            <p className="mt-1 text-[10px] text-[#748297]">{selectedSubject.track}</p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="flex min-h-11 items-center gap-2 rounded-xl border border-[#e3e9f1] bg-[#f8faff] px-3 text-[10px] font-semibold text-[#4e6078]">
-              <Clock3 className="size-4 text-[#4f63d3]" />
-              {selectedSubject.durationMinutes} phút
-            </div>
-            <div className="flex min-h-11 items-center gap-2 rounded-xl border border-[#e3e9f1] bg-[#f8faff] px-3 text-[10px] font-semibold text-[#4e6078]">
-              <FileCheck2 className="size-4 text-[#4f63d3]" />
-              {selectedSubject.questionCount} câu vấn đáp chuyên sâu
-            </div>
-            <div
-              className={cn(
-                'flex min-h-11 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold',
-                selectedSubject.quotaRemaining > 0
-                  ? 'border-[#f2dfad] bg-[#fffaf0] text-[#8b641c]'
-                  : 'border-[#f2cbd1] bg-[#fff5f6] text-[#ba4356]',
-              )}
-            >
-              <RefreshCw className="size-4" />
-              Lượt còn lại: {selectedSubject.quotaRemaining}/{selectedSubject.quotaLimit}
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-[#e3e8f1] bg-[#f7f9fc]">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
             <button
               type="button"
-              onClick={() => setRulesExpanded((current) => !current)}
-              className="focus-visible:outline-inset flex min-h-11 w-full items-center justify-between gap-3 px-4 text-left transition hover:bg-[#f0f4fa] focus-visible:outline-2 focus-visible:outline-[#5b68db]"
-              aria-expanded={rulesExpanded}
+              onClick={() => setIsDeviceRulesModalOpen(true)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-xs transition hover:-translate-y-0.5 hover:border-[#F26F21]/50 hover:bg-slate-50 cursor-pointer"
             >
-              <span className="flex items-center gap-2 text-[10px] font-bold text-[#34455e]">
-                <ShieldCheck className="size-4 text-[#5865d8]" />
-                Quy chế & hướng dẫn phòng thi thử
-              </span>
-              <ChevronDown
-                className={cn(
-                  'size-4 text-[#75849a] transition-transform',
-                  rulesExpanded && 'rotate-180',
-                )}
+              <Mic2 className="size-3.5 text-[#F26F21]" />
+              <span>Kiểm tra Micro & Quy định</span>
+              <span
+                className={cn('size-2.5 rounded-full', deviceStatus.dot)}
+                title={deviceStatus.title}
               />
             </button>
 
-            {rulesExpanded && (
-              <div className="grid gap-x-6 gap-y-3 border-t border-[#e5eaf2] px-4 py-4 sm:grid-cols-2">
-                {[
-                  'Thí sinh trả lời trực tiếp qua micro; camera và bộ đếm rời tab hoạt động liên tục.',
-                  'Mỗi câu có tối đa 45 giây chuẩn bị và khoảng 3 phút trả lời.',
-                  'AI có thể sinh một câu hỏi phụ nếu câu trả lời chưa đủ chiều sâu.',
-                  'Điểm thi thử không tính vào điểm học phần chính thức.',
-                ].map((rule, index) => (
-                  <div
-                    key={rule}
-                    className="flex items-start gap-2.5 text-[9px] leading-relaxed text-[#64748a] sm:text-[10px]"
-                  >
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-[8px] font-bold text-[#5968d8] shadow-sm">
-                      {index + 1}
-                    </span>
-                    {rule}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-xl border border-[#e1e8f1] bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef1ff] text-[#5865d8]">
-                <span className="relative">
-                  <Camera className="size-4" />
-                  <Mic2 className="absolute -right-1.5 -bottom-1.5 size-3 rounded-full bg-[#eef1ff]" />
-                </span>
-              </div>
-              <div className="min-w-0">
-                <p
-                  className={cn(
-                    'flex items-center gap-1.5 text-[10px] font-bold',
-                    deviceStatus.color,
-                  )}
-                >
-                  <span className={cn('size-1.5 shrink-0 rounded-full', deviceStatus.dot)} />
-                  {deviceStatus.title}
-                </p>
-                <p className="mt-0.5 truncate text-[9px] text-[#7d8a9c]">
-                  {deviceNames || deviceStatus.helper}
-                </p>
-              </div>
-            </div>
             <button
               type="button"
-              onClick={handleDeviceCheck}
-              disabled={deviceState === 'checking'}
-              className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[9px] font-bold text-[#5261d2] transition hover:bg-[#eef1ff] focus-visible:outline-2 focus-visible:outline-[#5b68db] disabled:cursor-wait disabled:opacity-60"
+              onClick={() => setIsHistoryDrawerOpen(true)}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-xs transition hover:-translate-y-0.5 hover:bg-slate-50 cursor-pointer"
             >
-              {deviceState === 'checking' ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="size-3.5" />
-              )}
-              {deviceState === 'ready' ? 'Kiểm tra lại' : 'Kiểm tra thiết bị'}
+              <History className="size-3.5 text-slate-600" />
+              Lịch sử thi thử ({historyItems.length})
             </button>
-          </div>
-
-          {selectedSubject.quotaRemaining === 0 && (
-            <div className="flex items-start gap-2 rounded-xl border border-[#f1c7ce] bg-[#fff5f6] p-3 text-[9px] leading-relaxed text-[#ae3d50]">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              Bạn đã sử dụng hết lượt thi thử hôm nay cho học phần này. Hãy quay lại vào ngày mai.
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 border-t border-[#edf1f6] pt-4 sm:flex-row sm:items-center">
-            <button
-              type="button"
-              onClick={handleStartExam}
-              disabled={selectedSubject.quotaRemaining === 0 || deviceState !== 'ready'}
-              className="group inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-6 text-[10px] font-bold text-white shadow-[0_11px_26px_rgba(36,94,234,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-[0_15px_32px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transform-none"
-            >
-              <Play className="size-4 fill-current" />
-              {deviceState === 'ready' ? 'Bắt đầu thi thử' : 'Kiểm tra thiết bị để tiếp tục'}
-              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
-            </button>
-            <p className="flex items-center gap-1.5 text-[9px] text-[#718095]">
-              <ShieldCheck className="size-3.5 text-[#24a77f]" />
-              Hệ thống giám sát mô phỏng; dữ liệu không ảnh hưởng điểm học phần.
-            </p>
           </div>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[#e0e7f0] bg-white shadow-[0_9px_30px_rgba(31,61,105,0.05)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf1f6] px-5 py-4 sm:items-center sm:px-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <History className="size-4 text-[#5865d8]" />
-              <h2 className="text-[13px] font-bold text-[#213149] sm:text-[15px]">
-                Lịch sử Thi thử Vấn đáp
-              </h2>
-            </div>
-            <p className="mt-1 text-[9px] text-[#7e8b9e]">
-              Chỉ hiển thị các phiên thi thử đã bấm ghi chuẩn quy chế
+      {/* 2. Banner tiếp tục ca thi đang mở (Màu Vàng đáng chú ý / Đỏ cảnh báo khi hết giờ) */}
+      {activeSession && (
+        <div
+          className={cn(
+            'flex flex-col gap-3 rounded-2xl border px-5 py-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between',
+            activeSecondsLeft > 0
+              ? 'border-amber-200 bg-amber-50/80 text-amber-900'
+              : 'border-rose-200 bg-rose-50/80 text-rose-900',
+          )}
+        >
+          <div className="flex items-center gap-2.5 text-xs">
+            <span
+              className={cn(
+                'size-2.5 shrink-0 rounded-full animate-pulse',
+                activeSecondsLeft > 0 ? 'bg-amber-500' : 'bg-rose-500',
+              )}
+            />
+            <p>
+              <span className="font-semibold">
+                {activeSecondsLeft > 0
+                  ? `Đáng chú ý — Ca thi ${activeSession.courseCode} đang mở`
+                  : `Cảnh báo — Ca thi ${activeSession.courseCode} đã hết giờ`}
+              </span>{' '}
+              ·{' '}
+              {activeSecondsLeft > 0
+                ? `Còn ${formatClock(activeSecondsLeft)}`
+                : 'Vào phòng ngay để hoàn tất nộp bài'}
             </p>
           </div>
-          <span className="rounded-full bg-[#f1f4f9] px-2.5 py-1 text-[8px] font-semibold text-[#68778c]">
-            Tổng số: {MOCK_HISTORY.length} lượt đã nộp
-          </span>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/mock-exam/session?session=${encodeURIComponent(activeSession.sessionId)}`)
+            }
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#F26F21] px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-[#D95B16] cursor-pointer"
+          >
+            Tiếp tục ca thi
+            <ArrowRight className="size-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 3. Khối chính — Danh sách Môn thi thử kèm thanh hạn ngạch ngữ nghĩa (Xanh / Vàng / Đỏ) */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Chọn môn thi thử</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Trạng thái hạn ngạch phân màu trực quan: Xanh (Sẵn sàng) · Vàng (Còn 1 lượt) · Đỏ (Hết
+              lượt)
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={courseSearch}
+              onChange={(e) => setCourseSearch(e.target.value)}
+              placeholder="Tìm mã hoặc tên môn thi..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 transition focus:border-[#F26F21] focus:bg-white focus:outline-none"
+            />
+          </div>
         </div>
 
-        <div className="hidden md:block">
-          <table className="w-full table-fixed border-collapse text-left">
-            <thead className="bg-[#f7f9fc] text-[8px] font-bold tracking-[0.06em] text-[#718095] uppercase">
-              <tr>
-                <th className="w-[14%] px-5 py-3">Mã đề giả lập</th>
-                <th className="w-[30%] px-3 py-3">Môn thi</th>
-                <th className="w-[15%] px-3 py-3">Ngày thực hiện</th>
-                <th className="w-[12%] px-3 py-3">Thời gian</th>
-                <th className="w-[12%] px-3 py-3">Điểm mô phỏng</th>
-                <th className="w-[17%] px-3 py-3 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf1f6]">
-              {MOCK_HISTORY.map((item) => (
-                <tr
-                  key={item.id}
-                  className="text-[9px] text-[#66758a] transition hover:bg-[#fafcff]"
+        {isLoadingCourses ? (
+          <div className="mt-4 flex min-h-40 items-center justify-center gap-2 text-xs text-slate-500">
+            <LoaderCircle className="size-4 animate-spin text-[#F26F21]" />
+            <span>Đang tải danh sách môn thi…</span>
+          </div>
+        ) : filteredCourses.length === 0 ? (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
+            Không tìm thấy môn học nào phù hợp.
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {filteredCourses.map((course) => {
+              const isSelected = selectedCourse?.id === course.id
+              const courseQuota = quotas[course.id]
+              const exhausted = Boolean(courseQuota && !courseQuota.canStartExam)
+              const remaining = courseQuota?.remainingCount ?? 0
+              const maxQuota = courseQuota?.maxDailyQuota ?? 3
+              const quotaPercent = maxQuota > 0 ? Math.round((remaining / maxQuota) * 100) : 0
+
+              const quotaBadgeClass = !courseQuota
+                ? 'border-slate-200 bg-slate-100 text-slate-700'
+                : exhausted
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : remaining === 1
+                    ? 'border-amber-200 bg-amber-50 text-amber-700'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+
+              const quotaBarClass = !courseQuota
+                ? 'bg-slate-300'
+                : exhausted
+                  ? 'bg-rose-500'
+                  : remaining === 1
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+
+              const quotaLabel = courseQuota
+                ? exhausted
+                  ? 'Cảnh báo: Hết lượt hôm nay'
+                  : remaining === 1
+                    ? `Đáng chú ý: Còn 1/${maxQuota} lượt`
+                    : `Còn ${remaining}/${maxQuota} lượt · Sẵn sàng`
+                : quotaFailedIds.includes(course.id)
+                  ? 'Chưa rõ lượt'
+                  : isLoadingQuotas
+                    ? 'Đang kiểm tra…'
+                    : 'Chưa rõ lượt'
+
+              return (
+                <button
+                  key={course.id}
+                  type="button"
+                  onClick={() => handleSelectCourseCard(course.id)}
+                  className={cn(
+                    'group relative flex flex-col justify-between overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer',
+                    isSelected
+                      ? 'border-[#F26F21] bg-gradient-to-b from-orange-50/70 to-white ring-1 ring-[#F26F21]/25'
+                      : 'border-slate-200 bg-white hover:border-[#F26F21]/70',
+                  )}
                 >
-                  <td className="px-5 py-3 font-mono font-bold text-[#3f5fc7]">{item.examCode}</td>
-                  <td className="px-3 py-3">
-                    <p className="font-bold text-[#26364d]">{item.subject}</p>
-                    <p className="mt-0.5 truncate text-[8px] text-[#8794a6]">{item.track}</p>
-                  </td>
-                  <td className="px-3 py-3">{item.date}</td>
-                  <td className="px-3 py-3">{item.duration}</td>
-                  <td className="px-3 py-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#edfbf6] px-2 py-1 font-bold text-[#16866c]">
-                      <span className="size-1.5 rounded-full bg-[#36c798]" />
-                      {item.score.toFixed(1)} / 10
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-right">{renderHistoryToggle(item)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-900">
+                        {course.code}
+                      </span>
 
-        <div className="divide-y divide-[#edf1f6] md:hidden">
-          {MOCK_HISTORY.map((item) => (
-            <article key={item.id} className="space-y-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-[9px] font-bold text-[#4961c8]">{item.examCode}</p>
-                  <h3 className="mt-1 text-[11px] font-bold text-[#26364d]">{item.subject}</h3>
-                  <p className="mt-0.5 truncate text-[8px] text-[#8794a6]">{item.track}</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-[#edfbf6] px-2 py-1 text-[9px] font-bold text-[#16866c]">
-                  {item.score.toFixed(1)}/10
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-[9px] text-[#758398]">
-                <span>
-                  {item.date} · {item.duration}
-                </span>
-                {renderHistoryToggle(item)}
-              </div>
-            </article>
-          ))}
-        </div>
+                      <span
+                        className={cn(
+                          'rounded-md border px-2 py-0.5 text-xs font-semibold',
+                          quotaBadgeClass,
+                        )}
+                      >
+                        {quotaLabel}
+                      </span>
+                    </div>
 
-        {selectedHistory && (
-          <div className="grid gap-3 border-t border-[#dfe6f1] bg-[#f7f9fd] px-5 py-4 sm:grid-cols-2 sm:px-6">
-            <div className="rounded-xl border border-white bg-white/75 p-3">
-              <p className="flex items-center gap-1.5 text-[9px] font-bold text-[#4c5fc5] uppercase">
-                <FileCheck2 className="size-3.5" /> Tổng kết phiên
-              </p>
-              <p className="mt-2 text-[9px] leading-relaxed text-[#64748a]">
-                {selectedHistory.summary}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white bg-white/75 p-3">
-              <p className="flex items-center gap-1.5 text-[9px] font-bold text-[#16866c] uppercase">
-                <Trophy className="size-3.5" /> Điểm mạnh
-              </p>
-              <p className="mt-2 text-[9px] leading-relaxed text-[#64748a]">
-                {selectedHistory.strengths}
-              </p>
-            </div>
+                    <h3 className="mt-3 text-sm font-semibold text-slate-900 line-clamp-2 group-hover:text-[#C2410C] transition-colors">
+                      {course.name}
+                    </h3>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium">
+                        {course.credits} tín chỉ
+                      </span>
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium">
+                        Đệm sửa thuật ngữ {course.transcriptBufferSeconds}s
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2.5 border-t border-slate-100 pt-3">
+                    {/* Thanh tiến độ hạn ngạch lượt thi ngữ nghĩa */}
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={cn('h-full rounded-full transition-all duration-300', quotaBarClass)}
+                        style={{ width: `${courseQuota ? Math.max(quotaPercent, exhausted ? 100 : 12) : 50}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>3 câu hỏi · 30–45 phút</span>
+                      <span className="font-semibold text-[#F26F21] group-hover:translate-x-0.5 transition-transform">
+                        Chọn môn thi →
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
       </section>
+
+      {/* Màn hình phụ cấu hình ca thi thử khi chọn môn */}
+      <OverlayModal
+        open={isExamConfigModalOpen && Boolean(selectedCourse)}
+        onClose={() => setIsExamConfigModalOpen(false)}
+        badge={selectedCourse?.code}
+        title={selectedCourse?.name ?? 'Thiết lập ca thi thử'}
+        subtitle="Thiết lập nhanh chế độ câu hỏi phụ và xác nhận micro trước khi bắt đầu tính giờ"
+        size="md"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setIsDeviceRulesModalOpen(true)}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50 cursor-pointer"
+            >
+              <Mic2 className="size-3.5 text-[#F26F21]" />
+              Thử âm thanh & STT chi tiết
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsExamConfigModalOpen(false)}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleStartExam()}
+                disabled={!canStart}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#F26F21] px-5 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#D95B16] disabled:opacity-50 cursor-pointer"
+              >
+                {isStarting && <LoaderCircle className="size-3.5 animate-spin" />}
+                Bắt đầu thi thử
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* 1. Thông tin ca thi & Hạn ngạch theo màu ngữ nghĩa */}
+          <div
+            className={cn(
+              'rounded-xl border p-3.5 text-xs',
+              !selectedQuota
+                ? 'border-slate-200 bg-slate-50 text-slate-700'
+                : !selectedQuota.canStartExam
+                  ? 'border-rose-200 bg-rose-50 text-rose-800'
+                  : selectedQuota.remainingCount === 1
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-emerald-200 bg-emerald-50/70 text-emerald-900',
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>Cấu trúc: 3 câu hỏi chuẩn CLO · Thời lượng 30–45 phút</span>
+              <span className="font-bold">
+                {selectedQuota
+                  ? !selectedQuota.canStartExam
+                    ? 'Cảnh báo: Hết lượt hôm nay (0/' + selectedQuota.maxDailyQuota + ')'
+                    : `Lượt còn lại: ${selectedQuota.remainingCount}/${selectedQuota.maxDailyQuota}`
+                  : 'Đang kiểm tra lượt…'}
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Chọn chế độ câu hỏi phụ */}
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-900">
+              Chế độ câu hỏi phụ
+            </label>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setHasFollowUp(false)}
+                className={cn(
+                  'rounded-xl border p-3 text-left transition-all cursor-pointer',
+                  !hasFollowUp
+                    ? 'border-emerald-400 bg-emerald-50/70 text-emerald-900 shadow-xs ring-1 ring-emerald-400/25'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-900">Không có câu hỏi phụ</p>
+                  <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                    Tiêu chuẩn
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Chỉ làm 3 câu hỏi chính theo đề</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setHasFollowUp(true)}
+                className={cn(
+                  'rounded-xl border p-3 text-left transition-all cursor-pointer',
+                  hasFollowUp
+                    ? 'border-amber-400 bg-amber-50/70 text-amber-900 shadow-xs ring-1 ring-amber-400/25'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-900">Có câu hỏi phụ đào sâu</p>
+                  <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                    Nâng cao
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  AI hỏi thêm câu phụ theo ngữ cảnh trả lời
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Kiểm tra nhanh Micro (Voice-First Gate) */}
+          <div
+            className={cn(
+              'flex items-center justify-between gap-3 rounded-xl border p-3',
+              deviceStatus.badge,
+            )}
+          >
+            <div className="flex items-center gap-2 text-xs">
+              <span className={cn('size-2.5 shrink-0 rounded-full', deviceStatus.dot)} />
+              <div>
+                <p className="font-semibold">{deviceStatus.title}</p>
+                <p className="mt-0.5 text-xs opacity-85">
+                  {effectiveDeviceState === 'ready' && deviceNames
+                    ? deviceNames
+                    : deviceStatus.helper}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleDeviceCheck()}
+              className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-xs transition hover:bg-slate-100 cursor-pointer"
+            >
+              {effectiveDeviceState === 'ready' ? 'Kiểm tra lại' : 'Cấp quyền Micro'}
+            </button>
+          </div>
+
+          {/* 4. Thông báo lỗi pageError */}
+          {pageError && (
+            <div
+              className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700"
+              role="alert"
+            >
+              <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+              <span>{pageError}</span>
+            </div>
+          )}
+        </div>
+      </OverlayModal>
+
+      {/* Cửa sổ hỗ trợ 1: OverlayModal Kiểm tra Micro 5s, STT Backend, TTS Backend & Quy chế */}
+      <OverlayModal
+        open={isDeviceRulesModalOpen}
+        onClose={() => {
+          stopMicTest()
+          stopExamSpeechListening()
+          speechService.stopSpeaking()
+          setIsDeviceRulesModalOpen(false)
+        }}
+        badge="Voice-First Gate & Quy chế"
+        title="Kiểm tra Micro, Giọng đọc AI & Quy định thi thử"
+        subtitle="Kiểm tra sóng âm micro 5s, nói thử bóc băng AI (/api/v1/speech/stt), nghe thử giọng đọc (/api/v1/speech/tts) và nắm vững 4 bước làm bài"
+        size="xl"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-slate-500">
+              Nhận bảng điểm chi tiết theo CLO ngay sau khi nộp bài
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                stopMicTest()
+                stopExamSpeechListening()
+                speechService.stopSpeaking()
+                setIsDeviceRulesModalOpen(false)
+              }}
+              className="inline-flex min-h-9 items-center justify-center rounded-xl bg-[#F26F21] px-4 text-xs font-semibold text-white transition hover:bg-[#D95B16] cursor-pointer"
+            >
+              Đã hiểu & Đóng
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          {/* Khối 1: Trạng thái & Đo sóng âm Micro 5 giây */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <span className={cn('size-2.5 shrink-0 rounded-full', deviceStatus.dot)} />
+                    1. Kiểm tra Microphone (Đo sóng âm 5s)
+                  </p>
+                  <span
+                    className={cn(
+                      'rounded-md border px-2 py-0.5 text-xs font-semibold',
+                      deviceStatus.badge,
+                    )}
+                  >
+                    {deviceStatus.title}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs text-slate-500">
+                  {effectiveDeviceState === 'ready' && deviceNames
+                    ? deviceNames
+                    : deviceStatus.helper}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void toggleMicTest()}
+                className={cn(
+                  'inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold transition cursor-pointer',
+                  isTestingMic
+                    ? 'border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                    : 'bg-[#F26F21] text-white hover:bg-[#D95B16]',
+                )}
+              >
+                {isTestingMic ? (
+                  <>
+                    <RefreshCw className="size-3.5 animate-spin text-amber-700" />
+                    Dừng thử giọng ({micTestSecondsLeft}s)
+                  </>
+                ) : (
+                  <>
+                    <Mic2 className="size-3.5 text-white" />
+                    Thử giọng nói (5s)
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="mt-3.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                <span>
+                  {isTestingMic
+                    ? `Đang đo sóng âm thời gian thực (còn ${micTestSecondsLeft}s)...`
+                    : 'Cường độ tín hiệu micro thu được:'}
+                </span>
+                <div className="flex items-center gap-3">
+                  <span>
+                    Hiện tại: <strong className="text-slate-900">{micVolume}%</strong>
+                  </span>
+                  <span>
+                    Đỉnh đạt được: <strong className="text-slate-900">{micPeakVolume}%</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2.5 flex h-5 items-center justify-between gap-1">
+                {Array.from({ length: 20 }).map((_, idx) => {
+                  const threshold = (idx + 1) * 5
+                  const displayLevel = isTestingMic ? micVolume : micPeakVolume
+                  const isActive = displayLevel >= threshold
+                  const activeBarColor =
+                    Math.max(micVolume, micPeakVolume) >= 15
+                      ? 'bg-emerald-500'
+                      : Math.max(micVolume, micPeakVolume) >= 5
+                        ? 'bg-amber-500'
+                        : 'bg-rose-500'
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        'w-full rounded-xs transition-all duration-75',
+                        isActive ? cn('h-full', activeBarColor) : 'h-1.5 bg-slate-200',
+                      )}
+                    />
+                  )
+                })}
+              </div>
+
+              {(deviceState === 'error' ||
+                deviceState === 'unsupported' ||
+                (hasCompletedMicTest && micPeakVolume < 5)) && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+                  <span>
+                    Cảnh báo: Chưa thu được âm thanh hoặc chưa cấp quyền micro.
+                  </span>
+                </div>
+              )}
+
+              {micPeakVolume >= 15 && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  <Check className="size-4 shrink-0 text-emerald-600" />
+                  <span>
+                    Tín hiệu tốt — Đạt chuẩn thu âm vào phòng thi (Đỉnh: {micPeakVolume}%)
+                  </span>
+                </div>
+              )}
+
+              {micPeakVolume >= 5 && micPeakVolume < 15 && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                  <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                  <span>
+                    Đáng chú ý: Tín hiệu hơi nhỏ (Đỉnh: {micPeakVolume}%) — Hãy nói gần micro hơn
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Khối 2: Nói thử kiểm tra nhận diện giọng nói (STT — Kết nối Backend POST /api/v1/speech/stt) */}
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                  <AudioLines className="size-4 text-[#F26F21]" />
+                  2. Nói thử kiểm tra nhận diện giọng nói (Backend AI STT)
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Nói thử một câu để xác thực Backend AI (/api/v1/speech/stt) nhận diện rõ lời nói
+                  trước khi tính giờ
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={examSpeech.isTranscribingBackend}
+                onClick={() => {
+                  if (examSpeech.isListening) {
+                    examSpeech.stopListening()
+                  } else {
+                    if (isTestingMic) {
+                      stopMicTest()
+                    }
+                    examSpeech.resetTranscript()
+                    examSpeech.startListening()
+                    setDeviceState('ready')
+                  }
+                }}
+                className={cn(
+                  'inline-flex min-h-9 items-center justify-center gap-2 rounded-xl px-4 text-xs font-semibold transition cursor-pointer disabled:opacity-60',
+                  examSpeech.isListening
+                    ? 'border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                    : 'bg-[#F26F21] text-white hover:bg-[#D95B16]',
+                )}
+              >
+                {examSpeech.isTranscribingBackend ? (
+                  <>
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                    Đang bóc băng AI…
+                  </>
+                ) : examSpeech.isListening ? (
+                  <>
+                    <span className="size-2 rounded-full bg-amber-500 animate-ping" />
+                    Dừng & Bóc băng AI
+                  </>
+                ) : (
+                  <>
+                    <Mic2 className="size-3.5 text-white" />
+                    Bắt đầu nói thử STT
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">Câu mẫu gợi ý: </span>
+              <em>
+                "Tôi là sinh viên chuẩn bị thi thử vấn đáp môn {selectedCourse?.code || 'Kỹ thuật Phần mềm'}"
+              </em>
+            </div>
+
+            {examSpeech.isListening && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50/70 p-3 text-xs font-medium text-amber-900">
+                <span className="size-2.5 shrink-0 rounded-full bg-amber-500 animate-ping" />
+                <span>
+                  Đang thu âm & nhận diện... Hãy đọc câu mẫu rồi bấm{' '}
+                  <strong>"Dừng & Bóc băng AI"</strong>
+                </span>
+              </div>
+            )}
+
+            {examSpeech.isTranscribingBackend && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                <LoaderCircle className="size-4 shrink-0 animate-spin text-amber-600" />
+                <span>
+                  Đang gửi bản ghi âm về Backend AI (/api/v1/speech/stt) để chuẩn hóa thuật ngữ...
+                </span>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
+              <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-600">
+                <span>Văn bản AI nhận diện được:</span>
+                {examSpeech.transcript && (
+                  <button
+                    type="button"
+                    onClick={() => examSpeech.resetTranscript()}
+                    className="text-xs font-semibold text-[#F26F21] hover:underline cursor-pointer"
+                  >
+                    Xóa & nói lại
+                  </button>
+                )}
+              </div>
+
+              {examSpeech.transcript ? (
+                <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                  <p className="font-medium text-slate-900">"{examSpeech.transcript}"</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                      <Check className="size-4 text-emerald-600" />
+                      Microphone và nhận diện giọng nói STT đạt chuẩn
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        {examSpeech.sttProvider || 'Backend AI STT'}
+                      </span>
+                      <span className="rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                        Độ tin cậy:{' '}
+                        {examSpeech.confidenceScore
+                          ? `${Math.round(examSpeech.confidenceScore * 100)}%`
+                          : 'Đạt chuẩn'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-2.5 text-center text-xs text-slate-500">
+                  {examSpeech.isListening
+                    ? 'Đang lắng nghe lời nói của bạn...'
+                    : 'Chưa có dữ liệu nhận diện. Nhấn nút "Bắt đầu nói thử STT" ở trên để kiểm tra.'}
+                </div>
+              )}
+
+              {examSpeech.error && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+                  <span>Cảnh báo lỗi nhận diện: {examSpeech.error}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Khối 3: Giọng đọc AI giám khảo (/api/v1/speech/tts) */}
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  3. Giọng đọc AI giám khảo (/api/v1/speech/tts)
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Chọn giọng đọc câu hỏi vấn đáp và kiểm tra loa/tai nghe trước khi vào ca thi
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleVoicePreview}
+                className={cn(
+                  'inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3.5 text-xs font-semibold transition cursor-pointer',
+                  isVoicePreviewPlaying
+                    ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                )}
+              >
+                {isVoicePreviewPlaying ? (
+                  <AudioLines className="size-4 animate-pulse text-amber-600" />
+                ) : (
+                  <Volume2 className="size-4 text-[#F26F21]" />
+                )}
+                {isVoicePreviewPlaying ? 'Dừng nghe thử' : 'Nghe thử câu chào mẫu'}
+              </button>
+            </div>
+
+            {voicePreviewMessage && (
+              <div
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium',
+                  voicePreviewTone === 'loading'
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : voicePreviewTone === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : voicePreviewTone === 'error'
+                        ? 'border-rose-200 bg-rose-50 text-rose-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-700',
+                )}
+              >
+                {voicePreviewTone === 'loading' && (
+                  <LoaderCircle className="size-4 shrink-0 animate-spin text-amber-600" />
+                )}
+                {voicePreviewTone === 'success' && (
+                  <Check className="size-4 shrink-0 text-emerald-600" />
+                )}
+                {voicePreviewTone === 'error' && (
+                  <AlertTriangle className="size-4 shrink-0 text-rose-600" />
+                )}
+                <span>{voicePreviewMessage}</span>
+              </div>
+            )}
+
+            <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Chọn giọng AI">
+              {TTS_VOICE_OPTIONS.map((option) => {
+                const isSelected = speechPrefs.voiceName === option.voiceId
+                return (
+                  <button
+                    key={option.voiceId}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectVoice(option.voiceId)}
+                    className={cn(
+                      'flex min-h-10 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition cursor-pointer',
+                      isSelected
+                        ? 'border-emerald-400 bg-emerald-50/70 text-emerald-800 ring-1 ring-emerald-400/25'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Volume2
+                        className={cn(
+                          'size-4 shrink-0',
+                          isSelected ? 'text-emerald-600' : 'text-slate-400',
+                        )}
+                      />
+                      <span>{option.shortLabel}</span>
+                    </span>
+                    {isSelected && <Check className="size-4 text-emerald-600" />}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Chọn tốc độ đọc">
+              {TTS_RATE_OPTIONS.map((rateOption) => {
+                const isSelected = Math.abs(speechPrefs.speakingRate - rateOption.value) < 0.01
+                return (
+                  <button
+                    key={rateOption.value}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => handleSelectRate(rateOption.value)}
+                    className={cn(
+                      'flex min-h-8 items-center justify-center rounded-xl border px-3 py-1.5 text-xs font-semibold transition cursor-pointer',
+                      isSelected
+                        ? 'border-[#F26F21] bg-orange-50/60 text-[#C2410C]'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                    )}
+                  >
+                    Tốc độ {rateOption.value}x
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Khối 4: 4 bước quy định */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              4. Quy trình 4 bước thực hiện bài thi thử vấn đáp
+            </h3>
+            <ol className="mt-3 grid gap-3 sm:grid-cols-2">
+              {EXAM_STEPS.map((step, index) => {
+                const StepIcon = step.icon
+                return (
+                  <li
+                    key={step.title}
+                    className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5"
+                  >
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-semibold text-slate-700">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                        <StepIcon className="size-3.5 shrink-0 text-[#F26F21]" />
+                        {step.title}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{step.hint}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        </div>
+      </OverlayModal>
+
+      {/* Cửa sổ hỗ trợ 2: OverlayDrawer Lịch sử thi thử & MockExamScorecard */}
+      <OverlayDrawer
+        open={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        badge="Nhật ký & Bảng điểm"
+        title={`Lịch sử thi thử tính giờ (${historyTotal || historyItems.length})`}
+        subtitle="Tra cứu các ca thi thử đã thực hiện và bấm vào từng ca để xem bảng điểm chi tiết"
+        width="2xl"
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryScope('course')
+                  setHistoryPage(1)
+                  setExpandedHistoryId(null)
+                }}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  historyScope === 'course'
+                    ? 'bg-orange-50/60 text-[#C2410C]'
+                    : 'text-slate-600 hover:text-slate-900',
+                )}
+              >
+                Môn vừa chọn
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryScope('all')
+                  setHistoryPage(1)
+                  setExpandedHistoryId(null)
+                }}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                  historyScope === 'all'
+                    ? 'bg-orange-50/60 text-[#C2410C]'
+                    : 'text-slate-600 hover:text-slate-900',
+                )}
+              >
+                Tất cả môn
+              </button>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+              {historyTotal} lượt
+            </span>
+          </div>
+
+          {historyError && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-700">
+              {historyError}
+            </div>
+          )}
+
+          {isLoadingHistory ? (
+            <div className="flex items-center gap-2 py-8 text-xs font-medium text-slate-600">
+              <LoaderCircle className="size-4 animate-spin text-[#F26F21]" />
+              Đang tải lịch sử…
+            </div>
+          ) : historyItems.length === 0 ? (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-500">
+              {historyScope === 'course' && !selectedCourseId
+                ? 'Hãy chọn một môn ở màn hình chính để lọc lịch sử môn đó.'
+                : 'Chưa có ca thi thử nào.'}
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              {historyItems.map((item) => (
+                <article key={item.sessionId} className="space-y-3 p-4">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-900">
+                          #{item.sessionId.slice(0, 8).toUpperCase()}
+                        </span>
+                        <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {statusLabel(item.status)}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {formatExamDate(item.startedAt)} · {item.durationMinutes} phút
+                        </span>
+                      </div>
+                      <h3 className="mt-1 text-sm font-semibold text-slate-900">
+                        {item.courseCode} — {item.courseName}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Đã trả lời {item.answeredQuestions}/{item.totalQuestions} câu hỏi
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      <span className="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
+                        {item.totalScore === null ? '—' : `${item.totalScore.toFixed(2)} / 10`}
+                      </span>
+                      {renderHistoryAction(item)}
+                    </div>
+                  </div>
+
+                  {expandedHistoryId === item.sessionId && (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+                      {loadingDetailId === item.sessionId && (
+                        <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                          <LoaderCircle className="size-4 animate-spin text-[#F26F21]" />
+                          Đang mở bảng điểm…
+                        </div>
+                      )}
+                      {detailError && (
+                        <p className="text-xs font-medium text-slate-700">{detailError}</p>
+                      )}
+                      {selectedDetail && <MockExamScorecard scorecard={selectedDetail} />}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+
+          {historyTotalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                disabled={historyPage <= 1}
+                onClick={() => {
+                  setHistoryPage((current) => Math.max(1, current - 1))
+                  setExpandedHistoryId(null)
+                }}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-[#C2410C] hover:bg-orange-50/60 disabled:opacity-40"
+              >
+                <ChevronLeft className="size-4" /> Trước
+              </button>
+              <span className="text-xs font-medium text-slate-600">
+                Trang {historyPage}/{historyTotalPages}
+              </span>
+              <button
+                type="button"
+                disabled={historyPage >= historyTotalPages}
+                onClick={() => {
+                  setHistoryPage((current) => current + 1)
+                  setExpandedHistoryId(null)
+                }}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-[#C2410C] hover:bg-orange-50/60 disabled:opacity-40"
+              >
+                Sau <ChevronDown className="size-4 -rotate-90" />
+              </button>
+            </div>
+          )}
+        </div>
+      </OverlayDrawer>
+
+      {/* Cửa sổ thông báo hết lượt thi thử */}
+      <OverlayModal
+        open={Boolean(quotaModal)}
+        onClose={() => setQuotaModal('')}
+        badge="Thông báo lượt thi"
+        title="Hết lượt thi thử hôm nay"
+        size="sm"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setQuotaModal('')}
+              className="inline-flex min-h-9 items-center justify-center rounded-xl bg-[#F26F21] px-4 text-xs font-semibold text-white transition hover:bg-[#D95B16]"
+            >
+              Đã hiểu
+            </button>
+          </div>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700">
+            <AlertTriangle className="size-5" />
+          </div>
+          <p className="text-sm leading-relaxed text-slate-600">{quotaModal}</p>
+        </div>
+      </OverlayModal>
 
       <div className="sr-only" aria-live="polite">
         {deviceStatus.title}. {deviceNames || deviceStatus.helper}

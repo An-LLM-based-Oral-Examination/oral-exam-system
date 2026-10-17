@@ -17,7 +17,11 @@ function getErrorMessage(error: unknown) {
 }
 
 export const storageService = {
-  async uploadPracticeAudio(audio: Blob): Promise<UploadAudioResponse> {
+  async uploadPracticeAudio(
+    audio: Blob,
+    clientTranscript?: string,
+    vocabularyHint?: string,
+  ): Promise<UploadAudioResponse> {
     if (audio.size === 0) {
       throw { status: 400, title: 'Bản ghi âm không hợp lệ', detail: 'Bản ghi âm đang trống.' }
     }
@@ -29,14 +33,27 @@ export const storageService = {
       }
     }
 
+    const hintTranscript = (
+      clientTranscript ||
+      (audio as Blob & { clientTranscript?: string }).clientTranscript ||
+      ''
+    ).trim()
+
     const formData = new FormData()
     const extension = getAudioExtension(audio.type)
     formData.append('file', audio, `practice-answer-${Date.now()}.${extension}`)
+    if (hintTranscript) {
+      formData.append('clientTranscript', hintTranscript)
+    }
+    if (vocabularyHint?.trim()) {
+      formData.append('vocabularyHint', vocabularyHint.trim())
+    }
 
     try {
       const response = await apiClient.post<unknown>('/storage/upload-audio', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120_000,
+        _skipAuthRefresh: true,
       })
       if (
         typeof response.data !== 'object' ||
@@ -46,6 +63,9 @@ export const storageService = {
           (response.data as Record<string, unknown>).Transcript
         ) !== 'string'
       ) {
+        if (hintTranscript.length > 0) {
+          return { transcript: hintTranscript }
+        }
         throw {
           status: 502,
           title: 'Phản hồi API không hợp lệ',
@@ -58,6 +78,9 @@ export const storageService = {
         (response.data as Record<string, string>).Transcript
       const transcript = rawTranscript.trim()
       if (!transcript) {
+        if (hintTranscript.length > 0) {
+          return { transcript: hintTranscript }
+        }
         throw {
           status: 422,
           title: 'Không nhận diện được giọng nói',
@@ -66,6 +89,9 @@ export const storageService = {
       }
       return { transcript }
     } catch (error) {
+      if (hintTranscript.length > 0) {
+        return { transcript: hintTranscript }
+      }
       const candidate = error as Partial<{ status: number; title: string; detail: string }>
       throw {
         status:

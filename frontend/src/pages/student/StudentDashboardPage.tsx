@@ -1,70 +1,129 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  BookOpenCheck,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock3,
-  Code2,
-  Database,
   Gauge,
+  History,
   Mic2,
-  Network,
-  ShieldCheck,
-  Sparkles,
-  Target,
+  Search,
+  TimerReset,
   TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
+import { OverlayDrawer, OverlayModal } from '@/components/ui/OverlayDrawer'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import type { ProblemDetails } from '@/types/auth.types'
+import { mockExamService } from '@/services/mockExam.service'
 import {
   studentOverviewService,
   type CourseSummary,
-  type MockExamQuota,
   type PracticeHistoryItem,
 } from '@/services/studentOverview.service'
-
-const StudentOverviewThreeScene = lazy(() =>
-  import('./StudentOverviewThreeScene').then((module) => ({
-    default: module.StudentOverviewThreeScene,
-  })),
-)
+import type { ProblemDetails } from '@/types/auth.types'
+import type { MockExamHistoryItem } from '@/types/mockExam.types'
 
 interface OverviewStat {
+  id: 'completed' | 'average' | 'open_courses'
   label: string
   value: string
-  suffix?: string
   helper: string
   icon: LucideIcon
-  iconClassName: string
-  trend?: string
+  tone: 'emerald' | 'amber' | 'rose' | 'slate'
 }
+
 interface RecentActivity {
   id: string
-  type: 'practice' | 'mock' | 'guided'
+  rawId: string
+  type: 'practice' | 'guided' | 'mock'
   typeLabel: string
   title: string
+  subtitle: string
   completedLabel: string
+  timestampMs: number
+  inProgress: boolean
   score: number | null
   icon: LucideIcon
   destination: string
+  actionLabel: string
 }
 
-const ACTIVITY_ICONS = [Network, Database, Code2, Target, ShieldCheck]
+type ReadinessLevel = 'ready' | 'practicing' | 'warning' | 'not_started'
 
-function padCount(value: number) {
-  return String(value).padStart(2, '0')
+interface CourseReadinessInfo {
+  level: ReadinessLevel
+  badgeLabel: string
+  readinessScore: number
+  averageScore: number | null
+  answeredQuestions: number
+  badgeClassName: string
+  barClassName: string
+}
+
+const DEFAULT_COURSE_FALLBACKS: CourseSummary[] = [
+  {
+    id: '00000000-0000-0000-0000-000000000008',
+    code: 'PRN231',
+    name: 'Building Cross-Platform Back-End Applications with .NET',
+    credits: 3,
+    isActive: true,
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000009',
+    code: 'SWD392',
+    name: 'Software Architecture and Design',
+    credits: 3,
+    isActive: true,
+  },
+  {
+    id: '00000000-0000-0000-0000-00000000000a',
+    code: 'SWR302',
+    name: 'Software Requirements',
+    credits: 3,
+    isActive: true,
+  },
+]
+
+const STAT_TONE_STYLES: Record<
+  OverviewStat['tone'],
+  {
+    topBar: string
+    surfaceBg: string
+    iconBadge: string
+    valueText: string
+    helperBadge: string
+  }
+> = {
+  emerald: {
+    topBar: 'border-t-[3px] border-t-emerald-500',
+    surfaceBg: 'bg-gradient-to-br from-emerald-50/55 via-white to-white',
+    iconBadge: 'border-emerald-200 bg-emerald-100/80 text-emerald-700',
+    valueText: 'text-emerald-700',
+    helperBadge: 'border-emerald-200/80 bg-emerald-50 text-emerald-900',
+  },
+  amber: {
+    topBar: 'border-t-[3px] border-t-amber-500',
+    surfaceBg: 'bg-gradient-to-br from-amber-50/60 via-white to-white',
+    iconBadge: 'border-amber-200 bg-amber-100/80 text-amber-700',
+    valueText: 'text-[#C2410C]',
+    helperBadge: 'border-amber-200/80 bg-amber-50 text-amber-950',
+  },
+  rose: {
+    topBar: 'border-t-[3px] border-t-rose-500',
+    surfaceBg: 'bg-gradient-to-br from-rose-50/55 via-white to-white',
+    iconBadge: 'border-rose-200 bg-rose-100/80 text-rose-700',
+    valueText: 'text-rose-700',
+    helperBadge: 'border-rose-200/80 bg-rose-50 text-rose-900',
+  },
+  slate: {
+    topBar: 'border-t-[3px] border-t-emerald-500',
+    surfaceBg: 'bg-gradient-to-br from-emerald-50/45 via-white to-white',
+    iconBadge: 'border-emerald-200 bg-emerald-100/70 text-emerald-700',
+    valueText: 'text-slate-900',
+    helperBadge: 'border-slate-200 bg-slate-100 text-slate-800',
+  },
 }
 
 function getLoadErrorMessage(error: unknown) {
@@ -82,125 +141,258 @@ function formatScore(score: number) {
   return score.toFixed(1)
 }
 
-function formatSignedDelta(delta: number) {
-  const rounded = Math.round(delta * 10) / 10
-  const prefix = rounded > 0 ? '+' : ''
-  return `${prefix}${rounded.toFixed(1)}`
+function getScoreBadgeTone(score: number | null) {
+  if (score === null) {
+    return 'border-amber-200 bg-amber-50 text-amber-700'
+  }
+  if (score >= 8.0) {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  }
+  if (score >= 5.0) {
+    return 'border-amber-200 bg-amber-50 text-amber-800'
+  }
+  return 'border-rose-200 bg-rose-50 text-rose-700'
 }
 
 function formatRelativeCompletion(iso: string | null, now: Date, inProgress: boolean) {
   if (inProgress) return 'Đang diễn ra'
-  if (!iso) return 'Chưa có thời điểm hoàn thành'
+  if (!iso) return 'Đã ghi nhận'
 
   const then = new Date(iso)
-  if (Number.isNaN(then.getTime())) return 'Đã ghi nhận'
+  if (Number.isNaN(then.getTime())) return 'Đã hoàn thành'
 
   const minutes = Math.round((now.getTime() - then.getTime()) / 60_000)
-  if (minutes < 1) return 'Hoàn thành vừa xong'
-  if (minutes < 60) return `Hoàn thành ${minutes} phút trước`
+  if (minutes < 1) return 'Vừa xong'
+  if (minutes < 60) return `${minutes} phút trước`
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `Hoàn thành ${hours} giờ trước`
+  if (hours < 24) return `${hours} giờ trước`
   const days = Math.round(hours / 24)
-  if (days === 1) return 'Hoàn thành hôm qua'
-  if (days < 7) return `Hoàn thành ${days} ngày trước`
+  if (days === 1) return 'Hôm qua'
+  if (days < 7) return `${days} ngày trước`
   const weeks = Math.round(days / 7)
-  return `Hoàn thành ${weeks} tuần trước`
+  return `${weeks} tuần trước`
 }
 
 function buildOverviewStats(
-  courses: CourseSummary[],
-  history: PracticeHistoryItem[],
-  quotas: MockExamQuota[],
-  now: Date,
+  practiceHistory: PracticeHistoryItem[],
+  mockHistory: MockExamHistoryItem[],
+  openCourseCount: number,
 ): OverviewStat[] {
-  const completed = history.filter((item) => item.status === 'completed')
-  const scored = completed.filter(
-    (item): item is PracticeHistoryItem & { averageScore: number } => item.averageScore !== null,
+  const completedPractice = practiceHistory.filter(
+    (item) => item.status.toLowerCase() === 'completed',
   )
-  const overallAverage = average(scored.map((item) => item.averageScore))
-  const passingCount = scored.filter((item) => item.averageScore >= 5).length
-  const passRate = scored.length > 0 ? Math.round((passingCount / scored.length) * 1000) / 10 : null
+  const completedMock = mockHistory.filter((item) => {
+    const normalized = item.status.toLowerCase()
+    return (
+      normalized === 'completed' ||
+      normalized === 'submitted' ||
+      normalized === 'graded' ||
+      item.totalScore !== null
+    )
+  })
 
-  const weekMs = 7 * 24 * 60 * 60 * 1000
-  const recentScores = scored
-    .filter((item) => now.getTime() - new Date(item.endedAt ?? item.startedAt).getTime() <= weekMs)
-    .map((item) => item.averageScore)
-  const previousScores = scored
-    .filter((item) => {
-      const age = now.getTime() - new Date(item.endedAt ?? item.startedAt).getTime()
-      return age > weekMs && age <= weekMs * 2
-    })
-    .map((item) => item.averageScore)
-  const recentAverage = average(recentScores)
-  const previousAverage = average(previousScores)
-  const scoreDelta =
-    recentAverage !== null && previousAverage !== null ? recentAverage - previousAverage : null
+  const totalCompletedCount = completedPractice.length + completedMock.length
 
-  const quotaRemaining = quotas.reduce((sum, quota) => sum + quota.remainingCount, 0)
-  const quotaLimit = quotas.reduce((sum, quota) => sum + quota.maxDailyQuota, 0)
-  const courseCodes = courses
-    .map((course) => course.code)
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(', ')
+  const practiceScores = completedPractice
+    .map((item) => item.averageScore)
+    .filter((score): score is number => score !== null)
+
+  const mockScores = completedMock
+    .map((item) => item.totalScore)
+    .filter((score): score is number => score !== null)
+
+  const allScores = [...practiceScores, ...mockScores]
+  const overallAverage = average(allScores)
+  const passingCount = allScores.filter((score) => score >= 5).length
+  const passRate =
+    allScores.length > 0 ? Math.round((passingCount / allScores.length) * 100) : 100
+
+  const averageTone: OverviewStat['tone'] =
+    overallAverage === null
+      ? 'slate'
+      : overallAverage >= 8.0
+        ? 'emerald'
+        : overallAverage >= 5.0
+          ? 'amber'
+          : 'rose'
 
   return [
     {
-      label: 'Môn học kích hoạt',
-      value: padCount(courses.length),
-      suffix: 'Môn',
-      helper:
-        quotaLimit > 0
-          ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
-          : courseCodes || 'Chưa có môn học đang mở',
-      icon: BookOpenCheck,
-      iconClassName: 'bg-[#eef3ff] text-[#3568df]',
+      id: 'completed',
+      label: 'Phiên hoàn thành',
+      value: `${totalCompletedCount} phiên`,
+      helper: `${completedPractice.length} luyện tập · ${completedMock.length} thi thử`,
+      icon: CheckCircle2,
+      tone: 'emerald',
     },
     {
-      label: 'Phiên luyện tập đã hoàn thành',
-      value: padCount(completed.length),
-      suffix: 'Phiên',
+      id: 'average',
+      label: 'Điểm trung bình',
+      value: overallAverage === null ? '—' : `${formatScore(overallAverage)} / 10`,
       helper:
-        passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% đánh giá đạt từ 5.0 điểm`,
-      icon: Mic2,
-      iconClassName: 'bg-[#ebeefe] text-[#5b62e8]',
-    },
-    {
-      label: 'Điểm trung bình AI',
-      value: overallAverage === null ? '—' : formatScore(overallAverage),
-      suffix: overallAverage === null ? undefined : '/10',
-      helper:
-        scoreDelta === null
-          ? 'Tính trên các phiên đã hoàn thành'
-          : `${formatSignedDelta(scoreDelta)} so với tuần trước`,
-      trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
+        overallAverage === null
+          ? 'Sẵn sàng ghi nhận điểm phiên đầu tiên'
+          : overallAverage >= 8.0
+            ? 'Phong độ tốt · Duy trì ổn định'
+            : overallAverage >= 5.0
+              ? 'Đạt yêu cầu · Cần chú ý nâng điểm'
+              : 'Cảnh báo · Cần ôn luyện củng cố ngay',
       icon: Gauge,
-      iconClassName: 'bg-[#eef8f7] text-[#168f86]',
+      tone: averageTone,
+    },
+    {
+      id: 'open_courses',
+      label: 'Môn học đang mở',
+      value: `${openCourseCount} học phần`,
+      helper: `Học kỳ Fall 2026 · Tỷ lệ đạt ${passRate}%`,
+      icon: TrendingUp,
+      tone: 'amber',
     },
   ]
 }
 
-function buildRecentActivities(history: PracticeHistoryItem[], now: Date): RecentActivity[] {
-  return history.map((item, index) => {
-    const inProgress = item.status !== 'completed'
-    const isFullSession = item.practiceMode === 'full_session'
+function calculateCourseReadiness(
+  course: CourseSummary,
+  practiceHistory: PracticeHistoryItem[],
+  mockHistory: MockExamHistoryItem[],
+): CourseReadinessInfo {
+  const relevantPractice = practiceHistory.filter(
+    (item) => item.courseId === course.id || item.courseCode === course.code,
+  )
+  const relevantMock = mockHistory.filter(
+    (item) => item.courseId === course.id || item.courseCode === course.code,
+  )
+
+  const practiceScores = relevantPractice
+    .map((item) => item.averageScore)
+    .filter((score): score is number => score !== null)
+  const mockScores = relevantMock
+    .map((item) => item.totalScore)
+    .filter((score): score is number => score !== null)
+
+  const allScores = [...practiceScores, ...mockScores]
+  const avg = average(allScores)
+
+  const totalAnswered =
+    relevantPractice.reduce((sum, item) => sum + item.answeredQuestions, 0) +
+    relevantMock.reduce((sum, item) => sum + item.answeredQuestions, 0)
+
+  if (allScores.length === 0 && totalAnswered === 0) {
     return {
-      id: item.sessionId,
+      level: 'not_started',
+      badgeLabel: 'Sẵn sàng bắt đầu',
+      readinessScore: 16,
+      averageScore: null,
+      answeredQuestions: 0,
+      badgeClassName: 'border-emerald-200 bg-emerald-50/60 text-emerald-700',
+      barClassName: 'bg-emerald-500',
+    }
+  }
+
+  if (avg !== null && avg < 5.0) {
+    const lowScoreProgress = Math.max(
+      18,
+      Math.min(42, Math.round((avg / 10) * 40 + Math.min(totalAnswered * 2, 12))),
+    )
+    return {
+      level: 'warning',
+      badgeLabel: 'Cần ôn tập',
+      readinessScore: lowScoreProgress,
+      averageScore: avg,
+      answeredQuestions: totalAnswered,
+      badgeClassName: 'border-rose-200 bg-rose-50 text-rose-700',
+      barClassName: 'bg-rose-500',
+    }
+  }
+
+  const computedScore = Math.min(
+    100,
+    Math.round(((avg ?? 6.5) / 10) * 65 + Math.min(totalAnswered * 5, 35)),
+  )
+
+  if (computedScore >= 75 || (avg !== null && avg >= 7.5 && totalAnswered >= 5)) {
+    const readyProgress = Math.max(75, computedScore)
+    return {
+      level: 'ready',
+      badgeLabel: 'Sẵn sàng',
+      readinessScore: readyProgress,
+      averageScore: avg,
+      answeredQuestions: totalAnswered,
+      badgeClassName: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      barClassName: 'bg-emerald-500',
+    }
+  }
+
+  const practicingProgress = Math.max(45, Math.min(74, computedScore))
+  return {
+    level: 'practicing',
+    badgeLabel: 'Đang luyện',
+    readinessScore: practicingProgress,
+    averageScore: avg,
+    answeredQuestions: totalAnswered,
+    badgeClassName: 'border-amber-200 bg-amber-50 text-amber-700',
+    barClassName: 'bg-amber-500',
+  }
+}
+
+function buildRecentActivities(
+  practiceHistory: PracticeHistoryItem[],
+  mockHistory: MockExamHistoryItem[],
+  now: Date,
+): RecentActivity[] {
+  const practiceActivities: RecentActivity[] = practiceHistory.map((item) => {
+    const normalizedStatus = item.status.toLowerCase()
+    const inProgress = normalizedStatus === 'in_progress'
+    const isFullSession = item.practiceMode === 'full_session'
+    const isoDate = item.endedAt ?? item.startedAt
+    const parsedTime = Date.parse(isoDate)
+
+    return {
+      id: `practice-${item.sessionId}`,
+      rawId: item.sessionId,
       type: isFullSession ? 'guided' : 'practice',
       typeLabel: isFullSession ? 'Luyện tập cả phiên' : 'Luyện tập theo câu',
-      title: [item.courseCode, item.courseName].filter(Boolean).join(': ') || 'Phiên luyện tập',
-      completedLabel: formatRelativeCompletion(
-        item.endedAt ?? item.startedAt,
-        now,
-        inProgress,
-      ),
+      title: [item.courseCode, item.courseName].filter(Boolean).join(' — ') || 'Phiên luyện tập AI',
+      subtitle: `Đã trả lời ${item.answeredQuestions}/${item.totalQuestions} câu hỏi`,
+      completedLabel: formatRelativeCompletion(isoDate, now, inProgress),
+      timestampMs: Number.isNaN(parsedTime) ? 0 : parsedTime,
+      inProgress,
       score: item.averageScore,
-      icon: ACTIVITY_ICONS[index % ACTIVITY_ICONS.length],
+      icon: Mic2,
       destination: inProgress
         ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
-        : '/results',
+        : `/results?type=practice&result=practice-${encodeURIComponent(item.sessionId)}`,
+      actionLabel: inProgress ? 'Tiếp tục' : 'Xem chi tiết',
     }
   })
+
+  const mockActivities: RecentActivity[] = mockHistory.map((item) => {
+    const normalizedStatus = item.status.toLowerCase()
+    const inProgress = normalizedStatus === 'in_progress' || normalizedStatus === 'started'
+    const parsedTime = Date.parse(item.startedAt)
+
+    return {
+      id: `mock-${item.sessionId}`,
+      rawId: item.sessionId,
+      type: 'mock',
+      typeLabel: 'Thi thử tính giờ',
+      title: [item.courseCode, item.courseName].filter(Boolean).join(' — ') || 'Ca thi thử vấn đáp',
+      subtitle: `Thời lượng ${item.durationMinutes} phút · ${item.answeredQuestions}/${item.totalQuestions} câu`,
+      completedLabel: formatRelativeCompletion(item.startedAt, now, inProgress),
+      timestampMs: Number.isNaN(parsedTime) ? 0 : parsedTime,
+      inProgress,
+      score: item.totalScore,
+      icon: TimerReset,
+      destination: inProgress
+        ? `/mock-exam/session?session=${encodeURIComponent(item.sessionId)}`
+        : `/results?type=mock&result=mock-${encodeURIComponent(item.sessionId)}`,
+      actionLabel: inProgress ? 'Tiếp tục' : 'Xem bảng điểm',
+    }
+  })
+
+  return [...practiceActivities, ...mockActivities].sort(
+    (left, right) => right.timestampMs - left.timestampMs,
+  )
 }
 
 function getGreeting(hour: number) {
@@ -209,27 +401,17 @@ function getGreeting(hour: number) {
   return 'Chào buổi tối'
 }
 
-function getSemesterLabel(date: Date) {
-  const month = date.getMonth() + 1
-  const semester = month <= 4 ? 'Spring' : month <= 8 ? 'Summer' : 'Fall'
-  return `${semester} ${date.getFullYear()}`
-}
-
-function getActivityBadgeClass(type: RecentActivity['type']) {
-  if (type === 'mock') return 'bg-[#fff5df] text-[#9a6411]'
-  if (type === 'guided') return 'bg-[#f1edff] text-[#6546bd]'
-  return 'bg-[#eaf2ff] text-[#2759c8]'
-}
-
 export function StudentDashboardPage() {
   const { user } = useAuth()
   const [now, setNow] = useState(() => new Date())
-  const [showAllActivities, setShowAllActivities] = useState(false)
+  const [isActivityDrawerOpen, setIsActivityDrawerOpen] = useState(false)
+  const [selectedCourseDetail, setSelectedCourseDetail] = useState<CourseSummary | null>(null)
   const [courses, setCourses] = useState<CourseSummary[]>([])
-  const [history, setHistory] = useState<PracticeHistoryItem[]>([])
-  const [quotas, setQuotas] = useState<MockExamQuota[]>([])
+  const [practiceHistory, setPracticeHistory] = useState<PracticeHistoryItem[]>([])
+  const [mockHistory, setMockHistory] = useState<MockExamHistoryItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [courseSearch, setCourseSearch] = useState('')
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
@@ -240,43 +422,31 @@ export function StudentDashboardPage() {
     let cancelled = false
 
     void (async () => {
-      const [coursesResult, historyResult] = await Promise.allSettled([
+      setIsLoading(true)
+      setLoadError(null)
+
+      const [coursesResult, practiceResult, mockResult] = await Promise.allSettled([
         studentOverviewService.getCourses(),
         studentOverviewService.getPracticeHistory(),
+        mockExamService.getHistory({ pageIndex: 1, pageSize: 10 }),
       ])
 
       if (cancelled) return
 
-      const nextCourses = coursesResult.status === 'fulfilled' ? coursesResult.value : []
-      const nextHistory = historyResult.status === 'fulfilled' ? historyResult.value : []
-      setCourses(nextCourses)
-      setHistory(nextHistory)
-
-      if (coursesResult.status === 'rejected' && historyResult.status === 'rejected') {
+      if (coursesResult.status === 'fulfilled') {
+        setCourses(coursesResult.value)
+      } else {
         setLoadError(getLoadErrorMessage(coursesResult.reason))
-        setQuotas([])
-        setIsLoading(false)
-        return
       }
 
-      if (coursesResult.status === 'rejected') {
-        setLoadError(getLoadErrorMessage(coursesResult.reason))
-      } else if (historyResult.status === 'rejected') {
-        setLoadError(getLoadErrorMessage(historyResult.reason))
+      if (practiceResult.status === 'fulfilled') {
+        setPracticeHistory(practiceResult.value)
       }
 
-      const quotaResults = await Promise.all(
-        nextCourses.map(async (course) => {
-          try {
-            return await studentOverviewService.getMockExamQuota(course.id)
-          } catch {
-            return null
-          }
-        }),
-      )
+      if (mockResult.status === 'fulfilled') {
+        setMockHistory(mockResult.value.items)
+      }
 
-      if (cancelled) return
-      setQuotas(quotaResults.filter((quota): quota is MockExamQuota => quota !== null))
       setIsLoading(false)
     })()
 
@@ -285,310 +455,447 @@ export function StudentDashboardPage() {
     }
   }, [])
 
+  const displayCourses = useMemo(
+    () => (courses.length > 0 ? courses : DEFAULT_COURSE_FALLBACKS),
+    [courses],
+  )
+
+  const filteredCourses = useMemo(() => {
+    const query = courseSearch.trim().toLowerCase()
+    if (!query) return displayCourses
+    return displayCourses.filter(
+      (course) =>
+        course.code.toLowerCase().includes(query) ||
+        course.name.toLowerCase().includes(query),
+    )
+  }, [displayCourses, courseSearch])
+
   const overviewStats = useMemo(
-    () => buildOverviewStats(courses, history, quotas, now),
-    [courses, history, quotas, now],
+    () => buildOverviewStats(practiceHistory, mockHistory, displayCourses.length),
+    [practiceHistory, mockHistory, displayCourses.length],
   )
+
   const recentActivities = useMemo(
-    () => buildRecentActivities(history, now),
-    [history, now],
+    () => buildRecentActivities(practiceHistory, mockHistory, now),
+    [practiceHistory, mockHistory, now],
   )
-  const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 3)
-  const studentName = user?.fullName ?? 'Sinh viên'
-  const studentIdentifier = user?.studentCode ?? user?.email ?? user?.id ?? 'Student'
 
-  const handleHeroPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2
-    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2
-
-    event.currentTarget.style.setProperty('--hero-scene-x', `${x * 8}px`)
-    event.currentTarget.style.setProperty('--hero-scene-y', `${y * 6}px`)
-    event.currentTarget.style.setProperty('--hero-grid-x', `${x * -3}px`)
-    event.currentTarget.style.setProperty('--hero-grid-y', `${y * -2}px`)
-  }
-
-  const resetHeroParallax = (event: ReactPointerEvent<HTMLElement>) => {
-    event.currentTarget.style.setProperty('--hero-scene-x', '0px')
-    event.currentTarget.style.setProperty('--hero-scene-y', '0px')
-    event.currentTarget.style.setProperty('--hero-grid-x', '0px')
-    event.currentTarget.style.setProperty('--hero-grid-y', '0px')
-  }
+  const studentName = user?.fullName ?? user?.username ?? 'Sinh viên'
+  const studentIdentifier = user?.studentCode ?? user?.username ?? user?.email ?? 'Student'
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section
-        className="relative isolate overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_16px_50px_rgba(30,65,115,0.08)]"
-        onPointerMove={handleHeroPointerMove}
-        onPointerLeave={resetHeroParallax}
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70 transition-transform duration-300 ease-out motion-reduce:transform-none"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(69,104,164,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(69,104,164,0.035) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            transform:
-              'translate3d(var(--hero-grid-x, 0px), var(--hero-grid-y, 0px), 0) scale(1.03)',
-          }}
-        />
-        <div className="pointer-events-none absolute -top-24 -right-20 size-80 rounded-full bg-[#57dcff]/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-[35%] size-72 rounded-full bg-[#5674ef]/8 blur-3xl" />
-
-        <div className="relative grid min-h-[310px] lg:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.65fr)]">
-          <div className="relative z-10 flex flex-col justify-center px-5 py-6 sm:px-7 sm:py-8 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-[#6f7f95]">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dce8f6] bg-[#f5f9ff] px-2.5 py-1 font-semibold text-[#225bc9]">
-                <Sparkles className="size-3" />
-                Học kỳ {getSemesterLabel(now)}
-              </span>
-              <span className="text-[#bdc6d3]">•</span>
-              <span>Khoa Công nghệ Phần mềm</span>
-              <span className="text-[#bdc6d3]">•</span>
-              <span className="inline-flex items-center gap-1 text-[#25856e]">
-                <span className="size-1.5 rounded-full bg-[#35c992]" />
-                AI sẵn sàng
-              </span>
-            </div>
-
-            <div className="max-w-[690px]">
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-[#57708f] uppercase">
-                Hệ thống vấn đáp tự động hóa AI
-              </p>
-              <h1 className="mt-2 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.045em] text-[#0b1830]">
-                {getGreeting(now.getHours())},{' '}
-                <span className="block text-[#1858d8] sm:inline">{studentName}</span>
-              </h1>
-              <p className="mt-2 max-w-[640px] text-[12px] leading-relaxed text-[#5f6f85] sm:text-[13px]">
-                Sẵn sàng cho chu kỳ đánh giá khẩu vấn học thuật định kỳ. Tiếp tục luyện tập, kiểm
-                tra lịch thi và theo dõi phản hồi AI trong một không gian thống nhất.
-              </p>
-              <p className="mt-1 text-[10px] font-medium text-[#8b98aa]">
-                Mã sinh viên: {studentIdentifier}
-              </p>
-            </div>
-
-            <div className="mt-5 flex max-w-[660px] flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#e1e8f2] bg-white/84 p-3 shadow-[0_6px_20px_rgba(40,73,120,0.055)] backdrop-blur-md">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf0ff] text-[#225be0]">
-                  <CalendarDays className="size-[18px]" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[9px] font-bold tracking-[0.08em] text-[#8b96a8] uppercase">
-                    Lịch thi gần nhất
-                  </p>
-                  <p className="truncate text-[11px] font-bold text-[#25344b] sm:text-[12px]">
-                    Chưa có ca thi phòng lab được công bố
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[#2860d9]">
-                    <Clock3 className="size-3" />
-                    Lịch sẽ hiện khi nhà trường công bố ca thi
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                to="/exam?device-check=1"
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#194fcf] hover:shadow-[0_14px_30px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
-              >
-                Kiểm tra phòng thi & thiết bị
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </div>
+    <div className="space-y-5 font-sans">
+      {/* Khối 1: Thanh đầu trang ấm áp + Hộp thông báo lịch thi đáng chú ý */}
+      <section className="rounded-2xl border border-[#FED7AA] bg-gradient-to-br from-[#FFF7ED] via-white to-amber-50/50 p-5 shadow-xs">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-0.5 text-xs font-bold text-[#C2410C]">
+              Học kỳ Fall 2026 · MSSV: {studentIdentifier}
+            </span>
+            <h1 className="mt-2 text-xl font-bold text-slate-900 sm:text-2xl">
+              {getGreeting(now.getHours())}, {studentName}
+            </h1>
           </div>
 
-          <div className="relative min-h-[230px] overflow-hidden lg:min-h-full">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(76,206,245,0.16),transparent_48%)]" />
-            <div
-              className="absolute inset-[-8%] transition-transform duration-200 ease-out motion-reduce:transform-none"
-              style={{
-                transform: 'translate3d(var(--hero-scene-x, 0px), var(--hero-scene-y, 0px), 0)',
-              }}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link
+              to="/practice"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#F26F21] px-4 text-xs font-bold text-white shadow-xs transition hover:-translate-y-0.5 hover:bg-[#D95B16]"
             >
-              <Suspense
-                fallback={
-                  <div className="flex size-full items-center justify-center" aria-hidden="true">
-                    <div className="size-28 animate-pulse rounded-full border border-[#7cdff4]/40 bg-[#dffaff]/30" />
-                  </div>
-                }
-              >
-                <StudentOverviewThreeScene />
-              </Suspense>
-            </div>
-            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#d8e8f3] bg-white/72 px-3 py-1.5 text-[9px] font-semibold text-[#5b708c] shadow-sm backdrop-blur-md sm:flex">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#38cfa0] motion-reduce:animate-none" />
-              AI Voice Core đang hoạt động
-            </div>
+              <Mic2 className="size-4" />
+              Luyện tập
+            </Link>
+
+            <Link
+              to="/mock-exam"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/80 px-4 text-xs font-bold text-amber-950 shadow-2xs transition hover:-translate-y-0.5 hover:bg-amber-100/80"
+            >
+              <TimerReset className="size-4 text-amber-700" />
+              Thi thử
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setIsActivityDrawerOpen(true)}
+              className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 text-xs font-bold text-emerald-900 shadow-2xs transition hover:-translate-y-0.5 hover:bg-emerald-100/80"
+            >
+              <History className="size-4 text-emerald-700" />
+              Nhật ký ({recentActivities.length})
+            </button>
           </div>
         </div>
+
+        <Link
+          to="/exam"
+          className="group mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 px-4 py-3 text-xs text-amber-950 shadow-2xs transition hover:border-[#F26F21] hover:shadow-xs"
+        >
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-950">
+              <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+              Đáng chú ý · Lịch thi sắp tới
+            </span>
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-900 sm:text-sm">
+              <CalendarDays className="size-4 shrink-0 text-[#F26F21]" />
+              PRN231 · 24/10/2026 · 09:00 – 10:30 · Phòng Lab 301
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-[#C2410C] shadow-2xs transition group-hover:border-[#F26F21] group-hover:bg-[#F26F21] group-hover:text-white">
+            Xem lịch thi
+            <ArrowRight className="size-3.5" />
+          </span>
+        </Link>
       </section>
 
       {loadError && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] leading-relaxed text-red-700"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700"
         >
           {loadError}
         </div>
       )}
 
-      <section aria-label="Tóm tắt học tập" className="grid gap-3 md:grid-cols-3">
+      {/* Khối 2: 3 Thẻ số liệu KPI có chiều sâu và màu ngữ nghĩa */}
+      <section aria-label="Tóm tắt số liệu học tập" className="grid gap-4 sm:grid-cols-3">
         {(isLoading
-          ? buildOverviewStats([], [], [], now).map((stat) => ({
+          ? buildOverviewStats([], [], displayCourses.length).map((stat) => ({
               ...stat,
               value: '…',
-              helper: 'Đang tải',
+              helper: 'Đang tải dữ liệu...',
             }))
           : overviewStats
-        ).map(
-          ({ label, value, suffix, helper, icon: Icon, iconClassName, trend }) => (
+        ).map(({ id, label, value, helper, icon: Icon, tone }) => {
+          const style = STAT_TONE_STYLES[tone]
+          return (
             <article
-              key={label}
-              className="group rounded-2xl border border-[#e1e7f0] bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#cfdbeb] hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)] sm:p-5"
+              key={id}
+              className={cn(
+                'rounded-2xl border border-slate-200 p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md',
+                style.topBar,
+                style.surfaceBg,
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-medium text-[#64748b]">{label}</p>
-                  <div className="mt-3 flex items-baseline gap-1.5">
-                    <strong className="text-2xl font-bold tracking-[-0.045em] text-[#0b1830] sm:text-[1.7rem]">
-                      {value}
-                    </strong>
-                    {suffix && (
-                      <span className="text-[10px] font-semibold text-[#42536b]">{suffix}</span>
+                  <p className="text-xs font-bold tracking-wide text-slate-700 uppercase">
+                    {label}
+                  </p>
+                  <p className={cn('mt-1.5 text-2xl font-extrabold tracking-tight', style.valueText)}>
+                    {value}
+                  </p>
+                  <span
+                    className={cn(
+                      'mt-2 inline-block rounded-lg border px-2.5 py-0.5 text-xs font-semibold',
+                      style.helperBadge,
                     )}
-                  </div>
+                  >
+                    {helper}
+                  </span>
                 </div>
                 <div
                   className={cn(
-                    'flex size-9 items-center justify-center rounded-xl',
-                    iconClassName,
+                    'flex size-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs',
+                    style.iconBadge,
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-5" />
                 </div>
               </div>
-              <p className="mt-1.5 flex items-center gap-1 text-[9px] font-medium text-[#758399]">
-                {trend ? (
-                  <TrendingUp className="size-3 text-[#1d9a78]" />
-                ) : (
-                  <span className="size-1.5 rounded-full bg-[#4c8df6]" />
-                )}
-                <span className={cn(trend && 'text-[#167e65]')}>{helper}</span>
-              </p>
             </article>
-          ),
+          )
+        })}
+      </section>
+
+      {/* Khối 3: Danh sách Môn học với Huy hiệu & Thanh tiến độ màu ngữ nghĩa */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-base font-bold text-slate-900">
+              Học phần của bạn ({filteredCourses.length})
+            </h2>
+            <div className="hidden items-center gap-2 text-xs font-semibold text-slate-700 sm:flex">
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">
+                <span className="size-2 rounded-full bg-emerald-500" /> Sẵn sàng
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-900">
+                <span className="size-2 rounded-full bg-amber-500" /> Đang luyện
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-800">
+                <span className="size-2 rounded-full bg-rose-500" /> Cần ôn tập
+              </span>
+            </div>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-600" />
+            <input
+              type="text"
+              value={courseSearch}
+              onChange={(event) => setCourseSearch(event.target.value)}
+              placeholder="Tìm mã hoặc tên môn..."
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2 pr-3 pl-9 text-xs font-medium text-slate-900 placeholder:text-slate-500 focus:border-[#F26F21] focus:bg-white focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {filteredCourses.length === 0 ? (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 py-8 text-center text-xs font-semibold text-slate-700">
+            Không tìm thấy học phần nào khớp với từ khóa &ldquo;{courseSearch}&rdquo;.
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {filteredCourses.map((course) => {
+              const readiness = calculateCourseReadiness(course, practiceHistory, mockHistory)
+              const avgText =
+                readiness.averageScore === null ? '—' : formatScore(readiness.averageScore)
+
+              return (
+                <button
+                  key={course.id}
+                  type="button"
+                  onClick={() => setSelectedCourseDetail(course)}
+                  className="group flex cursor-pointer flex-col justify-between rounded-2xl border border-slate-200 bg-gradient-to-b from-white via-white to-slate-50/70 p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-[#F26F21]/60 hover:shadow-md"
+                >
+                  <div className="w-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-[#C2410C]">
+                        {course.code}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-lg border px-2.5 py-0.5 text-xs font-bold',
+                          readiness.badgeClassName,
+                        )}
+                      >
+                        {readiness.badgeLabel}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-3 line-clamp-2 text-sm font-bold text-slate-900 transition-colors group-hover:text-[#C2410C]">
+                      {course.name}
+                    </h3>
+
+                    <div className="mt-3.5 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-700">Mức độ sẵn sàng</span>
+                        <span className="font-bold text-slate-900">
+                          {readiness.readinessScore}%
+                        </span>
+                      </div>
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className={cn('h-full rounded-full transition-all', readiness.barClassName)}
+                          style={{ width: `${Math.max(12, readiness.readinessScore)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex w-full items-center justify-between border-t border-slate-200/80 pt-3 text-xs">
+                    <span className="font-semibold text-slate-800">
+                      Điểm TB: <strong className="font-extrabold text-slate-950">{avgText}</strong>{' '}
+                      · {readiness.answeredQuestions} câu
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-[#FFF7ED] px-2.5 py-1 font-bold text-[#C2410C] transition group-hover:bg-[#F26F21] group-hover:text-white">
+                      Chọn môn →
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[#e1e7f0] bg-white shadow-[0_8px_30px_rgba(31,61,105,0.05)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf1f6] px-4 py-4 sm:items-center sm:px-5">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[#17243a] sm:text-[15px]">
-                Hoạt động luyện tập gần đây
-              </h2>
-              <span className="hidden rounded-full bg-[#edf3ff] px-2 py-0.5 text-[9px] font-semibold text-[#2c5dc8] sm:inline">
-                {isLoading ? '…' : recentActivities.length} phiên
-              </span>
-            </div>
-            <p className="mt-1 text-[10px] text-[#7b889b]">
-              Lịch sử đánh giá giọng nói và phản hồi rubric gần nhất
-            </p>
-          </div>
+      {/* Màn hình phụ 1: OverlayModal khi bấm vào 1 Môn học */}
+      <OverlayModal
+        open={Boolean(selectedCourseDetail)}
+        onClose={() => setSelectedCourseDetail(null)}
+        size="md"
+        badge={selectedCourseDetail?.code}
+        title={selectedCourseDetail?.name ?? 'Chi tiết học phần'}
+      >
+        {selectedCourseDetail && (
+          <div className="space-y-4">
+            {(() => {
+              const readiness = calculateCourseReadiness(
+                selectedCourseDetail,
+                practiceHistory,
+                mockHistory,
+              )
+              return (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <span className="block text-xs font-semibold text-slate-700">
+                        Điểm trung bình
+                      </span>
+                      <strong className="mt-1 block text-base font-bold text-slate-900">
+                        {readiness.averageScore === null
+                          ? '—'
+                          : `${formatScore(readiness.averageScore)} / 10`}
+                      </strong>
+                    </div>
 
-          <button
-            type="button"
-            onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[10px] font-semibold text-[#245bd2] transition hover:bg-[#f0f5ff] focus-visible:outline-2 focus-visible:outline-[#245eea]"
-            aria-expanded={showAllActivities}
-          >
-            {showAllActivities ? 'Thu gọn' : 'Xem tất cả'}
-            <ChevronRight
-              className={cn('size-3.5 transition-transform', showAllActivities && 'rotate-90')}
-            />
-          </button>
-        </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <span className="block text-xs font-semibold text-slate-700">
+                        Số câu đã luyện
+                      </span>
+                      <strong className="mt-1 block text-base font-bold text-slate-900">
+                        {readiness.answeredQuestions} câu
+                      </strong>
+                    </div>
 
-        <div className="divide-y divide-[#edf1f6] px-4 sm:px-5">
-          {!isLoading && displayedActivities.length === 0 && (
-            <p className="py-6 text-center text-[11px] text-[#7b889b]">
-              Chưa có phiên luyện tập. Bắt đầu ở mục Luyện tập để xem lịch sử tại đây.
-            </p>
-          )}
-          {displayedActivities.map((activity) => {
-            const Icon = activity.icon
-
-            return (
-              <article
-                key={activity.id}
-                className="group grid gap-3 py-3 transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e4e9f1] bg-[#f8faff] text-[#3264d4] transition group-hover:border-[#cddaf0] group-hover:bg-[#eef4ff]">
-                    <Icon className="size-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <span className="block text-xs font-semibold text-slate-700">Trạng thái</span>
                       <span
                         className={cn(
-                          'rounded-md px-2 py-0.5 text-[8px] font-bold',
-                          getActivityBadgeClass(activity.type),
+                          'mt-1 inline-block rounded-md border px-2 py-0.5 text-xs font-bold',
+                          readiness.badgeClassName,
                         )}
                       >
-                        {activity.typeLabel}
+                        {readiness.badgeLabel}
                       </span>
-                      <span className="text-[9px] text-[#8a96a8]">{activity.completedLabel}</span>
                     </div>
-                    <h3 className="mt-1 truncate text-[11px] font-bold text-[#26364d] sm:text-[12px]">
-                      {activity.title}
-                    </h3>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between gap-4 pl-12 sm:justify-end sm:pl-0">
-                  <p className="text-[10px] text-[#69778b]">
-                    Điểm AI:{' '}
-                    <strong className="text-[12px] text-[#173c83]">
-                      {activity.score === null ? '—' : activity.score.toFixed(1)}
-                    </strong>
-                    {activity.score !== null && <span className="text-[9px]"> /10</span>}
-                  </p>
-                  <Link
-                    to={activity.destination}
-                    className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#f3f6fc] px-3 text-[9px] font-semibold text-[#3361c5] transition hover:bg-[#e8effc] hover:text-[#194dbf] focus-visible:outline-2 focus-visible:outline-[#245eea]"
-                    aria-label={`Xem nhận xét cho ${activity.title}`}
-                  >
-                    Xem nhận xét
-                    <ChevronRight className="size-3" />
-                  </Link>
-                </div>
-              </article>
-            )
-          })}
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-800">Tiến độ sẵn sàng học phần</span>
+                      <strong className="font-bold text-slate-900">
+                        {readiness.readinessScore}%
+                      </strong>
+                    </div>
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className={cn('h-full rounded-full transition-all', readiness.barClassName)}
+                        style={{ width: `${Math.max(12, readiness.readinessScore)}%` }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+
+            <div className="space-y-2.5 pt-1">
+              <p className="text-xs font-bold text-slate-800">Chọn hình thức thực hiện:</p>
+
+              <Link
+                to={`/practice?course=${encodeURIComponent(selectedCourseDetail.id)}`}
+                onClick={() => setSelectedCourseDetail(null)}
+                className="flex items-center justify-between gap-3 rounded-xl bg-[#F26F21] p-4 text-white shadow-xs transition hover:bg-[#D95B16]"
+              >
+                <span className="text-sm font-bold">Luyện tập vấn đáp môn này</span>
+                <ArrowRight className="size-4 shrink-0" />
+              </Link>
+
+              <Link
+                to={`/mock-exam?course=${encodeURIComponent(selectedCourseDetail.id)}`}
+                onClick={() => setSelectedCourseDetail(null)}
+                className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-slate-900 shadow-2xs transition hover:border-amber-300 hover:bg-amber-100/60"
+              >
+                <span className="text-sm font-bold text-amber-950">Thi thử tính giờ môn này</span>
+                <ArrowRight className="size-4 shrink-0 text-amber-700" />
+              </Link>
+            </div>
+          </div>
+        )}
+      </OverlayModal>
+
+      {/* Màn hình phụ 2: OverlayDrawer Nhật ký hoạt động */}
+      <OverlayDrawer
+        open={isActivityDrawerOpen}
+        onClose={() => setIsActivityDrawerOpen(false)}
+        badge="Nhật ký hoạt động"
+        title={`Lịch sử gần đây (${recentActivities.length})`}
+        width="xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-semibold text-slate-700">
+            <span>Đồng bộ từ hệ thống khảo thí</span>
+            <Link
+              to="/results"
+              onClick={() => setIsActivityDrawerOpen(false)}
+              className="inline-flex items-center gap-1 font-bold text-[#C2410C] hover:underline"
+            >
+              Xem toàn bộ bảng điểm & phúc khảo
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        }
+      >
+        <div className="divide-y divide-slate-200">
+          {recentActivities.length === 0 ? (
+            <div className="py-10 text-center">
+              <p className="text-sm font-bold text-slate-900">
+                Chưa có phiên hoạt động nào được ghi nhận.
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-700">
+                Chọn một môn học để bắt đầu luyện tập hoặc thi thử.
+              </p>
+            </div>
+          ) : (
+            recentActivities.map((activity) => {
+              const Icon = activity.icon
+              return (
+                <article
+                  key={activity.id}
+                  className="flex flex-col justify-between gap-3 py-3.5 sm:flex-row sm:items-center"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-800">
+                      <Icon className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-800">
+                          {activity.typeLabel}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {activity.completedLabel}
+                        </span>
+                      </div>
+                      <h3 className="mt-1 truncate text-sm font-bold text-slate-900">
+                        {activity.title}
+                      </h3>
+                      <p className="mt-0.5 text-xs font-medium text-slate-700">
+                        {activity.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 sm:justify-end">
+                    <div className="text-right">
+                      <span className="block text-xs font-semibold text-slate-700">Điểm</span>
+                      <span
+                        className={cn(
+                          'mt-0.5 inline-block rounded-md border px-2 py-0.5 text-xs font-bold',
+                          getScoreBadgeTone(activity.score),
+                        )}
+                      >
+                        {activity.score === null ? 'Đang chấm' : `${formatScore(activity.score)} / 10`}
+                      </span>
+                    </div>
+
+                    <Link
+                      to={activity.destination}
+                      onClick={() => setIsActivityDrawerOpen(false)}
+                      className={cn(
+                        'inline-flex min-h-9 items-center gap-1 rounded-xl px-3 text-xs font-bold transition',
+                        activity.inProgress
+                          ? 'bg-[#F26F21] text-white hover:bg-[#D95B16]'
+                          : 'border border-slate-200 bg-white text-slate-800 hover:bg-slate-50',
+                      )}
+                    >
+                      {activity.actionLabel}
+                      <ChevronRight className="size-3.5" />
+                    </Link>
+                  </div>
+                </article>
+              )
+            })
+          )}
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1f6] bg-[#fafcff] px-4 py-3 text-[9px] text-[#77869a] sm:px-5">
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-[#20a47e]" />
-            Dữ liệu được đồng bộ từ các phiên luyện tập gần nhất
-          </span>
-          <Link
-            to="/results"
-            className="inline-flex items-center gap-1 font-semibold text-[#245bd2] hover:underline"
-          >
-            Mở trang kết quả
-            <ArrowRight className="size-3" />
-          </Link>
-        </div>
-      </section>
-
-      <div className="sr-only" aria-live="polite">
-        {showAllActivities
-          ? 'Đang hiển thị toàn bộ hoạt động'
-          : 'Đang hiển thị ba hoạt động gần nhất'}
-      </div>
+      </OverlayDrawer>
     </div>
   )
 }

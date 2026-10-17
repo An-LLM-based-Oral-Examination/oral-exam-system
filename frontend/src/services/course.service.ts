@@ -105,4 +105,25 @@ export const courseService = {
     const response = await apiClient.get<unknown>(`/courses/${courseId}/configurations`)
     return normalizeConfiguration(response.data)
   },
+
+  async updateConfiguration(
+    courseId: string,
+    payload: {
+      transcriptBufferSeconds: number
+      maxFollowUpQuestions: number
+      hasFollowUp: boolean
+      examInputMode: ExamInputMode
+      maxMockExamsPerDay?: number
+    },
+  ): Promise<CourseConfigurationDto> {
+    const response = await apiClient.put<unknown>(`/courses/${courseId}/configurations`, payload)
+    if (
+      isRecord(response.data) &&
+      (readString(response.data, 'courseId') || readString(response.data, 'id')) &&
+      readString(response.data, 'courseCode')
+    ) {
+      return normalizeConfiguration(response.data)
+    }
+    return this.getConfiguration(courseId)
+  },
 }
