@@ -40,8 +40,8 @@ const AuditEvidencePage = lazy(() =>
 function InstructorPageFallback() {
   return (
     <div className="flex min-h-[55vh] flex-col items-center justify-center" role="status">
-      <span className="size-9 animate-spin rounded-full border-[3px] border-[#d6e1f4] border-t-[#245eea] motion-reduce:animate-none" />
-      <span className="mt-3 text-[11px] font-semibold text-[#64758c]">
+      <span className="size-9 animate-spin rounded-full border-[3px] border-[#d6e1f4] border-t-[#4988C4] motion-reduce:animate-none" />
+      <span className="mt-3 text-sm font-semibold text-[#64758c]">
         Đang mở không gian giảng viên...
       </span>
     </div>
@@ -61,19 +61,21 @@ export const AppRoutes: React.FC = () => {
 
         {/* Student Portal */}
         <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
+          <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
           <Route element={<StudentLayout />}>
             <Route path="/student/overview" element={<StudentDashboardPage />} />
             <Route path="/practice" element={<PracticePage />} />
             <Route path="/practice/session" element={<PracticeSessionPage />} />
             <Route path="/mock-exam" element={<MockExamPage />} />
-            <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
             <Route path="/exam" element={<OfficialExamPage />} />
             <Route path="/results" element={<ExamHistoryPage />} />
           </Route>
         </Route>
 
         {/* Instructor, Department Head and Admin portal. Proctor has no standalone portal. */}
-        <Route element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}>
+        <Route
+          element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}
+        >
           <Route element={<AppLayout />}>
             <Route
               element={

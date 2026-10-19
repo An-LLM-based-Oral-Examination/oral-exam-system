@@ -50,8 +50,8 @@
 body {
   font-family: var(--font-sans);
   min-height: 100vh;
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #FFFFFF;
+  color: #0F2854;
 }
 
 #root {

@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,6 +19,9 @@ namespace OralExamination.Infrastructure.Services;
 
 public class CloudflareWhisperService : ISpeechToTextService
 {
+    private const string WhisperModel = "@cf/openai/whisper-large-v3-turbo";
+    private const string TranscriptionLanguage = "vi";
+
     private readonly HttpClient _httpClient;
     private readonly string _accountId;
     private readonly string _apiToken;
@@ -93,7 +97,7 @@ public class CloudflareWhisperService : ISpeechToTextService
             return string.Empty;
         }
 
-        var responseString = await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
+        var responseString = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken);
         var (rawText, _, _) = ParseWhisperResponse(responseString);
         var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
         return SeTerminologyNormalizer.NormalizeWithContext(sanitized, null);
@@ -226,10 +230,7 @@ public class CloudflareWhisperService : ISpeechToTextService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-
-            var content = new ByteArrayContent(audioBytes);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            request.Content = content;
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);

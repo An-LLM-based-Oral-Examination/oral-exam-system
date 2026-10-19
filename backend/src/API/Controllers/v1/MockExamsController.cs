@@ -294,7 +294,8 @@ public class MockExamsController : ControllerBase
     public async Task<IActionResult> GetHistory(
         [FromQuery] Guid? courseId,
         [FromQuery] int pageIndex = 1,
-        [FromQuery] int pageSize = 10)
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? status = null)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -312,7 +313,8 @@ public class MockExamsController : ControllerBase
             StudentId: currentUserId,
             CourseId: courseId,
             PageIndex: pageIndex,
-            PageSize: pageSize
+            PageSize: pageSize,
+            Status: string.IsNullOrWhiteSpace(status) ? null : status.Trim()
         );
 
         var result = await _sender.Send(query);

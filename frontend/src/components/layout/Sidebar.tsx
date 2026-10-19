@@ -78,7 +78,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
         type="button"
         aria-label="Đóng menu điều hướng"
         className={cn(
-          'fixed inset-0 z-40 bg-[#06142b]/55 backdrop-blur-[2px] transition-opacity md:hidden',
+          'fixed inset-0 z-40 bg-[#0F2854]/55 backdrop-blur-[2px] transition-opacity md:hidden',
           mobileOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={onMobileClose}
@@ -87,13 +87,13 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
       <aside
         aria-label="Điều hướng giảng viên"
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-white/8 bg-[#07172e] text-white shadow-[16px_0_50px_rgba(4,15,35,0.12)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
           collapsed ? 'md:w-20' : 'md:w-[220px] xl:w-[240px]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-[76px] shrink-0 items-center gap-3 border-b border-white/8 px-4">
-          <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_6px_24px_rgba(37,99,235,0.24)]">
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4 py-4">
+          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white">
             <img
               src={universityTechLogo}
               alt="University Tech"
@@ -102,17 +102,19 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
             />
           </div>
 
-          <div className={cn('min-w-0 transition-opacity', collapsed && 'md:hidden')}>
-            <p className="truncate text-sm font-bold tracking-[-0.02em]">OralExam AI</p>
-            <p className="mt-0.5 text-[9px] font-semibold tracking-[0.14em] text-[#91a6c4] uppercase">
-              Không gian giảng viên
+          <div className={cn('min-w-0', collapsed && 'md:hidden')}>
+            <p className="text-xs font-bold tracking-[0.14em] text-[#1C4D8D] uppercase">
+              Cổng giảng viên
+            </p>
+            <p className="mt-0.5 truncate text-sm font-bold tracking-[-0.02em] text-[#0F2854]">
+              OralExam AI
             </p>
           </div>
 
           <button
             type="button"
             onClick={onMobileClose}
-            className="ml-auto flex size-9 items-center justify-center rounded-lg text-[#9fb0c9] transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5ac8fa] md:hidden"
+            className="ml-auto flex size-9 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#4988C4]/10 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] md:hidden"
             aria-label="Đóng menu"
           >
             <X className="size-5" aria-hidden="true" />
@@ -122,7 +124,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
         <div className="flex-1 overflow-y-auto px-3 py-5">
           <p
             className={cn(
-              'mb-2 px-3 text-[9px] font-bold tracking-[0.15em] text-[#7087a6] uppercase',
+              'mb-2 px-3 text-xs font-bold tracking-[0.15em] text-[#1C4D8D] uppercase',
               collapsed && 'md:hidden',
             )}
           >
@@ -139,54 +141,44 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
                 title={collapsed ? label : undefined}
                 className={({ isActive }) =>
                   cn(
-                    'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#60d8ff]',
+                    'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                     isActive
-                      ? 'bg-[#245eea] text-white shadow-[0_10px_30px_rgba(36,94,234,0.28)]'
-                      : 'text-[#b5c2d5] hover:bg-white/7 hover:text-white',
+                      ? 'bg-[#1C4D8D] text-white'
+                      : 'bg-[#D7F1F8] text-[#1C4D8D] hover:bg-[#c5e8f3] hover:text-[#0F2854]',
                     collapsed && 'md:justify-center md:px-0',
                   )
                 }
               >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={cn(
-                        'absolute inset-y-2 left-0 w-0.5 rounded-full bg-[#67e8f9] opacity-0 transition-opacity',
-                        isActive && 'opacity-100',
-                      )}
-                    />
-                    <Icon className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
-                    <span className={cn('min-w-0 flex-1 truncate', collapsed && 'md:hidden')}>
-                      {label}
-                    </span>
-                  </>
-                )}
+                <Icon className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
+                <span className={cn('min-w-0 flex-1 truncate', collapsed && 'md:hidden')}>
+                  {label}
+                </span>
               </NavLink>
             ))}
           </nav>
         </div>
 
-        <div className="shrink-0 border-t border-white/8 p-3">
+        <div className="shrink-0 border-t border-[#4988C4] bg-[#D7F1F8] p-3">
           <div
             className={cn(
-              'mb-3 rounded-xl border border-[#284463] bg-[#0b203d] p-3',
+              'mb-2 flex items-start gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] px-3 py-2.5',
               collapsed && 'md:hidden',
             )}
           >
-            <div className="flex items-center gap-2 text-[10px] font-semibold text-[#d8e8fb]">
-              <Scale className="size-3.5 text-[#67e8f9]" aria-hidden="true" />
-              Chốt chặn học thuật
+            <Scale className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-[#0F2854]">Chốt chặn học thuật</p>
+              <p className="mt-0.5 text-xs leading-snug text-[#1C4D8D]">
+                Rubric đủ 10.0 điểm và cần Trưởng Bộ môn phê duyệt.
+              </p>
             </div>
-            <p className="mt-1.5 text-[9px] leading-relaxed text-[#88a0be]">
-              Rubric phải đủ 10.0 điểm và mọi câu hỏi đều cần Trưởng Bộ môn phê duyệt.
-            </p>
           </div>
 
           <button
             type="button"
             onClick={onCollapse}
             className={cn(
-              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold text-[#8499b6] transition hover:bg-white/7 hover:text-white focus-visible:outline-2 focus-visible:outline-[#60d8ff] md:flex',
+              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] text-xs font-semibold text-[#0F2854] transition hover:bg-[#c5e8f3] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:flex',
               !collapsed && 'justify-between px-3',
             )}
             aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}

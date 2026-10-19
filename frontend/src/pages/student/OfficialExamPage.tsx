@@ -35,6 +35,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useKioskLockdown } from '@/hooks/useKioskLockdown'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 import type { ExamSceneState } from './OfficialExamThreeScene'
 
 const OfficialExamThreeScene = lazy(() =>
@@ -302,8 +303,8 @@ export function OfficialExamPage() {
     scheduled: {
       label: 'Đã công bố · Chờ mở ca',
       helper: `Bắt đầu sau ${formatCountdown(selectedExam.startAt.getTime() - now.getTime())}`,
-      className: 'border-[#cfdaf8] bg-[#f1f5ff] text-[#3659b7]',
-      dotClassName: 'bg-[#5477db]',
+      className: 'border-[#cfdaf8] bg-[#4988C4]/16 text-[#1C4D8D]',
+      dotClassName: 'bg-[#1C4D8D]',
     },
     'in-progress': {
       label: 'Ca thi đang diễn ra',
@@ -325,21 +326,21 @@ export function OfficialExamPage() {
       value: formatTime(selectedExam.startAt),
       helper: formatDate(selectedExam.startAt),
       icon: CalendarDays,
-      accentClassName: 'bg-[#eef3ff] text-[#3568df]',
+      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     {
       label: 'Phòng thi (Lab)',
       value: selectedExam.room,
       helper: selectedExam.building,
       icon: MapPinned,
-      accentClassName: 'bg-[#f0f7ff] text-[#2671cf]',
+      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     {
       label: 'Vị trí Kiosk / Bàn',
       value: `Kiosk số ${selectedExam.kioskNumber}`,
       helper: `${selectedExam.workstationId} · ${selectedExam.seatZone}`,
       icon: Monitor,
-      accentClassName: 'bg-[#eef0ff] text-[#5d62dd]',
+      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     {
       label: 'Thời lượng vấn đáp',
@@ -499,7 +500,7 @@ export function OfficialExamPage() {
       icon: LoaderCircle,
       title: 'Đang kiểm tra tín hiệu...',
       helper: 'Giữ yên kết nối và nói thử một câu ngắn.',
-      className: 'border-[#cfdaf8] bg-[#f4f7ff] text-[#4663b6]',
+      className: 'border-[#cfdaf8] bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     ready: {
       icon: CheckCircle2,
@@ -523,7 +524,7 @@ export function OfficialExamPage() {
   const MicStatusIcon = micStatus.icon
 
   return (
-    <div className="space-y-4 pb-5 sm:space-y-5">
+    <div className={cn(ds.page, 'pb-5')}>
       <style>{`
         @media print {
           @page { size: A4; margin: 14mm; }
@@ -537,20 +538,20 @@ export function OfficialExamPage() {
             width: 100%;
             padding: 24px;
             background: white;
-            color: #10203d;
+            color: #0F2854;
           }
         }
       `}</style>
 
       <section id="official-exam-print-ticket" className="hidden" aria-hidden="true">
-        <div className="rounded-2xl border-2 border-[#173f9c] p-8">
-          <div className="flex items-start justify-between gap-8 border-b border-[#dce4ef] pb-5">
+        <div className="rounded-2xl border-2 border-[#0F2854] p-8">
+          <div className="flex items-start justify-between gap-8 border-b border-[#4988C4]/45 pb-5">
             <div>
-              <p className="text-sm font-bold tracking-[0.12em] text-[#315eca] uppercase">
+              <p className="text-sm font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
                 OralExam AI · University Tech
               </p>
               <h1 className="mt-2 text-3xl font-bold">Phiếu dự thi vấn đáp chính thức</h1>
-              <p className="mt-2 text-sm text-[#64748b]">
+              <p className="mt-2 text-sm text-[#5b6b84]">
                 {selectedExam.academicTerm} · Mã ca {selectedExam.sessionCode}
               </p>
             </div>
@@ -588,7 +589,7 @@ export function OfficialExamPage() {
               <strong>Vị trí:</strong> Kiosk {selectedExam.kioskNumber} · {selectedExam.seatZone}
             </div>
           </div>
-          <div className="mt-7 rounded-xl bg-[#f1f5ff] p-4 text-sm leading-relaxed">
+          <div className="mt-7 rounded-xl bg-[#4988C4]/16 p-4 text-sm leading-relaxed">
             Có mặt trước 15 phút, mang thẻ sinh viên và đến đúng Kiosk được phân công. QR/mã trên
             giao diện hiện là dữ liệu xem trước; thông tin xác thực thật phải do hệ thống backend
             cấp.
@@ -596,7 +597,7 @@ export function OfficialExamPage() {
         </div>
       </section>
 
-      <section className="relative isolate min-h-[210px] overflow-hidden rounded-[24px] border border-[#dce7f3] bg-[linear-gradient(118deg,#ffffff_0%,#f6fbff_56%,#e9f8ff_100%)] shadow-[0_14px_45px_rgba(31,61,105,0.08)] sm:min-h-[226px]">
+      <section className={cn(ds.banner, 'min-h-[210px] sm:min-h-[226px]')}>
         <div
           className="pointer-events-none absolute inset-0 opacity-60"
           style={{
@@ -625,21 +626,21 @@ export function OfficialExamPage() {
 
         <div className="relative z-10 flex min-h-[210px] max-w-[760px] flex-col justify-center p-5 sm:min-h-[226px] sm:p-7 lg:w-[58%] xl:p-8">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cddafd] bg-white/90 px-3 py-1 text-[9px] font-bold tracking-[0.04em] text-[#315bb7] uppercase shadow-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.04em] text-white uppercase">
               <ShieldCheck className="size-3.5" />
               Kỳ thi chính thức
             </span>
-            <span className="text-[9px] font-semibold text-[#718299]">
+            <span className="text-xs font-semibold text-white/75">
               {selectedExam.academicTerm} · {selectedExam.subjectCode}
             </span>
-            <span className="rounded-full bg-[#e9f0fa] px-2 py-1 text-[8px] font-bold text-[#60738e]">
+            <span className="rounded-full bg-white/15 px-2 py-1 text-xs font-bold text-white">
               Dữ liệu xem trước FE
             </span>
           </div>
-          <h1 className="mt-3 text-[26px] leading-[1.08] font-bold tracking-[-0.035em] text-[#10213e] sm:text-[34px]">
+          <h1 className="mt-3 text-[26px] leading-[1.08] font-bold tracking-[-0.035em] text-white sm:text-[34px]">
             Lịch Thi Vấn Đáp Chính Thức
           </h1>
-          <p className="mt-2 max-w-[620px] text-[11px] leading-relaxed text-[#5f7088] sm:text-xs">
+          <p className="mt-2 max-w-[620px] text-sm leading-relaxed text-white/80 sm:text-xs">
             Theo dõi ca thi, vị trí Kiosk được phân công và các bước check-in bắt buộc tại phòng Lab
             của nhà trường.
           </p>
@@ -647,20 +648,20 @@ export function OfficialExamPage() {
           <div className="mt-4 flex flex-wrap items-center gap-2.5">
             <div
               className={cn(
-                'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[9px] font-bold shadow-sm',
+                'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold shadow-sm',
                 phaseConfig.className,
               )}
             >
               <span className={cn('size-2 rounded-full', phaseConfig.dotClassName)} />
               {phaseConfig.label}
             </div>
-            <span className="text-[9px] font-medium text-[#64768e]" role="timer" aria-live="off">
+            <span className="text-xs font-medium text-white/75" role="timer" aria-live="off">
               {phaseConfig.helper}
             </span>
           </div>
         </div>
 
-        <div className="pointer-events-none absolute right-4 bottom-3 hidden items-center gap-2 rounded-full border border-white/70 bg-white/78 px-3 py-1.5 text-[8px] font-bold text-[#41647e] shadow-lg backdrop-blur-md lg:flex">
+        <div className="pointer-events-none absolute right-4 bottom-3 hidden items-center gap-2 rounded-full border border-white/70 bg-white/78 px-3 py-1.5 text-xs font-bold text-[#41647e] shadow-lg backdrop-blur-md lg:flex">
           <span className="size-1.5 rounded-full bg-[#38c997] shadow-[0_0_8px_rgba(56,201,151,0.75)]" />
           {selectedExam.room} · Kiosk {selectedExam.kioskNumber}
         </div>
@@ -670,7 +671,7 @@ export function OfficialExamPage() {
         <section
           role="alert"
           className={cn(
-            'rounded-2xl border px-4 py-3 text-[11px] shadow-sm',
+            'rounded-2xl border px-4 py-3 text-sm shadow-sm',
             kioskLockdown.isLocked
               ? 'border-rose-200 bg-rose-50 text-rose-800'
               : 'border-amber-200 bg-amber-50 text-amber-800',
@@ -693,17 +694,17 @@ export function OfficialExamPage() {
       )}
 
       <section className="flex items-start gap-3 rounded-2xl border border-[#d9e4f0] bg-white p-4 shadow-[0_7px_24px_rgba(31,61,105,0.045)] sm:px-5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#edf3ff] text-[#315ed0]">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
           <AlertTriangle className="size-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[11px] font-bold text-[#26364d]">Lưu ý bắt buộc về địa điểm thi</h2>
-          <p className="mt-1 text-[10px] leading-relaxed text-[#68788e] sm:text-[11px]">
+          <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Lưu ý bắt buộc về địa điểm thi</h2>
+          <p className="mt-1 text-xs leading-relaxed text-[#68788e]">
             Không thể thực hiện bài thi chính thức trên thiết bị cá nhân. Hãy có mặt trước 15 phút,
             đến đúng Kiosk được Admin phân công và chờ Giảng viên mở ca thi.
           </p>
         </div>
-        <span className="hidden rounded-full bg-[#f4f7fb] px-2.5 py-1 text-[8px] font-bold whitespace-nowrap text-[#718095] sm:inline-flex">
+        <span className="hidden rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-[#718095] sm:inline-flex">
           MF-04 · Lab Viva
         </span>
       </section>
@@ -720,25 +721,25 @@ export function OfficialExamPage() {
                 aria-pressed={isSelected}
                 onClick={() => handleSelectExam(assignment.id)}
                 className={cn(
-                  'group flex min-h-12 items-center gap-3 rounded-xl border px-3.5 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]',
+                  'group flex min-h-12 items-center gap-3 rounded-xl border px-3.5 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                   isSelected
-                    ? 'border-[#7896ed] bg-[#eef3ff] shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
-                    : 'border-[#dce4ee] bg-white hover:border-[#b9c9de] hover:bg-[#fafcff]',
+                    ? 'border-[#7896ed] bg-[#4988C4]/16 shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
+                    : 'border-[#dce4ee] bg-white hover:border-[#4988C4]/45 hover:bg-white',
                 )}
               >
                 <span
                   className={cn(
-                    'flex size-8 items-center justify-center rounded-lg text-[9px] font-bold',
-                    isSelected ? 'bg-[#245eea] text-white' : 'bg-[#f0f4f9] text-[#59708e]',
+                    'flex size-8 items-center justify-center rounded-lg text-xs font-bold',
+                    isSelected ? 'bg-[#1C4D8D] text-white' : 'bg-[#f0f4f9] text-[#59708e]',
                   )}
                 >
                   {formatShortDate(assignment.startAt)}
                 </span>
                 <span>
-                  <span className="block text-[9px] font-bold text-[#25364e]">
+                  <span className="block text-xs font-bold text-[#25364e]">
                     {assignment.subjectCode} · {formatTime(assignment.startAt)}
                   </span>
-                  <span className="mt-0.5 block text-[8px] text-[#7c899b]">
+                  <span className="mt-0.5 block text-xs text-[#7c899b]">
                     {assignment.room} · Kiosk {assignment.kioskNumber}
                   </span>
                 </span>
@@ -755,27 +756,27 @@ export function OfficialExamPage() {
       </section>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_310px] xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="overflow-hidden rounded-[22px] border border-[#dfe6f0] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
-          <div className="flex flex-col gap-3 border-b border-[#edf1f6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
+          <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#07172e] text-white shadow-[0_7px_18px_rgba(7,23,46,0.16)]">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#0F2854] text-white shadow-[0_7px_18px_rgba(7,23,46,0.16)]">
                 <BookOpenCheck className="size-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-[8px] font-bold tracking-[0.08em] text-[#4770cd] uppercase">
+                <p className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
                   {selectedExam.track}
                 </p>
-                <h2 className="mt-1 text-[14px] leading-tight font-bold text-[#172842] sm:text-[16px]">
+                <h2 className="mt-1 text-base leading-tight font-bold text-[#0F2854] sm:text-lg">
                   {selectedExam.subjectCode} · {selectedExam.subjectName}
                 </h2>
-                <p className="mt-1 text-[8px] font-medium text-[#8a97a9]">
+                <p className="mt-1 text-xs font-medium text-[#8a97a9]">
                   Mã ca: {selectedExam.sessionCode}
                 </p>
               </div>
             </div>
             <span
               className={cn(
-                'self-start rounded-full border px-2.5 py-1 text-[8px] font-bold',
+                'self-start rounded-full border px-2.5 py-1 text-xs font-bold',
                 phaseConfig.className,
               )}
             >
@@ -803,8 +804,8 @@ export function OfficialExamPage() {
                       <Icon className="size-3.5" />
                     </span>
                   </div>
-                  <p className="mt-3 truncate text-[13px] font-bold text-[#203149]">{value}</p>
-                  <p className="mt-1 line-clamp-2 min-h-[24px] text-[8px] leading-relaxed text-[#77859a]">
+                  <p className="mt-3 truncate text-sm font-bold text-[#203149]">{value}</p>
+                  <p className="mt-1 line-clamp-2 min-h-[24px] text-xs leading-relaxed text-[#77859a]">
                     {helper}
                   </p>
                 </article>
@@ -813,23 +814,23 @@ export function OfficialExamPage() {
 
             <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#e1e8f1] bg-[#f6f8fb] p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#245eea,#0d307d)] text-[11px] font-bold text-white shadow-[0_7px_18px_rgba(36,94,234,0.2)]">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#4988C4,#0F2854)] text-sm font-bold text-white shadow-[0_7px_18px_rgba(36,94,234,0.2)]">
                   {getInitials(studentName) || 'SV'}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[7px] font-bold tracking-[0.06em] text-[#8794a6] uppercase">
                     Thông tin thí sinh dự thi
                   </p>
-                  <p className="mt-1 truncate text-[11px] font-bold text-[#23344d]">
+                  <p className="mt-1 truncate text-sm font-bold text-[#23344d]">
                     {studentName}
                   </p>
-                  <p className="mt-1 text-[8px] text-[#758399]">
+                  <p className="mt-1 text-xs text-[#5b6b84]">
                     {selectedExam.candidateNumber} <span className="mx-1.5 text-[#bcc5d1]">•</span>{' '}
                     MSSV: {studentCode}
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#cfebe1] bg-white px-3 py-2 text-[8px] font-semibold text-[#277c67]">
+              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#cfebe1] bg-white px-3 py-2 text-xs font-semibold text-[#277c67]">
                 <BadgeCheck className="size-4 text-[#35bd91]" />
                 Danh tính đã liên kết
               </div>
@@ -840,13 +841,13 @@ export function OfficialExamPage() {
                 type="button"
                 onClick={() => setRulesOpen((isOpen) => !isOpen)}
                 aria-expanded={rulesOpen}
-                className="flex min-h-12 w-full items-center justify-between gap-3 bg-white px-4 text-left transition hover:bg-[#fafcff] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="flex min-h-12 w-full items-center justify-between gap-3 bg-white px-4 text-left transition hover:bg-white focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
               >
-                <span className="flex items-center gap-2 text-[10px] font-bold text-[#27384f]">
-                  <Clipboard className="size-4 text-[#4568c7]" />
+                <span className="flex items-center gap-2 text-xs font-bold text-[#27384f]">
+                  <Clipboard className="size-4 text-[#1C4D8D]" />
                   Quy chế phòng Kiosk & tiến trình thi
                 </span>
-                <span className="flex items-center gap-2 text-[8px] font-semibold text-[#697a91]">
+                <span className="flex items-center gap-2 text-xs font-semibold text-[#697a91]">
                   3 bước bắt buộc
                   <ChevronDown
                     className={cn('size-4 transition-transform', rulesOpen && 'rotate-180')}
@@ -855,7 +856,7 @@ export function OfficialExamPage() {
               </button>
 
               {rulesOpen && (
-                <ol className="space-y-2 border-t border-[#edf1f5] bg-[#fbfcfe] p-3 sm:p-4">
+                <ol className="space-y-2 border-t border-[#edf1f5] bg-white p-3 sm:p-4">
                   {[
                     {
                       title: 'Đến sớm & đối chiếu hồ sơ',
@@ -876,12 +877,12 @@ export function OfficialExamPage() {
                       key={rule.title}
                       className="flex gap-3 rounded-xl border border-[#e8edf3] bg-white p-3"
                     >
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#eaf0ff] text-[9px] font-bold text-[#315eca]">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#4988C4]/16 text-xs font-bold text-[#1C4D8D]">
                         {index + 1}
                       </span>
                       <div>
-                        <h3 className="text-[10px] font-bold text-[#2c3c53]">{rule.title}</h3>
-                        <p className="mt-1 text-[10px] leading-relaxed text-[#76859a]">
+                        <h3 className="text-xs font-bold text-[#2c3c53]">{rule.title}</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-[#76859a]">
                           {rule.detail}
                         </p>
                       </div>
@@ -896,7 +897,7 @@ export function OfficialExamPage() {
                 type="button"
                 onClick={() => setDevicePanelOpen((isOpen) => !isOpen)}
                 aria-expanded={devicePanelOpen}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[9px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#1b50cc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] motion-reduce:transform-none"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
               >
                 <Mic2 className="size-4" />
                 Kiểm tra micro tại Kiosk
@@ -905,25 +906,25 @@ export function OfficialExamPage() {
                 type="button"
                 onClick={() => setRoomMapOpen((isOpen) => !isOpen)}
                 aria-expanded={roomMapOpen}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d7e0eb] bg-white px-4 text-[9px] font-bold text-[#3c4f68] transition hover:border-[#adc0d7] hover:bg-[#f7f9fc] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
               >
-                <MapPinned className="size-4 text-[#3568d5]" />
+                <MapPinned className="size-4 text-[#1C4D8D]" />
                 {roomMapOpen ? 'Ẩn sơ đồ phòng' : `Xem sơ đồ ${selectedExam.room}`}
               </button>
               <button
                 type="button"
                 onClick={handleAddToCalendar}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d7e0eb] bg-white px-4 text-[9px] font-bold text-[#3c4f68] transition hover:border-[#adc0d7] hover:bg-[#f7f9fc] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
               >
-                <CalendarPlus className="size-4 text-[#3568d5]" />
+                <CalendarPlus className="size-4 text-[#1C4D8D]" />
                 Thêm vào lịch
               </button>
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d7e0eb] bg-white px-4 text-[9px] font-bold text-[#3c4f68] transition hover:border-[#adc0d7] hover:bg-[#f7f9fc] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
               >
-                <Printer className="size-4 text-[#3568d5]" />
+                <Printer className="size-4 text-[#1C4D8D]" />
                 In / lưu phiếu dự thi
               </button>
             </div>
@@ -932,29 +933,29 @@ export function OfficialExamPage() {
               <div
                 ref={devicePanelRef}
                 id="exam-readiness"
-                className="mt-4 scroll-mt-24 rounded-2xl border border-[#cfdcf1] bg-[linear-gradient(135deg,#f7faff,#eef5ff)] p-4"
+                className="mt-4 scroll-mt-24 rounded-2xl border border-[#cfdcf1] bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-start gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#315eca] shadow-sm">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#1C4D8D] shadow-sm">
                       <Headphones className="size-[18px]" />
                     </span>
                     <div>
-                      <h3 className="text-[10px] font-bold text-[#263a57]">
+                      <h3 className="text-xs font-bold text-[#263a57]">
                         Kiểm tra phần cứng tại Kiosk
                       </h3>
-                      <p className="mt-1 max-w-[560px] text-[10px] leading-relaxed text-[#687b95]">
+                      <p className="mt-1 max-w-[560px] text-xs leading-relaxed text-[#687b95]">
                         Bài kiểm tra này chỉ xác nhận micro của trình duyệt hiện tại. Kết quả chính
                         thức được Kiosk kiểm tra lại ngay trước khi Giảng viên bắt đầu timer.
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[8px] font-bold text-[#657993] shadow-sm">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#657993] shadow-sm">
                     {selectedExam.workstationId}
                   </span>
                 </div>
 
-                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#dbe4f0] bg-white p-3 text-[10px] leading-relaxed text-[#52647d]">
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#4988C4]/45 bg-white p-3 text-xs leading-relaxed text-[#52647d]">
                   <input
                     type="checkbox"
                     checked={confirmedAtKiosk}
@@ -966,7 +967,7 @@ export function OfficialExamPage() {
                         setMicCheckSecondsRemaining(0)
                       }
                     }}
-                    className="mt-0.5 size-4 accent-[#245eea]"
+                    className="mt-0.5 size-4 accent-[#4988C4]"
                   />
                   Tôi xác nhận đang ngồi tại {selectedExam.room}, Kiosk {selectedExam.kioskNumber}{' '}
                   được phân công.
@@ -986,12 +987,12 @@ export function OfficialExamPage() {
                       )}
                     />
                     <div className="min-w-0">
-                      <p className="text-[9px] font-bold">{micStatus.title}</p>
-                      <p className="mt-1 text-[9px] leading-relaxed break-words opacity-80">
+                      <p className="text-xs font-bold">{micStatus.title}</p>
+                      <p className="mt-1 text-xs leading-relaxed break-words opacity-80">
                         {micStatus.helper}
                       </p>
                       {micState === 'checking' && (
-                        <p className="mt-1 text-[9px] font-bold text-[#315eca]" role="timer" aria-live="polite">
+                        <p className="mt-1 text-xs font-bold text-[#1C4D8D]" role="timer" aria-live="polite">
                           Còn {micCheckSecondsRemaining} giây kiểm tra tín hiệu
                         </p>
                       )}
@@ -1001,7 +1002,7 @@ export function OfficialExamPage() {
                     type="button"
                     onClick={handleMicCheck}
                     disabled={!confirmedAtKiosk || micState === 'checking'}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#173f9c] px-4 text-[9px] font-bold text-white transition hover:bg-[#12347f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0F2854] px-4 text-sm font-bold text-white transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     {micState === 'checking' ? (
                       <LoaderCircle className="size-4 animate-spin" />
@@ -1017,19 +1018,19 @@ export function OfficialExamPage() {
             )}
 
             {roomMapOpen && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-[#dfe6ef] bg-[#f8fafc] p-4">
+              <div className="mt-4 overflow-hidden rounded-2xl border border-[#dfe6ef] bg-[#4988C4]/16 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="flex items-center gap-2 text-[10px] font-bold text-[#26384f]">
-                      <Building2 className="size-4 text-[#3568d5]" /> Sơ đồ {selectedExam.room}
+                    <h3 className="flex items-center gap-2 text-xs font-bold text-[#26384f]">
+                      <Building2 className="size-4 text-[#1C4D8D]" /> Sơ đồ {selectedExam.room}
                     </h3>
-                    <p className="mt-1 text-[8px] text-[#75849a]">
+                    <p className="mt-1 text-xs text-[#75849a]">
                       Đi theo lối vào bên phải và tìm Kiosk được tô xanh.
                     </p>
                   </div>
-                  <div className="flex items-center gap-3 text-[8px] text-[#718095]">
+                  <div className="flex items-center gap-3 text-xs text-[#718095]">
                     <span className="flex items-center gap-1.5">
-                      <span className="size-2 rounded-sm bg-[#245eea]" /> Vị trí của bạn
+                      <span className="size-2 rounded-sm bg-[#1C4D8D]" /> Vị trí của bạn
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="size-2 rounded-sm border border-[#cbd6e4] bg-white" /> Kiosk
@@ -1038,9 +1039,9 @@ export function OfficialExamPage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
-                  <div className="flex min-h-20 items-center justify-center rounded-xl border border-dashed border-[#b9c8da] bg-white text-center text-[8px] font-bold text-[#60738d]">
+                  <div className="flex min-h-20 items-center justify-center rounded-xl border border-dashed border-[#b9c8da] bg-white text-center text-xs font-bold text-[#5b6b84]">
                     <div>
-                      <UserRound className="mx-auto mb-1 size-4 text-[#496ac0]" />
+                      <UserRound className="mx-auto mb-1 size-4 text-[#1C4D8D]" />
                       Bàn giám thị
                     </div>
                   </div>
@@ -1051,9 +1052,9 @@ export function OfficialExamPage() {
                         <div
                           key={kiosk}
                           className={cn(
-                            'flex min-h-11 items-center justify-center rounded-lg border text-[8px] font-bold',
+                            'flex min-h-11 items-center justify-center rounded-xl border text-sm font-bold',
                             isAssigned
-                              ? 'border-[#245eea] bg-[#245eea] text-white shadow-[0_6px_16px_rgba(36,94,234,0.2)]'
+                              ? 'border-[#4988C4] bg-[#1C4D8D] text-white shadow-[0_6px_16px_rgba(36,94,234,0.2)]'
                               : 'border-[#dce4ee] bg-white text-[#75849a]',
                           )}
                         >
@@ -1063,7 +1064,7 @@ export function OfficialExamPage() {
                     })}
                   </div>
                 </div>
-                <div className="mt-3 flex items-center justify-end gap-2 text-[8px] font-semibold text-[#5f728c]">
+                <div className="mt-3 flex items-center justify-end gap-2 text-xs font-semibold text-[#5f728c]">
                   <DoorOpen className="size-4 text-[#2aa380]" /> Lối vào phòng
                 </div>
               </div>
@@ -1072,13 +1073,13 @@ export function OfficialExamPage() {
         </section>
 
         <aside className="space-y-4">
-          <section className="overflow-hidden rounded-[22px] border border-[#dfe6f0] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
-            <div className="flex items-center justify-between border-b border-[#edf1f6] px-4 py-3.5">
+          <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
+            <div className="flex items-center justify-between border-b border-[#4988C4]/45 px-4 py-3.5">
               <div className="flex items-center gap-2">
-                <QrCode className="size-4 text-[#315eca]" />
-                <h2 className="text-[10px] font-bold text-[#26374e]">Bản xem trước QR Check-in</h2>
+                <QrCode className="size-4 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Bản xem trước QR Check-in</h2>
               </div>
-              <span className="flex items-center gap-1 text-[8px] font-semibold text-[#4e67b4]">
+              <span className="flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
                 <ScanLine className="size-3.5" /> Đúng tại Kiosk
               </span>
             </div>
@@ -1095,38 +1096,38 @@ export function OfficialExamPage() {
                         draggable={false}
                       />
                     ) : qrError ? (
-                      <div className="flex size-full flex-col items-center justify-center gap-2 text-center text-[9px] text-[#a14354]">
+                      <div className="flex size-full flex-col items-center justify-center gap-2 text-center text-xs text-[#a14354]">
                         <XCircle className="size-7" /> Không thể tạo mã QR
                       </div>
                     ) : (
-                      <div className="flex size-full items-center justify-center text-[#4d68b8]">
+                      <div className="flex size-full items-center justify-center text-[#1C4D8D]">
                         <LoaderCircle className="size-6 animate-spin" />
                       </div>
                     )}
                     <span className="pointer-events-none absolute top-2 left-2 size-5 rounded-tl-lg border-t-2 border-l-2 border-[#46cfe5]" />
                     <span className="pointer-events-none absolute right-2 bottom-2 size-5 rounded-br-lg border-r-2 border-b-2 border-[#46cfe5]" />
                   </div>
-                  <p className="mt-3 text-center font-mono text-[9px] font-bold text-[#26384f]">
+                  <p className="mt-3 text-center font-mono text-xs font-bold text-[#26384f]">
                     {selectedExam.candidateNumber} · {selectedExam.subjectCode}
                   </p>
-                  <p className="mt-1 text-center text-[9px] leading-relaxed text-[#8290a3]">
+                  <p className="mt-1 text-center text-xs leading-relaxed text-[#8290a3]">
                     QR minh họa UI · token thật sẽ do backend cấp cho {selectedExam.workstationId}
                   </p>
 
-                  <div className="mt-3 rounded-xl border border-[#dfe6ef] bg-[#f7f9fc] p-3">
+                  <div className="mt-3 rounded-xl border border-[#dfe6ef] bg-[#4988C4]/16 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-[8px] font-bold tracking-[0.05em] text-[#8794a6] uppercase">
+                        <p className="text-xs font-bold tracking-[0.05em] text-[#8794a6] uppercase">
                           Mã demo dự phòng
                         </p>
-                        <p className="mt-1 font-mono text-[17px] font-bold tracking-[0.18em] text-[#244fba]">
+                        <p className="mt-1 font-mono text-[17px] font-bold tracking-[0.18em] text-[#1C4D8D]">
                           {selectedExam.checkInCode}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={handleCopyCode}
-                        className="flex size-10 items-center justify-center rounded-xl border border-[#d7e0eb] bg-white text-[#4461b4] transition hover:border-[#9cb0d9] hover:bg-[#f2f6ff] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                        className="flex size-10 items-center justify-center rounded-xl border border-[#4988C4]/45 bg-white text-[#4461b4] transition hover:border-[#9cb0d9] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
                         aria-label="Sao chép mã check-in dự phòng"
                       >
                         {copyState === 'copied' ? (
@@ -1136,10 +1137,10 @@ export function OfficialExamPage() {
                         )}
                       </button>
                     </div>
-                    <div className="mt-2 flex items-center justify-between border-t border-[#e4eaf1] pt-2 text-[8px]">
+                    <div className="mt-2 flex items-center justify-between border-t border-[#e4eaf1] pt-2 text-xs">
                       <span className="text-[#7a889b]">Token giao diện mẫu hết hạn sau</span>
                       <span
-                        className="font-mono font-bold text-[#365ab2]"
+                        className="font-mono font-bold text-[#1C4D8D]"
                         role="timer"
                         aria-live="off"
                       >
@@ -1149,19 +1150,19 @@ export function OfficialExamPage() {
                   </div>
                 </>
               ) : (
-                <div className="flex min-h-[285px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cad5e3] bg-[#f8fafc] px-5 text-center">
+                <div className="flex min-h-[285px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cad5e3] bg-[#4988C4]/16 px-5 text-center">
                   <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-[#7184a0] shadow-sm">
                     <QrCode className="size-7" />
                   </div>
-                  <h3 className="mt-4 text-[10px] font-bold text-[#36485f]">
+                  <h3 className="mt-4 text-xs font-bold text-[#36485f]">
                     {phase === 'check-in' ? 'Mã check-in đã hết hạn' : 'QR chưa được phát hành'}
                   </h3>
-                  <p className="mt-2 text-[10px] leading-relaxed text-[#7d8a9d]">
+                  <p className="mt-2 text-xs leading-relaxed text-[#5b6b84]">
                     {phase === 'check-in'
                       ? 'Hãy chờ Kiosk đồng bộ token mới hoặc liên hệ giám thị.'
                       : 'Mã chỉ xuất hiện khi Giảng viên mở ca và cửa sổ check-in bắt đầu.'}
                   </p>
-                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#edf2fa] px-3 py-1.5 text-[8px] font-bold text-[#5e718d]">
+                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#edf2fa] px-3 py-1.5 text-xs font-bold text-[#5e718d]">
                     <Clock3 className="size-3.5" /> {phaseConfig.label}
                   </span>
                 </div>
@@ -1169,46 +1170,46 @@ export function OfficialExamPage() {
             </div>
           </section>
 
-          <section className="rounded-[22px] border border-[#dfe6f0] bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
+          <section className="rounded-[22px] border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[8px] font-bold tracking-[0.05em] text-[#7890aa] uppercase">
+                <p className="text-xs font-bold tracking-[0.05em] text-[#7890aa] uppercase">
                   Không gian Kiosk thi
                 </p>
-                <h2 className="mt-1 text-[11px] font-bold text-[#26374e]">
+                <h2 className="mt-1 text-base font-bold text-[#0F2854] sm:text-lg">
                   {selectedExam.room} · Kiosk {selectedExam.kioskNumber}
                 </h2>
               </div>
-              <span className="flex size-9 items-center justify-center rounded-xl bg-[#eef4ff] text-[#315eca]">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                 <Monitor className="size-4" />
               </span>
             </div>
             <div className="mt-3 overflow-hidden rounded-2xl border border-[#dce6f1] bg-[linear-gradient(145deg,#071a38,#0a315d)] p-3">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-[8px] text-[#bdd2eb]">
+                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-xs text-[#bdd2eb]">
                   <Wifi className="mb-1 size-3.5 text-[#68e4cd]" /> Mạng Lab
                   <strong className="mt-0.5 block text-white">Ổn định</strong>
                 </div>
-                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-[8px] text-[#bdd2eb]">
+                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-xs text-[#bdd2eb]">
                   <Mic2 className="mb-1 size-3.5 text-[#75eaf3]" /> Micro Kiosk
                   <strong className="mt-0.5 block text-white">Chờ kiểm tra</strong>
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#071326]/70 px-2.5 py-2 text-[8px] text-[#b9cbe1]">
+              <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#071326]/70 px-2.5 py-2 text-xs text-[#b9cbe1]">
                 <Sparkles className="size-3.5 text-[#6ce8f1]" /> AI Voice Core kết nối khi Giảng
                 viên mở timer.
               </div>
             </div>
           </section>
 
-          <section className="rounded-[22px] border border-[#dfe6f0] bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
+          <section className="rounded-[22px] border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
             <div className="flex items-start gap-3">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#eef8f5] text-[#218c72]">
                 <Info className="size-4" />
               </span>
               <div>
-                <h2 className="text-[10px] font-bold text-[#2e4057]">Cần hỗ trợ kỹ thuật?</h2>
-                <p className="mt-1 text-[10px] leading-relaxed text-[#7a899c]">
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Cần hỗ trợ kỹ thuật?</h2>
+                <p className="mt-1 text-xs leading-relaxed text-[#7a899c]">
                   Báo trực tiếp giám thị tại {selectedExam.room}. Không tự ý đổi Kiosk hoặc bỏ qua
                   bước kiểm tra micro.
                 </p>

@@ -83,6 +83,15 @@ public static class AppealStatus
     public static readonly string[] All = { Pending, InReview, Approved, Rejected, Cancelled };
 }
 
+public static class StudentAcknowledgementStatus
+{
+    public const string Pending = "PENDING";
+    public const string Acknowledged = "ACKNOWLEDGED";
+    public const string Appealed = "APPEALED";
+
+    public static readonly string[] All = { Pending, Acknowledged, Appealed };
+}
+
 public static class ExamTicketStatus
 {
     public const string Scheduled = "SCHEDULED";

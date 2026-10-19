@@ -28,6 +28,7 @@ import type {
   QuestionSummary,
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 
 const STATUS_OPTIONS: Array<{ value: QuestionApprovalStatus | ''; label: string }> = [
   { value: '', label: 'Tất cả trạng thái' },
@@ -56,7 +57,7 @@ const DIFFICULTY_OPTIONS = [
 ]
 
 const STATUS_META: Record<QuestionApprovalStatus, { label: string; className: string }> = {
-  DRAFT: { label: 'Bản nháp', className: 'border-[#cfdbeb] bg-[#f3f6fa] text-[#52647d]' },
+  DRAFT: { label: 'Bản nháp', className: 'border-[#4988C4]/45 bg-[#f3f6fa] text-[#52647d]' },
   SUBMITTED_FOR_REVIEW: {
     label: 'Chờ duyệt',
     className: 'border-[#ead5a7] bg-[#fff8e9] text-[#8d6118]',
@@ -116,7 +117,7 @@ function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold',
+        'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold',
         meta.className,
       )}
     >
@@ -316,26 +317,26 @@ export function QuestionStudioPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section className="relative overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white p-5 shadow-[0_14px_40px_rgba(31,61,105,0.065)] sm:p-6">
+    <div className={ds.page}>
+      <section className={cn(ds.banner, 'p-5 sm:p-6')}>
         <div className="pointer-events-none absolute -top-24 right-10 size-64 rounded-full bg-[#55d9f1]/10 blur-3xl" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold tracking-[0.09em] text-[#245eea] uppercase">
+            <div className={ds.bannerChip}>
               <BookOpenCheck className="size-4" aria-hidden="true" />
               MF-03 · Ngân hàng đề & Rubric
             </div>
-            <h1 className="mt-2 text-xl font-bold tracking-[-0.035em] text-[#10203d] sm:text-2xl">
+            <h1 className={ds.bannerTitle}>
               Ngân hàng câu hỏi của giảng viên
             </h1>
-            <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-[#687990] sm:text-xs">
+            <p className={ds.bannerText}>
               Biên soạn câu hỏi thủ công hoặc bằng AI, kiểm tra Barem Rubric đúng 10.0 điểm và gửi
               Trưởng Bộ môn thẩm định trước khi đưa vào ngân hàng đề chính thức.
             </p>
           </div>
           <Link
             to="/question-bank/create"
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[11px] font-bold text-white shadow-[0_9px_22px_rgba(36,94,234,0.23)] transition hover:-translate-y-0.5 hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+            className={cn(ds.bannerButton, 'shrink-0')}
           >
             <Plus className="size-4" aria-hidden="true" />
             Tạo câu hỏi & Rubric
@@ -346,7 +347,7 @@ export function QuestionStudioPage() {
       {(error || notice) && (
         <div
           className={cn(
-            'flex items-start gap-2 rounded-2xl border px-4 py-3 text-[11px] font-semibold',
+            'flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold',
             error
               ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
               : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
@@ -364,7 +365,7 @@ export function QuestionStudioPage() {
 
       <form
         onSubmit={applyFilters}
-        className="rounded-2xl border border-[#e0e7f1] bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)]"
+        className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)]"
         aria-label="Bộ lọc câu hỏi"
       >
         <div className="grid gap-3 lg:grid-cols-[minmax(240px,1.35fr)_repeat(3,minmax(150px,0.65fr))_auto]">
@@ -376,7 +377,7 @@ export function QuestionStudioPage() {
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Tìm tiêu đề hoặc nội dung..."
-              className="min-h-11 w-full rounded-xl border border-[#d7e0ec] bg-[#fbfcfe] pr-3 pl-9 text-[11px] text-[#20324d] transition outline-none placeholder:text-[#96a4b6] focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+              className="min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white pr-3 pl-9 text-sm text-[#0F2854] transition outline-none placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
             />
           </label>
 
@@ -385,7 +386,7 @@ export function QuestionStudioPage() {
             <select
               value={filters.approvalStatus ?? ''}
               onChange={(event) => updateFilter('approvalStatus', event.target.value)}
-              className="min-h-11 w-full appearance-none rounded-xl border border-[#d7e0ec] bg-[#fbfcfe] px-3 text-[10px] font-semibold text-[#43546c] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+              className="min-h-11 w-full appearance-none rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
             >
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -400,7 +401,7 @@ export function QuestionStudioPage() {
             <select
               value={filters.bloomLevel ?? ''}
               onChange={(event) => updateFilter('bloomLevel', event.target.value)}
-              className="min-h-11 w-full appearance-none rounded-xl border border-[#d7e0ec] bg-[#fbfcfe] px-3 text-[10px] font-semibold text-[#43546c] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+              className="min-h-11 w-full appearance-none rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
             >
               {BLOOM_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -415,7 +416,7 @@ export function QuestionStudioPage() {
             <select
               value={filters.difficulty ?? ''}
               onChange={(event) => updateFilter('difficulty', event.target.value)}
-              className="min-h-11 w-full appearance-none rounded-xl border border-[#d7e0ec] bg-[#fbfcfe] px-3 text-[10px] font-semibold text-[#43546c] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+              className="min-h-11 w-full appearance-none rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
             >
               {DIFFICULTY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -427,7 +428,7 @@ export function QuestionStudioPage() {
 
           <button
             type="submit"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#ccd9ea] bg-[#f5f8fd] px-4 text-[10px] font-bold text-[#355477] transition hover:border-[#aebfda] hover:bg-[#edf3fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#edf3fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
           >
             <Filter className="size-3.5" aria-hidden="true" />
             Áp dụng
@@ -437,17 +438,17 @@ export function QuestionStudioPage() {
 
       {selectedIds.size > 0 && (
         <section
-          className="rounded-2xl border border-[#bfd0f2] bg-[linear-gradient(135deg,#f5f8ff,#eef4ff)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
+          className="rounded-2xl border border-[#bfd0f2] bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
           aria-label="Gửi câu hỏi để thẩm định"
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
             <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 text-[11px] font-bold text-[#234fba]">
+              <p className="flex items-center gap-2 text-sm font-bold text-[#1C4D8D]">
                 <Send className="size-4" aria-hidden="true" />
                 Đã chọn {selectedIds.size} bản nháp · {selectedQuestions[0]?.courseCode}
               </p>
               <label className="mt-3 block">
-                <span className="text-[9px] font-bold tracking-[0.06em] text-[#667d9e] uppercase">
+                <span className="text-xs font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
                   Ghi chú gửi Trưởng Bộ môn
                 </span>
                 <textarea
@@ -455,7 +456,7 @@ export function QuestionStudioPage() {
                   onChange={(event) => setSubmissionNotes(event.target.value)}
                   maxLength={1000}
                   placeholder="Nêu phạm vi nội dung hoặc điểm cần lưu ý khi thẩm định..."
-                  className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#cad8ee] bg-white/90 px-3 py-2.5 text-[11px] text-[#2d405d] transition outline-none placeholder:text-[#95a4b7] focus:border-[#7094e6] focus:ring-2 focus:ring-[#d9e6ff]"
+                  className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white/90 px-3 py-2.5 text-sm text-[#0F2854] transition outline-none placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </label>
             </div>
@@ -463,7 +464,7 @@ export function QuestionStudioPage() {
               <button
                 type="button"
                 onClick={() => setSelectedIds(new Set())}
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#c8d5e7] bg-white px-4 text-[10px] font-bold text-[#53657e] transition hover:bg-[#f4f7fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-xs font-bold text-[#5b6b84] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
               >
                 <X className="size-3.5" aria-hidden="true" />
                 Bỏ chọn
@@ -472,7 +473,7 @@ export function QuestionStudioPage() {
                 type="button"
                 onClick={() => void submitForReview()}
                 disabled={isSubmitting}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[10px] font-bold text-white shadow-[0_8px_18px_rgba(36,94,234,0.2)] transition hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_18px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -486,11 +487,11 @@ export function QuestionStudioPage() {
         </section>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-[#e0e7f1] bg-white shadow-[0_9px_30px_rgba(31,61,105,0.05)]">
+      <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_9px_30px_rgba(31,61,105,0.05)]">
         <div className="flex flex-col gap-3 border-b border-[#e8edf4] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
-            <h2 className="text-sm font-bold text-[#172640]">Danh sách câu hỏi</h2>
-            <p className="mt-1 text-[9px] text-[#7d8a9d]">
+            <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Danh sách câu hỏi</h2>
+            <p className="mt-1 text-xs text-[#5b6b84]">
               {isLoading ? 'Đang đồng bộ...' : `${totalCount} câu hỏi phù hợp bộ lọc`}
             </p>
           </div>
@@ -499,7 +500,7 @@ export function QuestionStudioPage() {
               type="button"
               onClick={toggleAllDrafts}
               disabled={draftQuestions.length === 0}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d4deeb] bg-white px-3 text-[9px] font-bold text-[#52657e] transition hover:bg-[#f5f8fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-bold text-[#5b6b84] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Check className="size-3.5" aria-hidden="true" />
               {allSelectableDraftsChecked ? 'Bỏ chọn bản nháp' : 'Chọn bản nháp'}
@@ -507,7 +508,7 @@ export function QuestionStudioPage() {
             <button
               type="button"
               onClick={() => setReloadKey((key) => key + 1)}
-              className="flex size-9 items-center justify-center rounded-lg border border-[#d4deeb] text-[#60738d] transition hover:bg-[#f5f8fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+              className="flex size-9 items-center justify-center rounded-lg border border-[#4988C4]/45 text-[#5b6b84] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
               aria-label="Tải lại danh sách"
             >
               <RefreshCw className="size-3.5" aria-hidden="true" />
@@ -517,8 +518,8 @@ export function QuestionStudioPage() {
 
         {isLoading ? (
           <div className="flex min-h-72 flex-col items-center justify-center px-5 text-center">
-            <LoaderCircle className="size-7 animate-spin text-[#245eea] motion-reduce:animate-none" />
-            <p className="mt-3 text-[11px] font-semibold text-[#60738d]">
+            <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
+            <p className="mt-3 text-sm font-semibold text-[#5b6b84]">
               Đang tải ngân hàng câu hỏi...
             </p>
           </div>
@@ -528,19 +529,19 @@ export function QuestionStudioPage() {
               <CircleDashed className="size-5" aria-hidden="true" />
             </span>
             <h3 className="mt-3 text-sm font-bold text-[#253750]">Chưa có câu hỏi phù hợp</h3>
-            <p className="mt-1 max-w-md text-[10px] leading-relaxed text-[#7b899c]">
+            <p className="mt-1 max-w-md text-xs leading-relaxed text-[#7b899c]">
               Thay đổi bộ lọc hoặc tạo bản nháp đầu tiên cho môn học bạn phụ trách.
             </p>
             <Link
               to="/question-bank/create"
-              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#245eea] px-4 text-[10px] font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
             >
               <Plus className="size-3.5" />
               Tạo câu hỏi
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-[#edf1f6]">
+          <div className="divide-y divide-[#4988C4]/30">
             {questions.map((question) => {
               const isSelected = selectedIds.has(question.id)
               const isOwned = canManageQuestion(question, user?.role, user?.id)
@@ -554,7 +555,7 @@ export function QuestionStudioPage() {
                   key={question.id}
                   className={cn(
                     'grid gap-3 px-4 py-4 transition sm:px-5 lg:grid-cols-[auto_minmax(0,1fr)_140px_140px_auto] lg:items-center',
-                    isSelected ? 'bg-[#f4f7ff]' : 'hover:bg-[#fbfcfe]',
+                    isSelected ? 'bg-[#4988C4]/16' : 'hover:bg-white',
                   )}
                 >
                   <label className="flex items-center">
@@ -564,20 +565,20 @@ export function QuestionStudioPage() {
                       checked={isSelected}
                       disabled={!canSelect}
                       onChange={() => toggleQuestion(question)}
-                      className="size-4 rounded border-[#bfcce0] text-[#245eea] accent-[#245eea] focus:ring-[#245eea] disabled:cursor-not-allowed disabled:opacity-35"
+                      className="size-4 rounded border-[#bfcce0] text-[#1C4D8D] accent-[#4988C4] focus:ring-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
                     />
                   </label>
 
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-[9px] font-bold text-[#245eea]">
+                      <span className="font-mono text-xs font-bold text-[#1C4D8D]">
                         {question.courseCode}
                       </span>
                       <StatusBadge status={question.approvalStatus} />
                       {user?.role !== 'Admin' && (
                         <span
                           className={cn(
-                            'rounded-full px-2 py-1 text-[8px] font-bold',
+                            'rounded-full px-2 py-1 text-xs font-bold',
                             isOwned ? 'bg-[#eaf9f4] text-[#17745b]' : 'bg-[#f1f3f6] text-[#6f7c8e]',
                           )}
                         >
@@ -585,27 +586,27 @@ export function QuestionStudioPage() {
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-2 line-clamp-2 text-[12px] leading-snug font-bold text-[#233650]">
+                    <h3 className="mt-2 line-clamp-2 text-sm leading-snug font-bold text-[#0F2854]">
                       {question.title}
                     </h3>
-                    <p className="mt-1 text-[9px] text-[#8794a6]">
+                    <p className="mt-1 text-xs text-[#8794a6]">
                       Tạo ngày {formatDate(question.createdAt)} · Nguồn{' '}
                       {getSourceLabel(question.source)}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 lg:block">
-                    <span className="text-[9px] font-semibold text-[#8995a6] lg:block">Bloom</span>
-                    <span className="mt-0.5 inline-flex rounded-lg bg-[#eef3ff] px-2 py-1 text-[9px] font-bold text-[#395fae]">
+                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Bloom</span>
+                    <span className="mt-0.5 inline-flex rounded-lg bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#1C4D8D]">
                       {question.bloomLevel}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2 lg:block">
-                    <span className="text-[9px] font-semibold text-[#8995a6] lg:block">Barem</span>
+                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Barem</span>
                     <span
                       className={cn(
-                        'mt-0.5 text-[12px] font-black',
+                        'mt-0.5 text-sm font-black',
                         question.totalRubricScore === 10 ? 'text-[#168367]' : 'text-[#b8404b]',
                       )}
                     >
@@ -616,7 +617,7 @@ export function QuestionStudioPage() {
                   <button
                     type="button"
                     onClick={() => void openDetail(question.id)}
-                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#d4deeb] bg-white px-3 text-[9px] font-bold text-[#49617f] transition hover:border-[#b8c8dd] hover:bg-[#f5f8fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                    className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4]/45 bg-white px-3 text-xs font-bold text-[#49617f] transition hover:border-[#b8c8dd] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                   >
                     <Eye className="size-3.5" aria-hidden="true" />
                     Xem chi tiết
@@ -628,24 +629,24 @@ export function QuestionStudioPage() {
         )}
 
         {!isLoading && questions.length > 0 && (
-          <div className="flex items-center justify-between border-t border-[#e8edf4] bg-[#fbfcfe] px-4 py-3 sm:px-5">
+          <div className="flex items-center justify-between border-t border-[#e8edf4] bg-white px-4 py-3 sm:px-5">
             <button
               type="button"
               onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
               disabled={pageNumber <= 1}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d4deeb] bg-white px-3 text-[9px] font-bold text-[#536780] transition hover:bg-[#f4f7fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-bold text-[#536780] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ArrowLeft className="size-3.5" />
               Trang trước
             </button>
-            <span className="text-[9px] font-semibold text-[#708096]">
+            <span className="text-xs font-semibold text-[#708096]">
               Trang {pageNumber} / {totalPages}
             </span>
             <button
               type="button"
               onClick={() => setPageNumber((page) => Math.min(totalPages, page + 1))}
               disabled={pageNumber >= totalPages}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#d4deeb] bg-white px-3 text-[9px] font-bold text-[#536780] transition hover:bg-[#f4f7fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-bold text-[#536780] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Trang sau
               <ArrowRight className="size-3.5" />
@@ -658,22 +659,22 @@ export function QuestionStudioPage() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-[#07172e]/45 backdrop-blur-[2px]"
+            className="fixed inset-0 z-40 bg-[#0F2854]/45 backdrop-blur-[2px]"
             onClick={() => setIsDetailOpen(false)}
             aria-label="Đóng chi tiết câu hỏi"
           />
           <aside
-            className="fixed inset-y-0 right-0 z-50 w-full max-w-xl overflow-y-auto border-l border-[#dce5f1] bg-[#f5f8fc] shadow-[-20px_0_60px_rgba(10,28,57,0.2)]"
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-xl overflow-y-auto border-l border-[#4988C4]/45 bg-[#4988C4]/16 shadow-[-20px_0_60px_rgba(10,28,57,0.2)]"
             aria-label="Chi tiết câu hỏi"
             role="dialog"
             aria-modal="true"
           >
-            <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[#dce5f1] bg-white/94 px-5 backdrop-blur-xl">
+            <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[#4988C4]/45 bg-white/94 px-5 backdrop-blur-xl">
               <div>
-                <p className="text-[9px] font-bold tracking-[0.08em] text-[#245eea] uppercase">
+                <p className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
                   Chi tiết câu hỏi
                 </p>
-                <h2 className="mt-0.5 text-sm font-bold text-[#172640]">
+                <h2 className="mt-0.5 text-base font-bold text-[#0F2854] sm:text-lg">
                   Barem & lịch sử thẩm định
                 </h2>
               </div>
@@ -681,7 +682,7 @@ export function QuestionStudioPage() {
                 ref={closeDetailButtonRef}
                 type="button"
                 onClick={() => setIsDetailOpen(false)}
-                className="flex size-9 items-center justify-center rounded-xl border border-[#d7e0ec] text-[#5f7088] transition hover:bg-[#f2f5f9] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                className="flex size-9 items-center justify-center rounded-xl border border-[#4988C4]/45 text-[#5f7088] transition hover:bg-[#f2f5f9] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
                 aria-label="Đóng bảng chi tiết"
               >
                 <X className="size-4" />
@@ -690,13 +691,13 @@ export function QuestionStudioPage() {
 
             {isDetailLoading ? (
               <div className="flex min-h-[70vh] flex-col items-center justify-center">
-                <LoaderCircle className="size-7 animate-spin text-[#245eea] motion-reduce:animate-none" />
-                <p className="mt-3 text-[11px] font-semibold text-[#708096]">
+                <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
+                <p className="mt-3 text-sm font-semibold text-[#708096]">
                   Đang tải chi tiết...
                 </p>
               </div>
             ) : detailError ? (
-              <div className="m-5 rounded-2xl border border-[#efc8cc] bg-[#fff5f6] p-4 text-[11px] text-[#a43c47]">
+              <div className="m-5 rounded-2xl border border-[#efc8cc] bg-[#fff5f6] p-4 text-sm text-[#a43c47]">
                 <p className="flex items-start gap-2 font-semibold">
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
                   {detailError}
@@ -704,31 +705,31 @@ export function QuestionStudioPage() {
               </div>
             ) : detail ? (
               <div className="space-y-4 p-4 sm:p-5">
-                <section className="rounded-2xl border border-[#dce5f1] bg-white p-4 shadow-sm">
+                <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[9px] font-bold text-[#245eea]">
+                    <span className="font-mono text-xs font-bold text-[#1C4D8D]">
                       {detail.courseCode}
                     </span>
                     <StatusBadge status={detail.approvalStatus} />
-                    <span className="rounded-full bg-[#f0edff] px-2 py-1 text-[9px] font-bold text-[#6558c8]">
+                    <span className="rounded-full bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#6558c8]">
                       {detail.bloomLevel}
                     </span>
                   </div>
                   <h3 className="mt-3 text-base leading-snug font-bold text-[#182a45]">
                     {detail.title}
                   </h3>
-                  <p className="mt-3 text-[11px] leading-relaxed whitespace-pre-wrap text-[#586a82]">
+                  <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-[#586a82]">
                     {detail.content}
                   </p>
                 </section>
 
-                <section className="rounded-2xl border border-[#dce5f1] bg-white p-4 shadow-sm">
+                <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[9px] font-bold tracking-[0.07em] text-[#667d9e] uppercase">
+                      <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
                         Barem Rubric
                       </p>
-                      <h3 className="mt-1 text-sm font-bold text-[#192c48]">
+                      <h3 className="mt-1 text-sm font-bold text-[#0F2854]">
                         {detail.rubric.name}
                       </h3>
                     </div>
@@ -747,18 +748,18 @@ export function QuestionStudioPage() {
                     {detail.rubric.criteria.map((criterion, index) => (
                       <div
                         key={criterion.id}
-                        className="rounded-xl border border-[#e3e9f1] bg-[#fbfcfe] p-3"
+                        className="rounded-xl border border-[#e3e9f1] bg-white p-3"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-[11px] font-bold text-[#30445f]">
+                          <p className="text-sm font-bold text-[#30445f]">
                             {index + 1}. {criterion.criterionName}
                           </p>
-                          <span className="shrink-0 font-mono text-[10px] font-black text-[#245eea]">
+                          <span className="shrink-0 font-mono text-xs font-black text-[#1C4D8D]">
                             {criterion.maxScore.toFixed(1)}đ
                           </span>
                         </div>
                         {criterion.description && (
-                          <p className="mt-1 text-[9px] leading-relaxed text-[#78879a]">
+                          <p className="mt-1 text-xs leading-relaxed text-[#78879a]">
                             {criterion.description}
                           </p>
                         )}
@@ -767,22 +768,22 @@ export function QuestionStudioPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-[#dce5f1] bg-white p-4 shadow-sm">
-                  <p className="text-[9px] font-bold tracking-[0.07em] text-[#667d9e] uppercase">
+                <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
                     Model Answer
                   </p>
-                  <p className="mt-2 text-[10px] leading-relaxed whitespace-pre-wrap text-[#586a82]">
+                  <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#586a82]">
                     {detail.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
                   </p>
                 </section>
 
                 {detail.reviewNotes && (
                   <section className="rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4">
-                    <p className="flex items-center gap-2 text-[10px] font-bold text-[#8a5e17]">
+                    <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
                       <Sparkles className="size-4" />
                       Phản hồi của Trưởng Bộ môn
                     </p>
-                    <p className="mt-2 text-[10px] leading-relaxed whitespace-pre-wrap text-[#755826]">
+                    <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#755826]">
                       {detail.reviewNotes}
                     </p>
                   </section>
@@ -790,7 +791,7 @@ export function QuestionStudioPage() {
 
                 {(detail.approvalStatus === 'DRAFT' ||
                   detail.approvalStatus === 'NEEDS_REVISION') && (
-                  <section className="rounded-2xl border border-[#d9e2ee] bg-[#f8faff] p-4 text-[9px] leading-relaxed text-[#62748c]">
+                  <section className="rounded-2xl border border-[#4988C4]/45 bg-[#4988C4]/16 p-4 text-xs leading-relaxed text-[#62748c]">
                     Backend hiện chưa cung cấp API cập nhật bản nháp. Màn hình này chỉ hiển thị nội
                     dung đã lưu và không mô phỏng thao tác chỉnh sửa.
                   </section>

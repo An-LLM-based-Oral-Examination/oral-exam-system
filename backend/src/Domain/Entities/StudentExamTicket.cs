@@ -15,7 +15,7 @@ public partial class StudentExamTicket : ILockableEntity
     public int SeatNumber { get; set; }
     public string? IpAddress { get; set; }
     public string Status { get; set; } = ExamTicketStatus.Scheduled;
-    public string StudentAcknowledgementStatus { get; set; } = "PENDING";
+    public string StudentAcknowledgementStatus { get; set; } = OralExamination.Domain.Enums.StudentAcknowledgementStatus.Pending;
     public bool IsLocked { get; set; } = false;
     public DateTime CheckedInAt { get; set; } = DateTime.UtcNow;
     public DateTime? SubmittedAt { get; set; }

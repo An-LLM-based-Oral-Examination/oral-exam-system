@@ -30,6 +30,7 @@ import type {
   RubricCriterionDraft,
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 
 type StudioMode = 'manual' | 'ai'
 
@@ -433,38 +434,38 @@ export function CreateQuestionPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <header className="rounded-[22px] border border-[#dce5f1] bg-white p-5 shadow-[0_14px_40px_rgba(31,61,105,0.065)] sm:p-6">
+    <div className={ds.page}>
+      <header className={cn(ds.banner, 'p-5 sm:p-6')}>
         <Link
           to="/question-bank"
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg text-[10px] font-bold text-[#58708f] transition hover:text-[#245eea] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg text-xs font-bold text-white/80 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           <ArrowLeft className="size-3.5" aria-hidden="true" />
           Quay lại ngân hàng đề
         </Link>
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="flex items-center gap-2 text-[9px] font-bold tracking-[0.09em] text-[#245eea] uppercase">
+            <p className={cn(ds.bannerChip, 'w-fit')}>
               <Sparkles className="size-3.5" aria-hidden="true" />
               Không gian biên soạn · MF-03
             </p>
-            <h1 className="mt-2 text-xl font-bold tracking-[-0.035em] text-[#10203d] sm:text-2xl">
+            <h1 className={ds.bannerTitle}>
               Tạo câu hỏi & Barem Rubric 10.0
             </h1>
-            <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-[#687990] sm:text-xs">
+            <p className={ds.bannerText}>
               Mọi câu hỏi được lưu ở trạng thái DRAFT. Giảng viên cần rà soát rồi gửi Trưởng Bộ môn
               phê duyệt trước khi sử dụng.
             </p>
           </div>
-          <div className="flex rounded-xl border border-[#d7e1ef] bg-[#f3f6fb] p-1">
+          <div className="flex rounded-xl border border-white/30 bg-white/10 p-1">
             <button
               type="button"
               onClick={() => setMode('manual')}
               className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition focus-visible:outline-2 focus-visible:outline-[#245eea]',
+                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#1C4D8D]',
                 mode === 'manual'
-                  ? 'bg-white text-[#245eea] shadow-sm'
-                  : 'text-[#657791] hover:text-[#314968]',
+                  ? 'bg-white text-[#1C4D8D] shadow-sm'
+                  : 'text-white/80 hover:text-white',
               )}
               aria-pressed={mode === 'manual'}
             >
@@ -475,10 +476,10 @@ export function CreateQuestionPage() {
               type="button"
               onClick={() => setMode('ai')}
               className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-bold transition focus-visible:outline-2 focus-visible:outline-[#245eea]',
+                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#1C4D8D]',
                 mode === 'ai'
-                  ? 'bg-white text-[#6256ce] shadow-sm'
-                  : 'text-[#657791] hover:text-[#314968]',
+                  ? 'bg-white text-[#1C4D8D] shadow-sm'
+                  : 'text-white/80 hover:text-white',
               )}
               aria-pressed={mode === 'ai'}
             >
@@ -489,9 +490,9 @@ export function CreateQuestionPage() {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-[#dbe4f0] bg-[linear-gradient(135deg,#f8fbff,#f2f6fc)] p-4">
+      <section className="rounded-2xl border border-[#4988C4]/45 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4">
         <label className="block max-w-2xl">
-          <span className="flex items-center gap-2 text-[9px] font-bold tracking-[0.07em] text-[#5e7696] uppercase">
+          <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
             Course ID
             <span className="tracking-normal text-[#b03a46] normal-case">Bắt buộc</span>
           </span>
@@ -500,10 +501,10 @@ export function CreateQuestionPage() {
             onChange={(event) => setCourseId(event.target.value)}
             placeholder="UUID môn học được phân công"
             autoComplete="off"
-            className="mt-1.5 min-h-11 w-full rounded-xl border border-[#ced9e8] bg-white px-3 font-mono text-[11px] text-[#263b59] transition outline-none placeholder:font-sans placeholder:text-[#98a6b8] focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+            className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm text-[#0F2854] transition outline-none placeholder:font-sans placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
           />
         </label>
-        <p className="mt-2 flex items-start gap-1.5 text-[9px] leading-relaxed text-[#78889d]">
+        <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#5b6b84]">
           <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />Ở
           phiên bản hiện tại, nhập UUID môn học từ phân công học vụ. Hệ thống chỉ lưu câu hỏi khi
           định danh môn học hợp lệ.
@@ -513,14 +514,14 @@ export function CreateQuestionPage() {
       {mode === 'manual' ? (
         <form onSubmit={saveManualDraft} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
           <div className="space-y-4">
-            <section className="rounded-2xl border border-[#e0e7f1] bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
               <div className="flex items-center gap-3">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-[#eaf1ff] font-mono text-[10px] font-black text-[#245eea]">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-[#4988C4]/16 font-mono text-xs font-black text-[#1C4D8D]">
                   01
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold text-[#172640]">Nội dung học thuật</h2>
-                  <p className="mt-0.5 text-[9px] text-[#7c8a9d]">
+                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Nội dung học thuật</h2>
+                  <p className="mt-0.5 text-xs text-[#5b6b84]">
                     Câu hỏi, đáp án chuẩn và các ý chính để AI đối chiếu.
                   </p>
                 </div>
@@ -528,37 +529,37 @@ export function CreateQuestionPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
                 <label className="block sm:col-span-2">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Tiêu đề</span>
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Tiêu đề</span>
                   <input
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     maxLength={300}
                     placeholder="Tên ngắn gọn giúp nhận diện câu hỏi"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-[11px] text-[#263850] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
                 <div className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Phạm vi</span>
-                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#d5dfec] bg-[#f5f8fd] px-3 text-[10px] font-semibold text-[#40546f]">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi</span>
+                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854]">
                     Kho thi chính thức · phải qua phê duyệt
                   </div>
                 </div>
               </div>
 
               <label className="mt-4 block">
-                <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                <span className="text-xs font-bold text-[#5b6b84] uppercase">
                   Nội dung câu hỏi
                 </span>
                 <textarea
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
                   placeholder="Viết đầy đủ yêu cầu mà sinh viên cần trình bày..."
-                  className="mt-1.5 min-h-28 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-[11px] leading-relaxed text-[#263850] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                  className="mt-1.5 min-h-28 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </label>
 
               <label className="mt-4 block">
-                <span className="flex items-center justify-between gap-3 text-[9px] font-bold text-[#61748e] uppercase">
+                <span className="flex items-center justify-between gap-3 text-xs font-bold text-[#5b6b84] uppercase">
                   Model Answer
                   <span
                     className={cn(
@@ -573,29 +574,29 @@ export function CreateQuestionPage() {
                   value={sampleAnswer}
                   onChange={(event) => setSampleAnswer(event.target.value)}
                   placeholder="Câu trả lời chuẩn mực dùng làm mốc chấm..."
-                  className="mt-1.5 min-h-36 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-[11px] leading-relaxed text-[#263850] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                  className="mt-1.5 min-h-36 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </label>
 
               <label className="mt-4 block">
-                <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                <span className="text-xs font-bold text-[#5b6b84] uppercase">
                   Key points · mỗi dòng một ý
                 </span>
                 <textarea
                   value={keyPointsInput}
                   onChange={(event) => setKeyPointsInput(event.target.value)}
                   placeholder={'Khái niệm trọng tâm\nLập luận cần có\nVí dụ hoặc tình huống'}
-                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-[11px] leading-relaxed text-[#263850] transition outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </label>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Độ khó</span>
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Độ khó</span>
                   <select
                     value={difficulty}
                     onChange={(event) => setDifficulty(event.target.value as QuestionDifficulty)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-[10px] font-semibold text-[#40546f] outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   >
                     {DIFFICULTIES.map((item) => (
                       <option key={item.value} value={item.value}>
@@ -605,11 +606,11 @@ export function CreateQuestionPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Bậc Bloom</span>
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Bậc Bloom</span>
                   <select
                     value={bloomLevel}
                     onChange={(event) => setBloomLevel(event.target.value as BloomLevel)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-[10px] font-semibold text-[#40546f] outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   >
                     {BLOOM_LEVELS.map((level) => (
                       <option key={level} value={level}>
@@ -621,15 +622,15 @@ export function CreateQuestionPage() {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#e0e7f1] bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-[#f0edff] font-mono text-[10px] font-black text-[#6256ce]">
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-[#4988C4]/16 font-mono text-xs font-black text-[#1C4D8D]">
                     02
                   </span>
                   <div>
-                    <h2 className="text-sm font-bold text-[#172640]">Barem Rubric 10.0</h2>
-                    <p className="mt-0.5 text-[9px] text-[#7c8a9d]">
+                    <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Barem Rubric 10.0</h2>
+                    <p className="mt-0.5 text-xs text-[#5b6b84]">
                       Tối thiểu hai tiêu chí, tổng điểm bằng chính xác 10.0.
                     </p>
                   </div>
@@ -637,7 +638,7 @@ export function CreateQuestionPage() {
                 <button
                   type="button"
                   onClick={addCriterion}
-                  className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#cdd9e9] bg-[#f8faff] px-3 text-[9px] font-bold text-[#4f6685] transition hover:bg-[#f0f4fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                  className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 px-3 text-xs font-bold text-[#5b6b84] transition hover:bg-[#f0f4fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                 >
                   <Plus className="size-3.5" />
                   Thêm tiêu chí
@@ -646,21 +647,21 @@ export function CreateQuestionPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Tên rubric</span>
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Tên rubric</span>
                   <input
                     value={rubricName}
                     onChange={(event) => setRubricName(event.target.value)}
                     placeholder="Ví dụ: Rubric đánh giá kiến trúc"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-[11px] outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Mô tả</span>
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Mô tả</span>
                   <input
                     value={rubricDescription}
                     onChange={(event) => setRubricDescription(event.target.value)}
                     placeholder="Mục tiêu đánh giá của rubric"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-[11px] outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
               </div>
@@ -669,11 +670,11 @@ export function CreateQuestionPage() {
                 {criteria.map((criterion, index) => (
                   <article
                     key={criterion.localId}
-                    className="rounded-2xl border border-[#e0e7f0] bg-[#fbfcfe] p-3.5"
+                    className="rounded-2xl border border-[#4988C4]/45 bg-white p-3.5"
                   >
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_100px_150px_auto]">
                       <label className="block">
-                        <span className="text-[8px] font-bold text-[#718198] uppercase">
+                        <span className="text-xs font-bold text-[#5b6b84] uppercase">
                           Tiêu chí {index + 1}
                         </span>
                         <input
@@ -682,11 +683,11 @@ export function CreateQuestionPage() {
                             updateCriterion(criterion.localId, 'criterionName', event.target.value)
                           }
                           placeholder="Tên tiêu chí đánh giá"
-                          className="mt-1 min-h-10 w-full rounded-lg border border-[#d6dfeb] bg-white px-3 text-[10px] outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-xs outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-[8px] font-bold text-[#718198] uppercase">Điểm</span>
+                        <span className="text-xs font-bold text-[#5b6b84] uppercase">Điểm</span>
                         <input
                           type="number"
                           min="0.1"
@@ -700,11 +701,11 @@ export function CreateQuestionPage() {
                               Number(event.target.value),
                             )
                           }
-                          className="mt-1 min-h-10 w-full rounded-lg border border-[#d6dfeb] bg-white px-2 text-center font-mono text-[11px] font-black outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                         />
                       </label>
                       <label className="block">
-                        <span className="text-[8px] font-bold text-[#718198] uppercase">Bloom</span>
+                        <span className="text-xs font-bold text-[#5b6b84] uppercase">Bloom</span>
                         <select
                           value={criterion.bloomLevel}
                           onChange={(event) =>
@@ -714,7 +715,7 @@ export function CreateQuestionPage() {
                               event.target.value as BloomLevel,
                             )
                           }
-                          className="mt-1 min-h-10 w-full rounded-lg border border-[#d6dfeb] bg-white px-2 text-[9px] font-semibold outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-2 text-xs font-semibold outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                         >
                           {BLOOM_LEVELS.map((level) => (
                             <option key={level} value={level}>
@@ -741,7 +742,7 @@ export function CreateQuestionPage() {
                           updateCriterion(criterion.localId, 'description', event.target.value)
                         }
                         placeholder="Mô tả biểu hiện đạt điểm của tiêu chí..."
-                        className="min-h-16 w-full resize-y rounded-lg border border-[#d6dfeb] bg-white px-3 py-2 text-[10px] leading-relaxed outline-none focus:border-[#7094e6] focus:ring-2 focus:ring-[#dce8ff]"
+                        className="min-h-16 w-full resize-y rounded-lg border border-[#4988C4]/45 bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                       />
                     </label>
                   </article>
@@ -757,7 +758,7 @@ export function CreateQuestionPage() {
                 rubricIsValid ? 'border-[#8bd6bd]' : 'border-[#efb9bf]',
               )}
             >
-              <p className="text-[9px] font-bold tracking-[0.08em] text-[#667b98] uppercase">
+              <p className="text-xs font-bold tracking-[0.08em] text-[#5b6b84] uppercase">
                 Cổng kiểm tra
               </p>
               <div className="mt-4 text-center">
@@ -769,9 +770,9 @@ export function CreateQuestionPage() {
                 >
                   {totalRubricScore.toFixed(1)}
                 </strong>
-                <span className="ml-1 text-xs font-bold text-[#8390a3]">/ 10.0</span>
+                <span className="ml-1 text-xs font-bold text-[#8aa0b8]">/ 10.0</span>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#edf1f6]">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#4988C4]/16">
                 <div
                   className={cn(
                     'h-full rounded-full transition-[width,background-color] duration-300',
@@ -782,7 +783,7 @@ export function CreateQuestionPage() {
               </div>
               <p
                 className={cn(
-                  'mt-3 flex items-start gap-2 rounded-xl p-3 text-[9px] leading-relaxed',
+                  'mt-3 flex items-start gap-2 rounded-xl p-3 text-xs leading-relaxed',
                   rubricIsValid ? 'bg-[#eefaf6] text-[#176f58]' : 'bg-[#fff3f4] text-[#9f3a45]',
                 )}
               >
@@ -800,7 +801,7 @@ export function CreateQuestionPage() {
             {(manualError || manualNotice) && (
               <div
                 className={cn(
-                  'rounded-2xl border p-4 text-[10px] leading-relaxed font-semibold',
+                  'rounded-2xl border p-4 text-xs leading-relaxed font-semibold',
                   manualError
                     ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
                     : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
@@ -815,7 +816,7 @@ export function CreateQuestionPage() {
               <button
                 type="submit"
                 disabled={isSaving || Boolean(savedQuestionId)}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -834,7 +835,7 @@ export function CreateQuestionPage() {
                 <button
                   type="button"
                   onClick={resetManualDraft}
-                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#cbd7e6] bg-white px-4 text-[10px] font-bold text-[#526780] transition hover:bg-[#f5f8fc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-xs font-bold text-[#526780] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                 >
                   <RotateCcw className="size-3.5" />
                   Soạn câu hỏi khác
@@ -842,7 +843,7 @@ export function CreateQuestionPage() {
               )}
             </div>
 
-            <p className="rounded-xl border border-[#dce5f1] bg-[#f8faff] p-3 text-[9px] leading-relaxed text-[#718198]">
+            <p className="rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 p-3 text-xs leading-relaxed text-[#5b6b84]">
               Follow-up không được cấu hình tại đây: Admin quản lý luyện tập MF-01 và Trưởng Bộ môn
               cấu hình theo môn thi trong MF-04.
             </p>
@@ -854,14 +855,14 @@ export function CreateQuestionPage() {
             onSubmit={generateQuestions}
             className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]"
           >
-            <section className="rounded-2xl border border-[#e0e7f1] bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
               <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-xl bg-[#f0edff] text-[#6256ce]">
+                <span className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   <Bot className="size-[18px]" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold text-[#172640]">Sinh câu hỏi từ FLM</h2>
-                  <p className="mt-0.5 text-[9px] text-[#7c8a9d]">
+                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Sinh câu hỏi từ FLM</h2>
+                  <p className="mt-0.5 text-xs text-[#5b6b84]">
                     AI tạo bản đề xuất; giảng viên vẫn phải rà soát và lưu thành DRAFT.
                   </p>
                 </div>
@@ -869,31 +870,31 @@ export function CreateQuestionPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
                     Mã CLO · ngăn cách bằng dấu phẩy
                   </span>
                   <textarea
                     value={cloInput}
                     onChange={(event) => setCloInput(event.target.value)}
                     placeholder="CLO1, CLO2"
-                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-[11px] outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#e7e4ff]"
+                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
                     Chủ đề · mỗi dòng một nội dung
                   </span>
                   <textarea
                     value={topicsInput}
                     onChange={(event) => setTopicsInput(event.target.value)}
                     placeholder={'Kiến trúc hệ thống\nThiết kế API'}
-                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 py-2.5 text-[11px] outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#e7e4ff]"
+                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
               </div>
 
               <div className="mt-4">
-                <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                <span className="text-xs font-bold text-[#5b6b84] uppercase">
                   Bậc Bloom mục tiêu
                 </span>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -905,10 +906,10 @@ export function CreateQuestionPage() {
                         type="button"
                         onClick={() => toggleBloomLevel(level)}
                         className={cn(
-                          'inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 text-[9px] font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6256ce]',
+                          'inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                           selected
-                            ? 'border-[#a8a1ee] bg-[#f0edff] text-[#5c50c5]'
-                            : 'border-[#d8e0eb] bg-[#fbfcfe] text-[#6d7d91] hover:bg-[#f3f6fa]',
+                            ? 'border-[#a8a1ee] bg-[#4988C4]/16 text-[#5c50c5]'
+                            : 'border-[#d8e0eb] bg-white text-[#6d7d91] hover:bg-[#f3f6fa]',
                         )}
                         aria-pressed={selected}
                       >
@@ -922,7 +923,7 @@ export function CreateQuestionPage() {
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
                     Số câu cần sinh
                   </span>
                   <input
@@ -931,12 +932,12 @@ export function CreateQuestionPage() {
                     max="10"
                     value={numberOfQuestions}
                     onChange={(event) => setNumberOfQuestions(Number(event.target.value))}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 font-mono text-[11px] font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#e7e4ff]"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
                 <div className="block">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">Phạm vi</span>
-                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#d5dfec] bg-[#f5f8fd] px-3 text-[10px] font-semibold text-[#40546f]">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi</span>
+                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854]">
                     Kho thi chính thức · lưu DRAFT trước
                   </div>
                 </div>
@@ -944,12 +945,12 @@ export function CreateQuestionPage() {
 
               <div className="mt-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] font-bold text-[#61748e] uppercase">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
                     Phân bổ độ khó
                   </span>
                   <span
                     className={cn(
-                      'text-[9px] font-bold',
+                      'text-xs font-bold',
                       difficultyTotal === numberOfQuestions ? 'text-[#168367]' : 'text-[#b8404b]',
                     )}
                   >
@@ -963,14 +964,14 @@ export function CreateQuestionPage() {
                     { label: 'Khó', value: hardCount, setter: setHardCount },
                   ].map((item) => (
                     <label key={item.label} className="block">
-                      <span className="text-[8px] font-semibold text-[#7b899c]">{item.label}</span>
+                      <span className="text-xs font-semibold text-[#7b899c]">{item.label}</span>
                       <input
                         type="number"
                         min="0"
                         max="10"
                         value={item.value}
                         onChange={(event) => item.setter(Number(event.target.value))}
-                        className="mt-1 min-h-10 w-full rounded-xl border border-[#d5dfec] bg-[#fbfcfe] px-3 text-center font-mono text-[11px] font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#e7e4ff]"
+                        className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-center font-mono text-sm font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
                       />
                     </label>
                   ))}
@@ -980,7 +981,7 @@ export function CreateQuestionPage() {
 
             <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
               <section className="rounded-2xl border border-[#d9d4f7] bg-[linear-gradient(145deg,#f9f8ff,#f1efff)] p-5">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-[#5f54c7]">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#5f54c7]">
                   <Sparkles className="size-4" />
                   Cổng kiểm tra nội dung AI
                 </div>
@@ -992,9 +993,9 @@ export function CreateQuestionPage() {
                   ].map((item, index) => (
                     <li
                       key={item}
-                      className="flex gap-2.5 text-[9px] leading-relaxed text-[#64627c]"
+                      className="flex gap-2.5 text-xs leading-relaxed text-[#64627c]"
                     >
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white font-mono text-[8px] font-bold text-[#6256ce] shadow-sm">
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white font-mono text-xs font-bold text-[#1C4D8D] shadow-sm">
                         {index + 1}
                       </span>
                       {item}
@@ -1006,7 +1007,7 @@ export function CreateQuestionPage() {
               {(aiError || aiNotice) && (
                 <div
                   className={cn(
-                    'rounded-2xl border p-4 text-[10px] leading-relaxed font-semibold',
+                    'rounded-2xl border p-4 text-xs leading-relaxed font-semibold',
                     aiError
                       ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
                       : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
@@ -1020,7 +1021,7 @@ export function CreateQuestionPage() {
               <button
                 type="submit"
                 disabled={isGenerating}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#6256ce] px-4 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(98,86,206,0.22)] transition hover:-translate-y-0.5 hover:bg-[#5146b8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6256ce] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(98,86,206,0.22)] transition hover:-translate-y-0.5 hover:bg-[#5146b8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isGenerating ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1034,12 +1035,12 @@ export function CreateQuestionPage() {
 
           {generation && (
             <section className="overflow-hidden rounded-2xl border border-[#dedff0] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.055)]">
-              <div className="flex flex-col gap-3 border-b border-[#e7e8f1] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
-                  <p className="text-[9px] font-bold tracking-[0.08em] text-[#6256ce] uppercase">
+                  <p className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
                     Xem trước bản nháp AI · {generation.courseCode}
                   </p>
-                  <h2 className="mt-1 text-sm font-bold text-[#172640]">
+                  <h2 className="mt-1 text-base font-bold text-[#0F2854] sm:text-lg">
                     {generation.generatedCount} đề xuất cần giảng viên rà soát
                   </h2>
                 </div>
@@ -1047,7 +1048,7 @@ export function CreateQuestionPage() {
                   type="button"
                   onClick={() => void saveGeneratedDrafts()}
                   disabled={selectedGenerated.size === 0 || isSavingGenerated}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[10px] font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition hover:bg-[#194fcf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSavingGenerated ? (
                     <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1074,8 +1075,8 @@ export function CreateQuestionPage() {
                       className={cn(
                         'relative rounded-2xl border p-4 transition',
                         selected
-                          ? 'border-[#9fb6ec] bg-[#f5f8ff] shadow-[0_8px_22px_rgba(36,94,234,0.08)]'
-                          : 'border-[#e0e6ef] bg-[#fbfcfe]',
+                          ? 'border-[#9fb6ec] bg-[#4988C4]/16 shadow-[0_8px_22px_rgba(36,94,234,0.08)]'
+                          : 'border-[#4988C4]/45 bg-white',
                         !valid && 'border-[#efc4c9] bg-[#fff7f7]',
                         alreadySaved && 'border-[#bce4d7] bg-[#f4fbf8]',
                       )}
@@ -1092,33 +1093,33 @@ export function CreateQuestionPage() {
                             checked={selected}
                             disabled={!valid || alreadySaved}
                             onChange={() => toggleGeneratedQuestion(question)}
-                            className="mt-0.5 size-4 accent-[#245eea] disabled:cursor-not-allowed disabled:opacity-40"
+                            className="mt-0.5 size-4 accent-[#4988C4] disabled:cursor-not-allowed disabled:opacity-40"
                           />
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full bg-[#f0edff] px-2 py-1 text-[8px] font-bold text-[#6256ce]">
+                              <span className="rounded-full bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#1C4D8D]">
                                 {question.cloCode}
                               </span>
-                              <span className="rounded-full bg-[#edf3ff] px-2 py-1 text-[8px] font-bold text-[#3d62ad]">
+                              <span className="rounded-full bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#3d62ad]">
                                 {question.bloomLevel}
                               </span>
-                              <span className="rounded-full bg-white px-2 py-1 text-[8px] font-bold text-[#66788f] shadow-sm">
+                              <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-[#66788f] shadow-sm">
                                 {getDifficultyLabel(question.difficulty)}
                               </span>
                               {alreadySaved && (
-                                <span className="rounded-full bg-[#eaf9f4] px-2 py-1 text-[8px] font-bold text-[#17745b]">
+                                <span className="rounded-full bg-[#eaf9f4] px-2 py-1 text-xs font-bold text-[#17745b]">
                                   Đã lưu
                                 </span>
                               )}
                             </div>
-                            <h3 className="mt-2 line-clamp-2 text-[12px] leading-snug font-bold text-[#253850]">
+                            <h3 className="mt-2 line-clamp-2 text-sm leading-snug font-bold text-[#253850]">
                               {question.title}
                             </h3>
                           </div>
                         </label>
                         <span
                           className={cn(
-                            'shrink-0 rounded-xl px-2.5 py-1.5 font-mono text-[10px] font-black',
+                            'shrink-0 rounded-xl px-2.5 py-1.5 font-mono text-xs font-black',
                             Math.abs(rubricTotal - 10) < 0.001
                               ? 'bg-[#eaf9f4] text-[#14765c]'
                               : 'bg-[#fff0f1] text-[#ae3945]',
@@ -1128,10 +1129,10 @@ export function CreateQuestionPage() {
                         </span>
                       </div>
 
-                      <p className="mt-3 line-clamp-3 text-[10px] leading-relaxed text-[#63738a]">
+                      <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-[#63738a]">
                         {question.content}
                       </p>
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#e3e8f0] pt-3 text-[8px] font-semibold text-[#7a899c]">
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#4988C4]/45 pt-3 text-xs font-semibold text-[#7a899c]">
                         <span>{question.rubric.criteria.length} tiêu chí rubric</span>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <span
@@ -1152,7 +1153,7 @@ export function CreateQuestionPage() {
                             type="button"
                             onClick={() => editGeneratedDraft(question)}
                             disabled={alreadySaved}
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#cbc8ee] bg-white px-2.5 text-[8px] font-bold text-[#5d55bc] transition hover:bg-[#f2f0ff] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#6256ce] disabled:cursor-not-allowed disabled:opacity-45"
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#cbc8ee] bg-white px-2.5 text-xs font-bold text-[#5d55bc] transition hover:bg-[#f2f0ff] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <PencilLine className="size-3" />
                             Chỉnh sửa trước khi lưu
@@ -1164,13 +1165,13 @@ export function CreateQuestionPage() {
                 })}
               </div>
 
-              <div className="flex items-start gap-2 border-t border-[#e7e8f1] bg-[#fafbfe] px-4 py-3 text-[9px] leading-relaxed text-[#718198] sm:px-5">
-                <Send className="mt-0.5 size-3.5 shrink-0 text-[#6256ce]" />
+              <div className="flex items-start gap-2 border-t border-[#4988C4]/45 bg-[#fafbfe] px-4 py-3 text-xs leading-relaxed text-[#5b6b84] sm:px-5">
+                <Send className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" />
                 Lưu ở đây chỉ tạo DRAFT. Sau khi tự rà soát, giảng viên chọn các bản nháp trong Ngân
                 hàng đề để gửi Trưởng Bộ môn thẩm định.
                 <Link
                   to="/question-bank"
-                  className="ml-auto inline-flex shrink-0 items-center gap-1 font-bold text-[#245eea] hover:underline"
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 font-bold text-[#1C4D8D] hover:underline"
                 >
                   Đến ngân hàng đề
                   <ChevronRight className="size-3" />

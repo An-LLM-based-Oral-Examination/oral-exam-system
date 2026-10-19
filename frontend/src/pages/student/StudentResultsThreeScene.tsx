@@ -477,14 +477,14 @@ export function StudentResultsThreeScene({
         className="absolute top-1/2 left-1/2 w-[210px] -translate-x-1/2 -translate-y-1/2 rotate-[-3deg] rounded-2xl border border-[#9dc9de] bg-[linear-gradient(135deg,#0b315d,#14677b)] p-4 shadow-[0_18px_45px_rgba(20,83,112,0.2)] sm:w-[240px]"
       >
         <div className="h-1.5 w-14 rounded-full bg-[#55e0dc]" />
-        <p className="mt-3 text-[9px] font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">
+        <p className="mt-3 text-xs font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">
           Academic score
         </p>
         <p className="mt-1 text-3xl font-black text-white">
           {averageScore === null ? '—' : averageScore.toFixed(1)}
           <span className="ml-1 text-xs font-semibold text-[#b8e3ec]">/10</span>
         </p>
-        <div className="mt-3 flex items-center justify-between text-[9px] font-bold text-[#d6f7f5]">
+        <div className="mt-3 flex items-center justify-between text-xs font-bold text-[#d6f7f5]">
           <span>LOCKED GRADES</span>
           <span>{pendingCount} PENDING</span>
         </div>

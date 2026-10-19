@@ -1186,6 +1186,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     SeatNumber = 1,
                     IpAddress = "192.168.1.101",
                     Status = "SCHEDULED",
+                    StudentAcknowledgementStatus = "PENDING",
                     IsLocked = false,
                     CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -1198,6 +1199,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     SeatNumber = 2,
                     IpAddress = "192.168.1.102",
                     Status = "SCHEDULED",
+                    StudentAcknowledgementStatus = "PENDING",
                     IsLocked = false,
                     CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 });

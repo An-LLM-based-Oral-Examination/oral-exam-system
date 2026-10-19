@@ -1,16 +1,24 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { LogOut, Menu } from 'lucide-react'
+import {
+  BookOpenCheck,
+  ClipboardCheck,
+  FilePlus2,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 
 interface NavbarProps {
   onOpenSidebar: () => void
 }
 
-const PAGE_LABELS: Record<string, string> = {
-  '/dashboard': 'Tổng quan',
-  '/question-bank': 'Ngân hàng đề & Rubric',
-  '/question-bank/create': 'Tạo câu hỏi & Rubric',
-  '/lecturer/audit': 'Hậu kiểm & công bố điểm',
+const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
+  '/dashboard': { label: 'Tổng quan', icon: LayoutDashboard },
+  '/question-bank': { label: 'Ngân hàng đề & Rubric', icon: BookOpenCheck },
+  '/question-bank/create': { label: 'Tạo câu hỏi & Rubric', icon: FilePlus2 },
+  '/lecturer/audit': { label: 'Hậu kiểm & công bố điểm', icon: ClipboardCheck },
 }
 
 function getInitials(fullName: string) {
@@ -32,7 +40,8 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const pageLabel = PAGE_LABELS[location.pathname] ?? 'Cổng giảng viên'
+  const page = PAGE_META[location.pathname] ?? { label: 'Cổng giảng viên', icon: LayoutDashboard }
+  const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()
   const roleLabel =
     user?.role === 'Admin'
@@ -48,59 +57,57 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#e6ebf3] bg-white/92 px-4 shadow-[0_1px_0_rgba(15,35,65,0.02)] backdrop-blur-xl sm:px-6 xl:px-8">
-      <div className="flex min-w-0 items-center gap-3">
-        <button
-          type="button"
-          onClick={onOpenSidebar}
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#dce4ef] text-[#42536d] transition hover:border-[#b9c9de] hover:bg-[#f3f6fb] focus-visible:outline-2 focus-visible:outline-[#245eea] md:hidden"
-          aria-label="Mở menu điều hướng"
-        >
-          <Menu className="size-5" aria-hidden="true" />
-        </button>
-
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-medium text-[#8492a7]">
-            <span className="hidden sm:inline">Không gian giảng viên</span>
-            <span className="hidden text-[#c2cad6] sm:inline" aria-hidden="true">
-              /
-            </span>
-            <span className="truncate text-[#3d4f69]">{pageLabel}</span>
-          </div>
-          <p className="mt-0.5 hidden text-[10px] font-semibold text-[#245eea] sm:block">
-            Học kỳ {semesterLabel}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="hidden h-7 w-px bg-[#e5eaf1] sm:block" />
-
-        <div className="flex items-center gap-2.5">
-          <div className="hidden text-right sm:block">
-            <p className="max-w-[180px] truncate text-[11px] font-bold text-[#17243a]">
-              {user?.fullName ?? roleLabel}
-            </p>
-            <p className="mt-0.5 text-[9px] font-medium text-[#8a97aa]">
-              {user?.email ?? roleLabel}
-            </p>
-          </div>
-
-          <div
-            className="flex size-9 items-center justify-center rounded-full bg-[#07172e] text-[10px] font-bold text-white shadow-[0_4px_14px_rgba(7,23,46,0.18)] ring-2 ring-white"
-            aria-label={`Tài khoản ${user?.fullName ?? roleLabel}`}
+    <header className="sticky top-0 z-30 bg-white px-4 pt-4 pb-3 sm:px-6 xl:px-8">
+      <div className="flex h-16 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenSidebar}
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#4988C4]/30 bg-[#BDE8F5] text-[#0F2854] transition hover:bg-[#4988C4]/20 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:hidden"
+            aria-label="Mở menu điều hướng"
           >
-            {getInitials(user?.fullName ?? roleLabel) || 'GV'}
+            <Menu className="size-5" aria-hidden="true" />
+          </button>
+
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-[0_8px_16px_rgba(28,77,141,0.28)]">
+            <PageIcon className="size-5" aria-hidden="true" />
+          </span>
+
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
+              {roleLabel} · Học kỳ {semesterLabel}
+            </p>
+            <h1 className="truncate text-lg leading-tight font-bold tracking-[-0.03em] text-[#0F2854]">
+              {page.label}
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3">
+            <div className="hidden text-right sm:block">
+              <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
+                {user?.fullName ?? roleLabel}
+              </p>
+              <p className="max-w-[180px] truncate text-xs font-medium text-[#1C4D8D]">
+                {user?.email ?? roleLabel}
+              </p>
+            </div>
+            <div
+              className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
+              aria-label={`Tài khoản ${user?.fullName ?? roleLabel}`}
+            >
+              {getInitials(user?.fullName ?? roleLabel) || 'GV'}
+            </div>
           </div>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#66758a] transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-[#245eea] sm:px-3"
+            className="flex size-10 items-center justify-center rounded-xl border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b] transition hover:bg-[#f8d5d8] focus-visible:outline-2 focus-visible:outline-[#c2415b]"
             aria-label="Đăng xuất"
           >
             <LogOut className="size-4" aria-hidden="true" />
-            <span className="hidden lg:inline">Đăng xuất</span>
           </button>
         </div>
       </div>

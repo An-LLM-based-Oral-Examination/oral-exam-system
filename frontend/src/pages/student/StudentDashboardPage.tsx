@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 import type { ProblemDetails } from '@/types/auth.types'
 import {
   studentOverviewService,
@@ -154,7 +155,7 @@ function buildOverviewStats(
           ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
           : courseCodes || 'Chưa có môn học đang mở',
       icon: BookOpenCheck,
-      iconClassName: 'bg-[#eef3ff] text-[#3568df]',
+      iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     {
       label: 'Phiên luyện tập đã hoàn thành',
@@ -163,7 +164,7 @@ function buildOverviewStats(
       helper:
         passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% đánh giá đạt từ 5.0 điểm`,
       icon: Mic2,
-      iconClassName: 'bg-[#ebeefe] text-[#5b62e8]',
+      iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
     },
     {
       label: 'Điểm trung bình AI',
@@ -217,8 +218,8 @@ function getSemesterLabel(date: Date) {
 
 function getActivityBadgeClass(type: RecentActivity['type']) {
   if (type === 'mock') return 'bg-[#fff5df] text-[#9a6411]'
-  if (type === 'guided') return 'bg-[#f1edff] text-[#6546bd]'
-  return 'bg-[#eaf2ff] text-[#2759c8]'
+  if (type === 'guided') return 'bg-[#4988C4]/16 text-[#6546bd]'
+  return 'bg-[#4988C4]/16 text-[#1C4D8D]'
 }
 
 export function StudentDashboardPage() {
@@ -318,9 +319,9 @@ export function StudentDashboardPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className={ds.page}>
       <section
-        className="relative isolate overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_16px_50px_rgba(30,65,115,0.08)]"
+        className={ds.banner}
         onPointerMove={handleHeroPointerMove}
         onPointerLeave={resetHeroParallax}
       >
@@ -328,7 +329,7 @@ export function StudentDashboardPage() {
           className="pointer-events-none absolute inset-0 opacity-70 transition-transform duration-300 ease-out motion-reduce:transform-none"
           style={{
             backgroundImage:
-              'linear-gradient(rgba(69,104,164,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(69,104,164,0.035) 1px, transparent 1px)',
+              'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
             backgroundSize: '28px 28px',
             transform:
               'translate3d(var(--hero-grid-x, 0px), var(--hero-grid-y, 0px), 0) scale(1.03)',
@@ -339,14 +340,14 @@ export function StudentDashboardPage() {
 
         <div className="relative grid min-h-[310px] lg:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.65fr)]">
           <div className="relative z-10 flex flex-col justify-center px-5 py-6 sm:px-7 sm:py-8 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-medium text-[#6f7f95]">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dce8f6] bg-[#f5f9ff] px-2.5 py-1 font-semibold text-[#225bc9]">
+            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-white/75">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 font-semibold text-white">
                 <Sparkles className="size-3" />
                 Học kỳ {getSemesterLabel(now)}
               </span>
-              <span className="text-[#bdc6d3]">•</span>
+              <span className="text-white/40">•</span>
               <span>Khoa Công nghệ Phần mềm</span>
-              <span className="text-[#bdc6d3]">•</span>
+              <span className="text-white/40">•</span>
               <span className="inline-flex items-center gap-1 text-[#25856e]">
                 <span className="size-1.5 rounded-full bg-[#35c992]" />
                 AI sẵn sàng
@@ -354,35 +355,35 @@ export function StudentDashboardPage() {
             </div>
 
             <div className="max-w-[690px]">
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-[#57708f] uppercase">
+              <p className="text-xs font-semibold tracking-[0.08em] text-[#BDE8F5] uppercase">
                 Hệ thống vấn đáp tự động hóa AI
               </p>
-              <h1 className="mt-2 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.045em] text-[#0b1830]">
+              <h1 className="mt-2 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.045em] text-white">
                 {getGreeting(now.getHours())},{' '}
-                <span className="block text-[#1858d8] sm:inline">{studentName}</span>
+                <span className="block text-[#BDE8F5] sm:inline">{studentName}</span>
               </h1>
-              <p className="mt-2 max-w-[640px] text-[12px] leading-relaxed text-[#5f6f85] sm:text-[13px]">
+              <p className="mt-2 max-w-[640px] text-sm leading-relaxed text-white/80">
                 Sẵn sàng cho chu kỳ đánh giá khẩu vấn học thuật định kỳ. Tiếp tục luyện tập, kiểm
                 tra lịch thi và theo dõi phản hồi AI trong một không gian thống nhất.
               </p>
-              <p className="mt-1 text-[10px] font-medium text-[#8b98aa]">
+              <p className="mt-1 text-xs font-medium text-white/70">
                 Mã sinh viên: {studentIdentifier}
               </p>
             </div>
 
             <div className="mt-5 flex max-w-[660px] flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#e1e8f2] bg-white/84 p-3 shadow-[0_6px_20px_rgba(40,73,120,0.055)] backdrop-blur-md">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf0ff] text-[#225be0]">
+              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#4988C4]/45 bg-white/84 p-3 shadow-[0_6px_20px_rgba(40,73,120,0.055)] backdrop-blur-md">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   <CalendarDays className="size-[18px]" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[9px] font-bold tracking-[0.08em] text-[#8b96a8] uppercase">
+                  <p className="text-xs font-bold tracking-[0.08em] text-[#8aa0b8] uppercase">
                     Lịch thi gần nhất
                   </p>
-                  <p className="truncate text-[11px] font-bold text-[#25344b] sm:text-[12px]">
+                  <p className="truncate text-sm font-bold text-[#0F2854]">
                     Chưa có ca thi phòng lab được công bố
                   </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[#2860d9]">
+                  <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
                     <Clock3 className="size-3" />
                     Lịch sẽ hiện khi nhà trường công bố ca thi
                   </p>
@@ -391,7 +392,7 @@ export function StudentDashboardPage() {
 
               <Link
                 to="/exam?device-check=1"
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#194fcf] hover:shadow-[0_14px_30px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_14px_30px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
               >
                 Kiểm tra phòng thi & thiết bị
                 <ArrowRight className="size-3.5" />
@@ -417,7 +418,7 @@ export function StudentDashboardPage() {
                 <StudentOverviewThreeScene />
               </Suspense>
             </div>
-            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#d8e8f3] bg-white/72 px-3 py-1.5 text-[9px] font-semibold text-[#5b708c] shadow-sm backdrop-blur-md sm:flex">
+            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#4988C4]/45 bg-white/72 px-3 py-1.5 text-xs font-semibold text-[#5b6b84] shadow-sm backdrop-blur-md sm:flex">
               <span className="size-1.5 animate-pulse rounded-full bg-[#38cfa0] motion-reduce:animate-none" />
               AI Voice Core đang hoạt động
             </div>
@@ -428,7 +429,7 @@ export function StudentDashboardPage() {
       {loadError && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] leading-relaxed text-red-700"
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-700"
         >
           {loadError}
         </div>
@@ -446,17 +447,17 @@ export function StudentDashboardPage() {
           ({ label, value, suffix, helper, icon: Icon, iconClassName, trend }) => (
             <article
               key={label}
-              className="group rounded-2xl border border-[#e1e7f0] bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#cfdbeb] hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)] sm:p-5"
+              className="group rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)] sm:p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-medium text-[#64748b]">{label}</p>
+                  <p className="text-xs font-medium text-[#5b6b84]">{label}</p>
                   <div className="mt-3 flex items-baseline gap-1.5">
-                    <strong className="text-2xl font-bold tracking-[-0.045em] text-[#0b1830] sm:text-[1.7rem]">
+                    <strong className="text-2xl font-bold tracking-[-0.045em] text-[#0F2854] sm:text-[1.7rem]">
                       {value}
                     </strong>
                     {suffix && (
-                      <span className="text-[10px] font-semibold text-[#42536b]">{suffix}</span>
+                      <span className="text-xs font-semibold text-[#42536b]">{suffix}</span>
                     )}
                   </div>
                 </div>
@@ -469,11 +470,11 @@ export function StudentDashboardPage() {
                   <Icon className="size-4" />
                 </div>
               </div>
-              <p className="mt-1.5 flex items-center gap-1 text-[9px] font-medium text-[#758399]">
+              <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#5b6b84]">
                 {trend ? (
                   <TrendingUp className="size-3 text-[#1d9a78]" />
                 ) : (
-                  <span className="size-1.5 rounded-full bg-[#4c8df6]" />
+                  <span className="size-1.5 rounded-full bg-[#1C4D8D]" />
                 )}
                 <span className={cn(trend && 'text-[#167e65]')}>{helper}</span>
               </p>
@@ -482,18 +483,18 @@ export function StudentDashboardPage() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[#e1e7f0] bg-white shadow-[0_8px_30px_rgba(31,61,105,0.05)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#edf1f6] px-4 py-4 sm:items-center sm:px-5">
+      <section className={ds.section}>
+        <div className="flex items-start justify-between gap-4 border-b border-[#4988C4]/45 px-4 py-4 sm:items-center sm:px-5">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[#17243a] sm:text-[15px]">
+              <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
                 Hoạt động luyện tập gần đây
               </h2>
-              <span className="hidden rounded-full bg-[#edf3ff] px-2 py-0.5 text-[9px] font-semibold text-[#2c5dc8] sm:inline">
+              <span className="hidden rounded-full bg-[#4988C4]/16 px-2 py-0.5 text-xs font-semibold text-[#1C4D8D] sm:inline">
                 {isLoading ? '…' : recentActivities.length} phiên
               </span>
             </div>
-            <p className="mt-1 text-[10px] text-[#7b889b]">
+            <p className="mt-1 text-xs text-[#5b6b84]">
               Lịch sử đánh giá giọng nói và phản hồi rubric gần nhất
             </p>
           </div>
@@ -501,7 +502,7 @@ export function StudentDashboardPage() {
           <button
             type="button"
             onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-[10px] font-semibold text-[#245bd2] transition hover:bg-[#f0f5ff] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
             aria-expanded={showAllActivities}
           >
             {showAllActivities ? 'Thu gọn' : 'Xem tất cả'}
@@ -511,9 +512,9 @@ export function StudentDashboardPage() {
           </button>
         </div>
 
-        <div className="divide-y divide-[#edf1f6] px-4 sm:px-5">
+        <div className="divide-y divide-[#4988C4]/30 px-4 sm:px-5">
           {!isLoading && displayedActivities.length === 0 && (
-            <p className="py-6 text-center text-[11px] text-[#7b889b]">
+            <p className="py-6 text-center text-sm text-[#5b6b84]">
               Chưa có phiên luyện tập. Bắt đầu ở mục Luyện tập để xem lịch sử tại đây.
             </p>
           )}
@@ -526,38 +527,38 @@ export function StudentDashboardPage() {
                 className="group grid gap-3 py-3 transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e4e9f1] bg-[#f8faff] text-[#3264d4] transition group-hover:border-[#cddaf0] group-hover:bg-[#eef4ff]">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e4e9f1] bg-[#4988C4]/16 text-[#1C4D8D] transition group-hover:border-[#cddaf0] group-hover:bg-[#4988C4]/18">
                     <Icon className="size-4" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={cn(
-                          'rounded-md px-2 py-0.5 text-[8px] font-bold',
+                          'rounded-md px-2 py-0.5 text-xs font-bold',
                           getActivityBadgeClass(activity.type),
                         )}
                       >
                         {activity.typeLabel}
                       </span>
-                      <span className="text-[9px] text-[#8a96a8]">{activity.completedLabel}</span>
+                      <span className="text-xs text-[#8a96a8]">{activity.completedLabel}</span>
                     </div>
-                    <h3 className="mt-1 truncate text-[11px] font-bold text-[#26364d] sm:text-[12px]">
+                    <h3 className="mt-1 truncate text-sm font-bold text-[#0F2854]">
                       {activity.title}
                     </h3>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 pl-12 sm:justify-end sm:pl-0">
-                  <p className="text-[10px] text-[#69778b]">
+                  <p className="text-xs text-[#5b6b84]">
                     Điểm AI:{' '}
-                    <strong className="text-[12px] text-[#173c83]">
+                    <strong className="text-sm text-[#0F2854]">
                       {activity.score === null ? '—' : activity.score.toFixed(1)}
                     </strong>
-                    {activity.score !== null && <span className="text-[9px]"> /10</span>}
+                    {activity.score !== null && <span className="text-xs"> /10</span>}
                   </p>
                   <Link
                     to={activity.destination}
-                    className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#f3f6fc] px-3 text-[9px] font-semibold text-[#3361c5] transition hover:bg-[#e8effc] hover:text-[#194dbf] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                    className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#4988C4]/16 px-3 text-xs font-semibold text-[#1C4D8D] transition hover:bg-[#e8effc] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
                     aria-label={`Xem nhận xét cho ${activity.title}`}
                   >
                     Xem nhận xét
@@ -569,14 +570,14 @@ export function StudentDashboardPage() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#edf1f6] bg-[#fafcff] px-4 py-3 text-[9px] text-[#77869a] sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#4988C4]/45 bg-white px-4 py-3 text-xs text-[#5b6b84] sm:px-5">
           <span className="inline-flex items-center gap-1.5">
             <CheckCircle2 className="size-3.5 text-[#20a47e]" />
             Dữ liệu được đồng bộ từ các phiên luyện tập gần nhất
           </span>
           <Link
             to="/results"
-            className="inline-flex items-center gap-1 font-semibold text-[#245bd2] hover:underline"
+            className="inline-flex items-center gap-1 font-semibold text-[#1C4D8D] hover:underline"
           >
             Mở trang kết quả
             <ArrowRight className="size-3" />

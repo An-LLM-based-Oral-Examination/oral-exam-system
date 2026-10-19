@@ -17,5 +17,10 @@ public sealed class GetMockExamHistoryQueryValidator : AbstractValidator<GetMock
 
         RuleFor(x => x.PageSize)
             .InclusiveBetween(1, 100).WithMessage("Kích thước trang phải từ 1 đến 100.");
+
+        RuleFor(x => x.Status)
+            .Must(status => string.IsNullOrWhiteSpace(status)
+                || status is "in_progress" or "submitted" or "graded" or "abandoned")
+            .WithMessage("Trạng thái lịch sử không hợp lệ.");
     }
 }

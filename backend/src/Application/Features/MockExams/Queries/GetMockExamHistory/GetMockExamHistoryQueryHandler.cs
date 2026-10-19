@@ -33,6 +33,11 @@ public sealed class GetMockExamHistoryQueryHandler(
             query = query.Where(s => s.CourseId == request.CourseId.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            query = query.Where(s => s.Status == request.Status);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var sessions = await query
