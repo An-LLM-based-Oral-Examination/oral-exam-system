@@ -16,9 +16,13 @@ public partial class ExamQuestionSubmission
     public decimal? AiScore { get; set; }
     public decimal? FinalScore { get; set; }
     public string GradingStatus { get; set; } = "pending";
+    public bool IsSuspicious { get; set; }
+    public string? SuspiciousReason { get; set; }
+    public DateTime? GradingStartedAt { get; set; }
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
     public virtual StudentExamTicket Ticket { get; set; } = null!;
     public virtual ExamQuestion ExamQuestion { get; set; } = null!;
     public virtual ICollection<AiEvaluation> AiEvaluations { get; set; } = new List<AiEvaluation>();
+    public virtual GradingJob? GradingJob { get; set; }
 }

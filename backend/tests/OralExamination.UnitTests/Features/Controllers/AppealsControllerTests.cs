@@ -102,6 +102,7 @@ public class AppealsControllerTests
     [Fact(DisplayName = "3. GetAppeals trả về 200 OK với danh sách đơn phúc khảo")]
     public async Task GetAppeals_Should_Return_200_With_List()
     {
+        SetUserContext(Guid.NewGuid(), "department_head");
         var list = new List<AppealResponseDto>
         {
             new() { Id = Guid.NewGuid(), Reason = "Đơn 1", Status = "PENDING" },
@@ -122,6 +123,7 @@ public class AppealsControllerTests
     [Fact(DisplayName = "4. GetAppealById trả về 200 OK khi tìm thấy đơn")]
     public async Task GetAppealById_Should_Return_200_When_Found()
     {
+        SetUserContext(Guid.NewGuid(), "department_head");
         var appealId = Guid.NewGuid();
         var dto = new AppealResponseDto { Id = appealId, Reason = "Đơn mẫu", Status = "PENDING" };
 
@@ -139,6 +141,7 @@ public class AppealsControllerTests
     [Fact(DisplayName = "5. GetAppealById trả về 404 NotFound khi không tìm thấy đơn")]
     public async Task GetAppealById_Should_Return_404_When_Not_Found()
     {
+        SetUserContext(Guid.NewGuid(), "department_head");
         var appealId = Guid.NewGuid();
 
         _senderMock

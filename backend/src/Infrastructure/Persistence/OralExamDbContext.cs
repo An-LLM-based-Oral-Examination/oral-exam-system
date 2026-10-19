@@ -41,6 +41,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<LecturerAuditDetail> LecturerAuditDetails { get; set; }
     public virtual DbSet<AppealRequest> AppealRequests { get; set; }
     public virtual DbSet<DeadLetterQueue> DeadLetterQueues { get; set; }
+    public virtual DbSet<GradingJob> GradingJobs { get; set; }
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
     public virtual DbSet<SystemConfig> SystemConfigs { get; set; } = null!;
 
@@ -779,7 +780,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CotTrace).HasColumnName("cot_trace");
             entity.Property(e => e.EvaluatedAt).HasColumnName("evaluated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.PracticeAnswerId).HasDatabaseName("ix_ai_evaluations_practice_answer");
-            entity.HasIndex(e => e.ExamSubmissionId).HasDatabaseName("ix_ai_evaluations_exam_submission");
+            entity.HasIndex(e => e.ExamSubmissionId)
+                .IsUnique()
+                .HasFilter("exam_submission_id IS NOT NULL")
+                .HasDatabaseName("uq_ai_evaluations_exam_submission");
             entity.HasIndex(e => e.MockExamAnswerId).HasDatabaseName("ix_ai_evaluations_mock_exam_answer");
 
             entity.HasOne(d => d.PracticeAnswer)
@@ -1150,6 +1154,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ExamSetId).HasColumnName("exam_set_id");
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number").IsRequired();
             entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
+            entity.Property(e => e.AudioObjectKey).HasColumnName("audio_object_key").HasMaxLength(512);
+            entity.Property(e => e.AudioR2Url).HasColumnName("audio_r2_url").HasMaxLength(1024);
+            entity.Property(e => e.AudioHashSha256).HasColumnName("audio_hash_sha256").HasMaxLength(64);
+            entity.Property(e => e.AudioVerifiedAt).HasColumnName("audio_verified_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED");
             entity.Property(e => e.StudentAcknowledgementStatus).HasColumnName("student_acknowledgement_status").HasMaxLength(20).HasDefaultValue("PENDING").IsRequired();
             entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false);
@@ -1224,6 +1232,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AiScore).HasColumnName("ai_score").HasPrecision(4, 2);
             entity.Property(e => e.FinalScore).HasColumnName("final_score").HasPrecision(4, 2);
             entity.Property(e => e.GradingStatus).HasColumnName("grading_status").HasMaxLength(20).HasDefaultValue("pending");
+            entity.Property(e => e.IsSuspicious).HasColumnName("is_suspicious").HasDefaultValue(false);
+            entity.Property(e => e.SuspiciousReason).HasColumnName("suspicious_reason");
+            entity.Property(e => e.GradingStartedAt).HasColumnName("grading_started_at");
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.TicketId).HasDatabaseName("ix_exam_question_submissions_ticket");
             entity.HasIndex(e => e.ExamQuestionId).HasDatabaseName("ix_exam_question_submissions_question");
@@ -1238,6 +1249,32 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.Submissions)
                 .HasForeignKey(d => d.ExamQuestionId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GradingJob>(entity =>
+        {
+            entity.ToTable("grading_jobs", t =>
+            {
+                t.HasCheckConstraint("ck_grading_jobs_status", "status IN ('pending', 'processing', 'completed', 'failed')");
+                t.HasCheckConstraint("ck_grading_jobs_attempt_count", "attempt_count >= 0");
+            });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.SubmissionId).HasColumnName("submission_id").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
+            entity.Property(e => e.AttemptCount).HasColumnName("attempt_count").HasDefaultValue(0);
+            entity.Property(e => e.NextAttemptAt).HasColumnName("next_attempt_at");
+            entity.Property(e => e.LockedUntil).HasColumnName("locked_until");
+            entity.Property(e => e.LastError).HasColumnName("last_error");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.CompletedAt).HasColumnName("completed_at");
+            entity.HasIndex(e => e.SubmissionId).IsUnique().HasDatabaseName("uq_grading_jobs_submission");
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt, e.LockedUntil }).HasDatabaseName("ix_grading_jobs_dispatch");
+            entity.HasOne(e => e.Submission)
+                .WithOne(e => e.GradingJob)
+                .HasForeignKey<GradingJob>(e => e.SubmissionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // 24. lecturer_audits
@@ -1308,13 +1345,18 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.TaskType).HasColumnName("task_type").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CorrelationId).HasColumnName("correlation_id");
             entity.Property(e => e.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
             entity.Property(e => e.ErrorMessage).HasColumnName("error_message").IsRequired();
             entity.Property(e => e.RetryCount).HasColumnName("retry_count").HasDefaultValue(0);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.NextRetryAt).HasColumnName("next_retry_at");
+            entity.Property(e => e.LastAttemptAt).HasColumnName("last_attempt_at");
             entity.Property(e => e.ResolvedAt).HasColumnName("resolved_at");
             entity.HasIndex(e => new { e.Status, e.CreatedAt }).HasDatabaseName("ix_dead_letter_queues_status");
+            entity.HasIndex(e => new { e.Status, e.NextRetryAt }).HasDatabaseName("ix_dead_letter_queues_retry");
+            entity.HasIndex(e => new { e.TaskType, e.CorrelationId, e.Status }).HasDatabaseName("ix_dead_letter_queues_correlation");
         });
 
         // 27. audit_logs

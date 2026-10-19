@@ -3,7 +3,10 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.Commands.CreateAppeal;
+using OralExamination.Application.Features.Appeals.Commands.AssignAppealLecturer;
+using OralExamination.Application.Features.Appeals.Commands.RegradeAppeal;
 using OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision;
 using OralExamination.Application.Features.Appeals.DTOs;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealById;
@@ -47,14 +50,25 @@ public class AppealsController : ControllerBase
         return Guid.Empty;
     }
 
+    private Guid GetAuthenticatedUserId()
+    {
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
+
     /// <summary>
     /// Sinh viên nộp đơn phúc khảo bài thi chính thức (MF-04).
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "student")]
     public async Task<IActionResult> CreateAppeal([FromBody] CreateAppealRequestDto request)
     {
-        var currentUserId = GetCurrentUserId();
-        var studentId = currentUserId != Guid.Empty ? currentUserId : (request.StudentId ?? Guid.Empty);
+        var studentId = GetAuthenticatedUserId();
+        if (studentId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
 
         var command = new CreateAppealCommand(
             studentId,
@@ -82,13 +96,20 @@ public class AppealsController : ControllerBase
     /// Tra cứu danh sách đơn phúc khảo có hỗ trợ lọc theo trạng thái, ca thi, sinh viên, người thụ lý.
     /// </summary>
     [HttpGet]
+    [Authorize(Roles = "student,lecturer,department_head")]
     public async Task<IActionResult> GetAppeals(
         [FromQuery] string? status,
         [FromQuery] Guid? sessionId,
         [FromQuery] Guid? studentId,
         [FromQuery] Guid? assignedTo)
     {
-        var query = new GetAppealsQuery(status, sessionId, studentId, assignedTo);
+        var requesterId = GetAuthenticatedUserId();
+        if (requesterId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+        var requesterRole = User.FindFirst(ClaimTypes.Role)?.Value ?? User.FindFirst("role")?.Value;
+        var query = new GetAppealsQuery(status, sessionId, studentId, assignedTo, requesterId, requesterRole);
         var result = await _sender.Send(query);
 
         if (!result.IsSuccess)
@@ -109,9 +130,16 @@ public class AppealsController : ControllerBase
     /// Tra cứu chi tiết một đơn phúc khảo theo ID.
     /// </summary>
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "student,lecturer,department_head")]
     public async Task<IActionResult> GetAppealById(Guid id)
     {
-        var query = new GetAppealByIdQuery(id);
+        var requesterId = GetAuthenticatedUserId();
+        if (requesterId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+        var requesterRole = User.FindFirst(ClaimTypes.Role)?.Value ?? User.FindFirst("role")?.Value;
+        var query = new GetAppealByIdQuery(id, requesterId, requesterRole);
         var result = await _sender.Send(query);
 
         if (!result.IsSuccess)
@@ -132,10 +160,14 @@ public class AppealsController : ControllerBase
     /// Trưởng Bộ Môn (department_head) hoặc Admin thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
     /// </summary>
     [HttpPut("{id:guid}/review")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> ReviewAppeal(Guid id, [FromBody] ReviewAppealRequestDto request)
     {
-        var currentUserId = GetCurrentUserId();
-        var reviewerId = currentUserId != Guid.Empty ? currentUserId : (request.ReviewerId ?? Guid.Empty);
+        var reviewerId = GetAuthenticatedUserId();
+        if (reviewerId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
 
         var command = new ReviewAppealDecisionCommand(
             id,
@@ -158,5 +190,77 @@ public class AppealsController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn tiếp nhận và giao một giảng viên đang hoạt động chấm lại đơn phúc khảo.
+    /// </summary>
+    [HttpPut("{id:guid}/assign-lecturer")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> AssignLecturer(
+        Guid id,
+        [FromBody] AssignAppealLecturerRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var departmentHeadId = GetAuthenticatedUserId();
+        if (departmentHeadId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new AssignAppealLecturerCommand(id, departmentHeadId, request.LecturerId),
+            cancellationToken);
+        return AppealMutationResult(result, "assign-lecturer");
+    }
+
+    /// <summary>
+    /// Giảng viên được phân công gửi điểm chấm lại và giải trình; One-Way Lock chỉ mở cho transaction này.
+    /// </summary>
+    [HttpPut("{id:guid}/regrade")]
+    [Authorize(Roles = "lecturer")]
+    public async Task<IActionResult> Regrade(
+        Guid id,
+        [FromBody] RegradeAppealRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var lecturerId = GetAuthenticatedUserId();
+        if (lecturerId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new RegradeAppealCommand(id, lecturerId, request.NewScore, request.ReviewNotes),
+            cancellationToken);
+        return AppealMutationResult(result, "regrade");
+    }
+
+    private IActionResult AppealMutationResult(Result<AppealResponseDto> result, string operation)
+    {
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        var statusCode = result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+            ? StatusCodes.Status404NotFound
+            : result.Error.Contains("Chỉ ", StringComparison.OrdinalIgnoreCase)
+                || result.Error.Contains("không phải người được phân công", StringComparison.OrdinalIgnoreCase)
+                ? StatusCodes.Status403Forbidden
+                : StatusCodes.Status409Conflict;
+
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status404NotFound => "Không tìm thấy.",
+                StatusCodes.Status403Forbidden => "Không được phép.",
+                _ => "Xung đột trạng thái tài nguyên."
+            },
+            Detail = result.Error,
+            Type = $"https://oralexam.fpt.edu.vn/errors/appeal-{operation}-{statusCode}"
+        });
     }
 }

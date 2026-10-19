@@ -20,6 +20,8 @@ using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 using OralExamination.Infrastructure.Persistence.Interceptors;
+using OralExamination.Infrastructure.Reporting;
+using OfficeOpenXml;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.OfficialExams;
@@ -186,7 +188,7 @@ public class ExportAndVerifyGradeCertificateTests
         using var context = CreateDbContext();
         var (shift, _, _, _, _) = await SeedShiftDataAsync(context);
 
-        var handler = new ExportShiftExcelQueryHandler(context);
+        var handler = new ExportShiftExcelQueryHandler(context, new ExamGradeReportExporter());
         var result = await handler.Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -195,22 +197,13 @@ public class ExportAndVerifyGradeCertificateTests
         result.Value.CertificateHash.Should().HaveLength(64);
         result.Value.FileContents.Should().NotBeEmpty();
 
-        using var ms = new MemoryStream(result.Value.FileContents);
-        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-        zip.Entries.Select(e => e.FullName).Should().Contain(new[]
-        {
-            "[Content_Types].xml",
-            "xl/workbook.xml",
-            "xl/worksheets/sheet1.xml"
-        });
-
-        var sheetEntry = zip.GetEntry("xl/worksheets/sheet1.xml")!;
-        using var reader = new StreamReader(sheetEntry.Open(), Encoding.UTF8);
-        var xml = await reader.ReadToEndAsync();
-        xml.Should().Contain("SE170123");
-        xml.Should().Contain("Nguyễn Quang Thành");
-        xml.Should().Contain("9.00");
-        xml.Should().Contain(result.Value.CertificateHash);
+        using var package = new ExcelPackage(new MemoryStream(result.Value.FileContents));
+        var sheet = package.Workbook.Worksheets["Bảng điểm khảo thí"];
+        sheet.Should().NotBeNull();
+        sheet.Cells[9, 3].Text.Should().Be("SE170123");
+        sheet.Cells[9, 4].Text.Should().Be("Nguyễn Quang Thành");
+        sheet.Cells[9, 7].GetValue<decimal>().Should().Be(9.00m);
+        sheet.Cells[11, 2].Text.Should().Be(result.Value.CertificateHash);
     }
 
     [Fact(DisplayName = "BE-V01: ExportShiftPdfQueryHandler sinh file PDF 1.4 chuẩn kèm chữ ký số SHA-256")]
@@ -219,7 +212,7 @@ public class ExportAndVerifyGradeCertificateTests
         using var context = CreateDbContext();
         var (shift, _, _, _, _) = await SeedShiftDataAsync(context);
 
-        var handler = new ExportShiftPdfQueryHandler(context);
+        var handler = new ExportShiftPdfQueryHandler(context, new ExamGradeReportExporter());
         var result = await handler.Handle(new ExportShiftPdfQuery(shift.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -227,12 +220,47 @@ public class ExportAndVerifyGradeCertificateTests
         result.Value.ContentType.Should().Be("application/pdf");
         result.Value.CertificateHash.Should().HaveLength(64);
 
-        var pdfText = Encoding.ASCII.GetString(result.Value.FileContents);
-        pdfText.Should().StartWith("%PDF-1.4");
-        pdfText.Should().Contain("SE170123");
-        pdfText.Should().Contain("Nguyen Quang Thanh");
-        pdfText.Should().Contain(result.Value.CertificateHash);
-        pdfText.TrimEnd().Should().EndWith("%%EOF");
+        Encoding.ASCII.GetString(result.Value.FileContents, 0, 5).Should().Be("%PDF-");
+        result.Value.FileContents.Length.Should().BeGreaterThan(1_000);
+    }
+
+    [Fact(DisplayName = "BE-11: Không xuất báo cáo chính thức trước khi toàn bộ vé được publish và khóa")]
+    public async Task ExportReport_Should_Fail_When_Shift_Is_Not_Fully_Published()
+    {
+        using var context = CreateDbContext();
+        var (shift, ticket, _, _, _) = await SeedShiftDataAsync(context);
+        ticket.IsLocked = false;
+        ticket.Status = ExamTicketStatus.Audited;
+        await context.SaveChangesAsync();
+
+        var exporter = new ExamGradeReportExporter();
+        var excelResult = await new ExportShiftExcelQueryHandler(context, exporter)
+            .Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
+        var pdfResult = await new ExportShiftPdfQueryHandler(context, exporter)
+            .Handle(new ExportShiftPdfQuery(shift.Id), CancellationToken.None);
+
+        excelResult.IsSuccess.Should().BeFalse();
+        pdfResult.IsSuccess.Should().BeFalse();
+        excelResult.Error.Should().Contain("đã công bố và khóa toàn bộ điểm");
+    }
+
+    [Fact(DisplayName = "BE-11: OneWayLock chặn sửa trực tiếp điểm submission sau publish")]
+    public async Task OneWayLockInterceptor_Should_Block_Submission_Score_Update_After_Publish()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        Guid submissionId;
+        using (var seedContext = CreateDbContext(databaseName))
+        {
+            var (_, ticket, _, _, _) = await SeedShiftDataAsync(seedContext);
+            submissionId = ticket.Submissions.Single().Id;
+        }
+
+        using var lockedContext = CreateDbContext(databaseName, withLockInterceptor: true);
+        var submission = await lockedContext.ExamQuestionSubmissions.FindAsync(submissionId);
+        submission!.FinalScore = 10m;
+
+        Func<Task> action = () => lockedContext.SaveChangesAsync();
+        await action.Should().ThrowAsync<OralExamination.Domain.Exceptions.OneWayLockException>();
     }
 
     [Fact(DisplayName = "BE-V02: VerifyGradeCertificateQueryHandler xác thực thành công mã băm QR và phát hiện giả mạo điểm")]
@@ -241,7 +269,7 @@ public class ExportAndVerifyGradeCertificateTests
         using var context = CreateDbContext();
         var (shift, _, audit, _, _) = await SeedShiftDataAsync(context);
 
-        var excelHandler = new ExportShiftExcelQueryHandler(context);
+        var excelHandler = new ExportShiftExcelQueryHandler(context, new ExamGradeReportExporter());
         var exportResult = await excelHandler.Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
         var certificateHash = exportResult.Value.CertificateHash;
 

@@ -295,7 +295,7 @@ public class CreateAppealCommandHandlerTests
     }
 
     [Fact(DisplayName = "5. Handle tự động gán Quản trị viên (admin) nếu hệ thống chưa có Trưởng Bộ Môn")]
-    public async Task Handle_Should_Fallback_To_Admin_When_No_DepartmentHead()
+    public async Task Handle_Should_Fail_When_No_DepartmentHead()
     {
         using var context = CreateDbContext();
         var (student, deptHead, ticket, _) = await SeedDataAsync(context);
@@ -324,9 +324,8 @@ public class CreateAppealCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AssignedTo.Should().Be(admin.Id);
-        result.Value.AssignedToName.Should().Be(admin.FullName);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Không tìm thấy người phụ trách");
     }
 
     [Theory(DisplayName = "6. Handle trả về Failure khi vé thi chưa ở trạng thái PUBLISHED hoặc LOCKED")]

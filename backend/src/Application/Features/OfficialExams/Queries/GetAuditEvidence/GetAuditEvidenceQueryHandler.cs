@@ -17,10 +17,12 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvi
 public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvidenceQuery, Result<List<AuditEvidenceItemDto>>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IStorageService? _storageService;
 
-    public GetAuditEvidenceQueryHandler(IApplicationDbContext context)
+    public GetAuditEvidenceQueryHandler(IApplicationDbContext context, IStorageService? storageService = null)
     {
         _context = context;
+        _storageService = storageService;
     }
 
     public async Task<Result<List<AuditEvidenceItemDto>>> Handle(GetAuditEvidenceQuery request, CancellationToken cancellationToken)
@@ -62,6 +64,17 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
             // Audio & Transcript
             var audioR2Url = latestSubmission?.AudioR2Url
                 ?? ticket.Submissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioR2Url))?.AudioR2Url;
+
+            if (_storageService is not null
+                && !string.IsNullOrWhiteSpace(audioR2Url)
+                && !Uri.TryCreate(audioR2Url, UriKind.Absolute, out _))
+            {
+                var presigned = await _storageService.CreatePresignedDownloadUrlAsync(
+                    audioR2Url,
+                    TimeSpan.FromMinutes(15),
+                    cancellationToken);
+                audioR2Url = presigned.DownloadUrl;
+            }
 
             var audioHashSha256 = latestSubmission?.AudioHashSha256
                 ?? ticket.Submissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioHashSha256))?.AudioHashSha256;
@@ -138,7 +151,7 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 ConfidenceScore = confidenceScore,
                 IsSuspicious = isSuspicious,
                 SuspiciousReason = suspiciousReason,
-                CotTrace = cotTrace,
+                AiChainOfThought = cotTrace,
                 FinalScore = finalScore,
                 IsLocked = ticket.IsLocked
             });

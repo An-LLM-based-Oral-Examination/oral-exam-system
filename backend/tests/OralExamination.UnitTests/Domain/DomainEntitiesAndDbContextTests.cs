@@ -29,12 +29,12 @@ public class DomainEntitiesAndDbContextTests
 
 
     [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 30 thực thể trong Model")]
-    public void DbContext_Must_Contain_Exactly_30_Entity_Types()
+    public void DbContext_Must_Contain_Exactly_31_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(30, "Hệ thống chuẩn hóa 30 bảng CSDL phân tách Practice - Exam kèm Phúc khảo nội bộ, Cấu hình hệ thống và Refresh Token");
+        entityTypes.Should().HaveCount(31, "durable official grading adds the grading_jobs table");
 
         var expectedEntities = new[]
         {
@@ -66,6 +66,7 @@ public class DomainEntitiesAndDbContextTests
             typeof(LecturerAuditDetail),
             typeof(AppealRequest),
             typeof(DeadLetterQueue),
+            typeof(GradingJob),
             typeof(AuditLog),
             typeof(SystemConfig)
         };
@@ -112,6 +113,7 @@ public class DomainEntitiesAndDbContextTests
             (typeof(LecturerAuditDetail), "lecturer_audit_details"),
             (typeof(AppealRequest), "appeal_requests"),
             (typeof(DeadLetterQueue), "dead_letter_queues"),
+            (typeof(GradingJob), "grading_jobs"),
             (typeof(AuditLog), "audit_logs"),
             (typeof(SystemConfig), "system_configs")
         };
@@ -195,7 +197,7 @@ public class DomainEntitiesAndDbContextTests
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(42, "Hệ thống phải có đúng 42 check constraints được cấu hình trong EF Core Code-First");
+        allCheckConstraints.Count.Should().Be(44, "grading_jobs adds status and non-negative attempt constraints");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
@@ -342,6 +344,7 @@ public class DomainEntitiesAndDbContextTests
         appDb.LecturerAuditDetails.Should().NotBeNull();
         appDb.AppealRequests.Should().NotBeNull();
         appDb.DeadLetterQueues.Should().NotBeNull();
+        appDb.GradingJobs.Should().NotBeNull();
         appDb.AuditLogs.Should().NotBeNull();
     }
 

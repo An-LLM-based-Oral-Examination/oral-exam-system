@@ -34,6 +34,21 @@ public sealed class GetAppealByIdQueryHandler : IRequestHandler<GetAppealByIdQue
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
+        if (request.RequesterId.HasValue)
+        {
+            var canView = request.RequesterRole switch
+            {
+                "student" => appeal.StudentId == request.RequesterId.Value,
+                "lecturer" => appeal.AssignedTo == request.RequesterId.Value,
+                "department_head" => true,
+                _ => false
+            };
+            if (!canView)
+            {
+                return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong phạm vi được phép truy cập.");
+            }
+        }
+
         var dto = new AppealResponseDto
         {
             Id = appeal.Id,

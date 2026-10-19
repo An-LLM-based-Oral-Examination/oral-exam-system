@@ -13,6 +13,7 @@ using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
+using OralExamination.Domain.Exceptions;
 using OralExamination.Infrastructure.Persistence;
 using OralExamination.Infrastructure.Persistence.Interceptors;
 using API.Controllers.v1;
@@ -212,7 +213,7 @@ public class AdversarialMilestone4ChallengerTests
                         TranscriptWhisper = "Thí sinh 5 trả lời đang chờ thẩm định.",
                         AiScore = 7.8m,
                         FinalScore = null,
-                        GradingStatus = "graded"
+                        GradingStatus = "ai_graded"
                     };
                     ticket.Submissions.Add(submission);
                     context.ExamQuestionSubmissions.Add(submission);
@@ -387,8 +388,8 @@ public class AdversarialMilestone4ChallengerTests
         lockedTicket.SeatNumber = 99;
 
         Func<Task> act1 = async () => await nextContext.SaveChangesAsync();
-        await act1.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await act1.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
 
         // Kịch bản tấn công 2: Cố tình mở khóa IsLocked = false
         using var rollbackContext = CreateDbContext(dbName);
@@ -397,8 +398,8 @@ public class AdversarialMilestone4ChallengerTests
 
         lockedTicket2.IsLocked = false;
         Func<Task> act2 = async () => await rollbackContext.SaveChangesAsync();
-        await act2.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await act2.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
 
         // Kịch bản tấn công 3: Cố tình chuyển Status về SCHEDULED
         using var statusContext = CreateDbContext(dbName);
@@ -407,8 +408,8 @@ public class AdversarialMilestone4ChallengerTests
 
         lockedTicket3.Status = ExamTicketStatus.Scheduled;
         Func<Task> act3 = async () => await statusContext.SaveChangesAsync();
-        await act3.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await act3.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
     }
 
     [Fact(DisplayName = "ADV-M4-05: Thử XÓA vé thi đã khóa -> OneWayLockInterceptor BẮT BUỘC ném InvalidOperationException")]
@@ -433,8 +434,8 @@ public class AdversarialMilestone4ChallengerTests
         deleteContext.StudentExamTickets.Remove(lockedTicket);
 
         Func<Task> act = async () => await deleteContext.SaveChangesAsync();
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await act.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
     }
 
     [Fact(DisplayName = "ADV-M4-06: Thử sửa đổi hoặc xóa LecturerAudit đã khóa -> OneWayLockInterceptor BẮT BUỘC ném InvalidOperationException")]
@@ -474,16 +475,16 @@ public class AdversarialMilestone4ChallengerTests
 
         lockedAudit.AuditedScore = 10.0m;
         Func<Task> actEdit = async () => await editContext.SaveChangesAsync();
-        await actEdit.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await actEdit.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
 
         // Thử xóa audit trong request mới
         using var delContext = CreateDbContext(dbName);
         var auditToDelete = await delContext.LecturerAudits.FindAsync(audit.Id);
         delContext.LecturerAudits.Remove(auditToDelete!);
         Func<Task> actDelete = async () => await delContext.SaveChangesAsync();
-        await actDelete.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*permanently locked (One-Way Lock)*");
+        await actDelete.Should().ThrowAsync<OneWayLockException>()
+            .WithMessage("*khóa một chiều*");
     }
 
     [Fact(DisplayName = "ADV-M4-07: Vé thứ 5 có 2 câu hỏi (1 có điểm, 1 thiếu điểm) -> BẮT BUỘC FAIL (không cho công bố dở dang)")]
@@ -966,8 +967,8 @@ public class AdversarialMilestone4ChallengerTests
 
     #region 3. Rà soát Controller Security & Error Handling
 
-    [Fact(DisplayName = "ADV-M4-15: OfficialExamsController.PublishGrades với request null & no auth -> trả về 422 an toàn, không 500")]
-    public async Task ADV_M4_15_Controller_PublishGrades_Null_Body_Returns_422()
+    [Fact(DisplayName = "ADV-M4-15: OfficialExamsController.PublishGrades không có JWT trả về 401")]
+    public async Task ADV_M4_15_Controller_PublishGrades_No_Auth_Returns_401()
     {
         var mockSender = new Mock<ISender>();
         mockSender
@@ -982,11 +983,9 @@ public class AdversarialMilestone4ChallengerTests
             }
         };
 
-        var response = await controller.PublishGrades(Guid.NewGuid(), null);
+        var response = await controller.PublishGrades(Guid.NewGuid());
 
-        response.Should().BeOfType<UnprocessableEntityObjectResult>();
-        var objResult = response as UnprocessableEntityObjectResult;
-        objResult!.StatusCode.Should().Be(422);
+        response.Should().BeOfType<UnauthorizedResult>();
     }
 
     [Fact(DisplayName = "ADV-M4-16: OfficialExamsController.GetAuditEvidence với ca thi không tồn tại -> trả về 404 RFC 7807")]

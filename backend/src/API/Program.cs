@@ -18,6 +18,9 @@ builder.Services.AddOralExamAuthentication(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<OralExamination.API.Workers.GradingQueueWorker>();
+builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamGradingDispatcher>();
+builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamGradingWorker>();
+builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamDlqReplayWorker>();
 
 builder.Services.AddCors(options =>
 {

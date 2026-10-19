@@ -37,6 +37,7 @@ public interface IApplicationDbContext
     DbSet<LecturerAuditDetail> LecturerAuditDetails { get; }
     DbSet<AppealRequest> AppealRequests { get; }
     DbSet<DeadLetterQueue> DeadLetterQueues { get; }
+    DbSet<GradingJob> GradingJobs { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<SystemConfig> SystemConfigs { get; }
 

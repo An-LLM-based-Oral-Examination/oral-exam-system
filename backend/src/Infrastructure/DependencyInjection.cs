@@ -48,6 +48,8 @@ public static class DependencyInjection
         services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
+        services.AddSingleton<IOfficialExamGradingQueue, OralExamination.Infrastructure.Channels.BoundedOfficialExamGradingQueue>();
+        services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
 
         return services;
     }

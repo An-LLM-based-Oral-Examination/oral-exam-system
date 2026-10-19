@@ -34,12 +34,12 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
 
         if (lecturer == null)
         {
-            return Result<PublishGradesResponseDto>.Failure("Giảng viên không tồn tại trong hệ thống.");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ActorNotFound);
         }
 
-        if (lecturer.Role != UserRole.Lecturer && lecturer.Role != UserRole.DepartmentHead && lecturer.Role != UserRole.Admin)
+        if (!lecturer.IsActive || lecturer.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
         {
-            return Result<PublishGradesResponseDto>.Failure("Người dùng không có quyền công bố điểm ca thi (yêu cầu Giảng viên, Trưởng Bộ Môn hoặc Quản trị viên).");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.Forbidden);
         }
 
         // 2. Kiểm tra ca thi tồn tại
@@ -48,7 +48,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
 
         if (shift == null)
         {
-            return Result<PublishGradesResponseDto>.Failure("Ca thi không tồn tại trong hệ thống.");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotFound);
         }
 
         // 3. Lấy toàn bộ vé thi của ca thi
@@ -56,25 +56,31 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
             .Include(t => t.Submissions)
+                .ThenInclude(submission => submission.GradingJob)
             .Where(t => t.ShiftId == request.ShiftId)
             .ToListAsync(cancellationToken);
 
         if (!tickets.Any())
         {
-            return Result<PublishGradesResponseDto>.Failure("Ca thi không có vé thi nào để công bố điểm.");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.NoTickets);
+        }
+
+        if (shift.EndTime > DateTime.UtcNow || shift.Status is "scheduled" or "cancelled")
+        {
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotEnded);
         }
 
         // 4. Kiểm tra ca thi đã bị khóa từ trước chưa
-        if (tickets.All(t => t.IsLocked))
+        if (tickets.Any(t => t.IsLocked || t.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked))
         {
-            return Result<PublishGradesResponseDto>.Failure("Ca thi này đã được công bố điểm trước đó và đã bị khóa một chiều.");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.AlreadyPublished);
         }
 
         // 5. CHỐT CHẶN 100%: Toàn bộ sinh viên trong ca thi bắt buộc phải có điểm hoàn chỉnh
         var unscoredTickets = tickets.Where(t => !HasCompleteScore(t)).ToList();
         if (unscoredTickets.Any())
         {
-            return Result<PublishGradesResponseDto>.Failure("Không thể công bố điểm. Còn sinh viên chưa có điểm hoàn chỉnh.");
+            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.IncompleteGrades);
         }
 
         // 6. Kích hoạt One-Way Lock cho toàn bộ vé thi và đồng bộ điểm chính thức
@@ -123,16 +129,27 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
     /// </summary>
     private static bool HasCompleteScore(StudentExamTicket ticket)
     {
-        if (ticket.LecturerAudit != null)
+        if (ticket.Status is not (ExamTicketStatus.AiGraded or ExamTicketStatus.Audited))
         {
-            return true;
+            return false;
         }
 
-        if (ticket.Submissions.Any() && ticket.Submissions.All(s => s.FinalScore.HasValue || s.AiScore.HasValue))
+        if (ticket.LecturerAudit != null)
+        {
+            return IsValidScore(ticket.LecturerAudit.AuditedScore)
+                && !string.IsNullOrWhiteSpace(ticket.LecturerAudit.OverrideReason);
+        }
+
+        if (ticket.Submissions.Any() && ticket.Submissions.All(submission =>
+                submission.GradingStatus is "ai_graded" or "audited"
+                && submission.GradingJob?.Status is null or "completed"
+                && IsValidScore(submission.FinalScore ?? submission.AiScore)))
         {
             return true;
         }
 
         return false;
     }
+
+    private static bool IsValidScore(decimal? score) => score is >= 0m and <= 10m;
 }

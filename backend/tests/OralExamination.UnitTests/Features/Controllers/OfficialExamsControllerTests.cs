@@ -101,8 +101,6 @@ public class OfficialExamsControllerTests
         SetUserContext(lecturerId, role: "lecturer");
 
         var shiftId = Guid.NewGuid();
-        var request = new PublishGradesRequestDto { LecturerId = lecturerId };
-
         var responseDto = new PublishGradesResponseDto
         {
             ShiftId = shiftId,
@@ -115,29 +113,27 @@ public class OfficialExamsControllerTests
             .Setup(s => s.Send(It.IsAny<PublishGradesCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PublishGradesResponseDto>.Success(responseDto));
 
-        var actionResult = await _controller.PublishGrades(shiftId, request);
+        var actionResult = await _controller.PublishGrades(shiftId);
 
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(responseDto);
     }
 
-    [Fact(DisplayName = "4. PublishGrades trả về 422 UnprocessableEntity khi còn sinh viên chưa có điểm hoàn chỉnh")]
-    public async Task PublishGrades_Should_Return_422_When_Any_Student_Lacks_Score()
+    [Fact(DisplayName = "4. PublishGrades trả về 409 Conflict khi còn sinh viên chưa có điểm hoàn chỉnh")]
+    public async Task PublishGrades_Should_Return_409_When_Any_Student_Lacks_Score()
     {
         var lecturerId = Guid.NewGuid();
         SetUserContext(lecturerId, role: "lecturer");
 
         var shiftId = Guid.NewGuid();
-        var request = new PublishGradesRequestDto { LecturerId = lecturerId };
-
         _senderMock
             .Setup(s => s.Send(It.IsAny<PublishGradesCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PublishGradesResponseDto>.Failure("Không thể công bố điểm. Còn sinh viên chưa có điểm hoàn chỉnh."));
 
-        var actionResult = await _controller.PublishGrades(shiftId, request);
+        var actionResult = await _controller.PublishGrades(shiftId);
 
-        var unprocResult = actionResult.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
-        unprocResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        var conflictResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        conflictResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
     }
 }

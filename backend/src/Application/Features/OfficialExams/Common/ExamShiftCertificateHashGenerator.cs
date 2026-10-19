@@ -10,7 +10,7 @@ using OralExamination.Domain.Entities;
 namespace OralExamination.Application.Features.OfficialExams.Common;
 
 /// <summary>
-/// Bộ sinh chữ ký số SHA-256 tất định (deterministic) cho bảng điểm ca thi thật (MF-04)
+/// Bộ sinh mã niêm phong SHA-256 tất định (deterministic) cho bảng điểm ca thi thật (MF-04)
 /// và trích xuất dữ liệu dòng điểm chuẩn hóa từ RealExamSessionShift.
 /// </summary>
 public static class ExamShiftCertificateHashGenerator

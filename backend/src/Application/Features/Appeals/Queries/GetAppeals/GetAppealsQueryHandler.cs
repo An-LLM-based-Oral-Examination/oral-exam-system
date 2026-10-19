@@ -31,6 +31,17 @@ public sealed class GetAppealsQueryHandler : IRequestHandler<GetAppealsQuery, Re
             .Include(a => a.ReviewedByUser)
             .AsQueryable();
 
+        if (request.RequesterId.HasValue)
+        {
+            query = request.RequesterRole switch
+            {
+                "student" => query.Where(a => a.StudentId == request.RequesterId.Value),
+                "lecturer" => query.Where(a => a.AssignedTo == request.RequesterId.Value),
+                "department_head" => query,
+                _ => query.Where(_ => false)
+            };
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
             query = query.Where(a => a.Status == request.Status.Trim());

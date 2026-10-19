@@ -187,4 +187,34 @@ public class GetAppealsQueryHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("không tồn tại");
     }
+
+    [Fact(DisplayName = "BE-12: Sinh viên không đọc được danh sách phúc khảo của sinh viên khác")]
+    public async Task Handle_GetAppeals_Should_Enforce_Student_Ownership()
+    {
+        using var context = CreateDbContext();
+        await SeedDataAsync(context);
+        var handler = new GetAppealsQueryHandler(context);
+
+        var result = await handler.Handle(
+            new GetAppealsQuery(RequesterId: Guid.NewGuid(), RequesterRole: UserRole.Student),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "BE-12: Giảng viên không đọc được chi tiết đơn không được phân công")]
+    public async Task Handle_GetAppealById_Should_Enforce_Lecturer_Assignment()
+    {
+        using var context = CreateDbContext();
+        var (_, _, _, appeal, _) = await SeedDataAsync(context);
+        var handler = new GetAppealByIdQueryHandler(context);
+
+        var result = await handler.Handle(
+            new GetAppealByIdQuery(appeal.Id, Guid.NewGuid(), UserRole.Lecturer),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("phạm vi được phép truy cập");
+    }
 }

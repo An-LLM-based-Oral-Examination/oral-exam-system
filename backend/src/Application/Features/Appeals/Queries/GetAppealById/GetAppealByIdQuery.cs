@@ -8,4 +8,7 @@ namespace OralExamination.Application.Features.Appeals.Queries.GetAppealById;
 /// <summary>
 /// CQRS Query tra cứu thông tin chi tiết một đơn phúc khảo theo ID.
 /// </summary>
-public sealed record GetAppealByIdQuery(Guid Id) : IRequest<Result<AppealResponseDto>>;
+public sealed record GetAppealByIdQuery(
+    Guid Id,
+    Guid? RequesterId = null,
+    string? RequesterRole = null) : IRequest<Result<AppealResponseDto>>;
