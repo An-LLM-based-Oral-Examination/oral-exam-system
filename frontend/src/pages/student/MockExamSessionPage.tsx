@@ -425,6 +425,22 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     const tick = () => {
       const next = secondsUntilExpiry(session.expiresAt)
       setSecondsLeft(next)
+      if (
+        next > 0 &&
+        next <= 60 &&
+        !urgentWarnedRef.current &&
+        !warningOpenRef.current
+      ) {
+        urgentWarnedRef.current = true
+        warningOpenRef.current = true
+        setWarning({
+          title: 'Sắp hết giờ',
+          message:
+            'Còn dưới 1 phút. Hết giờ hệ thống tự nộp bài và câu chưa trả lời được tính 0 điểm.',
+          confirmLabel: 'Tiếp tục làm bài',
+          tone: 'warning',
+        })
+      }
       if (next === 0 && !didAutoSubmit.current) {
         didAutoSubmit.current = true
         void finalizeExam('timeout')
@@ -519,19 +535,6 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [closeWarning, warning])
-
-  useEffect(() => {
-    if (phase !== 'exam' || urgentWarnedRef.current || warningOpenRef.current) return
-    if (secondsLeft <= 0 || secondsLeft > 60) return
-    urgentWarnedRef.current = true
-    warningOpenRef.current = true
-    setWarning({
-      title: 'Sắp hết giờ',
-      message: 'Còn dưới 1 phút. Hết giờ hệ thống tự nộp bài và câu chưa trả lời được tính 0 điểm.',
-      confirmLabel: 'Tiếp tục làm bài',
-      tone: 'warning',
-    })
-  }, [phase, secondsLeft])
 
   const moveToQuestion = async (nextIndex: number) => {
     if (isRecording || isSendingAnswer || nextIndex === questionIndex) return
