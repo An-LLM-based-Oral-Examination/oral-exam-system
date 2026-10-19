@@ -59,7 +59,10 @@ export function ConfirmDialog({
   const dismissRef = useRef(onCancel ?? onConfirm)
   const style = TONE_STYLE[tone]
   const Glyph = Icon ?? style.icon
-  dismissRef.current = onCancel ?? onConfirm
+
+  useEffect(() => {
+    dismissRef.current = onCancel ?? onConfirm
+  }, [onCancel, onConfirm])
 
   useEffect(() => {
     confirmRef.current?.focus()

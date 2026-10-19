@@ -16,7 +16,6 @@ import {
   Mic2,
   PenLine,
   Play,
-  RefreshCw,
   ShieldCheck,
   TimerReset,
   X,
@@ -482,6 +481,20 @@ export function MockExamPage() {
     return () => window.clearTimeout(timer)
   }, [archiveOpen, loadArchive])
 
+  const stopMicTest = useCallback(() => {
+    micTestRef.current?.stop()
+    micTestRef.current = null
+  }, [])
+
+  const closeCourseModal = useCallback(() => {
+    stopMicTest()
+    setMicLevel(0)
+    setDeviceState((current) =>
+      current === 'checking' || current === 'testing' ? 'idle' : current,
+    )
+    setOpenCourseId(null)
+  }, [stopMicTest])
+
   useEffect(() => {
     if (!quotaModal && !openCourseId && !archiveOpen && !expandedHistoryId) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -490,25 +503,11 @@ export function MockExamPage() {
       if (expandedHistoryId) setExpandedHistoryId(null)
       else if (quotaModal) setQuotaModal('')
       else if (archiveOpen) setArchiveOpen(false)
-      else setOpenCourseId(null)
+      else closeCourseModal()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [archiveOpen, expandedHistoryId, openCourseId, quotaModal])
-
-  const stopMicTest = useCallback(() => {
-    micTestRef.current?.stop()
-    micTestRef.current = null
-  }, [])
-
-  useEffect(() => {
-    if (openCourseId) return
-    stopMicTest()
-    setMicLevel(0)
-    setDeviceState((current) =>
-      current === 'checking' || current === 'testing' ? 'idle' : current,
-    )
-  }, [openCourseId, stopMicTest])
+  }, [archiveOpen, closeCourseModal, expandedHistoryId, openCourseId, quotaModal])
 
   useEffect(
     () => () => {
@@ -1318,7 +1317,7 @@ export function MockExamPage() {
           className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0F2854]/45 px-4 py-6 sm:items-center"
           role="presentation"
           onClick={(event) => {
-            if (event.target === event.currentTarget) setOpenCourseId(null)
+            if (event.target === event.currentTarget) closeCourseModal()
           }}
         >
           <div
@@ -1335,7 +1334,7 @@ export function MockExamPage() {
                 <button
                   type="button"
                   aria-label="Đóng"
-                  onClick={() => setOpenCourseId(null)}
+                  onClick={closeCourseModal}
                   className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#4988C4]/45 text-[#5b6b84] hover:bg-[#4988C4]/18"
                 >
                   <X className="size-4" />

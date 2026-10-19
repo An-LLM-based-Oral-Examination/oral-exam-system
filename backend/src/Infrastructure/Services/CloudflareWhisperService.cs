@@ -230,7 +230,8 @@ public class CloudflareWhisperService : ISpeechToTextService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+            request.Content = new ByteArrayContent(audioBytes);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
             var response = await _httpClient.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
