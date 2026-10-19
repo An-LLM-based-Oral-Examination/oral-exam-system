@@ -24,6 +24,7 @@ import {
   Volume2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 import { useAuth } from '@/hooks/useAuth'
 import { courseService } from '@/services/course.service'
 import { practiceService } from '@/services/practice.service'
@@ -90,8 +91,8 @@ function getMicrophoneStatus(state: MicrophoneState) {
       return {
         label: 'Đang kiểm tra microphone…',
         helper: 'Trình duyệt có thể yêu cầu quyền sử dụng micro.',
-        className: 'text-[#2563eb]',
-        dotClassName: 'bg-[#3b82f6] animate-pulse motion-reduce:animate-none',
+        className: 'text-[#1C4D8D]',
+        dotClassName: 'bg-[#1C4D8D] animate-pulse motion-reduce:animate-none',
       }
     case 'ready':
       return {
@@ -394,20 +395,20 @@ export function PracticePage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section className="relative isolate min-h-[224px] overflow-hidden rounded-[22px] border border-[#264b82] bg-[linear-gradient(120deg,#071a35_0%,#102c58_55%,#244785_100%)] shadow-[0_16px_42px_rgba(16,44,88,0.18)] sm:min-h-[210px]">
-        <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(129,220,255,0.22)_1px,transparent_1px),linear-gradient(90deg,rgba(129,220,255,0.22)_1px,transparent_1px)] [background-size:30px_30px] opacity-[0.16]" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-[78%] bg-[radial-gradient(circle_at_72%_50%,rgba(74,218,246,0.2),transparent_42%)] sm:w-[62%]" />
+    <div className={ds.page}>
+      <section className={cn(ds.banner, 'min-h-[224px] sm:min-h-[210px]')}>
+        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-40" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-[78%] bg-[radial-gradient(circle_at_72%_50%,rgba(189,232,245,0.22),transparent_42%)] sm:w-[62%]" />
 
         <div className="relative z-10 flex min-h-[224px] max-w-[720px] flex-col items-start justify-center px-5 py-6 sm:min-h-[210px] sm:px-7 lg:max-w-[62%] lg:px-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#5be1f0]/20 bg-[#0f4580]/72 px-3 py-1 text-[9px] font-bold tracking-[0.08em] text-[#b9f7ff] uppercase backdrop-blur-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.08em] text-white uppercase backdrop-blur-sm">
             <Sparkles className="size-3" />
             Phòng luyện tập tương tác 1-on-1
           </div>
           <h1 className="mt-3 max-w-[620px] text-[clamp(1.55rem,3vw,2.2rem)] leading-[1.08] font-bold tracking-[-0.045em] text-white">
             Phòng Luyện tập Vấn đáp AI
           </h1>
-          <p className="mt-2 max-w-[590px] text-[11px] leading-relaxed text-[#d2e5fa] sm:text-[12px]">
+          <p className="mt-2 max-w-[590px] text-sm leading-relaxed text-white/80">
             Tự rèn luyện kỹ năng trả lời phỏng vấn chuyên môn với trợ lý giọng nói AI theo thời gian
             thực.
           </p>
@@ -415,12 +416,12 @@ export function PracticePage() {
           <button
             type="button"
             onClick={handleVoicePreview}
-            className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-xl border border-white/14 bg-white/9 px-3 text-[10px] font-semibold text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#68e4f4] motion-reduce:transform-none"
+            className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-xl border border-white/30 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transform-none"
           >
             {isVoicePreviewPlaying ? (
-              <AudioLines className="size-4 animate-pulse text-[#6ceaf5] motion-reduce:animate-none" />
+              <AudioLines className="size-4 animate-pulse text-[#1C4D8D] motion-reduce:animate-none" />
             ) : (
-              <Volume2 className="size-4 text-[#6ceaf5]" />
+              <Volume2 className="size-4 text-[#1C4D8D]" />
             )}
             {isVoicePreviewPlaying ? 'Dừng nghe thử' : 'Thử giọng AI'}
           </button>
@@ -438,8 +439,8 @@ export function PracticePage() {
           </Suspense>
         </div>
 
-        <div className="pointer-events-none absolute top-5 right-5 z-10 hidden items-center gap-2 rounded-full border border-[#8be7f3]/15 bg-[#09254a]/58 px-3 py-1.5 text-[9px] font-semibold text-[#bceff7] shadow-lg backdrop-blur-md md:flex">
-          <AudioLines className="size-3.5 text-[#55ddeb]" />
+        <div className="pointer-events-none absolute top-5 right-5 z-10 hidden items-center gap-2 rounded-xl border border-white/25 bg-white/12 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-md md:flex">
+          <AudioLines className="size-3.5 text-[#BDE8F5]" />
           Độ trễ phản hồi &lt; 320ms · Neural TTS
         </div>
       </section>
@@ -449,7 +450,7 @@ export function PracticePage() {
           className="flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
           role="alert"
         >
-          <div className="flex items-start gap-2 text-[10px] leading-relaxed font-semibold">
+          <div className="flex items-start gap-2 text-xs leading-relaxed font-semibold">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <span>{pageError}</span>
           </div>
@@ -458,7 +459,7 @@ export function PracticePage() {
             onClick={() =>
               errorSource === 'start' ? void handleStartPractice() : void loadPracticeData()
             }
-            className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[9px] font-bold transition hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-500"
+            className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold transition hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-500"
           >
             {errorSource === 'start' ? 'Thử bắt đầu lại' : 'Thử tải lại'}
           </button>
@@ -466,20 +467,20 @@ export function PracticePage() {
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.78fr)]">
-        <section className="overflow-hidden rounded-2xl border border-[#e0e7f0] bg-white shadow-[0_10px_32px_rgba(31,61,105,0.055)]">
-          <div className="flex items-center justify-between gap-4 border-b border-[#edf1f6] px-5 py-4 sm:px-6">
+        <section className={ds.section}>
+          <div className="flex items-center justify-between gap-4 border-b border-[#4988C4]/45 px-5 py-4 sm:px-6">
             <div className="flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-[#edf3ff] text-[#245eea]">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                 <Settings2 className="size-4" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-[#17243a] sm:text-[15px]">
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
                   Cấu hình phiên luyện tập
                 </h2>
-                <p className="mt-0.5 text-[9px] text-[#8491a4]">Thiết lập trước khi bắt đầu</p>
+                <p className="mt-0.5 text-xs text-[#8491a4]">Thiết lập trước khi bắt đầu</p>
               </div>
             </div>
-            <span className="rounded-full bg-[#f2f5fa] px-2.5 py-1 text-[9px] font-semibold text-[#63738a]">
+            <span className="rounded-full bg-[#f2f5fa] px-2.5 py-1 text-xs font-semibold text-[#63738a]">
               Bước 1 / 1
             </span>
           </div>
@@ -488,7 +489,7 @@ export function PracticePage() {
             <div>
               <label
                 htmlFor="practice-course"
-                className="text-[10px] font-bold tracking-[0.02em] text-[#34445b]"
+                className="text-xs font-bold tracking-[0.02em] text-[#34445b]"
               >
                 Học phần & chuyên đề vấn đáp
               </label>
@@ -499,7 +500,7 @@ export function PracticePage() {
                   value={selectedCourseId}
                   onChange={(event) => setSelectedCourseId(event.target.value)}
                   disabled={isLoadingData || courses.length === 0}
-                  className="min-h-12 w-full appearance-none rounded-xl border border-[#dfe6f0] bg-[#f8faff] py-2 pr-10 pl-10 text-[11px] font-semibold text-[#26364d] transition hover:border-[#bdcce0] focus:border-[#4c78e8] focus:ring-3 focus:ring-[#245eea]/10 focus:outline-none sm:text-[12px]"
+                  className="min-h-12 w-full appearance-none rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 py-2 pr-10 pl-10 text-sm font-semibold text-[#0F2854] transition hover:border-[#bdcce0] focus:border-[#4988C4] focus:ring-3 focus:ring-[#1C4D8D]/10 focus:outline-none"
                 >
                   {courses.length === 0 && (
                     <option value="">
@@ -517,15 +518,15 @@ export function PracticePage() {
             </div>
 
             <fieldset>
-              <legend className="text-[10px] font-bold tracking-[0.02em] text-[#34445b]">
+              <legend className="text-xs font-bold tracking-[0.02em] text-[#34445b]">
                 Chế độ phản hồi của AI
               </legend>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#245eea] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
                     feedbackMode === 'PER_QUESTION'
-                      ? 'border-[#8db0ff] bg-[#f5f8ff] shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
+                      ? 'border-[#4988C4]/45 bg-[#4988C4]/16 shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
                       : 'border-[#e2e8f1] bg-[#fafbfd]',
                   )}
                 >
@@ -538,34 +539,34 @@ export function PracticePage() {
                     className="sr-only"
                   />
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-[#e9f0ff] text-[#245eea]">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-[#e9f0ff] text-[#1C4D8D]">
                       <Radio className="size-4" />
                     </div>
                     <span
                       className={cn(
                         'flex size-5 items-center justify-center rounded-full border transition',
                         feedbackMode === 'PER_QUESTION'
-                          ? 'border-[#245eea] bg-[#245eea] text-white'
+                          ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
                           : 'border-[#cad4e2] bg-white text-transparent',
                       )}
                     >
                       <Check className="size-3" />
                     </span>
                   </div>
-                  <h3 className="mt-3 text-[12px] font-bold text-[#20314a]">Luyện từng câu</h3>
-                  <p className="mt-1 text-[9px] leading-relaxed text-[#6f7e92] sm:text-[10px]">
+                  <h3 className="mt-3 text-sm font-bold text-[#20314a]">Luyện từng câu</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-[#6f7e92] sm:text-xs">
                     Chọn một hoặc nhiều mức độ, số câu cần luyện và nhận phản hồi sau từng câu.
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-[9px] font-semibold text-[#245eea]">
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
                     <Radio className="size-3" /> {questionCount} câu chính · Có follow-up theo điểm
                   </span>
                 </label>
 
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#245eea] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
                     feedbackMode === 'FULL_SESSION'
-                      ? 'border-[#8db0ff] bg-[#f5f8ff] shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
+                      ? 'border-[#4988C4]/45 bg-[#4988C4]/16 shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
                       : 'border-[#e2e8f1] bg-[#fafbfd]',
                   )}
                 >
@@ -585,19 +586,19 @@ export function PracticePage() {
                       className={cn(
                         'flex size-5 items-center justify-center rounded-full border transition',
                         feedbackMode === 'FULL_SESSION'
-                          ? 'border-[#245eea] bg-[#245eea] text-white'
+                          ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
                           : 'border-[#cad4e2] bg-white text-transparent',
                       )}
                     >
                       <Check className="size-3" />
                     </span>
                   </div>
-                  <h3 className="mt-3 text-[12px] font-bold text-[#20314a]">Luyện trọn gói</h3>
-                  <p className="mt-1 text-[9px] leading-relaxed text-[#6f7e92] sm:text-[10px]">
+                  <h3 className="mt-3 text-sm font-bold text-[#20314a]">Luyện trọn gói</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-[#6f7e92] sm:text-xs">
                     Chọn số lượng câu trong giới hạn Admin cho phép và hoàn thành toàn bộ trước khi
                     nhận Scorecard tổng kết.
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-[9px] font-semibold text-[#68788e]">
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#68788e]">
                     <Clock3 className="size-3" /> 3–10 câu · không có follow-up
                   </span>
                 </label>
@@ -605,17 +606,17 @@ export function PracticePage() {
             </fieldset>
 
             {feedbackMode === 'PER_QUESTION' ? (
-              <section className="space-y-3 rounded-xl border border-[#dce6f3] bg-[#f8faff] p-4">
+              <section className="space-y-3 rounded-xl border border-[#4988C4]/45 bg-white p-4">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h3 className="text-[10px] font-bold tracking-[0.02em] text-[#34445b]">
+                    <h3 className="text-xs font-bold tracking-[0.02em] text-[#34445b]">
                       Chọn mức độ câu hỏi
                     </h3>
-                    <p className="mt-1 text-[9px] text-[#7b899c]">
+                    <p className="mt-1 text-xs text-[#7b899c]">
                       Chọn ít nhất một mức; có thể kết hợp nhiều mức trong cùng phiên.
                     </p>
                   </div>
-                  <span className="text-[9px] font-bold text-[#245eea]">
+                  <span className="text-xs font-bold text-[#1C4D8D]">
                     Đã chọn {selectedDifficulties.length}/3
                   </span>
                 </div>
@@ -633,10 +634,10 @@ export function PracticePage() {
                         aria-disabled={isOnlySelection}
                         onClick={() => toggleDifficulty(option.value)}
                         className={cn(
-                          'flex min-h-16 items-center gap-3 rounded-xl border px-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] motion-reduce:transform-none',
+                          'flex min-h-16 items-center gap-3 rounded-xl border px-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none',
                           selected
                             ? option.selectedClassName
-                            : 'border-[#e0e6ef] bg-white hover:border-[#c5d2e3]',
+                            : 'border-[#4988C4]/45 bg-white hover:border-[#c5d2e3]',
                         )}
                         title={
                           isOnlySelection ? 'Phiên luyện tập cần ít nhất một mức độ.' : undefined
@@ -644,17 +645,17 @@ export function PracticePage() {
                       >
                         <span
                           className={cn(
-                            'flex size-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black',
+                            'flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-black',
                             selected ? option.badgeClassName : 'bg-[#f0f3f7] text-[#78879a]',
                           )}
                         >
                           {option.label.charAt(0)}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[10px] font-bold text-[#283a54]">
+                          <span className="block text-xs font-bold text-[#283a54]">
                             {option.label}
                           </span>
-                          <span className="mt-0.5 block text-[8px] text-[#7c8a9d]">
+                          <span className="mt-0.5 block text-xs text-[#5b6b84]">
                             {option.helper}
                           </span>
                         </span>
@@ -662,7 +663,7 @@ export function PracticePage() {
                           className={cn(
                             'flex size-4 shrink-0 items-center justify-center rounded-full border',
                             selected
-                              ? 'border-[#245eea] bg-[#245eea] text-white'
+                              ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
                               : 'border-[#cbd5e2] text-transparent',
                           )}
                         >
@@ -679,8 +680,8 @@ export function PracticePage() {
                       <Radio className="size-4" />
                     </span>
                     <div>
-                      <p className="text-[9px] font-bold text-[#176f58]">Số câu luyện từng câu</p>
-                      <p className="mt-0.5 text-[8px] text-[#65847a]">
+                      <p className="text-xs font-bold text-[#176f58]">Số câu luyện từng câu</p>
+                      <p className="mt-0.5 text-xs text-[#65847a]">
                         Follow-up không tính vào số câu chính đã chọn.
                       </p>
                     </div>
@@ -710,20 +711,20 @@ export function PracticePage() {
                 </div>
               </section>
             ) : (
-              <section className="rounded-xl border border-[#dce6f3] bg-[#f8faff] p-4">
+              <section className="rounded-xl border border-[#4988C4]/45 bg-white p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#3568dc] shadow-sm">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#1C4D8D] shadow-sm">
                       <Clock3 className="size-4" />
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a879a] uppercase">
+                      <p className="text-xs font-bold tracking-[0.06em] text-[#7a879a] uppercase">
                         Progressive · Dễ → Trung bình → Khó
                       </p>
-                      <p className="mt-0.5 text-[11px] font-bold text-[#24344c]">
+                      <p className="mt-0.5 text-sm font-bold text-[#24344c]">
                         {questionCount} câu · khoảng {estimatedMinutes} phút
                       </p>
-                      <p className="mt-1 text-[8px] text-[#8290a2]">
+                      <p className="mt-1 text-xs text-[#8290a2]">
                         Khoảng số câu backend hiện hỗ trợ: {FULL_SESSION_MIN_QUESTIONS}–
                         {FULL_SESSION_MAX_QUESTIONS} câu.
                       </p>
@@ -735,7 +736,7 @@ export function PracticePage() {
                       type="button"
                       onClick={() => updateFullSessionQuestionCount(questionCount - 1)}
                       disabled={questionCount <= FULL_SESSION_MIN_QUESTIONS}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf3ff] hover:text-[#245eea] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-35"
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#4988C4]/18 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Giảm một câu"
                     >
                       <Minus className="size-3.5" />
@@ -750,15 +751,15 @@ export function PracticePage() {
                         onChange={(event) =>
                           updateFullSessionQuestionCount(Number(event.target.value))
                         }
-                        className="w-8 rounded bg-transparent text-center font-mono text-sm font-black text-[#245eea] outline-none focus-visible:ring-2 focus-visible:ring-[#245eea]"
+                        className="w-8 rounded bg-transparent text-center font-mono text-sm font-black text-[#1C4D8D] outline-none focus-visible:ring-2 focus-visible:ring-[#1C4D8D]"
                       />
-                      <span className="text-[8px] font-semibold text-[#7e8b9d]">câu</span>
+                      <span className="text-xs font-semibold text-[#7e8b9d]">câu</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => updateFullSessionQuestionCount(questionCount + 1)}
                       disabled={questionCount >= FULL_SESSION_MAX_QUESTIONS}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf3ff] hover:text-[#245eea] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-35"
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#4988C4]/18 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Tăng một câu"
                     >
                       <Plus className="size-3.5" />
@@ -772,17 +773,17 @@ export function PracticePage() {
                   max={FULL_SESSION_MAX_QUESTIONS}
                   value={questionCount}
                   onChange={(event) => updateFullSessionQuestionCount(Number(event.target.value))}
-                  className="mt-4 h-1.5 w-full cursor-pointer accent-[#245eea]"
+                  className="mt-4 h-1.5 w-full cursor-pointer accent-[#4988C4]"
                   aria-label="Chọn số câu hỏi từ 3 đến 10"
                 />
-                <div className="mt-1.5 flex justify-between font-mono text-[8px] font-semibold text-[#8b98a9]">
+                <div className="mt-1.5 flex justify-between font-mono text-xs font-semibold text-[#8b98a9]">
                   <span>{FULL_SESSION_MIN_QUESTIONS}</span>
                   <span>{FULL_SESSION_MAX_QUESTIONS}</span>
                 </div>
               </section>
             )}
 
-            <div className="flex flex-col gap-3 rounded-xl border border-[#e1e8f2] bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#ebf7f4] text-[#19866d]">
                   <Mic2 className="size-4" />
@@ -790,7 +791,7 @@ export function PracticePage() {
                 <div className="min-w-0">
                   <p
                     className={cn(
-                      'flex items-center gap-1.5 text-[10px] font-bold',
+                      'flex items-center gap-1.5 text-xs font-bold',
                       microphoneStatus.className,
                     )}
                   >
@@ -802,7 +803,7 @@ export function PracticePage() {
                     />
                     {microphoneStatus.label}
                   </p>
-                  <p className="mt-0.5 truncate text-[9px] text-[#7b899b]">
+                  <p className="mt-0.5 truncate text-xs text-[#7b899b]">
                     {microphoneName || microphoneStatus.helper}
                   </p>
                 </div>
@@ -811,7 +812,7 @@ export function PracticePage() {
                 type="button"
                 onClick={handleMicrophoneCheck}
                 disabled={microphoneState === 'checking'}
-                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[9px] font-bold text-[#245bd2] transition hover:bg-[#eef4ff] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
               >
                 {microphoneState === 'checking' ? (
                   <LoaderCircle className="size-3.5 animate-spin" />
@@ -826,7 +827,7 @@ export function PracticePage() {
               type="button"
               onClick={() => void handleStartPractice()}
               disabled={isStarting || isLoadingData || !selectedCourse}
-              className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_12px_28px_rgba(36,94,234,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-[0_16px_34px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
+              className="group inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(36,94,234,0.24)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_16px_34px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
             >
               {isStarting ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -844,25 +845,25 @@ export function PracticePage() {
         </section>
 
         <aside className="space-y-4">
-          <section className="overflow-hidden rounded-2xl border border-[#e0e7f0] bg-white shadow-[0_9px_28px_rgba(31,61,105,0.05)]">
-            <div className="flex items-center justify-between border-b border-[#edf1f6] px-4 py-3.5">
+          <section className={ds.section}>
+            <div className="flex items-center justify-between border-b border-[#4988C4]/45 px-4 py-3.5">
               <div className="flex items-center gap-2">
-                <History className="size-4 text-[#245eea]" />
-                <h2 className="text-[12px] font-bold text-[#23334a]">Lịch sử luyện tập</h2>
+                <History className="size-4 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Lịch sử luyện tập</h2>
               </div>
-              <span className="text-[8px] font-semibold text-[#8995a6]">
+              <span className="text-xs font-semibold text-[#8995a6]">
                 {practiceHistory.length} phiên gần nhất
               </span>
             </div>
 
             <div className="space-y-2.5 p-3">
               {isLoadingData && (
-                <div className="flex items-center justify-center gap-2 py-8 text-[9px] font-semibold text-[#75859a]">
+                <div className="flex items-center justify-center gap-2 py-8 text-xs font-semibold text-[#75859a]">
                   <LoaderCircle className="size-4 animate-spin" /> Đang tải lịch sử…
                 </div>
               )}
               {!isLoadingData && practiceHistory.length === 0 && (
-                <p className="py-8 text-center text-[9px] leading-relaxed text-[#7b899c]">
+                <p className="py-8 text-center text-xs leading-relaxed text-[#7b899c]">
                   Chưa có phiên luyện tập nào.
                 </p>
               )}
@@ -874,35 +875,35 @@ export function PracticePage() {
                     <article
                       key={item.sessionId}
                       className={cn(
-                        'rounded-xl border bg-[#f8faff] transition',
+                        'rounded-xl border bg-[#4988C4]/16 transition',
                         isExpanded ? 'border-[#b9cdf6] shadow-sm' : 'border-[#e8edf4]',
                       )}
                     >
                       <button
                         type="button"
                         onClick={() => setExpandedHistoryId(isExpanded ? null : item.sessionId)}
-                        className="w-full p-3 text-left focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-[#245eea]"
+                        className="w-full p-3 text-left focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
                         aria-expanded={isExpanded}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-[10px] font-bold text-[#28384e]">
+                            <p className="truncate text-xs font-bold text-[#28384e]">
                               {item.courseName} ({item.courseCode})
                             </p>
-                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[8px] text-[#8190a3]">
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[#8190a3]">
                               <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-[#60718a]">
                                 {getPracticeModeLabel(item.practiceMode)}
                               </span>
                               <span>{formatPracticeDate(item.startedAt)}</span>
                             </div>
                           </div>
-                          <strong className="shrink-0 text-[11px] text-[#159378]">
+                          <strong className="shrink-0 text-sm text-[#159378]">
                             {item.averageScore === null
                               ? 'Đang chấm'
                               : `${item.averageScore.toFixed(1)}/10`}
                           </strong>
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-[8px] font-semibold text-[#3162cc]">
+                        <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[#1C4D8D]">
                           <span>{isExpanded ? 'Thu gọn chi tiết' : 'Xem chi tiết phiên'}</span>
                           <ChevronRight
                             className={cn('size-3 transition-transform', isExpanded && 'rotate-90')}
@@ -910,7 +911,7 @@ export function PracticePage() {
                         </div>
                       </button>
                       {isExpanded && (
-                        <div className="border-t border-[#e2e9f3] px-3 py-2.5 text-[9px] leading-relaxed text-[#64748a]">
+                        <div className="border-t border-[#e2e9f3] px-3 py-2.5 text-xs leading-relaxed text-[#64748a]">
                           Đã trả lời {item.answeredQuestions} lượt cho {item.totalQuestions} câu
                           chính.{' '}
                           {item.status === 'completed'
@@ -926,25 +927,25 @@ export function PracticePage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#e3e8f0] bg-[linear-gradient(145deg,#ffffff_0%,#f4f7fb_100%)] p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)]">
-            <div className="flex items-center gap-2 text-[#245eea]">
+          <section className="rounded-2xl border border-[#4988C4]/45 bg-[linear-gradient(145deg,#ffffff_0%,#f4f7fb_100%)] p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)]">
+            <div className="flex items-center gap-2 text-[#1C4D8D]">
               <Lightbulb className="size-4" />
-              <h2 className="text-[12px] font-bold text-[#26364c]">Mẹo đạt điểm cao</h2>
+              <h2 className="text-base font-bold text-[#26364c] sm:text-lg">Mẹo đạt điểm cao</h2>
             </div>
-            <p className="mt-3 min-h-14 text-[9px] leading-relaxed text-[#65758b] sm:text-[10px]">
+            <p className="mt-3 min-h-14 text-xs leading-relaxed text-[#65758b] sm:text-xs">
               {PRACTICE_TIPS[tipIndex]}
             </p>
             <button
               type="button"
               onClick={() => setTipIndex((current) => (current + 1) % PRACTICE_TIPS.length)}
-              className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[9px] font-bold text-[#245bd2] transition hover:bg-[#eaf1ff] focus-visible:outline-2 focus-visible:outline-[#245eea]"
+              className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
             >
               Mẹo tiếp theo
               <ChevronRight className="size-3" />
             </button>
           </section>
 
-          <div className="flex items-center gap-3 rounded-xl border border-[#dce8f2] bg-[#f5fbfc] p-3 text-[9px] leading-relaxed text-[#5f7187]">
+          <div className="flex items-center gap-3 rounded-xl border border-[#dce8f2] bg-[#f5fbfc] p-3 text-xs leading-relaxed text-[#5f7187]">
             <Headphones className="size-4 shrink-0 text-[#2095a5]" />
             Nên sử dụng tai nghe và luyện tập ở nơi yên tĩnh để AI nhận diện giọng nói tốt hơn.
           </div>

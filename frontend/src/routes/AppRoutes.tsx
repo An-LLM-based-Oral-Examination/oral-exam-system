@@ -40,8 +40,8 @@ const AuditEvidencePage = lazy(() =>
 function InstructorPageFallback() {
   return (
     <div className="flex min-h-[55vh] flex-col items-center justify-center" role="status">
-      <span className="size-9 animate-spin rounded-full border-[3px] border-[#d6e1f4] border-t-[#245eea] motion-reduce:animate-none" />
-      <span className="mt-3 text-[11px] font-semibold text-[#64758c]">
+      <span className="size-9 animate-spin rounded-full border-[3px] border-[#d6e1f4] border-t-[#4988C4] motion-reduce:animate-none" />
+      <span className="mt-3 text-sm font-semibold text-[#64758c]">
         Đang mở không gian giảng viên...
       </span>
     </div>

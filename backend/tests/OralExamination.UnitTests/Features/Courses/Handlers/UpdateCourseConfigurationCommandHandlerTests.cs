@@ -130,7 +130,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
         updatedCourse.MaxFollowUpQuestions.Should().Be(2);
     }
 
-    [Fact(DisplayName = "4. Handle cập nhật MaxMockExamsPerDay khi Trưởng Bộ Môn cấu hình hạn ngạch thi thử")]
+    [Fact(DisplayName = "4. Handle cập nhật MaxMockExamsPerDay khi Quản trị viên (Admin) cấu hình hạn ngạch thi thử")]
     public async Task Handle_Should_Update_MaxMockExamsPerDay_When_Provided()
     {
         using var context = CreateDbContext();

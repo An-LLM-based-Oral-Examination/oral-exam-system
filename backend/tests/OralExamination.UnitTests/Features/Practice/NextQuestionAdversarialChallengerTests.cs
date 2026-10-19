@@ -67,7 +67,7 @@ public class NextQuestionAdversarialChallengerTests
         {
             Id = Guid.NewGuid(),
             Key = "SessionInactivityTimeoutMinutes",
-            Value = "10",
+            Value = "5",
             Description = "Timeout luyện tập không tương tác"
         });
 

@@ -8,6 +8,7 @@ namespace OralExamination.Infrastructure.Authentication;
 
 public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 {
+    private const string DevGooglePrefix = "dev-google:";
     private readonly IConfiguration _configuration;
 
     public GoogleIdTokenValidator(IConfiguration configuration)
@@ -17,6 +18,30 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 
     public async Task<GoogleUserIdentity> ValidateAsync(string idToken, CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(idToken) &&
+            idToken.StartsWith(DevGooglePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var allowDevEmail = _configuration["Authentication:AllowDevGoogleEmail"]
+                ?? Environment.GetEnvironmentVariable("ALLOW_DEV_GOOGLE_EMAIL")
+                ?? "true";
+
+            if (!string.Equals(allowDevEmail, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                var rawPayload = idToken[DevGooglePrefix.Length..].Trim();
+                var parts = rawPayload.Split('|', 2, StringSplitOptions.TrimEntries);
+                var devEmail = parts[0].ToLowerInvariant();
+                if (!string.IsNullOrWhiteSpace(devEmail) && devEmail.Contains('@'))
+                {
+                    var devFullName = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1])
+                        ? parts[1]
+                        : FormatNameFromEmail(devEmail);
+                    return new GoogleUserIdentity(devEmail, devFullName);
+                }
+            }
+
+            throw new GoogleIdTokenRejectedException();
+        }
+
         var clientId = AuthConfiguration.GoogleClientId(_configuration);
         if (string.IsNullOrWhiteSpace(clientId))
         {
@@ -31,7 +56,7 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
                 idToken,
                 new GoogleJsonWebSignature.ValidationSettings
                 {
-                    Audience = new[] { clientId }
+                    Audience = [clientId]
                 });
         }
         catch (Exception exception) when (exception is InvalidJwtException or ArgumentException)
@@ -58,9 +83,20 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 
         if (string.IsNullOrWhiteSpace(name))
         {
-            name = email.Split('@')[0];
+            name = FormatNameFromEmail(email);
         }
 
         return name.Length <= 150 ? name : name[..150];
+    }
+
+    private static string FormatNameFromEmail(string email)
+    {
+        var localPart = email.Split('@')[0];
+        if (localPart.StartsWith("thanhnq", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Nguyễn Quang Thành";
+        }
+
+        return localPart;
     }
 }

@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
 
 const StudentResultsThreeScene = lazy(() =>
   import('./StudentResultsThreeScene').then((module) => ({
@@ -103,8 +104,8 @@ const CATEGORY_STYLES: Record<ResultCategory, CategoryStyle> = {
   official: {
     label: 'Thi chính thức',
     icon: GraduationCap,
-    iconClassName: 'bg-[#07172e] text-white',
-    badgeClassName: 'bg-[#edf2ff] text-[#315dc2]',
+    iconClassName: 'bg-[#0F2854] text-white',
+    badgeClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
   },
   mock: {
     label: 'Thi thử Mock Exam',
@@ -115,8 +116,8 @@ const CATEGORY_STYLES: Record<ResultCategory, CategoryStyle> = {
   practice: {
     label: 'Luyện tập',
     icon: Sparkles,
-    iconClassName: 'bg-[#f0edff] text-[#6c5bd4]',
-    badgeClassName: 'bg-[#f2efff] text-[#6854c8]',
+    iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
+    badgeClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
   },
 }
 
@@ -360,14 +361,14 @@ function ResultsSceneFallback({
     <div className="flex size-full items-center justify-center" aria-hidden="true">
       <div className="w-[210px] rotate-[-3deg] rounded-2xl border border-[#9dc9de] bg-[linear-gradient(135deg,#0b315d,#14677b)] p-4 shadow-[0_18px_45px_rgba(20,83,112,0.2)] sm:w-[240px]">
         <div className="h-1.5 w-14 rounded-full bg-[#55e0dc]" />
-        <p className="mt-3 text-[9px] font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">
+        <p className="mt-3 text-xs font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">
           Academic score
         </p>
         <p className="mt-1 text-3xl font-black text-white">
           {averageScore === null ? '—' : averageScore.toFixed(1)}
           <span className="ml-1 text-xs font-semibold text-[#b8e3ec]">/10</span>
         </p>
-        <div className="mt-3 flex items-center justify-between text-[9px] font-bold text-[#d6f7f5]">
+        <div className="mt-3 flex items-center justify-between text-xs font-bold text-[#d6f7f5]">
           <span>LOCKED GRADES</span>
           <span>{pendingCount} PENDING</span>
         </div>
@@ -468,7 +469,7 @@ export function ExamHistoryPage() {
   }
 
   return (
-    <div lang="vi" className="space-y-4 pb-5 sm:space-y-5">
+    <div lang="vi" className={cn(ds.page, 'pb-5')}>
       <style>{`
         @media print {
           @page { size: A4; margin: 14mm; }
@@ -482,15 +483,15 @@ export function ExamHistoryPage() {
             width: 100%;
             padding: 22px;
             background: white;
-            color: #10203d;
+            color: #0F2854;
           }
         }
       `}</style>
 
       <section id="student-results-print" className="hidden">
-        <div className="rounded-2xl border-2 border-[#173f9c] p-8">
-          <div className="border-b border-[#dce4ef] pb-5">
-            <p className="text-sm font-bold tracking-[0.12em] text-[#315eca] uppercase">
+        <div className="rounded-2xl border-2 border-[#0F2854] p-8">
+          <div className="border-b border-[#4988C4]/45 pb-5">
+            <p className="text-sm font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
               OralExam AI · University Tech
             </p>
             <p className="mt-4 inline-flex rounded-lg bg-[#fff1cf] px-3 py-2 text-xs font-bold text-[#7d540a]">
@@ -503,7 +504,7 @@ export function ExamHistoryPage() {
           </div>
           <table className="mt-6 w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b-2 border-[#173f9c]">
+              <tr className="border-b-2 border-[#0F2854]">
                 <th className="py-3">Mã học phần</th>
                 <th className="py-3">Tên học phần</th>
                 <th className="py-3">Ngày thi</th>
@@ -512,7 +513,7 @@ export function ExamHistoryPage() {
             </thead>
             <tbody>
               {releasedOfficialResults.map((result) => (
-                <tr key={result.id} className="border-b border-[#dce4ef]">
+                <tr key={result.id} className="border-b border-[#4988C4]/45">
                   <td className="py-3 font-semibold">{result.subjectCode}</td>
                   <td className="py-3">{result.subjectName}</td>
                   <td className="py-3">{formatDate(result.completedAt)}</td>
@@ -523,9 +524,9 @@ export function ExamHistoryPage() {
               ))}
             </tbody>
           </table>
-          <div className="mt-6 flex items-center justify-between rounded-xl bg-[#f1f5ff] p-4 text-sm">
+          <div className="mt-6 flex items-center justify-between rounded-xl bg-[#4988C4]/16 p-4 text-sm">
             <span>Điểm trung bình chính thức</span>
-            <strong className="text-xl text-[#245eea]">
+            <strong className="text-xl text-[#1C4D8D]">
               {officialAverage === null ? '—' : `${officialAverage.toFixed(1)} / 10`}
             </strong>
           </div>
@@ -536,7 +537,7 @@ export function ExamHistoryPage() {
         </div>
       </section>
 
-      <section className="relative isolate overflow-hidden rounded-[24px] border border-[#dce7f3] bg-[linear-gradient(118deg,#ffffff_0%,#f6fbff_55%,#e7f8ff_100%)] shadow-[0_14px_45px_rgba(31,61,105,0.08)]">
+      <section className={ds.banner}>
         <div
           className="pointer-events-none absolute inset-0 opacity-55"
           style={{
@@ -549,17 +550,17 @@ export function ExamHistoryPage() {
 
         <div className="relative z-10 p-5 sm:p-7 lg:min-h-[238px] lg:w-[61%] lg:p-8">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cddafd] bg-white/90 px-3 py-1 text-[10px] font-bold tracking-[0.04em] text-[#315bb7] uppercase shadow-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.04em] text-white uppercase">
               <BarChart3 className="size-3.5" /> Báo cáo năng lực học kỳ
             </span>
-            <span className="rounded-full bg-[#e9f0fa] px-2 py-1 text-[9px] font-bold text-[#4f6178]">
+            <span className="rounded-full bg-white/15 px-2 py-1 text-xs font-bold text-white">
               Dữ liệu xem trước FE
             </span>
           </div>
-          <h1 className="mt-3 text-[27px] leading-[1.08] font-bold tracking-[-0.04em] text-[#10213e] sm:text-[35px]">
+          <h1 className="mt-3 text-[27px] leading-[1.08] font-bold tracking-[-0.04em] text-white sm:text-[35px]">
             Kết quả & Bảng điểm Vấn đáp
           </h1>
-          <p className="mt-2 max-w-[650px] text-[11px] leading-relaxed text-[#5f7088] sm:text-xs">
+          <p className="mt-2 max-w-[650px] text-sm leading-relaxed text-white/80 sm:text-xs">
             Tra cứu kết quả luyện tập, thi thử và các điểm thi chính thức đã được Giảng viên hậu
             kiểm, khóa một chiều và công bố.
           </p>
@@ -568,15 +569,15 @@ export function ExamHistoryPage() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cfd9e7] bg-white px-4 text-[10px] font-bold text-[#344861] shadow-sm transition hover:-translate-y-0.5 hover:border-[#9eb3cf] hover:bg-[#f8faff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] motion-reduce:transform-none"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
             >
-              <Download className="size-4 text-[#315eca]" /> In bản xem trước
+              <Download className="size-4 text-[#1C4D8D]" /> In bản xem trước
             </button>
             <button
               type="button"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-4 text-[10px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#1b50cc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-wait disabled:opacity-70 motion-reduce:transform-none"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-70 motion-reduce:transform-none"
             >
               {isRefreshing ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -586,7 +587,7 @@ export function ExamHistoryPage() {
               {isRefreshing ? 'Đang cập nhật...' : 'Cập nhật bản xem trước'}
             </button>
           </div>
-          <p className="mt-2 text-[10px] text-[#52647b]">
+          <p className="mt-2 text-xs text-white/70">
             Hiển thị cập nhật lúc {formatTime(lastUpdatedAt)} · Chưa kết nối Student Results API
           </p>
         </div>
@@ -623,14 +624,14 @@ export function ExamHistoryPage() {
           <div className="absolute -top-10 -right-8 size-32 rounded-full bg-[#65d9b0]/10 blur-2xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <p className="flex items-center gap-2 text-[10px] font-bold tracking-[0.05em] text-[#277662] uppercase">
+              <p className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#277662] uppercase">
                 <span className="size-2 rounded-full bg-[#32c695]" /> Điểm chính thức đã công bố
               </p>
-              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#13263f]">
+              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#0F2854]">
                 {releasedOfficialResults.length.toString().padStart(2, '0')}
                 <span className="ml-2 text-sm font-semibold text-[#53667e]">Môn học</span>
               </p>
-              <span className="mt-3 inline-flex rounded-full bg-[#dff7ee] px-2.5 py-1 text-[10px] font-bold text-[#1c6b57]">
+              <span className="mt-3 inline-flex rounded-full bg-[#dff7ee] px-2.5 py-1 text-xs font-bold text-[#1c6b57]">
                 Điểm trung bình chính thức:{' '}
                 {officialAverage === null ? 'Chưa có' : `${officialAverage.toFixed(1)} / 10`}
               </span>
@@ -645,14 +646,14 @@ export function ExamHistoryPage() {
           <div className="absolute -top-10 -right-8 size-32 rounded-full bg-[#f1b84a]/10 blur-2xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div>
-              <p className="flex items-center gap-2 text-[10px] font-bold tracking-[0.05em] text-[#86590d] uppercase">
+              <p className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#86590d] uppercase">
                 <span className="size-2 rounded-full bg-[#efb63d]" /> Đang chờ Giảng viên hậu kiểm
               </p>
-              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#13263f]">
+              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#0F2854]">
                 {pendingOfficialResults.length.toString().padStart(2, '0')}
                 <span className="ml-2 text-sm font-semibold text-[#53667e]">Bài thi</span>
               </p>
-              <span className="mt-3 inline-flex rounded-full bg-[#fff0c8] px-2.5 py-1 text-[10px] font-bold text-[#7d540a]">
+              <span className="mt-3 inline-flex rounded-full bg-[#fff0c8] px-2.5 py-1 text-xs font-bold text-[#7d540a]">
                 Không hiển thị điểm dự thảo trước khi khóa
               </span>
             </div>
@@ -663,7 +664,7 @@ export function ExamHistoryPage() {
         </article>
       </section>
 
-      <section className="rounded-[20px] border border-[#dfe6f0] bg-white p-3 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-4">
+      <section className={cn(ds.section, 'p-3 sm:p-4')}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="overflow-x-auto pb-1 sm:pb-0">
             <div className="flex min-w-max gap-1.5" aria-label="Lọc kết quả theo loại">
@@ -676,17 +677,17 @@ export function ExamHistoryPage() {
                     aria-pressed={isActive}
                     onClick={() => handleFilterChange(filter)}
                     className={cn(
-                      'inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-[10px] font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]',
+                      'inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                       isActive
-                        ? 'bg-[#eaf0ff] text-[#2858c4] shadow-sm'
-                        : 'text-[#52647b] hover:bg-[#f4f7fb] hover:text-[#344861]',
+                        ? 'bg-[#4988C4]/16 text-[#2858c4] shadow-sm'
+                        : 'text-[#52647b] hover:bg-[#4988C4]/18 hover:text-[#0F2854]',
                     )}
                   >
                     {FILTER_LABELS[filter]}
                     <span
                       className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[9px]',
-                        isActive ? 'bg-white text-[#315eca]' : 'bg-[#edf1f6] text-[#52647b]',
+                        'rounded-full px-1.5 py-0.5 text-xs',
+                        isActive ? 'bg-white text-[#1C4D8D]' : 'bg-[#4988C4]/16 text-[#52647b]',
                       )}
                     >
                       {filterCounts[filter]}
@@ -697,14 +698,14 @@ export function ExamHistoryPage() {
             </div>
           </div>
 
-          <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dce4ee] bg-[#fafbfd] px-3 text-[10px] font-semibold text-[#52647b] focus-within:border-[#6688df] focus-within:ring-2 focus-within:ring-[#245eea]/20">
+          <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dce4ee] bg-[#fafbfd] px-3 text-xs font-semibold text-[#52647b] focus-within:border-[#6688df] focus-within:ring-2 focus-within:ring-[#1C4D8D]/20">
             Sắp xếp
             <select
               value={activeSort}
               onChange={(event) =>
                 updateQuery({ sort: event.target.value === 'score' ? 'score' : null })
               }
-              className="rounded-md bg-transparent text-[10px] font-bold text-[#30445e] outline-none"
+              className="rounded-md bg-transparent text-xs font-bold text-[#30445e] outline-none"
               aria-label="Sắp xếp kết quả"
             >
               <option value="recent">Mới nhất</option>
@@ -717,14 +718,14 @@ export function ExamHistoryPage() {
       <section aria-labelledby="results-list-title" className="space-y-3">
         <div className="flex items-center justify-between gap-4 px-1">
           <div>
-            <h2 id="results-list-title" className="text-sm font-bold text-[#26374e]">
+            <h2 id="results-list-title" className="text-base font-bold text-[#0F2854] sm:text-lg">
               {FILTER_LABELS[activeFilter]}
             </h2>
-            <p className="mt-1 text-[10px] text-[#52647b]">
+            <p className="mt-1 text-xs text-[#52647b]">
               {visibleResults.length} kết quả · Chỉ điểm `LOCKED` được tính là điểm chính thức
             </p>
           </div>
-          <span className="hidden text-[10px] font-semibold text-[#52647b] sm:inline">
+          <span className="hidden text-xs font-semibold text-[#52647b] sm:inline">
             Trang 1 / 1
           </span>
         </div>
@@ -751,7 +752,7 @@ export function ExamHistoryPage() {
                   'overflow-hidden rounded-[18px] border bg-white shadow-[0_7px_24px_rgba(31,61,105,0.045)] transition duration-200',
                   isExpanded
                     ? 'border-[#9bb0e9] shadow-[0_12px_34px_rgba(43,84,160,0.1)]'
-                    : 'border-[#dfe6f0] hover:-translate-y-0.5 hover:border-[#c6d3e3] hover:shadow-[0_11px_30px_rgba(31,61,105,0.08)] motion-reduce:transform-none',
+                    : 'border-[#4988C4]/45 hover:-translate-y-0.5 hover:border-[#c6d3e3] hover:shadow-[0_11px_30px_rgba(31,61,105,0.08)] motion-reduce:transform-none',
                   isPending && 'border-l-[3px] border-l-[#efb441]',
                 )}
               >
@@ -769,32 +770,32 @@ export function ExamHistoryPage() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span
                           className={cn(
-                            'rounded-full px-2 py-1 text-[9px] font-bold',
+                            'rounded-full px-2 py-1 text-xs font-bold',
                             categoryStyle.badgeClassName,
                           )}
                         >
                           {categoryStyle.label}
                         </span>
                         {isReleased && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f8f1] px-2 py-1 text-[9px] font-bold text-[#1d6f5a]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f8f1] px-2 py-1 text-xs font-bold text-[#1d6f5a]">
                             <LockKeyhole className="size-3" /> Đã công bố · Đã khóa điểm
                           </span>
                         )}
                         {isPending && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#fff1cf] px-2 py-1 text-[9px] font-bold text-[#7d540a]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#fff1cf] px-2 py-1 text-xs font-bold text-[#7d540a]">
                             <FileClock className="size-3" /> Chờ hậu kiểm
                           </span>
                         )}
                         {result.status === 'COMPLETED' && result.category !== 'official' && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f7] px-2 py-1 text-[9px] font-bold text-[#52647b]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#52647b]">
                             <CheckCircle2 className="size-3" /> Đã hoàn thành
                           </span>
                         )}
                       </div>
-                      <h3 className="mt-2 truncate text-[12px] font-bold text-[#26374e] sm:text-[13px]">
+                      <h3 className="mt-2 truncate text-sm font-bold text-[#0F2854]">
                         {result.subjectName}
                       </h3>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#56677f]">
+                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#56677f]">
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays className="size-3" /> {formatDate(result.completedAt)}
                         </span>
@@ -806,25 +807,25 @@ export function ExamHistoryPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#f7f9fc] px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
-                    <span className="text-[9px] font-bold tracking-[0.04em] text-[#52647b] uppercase">
+                  <div className="flex items-center justify-between rounded-xl bg-[#4988C4]/16 px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
+                    <span className="text-xs font-bold tracking-[0.04em] text-[#52647b] uppercase">
                       {getScoreLabel(result)}
                     </span>
                     <p className="mt-0.5 text-sm font-bold text-[#20334e]">
                       {visibleScore === undefined ? '—' : visibleScore.toFixed(1)}
                       {visibleScore !== undefined && (
-                        <span className="ml-0.5 text-[10px] text-[#52647b]">/10</span>
+                        <span className="ml-0.5 text-xs text-[#52647b]">/10</span>
                       )}
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#f7f9fc] px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
-                    <span className="text-[9px] font-bold tracking-[0.04em] text-[#52647b] uppercase">
+                  <div className="flex items-center justify-between rounded-xl bg-[#4988C4]/16 px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
+                    <span className="text-xs font-bold tracking-[0.04em] text-[#52647b] uppercase">
                       Trạng thái
                     </span>
                     <p
                       className={cn(
-                        'mt-0.5 text-[10px] font-bold',
+                        'mt-0.5 text-xs font-bold',
                         isPending
                           ? 'text-[#8a5d0d]'
                           : isReleased
@@ -847,7 +848,7 @@ export function ExamHistoryPage() {
                     onClick={() => handleResultToggle(result.id)}
                     aria-expanded={isExpanded}
                     aria-controls={`result-detail-${result.id}`}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#f0f4fa] px-3 text-[10px] font-bold text-[#344a67] transition hover:bg-[#e7eef8] hover:text-[#2458c7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#f0f4fa] px-3 text-xs font-bold text-[#344a67] transition hover:bg-[#e7eef8] hover:text-[#2458c7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                   >
                     {isExpanded ? 'Ẩn chi tiết' : 'Xem chi tiết'}
                     {isExpanded ? (
@@ -861,12 +862,12 @@ export function ExamHistoryPage() {
                 {isExpanded && (
                   <div
                     id={`result-detail-${result.id}`}
-                    className="border-t border-[#e6ebf2] bg-[linear-gradient(135deg,#f8faff,#f4f8fc)] p-4 sm:p-5"
+                    className="border-t border-[#e6ebf2] bg-[linear-gradient(135deg,#BDE8F5,#f4f8fc)] p-4 sm:p-5"
                   >
                     {isPending ? (
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                         <div className="rounded-2xl border border-[#e6dfcf] bg-white p-4">
-                          <h4 className="flex items-center gap-2 text-[11px] font-bold text-[#33465e]">
+                          <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
                             <FileClock className="size-4 text-[#d59a2d]" /> Tiến trình hậu kiểm
                           </h4>
                           <ol className="mt-4 space-y-3">
@@ -879,19 +880,19 @@ export function ExamHistoryPage() {
                               <li key={label} className="flex items-center gap-3">
                                 <span
                                   className={cn(
-                                    'flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                                    'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
                                     index < 2
                                       ? 'bg-[#e4f7ef] text-[#238066]'
                                       : index === 2
                                         ? 'bg-[#fff0cb] text-[#9d6a12]'
-                                        : 'bg-[#edf1f6] text-[#56677f]',
+                                        : 'bg-[#4988C4]/16 text-[#56677f]',
                                   )}
                                 >
                                   {index < 2 ? <CheckCircle2 className="size-3.5" /> : index + 1}
                                 </span>
                                 <div>
-                                  <p className="text-[10px] font-bold text-[#35475f]">{label}</p>
-                                  <p className="mt-0.5 text-[10px] text-[#56677f]">{state}</p>
+                                  <p className="text-xs font-bold text-[#35475f]">{label}</p>
+                                  <p className="mt-0.5 text-xs text-[#56677f]">{state}</p>
                                 </div>
                               </li>
                             ))}
@@ -899,14 +900,14 @@ export function ExamHistoryPage() {
                         </div>
                         <div className="rounded-2xl border border-[#e6dfcf] bg-[#fffaf0] p-4">
                           <ShieldCheck className="size-5 text-[#c88c24]" />
-                          <h4 className="mt-3 text-[11px] font-bold text-[#4b3e28]">
+                          <h4 className="mt-3 text-sm font-bold text-[#4b3e28]">
                             Điểm đang được bảo vệ
                           </h4>
-                          <p className="mt-2 text-[10px] leading-relaxed text-[#796b54]">
+                          <p className="mt-2 text-xs leading-relaxed text-[#796b54]">
                             Portal không hiển thị điểm AI dự thảo, rubric hoặc bản ghi trước khi
                             Giảng viên hoàn tất hậu kiểm và khóa điểm.
                           </p>
-                          <p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] font-semibold text-[#7d540a]">
+                          <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#7d540a]">
                             Dự kiến hoàn tất trước{' '}
                             {formatDate(result.expectedReviewAt ?? new Date())}
                           </p>
@@ -915,7 +916,7 @@ export function ExamHistoryPage() {
                     ) : (
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]">
                         <div className="rounded-2xl border border-[#e1e7ef] bg-white p-4">
-                          <h4 className="flex items-center gap-2 text-[11px] font-bold text-[#33465e]">
+                          <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
                             <Award className="size-4 text-[#4568cb]" /> Rubric đánh giá
                           </h4>
                           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -925,22 +926,22 @@ export function ExamHistoryPage() {
                                 className="rounded-xl border border-[#e7ecf2] bg-[#fafbfd] p-3"
                               >
                                 <div className="flex items-center justify-between gap-3">
-                                  <h5 className="text-[10px] font-bold text-[#3a4b62]">
+                                  <h5 className="text-xs font-bold text-[#3a4b62]">
                                     {criterion.label}
                                   </h5>
-                                  <span className="text-[10px] font-bold text-[#315eca]">
+                                  <span className="text-xs font-bold text-[#1C4D8D]">
                                     {criterion.score.toFixed(1)}/{criterion.maxScore}
                                   </span>
                                 </div>
                                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e3e9f1]">
                                   <div
-                                    className="h-full rounded-full bg-[linear-gradient(90deg,#315eea,#48cfe1)]"
+                                    className="h-full rounded-full bg-[linear-gradient(90deg,#4988C4,#48cfe1)]"
                                     style={{
                                       width: `${(criterion.score / criterion.maxScore) * 100}%`,
                                     }}
                                   />
                                 </div>
-                                <p className="mt-2 text-[10px] leading-relaxed text-[#56677f]">
+                                <p className="mt-2 text-xs leading-relaxed text-[#56677f]">
                                   {criterion.feedback}
                                 </p>
                               </article>
@@ -950,30 +951,30 @@ export function ExamHistoryPage() {
 
                         <div className="space-y-3">
                           <div className="rounded-2xl border border-[#e1e7ef] bg-white p-4">
-                            <h4 className="flex items-center gap-2 text-[11px] font-bold text-[#33465e]">
-                              <MessageSquareText className="size-4 text-[#4670ce]" /> Nhận xét tổng
+                            <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
+                              <MessageSquareText className="size-4 text-[#1C4D8D]" /> Nhận xét tổng
                               quan
                             </h4>
-                            <p className="mt-3 text-[10px] leading-relaxed text-[#52647b]">
+                            <p className="mt-3 text-xs leading-relaxed text-[#52647b]">
                               {result.summary}
                             </p>
                           </div>
 
                           {isReleased ? (
                             <div className="rounded-2xl border border-[#cfe8df] bg-[#f0faf6] p-4">
-                              <p className="flex items-center gap-2 text-[10px] font-bold text-[#247c65]">
+                              <p className="flex items-center gap-2 text-xs font-bold text-[#247c65]">
                                 <LockKeyhole className="size-4" /> Điểm đã khóa một chiều
                               </p>
-                              <p className="mt-2 text-[10px] leading-relaxed text-[#46695e]">
+                              <p className="mt-2 text-xs leading-relaxed text-[#46695e]">
                                 {result.lecturerNote}
                               </p>
-                              <p className="mt-2 text-[9px] font-semibold text-[#526a62]">
+                              <p className="mt-2 text-xs font-semibold text-[#526a62]">
                                 Khóa lúc {formatTime(result.lockedAt ?? new Date())} ·{' '}
                                 {formatDate(result.lockedAt ?? new Date())}
                               </p>
                             </div>
                           ) : (
-                            <div className="rounded-2xl border border-[#dfe5ee] bg-[#f5f7fa] p-4 text-[10px] leading-relaxed text-[#52647b]">
+                            <div className="rounded-2xl border border-[#dfe5ee] bg-[#f5f7fa] p-4 text-xs leading-relaxed text-[#52647b]">
                               {result.category === 'mock'
                                 ? 'Điểm mô phỏng và phản hồi AI không được tính vào điểm học phần.'
                                 : 'Đây là phản hồi luyện tập nhằm cải thiện kỹ năng, không phải điểm chính thức.'}
@@ -990,9 +991,9 @@ export function ExamHistoryPage() {
         )}
       </section>
 
-      <footer className="flex flex-col gap-2 rounded-2xl border border-[#dfe6ef] bg-white px-4 py-3 text-[10px] text-[#52647b] shadow-[0_6px_20px_rgba(31,61,105,0.035)] sm:flex-row sm:items-center sm:justify-between">
+      <footer className="flex flex-col gap-2 rounded-2xl border border-[#dfe6ef] bg-white px-4 py-3 text-xs text-[#52647b] shadow-[0_6px_20px_rgba(31,61,105,0.035)] sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2 leading-relaxed sm:items-center">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-[#4169c7] sm:mt-0" />
+          <Info className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D] sm:mt-0" />
           Điểm thi chính thức chỉ được phát hành sau khi Giảng viên hậu kiểm và thực hiện khóa điểm
           một chiều.
         </p>

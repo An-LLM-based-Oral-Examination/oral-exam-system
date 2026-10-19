@@ -152,11 +152,11 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
         <CardHeader className="shrink-0 space-y-0 border-b border-[#e7edf6] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_100%)] p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#245eea] text-white shadow-[0_8px_20px_rgba(36,94,234,0.24)] sm:size-11">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-[0_8px_20px_rgba(36,94,234,0.24)] sm:size-11">
                 <Edit3 className="size-5" aria-hidden="true" />
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] font-bold tracking-[0.1em] text-[#52709c] uppercase">
+                <p className="text-xs font-bold tracking-[0.1em] text-[#52709c] uppercase">
                   Rà soát trước khi nộp
                 </p>
                 <CardTitle
@@ -167,7 +167,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                 </CardTitle>
                 <p
                   id="buffer-screen-description"
-                  className="mt-1.5 max-w-xl text-xs leading-relaxed text-[#62738c] sm:text-[13px]"
+                  className="mt-1.5 max-w-xl text-xs leading-relaxed text-[#62738c]"
                 >
                   Kiểm tra nội dung lần cuối trước khi hệ thống tự động nộp câu trả lời khi hết thời
                   gian.
@@ -183,7 +183,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                   ? 'border-rose-200 bg-rose-50 text-rose-700'
                   : timeLeft <= safeDuration / 3
                     ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-[#cddcff] bg-white text-[#245eea]'
+                    : 'border-[#cddcff] bg-white text-[#1C4D8D]'
               }`}
             >
               <Clock
@@ -209,7 +209,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                   ? 'bg-rose-500'
                   : timeLeft <= safeDuration / 3
                     ? 'bg-amber-500'
-                    : 'bg-[linear-gradient(90deg,#245eea,#43bde8)]'
+                    : 'bg-[linear-gradient(90deg,#4988C4,#43bde8)]'
               }`}
               style={{ width: `${progressPercent}%` }}
             />
@@ -221,20 +221,20 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
             <div>
               <label
                 htmlFor="practice-transcript-editor"
-                className="text-xs font-bold text-[#273953] sm:text-[13px]"
+                className="text-xs font-bold text-[#273953]"
               >
                 Bản trả lời của bạn
               </label>
-              <p className="mt-1 text-[11px] leading-relaxed text-[#78879a]">
+              <p className="mt-1 text-sm leading-relaxed text-[#78879a]">
                 Bạn có thể sửa lỗi phiên âm hoặc lỗi nhập liệu trước khi xác nhận nộp.
               </p>
             </div>
-            <span className="shrink-0 text-[11px] font-semibold text-[#8794a6]" aria-live="polite">
+            <span className="shrink-0 text-sm font-semibold text-[#8794a6]" aria-live="polite">
               {transcript.trim().length} ký tự
             </span>
           </div>
 
-          <div className="rounded-2xl border border-[#dce5f2] bg-[#f8faff] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus-within:border-[#7fa4ff] focus-within:ring-3 focus-within:ring-[#245eea]/10">
+          <div className="rounded-2xl border border-[#dce5f2] bg-[#4988C4]/16 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus-within:border-[#7fa4ff] focus-within:ring-3 focus-within:ring-[#1C4D8D]/10">
             <textarea
               ref={transcriptElementRef}
               id="practice-transcript-editor"
@@ -260,9 +260,9 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
 
           <div
             id="practice-transcript-help"
-            className="flex items-start gap-2.5 rounded-xl border border-[#d8e5f8] bg-[#f3f7ff] px-3.5 py-3 text-[11px] leading-relaxed text-[#536a8a]"
+            className="flex items-start gap-2.5 rounded-xl border border-[#d8e5f8] bg-[#4988C4]/16 px-3.5 py-3 text-sm leading-relaxed text-[#536a8a]"
           >
-            <CheckCircle className="mt-0.5 size-4 shrink-0 text-[#245eea]" aria-hidden="true" />
+            <CheckCircle className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
             <span>
               Hãy chú ý tên công nghệ, từ viết tắt và thuật ngữ tiếng Anh. Hệ thống chỉ lưu nội dung
               văn bản cuối cùng trong phiên luyện tập.
@@ -280,14 +280,14 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
           )}
         </CardContent>
 
-        <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#e7edf6] bg-[#f8faff] p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
+        <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#e7edf6] bg-[#4988C4]/16 p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
           {onCancel ? (
             <Button
               variant="outline"
               size="sm"
               onClick={() => onCancel(transcriptRef.current)}
               disabled={isSubmitting}
-              className="min-h-11 w-full rounded-xl border-[#cfd9e7] bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#245eea] sm:w-auto"
+              className="min-h-11 w-full rounded-xl border-[#4988C4]/45 bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D] sm:w-auto"
             >
               Quay lại câu hỏi
             </Button>
@@ -300,7 +300,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
             onClick={handleConfirm}
             isLoading={isSubmitting}
             disabled={transcript.trim().length < 10}
-            className="min-h-11 w-full rounded-xl bg-[#245eea] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#194fce] focus:ring-[#245eea] disabled:shadow-none sm:w-auto"
+            className="min-h-11 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#0F2854] focus:ring-[#1C4D8D] disabled:shadow-none sm:w-auto"
           >
             <CheckCircle className="size-4" aria-hidden="true" />
             {isSubmitting ? 'Đang nộp câu trả lời…' : 'Xác nhận nộp ngay'}

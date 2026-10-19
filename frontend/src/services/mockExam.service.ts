@@ -350,6 +350,7 @@ export const mockExamService = {
 
   async getHistory(params: {
     courseId?: string
+    status?: string
     pageIndex?: number
     pageSize?: number
   }): Promise<MockExamHistoryPage> {
@@ -358,6 +359,7 @@ export const mockExamService = {
         pageIndex: params.pageIndex ?? 1,
         pageSize: params.pageSize ?? 5,
         ...(params.courseId ? { courseId: params.courseId } : {}),
+        ...(params.status ? { status: params.status } : {}),
       },
     })
     return normalizeHistory(unwrapPayload(response.data))

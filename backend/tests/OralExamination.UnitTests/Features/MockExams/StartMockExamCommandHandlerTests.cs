@@ -223,7 +223,7 @@ public class StartMockExamCommandHandlerTests
         result.Error.Should().Contain("3/3 lượt");
     }
 
-    [Fact(DisplayName = "4. Tuân thủ hạn ngạch động do Trưởng BM cấu hình trong Course.MaxMockExamsPerDay")]
+    [Fact(DisplayName = "4. Tuân thủ hạn ngạch động do Admin cấu hình trong Course.MaxMockExamsPerDay")]
     public async Task Handle_DynamicQuotaFromCourse_RespectsCustomCourseQuota()
     {
         using var context = CreateDbContext();
@@ -420,5 +420,104 @@ public class StartMockExamCommandHandlerTests
 
         var valid = new StartMockExamCommand(Guid.NewGuid(), Guid.NewGuid(), true);
         validator.Validate(valid).IsValid.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "11. Cho phép thi thử hôm nay khi hạn ngạch ngày hôm qua đã dùng hết")]
+    public async Task Handle_QuotaExhaustedYesterday_AllowsNewExamToday()
+    {
+        using var context = CreateDbContext();
+        var (course, student, _, _, _) = await SeedDataAsync(context, maxMockExamsPerDay: 3);
+
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var yesterdayVn = todayVn.AddDays(-1);
+
+        var yesterdayQuota = new MockExamQuota
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            QuotaDate = yesterdayVn,
+            UsedCount = 3,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.MockExamQuotas.Add(yesterdayQuota);
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var command = new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.UsedQuota.Should().Be(1);
+        result.Value.RemainingQuota.Should().Be(2);
+    }
+
+    [Theory(DisplayName = "12. Fallback về hạn ngạch mặc định K=3 khi MaxMockExamsPerDay <= 0")]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-5)]
+    public async Task Handle_ZeroOrNegativeMaxMockExamsPerDay_FallbacksToDefault3(int invalidQuota)
+    {
+        using var context = CreateDbContext();
+        var (course, student, _, _, _) = await SeedDataAsync(context, maxMockExamsPerDay: invalidQuota);
+
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var existingQuota = new MockExamQuota
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            QuotaDate = todayVn,
+            UsedCount = 2,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.MockExamQuotas.Add(existingQuota);
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+
+        // Lần thứ 3: Thành công (vì fallback = 3, used = 2 -> 3)
+        var cmd1 = new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false);
+        var res1 = await handler.Handle(cmd1, CancellationToken.None);
+        res1.IsSuccess.Should().BeTrue();
+        res1.Value.UsedQuota.Should().Be(3);
+        res1.Value.RemainingQuota.Should().Be(0);
+
+        // Lần thứ 4: Bị chặn (vượt quá 3)
+        var cmd2 = new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false);
+        var res2 = await handler.Handle(cmd2, CancellationToken.None);
+        res2.IsSuccess.Should().BeFalse();
+        res2.Error.Should().StartWith("QUOTA_EXCEEDED:");
+        res2.Error.Should().Contain("3/3 lượt");
+    }
+
+    [Fact(DisplayName = "13. Trả về QUOTA_EXCEEDED khi UsedCount lớn hơn MaxDailyQuota")]
+    public async Task Handle_UsedCountExceedsMaxDailyQuota_ReturnsQuotaExceededFailure()
+    {
+        using var context = CreateDbContext();
+        var (course, student, _, _, _) = await SeedDataAsync(context, maxMockExamsPerDay: 3);
+
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        var excessQuota = new MockExamQuota
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            QuotaDate = todayVn,
+            UsedCount = 5,
+            UpdatedAt = DateTime.UtcNow
+        };
+        context.MockExamQuotas.Add(excessQuota);
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var command = new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("QUOTA_EXCEEDED:");
+        result.Error.Should().Contain("3/3 lượt");
     }
 }

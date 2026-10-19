@@ -13,7 +13,7 @@ public static class StudentUsername
 {
     public const int GivenNameLength = 3;
     public const int StudentCodeLength = 8;
-    public const int MaxLength = GivenNameLength + 2 + StudentCodeLength;
+    public const int MaxLength = 50;
 
     private static readonly Regex StudentCodePattern = new("^[a-z]{2}[0-9]{6}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 

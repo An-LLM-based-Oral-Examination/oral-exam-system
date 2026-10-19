@@ -73,7 +73,15 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         AiQuestionGenerationParams parameters,
         CancellationToken cancellationToken)
     {
-        string[] candidateModels = { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-flash-latest" };
+        string[] candidateModels =
+        {
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.6-flash-lite",
+            "gemini-flash-latest",
+            "gemini-flash-lite-latest"
+        };
         var prompt = BuildPrompt(parameters);
 
         var payload = new
@@ -90,14 +98,13 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             },
             generationConfig = new
             {
-                response_mime_type = "application/json",
-                temperature = 0.3
+                response_mime_type = "application/json"
             }
         };
 
         foreach (var modelName in candidateModels)
         {
-            var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
+            var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent";
 
             try
             {
@@ -107,6 +114,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                     {
                         Content = JsonContent.Create(payload)
                     };
+                    requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
                     return await _httpClient.SendAsync(requestMessage, state);
                 }, cancellationToken);
 

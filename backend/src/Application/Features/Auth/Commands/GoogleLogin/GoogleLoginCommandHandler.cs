@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -15,7 +17,7 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Auth.Commands.GoogleLogin;
 
-public sealed class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Result<GoogleLoginResponse>>
+public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Result<GoogleLoginResponse>>
 {
     private readonly IApplicationDbContext _context;
     private readonly IGoogleIdTokenValidator _googleIdTokenValidator;
@@ -65,7 +67,8 @@ public sealed class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginComma
             {
                 Email = email,
                 FullName = identity.FullName,
-                StudentCode = null,
+                StudentCode = TryExtractFptStudentCode(email),
+                MustChangePassword = false,
                 Role = UserRole.Student,
                 IsActive = true
             };
@@ -75,6 +78,17 @@ public sealed class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginComma
         else if (!user.IsActive)
         {
             return Result<GoogleLoginResponse>.Failure("Tài khoản đã bị khóa.");
+        }
+        else if (user.MustChangePassword)
+        {
+            user.MustChangePassword = false;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        // Đảm bảo sinh viên đăng nhập qua Google được tự động ghi danh vào các lớp học đang mở
+        if (string.Equals(user.Role, UserRole.Student, StringComparison.OrdinalIgnoreCase))
+        {
+            await EnsureStudentEnrolledInActiveClassesAsync(user.Id, cancellationToken);
         }
 
         // 4. Cấp access token JWT (15 phút) + refresh token (7 ngày)
@@ -102,6 +116,57 @@ public sealed class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginComma
 
         return Result<GoogleLoginResponse>.Success(response);
     }
+
+    private async Task EnsureStudentEnrolledInActiveClassesAsync(Guid studentId, CancellationToken cancellationToken)
+    {
+        var activeClassIds = await _context.Classes
+            .AsNoTracking()
+            .Where(c => c.IsActive)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        if (activeClassIds.Count == 0)
+        {
+            return;
+        }
+
+        var enrolledClassIds = (await _context.ClassEnrollments
+            .AsNoTracking()
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var added = false;
+        foreach (var classId in activeClassIds)
+        {
+            if (!enrolledClassIds.Contains(classId))
+            {
+                _context.ClassEnrollments.Add(new ClassEnrollment
+                {
+                    Id = Guid.NewGuid(),
+                    ClassId = classId,
+                    StudentId = studentId,
+                    Status = "enrolled",
+                    EnrolledAt = DateTime.UtcNow
+                });
+                added = true;
+            }
+        }
+
+        if (added)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static string? TryExtractFptStudentCode(string email)
+    {
+        var match = FptStudentEmailRegex().Match(email);
+        return match.Success ? match.Groups[1].Value.ToUpperInvariant() : null;
+    }
+
+    [GeneratedRegex(@"([a-zA-Z]{2}\d{6})@fpt\.edu\.vn$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FptStudentEmailRegex();
 
     public static string HashToken(string token)
     {

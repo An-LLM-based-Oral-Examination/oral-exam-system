@@ -12,5 +12,6 @@ public sealed record GetMockExamHistoryQuery(
     Guid StudentId,
     Guid? CourseId = null,
     int PageIndex = 1,
-    int PageSize = 10
+    int PageSize = 10,
+    string? Status = null
 ) : IRequest<Result<MockExamHistoryListResponse>>;

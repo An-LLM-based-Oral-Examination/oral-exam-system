@@ -7,6 +7,8 @@ using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Auth.DTOs;
+using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using OralExamination.Domain.Identity;
 
 namespace OralExamination.Application.Features.Auth.Commands.PasswordLogin;
@@ -40,7 +42,7 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
 
         var username = StudentUsername.Normalize(request.Username);
         var user = await _context.Users
-            .FirstOrDefaultAsync(item => item.Username == username, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == username.ToLower(), cancellationToken);
 
         if (user is null)
         {
@@ -60,6 +62,12 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
         if (!_passwordHasher.Verify(request.Password!, user.PasswordHash))
         {
             return Result<PasswordLoginResponse>.Failure(AuthErrors.WrongPassword);
+        }
+
+        // Đảm bảo sinh viên đăng nhập bằng mật khẩu được tự động ghi danh vào các lớp học đang mở
+        if (string.Equals(user.Role, UserRole.Student, StringComparison.OrdinalIgnoreCase))
+        {
+            await EnsureStudentEnrolledInActiveClassesAsync(user.Id, cancellationToken);
         }
 
         var accessToken = _accessTokenIssuer.Issue(
@@ -86,6 +94,48 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             accessToken.ExpiresInSeconds,
             user.MustChangePassword,
             new GoogleLoginUserDto(user.Id, user.Email, user.FullName, user.StudentCode, user.Role)));
+    }
+
+    private async Task EnsureStudentEnrolledInActiveClassesAsync(Guid studentId, CancellationToken cancellationToken)
+    {
+        var activeClassIds = await _context.Classes
+            .AsNoTracking()
+            .Where(c => c.IsActive)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        if (activeClassIds.Count == 0)
+        {
+            return;
+        }
+
+        var enrolledClassIds = (await _context.ClassEnrollments
+            .AsNoTracking()
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.ClassId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var added = false;
+        foreach (var classId in activeClassIds)
+        {
+            if (!enrolledClassIds.Contains(classId))
+            {
+                _context.ClassEnrollments.Add(new ClassEnrollment
+                {
+                    Id = Guid.NewGuid(),
+                    ClassId = classId,
+                    StudentId = studentId,
+                    Status = "enrolled",
+                    EnrolledAt = DateTime.UtcNow
+                });
+                added = true;
+            }
+        }
+
+        if (added)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static string HashToken(string token)

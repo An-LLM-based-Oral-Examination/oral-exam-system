@@ -117,7 +117,7 @@ export function LoginPage() {
 
   return (
     <main className="login-page-shell min-h-dvh w-full bg-[#7868ef] p-0.5">
-      <div className="grid min-h-[calc(100dvh-4px)] overflow-hidden rounded-[7px] bg-[#f8fafc] lg:grid-cols-[58%_42%]">
+      <div className="grid min-h-[calc(100dvh-4px)] overflow-hidden rounded-[7px] bg-[#FFFFFF] lg:grid-cols-[58%_42%]">
         <section
           className="relative hidden min-h-[calc(100dvh-4px)] overflow-hidden bg-[#071426] lg:block"
           aria-label="Giới thiệu hệ thống luyện thi vấn đáp"
@@ -136,7 +136,7 @@ export function LoginPage() {
           </Suspense>
 
           <div className="login-hero-copy pointer-events-none absolute top-[6.5%] left-[7.5%] z-10 max-w-[560px] pr-8">
-            <div className="login-hero-badge mb-5 inline-flex items-center gap-2 rounded-full border border-[#3d8ccc]/25 bg-[#0b2744]/70 px-3 py-1.5 text-[10px] font-semibold tracking-[0.12em] text-[#87dffc] uppercase shadow-[0_0_18px_rgba(56,189,248,0.08)] backdrop-blur-md">
+            <div className="login-hero-badge mb-5 inline-flex items-center gap-2 rounded-full border border-[#3d8ccc]/25 bg-[#0b2744]/70 px-3 py-1.5 text-xs font-semibold tracking-[0.12em] text-[#87dffc] uppercase shadow-[0_0_18px_rgba(56,189,248,0.08)] backdrop-blur-md">
               <span className="h-1.5 w-1.5 rounded-full bg-[#50e1ff] shadow-[0_0_9px_#50e1ff]" />
               AI-powered oral examination
             </div>
@@ -165,16 +165,16 @@ export function LoginPage() {
                   <Icon className="size-3.5" strokeWidth={1.8} />
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-[8px] font-bold tracking-[0.12em] uppercase ${accent}`}>
+                  <p className={`text-xs font-bold tracking-[0.12em] uppercase ${accent}`}>
                     {title}
                   </p>
-                  <p className="truncate text-[8px] text-[#8999b1]">{description}</p>
+                  <p className="truncate text-xs text-[#8999b1]">{description}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="absolute right-[7%] bottom-[3.6%] left-[7%] z-10 flex items-center gap-5 text-[9px] text-[#9aabc1]">
+          <div className="absolute right-[7%] bottom-[3.6%] left-[7%] z-10 flex items-center gap-5 text-xs text-[#9aabc1]">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="size-3 text-[#72b9f4]" />
               Bảo vệ phiên đăng nhập
@@ -189,21 +189,21 @@ export function LoginPage() {
 
         <section className="relative flex min-h-[calc(100dvh-4px)] flex-col overflow-y-auto bg-[linear-gradient(145deg,#ffffff_0%,#f8fafe_58%,#f3f6fb_100%)]">
           <header className="login-header flex shrink-0 items-start justify-between gap-4 px-6 pt-5 sm:px-10 sm:pt-7">
-            <p className="pt-1 text-[9px] font-semibold tracking-[0.1em] text-[#70819a] uppercase">
+            <p className="pt-1 text-xs font-semibold tracking-[0.1em] text-[#70819a] uppercase">
               Department portal
             </p>
 
             <div className="flex flex-col items-end gap-1.5">
               <button
                 type="button"
-                className="login-status-button flex items-center gap-2 rounded-lg border border-[#dce4ef] bg-white/90 px-3 py-1.5 text-[9px] font-semibold text-[#67758a] shadow-sm transition hover:border-[#cbd7e8] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde]"
+                className="login-status-button flex items-center gap-2 rounded-lg border border-[#4988C4]/45 bg-white/90 px-3 py-1.5 text-xs font-semibold text-[#67758a] shadow-sm transition hover:border-[#cbd7e8] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde]"
                 aria-label="Môi trường hiện tại: mô phỏng"
               >
                 <span className="size-1.5 rounded-full bg-[#7aa9f4]" />
                 Simulation Status
                 <ChevronDown className="size-3" />
               </button>
-              <span className="login-status-line flex items-center gap-1.5 pr-1 text-[9px] font-medium text-[#51667a]">
+              <span className="login-status-line flex items-center gap-1.5 pr-1 text-xs font-medium text-[#51667a]">
                 <span className="size-1.5 rounded-full bg-[#22c58b] shadow-[0_0_7px_rgba(34,197,139,0.55)]" />
                 Gateway Active
               </span>
@@ -221,30 +221,30 @@ export function LoginPage() {
                     draggable={false}
                   />
                 </div>
-                <h2 className="text-[1.45rem] font-bold tracking-[-0.035em] text-[#0b1733]">
+                <h2 className="text-[1.45rem] font-bold tracking-[-0.035em] text-[#0b1733] sm:text-lg">
                   Oral Exam System
                 </h2>
-                <p className="login-subtitle mt-1.5 text-[11px] text-[#738198]">
+                <p className="login-subtitle mt-1.5 text-sm text-[#738198]">
                   AI-powered Oral Examination Practice & Assessment
                 </p>
               </div>
 
-              <div className="mb-5 rounded-xl border border-[#dce6f3] bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
+              <div className="mb-5 rounded-xl border border-[#4988C4]/45 bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
                 <div className="mb-2.5 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold text-[#253653]">Đăng nhập bằng Google</p>
-                    <p className="mt-0.5 text-[9px] text-[#7b8ba1]">Xác thực OAuth 2.0 theo tài khoản đã được cấp quyền.</p>
+                    <p className="text-sm font-semibold text-[#253653]">Đăng nhập bằng Google</p>
+                    <p className="mt-0.5 text-xs text-[#7b8ba1]">Xác thực OAuth 2.0 theo tài khoản đã được cấp quyền.</p>
                   </div>
                   <ShieldCheck className="size-4 shrink-0 text-[#2f70d9]" />
                 </div>
                 <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
                 {isLoading && (
-                  <p className="mt-2 text-center text-[9px] font-semibold text-[#4a6dcc]">
+                  <p className="mt-2 text-center text-xs font-semibold text-[#4a6dcc]">
                     Đang xác thực tài khoản Google…
                   </p>
                 )}
                 {!googleConfigured && (
-                  <p className="mt-2 text-center text-[9px] text-[#a16a16]">
+                  <p className="mt-2 text-center text-xs text-[#a16a16]">
                     Chưa cấu hình VITE_GOOGLE_CLIENT_ID cho môi trường này.
                   </p>
                 )}
@@ -259,11 +259,11 @@ export function LoginPage() {
               </div>
 
               <div className="login-security mt-5 border-t border-[#e5eaf1] pt-4 text-center">
-                <p className="flex items-center justify-center gap-1.5 text-[9px] text-[#8794a7]">
+                <p className="flex items-center justify-center gap-1.5 text-xs text-[#8794a7]">
                   <ShieldCheck className="size-3.5 text-[#6984b3]" />
                   Tài khoản được bảo vệ bằng xác thực phiên an toàn.
                 </p>
-                <p id="login-support" className="login-support mt-2 text-[9px] text-[#8794a7]">
+                <p id="login-support" className="login-support mt-2 text-xs text-[#8794a7]">
                   Cần hỗ trợ? Liên hệ trợ giảng hoặc quản trị viên hệ thống.
                 </p>
               </div>
@@ -271,7 +271,7 @@ export function LoginPage() {
             </div>
           </div>
 
-          <footer className="login-footer shrink-0 px-6 pb-5 text-center text-[9px] text-[#9aa6b6] sm:px-10 sm:pb-7">
+          <footer className="login-footer shrink-0 px-6 pb-5 text-center text-xs text-[#9aa6b6] sm:px-10 sm:pb-7">
             <div className="login-footer-divider mb-3 h-px bg-[#e8ecf2]" />© 2026 Faculty of
             Computer Science & Engineering. All rights reserved.
           </footer>

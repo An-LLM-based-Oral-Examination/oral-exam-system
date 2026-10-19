@@ -30,7 +30,7 @@ public class NextQuestionCommandHandlerTests
         List<string>? selectedDifficulties = null,
         string mode = "per_question",
         string status = "in_progress",
-        int timeoutMinutes = 10)
+        int timeoutMinutes = 5)
     {
         var course = new Course
         {

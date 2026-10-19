@@ -31,7 +31,7 @@ public class PracticeSessionInactivityTimeoutTests
     private async Task<(Course Course, User Student, PracticeSession Session)> SeedSessionAsync(
         OralExamDbContext context,
         DateTime lastActivityAt,
-        int timeoutMinutes = 10)
+        int timeoutMinutes = 5)
     {
         var course = new Course
         {
@@ -106,12 +106,12 @@ public class PracticeSessionInactivityTimeoutTests
         await context.SaveChangesAsync();
     }
 
-    [Fact(DisplayName = "1. NextQuestion: Khi không tương tác quá 10 phút, tự động chuyển status = completed và trả về lỗi timeout")]
-    public async Task NextQuestion_WhenInactiveForMoreThan10Minutes_ShouldMarkSessionCompletedAndReturnTimeoutFailure()
+    [Fact(DisplayName = "1. NextQuestion: Khi không tương tác quá 5 phút, tự động chuyển status = completed và trả về lỗi timeout")]
+    public async Task NextQuestion_WhenInactiveForMoreThan5Minutes_ShouldMarkSessionCompletedAndReturnTimeoutFailure()
     {
-        // Arrange: LastActivityAt cách đây 12 phút (quá 10 phút)
+        // Arrange: LastActivityAt cách đây 7 phút (quá 5 phút)
         using var context = CreateDbContext();
-        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-12), timeoutMinutes: 10);
+        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-7), timeoutMinutes: 5);
         await SeedQuestionsAsync(context, course.Id);
 
         var handler = new NextQuestionCommandHandler(context);
@@ -122,7 +122,7 @@ public class PracticeSessionInactivityTimeoutTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("không có tương tác trong hơn 10 phút");
+        result.Error.Should().Contain("không có tương tác trong hơn 5 phút");
 
         // Kiểm tra trong DB: Session đã được cập nhật completed an toàn
         var updatedSession = await context.PracticeSessions.FindAsync(session.Id);
@@ -131,12 +131,12 @@ public class PracticeSessionInactivityTimeoutTests
         updatedSession.CompletedAt.Should().NotBeNull();
     }
 
-    [Fact(DisplayName = "2. SubmitPracticeAnswer: Khi không tương tác quá 10 phút, tự động chuyển status = completed và trả về lỗi timeout")]
-    public async Task SubmitPracticeAnswer_WhenInactiveForMoreThan10Minutes_ShouldMarkSessionCompletedAndReturnTimeoutFailure()
+    [Fact(DisplayName = "2. SubmitPracticeAnswer: Khi không tương tác quá 5 phút, tự động chuyển status = completed và trả về lỗi timeout")]
+    public async Task SubmitPracticeAnswer_WhenInactiveForMoreThan5Minutes_ShouldMarkSessionCompletedAndReturnTimeoutFailure()
     {
-        // Arrange: LastActivityAt cách đây 15 phút
+        // Arrange: LastActivityAt cách đây 7 phút
         using var context = CreateDbContext();
-        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-15), timeoutMinutes: 10);
+        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-7), timeoutMinutes: 5);
         await SeedQuestionsAsync(context, course.Id);
 
         var question = await context.PracticeQuestions.FirstAsync();
@@ -157,7 +157,7 @@ public class PracticeSessionInactivityTimeoutTests
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("không có tương tác trong hơn 10 phút");
+        result.Error.Should().Contain("không có tương tác trong hơn 5 phút");
 
         var updatedSession = await context.PracticeSessions.FindAsync(session.Id);
         updatedSession!.Status.Should().Be("completed");
@@ -169,7 +169,7 @@ public class PracticeSessionInactivityTimeoutTests
     {
         // Arrange: Đã có 2 câu trả lời có điểm trước khi session bị timeout
         using var context = CreateDbContext();
-        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-20), timeoutMinutes: 10);
+        var (course, student, session) = await SeedSessionAsync(context, DateTime.UtcNow.AddMinutes(-10), timeoutMinutes: 5);
         await SeedQuestionsAsync(context, course.Id);
 
         var questions = await context.PracticeQuestions.Take(2).ToListAsync();
@@ -253,10 +253,10 @@ public class PracticeSessionInactivityTimeoutTests
     [Fact(DisplayName = "4. Cập nhật chính xác LastActivityAt khi NextQuestion và SubmitPracticeAnswer tương tác hợp lệ")]
     public async Task Interaction_ShouldUpdateLastActivityAtOnSuccessfulNextQuestionAndSubmitAnswer()
     {
-        // Arrange: Session tương tác cách đây 3 phút (< 10 phút, còn hợp lệ)
+        // Arrange: Session tương tác cách đây 2 phút (< 5 phút, còn hợp lệ)
         using var context = CreateDbContext();
-        var oldTime = DateTime.UtcNow.AddMinutes(-3);
-        var (course, student, session) = await SeedSessionAsync(context, oldTime, timeoutMinutes: 10);
+        var oldTime = DateTime.UtcNow.AddMinutes(-2);
+        var (course, student, session) = await SeedSessionAsync(context, oldTime, timeoutMinutes: 5);
         await SeedQuestionsAsync(context, course.Id);
 
         var nextHandler = new NextQuestionCommandHandler(context);

@@ -7,6 +7,7 @@ using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguration;
 
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 
 namespace API.Controllers.v1;
 
@@ -53,11 +54,24 @@ public class CoursesController : ControllerBase
 
     /// <summary>
     /// Cập nhật cấu hình động của môn học (Mở quyền cho Giảng viên / Trưởng Bộ Môn / Admin).
-    /// Giảng viên trực tiếp cấu hình tính năng hỏi chuyên sâu (1–2 câu) và thời gian đệm.
+    /// Giảng viên / Trưởng Bộ Môn cấu hình tính năng hỏi chuyên sâu (1–2 câu), thời gian đệm và cấu trúc đề.
+    /// Riêng hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Quản trị viên (Admin).
     /// </summary>
     [HttpPut("{id:guid}/configurations")]
     public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)
     {
+        // R2 Check: Hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Admin
+        if (request.MaxMockExamsPerDay.HasValue && (User?.IsInRole("admin") != true))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = "Chỉ có Quản trị viên (Admin) mới có quyền cấu hình hạn ngạch thi thử (MaxMockExamsPerDay).",
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
         var command = new UpdateCourseConfigurationCommand(
             id,
             request.TranscriptBufferSeconds,

@@ -9,7 +9,7 @@ export function StudentLayout() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-dvh bg-[#f4f7fc] text-[#10203d]">
+    <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
       <StudentSidebar
         collapsed={isSidebarCollapsed}
         mobileOpen={isMobileSidebarOpen}

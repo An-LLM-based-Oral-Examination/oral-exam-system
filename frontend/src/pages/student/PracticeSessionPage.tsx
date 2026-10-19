@@ -24,8 +24,10 @@ import {
   Volume2,
   Wifi,
   WifiOff,
-  X,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ds } from '@/design/system'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { BufferScreen } from '@/components/practice/BufferScreen'
 import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { useAuth } from '@/hooks/useAuth'
@@ -259,9 +261,6 @@ export const PracticeSessionPage: React.FC = () => {
   const syncInFlightRef = useRef(false)
   const submissionRecoveryInFlightRef = useRef(false)
   const submissionRequestInFlightRef = useRef(false)
-  const stopDialogRef = useRef<HTMLElement>(null)
-  const isCompletingRef = useRef(isCompleting)
-
   const {
     isRecording,
     error: recorderError,
@@ -510,49 +509,12 @@ export const PracticeSessionPage: React.FC = () => {
   }, [runtime])
 
   useEffect(() => {
-    isCompletingRef.current = isCompleting
-  }, [isCompleting])
-
-  useEffect(() => {
     if (!showStopConfirmation) return
     const previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     const previousBodyOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    stopDialogRef.current?.focus()
-
-    const handleDialogKeyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isCompletingRef.current) {
-        setShowStopConfirmation(false)
-        return
-      }
-      if (event.key !== 'Tab') return
-
-      const focusableElements = Array.from(
-        stopDialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      ).filter((element) => element.getAttribute('aria-hidden') !== 'true')
-
-      if (focusableElements.length === 0) {
-        event.preventDefault()
-        stopDialogRef.current?.focus()
-        return
-      }
-
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-      if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault()
-        lastElement.focus()
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault()
-        firstElement.focus()
-      }
-    }
-    window.addEventListener('keydown', handleDialogKeyboard)
     return () => {
-      window.removeEventListener('keydown', handleDialogKeyboard)
       document.body.style.overflow = previousBodyOverflow
       previouslyFocusedElement?.focus()
     }
@@ -1041,22 +1003,22 @@ export const PracticeSessionPage: React.FC = () => {
   if (!runtime || !sessionId || !currentQuestion || !user || runtime.studentId !== user.id) {
     return (
       <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#efcbd1] bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
-        <div className="bg-[linear-gradient(135deg,#fff8f9,#f7faff)] px-6 py-8">
+        <div className="bg-[linear-gradient(135deg,#fff8f9,#BDE8F5)] px-6 py-8">
           <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-[#d3485f] shadow-[0_10px_28px_rgba(211,72,95,0.12)]">
             <AlertCircle className="size-7" />
           </span>
           <div className="mt-4">
-            <h1 className="text-lg font-bold text-[#17243a]">Không thể mở phiên luyện tập</h1>
-            <p className="mx-auto mt-2 max-w-md text-[11px] leading-relaxed text-[#68778b]">
+            <h1 className="text-lg font-bold text-[#0F2854]">Không thể mở phiên luyện tập</h1>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#68778b]">
               {pageError || runtimeIssue || 'Dữ liệu phiên luyện tập không đầy đủ hoặc đã bị xóa.'}
             </p>
           </div>
         </div>
-        <div className="border-t border-[#edf1f6] bg-white p-4">
+        <div className="border-t border-[#4988C4]/45 bg-white p-4">
           <button
             type="button"
             onClick={() => navigate('/practice')}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:bg-[#194fce] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea]"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
           >
             <ArrowLeft className="size-4" /> Tạo phiên mới
           </button>
@@ -1110,26 +1072,26 @@ export const PracticeSessionPage: React.FC = () => {
             : 'Kiểm tra nội dung lần cuối; câu trả lời sẽ được gửi trực tiếp để chấm điểm.'
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <section className="relative isolate overflow-hidden rounded-[22px] border border-[#23467a] bg-[linear-gradient(120deg,#071a35_0%,#102e5a_58%,#24528f_100%)] px-5 py-5 text-white shadow-[0_18px_46px_rgba(16,44,88,0.18)] sm:px-7 sm:py-6">
-        <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(126,218,247,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(126,218,247,0.16)_1px,transparent_1px)] [background-size:32px_32px] opacity-20" />
-        <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#48d9ef]/16 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#477bff]/18 blur-3xl" />
+    <div className={ds.page}>
+      <section className={cn(ds.banner, 'px-5 py-5 text-white sm:px-7 sm:py-6')}>
+        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-35" />
+        <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#4988C4]/16/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#4988C4]/30 blur-3xl" />
 
         <div className="relative z-10">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#6de4f1]/20 bg-[#0d477f]/72 px-3 py-1 text-[10px] font-bold tracking-[0.08em] text-[#bcf6fb] uppercase backdrop-blur-sm">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.08em] text-white uppercase backdrop-blur-sm">
                   <Radio className="size-3" /> Phiên luyện tập đang diễn ra
                 </span>
                 <span
                   role="status"
                   aria-live="polite"
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold backdrop-blur-sm ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-sm ${
                     hubStatus === 'connected'
-                      ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-100'
-                      : 'border-amber-300/25 bg-amber-300/10 text-amber-100'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-amber-200 bg-amber-50 text-amber-700'
                   }`}
                 >
                   {hubStatus === 'connected' ? (
@@ -1147,18 +1109,18 @@ export const PracticeSessionPage: React.FC = () => {
                 </span>
               </div>
 
-              <p className="mt-4 text-[10px] font-semibold tracking-[0.08em] text-[#9fc4ef] uppercase">
+              <p className="mt-4 text-xs font-semibold tracking-[0.08em] text-[#BDE8F5] uppercase">
                 {runtime.config.courseCode}
               </p>
               <h1 className="mt-1 max-w-3xl text-[clamp(1.35rem,2.5vw,2rem)] leading-tight font-bold tracking-[-0.035em] text-white">
                 {runtime.config.courseName}
               </h1>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-[#d7e8fb]">
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/80">
                 <span className="inline-flex items-center gap-1.5">
-                  <LockKeyhole className="size-3.5 text-[#69e1ef]" /> {modeLabel}
+                  <LockKeyhole className="size-3.5 text-[#BDE8F5]" /> {modeLabel}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-[#69e1ef]" /> Hiệu đính trong{' '}
+                  <Clock className="size-3.5 text-[#BDE8F5]" /> Hiệu đính trong{' '}
                   {runtime.transcriptBufferSeconds} giây
                 </span>
               </div>
@@ -1171,24 +1133,24 @@ export const PracticeSessionPage: React.FC = () => {
               title={
                 isVerifyingSubmission ? 'Hãy xác minh lần nộp trước khi kết thúc phiên.' : undefined
               }
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-rose-200/25 bg-rose-400/10 px-4 text-[11px] font-bold text-rose-100 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-rose-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-200 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-rose-200 bg-white px-4 text-sm font-bold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
             >
               <Square className="size-3.5 fill-current" /> Kết thúc phiên
             </button>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.07] p-3.5 backdrop-blur-sm sm:p-4">
+          <div className="mt-5 rounded-2xl border border-white/30 bg-white p-3.5 shadow-sm sm:p-4">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold text-[#b7d0eb]">Tiến độ câu hỏi chính</p>
-                <p className="mt-0.5 text-sm font-bold text-white">
+                <p className="text-xs font-semibold text-[#0F2854]/70">Tiến độ câu hỏi chính</p>
+                <p className="mt-0.5 text-sm font-bold text-[#0F2854]">
                   Đã hoàn thành {completedMainQuestions}/{totalMainQuestions} câu
                 </p>
               </div>
-              <strong className="font-mono text-lg text-[#7be6f2]">{progressPercentage}%</strong>
+              <strong className="font-mono text-lg text-[#1C4D8D]">{progressPercentage}%</strong>
             </div>
             <div
-              className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"
+              className="mt-3 h-2 overflow-hidden rounded-full bg-[#4988C4]/16"
               role="progressbar"
               aria-label="Tiến độ phiên luyện tập"
               aria-valuemin={0}
@@ -1196,7 +1158,7 @@ export const PracticeSessionPage: React.FC = () => {
               aria-valuenow={completedMainQuestions}
             >
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#50dce9,#75a8ff)] shadow-[0_0_16px_rgba(80,220,233,0.5)] transition-[width] duration-500 motion-reduce:transition-none"
+                className="h-full rounded-full bg-[#1C4D8D] transition-[width] duration-500 motion-reduce:transition-none"
                 style={{ width: `${progressPercentage}%` }}
               />
             </div>
@@ -1206,7 +1168,7 @@ export const PracticeSessionPage: React.FC = () => {
 
       {(pageError || recorderError) && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3.5 text-[11px] font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
+          className="flex items-start gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3.5 text-sm font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
           role="alert"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
@@ -1218,7 +1180,7 @@ export const PracticeSessionPage: React.FC = () => {
 
       {sessionNotice && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-[#cfe0fb] bg-[#f3f7ff] px-4 py-3.5 text-[11px] font-semibold text-[#2859bf]"
+          className="flex items-start gap-3 rounded-2xl border border-[#cfe0fb] bg-[#4988C4]/16 px-4 py-3.5 text-sm font-semibold text-[#2859bf]"
           role="status"
           aria-live="polite"
         >
@@ -1238,7 +1200,7 @@ export const PracticeSessionPage: React.FC = () => {
           type="button"
           onClick={() => void reconcilePendingSubmission(runtime)}
           disabled={isSubmitting}
-          className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-[11px] font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60"
+          className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-sm font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60"
         >
           <RefreshCw
             className={`size-4 ${isSubmitting ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -1249,32 +1211,32 @@ export const PracticeSessionPage: React.FC = () => {
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.72fr)]">
         <div className="min-w-0 space-y-4">
-          <article className="overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="border-b border-[#edf1f6] px-5 py-4 sm:px-6 sm:py-5">
+          <article className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
+            <div className="border-b border-[#4988C4]/45 px-5 py-4 sm:px-6 sm:py-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#edf3ff] px-2.5 py-1.5 text-[10px] font-bold text-[#245eea]">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#4988C4]/16 px-2.5 py-1.5 text-xs font-bold text-[#1C4D8D]">
                     <BookOpenText className="size-3.5" />
                     {runtime.activeFollowUp
                       ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
                       : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
                   </span>
                   {runtime.activeFollowUp && (
-                    <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[10px] font-bold text-violet-700">
+                    <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-bold text-violet-700">
                       Đào sâu theo câu trả lời
                     </span>
                   )}
                 </div>
                 {currentDifficulty && (
                   <span
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${DIFFICULTY_META[currentDifficulty].className}`}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-bold ${DIFFICULTY_META[currentDifficulty].className}`}
                   >
                     {DIFFICULTY_META[currentDifficulty].label}
                   </span>
                 )}
               </div>
 
-              <h2 className="mt-5 text-[clamp(1.15rem,2.1vw,1.55rem)] leading-[1.45] font-bold tracking-[-0.025em] text-[#14233d]">
+              <h2 className="mt-5 text-[clamp(1.15rem,2.1vw,1.55rem)] leading-[1.45] font-bold tracking-[-0.025em] text-[#0F2854]">
                 {activePrompt}
               </h2>
 
@@ -1282,14 +1244,14 @@ export const PracticeSessionPage: React.FC = () => {
                 type="button"
                 onClick={handleReadQuestion}
                 disabled={isRecording}
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8e3f3] bg-[#f8faff] px-4 text-[11px] font-bold text-[#315fbd] transition hover:border-[#b7c9e4] hover:bg-[#eef4ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8e3f3] bg-[#4988C4]/16 px-4 text-sm font-bold text-[#1C4D8D] transition hover:border-[#b7c9e4] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Volume2 className="size-4" /> Nghe đọc câu hỏi
               </button>
             </div>
 
-            <div className="bg-[#fbfcfe] px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.05em] text-[#6d7d92] uppercase">
+            <div className="bg-white px-5 py-4 sm:px-6">
+              <div className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#6d7d92] uppercase">
                 <ListChecks className="size-4 text-[#5276bc]" /> Tiêu chí cần thể hiện
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -1297,14 +1259,14 @@ export const PracticeSessionPage: React.FC = () => {
                   currentQuestion.rubricCriteria.map((criterion, index) => (
                     <span
                       key={`${criterion}-${index}`}
-                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#e0e7f0] bg-white px-3 py-2 text-[10px] leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
+                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2 text-xs leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
                     >
                       <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#299b7d]" />
                       {criterion}
                     </span>
                   ))
                 ) : (
-                  <span className="text-[11px] text-[#78879a]">
+                  <span className="text-sm text-[#78879a]">
                     Trả lời đầy đủ, đúng trọng tâm và trình bày mạch lạc.
                   </span>
                 )}
@@ -1312,10 +1274,10 @@ export const PracticeSessionPage: React.FC = () => {
             </div>
           </article>
 
-          <section className="overflow-hidden rounded-[22px] border border-[#dce5f1] bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="flex flex-col gap-3 border-b border-[#edf1f6] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
+            <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eaf2ff] text-[#245eea]">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   {answerInputMode === 'voice' ? (
                     <Mic className="size-5" />
                   ) : (
@@ -1323,15 +1285,15 @@ export const PracticeSessionPage: React.FC = () => {
                   )}
                 </span>
                 <div>
-                  <h2 className="text-sm font-bold text-[#1b2c46]">Khu vực trả lời</h2>
-                  <p className="mt-0.5 text-[10px] leading-relaxed text-[#7a899c]">
+                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Khu vực trả lời</h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#7a899c]">
                     {answerInputMode === 'voice'
                       ? 'Nói tự nhiên; bạn sẽ được hiệu đính bản nhận diện trước khi nộp.'
                       : 'Nhập câu trả lời trực tiếp và kiểm tra nội dung trước khi gửi.'}
                   </p>
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-[#d9e8e3] bg-[#f1faf7] px-3 py-1.5 text-[9px] font-bold text-[#19785f] sm:self-auto">
+              <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-[#d9e8e3] bg-[#f1faf7] px-3 py-1.5 text-xs font-bold text-[#19785f] sm:self-auto">
                 <ShieldCheck className="size-3.5" />
                 {answerInputMode === 'voice' ? 'Không lưu bản ghi âm' : 'Chỉ lưu nội dung văn bản'}
               </span>
@@ -1341,7 +1303,7 @@ export const PracticeSessionPage: React.FC = () => {
               <div
                 role="group"
                 aria-label="Chọn hình thức trả lời"
-                className="grid gap-2 rounded-2xl border border-[#dfe7f2] bg-[#f5f8fc] p-1.5 sm:grid-cols-2"
+                className="grid gap-2 rounded-2xl border border-[#dfe7f2] bg-[#4988C4]/16 p-1.5 sm:grid-cols-2"
               >
                 {(
                   [
@@ -1384,22 +1346,22 @@ export const PracticeSessionPage: React.FC = () => {
                         )
                       }}
                       disabled={isInputModeLocked}
-                      className={`flex min-h-16 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-60 ${
+                      className={`flex min-h-16 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60 ${
                         isSelected
-                          ? 'border-[#8aabff] bg-white text-[#1f57d5] shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
+                          ? 'border-[#8aabff] bg-white text-[#1C4D8D] shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
                           : 'border-transparent text-[#63738a] hover:border-[#d2deef] hover:bg-white/80'
                       }`}
                     >
                       <span
                         className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                          isSelected ? 'bg-[#eaf1ff] text-[#245eea]' : 'bg-white text-[#7b8da6]'
+                          isSelected ? 'bg-[#4988C4]/16 text-[#1C4D8D]' : 'bg-white text-[#7b8da6]'
                         }`}
                       >
                         <OptionIcon className="size-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-[11px] font-bold">{option.label}</span>
-                        <span className="mt-0.5 block text-[9px] leading-relaxed opacity-75">
+                        <span className="block text-sm font-bold">{option.label}</span>
+                        <span className="mt-0.5 block text-xs leading-relaxed opacity-75">
                           {option.description}
                         </span>
                       </span>
@@ -1407,7 +1369,7 @@ export const PracticeSessionPage: React.FC = () => {
                         aria-hidden="true"
                         className={`ml-auto size-3.5 shrink-0 rounded-full border-2 ${
                           isSelected
-                            ? 'border-[#245eea] bg-[#245eea] shadow-[inset_0_0_0_3px_white]'
+                            ? 'border-[#4988C4] bg-[#1C4D8D] shadow-[inset_0_0_0_3px_white]'
                             : 'border-[#b9c7da]'
                         }`}
                       />
@@ -1422,7 +1384,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isRecording
                       ? 'border-[#f1a9b5] bg-[linear-gradient(145deg,#fff7f8,#fff1f3)]'
                       : isTranscribing || isAnswerLocked
-                        ? 'border-[#cdddfa] bg-[linear-gradient(145deg,#f6f9ff,#eef4ff)]'
+                        ? 'border-[#cdddfa] bg-[linear-gradient(145deg,#BDE8F5,#BDE8F5)]'
                         : 'border-[#d8e4f3] bg-[linear-gradient(145deg,#f9fbff,#f3f7fc)]'
                   }`}
                 >
@@ -1431,7 +1393,7 @@ export const PracticeSessionPage: React.FC = () => {
                     className={`mx-auto flex size-16 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(31,61,105,0.12)] transition ${
                       isRecording
                         ? 'bg-[#e94f68] text-white shadow-[0_12px_34px_rgba(233,79,104,0.28)]'
-                        : 'bg-white text-[#245eea]'
+                        : 'bg-white text-[#1C4D8D]'
                     }`}
                   >
                     {isTranscribing || isAnswerLocked ? (
@@ -1446,7 +1408,7 @@ export const PracticeSessionPage: React.FC = () => {
                   <p className="mt-4 text-sm font-bold text-[#21324a]" aria-live="polite">
                     {answerState}
                   </p>
-                  <p className="mx-auto mt-1 max-w-md text-[10px] leading-relaxed text-[#728197]">
+                  <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-[#728197]">
                     {isVerifyingSubmission
                       ? 'Không nộp lại hoặc kết thúc phiên cho tới khi trạng thái được xác minh.'
                       : isRecording
@@ -1482,11 +1444,11 @@ export const PracticeSessionPage: React.FC = () => {
                     type="button"
                     onClick={() => void handleRecording()}
                     disabled={isTranscribing || isSubmitting || isAnswerLocked}
-                    className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-[11px] font-bold text-white shadow-lg transition sm:w-auto sm:min-w-52 ${
+                    className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white shadow-lg transition sm:w-auto sm:min-w-52 ${
                       isRecording
                         ? 'bg-[#df405b] shadow-[#df405b]/20 hover:bg-[#c9344d]'
-                        : 'bg-[#245eea] shadow-[#245eea]/20 hover:-translate-y-0.5 hover:bg-[#194fce] hover:shadow-xl'
-                    } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
+                        : 'bg-[#1C4D8D] shadow-[#4988C4]/20 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-xl'
+                    } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
                   >
                     {isTranscribing ? (
                       <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1506,22 +1468,22 @@ export const PracticeSessionPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-[#dfe6f0] bg-[#fbfcfe] p-4">
+              <div className="rounded-2xl border border-[#4988C4]/45 bg-white p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-[11px] font-bold text-[#33445b]">
+                    <p className="text-sm font-bold text-[#33445b]">
                       {answerInputMode === 'voice'
                         ? 'Bản trả lời nhận diện từ giọng nói'
                         : 'Câu trả lời bằng văn bản'}
                     </p>
-                    <p className="mt-0.5 text-[9px] text-[#8390a2]">
+                    <p className="mt-0.5 text-xs text-[#8390a2]">
                       {answerInputMode === 'voice'
                         ? 'Bạn có thể hiệu đính thuật ngữ kỹ thuật ở bước tiếp theo.'
                         : 'Trình bày đầy đủ ý chính và sử dụng thuật ngữ chuyên ngành chính xác.'}
                     </p>
                   </div>
                   {currentAnswerDraft.trim() && (
-                    <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#eaf8f4] px-2.5 py-1 text-[9px] font-bold text-[#188267] sm:self-auto">
+                    <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#eaf8f4] px-2.5 py-1 text-xs font-bold text-[#188267] sm:self-auto">
                       <CheckCircle2 className="size-3" />
                       {answerInputMode === 'voice'
                         ? 'Đã nhận diện'
@@ -1535,9 +1497,9 @@ export const PracticeSessionPage: React.FC = () => {
                       ? 'Bản trả lời được nhận diện từ giọng nói'
                       : 'Nhập câu trả lời bằng văn bản'
                   }
-                  className={`mt-3 min-h-32 w-full rounded-xl border border-[#dce4ef] bg-white p-3.5 text-[13px] leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa] ${
+                  className={`mt-3 min-h-32 w-full rounded-xl border border-[#4988C4]/45 bg-white p-3.5 text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa] ${
                     answerInputMode === 'text'
-                      ? 'resize-y focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#245eea]/10'
+                      ? 'resize-y focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
                       : 'resize-none'
                   }`}
                   value={currentAnswerDraft}
@@ -1557,8 +1519,8 @@ export const PracticeSessionPage: React.FC = () => {
                   }
                 />
                 {answerInputMode === 'text' && (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[9px]">
-                    <span className="text-[#7d8a9d]">Tối thiểu 10 ký tự để gửi câu trả lời.</span>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[#5b6b84]">Tối thiểu 10 ký tự để gửi câu trả lời.</span>
                     <span
                       className={
                         textAnswer.trim().length >= 10
@@ -1573,9 +1535,9 @@ export const PracticeSessionPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-[#edf1f6] bg-[#fbfcfe] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-              <div className="flex min-w-0 items-start gap-2 text-[10px] leading-relaxed text-[#6d7d92]">
-                <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#4d73d3]" />
+            <div className="flex flex-col gap-3 border-t border-[#4988C4]/45 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div className="flex min-w-0 items-start gap-2 text-xs leading-relaxed text-[#6d7d92]">
+                <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" />
                 <span>{reviewHint}</span>
               </div>
               <button
@@ -1592,7 +1554,7 @@ export const PracticeSessionPage: React.FC = () => {
                   persistAnswerDraft(transcript, 'voice', true, nextDeadline)
                 }}
                 disabled={!canOpenBuffer}
-                className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245eea] px-5 text-[11px] font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:-translate-y-0.5 hover:bg-[#194fce] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245eea] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none sm:w-auto"
+                className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none sm:w-auto"
               >
                 {isSubmitting ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1610,23 +1572,23 @@ export const PracticeSessionPage: React.FC = () => {
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-24">
-          <section className="overflow-hidden rounded-2xl border border-[#dce5f1] bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
-            <div className="border-b border-[#edf1f6] px-4 py-3.5">
+          <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
+            <div className="border-b border-[#4988C4]/45 px-4 py-3.5">
               <div className="flex items-center gap-2">
-                <Layers className="size-4 text-[#245eea]" />
-                <h2 className="text-[12px] font-bold text-[#23334a]">Tóm tắt phiên luyện tập</h2>
+                <Layers className="size-4 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Tóm tắt phiên luyện tập</h2>
               </div>
             </div>
             <div className="space-y-4 p-4">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#f8faff] p-3">
-                  <p className="text-[9px] font-semibold text-[#8190a3]">Câu hiện tại</p>
-                  <p className="mt-1 text-sm font-black text-[#245eea]">
+                <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
+                  <p className="text-xs font-semibold text-[#8190a3]">Câu hiện tại</p>
+                  <p className="mt-1 text-sm font-black text-[#1C4D8D]">
                     {currentQuestionNumber}/{totalMainQuestions}
                   </p>
                 </div>
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#f8faff] p-3">
-                  <p className="text-[9px] font-semibold text-[#8190a3]">Đã hoàn thành</p>
+                <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
+                  <p className="text-xs font-semibold text-[#8190a3]">Đã hoàn thành</p>
                   <p className="mt-1 text-sm font-black text-[#168367]">
                     {completedMainQuestions}/{totalMainQuestions}
                   </p>
@@ -1634,11 +1596,11 @@ export const PracticeSessionPage: React.FC = () => {
               </div>
 
               <div>
-                <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a889b] uppercase">
+                <p className="text-xs font-bold tracking-[0.06em] text-[#7a889b] uppercase">
                   Chế độ
                 </p>
-                <p className="mt-1.5 text-[11px] font-bold text-[#304159]">{modeLabel}</p>
-                <p className="mt-1 text-[9px] leading-relaxed text-[#7b899c]">
+                <p className="mt-1.5 text-sm font-bold text-[#304159]">{modeLabel}</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#7b899c]">
                   {mode === 'PER_QUESTION'
                     ? 'Nhận phản hồi sau từng câu; câu đào sâu không tính vào số câu chính.'
                     : 'Hoàn thành toàn bộ câu hỏi trước khi nhận bảng điểm tổng kết.'}
@@ -1646,14 +1608,14 @@ export const PracticeSessionPage: React.FC = () => {
               </div>
 
               <div>
-                <p className="text-[9px] font-bold tracking-[0.06em] text-[#7a889b] uppercase">
+                <p className="text-xs font-bold tracking-[0.06em] text-[#7a889b] uppercase">
                   Mức độ trong phiên
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {runtime.config.selectedDifficulties.map((difficulty) => (
                     <span
                       key={difficulty}
-                      className={`rounded-full border px-2.5 py-1 text-[9px] font-bold ${DIFFICULTY_META[difficulty].className}`}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${DIFFICULTY_META[difficulty].className}`}
                     >
                       {DIFFICULTY_META[difficulty].label}
                     </span>
@@ -1663,10 +1625,10 @@ export const PracticeSessionPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#dce5f1] bg-white p-4 shadow-[0_10px_30px_rgba(31,61,105,0.05)]">
+          <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_30px_rgba(31,61,105,0.05)]">
             <div className="flex items-center gap-2">
-              <AudioLines className="size-4 text-[#245eea]" />
-              <h2 className="text-[12px] font-bold text-[#23334a]">Ba bước trả lời</h2>
+              <AudioLines className="size-4 text-[#1C4D8D]" />
+              <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Ba bước trả lời</h2>
             </div>
             <ol className="mt-4 space-y-3">
               {(answerInputMode === 'voice'
@@ -1686,12 +1648,12 @@ export const PracticeSessionPage: React.FC = () => {
                   ]
               ).map(([step, title, description]) => (
                 <li key={step} className="flex gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#cbd9ef] bg-[#f2f6ff] text-[9px] font-black text-[#245eea]">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#cbd9ef] bg-[#4988C4]/16 text-xs font-black text-[#1C4D8D]">
                     {step}
                   </span>
                   <div>
-                    <p className="text-[10px] font-bold text-[#33445b]">{title}</p>
-                    <p className="mt-0.5 text-[9px] leading-relaxed text-[#7e8c9e]">
+                    <p className="text-xs font-bold text-[#33445b]">{title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[#7e8c9e]">
                       {description}
                     </p>
                   </div>
@@ -1710,8 +1672,8 @@ export const PracticeSessionPage: React.FC = () => {
                 )}
               </span>
               <div>
-                <p className="text-[10px] font-bold text-[#266368]">Quyền riêng tư được bảo vệ</p>
-                <p className="mt-1 text-[9px] leading-relaxed text-[#627d82]">
+                <p className="text-xs font-bold text-[#266368]">Quyền riêng tư được bảo vệ</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#627d82]">
                   {answerInputMode === 'voice'
                     ? 'Bản ghi chỉ dùng để nhận diện giọng nói và được xóa sau khi tạo văn bản.'
                     : 'Hệ thống chỉ lưu nội dung văn bản cuối cùng mà bạn gửi.'}
@@ -1725,7 +1687,7 @@ export const PracticeSessionPage: React.FC = () => {
               type="button"
               onClick={() => void synchronizeSession(true)}
               disabled={isManualSyncing}
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#cbdaf4] bg-white px-4 text-[10px] font-bold text-[#245bd2] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:cursor-wait disabled:opacity-60"
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
             >
               <RefreshCw
                 className={`size-3.5 ${isManualSyncing ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -1776,68 +1738,24 @@ export const PracticeSessionPage: React.FC = () => {
       )}
 
       {showStopConfirmation && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#07172e]/70 p-4 backdrop-blur-sm">
-          <section
-            ref={stopDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="stop-practice-title"
-            tabIndex={-1}
-            className="w-full max-w-md overflow-hidden rounded-[22px] border border-white/70 bg-white shadow-[0_24px_70px_rgba(7,23,46,0.3)] outline-none"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-[#edf1f6] p-5 sm:p-6">
-              <div className="flex gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#fff0f2] text-[#d9465f]">
-                  <Square className="size-4 fill-current" />
-                </span>
-                <div>
-                  <p className="text-[9px] font-bold tracking-[0.08em] text-[#d9465f] uppercase">
-                    Xác nhận kết thúc
-                  </p>
-                  <h2 id="stop-practice-title" className="mt-1 text-base font-bold text-[#17243a]">
-                    Kết thúc phiên luyện tập?
-                  </h2>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[#66768b]">
-                    {isRecording
-                      ? 'Bản ghi đang thực hiện sẽ bị xóa. Các câu trả lời đã nộp trước đó vẫn được lưu.'
-                      : mode === 'FULL_SESSION' && !runtime.fullSessionSubmitted
-                        ? 'Các câu đã xác nhận trước đó vẫn được lưu. Bản trả lời chưa nộp của câu hiện tại sẽ không được ghi nhận.'
-                        : 'Các câu đã nộp vẫn được lưu. Bản trả lời chưa nộp của câu hiện tại sẽ không được ghi nhận.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowStopConfirmation(false)}
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#6f7e92] transition hover:bg-[#f1f4f8] focus-visible:outline-2 focus-visible:outline-[#245eea]"
-                aria-label="Đóng xác nhận dừng"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <div className="flex flex-col-reverse gap-2 bg-[#f8fafd] p-4 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setShowStopConfirmation(false)}
-                disabled={isCompleting}
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#d8e1ec] bg-white px-4 text-[11px] font-bold text-[#53657d] transition hover:bg-[#f1f4f8] focus-visible:outline-2 focus-visible:outline-[#245eea] disabled:opacity-50"
-              >
-                Tiếp tục luyện
-              </button>
-              <button
-                type="button"
-                onClick={() => void completeAndExit()}
-                disabled={isCompleting || isVerifyingSubmission}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#d9465f] px-4 text-[11px] font-bold text-white shadow-[0_8px_20px_rgba(217,70,95,0.2)] transition hover:bg-[#c23850] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d9465f] disabled:cursor-wait disabled:opacity-60"
-              >
-                {isCompleting && (
-                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                )}
-                Kết thúc phiên
-              </button>
-            </div>
-          </section>
-        </div>
+        <ConfirmDialog
+          tone="danger"
+          icon={Square}
+          eyebrow="Xác nhận kết thúc"
+          title="Kết thúc phiên luyện tập?"
+          message={
+            isRecording
+              ? 'Bản ghi đang thực hiện sẽ bị xóa. Các câu trả lời đã nộp trước đó vẫn được lưu.'
+              : mode === 'FULL_SESSION' && !runtime.fullSessionSubmitted
+                ? 'Các câu đã xác nhận trước đó vẫn được lưu. Bản trả lời chưa nộp của câu hiện tại sẽ không được ghi nhận.'
+                : 'Các câu đã nộp vẫn được lưu. Bản trả lời chưa nộp của câu hiện tại sẽ không được ghi nhận.'
+          }
+          confirmLabel={isCompleting ? 'Đang kết thúc…' : 'Kết thúc phiên'}
+          cancelLabel="Tiếp tục luyện"
+          pending={isCompleting || isVerifyingSubmission}
+          onCancel={() => setShowStopConfirmation(false)}
+          onConfirm={() => void completeAndExit()}
+        />
       )}
     </div>
   )

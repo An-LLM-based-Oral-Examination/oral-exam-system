@@ -1,6 +1,8 @@
+using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Infrastructure.Persistence;
 
@@ -16,12 +18,22 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is missing.");
 
+        var usePostgres = IsPostgresEndpointReachable(connectionString);
+
         services.AddScoped<OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor>();
 
         services.AddDbContext<OralExamDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString, npgsql =>
-                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+            if (usePostgres)
+            {
+                options.UseNpgsql(connectionString, npgsql =>
+                    npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+            }
+            else
+            {
+                options.UseInMemoryDatabase("OralExamLiveDb");
+            }
+
             options.AddInterceptors(sp.GetRequiredService<OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor>());
         });
 
@@ -30,10 +42,31 @@ public static class DependencyInjection
 
         services.AddHttpClient<IAiQuestionGenerationService, OralExamination.Infrastructure.Services.GeminiQuestionGenerationService>();
         services.AddHttpClient<IAiGradingService, OralExamination.Infrastructure.Services.GeminiAiGradingService>();
-        services.AddHttpClient<ISpeechToTextService, OralExamination.Infrastructure.Services.CloudflareWhisperService>();
+        services.AddHttpClient<OralExamination.Infrastructure.Services.CloudflareWhisperService>();
+        services.AddHttpClient<OralExamination.Infrastructure.Services.GeminiSpeechToTextService>();
+        services.AddScoped<ISpeechToTextService, OralExamination.Infrastructure.Services.ResilientSpeechToTextService>();
+        services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
 
         return services;
+    }
+
+    private static bool IsPostgresEndpointReachable(string connectionString)
+    {
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            var host = string.IsNullOrWhiteSpace(builder.Host) ? "localhost" : builder.Host;
+            var port = builder.Port > 0 ? builder.Port : 5432;
+
+            using var tcpClient = new TcpClient();
+            var connectTask = tcpClient.ConnectAsync(host, port);
+            return connectTask.Wait(TimeSpan.FromMilliseconds(450)) && tcpClient.Connected;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

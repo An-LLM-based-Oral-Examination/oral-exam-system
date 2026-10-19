@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Clock3, Flag, LoaderCircle, Mic, Settings, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Clock3,
+  LoaderCircle,
+  Mic,
+  Settings,
+  Volume2,
+  X,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import {
@@ -22,6 +32,14 @@ import {
 } from '@/utils/mockExamSessionStorage'
 
 type RoomPhase = 'exam' | 'submitting-exam' | 'scorecard'
+
+interface ExamWarning {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel?: string
+  tone: 'warning' | 'danger'
+}
 
 interface ExamRuntime {
   phase: RoomPhase
@@ -52,10 +70,10 @@ function shouldIgnoreSpace(target: EventTarget | null) {
   return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
-function speakQuestion(title: string, content: string) {
+function speakQuestion(content: string) {
   if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return
   const start = () => {
-    const utterance = new SpeechSynthesisUtterance(`${title}. ${content}`)
+    const utterance = new SpeechSynthesisUtterance(content)
     utterance.lang = 'vi-VN'
     utterance.rate = 0.96
     const voice = window.speechSynthesis
@@ -90,7 +108,7 @@ export function MockExamSessionPage() {
 
 function MissingSession() {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#f4f7fc] px-4 text-[#10203d]">
+    <div className="flex min-h-dvh items-center justify-center bg-white px-4 text-[#0F2854]">
       <section className="max-w-md text-center">
         <h1 className="text-xl font-bold">Không tìm thấy ca thi đang mở</h1>
         <p className="mt-2 text-sm leading-relaxed text-[#5f6f87]">
@@ -129,6 +147,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const [scorecard, setScorecard] = useState<MockExamScorecardData | null>(null)
   const [autoRead, setAutoRead] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [warning, setWarning] = useState<ExamWarning | null>(null)
+  const warningResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const warningOpenRef = useRef(false)
+  const urgentWarnedRef = useRef(false)
   const playbackUrlRef = useRef<string | null>(null)
   const recordingSecondsRef = useRef(0)
   const finalizeLock = useRef(false)
@@ -356,7 +378,15 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         closingRef.current = false
         setPhase('exam')
         runtimeRef.current.phase = 'exam'
-        setSubmitError(getMockExamErrorDetail(error, 'Không thể nộp bài thi thử.'))
+        const message = getMockExamErrorDetail(error, 'Không thể nộp bài thi thử.')
+        setSubmitError(message)
+        warningOpenRef.current = true
+        setWarning({
+          title: 'Không nộp được bài',
+          message,
+          confirmLabel: 'Đã hiểu',
+          tone: 'danger',
+        })
       }
     },
     [finishRecording, session.sessionId, uploadAnswer],
@@ -427,13 +457,13 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== 'Space' || event.repeat || phase !== 'exam') return
-      if (shouldIgnoreSpace(event.target)) return
+      if (warningOpenRef.current || shouldIgnoreSpace(event.target)) return
       event.preventDefault()
       void requestHold(true)
     }
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== 'Space' || phase !== 'exam') return
-      if (shouldIgnoreSpace(event.target)) return
+      if (warningOpenRef.current || shouldIgnoreSpace(event.target)) return
       event.preventDefault()
       void requestHold(false)
     }
@@ -447,7 +477,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   useEffect(() => {
     if (!autoRead || !question || phase !== 'exam') return
-    speakQuestion(question.title, question.content)
+    speakQuestion(question.content)
     return () => {
       if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     }
@@ -461,6 +491,47 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     window.addEventListener('pointerdown', onPointerDown)
     return () => window.removeEventListener('pointerdown', onPointerDown)
   }, [settingsOpen])
+
+  const closeWarning = useCallback((confirmed: boolean) => {
+    warningOpenRef.current = false
+    const resolve = warningResolveRef.current
+    warningResolveRef.current = null
+    setWarning(null)
+    resolve?.(confirmed)
+  }, [])
+
+  const askWarning = useCallback((nextWarning: ExamWarning) => {
+    if (warningOpenRef.current) return Promise.resolve(false)
+    warningOpenRef.current = true
+    return new Promise<boolean>((resolve) => {
+      warningResolveRef.current = resolve
+      setWarning(nextWarning)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!warning) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      closeWarning(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [closeWarning, warning])
+
+  useEffect(() => {
+    if (phase !== 'exam' || urgentWarnedRef.current || warningOpenRef.current) return
+    if (secondsLeft <= 0 || secondsLeft > 60) return
+    urgentWarnedRef.current = true
+    warningOpenRef.current = true
+    setWarning({
+      title: 'Sắp hết giờ',
+      message: 'Còn dưới 1 phút. Hết giờ hệ thống tự nộp bài và câu chưa trả lời được tính 0 điểm.',
+      confirmLabel: 'Tiếp tục làm bài',
+      tone: 'warning',
+    })
+  }, [phase, secondsLeft])
 
   const moveToQuestion = async (nextIndex: number) => {
     if (isRecording || isSendingAnswer || nextIndex === questionIndex) return
@@ -487,7 +558,13 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         setIsSendingAnswer(false)
       }
     } else if (audioBlob) {
-      const confirmed = window.confirm('Bản ghi chưa gửi sẽ bị bỏ khi chuyển câu. Tiếp tục?')
+      const confirmed = await askWarning({
+        title: 'Bỏ bản ghi chưa gửi?',
+        message: 'Bản ghi này chưa được gửi. Chuyển câu sẽ bỏ bản ghi và không chấm câu hiện tại.',
+        confirmLabel: 'Vẫn chuyển câu',
+        cancelLabel: 'Ở lại',
+        tone: 'warning',
+      })
       if (!confirmed) return
     }
     const nextQuestion = session.questions[nextIndex]
@@ -515,35 +592,62 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isRecording || isSendingAnswer) return
     const savedCount = session.questions.filter((item) => answers[item.id]).length
     const unanswered = session.questions.length - savedCount
     if (unanswered > 0) {
-      const confirmed = window.confirm(
-        `Còn ${unanswered} câu chưa trả lời. Những câu này sẽ được tính 0 điểm. Nộp bài?`,
-      )
+      const confirmed = await askWarning({
+        title: 'Nộp khi còn câu chưa làm?',
+        message: `Còn ${unanswered} câu chưa trả lời. Những câu này được tính 0 điểm.`,
+        confirmLabel: 'Vẫn nộp bài',
+        cancelLabel: 'Quay lại',
+        tone: 'danger',
+      })
       if (!confirmed) return
     }
     void finalizeExam('manual')
   }
 
-  const leaveRoom = () => {
-    const confirmed = window.confirm(
-      'Đồng hồ máy chủ vẫn tiếp tục chạy. Bạn có thể quay lại phòng thi trước khi hết giờ.',
-    )
-    if (confirmed) {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
-      navigate('/mock-exam')
-    }
+  const leaveRoom = async () => {
+    const confirmed = await askWarning({
+      title: 'Rời phòng thi?',
+      message:
+        'Đồng hồ máy chủ vẫn tiếp tục chạy. Bạn có thể quay lại phòng thi trước khi hết giờ.',
+      confirmLabel: 'Rời phòng',
+      cancelLabel: 'Ở lại',
+      tone: 'warning',
+    })
+    if (!confirmed) return
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    navigate('/mock-exam')
   }
+
+  const warningDialog = warning ? (
+    <ConfirmDialog
+      title={warning.title}
+      message={warning.message}
+      tone={warning.tone}
+      confirmLabel={warning.confirmLabel}
+      cancelLabel={warning.cancelLabel}
+      onConfirm={() => closeWarning(true)}
+      onCancel={() => closeWarning(false)}
+    />
+  ) : null
 
   if (phase === 'submitting-exam') {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#f4f7fc] px-4 text-center text-[#10203d]">
-        <div>
-          <LoaderCircle className="mx-auto size-8 animate-spin text-[#315fc4]" />
-          <h1 className="mt-4 text-xl font-bold">AI đang chấm bài thi thử</h1>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#0F2854]/45 px-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mock-grading-title"
+          className="w-full max-w-md rounded-2xl border border-[#4988C4]/45 bg-white px-6 py-8 text-center text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
+        >
+          <LoaderCircle className="mx-auto size-8 animate-spin text-[#1C4D8D]" />
+          <h1 id="mock-grading-title" className="mt-4 text-xl font-bold">
+            AI đang chấm bài thi thử
+          </h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#5f6f87]">
             Bảng điểm theo rubric thường trả về trong vài giây. Vui lòng giữ trang này mở.
           </p>
@@ -554,8 +658,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   if (phase === 'scorecard' && scorecard) {
     return (
-      <div className="h-dvh overflow-y-auto overscroll-y-contain bg-[#f4f7fc] px-4 py-6 text-[#10203d] sm:px-6">
-        <div className="mx-auto max-w-3xl space-y-4">
+      <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0F2854]/45 px-4 py-6 sm:items-center">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="max-h-[90dvh] w-full max-w-3xl space-y-4 overflow-y-auto rounded-2xl border border-[#4988C4]/45 bg-white p-4 text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:p-5"
+        >
           <MockExamScorecard scorecard={scorecard} />
           <div className="flex justify-end">
             <button
@@ -571,26 +679,36 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     )
   }
 
+  const isLastQuestion = questionIndex >= session.questions.length - 1
+
   return (
-    <div className="h-dvh overflow-y-auto overscroll-y-contain bg-[#f4f7fc] text-[#10203d]">
-      <div className="sticky top-0 z-20 bg-[#f4f7fc] pb-4">
-        <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-8">
-          <div className="inline-flex min-h-10 items-center gap-2 rounded-full px-1 text-sm font-semibold text-[#10203d]">
-            <span className="flex size-7 items-center justify-center rounded-full bg-[#3d4fff] text-xs font-bold text-white">
-              {session.courseCode.slice(0, 1)}
-            </span>
-            <span className="max-w-[180px] truncate sm:max-w-xs">{session.courseCode}</span>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#0F2854]/45 p-3 text-[#0F2854] sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mock-session-title"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-y-auto rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:max-h-[calc(100dvh-2rem)]"
+      >
+        <header className="relative z-20 shrink-0 bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white">
+          <div className="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-[0.08em] text-white/75 uppercase">
+              {session.courseCode}
+            </p>
+            <h1 id="mock-session-title" className="truncate text-base font-bold sm:text-lg">
+              {session.courseName}
+            </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <div
               role="timer"
               aria-live="off"
               aria-label={`Thời gian còn lại ${formatClock(secondsLeft)}`}
               className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-bold',
+                'inline-flex min-h-10 items-center gap-2 rounded-full px-3.5 text-sm font-bold',
                 isUrgent
-                  ? 'animate-pulse bg-[#ff5d73] text-white motion-reduce:animate-none'
-                  : 'bg-[#f5c518] text-[#1b1600]',
+                  ? 'animate-pulse bg-[#c2415b] text-white motion-reduce:animate-none'
+                  : 'bg-white text-[#0F2854]',
               )}
             >
               <Clock3 className="size-4" />
@@ -603,14 +721,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 aria-label="Cài đặt phòng thi"
                 aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen((current) => !current)}
-                className="flex size-10 items-center justify-center rounded-full text-[#52627a] transition hover:bg-[#e7edf6]"
+                className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"
               >
                 <Settings className="size-5" />
               </button>
               {settingsOpen && (
                 <div
                   data-space-ignore="true"
-                  className="absolute top-12 right-0 z-10 w-64 rounded-2xl border border-[#dce5f1] bg-white p-3 text-left shadow-[0_18px_50px_rgba(31,61,105,0.12)]"
+                  className="absolute top-12 right-0 z-30 w-72 rounded-2xl border border-[#4988C4]/45 bg-white p-3 text-left text-[#0F2854] shadow-[0_18px_50px_rgba(15,40,84,0.18)]"
                 >
                   <button
                     type="button"
@@ -621,7 +739,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   >
                     <span>
                       <span className="block text-sm font-semibold">Tự động đọc câu</span>
-                      <span className="mt-1 block text-xs leading-relaxed text-[#5f6f87]">
+                      <span className="mt-1 block text-xs leading-relaxed text-[#5b6b84]">
                         Đọc câu hỏi khi chuyển câu. Tắt thì không phát giọng nói.
                       </span>
                     </span>
@@ -647,53 +765,59 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               data-space-ignore="true"
               aria-label="Rời phòng thi"
               onClick={leaveRoom}
-              className="flex size-10 items-center justify-center rounded-full text-[#52627a] transition hover:bg-[#e7edf6]"
+              className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"
             >
               <X className="size-5" />
             </button>
           </div>
+          </div>
+          <div className="flex items-center gap-3 border-t border-white/15 px-5 py-3 sm:px-6">
+            <span className="text-xs font-bold text-white/90">
+              Câu {session.questions.length === 0 ? 0 : questionIndex + 1}/{session.questions.length}
+            </span>
+            <div className="flex h-1.5 min-w-0 flex-1 gap-1.5">
+              {session.questions.map((item, index) => (
+                <span
+                  key={item.id}
+                  className={cn(
+                    'h-full flex-1 rounded-full',
+                    answers[item.id]
+                      ? 'bg-white'
+                      : index === questionIndex
+                        ? 'bg-[#BDE8F5]'
+                        : 'bg-white/25',
+                  )}
+                />
+              ))}
+            </div>
+          </div>
         </header>
 
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-6">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#3dce7a] text-sm font-bold text-[#06210f]">
-            {session.questions.length === 0 ? 0 : questionIndex + 1}
-          </span>
-          <div className="flex h-1.5 min-w-0 flex-1 gap-1.5">
-            {session.questions.map((item, index) => (
-              <span
-                key={item.id}
-                className={cn(
-                  'h-full flex-1 rounded-full',
-                  answers[item.id]
-                    ? 'bg-[#6f7de8]'
-                    : index === questionIndex
-                      ? 'bg-[#8d98ea]'
-                      : 'bg-[#d5deea]',
-                )}
-              />
-            ))}
-          </div>
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#e7edf6] text-xs font-bold text-[#52627a]">
-            {session.questions.length}
-          </span>
-        </div>
-      </div>
-
-      <main className="mx-auto w-full max-w-3xl px-4 pb-8 sm:px-6">
         {question ? (
-          <section className="w-full rounded-[28px] border border-[#dce5f1] bg-white px-5 py-7 shadow-[0_16px_40px_rgba(31,61,105,0.06)] sm:px-8 sm:py-8">
-            <p className="text-sm text-[#6b7c99]">
-              {question.bloomLevel} · {difficultyLabel(question.difficulty)}
-            </p>
-            <h1 className="mt-4 text-[22px] leading-snug font-semibold text-[#10203d] sm:text-[26px]">
+          <section className="flex flex-col gap-4 px-5 py-5 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[#5b6b84]">
+                {question.bloomLevel} · {difficultyLabel(question.difficulty)}
+              </p>
+              <button
+                type="button"
+                data-space-ignore="true"
+                onClick={() => speakQuestion(question.content)}
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD]"
+              >
+                <Volume2 className="size-4" />
+                Đọc câu hỏi
+              </button>
+            </div>
+            <h2 className="text-[24px] leading-snug font-semibold text-[#0F2854]">
               Câu {question.orderIndex}. {question.content}
-            </h1>
+            </h2>
 
-
-            <div className="mt-8">
+            <div className="flex flex-col items-center gap-3 py-1">
               <button
                 type="button"
                 disabled={isSendingAnswer}
+                aria-label={isRecording ? 'Đang nói, thả ra để kết thúc' : 'Nhấn giữ để trả lời'}
                 onPointerDown={(event) => {
                   if (event.button !== 0 || isSendingAnswer) return
                   event.preventDefault()
@@ -703,36 +827,39 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 onPointerUp={() => void requestHold(false)}
                 onPointerCancel={() => void requestHold(false)}
                 className={cn(
-                  'flex min-h-16 w-full touch-none items-center justify-center gap-3 rounded-2xl border text-sm font-bold transition select-none disabled:opacity-60',
+                  'flex size-32 touch-none flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                   isRecording
-                    ? 'border-[#ff8fa0] bg-[#ff5d73] text-white'
-                    : 'border-[#d5deea] bg-[#f7f9fc] text-[#10203d] hover:border-[#8ea0c8]',
+                    ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                    : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                 )}
               >
                 <Mic
                   className={cn(
-                    'size-5',
+                    'size-8',
                     isRecording && 'animate-pulse motion-reduce:animate-none',
                   )}
                 />
-                {isRecording
-                  ? `Đang nói ${formatClock(recordingSeconds)} · thả ra để kết thúc`
-                  : 'Nhấn giữ để trả lời'}
+                <span className="text-xs font-bold">
+                  {isRecording ? formatClock(recordingSeconds) : 'Giữ để nói'}
+                </span>
               </button>
-              <p className="mt-3 text-center text-xs text-[#6b7c99]">
-                Giữ nút này hoặc giữ phím{' '}
-                <kbd className="rounded bg-[#eef2f7] px-1.5 py-0.5 text-[#10203d]">Space</kbd> khi
-                nói. Thả ra để xem transcript.
+              <p className="text-center text-sm font-bold text-[#0F2854]">
+                {isRecording ? 'Thả ra để kết thúc' : 'Nhấn giữ để trả lời'}
+              </p>
+              <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
+                Giữ nút tròn hoặc phím{' '}
+                <kbd className="rounded bg-[#F4FBFD] px-1.5 py-0.5 font-bold text-[#0F2854]">Space</kbd>
+                . Thả ra để xem transcript.
               </p>
             </div>
 
             {showTranscript && (
-              <div className="mt-6">
-                <label htmlFor="mock-transcript" className="text-sm font-semibold text-[#10203d]">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="mock-transcript" className="text-sm font-semibold text-[#0F2854]">
                   Transcript để kiểm tra và chỉnh sửa
                 </label>
                 {isSendingAnswer && !savedAnswer ? (
-                  <div className="mt-3 flex items-center gap-2 rounded-2xl bg-[#f7f9fc] px-4 py-6 text-sm text-[#52627a]">
+                  <div className="flex h-28 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-4 text-sm text-[#5b6b84]">
                     <LoaderCircle className="size-4 animate-spin" />
                     Đang nhận diện giọng nói tiếng Việt…
                   </div>
@@ -743,7 +870,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     onChange={(event) =>
                       setDrafts((current) => ({ ...current, [question.id]: event.target.value }))
                     }
-                    className="mt-3 min-h-32 w-full resize-y rounded-2xl border border-[#dce5f1] bg-white px-4 py-3 text-sm leading-relaxed text-[#10203d] outline-none focus:border-[#6f7de8]"
+                    className="h-28 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-4 py-3 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 )}
                 {transcriptDirty && (
@@ -752,7 +879,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     data-space-ignore="true"
                     onClick={() => void handleUpdateTranscript()}
                     disabled={isSendingAnswer}
-                    className="mt-3 inline-flex min-h-10 items-center rounded-full bg-[#eef2f7] px-4 text-sm font-bold text-[#10203d] disabled:opacity-50"
+                    className="inline-flex min-h-10 w-fit items-center rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] disabled:opacity-50"
                   >
                     Lưu chỉnh sửa
                   </button>
@@ -761,53 +888,54 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             )}
 
             {(answerError || recorderError) && (
-              <p className="mt-4 text-sm leading-relaxed text-[#c4475c]">
+              <p className="text-sm leading-relaxed text-[#c2415b]">
                 {answerError || recorderError}
               </p>
             )}
             {submitError && (
-              <p className="mt-3 text-sm leading-relaxed text-[#c4475c]">{submitError}</p>
+              <p className="text-sm leading-relaxed text-[#c2415b]">{submitError}</p>
             )}
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                data-space-ignore="true"
-                onClick={handleSubmit}
-                disabled={isRecording || isSendingAnswer}
-                className="inline-flex min-h-10 items-center justify-center rounded-full px-3 text-sm font-semibold text-[#52627a] disabled:opacity-40"
-              >
-                Nộp bài
-              </button>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {!savedAnswer && questionIndex < session.questions.length - 1 && (
-                  <button
-                    type="button"
-                    data-space-ignore="true"
-                    onClick={() => void moveToQuestion(questionIndex + 1)}
-                    disabled={isRecording || isSendingAnswer}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-[#315fc4] disabled:opacity-40"
-                  >
-                    <Flag className="size-4" />
-                    Bạn không biết?
-                  </button>
-                )}
-                {savedAnswer && questionIndex < session.questions.length - 1 && (
-                  <button
-                    type="button"
-                    data-space-ignore="true"
-                    onClick={() => void moveToQuestion(questionIndex + 1)}
-                    disabled={isRecording || isSendingAnswer}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
-                  >
-                    Câu tiếp <ArrowRight className="size-4" />
-                  </button>
-                )}
-              </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {!isLastQuestion && !savedAnswer && (
+                <button
+                  type="button"
+                  data-space-ignore="true"
+                  onClick={() => void moveToQuestion(questionIndex + 1)}
+                  disabled={isRecording || isSendingAnswer}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                >
+                  Bỏ qua
+                  <ArrowRight className="size-4" />
+                </button>
+              )}
+              {!isLastQuestion && savedAnswer && (
+                <button
+                  type="button"
+                  data-space-ignore="true"
+                  onClick={() => void moveToQuestion(questionIndex + 1)}
+                  disabled={isRecording || isSendingAnswer}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
+                >
+                  Câu tiếp
+                  <ArrowRight className="size-4" />
+                </button>
+              )}
+              {isLastQuestion && (
+                <button
+                  type="button"
+                  data-space-ignore="true"
+                  onClick={handleSubmit}
+                  disabled={isRecording || isSendingAnswer}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
+                >
+                  Nộp bài
+                </button>
+              )}
             </div>
           </section>
         ) : (
-          <section className="w-full rounded-[28px] border border-[#dce5f1] bg-white px-6 py-10 text-center shadow-[0_16px_40px_rgba(31,61,105,0.06)]">
+          <section className="flex w-full flex-1 flex-col items-center justify-center rounded-2xl border border-[#4988C4]/45 bg-white px-6 py-8 text-center shadow-[0_16px_40px_rgba(31,61,105,0.06)]">
             <p className="text-sm text-[#3d4e6b]">
               Ca thi không có câu hỏi. Bạn có thể nộp để đóng phiên.
             </p>
@@ -821,7 +949,8 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             </button>
           </section>
         )}
-      </main>
+      </div>
+      {warningDialog}
     </div>
   )
 }

@@ -8,4 +8,4 @@ namespace OralExamination.Application.Features.Practice.Queries.GetPracticeSessi
 /// <summary>
 /// Query lấy chi tiết phiên luyện tập bao gồm danh sách câu hỏi và câu trả lời đã nộp.
 /// </summary>
-public sealed record GetPracticeSessionQuery(Guid SessionId) : IRequest<Result<PracticeSessionDetailDto>>;
+public sealed record GetPracticeSessionQuery(Guid SessionId, Guid? RequestingUserId = null, bool IsElevatedRole = false) : IRequest<Result<PracticeSessionDetailDto>>;
