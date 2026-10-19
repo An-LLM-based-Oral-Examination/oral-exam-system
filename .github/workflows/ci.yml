@@ -44,6 +44,17 @@ jobs:
       - name: Build Backend Solution (Zero Warnings, Zero Errors)
         run: dotnet build backend/OralExamination.sln --configuration Release --no-restore -warnaserror -nowarn:NU1900
 
+      - name: Install EF Core CLI
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.0.11
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Verify EF model matches migration snapshot
+        run: >
+          dotnet ef migrations has-pending-model-changes
+          --project backend/src/Infrastructure/Infrastructure.csproj
+          --startup-project backend/src/API/API.csproj
+
       - name: Run Unit Tests with Coverage (542 Tests)
         run: dotnet test backend/OralExamination.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
