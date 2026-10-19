@@ -177,8 +177,8 @@ public class AdversarialMilestone1ModelIntegrityChallengerTests
             .Select(t => t.Name)
             .ToList();
         migrationTypes.Should().Contain(
-            name => name.Contains("AddModelCheckConstraints"),
-            "Bản migration AddModelCheckConstraints phải tồn tại để áp dụng các check constraints vào CSDL PostgreSQL");
+            name => name.Contains("InitialDB"),
+            "Migration nền InitialDB phải tồn tại và chứa các check constraints của CSDL PostgreSQL");
     }
 
     [Fact(DisplayName = "ADV-M1-06: DomainEnums.ExamInputMode phải khớp chính xác 100% với 2 giá trị trong EF Core CHECK constraint")]
