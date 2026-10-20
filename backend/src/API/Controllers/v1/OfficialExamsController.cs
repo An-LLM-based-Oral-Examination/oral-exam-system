@@ -24,6 +24,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
+[Route("api/v1/official-exams")]
 [Authorize(Roles = "lecturer,department_head,proctor,admin")]
 public class OfficialExamsController : ControllerBase
 {
@@ -52,6 +53,13 @@ public class OfficialExamsController : ControllerBase
         return Guid.Empty;
     }
 
+    private Guid GetAuthenticatedUserId()
+    {
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value;
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
+
     /// <summary>
     /// Giảng viên truy xuất toàn bộ bằng chứng hậu kiểm (Evidence Panel) của một ca thi phòng Lab (MF-04).
     /// Bao gồm Audio URL trên Cloudflare R2, mã băm SHA-256, bản bóc băng Whisper,
@@ -59,6 +67,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/audit-evidence")]
     [HttpGet("shifts/{shiftId:guid}/audit-submissions")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> GetAuditEvidence(Guid shiftId)
     {
         var query = new GetAuditEvidenceQuery(shiftId);
@@ -84,22 +93,40 @@ public class OfficialExamsController : ControllerBase
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
     /// </summary>
     [HttpPost("shifts/{shiftId:guid}/publish-grades")]
-    public async Task<IActionResult> PublishGrades(Guid shiftId, [FromBody] PublishGradesRequestDto? request)
+    [Authorize(Roles = "lecturer,department_head")]
+    public async Task<IActionResult> PublishGrades(Guid shiftId, CancellationToken cancellationToken = default)
     {
-        var currentUserId = GetCurrentUserId();
-        var lecturerId = currentUserId != Guid.Empty ? currentUserId : (request?.LecturerId ?? Guid.Empty);
+        var lecturerId = GetAuthenticatedUserId();
+        if (lecturerId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
 
         var command = new PublishGradesCommand(shiftId, lecturerId);
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            return UnprocessableEntity(new
+            var statusCode = result.Error switch
             {
-                type = "https://oralexam.fpt.edu.vn/errors/publish-failed",
-                title = "Unprocessable Entity",
-                status = 422,
-                detail = result.Error
+                PublishGradesErrors.ActorNotFound or PublishGradesErrors.ShiftNotFound => StatusCodes.Status404NotFound,
+                PublishGradesErrors.Forbidden => StatusCodes.Status403Forbidden,
+                PublishGradesErrors.AlreadyPublished or PublishGradesErrors.IncompleteGrades or PublishGradesErrors.ShiftNotEnded => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status422UnprocessableEntity
+            };
+
+            return StatusCode(statusCode, new ProblemDetails
+            {
+                Type = $"https://oralexam.fpt.edu.vn/errors/publish-grades-{statusCode}",
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Không được phép.",
+                    StatusCodes.Status404NotFound => "Không tìm thấy.",
+                    StatusCodes.Status409Conflict => "Xung đột trạng thái tài nguyên.",
+                    _ => "Dữ liệu không thể xử lý."
+                },
+                Status = statusCode,
+                Detail = result.Error
             });
         }
 
@@ -107,10 +134,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã băm chữ ký số SHA-256 (BE-V01).
+    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã niêm phong SHA-256 (BE-V01).
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-excel")]
     [HttpGet("/api/v1/audit/export-excel")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> ExportShiftExcel([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -128,12 +156,15 @@ public class OfficialExamsController : ControllerBase
         var result = await _sender.Send(new ExportShiftExcelQuery(resolvedShiftId), cancellationToken);
         if (!result.IsSuccess)
         {
-            return NotFound(new ProblemDetails
+            var statusCode = result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status409Conflict;
+            return StatusCode(statusCode, new ProblemDetails
             {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Not Found",
+                Status = statusCode,
+                Title = statusCode == StatusCodes.Status404NotFound ? "Không tìm thấy." : "Chưa thể xuất báo cáo.",
                 Detail = result.Error,
-                Type = "https://oralexam.fpt.edu.vn/errors/shift-not-found"
+                Type = $"https://oralexam.fpt.edu.vn/errors/exam-report-{statusCode}"
             });
         }
 
@@ -142,10 +173,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp PDF có đóng dấu chữ ký số SHA-256 và mã QR (BE-V01).
+    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp PDF có mã niêm phong SHA-256 (BE-V01).
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-pdf")]
     [HttpGet("/api/v1/audit/export-pdf")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> ExportShiftPdf([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -163,12 +195,15 @@ public class OfficialExamsController : ControllerBase
         var result = await _sender.Send(new ExportShiftPdfQuery(resolvedShiftId), cancellationToken);
         if (!result.IsSuccess)
         {
-            return NotFound(new ProblemDetails
+            var statusCode = result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status409Conflict;
+            return StatusCode(statusCode, new ProblemDetails
             {
-                Status = StatusCodes.Status404NotFound,
-                Title = "Not Found",
+                Status = statusCode,
+                Title = statusCode == StatusCodes.Status404NotFound ? "Không tìm thấy." : "Chưa thể xuất báo cáo.",
                 Detail = result.Error,
-                Type = "https://oralexam.fpt.edu.vn/errors/shift-not-found"
+                Type = $"https://oralexam.fpt.edu.vn/errors/exam-report-{statusCode}"
             });
         }
 
@@ -278,6 +313,7 @@ public class OfficialExamsController : ControllerBase
     /// <summary>
     /// Sinh viên tại máy trạm Kiosk lấy thông tin vé thi hiện tại khớp với địa chỉ IP máy trạm (ip_address).
     /// </summary>
+    [HttpGet("tickets/current")]
     [HttpGet("tickets/my-workstation")]
     [HttpGet("workstation/ticket")]
     [Authorize(Roles = "student,proctor,lecturer,department_head,admin")]
@@ -327,6 +363,7 @@ public class OfficialExamsController : ControllerBase
                 or OfficialExamErrors.SessionNotFound
                 or OfficialExamErrors.ShiftNotFound
                 or OfficialExamErrors.TicketNotFound
+                or OfficialExamErrors.WorkstationTicketNotFound
                 or OfficialExamErrors.StudentNotFound => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status400BadRequest
         };

@@ -21,4 +21,14 @@ public static class OfficialExamErrors
     public const string OverlappingShifts = "Có nhiều ca thi trùng giờ trên máy trạm này.";
     public const string SeatOutOfRange = "Số ghế phải từ 1 đến 40.";
     public const string IpInvalid = "Địa chỉ IP máy trạm không hợp lệ.";
+    public const string TicketNotInProgress = "Vé thi không ở trạng thái đang thi.";
+    public const string AudioAlreadySealed = "Audio của bài thi đã được niêm phong.";
+    public const string AudioNotSealed = "Audio của bài thi chưa được tải lên và xác minh SHA-256.";
+    public const string AudioObjectNotFound = "Không tìm thấy file audio đã tải lên.";
+    public const string AudioObjectInvalid = "File audio không đúng định dạng hoặc vượt quá dung lượng cho phép.";
+    public const string AudioHashMismatch = "Mã SHA-256 không khớp với nội dung audio trên kho lưu trữ.";
+    public const string AudioObjectKeyMismatch = "Đường dẫn audio không thuộc vé thi này.";
+    public const string ExamSetNotAssigned = "Vé thi chưa được gán bộ đề.";
+    public const string SubmissionQuestionsMismatch = "Danh sách câu trả lời không khớp với bộ đề của vé thi.";
+    public const string SubmissionAlreadyExists = "Bài thi đã được nộp trước đó.";
 }

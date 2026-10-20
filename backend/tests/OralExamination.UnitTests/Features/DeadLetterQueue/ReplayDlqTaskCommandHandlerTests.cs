@@ -175,4 +175,72 @@ public class ReplayDlqTaskCommandHandlerTests
         var updatedAnswer = await context.PracticeAnswers.FindAsync(answerId);
         updatedAnswer!.Status.Should().Be("pending");
     }
+
+    [Fact(DisplayName = "5. ReplayDlqTaskCommand: Tác vụ OfficialExamGrading khôi phục GradingJob và ExamQuestionSubmission về pending, đánh dấu DLQ resolved")]
+    public async Task Handle_WhenOfficialExamGradingTask_RequeuesGradingJobAndSubmission()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var submissionId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+
+        var submission = new ExamQuestionSubmission
+        {
+            Id = submissionId,
+            TicketId = Guid.NewGuid(),
+            ExamQuestionId = Guid.NewGuid(),
+            TranscriptWhisper = "Trả lời thi thật MF-04",
+            GradingStatus = "failed"
+        };
+        context.ExamQuestionSubmissions.Add(submission);
+
+        var gradingJob = new GradingJob
+        {
+            Id = jobId,
+            SubmissionId = submissionId,
+            Status = "failed",
+            AttemptCount = 3,
+            LockedUntil = DateTime.UtcNow.AddMinutes(5),
+            NextAttemptAt = DateTime.UtcNow.AddMinutes(5),
+            LastError = "Gemini 429 Too Many Requests"
+        };
+        context.GradingJobs.Add(gradingJob);
+
+        var officialTask = new OfficialExamGradingTask(jobId, submissionId);
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            CorrelationId = jobId,
+            PayloadJson = JsonSerializer.Serialize(officialTask),
+            ErrorMessage = "Gemini 429 Too Many Requests",
+            RetryCount = 3,
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-2)
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        queueChannelMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var updatedJob = await context.GradingJobs.FindAsync(jobId);
+        updatedJob!.Status.Should().Be("pending");
+        updatedJob.LockedUntil.Should().BeNull();
+        updatedJob.NextAttemptAt.Should().NotBeNull();
+
+        var updatedSubmission = await context.ExamQuestionSubmissions.FindAsync(submissionId);
+        updatedSubmission!.GradingStatus.Should().Be("pending");
+
+        var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        updatedDlq!.Status.Should().Be("resolved");
+        updatedDlq.ResolvedAt.Should().NotBeNull();
+    }
 }

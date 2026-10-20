@@ -106,17 +106,19 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             ? await activeCoursesQuery.Where(c => enrolledCourseIds.Contains(c.Id)).OrderBy(c => c.Code).ToListAsync(cancellationToken)
             : await activeCoursesQuery.OrderBy(c => c.Code).ToListAsync(cancellationToken);
 
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
         var todayQuotas = await context.MockExamQuotas
             .AsNoTracking()
-            .Where(q => q.StudentId == request.StudentId && q.QuotaDate == todayUtc)
+            .Where(q => q.StudentId == request.StudentId && (q.QuotaDate == todayVn || q.QuotaDate == todayUtc))
             .ToListAsync(cancellationToken);
 
         var courseQuotaDtos = courses.Select(course =>
         {
-            var usedToday = todayQuotas
-                .FirstOrDefault(q => q.CourseId == course.Id)?.UsedCount ?? 0;
-            var maxPerDay = Math.Max(0, course.MaxMockExamsPerDay);
+            var quotaRecord = todayQuotas.FirstOrDefault(q => q.CourseId == course.Id && q.QuotaDate == todayVn)
+                ?? todayQuotas.FirstOrDefault(q => q.CourseId == course.Id && q.QuotaDate == todayUtc);
+            var usedToday = quotaRecord?.UsedCount ?? 0;
+            var maxPerDay = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
             var remaining = Math.Max(0, maxPerDay - usedToday);
 
             return new StudentCourseQuotaDto

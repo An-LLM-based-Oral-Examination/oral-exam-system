@@ -67,6 +67,16 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                     submission.FinalScore = request.ProposedScore.Value;
                 }
             }
+            else
+            {
+                var ticketSubmissions = await _context.ExamQuestionSubmissions
+                    .Where(s => s.TicketId == appeal.TicketId)
+                    .ToListAsync(cancellationToken);
+                foreach (var sub in ticketSubmissions)
+                {
+                    sub.FinalScore = request.ProposedScore.Value;
+                }
+            }
 
             var audit = await _context.LecturerAudits
                 .FirstOrDefaultAsync(a => a.TicketId == appeal.TicketId, cancellationToken);

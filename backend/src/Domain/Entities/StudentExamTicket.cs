@@ -14,6 +14,10 @@ public partial class StudentExamTicket : ILockableEntity
     public Guid? ExamSetId { get; set; }
     public int SeatNumber { get; set; }
     public string? IpAddress { get; set; }
+    public string? AudioObjectKey { get; set; }
+    public string? AudioR2Url { get; set; }
+    public string? AudioHashSha256 { get; set; }
+    public DateTime? AudioVerifiedAt { get; set; }
     public string Status { get; set; } = ExamTicketStatus.Scheduled;
     public string StudentAcknowledgementStatus { get; set; } = OralExamination.Domain.Enums.StudentAcknowledgementStatus.Pending;
     public bool IsLocked { get; set; } = false;

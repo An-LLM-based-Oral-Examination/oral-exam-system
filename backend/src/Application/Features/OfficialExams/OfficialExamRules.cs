@@ -8,4 +8,7 @@ public static class OfficialExamRules
     public const int MaxFollowUpQuestions = 5;
     public const int MinTranscriptBufferSeconds = 10;
     public const int MaxTranscriptBufferSeconds = 300;
+    public const int AudioUploadUrlLifetimeMinutes = 10;
+    public const long MaxOfficialExamAudioBytes = 500L * 1024L * 1024L;
+    public const decimal SuspiciousConfidenceThreshold = 0.70m;
 }

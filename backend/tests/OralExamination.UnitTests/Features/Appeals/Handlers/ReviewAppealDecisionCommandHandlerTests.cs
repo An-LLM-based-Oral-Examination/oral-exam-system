@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision;
+using OralExamination.Application.Features.Appeals.Commands.AssignAppealLecturer;
+using OralExamination.Application.Features.Appeals.Commands.RegradeAppeal;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
@@ -269,5 +271,104 @@ public class ReviewAppealDecisionCommandHandlerTests
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("không có quyền thẩm định");
+    }
+
+    [Fact(DisplayName = "BE-12: Trưởng bộ môn phân công giảng viên và chuyển đơn sang IN_REVIEW")]
+    public async Task AssignLecturer_Should_Move_Pending_Appeal_To_InReview()
+    {
+        using var context = CreateDbContext();
+        var (_, departmentHead, lecturer, _, _, appeal) = await SeedDataAsync(context);
+
+        var handler = new AssignAppealLecturerCommandHandler(context);
+        var result = await handler.Handle(
+            new AssignAppealLecturerCommand(appeal.Id, departmentHead.Id, lecturer.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be(AppealStatus.InReview);
+        result.Value.AssignedTo.Should().Be(lecturer.Id);
+        appeal.ReviewedBy.Should().Be(departmentHead.Id);
+    }
+
+    [Fact(DisplayName = "BE-12: Chỉ giảng viên được phân công mới cập nhật được điểm chấm lại")]
+    public async Task Regrade_Should_Update_Score_Only_For_Assigned_Lecturer()
+    {
+        using var context = CreateDbContext();
+        var (_, departmentHead, lecturer, _, submission, appeal) = await SeedDataAsync(context);
+        var assignHandler = new AssignAppealLecturerCommandHandler(context);
+        await assignHandler.Handle(
+            new AssignAppealLecturerCommand(appeal.Id, departmentHead.Id, lecturer.Id),
+            CancellationToken.None);
+
+        var otherLecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "other.lecturer@fpt.edu.vn",
+            FullName = "Giảng viên không được phân công",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
+        context.Users.Add(otherLecturer);
+        await context.SaveChangesAsync();
+
+        var handler = new RegradeAppealCommandHandler(context);
+        var forbidden = await handler.Handle(
+            new RegradeAppealCommand(appeal.Id, otherLecturer.Id, 8m, "Không có quyền chấm đơn này."),
+            CancellationToken.None);
+        forbidden.IsSuccess.Should().BeFalse();
+        submission.FinalScore.Should().Be(5m);
+
+        var result = await handler.Handle(
+            new RegradeAppealCommand(appeal.Id, lecturer.Id, 8.25m, "Đã nghe lại audio và đối chiếu transcript."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be(AppealStatus.Approved);
+        submission.FinalScore.Should().Be(8.25m);
+    }
+
+    [Fact(DisplayName = "R2: Chấm lại đơn phúc khảo toàn vé (SubmissionId == null, không có LecturerAudit) vượt qua OneWayLockInterceptor và cập nhật FinalScore")]
+    public async Task Regrade_WholeTicketAppeal_Without_LecturerAudit_Should_Update_Submissions_Under_OneWayLock()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var seedOptions = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(databaseName: dbName)
+            .Options;
+
+        Guid appealId;
+        Guid lecturerId;
+        Guid submissionId;
+
+        using (var seedContext = new OralExamDbContext(seedOptions))
+        {
+            var (_, deptHead, lecturer, ticket, submission, appeal) = await SeedDataAsync(seedContext);
+            appeal.SubmissionId = null; // Đơn phúc khảo toàn vé thi (Nhóm 2 tin cậy cao, không có LecturerAudit)
+            appeal.Status = AppealStatus.InReview;
+            appeal.AssignedTo = lecturer.Id;
+            appeal.ReviewedBy = deptHead.Id;
+            await seedContext.SaveChangesAsync();
+
+            appealId = appeal.Id;
+            lecturerId = lecturer.Id;
+            submissionId = submission.Id;
+        }
+
+        var lockedOptions = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(databaseName: dbName)
+            .AddInterceptors(new OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor())
+            .Options;
+
+        using var activeContext = new OralExamDbContext(lockedOptions);
+        var handler = new RegradeAppealCommandHandler(activeContext);
+        var result = await handler.Handle(
+            new RegradeAppealCommand(appealId, lecturerId, 8.75m, "Chấm lại phúc khảo toàn vé thi Nhóm 2 sau khi nghe lại file ghi âm R2."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Status.Should().Be(AppealStatus.Approved);
+        result.Value.ProposedScore.Should().Be(8.75m);
+
+        var updatedSubmission = await activeContext.ExamQuestionSubmissions.FindAsync(submissionId);
+        updatedSubmission!.FinalScore.Should().Be(8.75m);
     }
 }

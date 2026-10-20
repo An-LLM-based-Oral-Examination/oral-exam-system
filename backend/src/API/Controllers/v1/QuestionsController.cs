@@ -153,6 +153,12 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.Contains("Chỉ Trưởng Bộ Môn", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("không có quyền", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { type = "https://oralexam.fpt.edu.vn/errors/forbidden", detail = result.Error });
+            }
+
             return BadRequest(new { type = "https://oralexam.fpt.edu.vn/errors/review-decision-failed", detail = result.Error });
         }
 

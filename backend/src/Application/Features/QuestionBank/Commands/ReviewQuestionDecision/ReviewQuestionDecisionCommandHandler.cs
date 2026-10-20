@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.ReviewQuestionDecision;
@@ -76,6 +77,31 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
                 question.ReviewNotes = request.ReviewNotes;
+
+                var targetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
+                if (targetScope is "both" or "practice" or "all")
+                {
+                    var existsInPracticePool = await _context.PracticeQuestions
+                        .AnyAsync(p => p.CourseId == question.CourseId && p.Title == question.Title, cancellationToken);
+                    if (!existsInPracticePool)
+                    {
+                        _context.PracticeQuestions.Add(new PracticeQuestion
+                        {
+                            CourseId = question.CourseId,
+                            RubricId = question.RubricId,
+                            Title = question.Title,
+                            Content = question.Content,
+                            SampleAnswer = question.SampleAnswer,
+                            KeyPoints = question.KeyPoints,
+                            Difficulty = question.Difficulty,
+                            BloomLevel = question.BloomLevel,
+                            HasFollowUp = true,
+                            IsActive = true,
+                            CreatedAt = now
+                        });
+                    }
+                }
+
                 message = "Câu hỏi đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng đề thi.";
                 break;
 

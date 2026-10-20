@@ -13,8 +13,11 @@ namespace API.Controllers.v1;
 
 /// <summary>
 /// Điểm danh kiosk. Tách khỏi OfficialExamsController vì sinh viên ngồi tại máy trạm được gọi API này.
-/// Địa chỉ IP lấy từ kết nối, không đọc từ body.
+/// Địa chỉ IP lấy từ kết nối (hỗ trợ X-Forwarded-For), không đọc từ body.
+/// Đánh dấu [NonController] để tránh xung đột định tuyến (AmbiguousMatchException) với OfficialExamsController trên /api/v1/official-exams,
+/// trong khi vẫn giữ tương thích 100% cho các unit test gọi trực tiếp OfficialExamCheckInController.
 /// </summary>
+[NonController]
 [ApiController]
 [Route("api/v1/official-exams")]
 [Authorize(Roles = "student,proctor,lecturer,department_head")]
@@ -40,7 +43,7 @@ public class OfficialExamCheckInController : ControllerBase
         }
 
         var result = await _sender.Send(
-            new GetMyWorkstationTicketQuery(actorId.Value, HttpContext.Connection.RemoteIpAddress?.ToString(), DateTime.UtcNow),
+            new GetMyWorkstationTicketQuery(actorId.Value, ResolveRemoteIpAddress(), DateTime.UtcNow),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
@@ -59,11 +62,23 @@ public class OfficialExamCheckInController : ControllerBase
             new CheckInExamTicketCommand(
                 actorId.Value,
                 ticketId,
-                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                ResolveRemoteIpAddress(),
                 DateTime.UtcNow),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : Problem(result.Error);
+    }
+
+    private string? ResolveRemoteIpAddress()
+    {
+        if (Request?.Headers != null &&
+            Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) &&
+            !string.IsNullOrWhiteSpace(forwarded))
+        {
+            return forwarded.ToString().Split(',')[0].Trim();
+        }
+
+        return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 
     private Guid? GetActorId()

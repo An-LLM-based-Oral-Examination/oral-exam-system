@@ -179,13 +179,13 @@ public class CloudflareWhisperService : ISpeechToTextService
         string? vocabularyHint,
         CancellationToken cancellationToken)
     {
-        var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/@cf/openai/whisper-large-v3-turbo";
+        var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
         var prompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint);
 
         var jsonPayload = JsonSerializer.Serialize(new
         {
             audio = Convert.ToBase64String(audioBytes),
-            language = "vi",
+            language = TranscriptionLanguage,
             task = "transcribe",
             vad_filter = true,
             initial_prompt = prompt
@@ -230,8 +230,10 @@ public class CloudflareWhisperService : ISpeechToTextService
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-            request.Content = new ByteArrayContent(audioBytes);
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+            var content = new ByteArrayContent(audioBytes);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            request.Content = content;
 
             var response = await _httpClient.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
@@ -410,4 +412,3 @@ public class CloudflareWhisperService : ISpeechToTextService
         return (rawText, timestampsJson, confidenceScore);
     }
 }
-

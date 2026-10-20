@@ -13,5 +13,7 @@ public sealed record GetAppealsQuery(
     string? Status = null,
     Guid? SessionId = null,
     Guid? StudentId = null,
-    Guid? AssignedTo = null
+    Guid? AssignedTo = null,
+    Guid? RequesterId = null,
+    string? RequesterRole = null
 ) : IRequest<Result<List<AppealResponseDto>>>;

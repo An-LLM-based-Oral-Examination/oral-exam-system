@@ -556,7 +556,7 @@ public class AdversarialMilestone3ChallengerTests
     }
 
     [Fact(DisplayName = "ADV-23: Handler tự động fallback sang admin khi không có department_head active")]
-    public async Task Handler_Must_Fallback_To_Admin_When_DepartmentHead_Inactive()
+    public async Task Handler_Must_Fail_When_DepartmentHead_Inactive()
     {
         using var context = CreateDbContext();
         var (student, deptHead, admin, ticket, submission) = await SeedBaseEntitiesAsync(context);
@@ -575,9 +575,8 @@ public class AdversarialMilestone3ChallengerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.AssignedTo.Should().Be(admin.Id);
-        result.Value.AssignedToName.Should().Be(admin.FullName);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Không tìm thấy người phụ trách");
     }
 
     [Fact(DisplayName = "ADV-24: Handler PHẢI chặn nộp trùng đơn khi đơn cũ đang có trạng thái PENDING")]

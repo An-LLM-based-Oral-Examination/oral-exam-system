@@ -243,4 +243,24 @@ public class CreateDraftQuestionCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be("Câu trả lời mẫu (Model Answer) khi cung cấp bắt buộc phải từ 50 ký tự trở lên.");
     }
+
+    [Fact(DisplayName = "8. R4 MF-03: Handle tạo đồng thời cả ExamQuestion và PracticeQuestion khi UsageScope là 'both'")]
+    public async Task Handle_Should_Create_Both_Exam_And_Practice_Questions_When_UsageScope_Is_Both()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, course) = await SeedUserAndCourseAsync(context);
+        var handler = new CreateDraftQuestionCommandHandler(context);
+
+        var command = CreateCommand(course.Id, lecturer.Id, usageScope: "both");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var examQ = await context.ExamQuestions.FirstOrDefaultAsync(q => q.Id == result.Value);
+        examQ.Should().NotBeNull();
+
+        var practiceQ = await context.PracticeQuestions.FirstOrDefaultAsync(p => p.CourseId == course.Id && p.Title == command.Title);
+        practiceQ.Should().NotBeNull();
+        practiceQ!.HasFollowUp.Should().BeTrue();
+    }
 }

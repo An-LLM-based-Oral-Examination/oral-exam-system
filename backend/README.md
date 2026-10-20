@@ -1,19 +1,20 @@
 # Backend — Oral Examination API
 
-API của hệ thống luyện thi và đánh giá vấn đáp. Solution .NET 8 theo Clean Architecture, PostgreSQL 16 qua EF Core Code First, xác thực Google và JWT.
+API của hệ thống luyện thi và đánh giá vấn đáp. Solution .NET 8 theo Clean Architecture, PostgreSQL 16 (30 bảng 3NF) qua EF Core Code First, xác thực kép (Google OAuth 2.0 và tài khoản do Nhà trường cấp phát) kèm JWT.
 
 ## Chức năng
 
 | Nhóm | Việc API làm |
 | --- | --- |
-| Auth | Đăng nhập Google, cấp và thu hồi refresh token |
-| Practice | Phiên luyện tập, nộp câu trả lời, câu tiếp theo, SignalR báo kết quả chấm |
-| Mock exams | Thi thử có hạn ngạch |
-| Question bank | Ngân hàng câu hỏi, sinh đề, gửi duyệt |
-| Official exams | Ca thi, bài nộp, hậu kiểm của giảng viên |
-| Appeals | Phúc khảo |
-| Courses | Môn học và cấu hình liên quan |
-| Storage | Nhận audio để bóc băng |
+| Auth | Đăng nhập Google OAuth 2.0 hoặc tài khoản trường cấp (`username`/`password`), đổi mật khẩu, cấp và thu hồi refresh token |
+| Practice | Phiên luyện tập (`Per-Question On-Demand` / `Full-Session Progressive` 3–10 câu), timeout 5 phút (`HTTP 410`), nộp câu trả lời, câu tiếp theo, SignalR báo kết quả chấm |
+| Mock exams | Thi thử có hạn ngạch ngày theo môn do Admin cấu hình (`max_mock_exams_per_day`, vượt trả `HTTP 429`) |
+| Question bank | Ngân hàng câu hỏi, AI sinh đề từ FLM/CLO, Barem 10.0đ (`HTTP 422`), gửi Trưởng BM duyệt |
+| Official exams | Kỳ thi, ca thi, Kiosk check-in (`ip_address`), bài nộp Persist First `< 100ms`, hậu kiểm và công bố điểm (`OneWayLockInterceptor`) |
+| Appeals | Phúc khảo nội bộ trên Student Portal, Trưởng BM giao Giảng viên khác chấm lại |
+| DeadLetterQueue | Trưởng Bộ Môn giám sát và kích hoạt chấm bù thủ công các tác vụ lỗi trong `dead_letter_queues` |
+| Admin & Courses | Quản trị người dùng, học kỳ, cấu hình động `system_configs`, cấu hình môn học và nhật ký kiểm toán (`audit_logs`) |
+| Storage | Nhận audio bóc băng Whisper STT và lưu trữ audio phòng thi thật lên Cloudflare R2 (`STT_MSSV.webm` + SHA-256) |
 
 Prefix REST là `/api/v1`. Hub SignalR luyện tập là `/hubs/practice`.
 

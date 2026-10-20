@@ -37,13 +37,64 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Tác vụ DLQ đã được giải quyết (resolved) trước đó.");
         }
 
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var now = DateTime.UtcNow;
+
+        if (string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase))
+        {
+            OfficialExamGradingTask? officialTask;
+            try
+            {
+                officialTask = JsonSerializer.Deserialize<OfficialExamGradingTask>(dlqItem.PayloadJson, options);
+            }
+            catch (Exception ex)
+            {
+                return Result<Unit>.Failure($"Không thể giải mã dữ liệu tác vụ (PayloadJson): {ex.Message}");
+            }
+
+            if (officialTask == null || (officialTask.JobId == Guid.Empty && officialTask.SubmissionId == Guid.Empty))
+            {
+                return Result<Unit>.Failure("Dữ liệu tác vụ OfficialExamGrading sau khi giải mã không hợp lệ.");
+            }
+
+            var job = await _context.GradingJobs
+                .FirstOrDefaultAsync(j => j.Id == officialTask.JobId || j.SubmissionId == officialTask.SubmissionId, cancellationToken);
+
+            if (job == null)
+            {
+                return Result<Unit>.Failure("Không tìm thấy GradingJob tương ứng với tác vụ DLQ này.");
+            }
+
+            if (job.Status != "completed")
+            {
+                job.Status = "pending";
+                job.NextAttemptAt = now;
+                job.LockedUntil = null;
+                job.UpdatedAt = now;
+
+                var submission = await _context.ExamQuestionSubmissions
+                    .FirstOrDefaultAsync(s => s.Id == job.SubmissionId, cancellationToken);
+                if (submission != null && submission.GradingStatus == "failed")
+                {
+                    submission.GradingStatus = "pending";
+                }
+            }
+
+            dlqItem.Status = "resolved";
+            dlqItem.ResolvedAt = now;
+            dlqItem.LastAttemptAt = now;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result<Unit>.Success(Unit.Value);
+        }
+
         GradingTask? gradingTask;
         try
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
             gradingTask = JsonSerializer.Deserialize<GradingTask>(dlqItem.PayloadJson, options);
         }
         catch (Exception ex)
@@ -61,7 +112,8 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
 
         // Đánh dấu bản ghi DLQ là resolved
         dlqItem.Status = "resolved";
-        dlqItem.ResolvedAt = DateTime.UtcNow;
+        dlqItem.ResolvedAt = now;
+        dlqItem.LastAttemptAt = now;
 
         // Nếu có PracticeAnswer tương ứng, khôi phục trạng thái về pending
         if (gradingTask.AnswerId != Guid.Empty)

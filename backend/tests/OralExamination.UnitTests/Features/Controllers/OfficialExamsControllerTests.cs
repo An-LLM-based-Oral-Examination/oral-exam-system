@@ -101,8 +101,6 @@ public class OfficialExamsControllerTests
         SetUserContext(lecturerId, role: "lecturer");
 
         var shiftId = Guid.NewGuid();
-        var request = new PublishGradesRequestDto { LecturerId = lecturerId };
-
         var responseDto = new PublishGradesResponseDto
         {
             ShiftId = shiftId,
@@ -115,29 +113,57 @@ public class OfficialExamsControllerTests
             .Setup(s => s.Send(It.IsAny<PublishGradesCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PublishGradesResponseDto>.Success(responseDto));
 
-        var actionResult = await _controller.PublishGrades(shiftId, request);
+        var actionResult = await _controller.PublishGrades(shiftId);
 
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(responseDto);
     }
 
-    [Fact(DisplayName = "4. PublishGrades trả về 422 UnprocessableEntity khi còn sinh viên chưa có điểm hoàn chỉnh")]
-    public async Task PublishGrades_Should_Return_422_When_Any_Student_Lacks_Score()
+    [Fact(DisplayName = "4. PublishGrades trả về 409 Conflict khi còn sinh viên chưa có điểm hoàn chỉnh")]
+    public async Task PublishGrades_Should_Return_409_When_Any_Student_Lacks_Score()
     {
         var lecturerId = Guid.NewGuid();
         SetUserContext(lecturerId, role: "lecturer");
 
         var shiftId = Guid.NewGuid();
-        var request = new PublishGradesRequestDto { LecturerId = lecturerId };
-
         _senderMock
             .Setup(s => s.Send(It.IsAny<PublishGradesCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PublishGradesResponseDto>.Failure("Không thể công bố điểm. Còn sinh viên chưa có điểm hoàn chỉnh."));
 
-        var actionResult = await _controller.PublishGrades(shiftId, request);
+        var actionResult = await _controller.PublishGrades(shiftId);
 
-        var unprocResult = actionResult.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
-        unprocResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        var conflictResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        conflictResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+    }
+
+    [Fact(DisplayName = "5. OfficialExamsController hỗ trợ đồng thời route /api/v1/official-exams và xử lý WorkstationTicketNotFound -> 404")]
+    public async Task OfficialExamsController_Should_Support_Hyphenated_Route_And_Return_404_For_WorkstationTicketNotFound()
+    {
+        var routes = typeof(OfficialExamsController)
+            .GetCustomAttributes(typeof(RouteAttribute), inherit: false);
+        routes.Should().Contain(attr => ((RouteAttribute)attr).Template == "api/v1/official-exams");
+        routes.Should().Contain(attr => ((RouteAttribute)attr).Template == "api/v1/[controller]");
+
+        typeof(OfficialExamCheckInController)
+            .GetCustomAttributes(typeof(NonControllerAttribute), inherit: false)
+            .Should().NotBeEmpty();
+
+        var studentId = Guid.NewGuid();
+        SetUserContext(studentId, role: "student");
+        _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "10.24.16.12, 172.16.0.1";
+
+        _senderMock
+            .Setup(s => s.Send(
+                It.Is<OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkstationTicket.GetMyWorkstationTicketQuery>(
+                    q => q.ActorUserId == studentId && q.RemoteIpAddress == "10.24.16.12"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StudentWorkstationTicketResponse>.Failure(
+                OralExamination.Application.Features.OfficialExams.OfficialExamErrors.WorkstationTicketNotFound));
+
+        var actionResult = await _controller.GetMyWorkstationTicket(CancellationToken.None);
+
+        var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 }

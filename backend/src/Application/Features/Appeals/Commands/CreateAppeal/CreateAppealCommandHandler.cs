@@ -69,13 +69,9 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
         }
 
-        // Tự động gán Trưởng Bộ Môn (department_head). Nếu chưa có, gán user có role admin
+        // Đơn phải được tiếp nhận bởi đúng Trưởng bộ môn đang hoạt động.
         var assignedUser = await _context.Users
-            .FirstOrDefaultAsync(u => u.Role == UserRole.DepartmentHead && u.IsActive, cancellationToken)
-            ?? await _context.Users
-            .FirstOrDefaultAsync(u => u.Role == UserRole.Admin && u.IsActive, cancellationToken)
-            ?? await _context.Users
-            .FirstOrDefaultAsync(u => u.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Role == UserRole.DepartmentHead && u.IsActive, cancellationToken);
 
         if (assignedUser == null)
         {

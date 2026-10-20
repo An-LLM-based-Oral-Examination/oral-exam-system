@@ -240,6 +240,21 @@ public class PublishGradesCommandHandlerTests
         result.Error.Should().Contain("Người dùng không có quyền công bố điểm ca thi");
     }
 
+    [Fact(DisplayName = "BE-11: Tài khoản giảng viên bị khóa không được publish")]
+    public async Task Handle_Should_Fail_When_Lecturer_Is_Inactive()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, shift, _) = await SeedShiftDataAsync(context, ticketCount: 1, allScored: true);
+        lecturer.IsActive = false;
+        await context.SaveChangesAsync();
+
+        var result = await new PublishGradesCommandHandler(context)
+            .Handle(new PublishGradesCommand(shift.Id, lecturer.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(PublishGradesErrors.Forbidden);
+    }
+
     [Fact(DisplayName = "6. Handle trả về Failure khi ca thi không có vé thi nào")]
     public async Task Handle_Should_Fail_When_Shift_Has_No_Tickets()
     {
@@ -297,7 +312,7 @@ public class PublishGradesCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be("Ca thi này đã được công bố điểm trước đó và đã bị khóa một chiều.");
+        result.Error.Should().Be(PublishGradesErrors.AlreadyPublished);
     }
 
     [Fact(DisplayName = "8. Sinh viên có LecturerAudit thẩm định ghi nhận điểm thành công ngay cả khi submission chưa có điểm")]

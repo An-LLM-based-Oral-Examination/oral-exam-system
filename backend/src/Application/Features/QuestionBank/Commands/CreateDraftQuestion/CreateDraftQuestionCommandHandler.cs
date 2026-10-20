@@ -73,11 +73,12 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         _context.Rubrics.Add(rubric);
 
-        // 2. Tạo Question
+        // 2. Tạo Question (hỗ trợ cả 2 kho: practice_questions, exam_questions, hoặc both)
         var keyPointsJson = JsonSerializer.Serialize(request.KeyPoints ?? new());
+        var normalizedScope = (request.UsageScope ?? "exam").Trim().ToLowerInvariant();
         Guid createdId;
 
-        if (request.UsageScope == "practice")
+        if (normalizedScope == "practice")
         {
             var pq = new PracticeQuestion
             {
@@ -117,6 +118,26 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             };
             _context.ExamQuestions.Add(eq);
             createdId = eq.Id;
+
+            if (normalizedScope is "both" or "all")
+            {
+                var pq = new PracticeQuestion
+                {
+                    CourseId = request.CourseId,
+                    Rubric = rubric,
+                    Title = request.Title,
+                    Content = request.Content,
+                    SampleAnswer = request.SampleAnswer,
+                    KeyPoints = keyPointsJson,
+                    Difficulty = request.Difficulty,
+                    BloomLevel = request.BloomLevel,
+                    HasFollowUp = request.HasFollowUp,
+                    FollowUpPrompt = request.FollowUpPrompt,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.PracticeQuestions.Add(pq);
+            }
         }
 
         await _context.SaveChangesAsync(cancellationToken);

@@ -9,7 +9,7 @@
 **Quy chuẩn cốt lõi:**  
 - **Tách biệt hoàn toàn:** Kho luyện tập mở (`practice_questions`, `practice_answers`) và kho thi cử bảo mật (`exam_questions`, `mock_exam_*`, `official_exam_*`).  
 - **Buffer Screen:** Thời gian đệm cấu hình động 10–300 giây (mặc định 60s do Admin cấu hình chung qua `system_configs` cho MF-01) cho phép sinh viên nghe TTS, nói qua Mic, xem transcript Web Speech và chỉnh sửa trước khi nộp bài.  
-- **Quota Guard:** Đếm trực tiếp từ PostgreSQL theo hạn ngạch môn học do Trưởng Bộ Môn cấu hình (`max_mock_exams_per_day`) cho thi thử (MF-02).  
+- **Quota Guard:** Đếm trực tiếp từ PostgreSQL theo hạn ngạch môn học do Admin cấu hình (`max_mock_exams_per_day`) cho thi thử (MF-02).  
 - **Hàng đợi RAM:** `BoundedChannel` 1,000 slots trả `202 Accepted` trong $< 100$ms, kết quả trả qua WebSocket SignalR `/hubs/practice`.  
 - **Thi thật phòng Lab (MF-04):** Bóc băng Whisper STT Server-side kèm timestamps, Cloudflare R2 lưu `STT_MSSV.webm`, băm SHA-256 niêm phong, và cơ chế Khóa điểm một chiều `OneWayLockInterceptor` (`HTTP 403`).
 
@@ -57,20 +57,20 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - `401 Unauthorized`: Chưa đăng nhập hoặc Token JWT hết hạn / không hợp lệ.
 - `403 Forbidden`: Bị từ chối quyền truy cập (ví dụ: Sinh viên cố truy cập route quản trị, người dùng không có quyền gọi API sinh câu hỏi FLM [yêu cầu `lecturer` hoặc `department_head`], hoặc gửi request sửa bài thi khi đã bị Khóa điểm một chiều `is_locked = true`).
 - `404 Not Found`: Không tìm thấy tài nguyên theo ID.
-- `410 Gone`: Phiên luyện tập đã kết thúc tự động do quá thời gian không tương tác (`SessionInactivityTimeoutMinutes = 10` phút). Toàn bộ dữ liệu điểm số và câu trả lời đã làm trước đó được bảo toàn nguyên vẹn, sinh viên không thể tương tác thêm trong phiên này.
+- `410 Gone`: Phiên luyện tập đã kết thúc tự động do quá thời gian không tương tác (`SessionInactivityTimeoutMinutes = 5` phút). Toàn bộ dữ liệu điểm số và câu trả lời đã làm trước đó được bảo toàn nguyên vẹn, sinh viên không thể tương tác thêm trong phiên này.
 - `422 Unprocessable Entity`: Dữ liệu đúng cú pháp nhưng vi phạm quy tắc nghiệp vụ (ví dụ: Tổng điểm Rubric != 10.0, Model Answer < 50 ký tự, hoặc cập nhật điểm thẩm định mà để trống lý do giải trình).
-- `429 Too Many Requests`: Vi phạm Quota Guard thi thử quá 3 lượt/môn/ngày (kiểm soát bởi PostgreSQL).
+- `429 Too Many Requests`: Vi phạm Quota Guard thi thử vượt quá hạn ngạch ngày theo môn học (`max_mock_exams_per_day` do Admin cấu hình, kiểm soát bởi PostgreSQL).
 - `500 Internal Server Error`: Lỗi máy chủ chưa được xử lý.
 - `502 Bad Gateway`: Lỗi kết nối hoặc phản hồi không hợp lệ từ dịch vụ upstream bên thứ 3 (FLM Adapter API, Cloudflare Whisper STT, Google Gemini AI) sau khi đã thực thi chính sách thử lại Polly Retry Policy.
 - `504 Gateway Timeout`: Quá thời gian chờ phản hồi từ dịch vụ ngoại vi sau khi cạn kiệt chu trình Polly Retry (3 lần: 2s, 4s, 8s). Phân định rõ hai tầng timeout: Thời gian chờ mỗi lần gọi đơn lẻ (Attempt Timeout: 10s cho FLM API, 30s cho Gemini AI Generation) và Tổng thời gian chờ tối đa của toàn bộ Resilience Pipeline (Total Request Timeout: 60s cho FLM API, 90s cho Gemini AI Generation).
 
 ---
 
-## 4. BẢO MẬT & XÁC THỰC (AUTHENTICATION & JWT CONTRACT)
+## 4. BẢO MẬT & XÁC THỰC KÉP (DUAL AUTHENTICATION & JWT CONTRACT)
 
-### 4.1. Đăng nhập hệ thống (Google OAuth 2.0 PKCE)
+### 4.1. Đăng nhập hệ thống (Google OAuth 2.0 PKCE & Tài khoản Nhà trường cấp)
 
-#### Đăng nhập Google OAuth 2.0 PKCE (Quy chuẩn Toàn Hệ Thống)
+#### 4.1.1. Đăng nhập Google OAuth 2.0 PKCE
 - **Endpoint:** `POST /api/v1/auth/google-login`
 - **Quyền truy cập:** Public
 - **Request Body:**
@@ -97,10 +97,35 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 }
 ```
 
-#### Cơ chế Đăng nhập Xác thực Toàn Hệ Thống
-- Hệ thống áp dụng chuẩn bảo mật **100% Google OAuth 2.0 PKCE** cho toàn bộ 5 vai trò (`student`, `lecturer`, `department_head`, `proctor`, `admin`), hỗ trợ mọi tài khoản email Google hợp lệ.
-- **Tuyệt đối không sử dụng endpoint đăng nhập mật khẩu cục bộ (`POST /api/v1/auth/login`)**: Loại bỏ hoàn toàn nguy cơ lưu trữ hash mật khẩu và tấn công brute-force.
-- Mọi phiên làm việc sau khi xác thực qua Google Callback nhận cặp `accessToken` (JWT 15 phút) và `refreshToken` (7 ngày).
+#### 4.1.2. Đăng nhập bằng Tài khoản & Mật khẩu do Nhà trường cấp
+- **Endpoint:** `POST /api/v1/auth/password-login`
+- **Quyền truy cập:** Public
+- **Request Body:**
+```json
+{
+  "usernameOrEmail": "SE170001",
+  "password": "SchoolProvisionedPassword123!"
+}
+```
+- **Response 200 OK:** Trả về cùng cấu trúc `AuthResponse` (`accessToken`, `refreshToken`, `tokenType`, `expiresIn`, `user`). Nếu sai thông tin đăng nhập trả `401 Unauthorized`; nếu tài khoản bị khóa (`is_active = false`) trả `403 Forbidden`.
+
+#### 4.1.3. Đổi mật khẩu tài khoản Nhà trường cấp
+- **Endpoint:** `POST /api/v1/auth/change-password`
+- **Quyền truy cập:** Authenticated (`student`, `lecturer`, `department_head`, `proctor`, `admin`)
+- **Request Body:**
+```json
+{
+  "currentPassword": "SchoolProvisionedPassword123!",
+  "newPassword": "NewStrongPassword456!",
+  "confirmNewPassword": "NewStrongPassword456!"
+}
+```
+- **Response 200 OK:** `{ "message": "Đổi mật khẩu thành công." }` (Cập nhật `password_hash` BCrypt và `password_changed_at`).
+
+#### Cơ chế Xác thực Kép Toàn Hệ Thống (Dual Authentication)
+- Hệ thống hỗ trợ xác thực kép (**Google OAuth 2.0 PKCE** hoặc **Tài khoản `username`/`password` do Nhà trường cấp**) cho toàn bộ 5 vai trò (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
+- **Không mở form tự đăng ký công khai bằng mật khẩu**: Tài khoản mật khẩu do Nhà trường/Admin cấp phát sẵn (lưu `password_hash` chuẩn BCrypt).
+- Mọi phiên làm việc sau khi xác thực thành công đều nhận cặp `accessToken` (JWT 15 phút) và `refreshToken` (7 ngày, hỗ trợ Token Rotation).
 
 #### Cấp lại Access Token mới (Silent Refresh Token)
 - **Endpoint:** `POST /api/v1/auth/refresh-token`
@@ -165,7 +190,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | Tra cứu danh sách đơn phúc khảo (`GET /api/v1/appeals`) | ✅ (của mình) | ✅ (được giao) | ✅ | ❌ | ✅ |
 | Trưởng Bộ Môn giao Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`) | ❌ | ❌ | ✅ | ❌ | ✅ |
 | Giảng viên chấm lại / Thẩm định phúc khảo (`PUT /api/v1/appeals/{id}/review`) | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Quản trị hệ thống, DLQ Replay & Audit Logs (`/api/v1/admin/*`) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Quản trị hệ thống & Audit Logs (`/api/v1/admin/*`) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Theo dõi & Kích hoạt Replay Dead-Letter Queue (`/api/v1/dlq/*`) | ❌ | ❌ | ✅ | ❌ | ❌ |
 
 *Ghi chú quan trọng:* Tính năng AI sinh câu hỏi từ FLM/Syllabus mở quyền sử dụng cho cả **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)**. Giảng viên được tự thiết kế Barem Rubric riêng 10.0đ, tinh chỉnh câu hỏi và sau đó ấn **"Gửi lên cho Bộ Môn"** (`SUBMITTED_FOR_REVIEW`) để Trưởng Bộ Môn thẩm định và phê duyệt chính thức vào ngân hàng đề. Tại MF-04, sau khi kết thúc ca thi, AI chấm điểm ngầm chuyển Giảng viên thẩm định các bài nghi ngờ qua Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT); khi 100% sinh viên có điểm, Giảng viên ấn **"Công Bố Điểm"** (`Publish Grades`); Sinh viên xem điểm trên Student Portal, nếu không đồng ý thì nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) trực tiếp trên Student Portal để chuyển Trưởng Bộ Môn tiếp nhận và giao cho một Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
 
@@ -184,7 +210,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | 5.6 | Thi thử bấm giờ MF-02 | `/api/v1/mock-exams/*` | Student |
 | 5.7 | Thi thật phòng Lab MF-04 | `/api/v1/official-exams/*` | Student, Proctor |
 | 5.8 | Hậu kiểm & Công bố điểm | `/api/v1/official-exams/shifts/*` | Lecturer |
-| 5.9 | Quản trị DLQ & Audit | `/api/v1/admin/*` | Admin |
+| 5.9 | Quản trị DLQ & Audit | `/api/v1/dlq/*`, `/api/v1/admin/*` | Department Head (DLQ), Admin (Audit) |
 | 5.10 | Phúc khảo nội bộ MF-04 | `/api/v1/appeals` | Student, Department Head |
 | 5.11 | Thông báo trong ứng dụng FE-11 | `/api/v1/notifications` | All Roles |
 
@@ -1410,7 +1436,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   * Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` theo nhu cầu (On-Demand).
   * **Thuật toán Anti-3-Consecutive Randomizer:** Kiểm tra 2 câu hỏi chính liền trước. Nếu cả 2 câu có cùng độ khó $D$ và sinh viên chọn từ 2 mức trở lên, loại trừ mức $D$ để bốc mức khác (đảm bảo tối đa 2 câu cùng mức trong 3 câu liên tiếp).
   * **Không lặp câu đã làm:** Loại trừ toàn bộ câu hỏi đã làm trong phiên (`Id NOT IN (...)`).
-  * **Lazy Inactivity Timeout:** Kiểm tra nếu thời gian không tương tác vượt quá `SessionInactivityTimeoutMinutes` (10 phút), tự động kết thúc phiên (`status = "completed"`) và trả về mã lỗi HTTP 410 Gone.
+  * **Lazy Inactivity Timeout:** Kiểm tra nếu thời gian không tương tác vượt quá `SessionInactivityTimeoutMinutes` (5 phút), tự động kết thúc phiên (`status = "completed"`) và trả về mã lỗi HTTP 410 Gone.
   * Tự động cập nhật `last_activity_at = DateTime.UtcNow` khi bốc câu hỏi thành công.
 - **Response 200 OK (Khi còn câu hỏi khả dụng):**
 ```json
@@ -1444,7 +1470,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "type": "https://tools.ietf.org/html/rfc7807",
   "title": "Session Timed Out",
   "status": 410,
-  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
 }
 ```
 - **Response 404 Not Found (Session Not Found RFC 7807):**
@@ -1486,13 +1512,13 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "answerId": "77777777-0000-0000-0000-000000000001"
 }
 ```
-- **Response 410 Gone (Khi phiên bị timeout quá 10 phút không tương tác):**
+- **Response 410 Gone (Khi phiên bị timeout quá 5 phút không tương tác):**
 ```json
 {
   "type": "https://tools.ietf.org/html/rfc7807",
   "title": "Session Timed Out",
   "status": 410,
-  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
 }
 ```
 
@@ -1517,13 +1543,13 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 - **Response 202 Accepted:** Không có response body (Empty body với status `202 Accepted`). Toàn bộ câu trả lời được đưa vào hàng đợi chấm điểm ngầm.
-- **Response 410 Gone (Khi phiên bị timeout quá 10 phút không tương tác):**
+- **Response 410 Gone (Khi phiên bị timeout quá 5 phút không tương tác):**
 ```json
 {
   "type": "https://tools.ietf.org/html/rfc7807",
   "title": "Session Timed Out",
   "status": 410,
-  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+  "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
 }
 ```
 
@@ -1631,7 +1657,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 #### 1. Tra cứu hạn ngạch thi thử trong ngày (Dynamic Daily Quota)
 - **Endpoint:** `GET /api/v1/mock-exams/quota?courseId={courseId}`
 - **Quyền:** `student`, `lecturer`, `department_head`, `admin`
-- **Mô tả:** Kiểm tra số lượt thi thử sinh viên đã dùng và còn lại trong ngày hôm nay (theo giờ Việt Nam GMT+7) đối với môn học `courseId`. Hạn ngạch tối đa mỗi ngày (`max_mock_exams_per_day`) do Trưởng Bộ Môn cấu hình động trên từng môn học (mặc định $K = 3$).
+- **Mô tả:** Kiểm tra số lượt thi thử sinh viên đã dùng và còn lại trong ngày hôm nay (theo giờ Việt Nam GMT+7) đối với môn học `courseId`. Hạn ngạch tối đa mỗi ngày (`max_mock_exams_per_day`) do Admin cấu hình động trên từng môn học (mặc định $K = 3$).
 - **Response 200 OK:**
 ```json
 {
@@ -2163,12 +2189,12 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 ---
 
-### 5.9. Quản trị Admin, Cứu hộ Dead-Letter Queue (DLQ Replay) & Audit Logs
+### 5.9. Cứu hộ Dead-Letter Queue (DLQ Replay) & Quản trị Audit Logs
 *(Phân hệ CSDL: `dead_letter_queues`, `audit_logs`)*
 
 #### Tra cứu danh sách task lỗi trong Dead-Letter Queue
-- **Endpoint:** `GET /api/v1/admin/dlq?status=pending`
-- **Quyền:** `admin`
+- **Endpoint:** `GET /api/v1/dlq/tasks?status=pending`
+- **Quyền:** `department_head`
 - **Response 200 OK:**
 ```json
 [
@@ -2183,9 +2209,9 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ]
 ```
 
-#### Admin kích hoạt cứu hộ chấm bù bài thi (DLQ Replay)
-- **Endpoint:** `POST /api/v1/admin/dlq/{id}/replay`
-- **Quyền:** `admin`
+#### Trưởng Bộ Môn kích hoạt cứu hộ chấm bù bài thi (DLQ Replay)
+- **Endpoint:** `POST /api/v1/dlq/tasks/{id}/replay`
+- **Quyền:** `department_head`
 - **Response 200 OK:**
 ```json
 {
@@ -2414,6 +2440,40 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
   "message": "Đã đánh dấu tất cả thông báo là đã đọc."
 }
 ```
+
+---
+
+### 5.12. Dịch vụ Giọng nói AI Đa tầng (Speech STT / TTS) & Bảng Tra Cứu Nhanh Endpoints Thực Tế (Cập nhật mới nhất cho Frontend)
+
+#### 1. Danh sách giọng đọc AI Giám khảo (`GET /api/v1/speech/voices`)
+- **Quyền:** Public (`AllowAnonymous`)
+- **Response 200 OK:** Danh sách 2 giọng chuẩn tiếng Việt (`vi-VN-HoaiMyNeural` - Nữ, `vi-VN-NamMinhNeural` - Nam).
+
+#### 2. Tổng hợp giọng đọc câu hỏi giám khảo — Text-to-Speech (`POST /api/v1/speech/tts` & `GET /api/v1/speech/tts`)
+- **Quyền:** Public (`AllowAnonymous`)
+- **Request Body (`POST`):** `{ "text": "...", "voiceName": "vi-VN-HoaiMyNeural", "speakingRate": 1.0 }`
+- **Response 200 OK:** Stream âm thanh `audio/mpeg` kèm các Headers chẩn đoán (`X-TTS-Provider`, `X-TTS-Voice`, `X-TTS-Fallback`, `X-TTS-Cache`). Tự động chuẩn hóa phát âm từ viết tắt Kỹ thuật Phần mềm (`SeTerminologyNormalizer.PrepareTextForTts`) và chuyển đổi dự phòng 3 tầng (Edge Neural TTS $\to$ Google Translate TTS $\to$ Offline WAV Synth).
+
+#### 3. Bóc băng giọng nói sinh viên — Speech-to-Text (`POST /api/v1/speech/stt`)
+- **Quyền:** Public (`AllowAnonymous`), `multipart/form-data` (`file`, `vocabularyHint`, `clientTranscript`)
+- **Response 200 OK:** Trả về `transcript` đã khử ảo giác âm thanh câm (Whisper `no_speech_prob` / `avg_logprob`), chuẩn hóa thuật ngữ SE (Code-Switching Việt - Anh) và tự động dự phòng sang Gemini Multimodal STT khi cần.
+
+#### 4. Bảng Ánh Xạ Nhanh Các Endpoint Thực Thi Trên Backend (Cập nhật đồng bộ cho Frontend)
+| Chức năng | Phương thức & Đường dẫn chính xác trên Backend | Ghi chú tích hợp FE |
+| :--- | :--- | :--- |
+| **Tạo câu hỏi nháp 2 kho (MF-03)** | `POST /api/v1/questions/draft` | Hỗ trợ `usageScope: "practice" \| "exam" \| "both"` (khi chọn `"both"` tự động lưu vào cả 2 kho `ExamQuestions` và `PracticeQuestions`) |
+| **Gửi duyệt câu hỏi (MF-03)** | `POST /api/v1/questions/batch-submit-review` | Chuyển trạng thái sang `SUBMITTED_FOR_REVIEW` |
+| **Trưởng BM duyệt đề (MF-03)** | `POST /api/v1/questions/{id}/review-decision` | Hỗ trợ `targetUsageScope: "both"`, trả `403 Forbidden` nếu người gọi không phải `department_head` / `admin` |
+| **Tạo kỳ thi & mở ca thi (MF-04)** | `POST /api/v1/official-exams/sessions`<br>`POST /api/v1/official-exams/shifts` | Hỗ trợ đồng thời cả `/api/v1/official-exams/*` và `/api/v1/officialexams/*` |
+| **Gán ghế 1–40 & IP máy trạm** | `POST /api/v1/official-exams/tickets` | Ràng buộc `seatNumber` (1–40) và `ipAddress` (`ip_address`) |
+| **Kiosk lấy vé & Check-in (MF-04)** | `GET /api/v1/official-exams/tickets/current`<br>`POST /api/v1/official-exams/tickets/{ticketId}/check-in` | Tự động đọc IP kết nối (hỗ trợ `X-Forwarded-For`), chuyển vé sang `IN_PROGRESS` |
+| **Kiosk cấp quyền R2 & Niêm phong SHA-256** | `POST /api/v1/official-exams/tickets/{ticketId}/audio-upload-authorizations`<br>`PUT /api/v1/official-exams/tickets/{ticketId}/audio` | Đặt tên file bất biến `STT_MSSV.webm` và niêm phong mã băm SHA-256 |
+| **Kiosk nộp bài Persist First (< 100ms)** | `PUT /api/v1/official-exams/tickets/{ticketId}/submission`<br>`GET /api/v1/official-exams/tickets/{ticketId}/submission` | Trả `202 Accepted` (`SUBMITTED`), đẩy hàng đợi chấm ngầm `BoundedOfficialExamGradingQueue` |
+| **Giảng viên xem Evidence Panel (MF-04)** | `GET /api/v1/official-exams/shifts/{shiftId}/audit-evidence` | Alias tương thích: `/api/v1/official-exams/shifts/{shiftId}/audit-submissions` |
+| **Công bố điểm & Khóa 1 chiều (MF-04)** | `POST /api/v1/official-exams/shifts/{shiftId}/publish-grades` | Kích hoạt `is_locked = true` và `OneWayLockInterceptor` (`HTTP 403`) |
+| **Xuất Báo cáo Excel / PDF & QR Verify** | `GET /api/v1/official-exams/shifts/{shiftId}/export-excel`<br>`GET /api/v1/official-exams/shifts/{shiftId}/export-pdf`<br>`GET /api/v1/verification/grades/{certificateHash}` | Kèm Header `X-Certificate-Hash` và tra cứu công khai qua QR |
+| **Phúc khảo nội bộ & Chấm lại (MF-04)** | `POST /api/v1/appeals`<br>`PUT /api/v1/appeals/{id}/assign-lecturer`<br>`PUT /api/v1/appeals/{id}/regrade`<br>`PUT /api/v1/appeals/{id}/review` | Hỗ trợ chấm lại cả đơn theo từng câu (`submissionId != null`) lẫn đơn toàn vé (`submissionId == null`) |
+| **Student Dashboard & Xác nhận điểm** | `GET /api/v1/student/dashboard`<br>`POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade` | Đồng bộ hạn ngạch thi thử theo múi giờ Việt Nam (GMT+7) |
 
 ---
 *(Hợp đồng giao diện API Contract này là tài liệu pháp lý kỹ thuật bất biến giữa Frontend và Backend, bảo đảm tính toàn vẹn 100% khi tích hợp hệ thống).*

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using API.Controllers.v1;
@@ -601,6 +602,10 @@ public class AdversarialMilestone5ChallengerTests
                 HttpContext = new DefaultHttpContext()
             }
         };
+        var studentId = Guid.NewGuid();
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim(ClaimTypes.NameIdentifier, studentId.ToString()) },
+            "TestAuth"));
 
         var requestDto = new CreateAppealRequestDto
         {
@@ -620,13 +625,15 @@ public class AdversarialMilestone5ChallengerTests
         unprocResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
     }
 
-    [Fact(DisplayName = "ADV-M5-19: AppealsController xử lý an toàn khi User có claims hoặc header X-User-Id")]
-    public async Task AppealsController_Must_Extract_User_From_Claims_Or_Header()
+    [Fact(DisplayName = "ADV-M5-19: AppealsController chỉ lấy định danh sinh viên từ JWT claims")]
+    public async Task AppealsController_Must_Extract_User_From_Claims()
     {
         var senderMock = new Mock<ISender>();
         var expectedUserId = Guid.NewGuid();
         var httpContext = new DefaultHttpContext();
-        httpContext.Request.Headers["X-User-Id"] = expectedUserId.ToString();
+        httpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            new[] { new Claim(ClaimTypes.NameIdentifier, expectedUserId.ToString()) },
+            "TestAuth"));
 
         var controller = new AppealsController(senderMock.Object)
         {

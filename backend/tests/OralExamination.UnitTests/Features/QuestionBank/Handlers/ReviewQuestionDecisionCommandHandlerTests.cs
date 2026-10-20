@@ -306,4 +306,32 @@ public class ReviewQuestionDecisionCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("lệch 10.00đ");
     }
+
+    [Fact(DisplayName = "8. R4 MF-03: Khi Trưởng Bộ Môn duyệt APPROVED kèm TargetUsageScope = 'both', câu hỏi được đồng bộ sang kho PracticeQuestions")]
+    public async Task Handle_Should_Sync_To_PracticeQuestions_When_Approved_With_TargetUsageScope_Both()
+    {
+        using var context = CreateDbContext();
+        var (reviewer, course) = await SeedReviewerAndCourseAsync(context, role: "department_head");
+        var handler = new ReviewQuestionDecisionCommandHandler(context);
+
+        var question = CreateExamQuestion(course.Id);
+        context.ExamQuestions.Add(question);
+        await context.SaveChangesAsync();
+
+        var command = new ReviewQuestionDecisionCommand(
+            QuestionId: question.Id,
+            ReviewerId: reviewer.Id,
+            Decision: ApprovalStatus.Approved,
+            ReviewNotes: "Đồng ý đưa vào cả 2 kho đề thi thật và luyện tập.",
+            TargetUsageScope: "both"
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var syncedPractice = await context.PracticeQuestions
+            .FirstOrDefaultAsync(p => p.CourseId == course.Id && p.Title == question.Title);
+        syncedPractice.Should().NotBeNull();
+        syncedPractice!.RubricId.Should().Be(question.RubricId);
+    }
 }

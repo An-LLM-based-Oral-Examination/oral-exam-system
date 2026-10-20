@@ -351,4 +351,61 @@ public class StudentDashboardAndAcknowledgeTests
         var response = await controller.GetDashboard(null, CancellationToken.None);
         response.Should().BeOfType<OkObjectResult>();
     }
+
+    [Fact(DisplayName = "R3 GetStudentDashboard: Áp dụng múi giờ GMT+7 cho QuotaDate và fallback MaxMockExamsPerDay = 3 khi cấu hình <= 0")]
+    public async Task GetStudentDashboard_Should_Use_VietnamDate_And_Fallback_Default_Quota_When_Zero()
+    {
+        using var context = CreateDbContext();
+        var semester = new Semester
+        {
+            Id = Guid.NewGuid(),
+            Code = "FA26",
+            Name = "Fall 2026",
+            StartDate = new DateOnly(2026, 9, 1),
+            EndDate = new DateOnly(2026, 12, 31),
+            IsActive = true
+        };
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWR302",
+            Name = "Software Requirements",
+            Credits = 3,
+            SemesterId = semester.Id,
+            MaxMockExamsPerDay = 0, // Chưa cấu hình -> fallback = 3
+            IsActive = true
+        };
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.vnquota@fpt.edu.vn",
+            FullName = "Nguyễn Đăng Hải",
+            StudentCode = "SE170555",
+            Role = "student",
+            IsActive = true
+        };
+
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
+        context.Semesters.Add(semester);
+        context.Courses.Add(course);
+        context.Users.Add(student);
+        context.MockExamQuotas.Add(new MockExamQuota
+        {
+            Id = Guid.NewGuid(),
+            StudentId = student.Id,
+            CourseId = course.Id,
+            QuotaDate = todayVn,
+            UsedCount = 2
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new GetStudentDashboardQueryHandler(context);
+        var result = await handler.Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CourseQuotas.Should().ContainSingle();
+        result.Value.CourseQuotas[0].MaxMockExamsPerDay.Should().Be(3);
+        result.Value.CourseQuotas[0].UsedMockExamsToday.Should().Be(2);
+        result.Value.CourseQuotas[0].RemainingMockExamsToday.Should().Be(1);
+    }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace OralExamination.Application.Features.OfficialExams.DTOs;
 
@@ -21,17 +22,15 @@ public sealed class AuditEvidenceItemDto
     public decimal? ConfidenceScore { get; set; }
     public bool IsSuspicious { get; set; }
     public string? SuspiciousReason { get; set; }
-    public string? CotTrace { get; set; }
+    public string? AiChainOfThought { get; set; }
+    [JsonIgnore]
+    public string? CotTrace
+    {
+        get => AiChainOfThought;
+        set => AiChainOfThought = value;
+    }
     public decimal? FinalScore { get; set; }
     public bool IsLocked { get; set; }
-}
-
-/// <summary>
-/// DTO yêu cầu công bố điểm toàn bộ ca thi từ Giảng viên.
-/// </summary>
-public sealed class PublishGradesRequestDto
-{
-    public Guid? LecturerId { get; set; }
 }
 
 /// <summary>

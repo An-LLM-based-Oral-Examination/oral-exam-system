@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace OralExamination.Application.Features.OfficialExams.DTOs;
 
 /// <summary>
-/// Kết quả xuất file báo cáo bảng điểm khảo thí (Excel .xlsx hoặc PDF có chữ ký số).
+/// Kết quả xuất file báo cáo bảng điểm khảo thí (Excel .xlsx hoặc PDF có mã niêm phong SHA-256).
 /// </summary>
 public sealed class ExportShiftFileResponseDto
 {

@@ -52,3 +52,20 @@ public sealed class ReviewAppealRequestDto
     public Guid? ReviewerId { get; set; }
 }
 
+/// <summary>
+/// Yêu cầu Trưởng bộ môn phân công một giảng viên đang hoạt động chấm lại đơn phúc khảo.
+/// </summary>
+public sealed class AssignAppealLecturerRequestDto
+{
+    public Guid LecturerId { get; set; }
+}
+
+/// <summary>
+/// Kết quả chấm lại do chính giảng viên được phân công gửi lên.
+/// </summary>
+public sealed class RegradeAppealRequestDto
+{
+    public decimal NewScore { get; set; }
+    public string ReviewNotes { get; set; } = string.Empty;
+}
+
