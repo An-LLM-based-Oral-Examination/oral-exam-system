@@ -571,11 +571,11 @@ backend/src/
 | **BE-4.5** | Công Bố Điểm Atomic 100%, `OneWayLockInterceptor` (`is_locked = true` $\to$ HTTP 403) | **🧑 Tốt** | ✅ **Đã hoàn thành 100%** |
 | **BE-4.6** | Phân hệ Phúc khảo nội bộ `AppealRequest` Trưởng BM giao giảng viên khác chấm lại & Acknowledge | **🧑 Tốt** | ✅ **Đã hoàn thành 100%** |
 | **BE-V04** | Dual Auth (Google OAuth PKCE + tài khoản trường cấp), cấp JWT 5 roles, đổi mật khẩu | **🧑 Tốt** | ✅ **Đã hoàn thành 100%** |
-| **BE-V05** | API Quản lý Người dùng User Management FE-09 (status, role; không mở tự đăng ký công khai) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có Controller/Handler) |
-| **BE-V06** | API Quản lý Học kỳ Semester CRUD FE-08 (tạo/sửa, không xóa) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có Controller/Handler) |
-| **BE-V07** | Hộp thư Notification in-app FE-11 (tự động thông báo lịch thi, điểm, duyệt đề, phúc khảo) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có Controller/Handler) |
-| **BE-V08** | API Quản trị Cấu hình Hệ thống Admin (`system_configs`) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có Controller/Handler) |
-| **BE-V09** | Quản trị Dead-Letter Queue (DLQ Replay 5m - Trưởng BM: ✅ Đã xong) & API Audit Logs (Admin: ⏳ Chưa có) | **🧑 Tốt** | 🟡 **Đã xong phần DLQ Replay; chờ API Audit Logs** |
-| **BE-V10** | API Giám thị Phòng thi & Điểm danh Ca thi Lab (`ProctorRoomMonitorPage.tsx`) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có `ProctorController`) |
-| **BE-V11** | API Dashboard Giảng viên FE-10 (thống kê đề thi, tỷ lệ duyệt) | **🧑 Tốt** | ⏳ Kế hoạch của Tốt (Chưa có `LecturerDashboard`) |
-| **BE-QA** | Bộ Test Suites xUnit & Architecture Tests NetArchTest (950/950 tests pass 100%, Exit Code 0) | **🧑 Tốt & Thành** | ✅ **Đã đạt 950/950 Unit & Arch Tests PASS (100%)** |
+| **BE-V05** | API Quản lý Người dùng User Management FE-09 (status, role; không mở tự đăng ký công khai) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`AdminController` + CQRS Handlers)** |
+| **BE-V06** | API Quản lý Học kỳ Semester CRUD FE-08 (tạo/sửa, không xóa) & Lớp học phần | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`SemestersController` + CQRS Handlers)** |
+| **BE-V07** | Hộp thư Notification in-app FE-11 (tự động thông báo lịch thi, điểm, duyệt đề, phúc khảo) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`NotificationsController` + CQRS Handlers)** |
+| **BE-V08** | API Quản trị Cấu hình Hệ thống Admin (`system_configs`) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`AdminController` + `UpdateSystemConfigCommand`)** |
+| **BE-V09** | Quản trị Dead-Letter Queue (DLQ Replay 5m - Trưởng BM) & API Audit Logs (Admin) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`DeadLetterQueueController` & `GetAuditLogsQuery`)** |
+| **BE-V10** | API Giám thị Phòng thi 40 ghế & Điểm danh / Đình chỉ Kiosk (`ProctorController`) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`ProctorController` + 3 CQRS Handlers)** |
+| **BE-V11** | API Dashboard Giảng viên & Trưởng BM FE-10 (`GET /api/v1/lecturer/dashboard`) | **🧑 Tốt** | ✅ **Đã hoàn thành 100% (`LecturerController` + `GetLecturerDashboardQuery`)** |
+| **BE-QA** | Bộ Test Suites xUnit & Architecture Tests NetArchTest (958/958 tests pass 100%, Exit Code 0) | **🧑 Tốt & Thành** | ✅ **Đã đạt 958/958 Unit & Arch Tests PASS (100%)** |

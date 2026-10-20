@@ -213,6 +213,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | 5.9 | Quản trị DLQ & Audit | `/api/v1/dlq/*`, `/api/v1/admin/*` | Department Head (DLQ), Admin (Audit) |
 | 5.10 | Phúc khảo nội bộ MF-04 | `/api/v1/appeals` | Student, Department Head |
 | 5.11 | Thông báo trong ứng dụng FE-11 | `/api/v1/notifications` | All Roles |
+| 5.12 | Giám thị Phòng Lab 40 ghế & Dashboard GV | `/api/v1/proctor/*`, `/api/v1/lecturer/dashboard` | Proctor, Lecturer, Department Head |
 
 ### 5.1. Quản lý Học thuật: Học kỳ, Môn học, Lớp học & Danh sách Sinh viên
 *(Phân hệ CSDL: `semesters`, `courses`, `classes`, `class_enrollments`)*

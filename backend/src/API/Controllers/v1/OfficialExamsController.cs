@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +9,7 @@ using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficialExamSession;
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.OverrideExamScore;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
@@ -81,6 +84,73 @@ public class OfficialExamsController : ControllerBase
                 title = "Not Found",
                 status = 404,
                 detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên hậu kiểm và ghi đè điểm bài thi thật Kiosk trên Evidence Panel (MF-04 / BE-4.4b).
+    /// Bắt buộc nhập lý do chỉnh sửa (override_reason >= 10 ký tự) và chỉ cho phép trước khi công bố điểm (is_locked == false).
+    /// </summary>
+    [HttpPut("tickets/{ticketId:guid}/override-score")]
+    [HttpPost("tickets/{ticketId:guid}/override-score")]
+    [HttpPut("/api/v1/audit/override")]
+    [HttpPost("/api/v1/audit/submissions/{ticketId:guid}/override-score")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> OverrideScore(
+        [FromRoute] Guid? ticketId,
+        [FromBody] OverrideExamScoreRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var resolvedTicketId = ticketId ?? request.TicketId ?? Guid.Empty;
+        if (resolvedTicketId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Dữ liệu đầu vào không hợp lệ.",
+                Detail = "Mã vé thi (TicketId) không được để trống.",
+                Type = "https://oralexam.fpt.edu.vn/errors/invalid-ticket-id"
+            });
+        }
+
+        var command = new OverrideExamScoreCommand(
+            actorId,
+            resolvedTicketId,
+            request.AuditedScore,
+            request.OverrideReason ?? string.Empty,
+            request.CriterionDetails);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            var statusCode = result.Error switch
+            {
+                var err when err.StartsWith("LOCKED:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
+                var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
+                var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+                _ => StatusCodes.Status400BadRequest
+            };
+
+            return StatusCode(statusCode, new ProblemDetails
+            {
+                Status = statusCode,
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Thao tác bị từ chối.",
+                    StatusCodes.Status404NotFound => "Không tìm thấy vé thi.",
+                    _ => "Dữ liệu hậu kiểm không hợp lệ."
+                },
+                Detail = result.Error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/override-score-{statusCode}"
             });
         }
 
@@ -381,4 +451,12 @@ public class OfficialExamsController : ControllerBase
             Type = "https://tools.ietf.org/html/rfc7231"
         });
     }
+}
+
+public sealed record OverrideExamScoreRequest
+{
+    public Guid? TicketId { get; init; }
+    public decimal AuditedScore { get; init; }
+    public string OverrideReason { get; init; } = string.Empty;
+    public IReadOnlyList<OverrideCriterionScoreDto>? CriterionDetails { get; init; }
 }
