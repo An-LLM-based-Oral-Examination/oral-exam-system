@@ -130,6 +130,21 @@ function nullableString(record: JsonRecord, key: string, detail: string): string
   return value
 }
 
+function nullableStringFromKeys(
+  record: JsonRecord,
+  keys: readonly string[],
+  detail: string,
+): string | null {
+  for (const key of keys) {
+    const value = field(record, key)
+    if (value === null || value === undefined) continue
+    if (typeof value !== 'string') return invalidApiResponse(detail)
+    return value
+  }
+
+  return null
+}
+
 function nullableGuid(record: JsonRecord, key: string, detail: string): string | null {
   const value = nullableString(record, key, detail)
   if (value !== null && !UUID_PATTERN.test(value)) return invalidApiResponse(detail)
@@ -190,7 +205,11 @@ function normalizeQuestion(payload: unknown): PracticeQuestion {
     questionId: requireGuid(candidate, 'questionId', 'Câu hỏi luyện tập thiếu questionId hợp lệ.'),
     content: requireNonEmptyString(candidate, 'content', 'Câu hỏi luyện tập thiếu nội dung.'),
     imageUrl: nullableString(candidate, 'imageUrl', 'URL hình ảnh câu hỏi không hợp lệ.'),
-    imageAlt: nullableString(candidate, 'imageAlt', 'Mô tả hình ảnh câu hỏi không hợp lệ.'),
+    imageAlt: nullableStringFromKeys(
+      candidate,
+      ['imageAlt', 'imageDescription'],
+      'Mô tả hình ảnh câu hỏi không hợp lệ.',
+    ),
     rubricCriteria: stringArray(
       candidate,
       'rubricCriteria',
@@ -222,7 +241,11 @@ function normalizeNextQuestion(payload: unknown): NextPracticeQuestion {
     id: requireGuid(candidate, 'id', 'Câu hỏi tiếp theo thiếu id hợp lệ.'),
     content: requireNonEmptyString(candidate, 'content', 'Câu hỏi tiếp theo thiếu nội dung.'),
     imageUrl: nullableString(candidate, 'imageUrl', 'URL hình ảnh câu hỏi tiếp theo không hợp lệ.'),
-    imageAlt: nullableString(candidate, 'imageAlt', 'Mô tả hình ảnh câu hỏi tiếp theo không hợp lệ.'),
+    imageAlt: nullableStringFromKeys(
+      candidate,
+      ['imageAlt', 'imageDescription'],
+      'Mô tả hình ảnh câu hỏi tiếp theo không hợp lệ.',
+    ),
     difficulty: difficulty as PracticeDifficulty,
     questionOrder,
     rubricCriteria: stringArray(

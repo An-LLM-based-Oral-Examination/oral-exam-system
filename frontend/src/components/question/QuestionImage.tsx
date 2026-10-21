@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface QuestionImageProps {
   imageUrl?: string | null
@@ -9,6 +9,10 @@ interface QuestionImageProps {
 export function QuestionImage({ imageUrl, imageAlt, className = '' }: QuestionImageProps) {
   const [hasError, setHasError] = useState(false)
   const normalizedImageUrl = imageUrl?.trim()
+
+  useEffect(() => {
+    setHasError(false)
+  }, [normalizedImageUrl])
 
   if (!normalizedImageUrl || hasError) return null
 

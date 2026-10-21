@@ -12,10 +12,6 @@ import type {
   SubmitMockExamAnswerRequest,
   SubmitMockExamAnswerResponse,
 } from '@/types/mockExam.types'
-import {
-  TEMPORARY_QUESTION_IMAGE_ALT,
-  TEMPORARY_QUESTION_IMAGE_URL,
-} from '@/components/question/temporaryQuestionImage'
 
 type JsonRecord = Record<string, unknown>
 
@@ -98,6 +94,16 @@ function readOptionalString(record: JsonRecord, key: string): string | null {
   return typeof value === 'string' ? value : null
 }
 
+function readOptionalStringFromKeys(record: JsonRecord, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = field(record, key)
+    if (value === null || value === undefined) continue
+    return typeof value === 'string' ? value : null
+  }
+
+  return null
+}
+
 function requireDateString(record: JsonRecord, key: string, detail: string): string {
   const value = requireString(record, key, detail)
   if (Number.isNaN(Date.parse(value))) return invalidApiResponse(detail)
@@ -134,7 +140,7 @@ function normalizeQuestion(value: unknown): MockExamQuestion {
     title: requireString(record, 'title', 'Câu hỏi thi thử thiếu tiêu đề.'),
     content: requireString(record, 'content', 'Câu hỏi thi thử thiếu nội dung.'),
     imageUrl: readOptionalString(record, 'imageUrl'),
-    imageAlt: readOptionalString(record, 'imageAlt'),
+    imageAlt: readOptionalStringFromKeys(record, ['imageAlt', 'imageDescription']),
     bloomLevel: requireString(record, 'bloomLevel', 'Câu hỏi thi thử thiếu mức Bloom.'),
     difficulty: requireString(record, 'difficulty', 'Câu hỏi thi thử thiếu độ khó.'),
     rubricCriteria: readArray(
@@ -176,15 +182,7 @@ function normalizeStart(value: unknown): StartMockExamResponse {
     usedQuota: requireInteger(record, 'usedQuota', 'Ca thi thử thiếu số lượt đã dùng.'),
     remainingQuota: requireInteger(record, 'remainingQuota', 'Ca thi thử thiếu số lượt còn lại.'),
     maxDailyQuota: requireInteger(record, 'maxDailyQuota', 'Ca thi thử thiếu hạn ngạch tối đa.'),
-    questions: questions.map((question, index) =>
-      index === 0
-        ? {
-            ...question,
-            imageUrl: question.imageUrl?.trim() || TEMPORARY_QUESTION_IMAGE_URL,
-            imageAlt: question.imageAlt?.trim() || TEMPORARY_QUESTION_IMAGE_ALT,
-          }
-        : question,
-    ),
+    questions,
   }
 }
 
@@ -219,7 +217,7 @@ function normalizeQuestionScore(value: unknown): MockExamQuestionScore {
     title: requireString(record, 'title', 'Điểm câu hỏi thiếu tiêu đề.'),
     content: requireString(record, 'content', 'Điểm câu hỏi thiếu nội dung đề.'),
     imageUrl: readOptionalString(record, 'imageUrl'),
-    imageAlt: readOptionalString(record, 'imageAlt'),
+    imageAlt: readOptionalStringFromKeys(record, ['imageAlt', 'imageDescription']),
     bloomLevel: requireString(record, 'bloomLevel', 'Điểm câu hỏi thiếu mức Bloom.'),
     difficulty: requireString(record, 'difficulty', 'Điểm câu hỏi thiếu độ khó.'),
     transcript: readOptionalString(record, 'transcript'),
@@ -257,15 +255,7 @@ function normalizeScorecard(value: unknown): MockExamScorecard {
     isOverdue: requireBoolean(record, 'isOverdue', 'Bảng điểm thiếu cờ nộp quá hạn.'),
     startedAt: requireDateString(record, 'startedAt', 'Bảng điểm thiếu thời điểm bắt đầu.'),
     submittedAt: requireDateString(record, 'submittedAt', 'Bảng điểm thiếu thời điểm nộp.'),
-    questions: questions.map((question, index) =>
-      index === 0
-        ? {
-            ...question,
-            imageUrl: question.imageUrl?.trim() || TEMPORARY_QUESTION_IMAGE_URL,
-            imageAlt: question.imageAlt?.trim() || TEMPORARY_QUESTION_IMAGE_ALT,
-          }
-        : question,
-    ),
+    questions,
   }
 }
 

@@ -41,10 +41,6 @@ import {
   saveMockExamSession,
   secondsUntilExpiry,
 } from '@/utils/mockExamSessionStorage'
-import {
-  TEMPORARY_QUESTION_IMAGE_ALT,
-  TEMPORARY_QUESTION_IMAGE_URL,
-} from '@/components/question/temporaryQuestionImage'
 
 const MockExamHeroThreeScene = lazy(() =>
   import('./MockExamHeroThreeScene').then((module) => ({
@@ -634,16 +630,7 @@ export function MockExamPage() {
     try {
       const session = await mockExamService.startSession(modalCourse.id, hasFollowUp)
       setConfirmReplace(false)
-      const questionsWithTemporaryImage = session.questions.map((question, index) =>
-        index === 0
-          ? {
-              ...question,
-              imageUrl: question.imageUrl?.trim() || TEMPORARY_QUESTION_IMAGE_URL,
-              imageAlt: question.imageAlt?.trim() || TEMPORARY_QUESTION_IMAGE_ALT,
-            }
-          : question,
-      )
-      saveMockExamSession({ ...session, questions: questionsWithTemporaryImage, answers: [] })
+      saveMockExamSession({ ...session, questions: session.questions, answers: [] })
       setActiveSessionVersion((current) => current + 1)
       navigate(`/mock-exam/session?session=${encodeURIComponent(session.sessionId)}`)
     } catch (error) {
