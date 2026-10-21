@@ -58,6 +58,8 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - `403 Forbidden`: Bị từ chối quyền truy cập (ví dụ: Sinh viên cố truy cập route quản trị, người dùng không có quyền gọi API sinh câu hỏi FLM [yêu cầu `lecturer` hoặc `department_head`], hoặc gửi request sửa bài thi khi đã bị Khóa điểm một chiều `is_locked = true`).
 - `404 Not Found`: Không tìm thấy tài nguyên theo ID.
 - `410 Gone`: Phiên luyện tập đã kết thúc tự động do quá thời gian không tương tác (`SessionInactivityTimeoutMinutes = 5` phút). Toàn bộ dữ liệu điểm số và câu trả lời đã làm trước đó được bảo toàn nguyên vẹn, sinh viên không thể tương tác thêm trong phiên này.
+- `413 Payload Too Large`: Dung lượng tệp ảnh sơ đồ đính kèm câu hỏi thủ công (`POST /api/v1/questions/upload-image` hoặc `POST /api/v1/storage/upload-question-image`) vượt quá giới hạn tối đa **5MB** (`5,242,880 bytes`).
+- `415 Unsupported Media Type`: Tệp ảnh tải lên không khớp chữ ký nhị phân (Magic Bytes) hợp lệ của các định dạng `PNG`, `JPG/JPEG` hoặc `WEBP`.
 - `422 Unprocessable Entity`: Dữ liệu đúng cú pháp nhưng vi phạm quy tắc nghiệp vụ (ví dụ: Tổng điểm Rubric != 10.0, Model Answer < 50 ký tự, hoặc cập nhật điểm thẩm định mà để trống lý do giải trình).
 - `429 Too Many Requests`: Vi phạm Quota Guard thi thử vượt quá hạn ngạch ngày theo môn học (`max_mock_exams_per_day` do Admin cấu hình, kiểm soát bởi PostgreSQL).
 - `500 Internal Server Error`: Lỗi máy chủ chưa được xử lý.
@@ -432,6 +434,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | `source` | `string` | Bắt buộc (Non-null) | Cố định `'manual'` | Nguồn gốc tạo đề |
 | `hasFollowUp` | `bool` | Bắt buộc (Non-null) | `true` \| `false` | Cờ bật hỏi xoáy Follow-up |
 | `followUpPrompt`| `string` | Nullable | Tuỳ chọn | Gợi ý câu hỏi phụ phản biện |
+| `imageUrl` | `string` | Nullable | Tối đa 1000 ký tự; chỉ hợp lệ khi `source == "manual"` | Đường dẫn ảnh/sơ đồ kỹ thuật minh họa câu hỏi (UML, ERD, Sequence, Kiến trúc) đã tải lên qua `POST /api/v1/questions/upload-image` |
+| `imageDescription` | `string` | Nullable | Tuỳ chọn | Mô tả chi tiết nội dung sơ đồ/hình ảnh để cung cấp ngữ cảnh chấm thi đa phương thức (Multimodal AI Grading) |
 
 - **Request Body:**
 ```json
@@ -510,6 +514,35 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
+
+---
+
+#### 3. Tải lên Hình ảnh / Sơ đồ Minh họa cho Câu hỏi Thủ công (Question Image Upload — Multimodal Support)
+- **Endpoint chính:** `POST /api/v1/questions/upload-image`
+- **Endpoint bí danh (Alias tương thích):** `POST /api/v1/storage/upload-question-image`
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Content-Type:** `multipart/form-data`
+- **Form Data Fields:**
+  - `file` (`IFormFile`, bắt buộc): Tệp hình ảnh sơ đồ kỹ thuật (`PNG`, `JPG/JPEG`, `WEBP`), dung lượng tối đa **5MB** (`5,242,880 bytes`).
+  - `description` (hoặc `imageDescription`, `string`, tùy chọn): Mô tả nội dung sơ đồ/hình ảnh để hỗ trợ AI chấm điểm đa phương thức (Multimodal AI Grading).
+- **Ràng buộc bảo mật & Lưu trữ:**
+  1. Kiểm tra dung lượng `<= 5MB` (vượt ngưỡng trả `HTTP 413 Payload Too Large`).
+  2. Kiểm tra chữ ký nhị phân (Magic Bytes: `PNG` `89 50 4E 47 0D 0A 1A 0A`, `JPG/JPEG` `FF D8 FF`, `WEBP` `RIFF....WEBP`). Sai định dạng trả `HTTP 415 Unsupported Media Type`.
+  3. Lưu trữ kép: Lưu bản tĩnh tại `wwwroot/uploads/questions/{yyyyMM}/{guid}.{ext}` (phục vụ qua `/uploads/questions/{yyyyMM}/{guid}.{ext}`) đồng thời đồng bộ lên Cloudflare R2 (`objectKey = questions/{yyyyMM}/{guid}.{ext}`).
+  4. **Quy tắc nghiệp vụ:** Chỉ câu hỏi biên soạn thủ công (`source == "manual"`) mới được đính kèm `imageUrl`. Khi Trưởng BM duyệt đề với `targetUsageScope: "both"`, `imageUrl` và `imageDescription` được tự động đồng bộ sang cả 2 kho `exam_questions` và `practice_questions`.
+- **Response 200 OK:**
+```json
+{
+  "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+  "objectKey": "questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+  "r2PublicUrl": "https://r2.oralexam.edu.vn/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+  "contentType": "image/png",
+  "sizeBytes": 245120,
+  "sha256Hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture thể hiện hướng mũi tên phụ thuộc hướng vào tầng Domain trung tâm.",
+  "uploadedAt": "2026-10-21T07:00:00Z"
+}
+```
 
 ---
 
@@ -1326,6 +1359,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
     {
       "questionId": "11111111-2222-3333-4444-555555555555",
       "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP) trong SOLID và cho ví dụ áp dụng trong .NET 8.",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
       "rubricCriteria": [
         "Định nghĩa chính xác DIP (High-level không phụ thuộc Low-level)",
         "Mô tả vai trò của Interface/Abstraction",
@@ -1376,6 +1411,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
     {
       "questionId": "11111111-2222-3333-4444-555555555555",
       "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP)...",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
       "rubricCriteria": [
         "Định nghĩa chính xác DIP",
         "Mô tả vai trò Interface/Abstraction",
@@ -1449,6 +1486,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
     "content": "Giải thích cách hoạt động của Pattern Matching trong C# 12 và so sánh với switch-case truyền thống.",
     "difficulty": "medium",
     "questionOrder": 2,
+    "imageUrl": null,
+    "imageDescription": null,
     "rubricCriteria": [
       "Khái niệm Pattern Matching và các dạng pattern",
       "Tính an toàn kiểu dữ liệu so với switch-case",
@@ -1702,6 +1741,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "id": "99999999-0000-0000-0000-000000000001",
       "orderIndex": 1,
       "title": "Phân tích nguyên lý DIP trong Clean Architecture",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
       "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc của 4 phân tầng trong Clean Architecture.",
       "bloomLevel": "Analyze",
       "difficulty": "medium",
@@ -1768,6 +1809,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "questionId": "99999999-0000-0000-0000-000000000001",
       "orderIndex": 1,
       "title": "Phân tích nguyên lý DIP trong Clean Architecture",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
       "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc của 4 phân tầng trong Clean Architecture.",
       "bloomLevel": "Analyze",
       "difficulty": "medium",
@@ -2462,7 +2505,8 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
 #### 4. Bảng Ánh Xạ Nhanh Các Endpoint Thực Thi Trên Backend (Cập nhật đồng bộ cho Frontend)
 | Chức năng | Phương thức & Đường dẫn chính xác trên Backend | Ghi chú tích hợp FE |
 | :--- | :--- | :--- |
-| **Tạo câu hỏi nháp 2 kho (MF-03)** | `POST /api/v1/questions/draft` | Hỗ trợ `usageScope: "practice" \| "exam" \| "both"` (khi chọn `"both"` tự động lưu vào cả 2 kho `ExamQuestions` và `PracticeQuestions`) |
+| **Tải lên ảnh/sơ đồ câu hỏi (MF-03)** | `POST /api/v1/questions/upload-image`<br>`POST /api/v1/storage/upload-question-image` | `multipart/form-data` (`file`, `description`); kiểm tra Magic Bytes (`PNG`, `JPG/JPEG`, `WEBP` $\le 5\text{MB}$), trả `413` / `415` nếu vi phạm |
+| **Tạo câu hỏi nháp 2 kho (MF-03)** | `POST /api/v1/questions/draft` | Hỗ trợ `usageScope: "practice" \| "exam" \| "both"`, đính kèm `imageUrl` & `imageDescription` cho câu hỏi thủ công (`source == "manual"`) |
 | **Gửi duyệt câu hỏi (MF-03)** | `POST /api/v1/questions/batch-submit-review` | Chuyển trạng thái sang `SUBMITTED_FOR_REVIEW` |
 | **Trưởng BM duyệt đề (MF-03)** | `POST /api/v1/questions/{id}/review-decision` | Hỗ trợ `targetUsageScope: "both"`, trả `403 Forbidden` nếu người gọi không phải `department_head` / `admin` |
 | **Tạo kỳ thi & mở ca thi (MF-04)** | `POST /api/v1/official-exams/sessions`<br>`POST /api/v1/official-exams/shifts` | Hỗ trợ đồng thời cả `/api/v1/official-exams/*` và `/api/v1/officialexams/*` |

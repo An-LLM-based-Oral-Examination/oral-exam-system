@@ -30,7 +30,9 @@ public record MockExamQuestionDto(
     string Content,
     string BloomLevel,
     string Difficulty,
-    List<MockExamRubricCriterionDto> RubricCriteria
+    List<MockExamRubricCriterionDto> RubricCriteria,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 /// <summary>

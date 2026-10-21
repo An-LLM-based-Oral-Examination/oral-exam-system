@@ -29,7 +29,9 @@ public record MockExamQuestionScoreDto(
     decimal Score,
     string? Feedback,
     decimal? ConfidenceScore,
-    List<MockExamCriterionScoreDto> CriteriaScores
+    List<MockExamCriterionScoreDto> CriteriaScores,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 /// <summary>

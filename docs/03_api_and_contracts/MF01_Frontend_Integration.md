@@ -29,9 +29,9 @@
    - [6.1. Buffer Screen (Màn hình đệm hiệu đính)](#61-buffer-screen-màn-hình-đệm-hiệu-đính)
    - [6.2. Follow-up Engine (Câu hỏi phụ chuyên sâu)](#62-follow-up-engine-câu-hỏi-phụ-chuyên-sâu)
    - [6.3. Thuật toán Anti-3-Consecutive Randomizer](#63-thuật-toán-anti-3-consecutive-randomizer)
-   - [6.4. Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)](#64-cơ-chế-timeout-10-phút-không-tương-tác-inactivity-timeout)
+   - [6.4. Cơ chế Timeout 5 phút không tương tác (Inactivity Timeout)](#64-cơ-chế-timeout-5-phút-không-tương-tác-inactivity-timeout)
 7. [Checklist Tác Chiến Cho Frontend Dev](#7-checklist-tác-chiến-cho-frontend-dev)
-8. [Công Cụ Test Độc Lập Cho Frontend (`docs/MF01_Mini_Tester.html`)](#8-công-cụ-test-độc-lập-cho-frontend-docsmf01_mini_testerhtml)
+8. [Công Cụ Test Độc Lập Cho Frontend (`docs/06_testing_tools/MF01_Mini_Tester.html`)](#8-công-cụ-test-độc-lập-cho-frontend-docs06_testing_toolsmf01_mini_testerhtml)
 
 ---
 
@@ -96,8 +96,8 @@ sequenceDiagram
    - Nộp toàn bộ 1 lần qua endpoint `batch-submit` hoặc nộp từng câu.
    - **TUYỆT ĐỐI KHÔNG có câu hỏi Follow-up** (`NeedsFollowUp` luôn bằng `false`).
    - Sau khi nộp, hệ thống xử lý chấm toàn bộ và sinh viên nhận bảng điểm Scorecard tổng kết.
-3. **Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)**:
-   - Áp dụng cho cả 2 chế độ: Nếu sinh viên không tương tác (không nộp câu trả lời, không lấy câu tiếp theo) quá `SessionInactivityTimeoutMinutes` (mặc định **10 phút**), phiên tự động kết thúc (`status = "completed"`).
+3. **Cơ chế Timeout 5 phút không tương tác (Inactivity Timeout)**:
+   - Áp dụng cho cả 2 chế độ: Nếu sinh viên không tương tác (không nộp câu trả lời, không lấy câu tiếp theo) quá `SessionInactivityTimeoutMinutes` (mặc định **5 phút**), phiên tự động kết thúc (`status = "completed"`).
    - Mọi thao tác tiếp theo sẽ nhận mã lỗi **HTTP 410 Gone** (Session Timed Out). Toàn bộ câu trả lời và điểm số đã hoàn thành trước đó được bảo toàn 100%.
 
 ---
@@ -158,6 +158,8 @@ Khởi tạo một phiên luyện tập mới cho sinh viên theo môn học đ�
       {
         "questionId": "11111111-2222-3333-4444-555555555555",
         "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP) trong SOLID và cho ví dụ áp dụng trong .NET 8.",
+        "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+        "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
         "rubricCriteria": [
           "Định nghĩa chính xác DIP (High-level không phụ thuộc Low-level)",
           "Mô tả vai trò của Interface/Abstraction",
@@ -203,6 +205,8 @@ Lấy toàn bộ dữ liệu phiên luyện tập, danh sách câu hỏi, câu t
       {
         "questionId": "11111111-2222-3333-4444-555555555555",
         "content": "Giải thích nguyên lý Dependency Inversion Principle (DIP)...",
+        "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+        "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
         "rubricCriteria": [
           "Định nghĩa chính xác DIP",
           "Mô tả vai trò Interface",
@@ -291,13 +295,13 @@ Nộp câu trả lời cho một câu hỏi cụ thể trong chế độ `[Per-Q
   }
   ```
   > ⚡ **Cơ chế Persist First:** Endpoint trả về ngay `HTTP 202 Accepted` trong $< 100$ms. Kết quả chấm điểm AI sẽ được gửi về qua SignalR Event `ReceiveGradingResult`.
-* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 5 phút không tương tác):**
   ```json
   {
     "type": "https://tools.ietf.org/html/rfc7807",
     "title": "Session Timed Out",
     "status": 410,
-    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
   }
   ```
 
@@ -329,13 +333,13 @@ Nộp toàn bộ câu trả lời của phiên luyện tập trong chế độ `
   }
   ```
 * **Response Success (HTTP 202 Accepted):** Không có response body (Empty body với status `202 Accepted`).
-* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 5 phút không tương tác):**
   ```json
   {
     "type": "https://tools.ietf.org/html/rfc7807",
     "title": "Session Timed Out",
     "status": 410,
-    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
   }
   ```
 ---
@@ -385,7 +389,7 @@ Lấy toàn bộ lịch sử các phiên luyện tập của sinh viên để hi
 ---
 
 ### 3.8. Lấy câu hỏi tiếp theo theo yêu cầu [Per-Question On-Demand] (`POST /api/v1/practice/sessions/{sessionId}/next-question`)
-Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` theo nhu cầu (On-Demand), tuân thủ thuật toán chống lặp 3 câu liên tiếp cùng mức và lazy check timeout 10 phút.
+Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` theo nhu cầu (On-Demand), tuân thủ thuật toán chống lặp 3 câu liên tiếp cùng mức và lazy check timeout 5 phút.
 
 * **Method:** `POST`
 * **URL:** `/api/v1/practice/sessions/{sessionId}/next-question` (hoặc `/api/v1/practice/sessions/{sessionId}/next-question?studentId={GUID}`)
@@ -402,6 +406,8 @@ Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` t
       "content": "Giải thích cách hoạt động của Pattern Matching trong C# 12 và so sánh với switch-case truyền thống.",
       "difficulty": "medium",
       "questionOrder": 2,
+      "imageUrl": null,
+      "imageDescription": null,
       "rubricCriteria": [
         "Khái niệm Pattern Matching và các dạng pattern (Type, Relational, Positional)",
         "Tính rõ ràng và an toàn kiểu dữ liệu so với switch-case",
@@ -418,13 +424,13 @@ Cấp câu hỏi tiếp theo cho sinh viên trong chế độ `[Per-Question]` t
     "question": null
   }
   ```
-* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 10 phút không tương tác):**
+* **Response Error (HTTP 410 Gone — Khi phiên bị timeout quá 5 phút không tương tác):**
   ```json
   {
     "type": "https://tools.ietf.org/html/rfc7807",
     "title": "Session Timed Out",
     "status": 410,
-    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút."
+    "detail": "Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút."
   }
   ```
 * **Response Error (HTTP 404 Not Found — Không tìm thấy phiên hoặc sai quyền):**
@@ -449,7 +455,7 @@ Backend chuẩn hóa 100% các mã phản hồi lỗi theo chuẩn **RFC 7807 Pr
 | **401 Unauthorized** | Token hết hạn hoặc không có Header Authorization | Điều hướng người dùng về trang Đăng nhập (`/login`). |
 | **403 Forbidden** | Cố tình nộp bài của sinh viên khác hoặc can thiệp dữ liệu bị khóa | Hiển thị thông báo "Bạn không có quyền thực hiện hành động này". |
 | **404 Not Found** | Không tìm thấy `sessionId`, `courseId` hoặc câu hỏi tương ứng | Hiển thị Empty State hoặc quay lại màn hình chọn môn học. |
-| **410 Gone** | Phiên luyện tập đã bị timeout do không có tương tác quá 10 phút (`SessionInactivityTimeoutMinutes = 10`) | Hiển thị modal: *"Phiên luyện tập đã kết thúc do không tương tác trong hơn 10 phút. Kết quả các câu đã hoàn thành đã được lưu an toàn."* $\to$ Chuyển về màn hình Scorecard/Lịch sử. |
+| **410 Gone** | Phiên luyện tập đã bị timeout do không có tương tác quá 5 phút (`SessionInactivityTimeoutMinutes = 5`) | Hiển thị modal: *"Phiên luyện tập đã kết thúc do không tương tác trong hơn 5 phút. Kết quả các câu đã hoàn thành đã được lưu an toàn."* $\to$ Chuyển về màn hình Scorecard/Lịch sử. |
 | **422 Unprocessable Entity** | Lỗi Validation nghiệp vụ (vd: số lượng câu hỏi ngoài khoảng 3..10 trong Full-Session) | Hiển thị lỗi đỏ trực tiếp dưới ô nhập liệu form. |
 | **500 Internal Server Error** | Lỗi nội bộ hệ thống | Báo lỗi thân thiện, khuyến khích thử lại sau ít phút. |
 
@@ -688,9 +694,9 @@ export const usePracticeHub = ({
 
 ---
 
-### 6.4. Cơ chế Timeout 10 phút không tương tác (Inactivity Timeout)
+### 6.4. Cơ chế Timeout 5 phút không tương tác (Inactivity Timeout)
 - **Mục đích:** Giải phóng tài nguyên hệ thống, bảo vệ an toàn dữ liệu và ngăn chặn tình trạng bỏ quên phiên luyện tập.
-- **Cấu hình động:** Tham số `SessionInactivityTimeoutMinutes = 10` được lưu trong bảng `system_configs`.
+- **Cấu hình động:** Tham số `SessionInactivityTimeoutMinutes = 5` được lưu trong bảng `system_configs`.
 - **Nguyên lý hoạt động (Lazy Validation & Auto-Completion):**
   1. Thực thể `PracticeSession` duy trì trường `last_activity_at` (TIMESTAMPTZ), tự động cập nhật thời điểm hiện tại (`DateTime.UtcNow`) mỗi khi sinh viên:
      - Khởi tạo phiên (`StartPracticeSession`).
@@ -698,8 +704,8 @@ export const usePracticeHub = ({
      - Nộp câu trả lời (`SubmitAnswer` hoặc `SubmitBatch`).
   2. Khi có request gọi lên (`NextQuestion`, `SubmitAnswer`, `SubmitBatch`), backend kiểm tra khoảng thời gian trôi qua:
      $$\Delta t = \text{DateTime.UtcNow} - \text{session.LastActivityAt}$$
-  3. Nếu $\Delta t > 10\text{ phút}$:
-     - Hệ thống tự động chuyển trạng thái phiên thành **`status = "completed"`**, ghi nhận `completed_at = last_activity_at + 10m` và lưu vào CSDL.
+  3. Nếu $\Delta t > 5\text{ phút}$:
+     - Hệ thống tự động chuyển trạng thái phiên thành **`status = "completed"`**, ghi nhận `completed_at = last_activity_at + 5m` và lưu vào CSDL.
      - Trả về mã lỗi **HTTP 410 Gone** RFC 7807 (`Title = "Session Timed Out"`).
   4. **Bảo toàn dữ liệu 100%:** Toàn bộ các câu trả lời, điểm số AI chấm và nhận xét đã thực hiện trước thời điểm timeout đều được lưu trữ vĩnh viễn, sinh viên vẫn xem lại được đầy đủ trong lịch sử luyện tập (`/api/v1/practice/student/history`).
 
@@ -713,15 +719,15 @@ export const usePracticeHub = ({
 - [ ] **Màn hình đệm (Buffer Screen):** Xây dựng bộ đếm ngược thời gian đệm `TranscriptBufferSeconds` (mặc định 60s), cho phép hiệu đính `transcript` và nộp tự động khi hết giờ.
 - [ ] **Hiển thị Feedback & Scorecard:** Render Scorecard Rubric chi tiết theo từng tiêu chí, thanh tiến độ điểm tổng và hiển thị `followUpPrompt` khi `needsFollowUp === true`.
 - [ ] **Tích hợp NextQuestion On-Demand:** Gắn sự kiện nút "Câu Tiếp Theo" gọi `POST /api/v1/practice/sessions/{sessionId}/next-question`, cập nhật nội dung câu hỏi mới hoặc hiển thị modal hoàn thành khi `hasMoreQuestions === false`.
-- [ ] **Bộ đếm Timeout 10 phút:** Thiết lập đếm ngược không tương tác 10 phút ở góc màn hình, tự động reset timer khi sinh viên tương tác mic / nộp bài / lấy câu tiếp theo, và bắt mã lỗi HTTP 410 Gone để hiển thị thông báo phiên hết hạn an toàn.
+- [ ] **Bộ đếm Timeout 5 phút:** Thiết lập đếm ngược không tương tác 5 phút ở góc màn hình, tự động reset timer khi sinh viên tương tác mic / nộp bài / lấy câu tiếp theo, và bắt mã lỗi HTTP 410 Gone để hiển thị thông báo phiên hết hạn an toàn.
 - [ ] **Xử lý ngắt kết nối:** Kiểm tra cờ `isConnected` của SignalR, hiển thị thông báo "Đang kết nối lại..." khi mạng chập chờn (`withAutomaticReconnect`).
 
 ---
 
-## 8. CÔNG CỤ TEST ĐỘC LẬP CHO FRONTEND (`docs/MF01_Mini_Tester.html`)
+## 8. CÔNG CỤ TEST ĐỘC LẬP CHO FRONTEND (`docs/06_testing_tools/MF01_Mini_Tester.html`)
 
 Để giúp đội ngũ Frontend (Hoàng & Hải) kiểm chứng nhanh các API và sự kiện SignalR mà không cần phải tự dựng mock server hay chờ hoàn thiện toàn bộ giao diện React:
-- **Đường dẫn tệp:** `05_Source_Code/docs/MF01_Mini_Tester.html`
+- **Đường dẫn tệp:** `05_Source_Code/docs/06_testing_tools/MF01_Mini_Tester.html`
 - **Cách sử dụng:**
   1. Đảm bảo Backend API đang chạy tại `http://localhost:5000` (`dotnet run --project src/API`).
   2. Mở tệp `MF01_Mini_Tester.html` trực tiếp bằng trình duyệt Google Chrome hoặc Microsoft Edge (hoặc dùng tiện ích *Live Server* trong VS Code).

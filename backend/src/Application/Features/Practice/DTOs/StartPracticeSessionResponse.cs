@@ -12,5 +12,7 @@ public record StartPracticeSessionResponse(
 public record PracticeQuestionDto(
     Guid QuestionId,
     string Content,
-    List<string> RubricCriteria
+    List<string> RubricCriteria,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );

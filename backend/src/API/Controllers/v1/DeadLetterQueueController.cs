@@ -75,8 +75,10 @@ public class DeadLetterQueueController : ControllerBase
 
         return Ok(new
         {
-            message = "Tác vụ DLQ đã được đưa vào hàng đợi chấm điểm thành công.",
-            id
+            id,
+            dlqId = id,
+            status = "requeued",
+            message = "Tác vụ DLQ đã được đưa vào hàng đợi chấm điểm thành công."
         });
     }
 }

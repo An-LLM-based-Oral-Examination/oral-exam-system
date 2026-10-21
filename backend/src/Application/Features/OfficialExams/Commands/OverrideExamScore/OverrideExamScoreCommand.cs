@@ -9,7 +9,8 @@ public sealed record OverrideCriterionScoreDto(
     Guid CriterionId,
     decimal AuditedScore,
     string? LecturerComment = null,
-    decimal? AiScore = null);
+    decimal? AiScore = null,
+    string? Comment = null);
 
 public sealed record OverrideExamScoreResponseDto
 {

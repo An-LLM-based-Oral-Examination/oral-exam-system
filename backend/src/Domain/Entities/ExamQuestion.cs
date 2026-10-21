@@ -19,6 +19,8 @@ public partial class ExamQuestion
     public string ApprovalStatus { get; set; } = "DRAFT";
     public Guid? SubmittedBy { get; set; }
     public string? ReviewNotes { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ImageDescription { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

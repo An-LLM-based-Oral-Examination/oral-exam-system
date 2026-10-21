@@ -70,15 +70,19 @@ public class GradingQueueWorker : BackgroundService
                 {
                     using var errorScope = _serviceProvider.CreateScope();
                     var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                    var now = DateTime.UtcNow;
 
                     var dlqEntry = new DeadLetterQueue
                     {
                         TaskType = "PracticeGrading",
+                        CorrelationId = task.AnswerId,
                         PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
                         ErrorMessage = ex.Message,
                         RetryCount = 3,
                         Status = "pending",
-                        CreatedAt = DateTime.UtcNow
+                        NextRetryAt = now.AddMinutes(5),
+                        LastAttemptAt = now,
+                        CreatedAt = now
                     };
                     errorDbContext.DeadLetterQueues.Add(dlqEntry);
 
@@ -138,7 +142,9 @@ public class GradingQueueWorker : BackgroundService
             QuestionContent = question.Content,
             SampleAnswer = question.SampleAnswer ?? string.Empty,
             Transcript = gradingTask.AnswerText,
-            Criteria = criteriaContext
+            Criteria = criteriaContext,
+            QuestionImageUrl = question.ImageUrl,
+            QuestionImageDescription = question.ImageDescription
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);

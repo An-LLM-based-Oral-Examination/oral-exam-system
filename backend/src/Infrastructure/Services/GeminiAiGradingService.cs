@@ -3,6 +3,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -112,6 +113,13 @@ public class GeminiAiGradingService : IAiGradingService
             .Replace("</student_transcript>", "")
             .Replace("<student_transcript>", "");
 
+        var hasImageContext = !string.IsNullOrWhiteSpace(request.QuestionImageUrl)
+            || !string.IsNullOrWhiteSpace(request.QuestionImageDescription)
+            || !string.IsNullOrWhiteSpace(request.QuestionImageBase64);
+        var imageContextBlock = hasImageContext
+            ? $"\n- Hình ảnh/Sơ đồ đính kèm câu hỏi: {(string.IsNullOrWhiteSpace(request.QuestionImageUrl) ? "Đã đính kèm dữ liệu ảnh trực tiếp" : request.QuestionImageUrl)}\n- Mô tả nội dung hình ảnh/sơ đồ của Giảng viên: {(string.IsNullOrWhiteSpace(request.QuestionImageDescription) ? "Hãy quan sát trực tiếp hình ảnh đính kèm và đối chiếu với Đáp án mẫu." : request.QuestionImageDescription)}\n- YÊU CẦU CHẤM CÂU HỎI CÓ HÌNH ẢNH: Đối chiếu câu trả lời của sinh viên với các thành phần, luồng dữ liệu, sơ đồ hoặc mã nguồn hiển thị trong hình ảnh/mô tả hình ảnh kết hợp cùng Đáp án mẫu và Barem Rubric."
+            : string.Empty;
+
         var prompt = $@"
 Bạn là một Giảng viên chuyên ngành Kỹ thuật Phần mềm (SE) nghiêm khắc và khách quan.
 Nhiệm vụ: Chấm điểm câu trả lời của sinh viên cho môn học dựa trên Barem Rubric và Đáp án mẫu được cung cấp.
@@ -119,7 +127,7 @@ Nhiệm vụ: Chấm điểm câu trả lời của sinh viên cho môn học d�
 TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 QUY TẮC NGHIÊM NGẶT: Nếu sinh viên trả lời 'không biết', 'I don't know', 'làm giùm', bỏ cuộc, hoặc trả lời hoàn toàn lạc đề không chứa kiến thức chuyên môn liên quan đến câu hỏi, BẮT BUỘC chấm Score = 0.0, toàn bộ các tiêu chí trong Details có Score = 0.0 và IsSuspicious = true.
 Dưới đây là chi tiết:
-- Câu hỏi: {request.QuestionContent}
+- Câu hỏi: {request.QuestionContent}{imageContextBlock}
 - Đáp án mẫu (Model Answer) của Giảng viên để đối chiếu: {request.SampleAnswer ?? "Không có sẵn"}
 - Barem Rubric (gồm Id, tên tiêu chí Name, mô tả Description, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
 
@@ -168,11 +176,23 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             return CreateFallbackResult(request, "Thiếu cấu hình Gemini API Key.");
         }
 
+        var inlineImage = await TryResolveQuestionImageInlineDataAsync(request, cancellationToken);
+        object[] messageParts = inlineImage.HasValue
+            ? new object[]
+            {
+                new { text = prompt },
+                new { inline_data = new { mime_type = inlineImage.Value.MimeType, data = inlineImage.Value.Base64Data } }
+            }
+            : new object[]
+            {
+                new { text = prompt }
+            };
+
         var payload = new
         {
             contents = new[]
             {
-                new { parts = new[] { new { text = prompt } } }
+                new { parts = messageParts }
             },
             generationConfig = new
             {
@@ -281,6 +301,121 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         {
             return CreateFallbackResult(request, $"Lỗi khi phân tích JSON từ AI: {ex.Message}");
         }
+    }
+
+    private async Task<(string MimeType, string Base64Data)?> TryResolveQuestionImageInlineDataAsync(
+        AiGradingRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(request.QuestionImageBase64))
+            {
+                var parsedBase64 = TryExtractBase64Payload(request.QuestionImageBase64, request.QuestionImageMimeType);
+                if (parsedBase64.HasValue)
+                {
+                    return parsedBase64;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(request.QuestionImageUrl))
+            {
+                return null;
+            }
+
+            var trimmedUrl = request.QuestionImageUrl.Trim();
+            if (trimmedUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryExtractBase64Payload(trimmedUrl, request.QuestionImageMimeType);
+            }
+
+            var normalizedPath = trimmedUrl;
+            if (Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var parsedUri) &&
+                (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps))
+            {
+                normalizedPath = parsedUri.AbsolutePath;
+            }
+
+            if (normalizedPath.StartsWith("/uploads/questions/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.StartsWith("uploads/questions/", StringComparison.OrdinalIgnoreCase))
+            {
+                var relativeUnderQuestions = normalizedPath.TrimStart('/');
+                relativeUnderQuestions = relativeUnderQuestions["uploads/questions/".Length..]
+                    .TrimStart('/', '\\')
+                    .Replace('/', Path.DirectorySeparatorChar);
+
+                if (string.IsNullOrWhiteSpace(relativeUnderQuestions))
+                {
+                    return null;
+                }
+
+                var uploadsRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "questions"));
+                var fullPath = Path.GetFullPath(Path.Combine(uploadsRoot, relativeUnderQuestions));
+                if (!fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+                {
+                    return null;
+                }
+
+                var fileInfo = new FileInfo(fullPath);
+                if (fileInfo.Length <= 0 || fileInfo.Length > 5 * 1024 * 1024)
+                {
+                    return null;
+                }
+
+                var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken);
+                var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                var mimeType = ext switch
+                {
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".webp" => "image/webp",
+                    _ => "image/png"
+                };
+
+                return (mimeType, Convert.ToBase64String(bytes));
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static (string MimeType, string Base64Data)? TryExtractBase64Payload(string rawInput, string? fallbackMimeType)
+    {
+        var trimmed = rawInput.Trim();
+        var mimeType = !string.IsNullOrWhiteSpace(fallbackMimeType) ? fallbackMimeType.Trim() : "image/png";
+        var base64Data = trimmed;
+
+        if (trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var commaIndex = trimmed.IndexOf(',');
+            if (commaIndex <= 5 || commaIndex >= trimmed.Length - 1)
+            {
+                return null;
+            }
+
+            var header = trimmed.Substring(5, commaIndex - 5);
+            var semiIndex = header.IndexOf(';');
+            if (semiIndex > 0)
+            {
+                var headerMime = header.Substring(0, semiIndex).Trim();
+                if (!string.IsNullOrWhiteSpace(headerMime))
+                {
+                    mimeType = headerMime;
+                }
+            }
+
+            base64Data = trimmed.Substring(commaIndex + 1).Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(base64Data))
+        {
+            return null;
+        }
+
+        return (mimeType, base64Data);
     }
 
     private async Task<AiGradingResult?> TryGradeWithCloudflareLlamaAsync(
@@ -529,7 +664,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         var hasRefusalPhrase = RefusalPhrases.Any(phrase => lower.Contains(phrase, StringComparison.OrdinalIgnoreCase));
 
         var transcriptKeywords = ExtractKeywords(transcript);
-        var referenceKeywords = ExtractKeywords($"{request.QuestionContent} {request.SampleAnswer}");
+        var referenceKeywords = ExtractKeywords($"{request.QuestionContent} {request.QuestionImageDescription} {request.SampleAnswer}");
         if (request.Criteria != null)
         {
             foreach (var c in request.Criteria)
@@ -613,11 +748,16 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         var transcriptKeywords = ExtractKeywords(sanitizedTranscript);
         var sampleKeywords = ExtractKeywords(request.SampleAnswer);
         var questionKeywords = ExtractKeywords(request.QuestionContent);
+        var imageDescriptionKeywords = ExtractKeywords(request.QuestionImageDescription);
 
         var allReferenceKeywords = new HashSet<string>(sampleKeywords, StringComparer.OrdinalIgnoreCase);
         foreach (var qKw in questionKeywords)
         {
             allReferenceKeywords.Add(qKw);
+        }
+        foreach (var imgKw in imageDescriptionKeywords)
+        {
+            allReferenceKeywords.Add(imgKw);
         }
 
         if (request.Criteria != null)
@@ -652,6 +792,10 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 foreach (var sampleKw in sampleKeywords)
                 {
                     criterionKeywords.Add(sampleKw);
+                }
+                foreach (var imgKw in imageDescriptionKeywords)
+                {
+                    criterionKeywords.Add(imgKw);
                 }
 
                 var matchedCount = criterionKeywords.Count > 0

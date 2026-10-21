@@ -29,6 +29,7 @@ public class PasswordLoginCommandHandlerTests
     public void MustChangePassword_AllowsOnlyChangePasswordSignOutHealthAndSwagger()
     {
         MustChangePasswordMiddleware.IsAllowed("/api/v1/auth/change-password").Should().BeTrue();
+        MustChangePasswordMiddleware.IsAllowed("/api/v1/auth/refresh-token").Should().BeTrue();
         MustChangePasswordMiddleware.IsAllowed("/api/v1/auth/sign-out").Should().BeTrue();
         MustChangePasswordMiddleware.IsAllowed("/health").Should().BeTrue();
         MustChangePasswordMiddleware.IsAllowed("/api/v1/practice/sessions").Should().BeFalse();

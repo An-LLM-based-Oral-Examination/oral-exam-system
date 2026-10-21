@@ -64,14 +64,28 @@ public class PracticeController : ControllerBase
     {
         var studentId = ResolveEffectiveStudentId(request.StudentId);
 
+        var isFullSession = request.IsFullSession
+            || string.Equals(request.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.PracticeMode, "progressive", StringComparison.OrdinalIgnoreCase);
+
+        var resolvedDifficulties = request.Difficulties is { Count: > 0 }
+            ? request.Difficulties
+            : request.SelectedDifficulties;
+
+        var resolvedQuestionCount = request.QuestionCount ?? request.TotalQuestions;
+
+        var resolvedDifficulty = !string.IsNullOrWhiteSpace(request.Difficulty)
+            ? request.Difficulty
+            : (resolvedDifficulties is { Count: > 0 } ? resolvedDifficulties[0] : null);
+
         var command = new StartPracticeSessionCommand(
             studentId,
             request.CourseId,
-            request.Difficulty,
-            request.QuestionCount,
-            request.IsFullSession,
+            resolvedDifficulty,
+            resolvedQuestionCount,
+            isFullSession,
             request.Topic,
-            request.Difficulties
+            resolvedDifficulties
         );
 
         var result = await _sender.Send(command);

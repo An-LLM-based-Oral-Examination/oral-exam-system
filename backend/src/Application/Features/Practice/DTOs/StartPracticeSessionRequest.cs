@@ -10,5 +10,8 @@ public record StartPracticeSessionRequest(
     bool IsFullSession = false,
     string? Topic = null,
     Guid? StudentId = null,
-    List<string>? Difficulties = null
+    List<string>? Difficulties = null,
+    string? PracticeMode = null,
+    List<string>? SelectedDifficulties = null,
+    int? TotalQuestions = null
 );

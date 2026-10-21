@@ -4,10 +4,13 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficialExamSession;
+using OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.OverrideExamScore;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
@@ -15,9 +18,8 @@ using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
-
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
+using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamSessions;
 
 namespace API.Controllers.v1;
 
@@ -64,12 +66,46 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Lấy danh sách kỳ thi thật (OfficialExamSession). Hỗ trợ alias seasons & sessions.
+    /// </summary>
+    [HttpGet("sessions")]
+    [HttpGet("seasons")]
+    [Authorize(Roles = "lecturer,department_head,proctor,admin")]
+    public async Task<IActionResult> GetSessions(
+        [FromQuery] Guid? courseId = null,
+        [FromQuery] string? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new GetOfficialExamSessionsQuery(courseId, status), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Lấy danh sách ca thi phòng Lab (RealExamSessionShift). Hỗ trợ lọc theo sessionId, proctorUserId, status.
+    /// </summary>
+    [HttpGet("shifts")]
+    [HttpGet("seasons/{sessionId:guid}/shifts")]
+    [Authorize(Roles = "lecturer,department_head,proctor,admin")]
+    public async Task<IActionResult> GetShifts(
+        [FromRoute] Guid? sessionId = null,
+        [FromQuery(Name = "sessionId")] Guid? querySessionId = null,
+        [FromQuery] Guid? proctorUserId = null,
+        [FromQuery] string? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedSessionId = sessionId ?? querySessionId;
+        var result = await _sender.Send(new GetExamShiftsQuery(resolvedSessionId, proctorUserId, status), cancellationToken);
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Giảng viên truy xuất toàn bộ bằng chứng hậu kiểm (Evidence Panel) của một ca thi phòng Lab (MF-04).
     /// Bao gồm Audio URL trên Cloudflare R2, mã băm SHA-256, bản bóc băng Whisper,
     /// điểm AI, độ tin cậy, cờ phân loại nghi ngờ (AI Doubt Guard) và chuỗi suy luận CoT.
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/audit-evidence")]
     [HttpGet("shifts/{shiftId:guid}/audit-submissions")]
+    [HttpGet("/api/v1/audit/shifts/{shiftId:guid}/submissions")]
     [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> GetAuditEvidence(Guid shiftId)
     {
@@ -88,6 +124,16 @@ public class OfficialExamsController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Alias truy xuất bằng chứng hậu kiểm theo query parameter shiftId.
+    /// </summary>
+    [HttpGet("/api/v1/audit/submissions")]
+    [Authorize(Roles = "lecturer,department_head")]
+    public Task<IActionResult> GetAuditEvidenceByQuery([FromQuery] Guid shiftId)
+    {
+        return GetAuditEvidence(shiftId);
     }
 
     /// <summary>
@@ -127,7 +173,7 @@ public class OfficialExamsController : ControllerBase
             resolvedTicketId,
             request.AuditedScore,
             request.OverrideReason ?? string.Empty,
-            request.CriterionDetails);
+            request.CriterionDetails ?? request.CriteriaScores);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -151,6 +197,58 @@ public class OfficialExamsController : ControllerBase
                 },
                 Detail = result.Error,
                 Type = $"https://oralexam.fpt.edu.vn/errors/override-score-{statusCode}"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên, Trưởng Bộ Môn hoặc Quản trị viên khóa một chiều điểm của một vé thi cụ thể trên Evidence Panel (MF-04 / R2.1).
+    /// </summary>
+    [HttpPost("/api/v1/audit/lock")]
+    [HttpPost("tickets/{ticketId:guid}/lock")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> LockTicketGrade(
+        [FromRoute] Guid? ticketId = null,
+        [FromBody] LockExamTicketRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedTicketId = ticketId ?? request?.TicketId ?? Guid.Empty;
+        if (resolvedTicketId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Dữ liệu đầu vào không hợp lệ.",
+                Detail = "Mã vé thi (TicketId) không được để trống.",
+                Type = "https://oralexam.fpt.edu.vn/errors/invalid-ticket-id"
+            });
+        }
+
+        var result = await _sender.Send(new LockExamTicketCommand(GetCurrentUserId(), resolvedTicketId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            var statusCode = result.Error switch
+            {
+                var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
+                var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+                var err when err.StartsWith("UNPROCESSABLE:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status422UnprocessableEntity,
+                _ => StatusCodes.Status400BadRequest
+            };
+
+            return StatusCode(statusCode, new ProblemDetails
+            {
+                Status = statusCode,
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Thao tác bị từ chối.",
+                    StatusCodes.Status404NotFound => "Không tìm thấy vé thi.",
+                    StatusCodes.Status422UnprocessableEntity => "Không thể khóa điểm bài thi.",
+                    _ => "Dữ liệu đầu vào không hợp lệ."
+                },
+                Detail = result.Error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/lock-ticket-{statusCode}"
             });
         }
 
@@ -285,6 +383,7 @@ public class OfficialExamsController : ControllerBase
     /// Trưởng bộ môn tạo kỳ thi thật. Role lấy từ tài khoản trong database.
     /// </summary>
     [HttpPost("sessions")]
+    [HttpPost("seasons")]
     [Authorize(Roles = "department_head")]
     public async Task<IActionResult> CreateSession([FromBody] CreateOfficialExamSessionRequest request, CancellationToken cancellationToken)
     {
@@ -312,8 +411,12 @@ public class OfficialExamsController : ControllerBase
     /// Trưởng bộ môn mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
     /// </summary>
     [HttpPost("shifts")]
+    [HttpPost("seasons/{sessionId:guid}/shifts")]
     [Authorize(Roles = "department_head")]
-    public async Task<IActionResult> OpenShift([FromBody] OpenExamShiftRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> OpenShift(
+        [FromBody] OpenExamShiftRequest request,
+        CancellationToken cancellationToken = default,
+        [FromRoute] Guid? sessionId = null)
     {
         var actorId = GetActorId();
         if (actorId is null)
@@ -321,9 +424,13 @@ public class OfficialExamsController : ControllerBase
             return Unauthorized();
         }
 
+        var resolvedSessionId = sessionId.HasValue && sessionId.Value != Guid.Empty
+            ? sessionId.Value
+            : request.SessionId;
+
         var result = await _sender.Send(new OpenExamShiftCommand(
             actorId.Value,
-            request.SessionId,
+            resolvedSessionId,
             request.ShiftName,
             request.RoomLab,
             request.StartTime,
@@ -459,4 +566,10 @@ public sealed record OverrideExamScoreRequest
     public decimal AuditedScore { get; init; }
     public string OverrideReason { get; init; } = string.Empty;
     public IReadOnlyList<OverrideCriterionScoreDto>? CriterionDetails { get; init; }
+    public IReadOnlyList<OverrideCriterionScoreDto>? CriteriaScores { get; init; }
+}
+
+public sealed record LockExamTicketRequest
+{
+    public Guid? TicketId { get; init; }
 }

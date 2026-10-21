@@ -127,7 +127,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             new(
                 selectedQuestion.Id,
                 selectedQuestion.Content,
-                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>()
+                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                selectedQuestion.ImageUrl,
+                selectedQuestion.ImageDescription
             )
         };
 
@@ -225,7 +227,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>()
+                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.ImageUrl,
+                q.ImageDescription
             ))
             .ToList();
 
@@ -307,7 +311,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>()
+                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.ImageUrl,
+                q.ImageDescription
             ))
             .ToList();
 
@@ -335,4 +341,3 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         return Result<StartPracticeSessionResponse>.Success(response);
     }
 }
-

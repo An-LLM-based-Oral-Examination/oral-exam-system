@@ -12,7 +12,7 @@
 > - 🧑 **Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
 > - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator  
 > **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (30 bảng 3NF: 27 bảng lõi + 1 bảng phúc khảo + 1 bảng cấu hình hệ thống + 1 bảng thông báo)  
-> **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](./diagrams/KIEN_TRUC_HE_THONG.drawio)  
+> **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](../05_diagrams/KIEN_TRUC_HE_THONG.drawio)  
 > **Nguồn sự thật CSDL duy nhất (Single Source of Truth):** EF Core Code-First ([`backend/src/Infrastructure/Persistence/OralExamDbContext.cs`](../../backend/src/Infrastructure/Persistence/OralExamDbContext.cs)) và các bản Migrations ([`backend/src/Infrastructure/Persistence/Migrations/`](../../backend/src/Infrastructure/Persistence/Migrations/))
 
 ---
@@ -47,7 +47,7 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 │  [Chịu Lỗi, Cấu Hình & Thông Báo Enterprise]                                                   │
 │  • dead_letter_queues (Zero Data Loss - Phục hồi tự động 4 tầng)                                │
 │  • audit_logs (Lưu vết thay đổi dữ liệu nhạy cảm & điểm số)                                    │
-│  • system_configs (Cấu hình động: Min/Max Practice, Buffer, Follow-up, Inactivity Timeout 10m) │
+│  • system_configs (Cấu hình động: Min/Max Practice, Buffer, Follow-up, Inactivity Timeout 5m)  │
 │  • notifications (Hộp thư thông báo trong ứng dụng FE-11: 5 sự kiện)                           │
 └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -136,10 +136,13 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Định danh người dùng duy nhất toàn hệ thống |
-| `email` | `varchar(255)` | NOT NULL, UNIQUE | Email Google OAuth 2.0 PKCE toàn hệ thống (chấp nhận mọi tài khoản email hợp lệ) |
+| `email` | `varchar(255)` | NOT NULL, UNIQUE | Email định danh toàn hệ thống (hỗ trợ đăng nhập qua Google OAuth 2.0 PKCE) |
 | `full_name` | `varchar(150)` | NOT NULL | Họ và tên đầy đủ |
 | `student_code` | `varchar(20)` | UNIQUE, NULLABLE | Mã sinh viên (chỉ có với vai trò `student`, ví dụ: `SE170001`) |
-| `role` | `varchar(20)` | NOT NULL, CHECK in (`admin`, `department_head`, `lecturer`, `proctor`, `student`) | Vai trò người dùng trong hệ thống (`lecturer`: Giảng viên dùng AI sinh đề theo barem và cấu hình môn; `department_head`: Trưởng Bộ Môn duyệt đề và thẩm định phúc khảo) |
+| `username` | `varchar(32)` | UNIQUE, NULLABLE | Tên đăng nhập do Nhà trường cấp phát (phục vụ xác thực kép Dual Auth) |
+| `role` | `varchar(20)` | NOT NULL, CHECK in (`admin`, `department_head`, `lecturer`, `proctor`, `student`) | Vai trò người dùng trong hệ thống (`lecturer`: Giảng viên dùng AI sinh đề theo barem và hậu kiểm; `department_head`: Trưởng Bộ Môn duyệt đề, cấu hình kỳ thi/đề thi thử, giám sát DLQ và phân công phúc khảo) |
+| `password_hash` | `varchar(256)` | NULLABLE | Mã băm mật khẩu (PBKDF2) cho tài khoản do Nhà trường cấp phát |
+| `must_change_password` | `boolean` | NOT NULL, Default `false` | Cờ yêu cầu đổi mật khẩu trong lần đăng nhập đầu tiên với tài khoản trường cấp |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái kích hoạt tài khoản |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật cuối |
@@ -180,7 +183,7 @@ erDiagram
 | `has_follow_up` | `boolean` | NOT NULL, Default `false` | Cờ bật/tắt hỏi xoáy Follow-up cho môn học do Giảng viên cấu hình |
 | `transcript_buffer_seconds` | `int` | NOT NULL, Default `60`, CHECK `transcript_buffer_seconds BETWEEN 10 AND 300` | Thời gian đệm hiệu đính phiên âm theo môn (10–300s, mặc định 60s) |
 | `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 1 AND 5` | Số câu hỏi phụ Follow-up tối đa do Admin cấu hình cho hệ thống luyện tập MF-01 (1–5 câu, mặc định 2 câu) |
-| `max_mock_exams_per_day` | `int` | NOT NULL, Default `3`, CHECK `max_mock_exams_per_day >= 1` | Hạn ngạch thi thử tối đa trong ngày do Trưởng Bộ Môn cấu hình theo môn |
+| `max_mock_exams_per_day` | `int` | NOT NULL, Default `3`, CHECK `max_mock_exams_per_day >= 1` | Hạn ngạch thi thử tối đa trong ngày do Admin cấu hình theo môn |
 | `allow_transcript_edit` | `boolean` | NOT NULL, Default `true` | Cho phép mở màn hình đệm sửa transcript sau khi phát biểu qua micro |
 | `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceWithTranscriptEdit'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) | Phương thức trả lời bài thi theo môn (`VoiceOnly`: chỉ mic, khóa phím; `VoiceWithTranscriptEdit`: nói mic + mở đệm sửa transcript) |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hoạt động |
@@ -254,6 +257,8 @@ erDiagram
 | `review_notes` | `text` | NULLABLE | Nhận xét, hướng dẫn chỉnh sửa hoặc căn cứ phê duyệt của Trưởng Bộ Môn |
 | `has_follow_up` | `boolean` | NOT NULL, Default `false` | Cho phép hỏi xoáy thêm câu phụ |
 | `follow_up_prompt` | `text` | NULLABLE | Nội dung gợi ý câu hỏi xoáy A2 |
+| `image_url` | `varchar(1000)` | NULLABLE | URL hình ảnh / sơ đồ kỹ thuật (UML, ERD, Kiến trúc, UI) lưu trữ Cloudflare R2 / Server |
+| `image_description` | `text` | NULLABLE | Mô tả chi tiết hình ảnh của Giảng viên phục vụ hỗ trợ AI Multimodal đối chiếu CoT và accessibility |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hiển thị |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo câu hỏi |
 
@@ -267,7 +272,7 @@ erDiagram
 | `started_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm bắt đầu phiên luyện tập |
 | `completed_at` | `timestamptz` | NULLABLE | Thời điểm hoàn thành phiên |
 | `status` | `varchar(20)` | NOT NULL, Default `'in_progress'`, CHECK in (`'in_progress'`, `'completed'`, `'abandoned'`, `'timed_out'`) | Trạng thái phiên: đang làm, đã hoàn thành, bỏ dở, hoặc quá hạn timeout không tương tác |
-| `last_activity_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tương tác gần nhất của sinh viên (tạo phiên, bốc câu tiếp theo `POST /next-question`, nộp câu trả lời), phục vụ kiểm soát Lazy Timeout 10 phút không tương tác |
+| `last_activity_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tương tác gần nhất của sinh viên (tạo phiên, bốc câu tiếp theo `POST /next-question`, nộp câu trả lời), phục vụ kiểm soát Lazy Timeout 5 phút không tương tác |
 | `selected_difficulties` | `jsonb` | NOT NULL, Default `'[]'::jsonb` | Mảng JSON lưu trữ tổ hợp mức độ khó sinh viên đã chọn (ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "medium", "hard"]`) phục vụ thuật toán bốc đề On-Demand chặn 3 câu liên tiếp cùng mức |
 
 #### Bảng `practice_answers`
@@ -348,7 +353,7 @@ erDiagram
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên thực hiện thi thử |
 | `course_id` | `uuid` | FK `courses(id)` ON DELETE CASCADE | Môn học thi thử áp dụng hạn ngạch |
 | `quota_date` | `date` | NOT NULL | Ngày áp dụng hạn ngạch thi thử |
-| `used_count` | `int` | NOT NULL, Default `0`, CHECK `used_count >= 0` | Số lượt thi thử đã sử dụng trong ngày (Kiểm tra đối chiếu `courses.max_mock_exams_per_day` do Trưởng Bộ Môn cấu hình theo môn, vượt hạn ngạch bị chặn `HTTP 429 Too Many Requests`) |
+| `used_count` | `int` | NOT NULL, Default `0`, CHECK `used_count >= 0` | Số lượt thi thử đã sử dụng trong ngày (Kiểm tra đối chiếu `courses.max_mock_exams_per_day` do Admin cấu hình theo môn, vượt hạn ngạch bị chặn `HTTP 429 Too Many Requests`) |
 | `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật số lượt thi gần nhất |
 | (UNIQUE) | `uq_mock_exam_quotas` | UNIQUE `(student_id, course_id, quota_date)` | Ràng buộc: Mỗi sinh viên chỉ có 1 bản ghi hạn ngạch cho mỗi môn trong một ngày |
 
@@ -401,6 +406,8 @@ erDiagram
 | `submitted_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Giảng viên thiết kế và đệ trình câu hỏi |
 | `approved_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Trưởng Bộ Môn thẩm định & phê duyệt chính thức đưa vào kho thi |
 | `review_notes` | `text` | NULLABLE | Ghi chú thẩm định, căn cứ phê duyệt của Trưởng Bộ Môn |
+| `image_url` | `varchar(1000)` | NULLABLE | URL hình ảnh / sơ đồ bảo mật đính kèm câu hỏi thi (UML, ERD, Kiến trúc, UI) trên Cloudflare R2 |
+| `image_description` | `text` | NULLABLE | Mô tả chi tiết hình ảnh phục vụ AI Gemini Multimodal đối chiếu CoT và hậu kiểm phúc khảo |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hoạt động |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo câu hỏi thi |
 
@@ -549,7 +556,7 @@ erDiagram
 ##### Danh mục tham số cấu hình mặc định (Default System Configuration Seeds)
 | Khóa cấu hình (`key`) | Giá trị mặc định (`value`) | Kiểu dữ liệu logic | Mô tả nghiệp vụ & Phạm vi áp dụng |
 |:---|:---:|:---:|:---|
-| `SessionInactivityTimeoutMinutes` | `10` | Số nguyên (Integer, phút) | **Thời gian timeout không tương tác của phiên luyện tập MF-01.** Nếu quá 10 phút sinh viên không có tương tác (bốc câu mới hoặc nộp bài), hệ thống tự động kết thúc phiên (`status = 'timed_out'`), trả `HTTP 410 Gone` và bảo toàn kết quả các câu đã làm. |
+| `SessionInactivityTimeoutMinutes` | `5` | Số nguyên (Integer, phút) | **Thời gian timeout không tương tác của phiên luyện tập MF-01.** Nếu quá 5 phút sinh viên không có tương tác (bốc câu mới hoặc nộp bài), hệ thống tự động kết thúc phiên (`status = 'timed_out'`), trả `HTTP 410 Gone` và bảo toàn kết quả các câu đã làm. |
 | `MaxPracticeQuestionsPerSession` | `10` | Số nguyên (Integer, câu) | Giới hạn số lượng câu hỏi luyện tập tối đa sinh viên có thể thực hiện trong một phiên luyện tập. |
 | `MinMixedPracticeQuestions` | `3` | Số nguyên (Integer, câu) | Số lượng câu hỏi luyện tập tối thiểu cho chế độ Full-Session tự động phân bổ tiến trình từ Dễ đến Khó. |
 | `MaxMixedPracticeQuestions` | `10` | Số nguyên (Integer, câu) | Số lượng câu hỏi luyện tập tối đa cho chế độ Full-Session tự động phân bổ tiến trình từ Dễ đến Khó. |
@@ -587,7 +594,7 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_practice_questions_course` | `practice_questions` | `(course_id, difficulty, is_active)` | Composite B-Tree | Lọc danh sách câu hỏi luyện tập theo môn học và độ khó. |
 | `ix_practice_questions_source` | `practice_questions` | `(course_id, source)` | Composite B-Tree | Tối ưu tra cứu và phân loại câu hỏi sinh từ FLM API (`flm_api`) so với soạn thủ công (`manual`). |
 | `ix_practice_questions_rubric` | `practice_questions` | `(rubric_id)` | B-Tree | Join tức thời bảng Barem khi sinh scorecard luyện tập. |
-| `ix_practice_sessions_last_activity` | `practice_sessions` | `(status, last_activity_at)` | Composite B-Tree | Tối ưu hóa truy vấn lọc các phiên đang mở (`status = 'in_progress'`) có `last_activity_at` vượt quá thời gian timeout (10 phút) để Lazy Validation và Background Worker quét dọn chuyển sang `'timed_out'`. |
+| `ix_practice_sessions_last_activity` | `practice_sessions` | `(status, last_activity_at)` | Composite B-Tree | Tối ưu hóa truy vấn lọc các phiên đang mở (`status = 'in_progress'`) có `last_activity_at` vượt quá thời gian timeout (5 phút) để Lazy Validation và Background Worker quét dọn chuyển sang `'timed_out'`. |
 | `ix_exam_questions_course` | `exam_questions` | `(course_id, difficulty, is_active)` | Composite B-Tree | Bốc ngẫu nhiên câu hỏi theo cấu trúc ma trận đề thi MF-02/MF-04. |
 | `ix_exam_questions_source` | `exam_questions` | `(course_id, source)` | Composite B-Tree | Phân loại câu hỏi thi chính thức theo nguồn gốc FLM API. |
 | `ix_exam_questions_approved` | `exam_questions` | `(approved_by)` | B-Tree | Thống kê số lượng câu hỏi do Trưởng Bộ Môn hoặc Giảng viên phê duyệt. |
@@ -619,7 +626,7 @@ Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questio
 - **Ràng buộc nguồn gốc câu hỏi:** `practice_questions.source` và `exam_questions.source` có CHECK constraint `source IN ('manual', 'flm_api')`.
 - **Ràng buộc Barem Rubric 10.0:** Tổng điểm các tiêu chí con trong bảng `rubrics` bắt buộc bằng đúng 10.00: $\sum \text{criteria.max_score} \equiv 10.00$.
 - **Ràng buộc Đáp án mẫu:** `sample_answer` (Model Answer) bắt buộc $\ge 50$ ký tự khi phê duyệt vào kho đề.
-- **Ràng buộc Hạn ngạch thi thử:** `mock_exam_quotas.used_count` có CHECK constraint `used_count >= 0` (so sánh động với `courses.max_mock_exams_per_day` do Trưởng Bộ Môn cấu hình theo môn, vượt hạn ngạch trả `HTTP 429 Too Many Requests`).
+- **Ràng buộc Hạn ngạch thi thử:** `mock_exam_quotas.used_count` có CHECK constraint `used_count >= 0` (so sánh động với `courses.max_mock_exams_per_day` do Admin cấu hình theo môn, vượt hạn ngạch trả `HTTP 429 Too Many Requests`).
 - **Ràng buộc Khóa điểm một chiều:** Khi `student_exam_tickets.is_locked = true`, EF Core Interceptor chặn 100% câu lệnh `UPDATE`/`DELETE` ở cấp độ CSDL, ngoại trừ trường hợp Giảng viên được Trưởng Bộ Môn phân công chấm lại đơn phúc khảo nội bộ (`AppealRequest`).
 - **Ràng buộc Phương thức thi môn học:** `courses.exam_input_mode` có CHECK constraint `exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')`.
 - **Ràng buộc Cấu hình động môn học & kỳ thi:** `courses.transcript_buffer_seconds` có CHECK `BETWEEN 10 AND 300` và `courses.max_follow_up_questions` có CHECK `BETWEEN 1 AND 5` (do Admin cấu hình cho hệ thống luyện tập MF-01). Môn thi trong kỳ thi thật MF-04 (`official_exam_sessions`) có `max_follow_up_questions` CHECK `BETWEEN 1 AND 5` (mặc định 2 câu), `transcript_buffer_seconds` CHECK `BETWEEN 10 AND 300` và `exam_input_mode` CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) do Trưởng Bộ Môn thiết lập.
@@ -627,4 +634,4 @@ Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questio
 - **Ràng buộc Phân loại bài thi Hậu kiểm:** `student_exam_tickets.ai_confidence_score` và `exam_question_submissions.ai_confidence_score` có CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00`. Khi `is_suspicious == true` hoặc `ai_confidence_score < 0.70`, hệ thống tự động gắn cờ xếp vào Nhóm 1 Đáng nghi ngờ trên Cổng Hậu kiểm Giảng viên để ưu tiên nghe lại Waveform Player và thẩm định trước.
 - **Ràng buộc Phê duyệt Câu hỏi:** `practice_questions.approval_status` và `exam_questions.approval_status` có CHECK constraint `approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')`. Chỉ các câu hỏi mang trạng thái `'APPROVED'` do Trưởng Bộ Môn phê duyệt mới được đưa vào ma trận bốc đề thi thật MF-04.
 - **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Giảng viên công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu không chấp nhận kết quả, sinh viên bấm nộp đơn Phúc khảo nội bộ trực tiếp trên Student Portal (`POST /api/v1/appeals`) để tạo bản ghi `appeal_requests` gửi tới Trưởng Bộ Môn; Trưởng Bộ Môn tiếp nhận và phân công cho một Giảng viên chấm lại.
-- **Ràng buộc Thời gian không tương tác (Session Inactivity Timeout MF-01):** Tham số `SessionInactivityTimeoutMinutes` trong bảng `system_configs` (mặc định 10 phút) quy định thời gian tối đa một phiên luyện tập được duy trì trạng thái `in_progress` mà không có hoạt động. Mọi request gọi lên (tạo phiên, bốc câu hỏi tiếp theo qua `POST /api/v1/practice/sessions/{id}/next-question`, nộp câu trả lời) đều cập nhật lại mốc thời gian `last_activity_at`. Khi phát hiện quá 10 phút không tương tác, hệ thống tự động đánh dấu phiên là `timed_out`, chấm điểm các câu đã hoàn thành (đối với Full-Session, các câu chưa làm tính 0 điểm; đối với Per-Question, lưu lại các câu đã làm), trả về lỗi `HTTP 410 Gone` (RFC 7807) và tuyệt đối không tạo phiên rác.
+- **Ràng buộc Thời gian không tương tác (Session Inactivity Timeout MF-01):** Tham số `SessionInactivityTimeoutMinutes` trong bảng `system_configs` (mặc định 5 phút) quy định thời gian tối đa một phiên luyện tập được duy trì trạng thái `in_progress` mà không có hoạt động. Mọi request gọi lên (tạo phiên, bốc câu hỏi tiếp theo qua `POST /api/v1/practice/sessions/{id}/next-question`, nộp câu trả lời) đều cập nhật lại mốc thời gian `last_activity_at`. Khi phát hiện quá 5 phút không tương tác, hệ thống tự động đánh dấu phiên là `timed_out`, chấm điểm các câu đã hoàn thành (đối với Full-Session, các câu chưa làm tính 0 điểm; đối với Per-Question, lưu lại các câu đã làm), trả về lỗi `HTTP 410 Gone` (RFC 7807) và tuyệt đối không tạo phiên rác.

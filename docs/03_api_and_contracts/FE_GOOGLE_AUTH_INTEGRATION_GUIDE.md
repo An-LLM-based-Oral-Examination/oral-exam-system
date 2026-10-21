@@ -6,22 +6,24 @@
 
 ---
 
-## 📌 1. TỔNG QUAN LUỒNG XÁC THỰC GOOGLE OAUTH 2.0
+## 📌 1. TỔNG QUAN LUỒNG XÁC THỰC KÉP (DUAL AUTHENTICATION)
 
-Hệ thống sử dụng cơ chế **Google OAuth 2.0 (Google Identity Services)** kết hợp **JWT Access Token + Refresh Token Rotation**:
-- ❌ **KHÔNG sử dụng mật khẩu** (mọi người dùng đăng nhập bằng tài khoản Google).
-- ✅ **Chấp nhận mọi email domain** (Gmail cá nhân, email `@fpt.edu.vn`, v.v.).
+Hệ thống sử dụng cơ chế **Xác thực Kép (Dual Auth)** gồm **Google OAuth 2.0 (Google Identity Services)** và **Tài khoản `username` & `password` do Nhà trường cấp** kết hợp **JWT Access Token + Refresh Token Rotation**:
+- ✅ **Hỗ trợ đăng nhập kép:** Đăng nhập bằng tài khoản Google (`POST /api/v1/auth/google-login`) hoặc bằng tài khoản/mật khẩu do Nhà trường cấp (`POST /api/v1/auth/password-login`), kèm chức năng đổi mật khẩu (`POST /api/v1/auth/change-password`). Không mở form tự đăng ký công khai bằng mật khẩu.
+- ✅ **Chấp nhận mọi email domain hợp lệ** (Gmail cá nhân, email `@fpt.edu.vn`, hoặc mã số SV/GV do trường cấp).
 - ⏱️ **Access Token:** Có hiệu lực trong **15 phút (900 giây)**. Đính kèm vào Header `Authorization: Bearer <accessToken>` ở mọi API được bảo vệ.
 - 🔄 **Refresh Token:** Có hiệu lực trong **7 ngày**. Được dùng để cấp lại Access Token mới tự động ngầm (Silent Refresh) khi Access Token hết hạn, hỗ trợ Token Rotation chống lộ lọt.
 - 🛡️ **Phòng chống Replay Attack (RFC 6819):** Nếu một Refresh Token cũ đã bị thu hồi mà vẫn bị gửi lên, toàn bộ các phiên đăng nhập khác của user sẽ bị server vô hiệu hóa ngay lập tức.
 
 ---
 
-## 📋 2. BẢNG DANH MỤC 3 ENDPOINTS AUTHENTICATION
+## 📋 2. BẢNG DANH MỤC 5 ENDPOINTS AUTHENTICATION
 
 | Method | Endpoint | Quyền (Auth) | Mục đích |
 | :---: | :--- | :---: | :--- |
 | `POST` | `/api/v1/auth/google-login` | Public | Đăng nhập bằng Google ID Token |
+| `POST` | `/api/v1/auth/password-login` | Public | Đăng nhập bằng tài khoản `username`/`email` & `password` do Nhà trường cấp |
+| `POST` | `/api/v1/auth/change-password` | Authenticated | Đổi mật khẩu cho tài khoản được Nhà trường cấp |
 | `POST` | `/api/v1/auth/refresh-token` | Public | Tự động làm mới Access Token (Token Rotation) |
 | `POST` | `/api/v1/auth/sign-out` | Public | Đăng xuất & thu hồi Refresh Token trên Server |
 

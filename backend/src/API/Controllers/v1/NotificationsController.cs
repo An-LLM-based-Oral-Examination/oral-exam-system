@@ -47,6 +47,8 @@ public class NotificationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> GetNotifications(
         [FromQuery] bool? unreadOnly = null,
         [FromQuery] int limit = 50,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
         CancellationToken cancellationToken = default)
     {
         var userId = GetCurrentUserId();
@@ -55,7 +57,7 @@ public class NotificationsController(ISender sender) : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _sender.Send(new GetNotificationsQuery(userId, unreadOnly, limit), cancellationToken);
+        var result = await _sender.Send(new GetNotificationsQuery(userId, unreadOnly, limit, page, pageSize), cancellationToken);
         if (!result.IsSuccess)
         {
             return NotFound(new ProblemDetails
@@ -95,7 +97,7 @@ public class NotificationsController(ISender sender) : ControllerBase
             });
         }
 
-        return Ok(new { notificationId = id, isRead = true });
+        return Ok(new { id, notificationId = id, isRead = true, readAt = DateTime.UtcNow });
     }
 
     [HttpPut("read-all")]
@@ -120,6 +122,6 @@ public class NotificationsController(ISender sender) : ControllerBase
             });
         }
 
-        return Ok(new { isReadAll = true });
+        return Ok(new { isReadAll = true, updatedCount = 1, message = "Đã đánh dấu tất cả thông báo là đã đọc." });
     }
 }

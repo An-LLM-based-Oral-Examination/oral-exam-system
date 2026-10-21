@@ -6,11 +6,14 @@ Giao diện React 19 cho hệ thống luyện thi và đánh giá vấn đáp. �
 
 | Nhóm | Đường dẫn |
 | --- | --- |
-| Đăng nhập | `/login` |
-| Sinh viên | `/student/overview`, `/practice`, `/mock-exam`, `/exam`, `/results` |
-| Giảng viên | dashboard, ngân hàng câu hỏi, tạo câu hỏi, hậu kiểm |
+| Đăng nhập | `/login` (Hỗ trợ xác thực kép: Google OAuth 2.0 hoặc tài khoản `username`/`password` do Nhà trường cấp) |
+| Sinh viên (`student`) | `/student/overview`, `/practice`, `/mock-exam`, `/exam` (Kiosk), `/results` |
+| Giảng viên (`lecturer`) | Dashboard, ngân hàng câu hỏi, AI sinh đề & Rubric Studio 10.0, hậu kiểm (Evidence Panel & Waveform Player), chấm phúc khảo |
+| Trưởng Bộ Môn (`department_head`) | Duyệt câu hỏi (`APPROVED`/`NEEDS_REVISION`/`REJECTED`), cấu hình đề thi thử, quản trị kỳ thi & ca thi, phân công phúc khảo, giám sát & replay DLQ |
+| Giám thị (`proctor`) | Điểm danh STT (Ghế 1–40), đối chiếu thẻ SV/CCCD, mở ca thi, giám sát phòng máy Kiosk |
+| Quản trị viên (`admin`) | Quản lý người dùng (khóa/mở, gán 5 roles), quản lý học kỳ, cấu hình động `system_configs` MF-01, cấu hình hạn ngạch thi thử MF-02 (`max_mock_exams_per_day`), xem Audit Logs |
 
-Đăng nhập dùng Google. Ở môi trường dev, trang `/login` có thêm lối đăng nhập nhanh để xem giao diện khi chưa cấu hình Google.
+Đăng nhập hỗ trợ cơ chế xác thực kép (Dual Auth): Google OAuth 2.0 hoặc tài khoản `username` & `password` do Nhà trường cấp phát (kèm đổi mật khẩu; không mở form tự đăng ký công khai).
 
 ## Cấu trúc
 
@@ -19,8 +22,8 @@ frontend/
 ├── Dockerfile
 ├── vite.config.ts          # Dev server cổng 5173, proxy /api và /hubs
 └── src/
-    ├── routes/             # Route và phân quyền
-    ├── pages/              # auth, student, lecturer
+    ├── routes/             # Route và phân quyền 5 roles
+    ├── pages/              # auth, student, lecturer, department-head, proctor, admin
     ├── components/         # layout, practice, exam, rubric, audio
     ├── services/           # Gọi API
     ├── hooks/              # SignalR, speech, kiosk

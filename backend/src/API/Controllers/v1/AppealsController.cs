@@ -1,18 +1,19 @@
 using System;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Common.Models;
-using OralExamination.Application.Features.Appeals.Commands.CreateAppeal;
 using OralExamination.Application.Features.Appeals.Commands.AssignAppealLecturer;
+using OralExamination.Application.Features.Appeals.Commands.CreateAppeal;
 using OralExamination.Application.Features.Appeals.Commands.RegradeAppeal;
 using OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision;
 using OralExamination.Application.Features.Appeals.DTOs;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealById;
 using OralExamination.Application.Features.Appeals.Queries.GetAppeals;
-
-using Microsoft.AspNetCore.Authorization;
 
 namespace API.Controllers.v1;
 
@@ -96,7 +97,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu danh sách đơn phúc khảo có hỗ trợ lọc theo trạng thái, ca thi, sinh viên, người thụ lý.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "student,lecturer,department_head")]
+    [Authorize(Roles = "student,lecturer,department_head,admin")]
     public async Task<IActionResult> GetAppeals(
         [FromQuery] string? status,
         [FromQuery] Guid? sessionId,
@@ -130,7 +131,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu chi tiết một đơn phúc khảo theo ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "student,lecturer,department_head")]
+    [Authorize(Roles = "student,lecturer,department_head,admin")]
     public async Task<IActionResult> GetAppealById(Guid id)
     {
         var requesterId = GetAuthenticatedUserId();
@@ -160,7 +161,8 @@ public class AppealsController : ControllerBase
     /// Trưởng Bộ Môn (department_head) hoặc Admin thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
     /// </summary>
     [HttpPut("{id:guid}/review")]
-    [Authorize(Roles = "department_head")]
+    [HttpPut("{id:guid}/decision")]
+    [Authorize(Roles = "department_head,admin")]
     public async Task<IActionResult> ReviewAppeal(Guid id, [FromBody] ReviewAppealRequestDto request)
     {
         var reviewerId = GetAuthenticatedUserId();

@@ -287,7 +287,7 @@ backend/src/
 * **Endpoint:** `POST /api/v1/questions/draft`
 * **Tệp liên quan:** `Features/Questions/Commands/CreateQuestionDraft/*`, `Application/Common/Validators/RubricValidator.cs`
 * **Mô tả nghiệp vụ:**
-  - Tiếp nhận câu hỏi do giảng viên tự soạn thủ công hoặc hiệu chỉnh từ bản AI sinh.
+  - Tiếp nhận câu hỏi do giảng viên tự soạn thủ công hoặc hiệu chỉnh từ bản AI sinh. Hỗ trợ đính kèm hình ảnh/sơ đồ kỹ thuật (`imageUrl`, `imageDescription` tải lên qua `POST /api/v1/questions/upload-image` hoặc `POST /api/v1/storage/upload-question-image`, kiểm tra Magic Bytes `PNG/JPG/WEBP <= 5MB`, trả `HTTP 413`/`415` nếu vi phạm; chỉ áp dụng cho câu hỏi tạo thủ công `source == "manual"`). Khi chấm bài ở MF-01, MF-02 và MF-04, `GeminiAiGradingService` tự động nạp ảnh dạng Base64 `inline_data` kèm `imageDescription` để chấm điểm đa phương thức (Multimodal AI Grading).
   - Cài đặt `RubricValidator` sử dụng FluentValidation ép cứng quy tắc:
     * **Tổng điểm barem rubric bắt buộc $\sum \equiv 10.0$ điểm** (dung sai sai số số thực $\le 0.001$). Nếu tổng điểm $< 10.0$ hoặc $> 10.0$ (kể cả 9.9đ hay 10.1đ), ném lỗi validation và trả mã **`HTTP 422 Unprocessable Entity`** kèm thông báo: *"Tổng điểm các tiêu chí rubric phải đúng bằng 10.0 điểm"*.
     * Câu trả lời mẫu (Model Answer) bắt buộc $\ge 50$ ký tự.

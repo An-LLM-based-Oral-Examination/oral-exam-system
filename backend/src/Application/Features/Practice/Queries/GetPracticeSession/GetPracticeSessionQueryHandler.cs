@@ -74,7 +74,9 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                         q.Content,
                         q.Rubric != null
                             ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList()
-                            : new List<string>()
+                            : new List<string>(),
+                        q.ImageUrl,
+                        q.ImageDescription
                     );
                 })
                 .ToList();
@@ -105,7 +107,9 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     q.Content,
                     q.Rubric != null
                         ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList()
-                        : new List<string>()
+                        : new List<string>(),
+                    q.ImageUrl,
+                    q.ImageDescription
                 ))
                 .ToList();
         }

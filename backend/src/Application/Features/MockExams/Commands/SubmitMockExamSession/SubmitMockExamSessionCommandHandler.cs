@@ -96,7 +96,9 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     0.0m,
                     reason,
                     1.0m,
-                    emptyCriteria
+                    emptyCriteria,
+                    q.ImageUrl,
+                    q.ImageDescription
                 );
 
                 return (a, emptyQuestionScore, (AiEvaluation?)null);
@@ -117,6 +119,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 Transcript = a.AnswerText!,
                 QuestionContent = q.Content,
                 SampleAnswer = q.SampleAnswer ?? string.Empty,
+                QuestionImageUrl = q.ImageUrl,
+                QuestionImageDescription = q.ImageDescription,
                 Criteria = criteriaList
             };
 
@@ -181,7 +185,9 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 finalQuestionScore,
                 gradingResult.Feedback,
                 gradingResult.ConfidenceScore,
-                criterionScores
+                criterionScores,
+                q.ImageUrl,
+                q.ImageDescription
             );
 
             var aiEvaluation = new AiEvaluation

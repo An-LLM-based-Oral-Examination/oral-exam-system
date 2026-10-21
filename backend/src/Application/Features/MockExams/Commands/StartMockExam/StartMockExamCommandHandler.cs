@@ -249,7 +249,9 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 Content: q.Content,
                 BloomLevel: q.BloomLevel,
                 Difficulty: q.Difficulty,
-                RubricCriteria: criteriaDtos
+                RubricCriteria: criteriaDtos,
+                ImageUrl: q.ImageUrl,
+                ImageDescription: q.ImageDescription
             );
         }).ToList();
 

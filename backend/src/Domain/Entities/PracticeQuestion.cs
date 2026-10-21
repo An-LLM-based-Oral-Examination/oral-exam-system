@@ -16,6 +16,8 @@ public partial class PracticeQuestion
     public string BloomLevel { get; set; } = "Understand";
     public bool HasFollowUp { get; set; } = false;
     public string? FollowUpPrompt { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ImageDescription { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

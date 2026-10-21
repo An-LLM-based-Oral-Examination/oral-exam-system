@@ -40,11 +40,16 @@ public sealed class SealOfficialExamAudioCommandHandler(
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
         }
 
+        if (string.IsNullOrWhiteSpace(ticket.Student.StudentCode))
+        {
+            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.StudentNotFound);
+        }
+
         var expectedObjectKey = OfficialExamAudioObjectKey.Create(
             ticket.ShiftId,
             ticket.Id,
             ticket.SeatNumber,
-            ticket.Student.StudentCode ?? string.Empty);
+            ticket.Student.StudentCode);
         if (!string.Equals(expectedObjectKey, request.ObjectKey, StringComparison.Ordinal))
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioObjectKeyMismatch);

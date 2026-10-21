@@ -94,6 +94,7 @@ public class AdminController(ISender sender) : ControllerBase
     }
 
     [HttpGet("system-configs")]
+    [HttpGet("configs")]
     [HttpGet("/api/v1/system-configs")]
     public async Task<IActionResult> GetSystemConfigs(CancellationToken cancellationToken = default)
     {
@@ -102,6 +103,7 @@ public class AdminController(ISender sender) : ControllerBase
     }
 
     [HttpPut("system-configs/{key}")]
+    [HttpPut("configs/{key}")]
     [HttpPut("/api/v1/system-configs/{key}")]
     public async Task<IActionResult> UpdateSystemConfig(
         [FromRoute] string key,

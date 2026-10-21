@@ -109,6 +109,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             QuestionContent = submission.ExamQuestion.Content,
             SampleAnswer = submission.ExamQuestion.SampleAnswer ?? string.Empty,
             Transcript = submission.TranscriptWhisper,
+            QuestionImageUrl = submission.ExamQuestion.ImageUrl,
+            QuestionImageDescription = submission.ExamQuestion.ImageDescription,
             Criteria = orderedCriteria.Select(item => new AiGradingCriterion
             {
                 Id = item.Id.ToString(),

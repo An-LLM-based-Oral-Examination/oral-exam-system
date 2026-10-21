@@ -147,7 +147,7 @@
         let sessionQuestions = [];
         let currentQuestionIndex = 0;
         let inactivityTimer = null;
-        let inactivitySecondsLeft = 600; // 10 phút
+        let inactivitySecondsLeft = 300; // 5 phút
         const BASE_URL = 'http://localhost:5000';
 
         function log(message, type = 'log-info') {
@@ -187,22 +187,22 @@
 
         function startInactivityTimer() {
             stopInactivityTimer();
-            inactivitySecondsLeft = 600;
+            inactivitySecondsLeft = 300;
             updateInactivityBadge();
             inactivityTimer = setInterval(() => {
                 inactivitySecondsLeft--;
                 updateInactivityBadge();
                 if (inactivitySecondsLeft <= 0) {
                     stopInactivityTimer();
-                    log("⚠️ [TIMEOUT] Phiên luyện tập đã hết hạn do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!", "log-error");
-                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    log("⚠️ [TIMEOUT] Phiên luyện tập đã hết hạn do không có tương tác trong hơn 5 phút (HTTP 410 Gone)!", "log-error");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút (HTTP 410 Gone)!");
                 }
             }, 1000);
         }
 
         function resetInactivityTimer() {
             if (activeSessionId) {
-                inactivitySecondsLeft = 600;
+                inactivitySecondsLeft = 300;
                 updateInactivityBadge();
             }
         }
@@ -333,7 +333,7 @@
                     stopInactivityTimer();
                     const err = await response.json();
                     log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn'}`, "log-error");
-                    alert("Phiên luyện tập đã kết thúc do không tương tác quá 10 phút (HTTP 410 Gone)!");
+                    alert("Phiên luyện tập đã kết thúc do không tương tác quá 5 phút (HTTP 410 Gone)!");
                     return;
                 }
 
@@ -412,8 +412,8 @@
                 if (response.status === 410) {
                     stopInactivityTimer();
                     const err = await response.json();
-                    log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn do không tương tác trong hơn 10 phút'}`, "log-error");
-                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn do không tương tác trong hơn 5 phút'}`, "log-error");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút (HTTP 410 Gone)!");
                     return;
                 }
 
@@ -472,7 +472,7 @@
                 
                 if (response.status === 410) {
                     stopInactivityTimer();
-                    alert("Phiên luyện tập đã hết hạn do không tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    alert("Phiên luyện tập đã hết hạn do không tương tác trong hơn 5 phút (HTTP 410 Gone)!");
                     return;
                 }
 
@@ -533,7 +533,7 @@
                     stopInactivityTimer();
                     const err = await response.json();
                     log(`❌ [HTTP 410 Gone - Session Timed Out]: ${err.detail || 'Phiên đã hết hạn'}`, "log-error");
-                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 10 phút (HTTP 410 Gone)!");
+                    alert("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút (HTTP 410 Gone)!");
                     return;
                 }
 

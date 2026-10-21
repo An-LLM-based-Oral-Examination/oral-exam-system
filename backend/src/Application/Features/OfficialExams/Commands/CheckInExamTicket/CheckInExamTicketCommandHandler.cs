@@ -39,6 +39,7 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
 
         var ticket = await _context.StudentExamTickets
             .Include(item => item.Shift)
+                .ThenInclude(s => s.Session)
             .FirstOrDefaultAsync(item => item.Id == request.TicketId, cancellationToken);
         if (ticket is null)
         {
@@ -85,6 +86,14 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
 
         ticket.Status = ExamTicketStatus.InProgress;
         ticket.CheckedInAt = DateTime.UtcNow;
+        if (!ticket.ExamSetId.HasValue)
+        {
+            ticket.ExamSetId = await AssignExamTicketCommandHandler.TryResolveOrCreateExamSetIdAsync(
+                _context,
+                ticket.Shift,
+                ticket.SeatNumber,
+                cancellationToken);
+        }
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result<ExamTicketResponse>.Success(AssignExamTicketCommandHandler.ToResponse(ticket));

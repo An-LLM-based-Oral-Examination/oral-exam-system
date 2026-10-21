@@ -1,13 +1,12 @@
 using System;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
 using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguration;
-
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 
 namespace API.Controllers.v1;
 
@@ -58,6 +57,7 @@ public class CoursesController : ControllerBase
     /// Riêng hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Quản trị viên (Admin).
     /// </summary>
     [HttpPut("{id:guid}/configurations")]
+    [HttpPut("{id:guid}/exam-config")]
     public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)
     {
         // R2 Check: Hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Admin
@@ -102,6 +102,7 @@ public class CoursesController : ControllerBase
     /// Lấy thông tin cấu hình động hiện tại của môn học.
     /// </summary>
     [HttpGet("{id:guid}/configurations")]
+    [HttpGet("{id:guid}/exam-config")]
     public async Task<IActionResult> GetConfiguration(Guid id)
     {
         var query = new GetCourseConfigurationQuery(id);

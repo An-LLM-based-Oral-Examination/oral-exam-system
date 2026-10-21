@@ -135,6 +135,10 @@ public sealed class OverrideExamScoreCommandHandler
 
             foreach (var detail in request.CriterionDetails)
             {
+                var resolvedComment = !string.IsNullOrWhiteSpace(detail.LecturerComment)
+                    ? detail.LecturerComment.Trim()
+                    : (!string.IsNullOrWhiteSpace(detail.Comment) ? detail.Comment.Trim() : null);
+
                 var detailEntity = new LecturerAuditDetail
                 {
                     Id = Guid.NewGuid(),
@@ -142,7 +146,7 @@ public sealed class OverrideExamScoreCommandHandler
                     CriterionId = detail.CriterionId,
                     AiScore = detail.AiScore ?? 0m,
                     AuditedScore = Math.Round(detail.AuditedScore, 2, MidpointRounding.AwayFromZero),
-                    LecturerComment = string.IsNullOrWhiteSpace(detail.LecturerComment) ? null : detail.LecturerComment.Trim()
+                    LecturerComment = resolvedComment
                 };
                 audit.Details.Add(detailEntity);
                 _context.LecturerAuditDetails.Add(detailEntity);

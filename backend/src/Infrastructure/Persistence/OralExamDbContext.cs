@@ -500,6 +500,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.BloomLevel).HasColumnName("bloom_level").HasMaxLength(20).HasDefaultValue("Understand");
             entity.Property(e => e.HasFollowUp).HasColumnName("has_follow_up").HasDefaultValue(false);
             entity.Property(e => e.FollowUpPrompt).HasColumnName("follow_up_prompt");
+            entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
+            entity.Property(e => e.ImageDescription).HasColumnName("image_description");
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_practice_questions_course");
@@ -637,6 +639,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("DRAFT");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
+            entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
+            entity.Property(e => e.ImageDescription).HasColumnName("image_description");
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_exam_questions_course");

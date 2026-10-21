@@ -15,7 +15,9 @@ namespace OralExamination.Application.Features.Notifications.Queries.GetNotifica
 public sealed record GetNotificationsQuery(
     Guid UserId,
     bool? UnreadOnly = null,
-    int Limit = 50) : IRequest<Result<NotificationsSummaryResponseDto>>;
+    int Limit = 50,
+    int Page = 1,
+    int PageSize = 0) : IRequest<Result<NotificationsSummaryResponseDto>>;
 
 public sealed class GetNotificationsQueryHandler
     : IRequestHandler<GetNotificationsQuery, Result<NotificationsSummaryResponseDto>>
@@ -77,6 +79,25 @@ public sealed class GetNotificationsQueryHandler
                 readAt = markAllReadLog.Value;
             }
 
+            var metadata = new Dictionary<string, string?>
+            {
+                ["entityName"] = entityName,
+                ["entityId"] = entityId.ToString()
+            };
+
+            if (string.Equals(entityName, "student_exam_tickets", StringComparison.OrdinalIgnoreCase))
+            {
+                metadata["ticketId"] = entityId.ToString();
+            }
+            else if (string.Equals(entityName, "appeal_requests", StringComparison.OrdinalIgnoreCase))
+            {
+                metadata["appealId"] = entityId.ToString();
+            }
+            else if (string.Equals(entityName, "exam_questions", StringComparison.OrdinalIgnoreCase))
+            {
+                metadata["questionId"] = entityId.ToString();
+            }
+
             notifications.Add(new NotificationItemDto
             {
                 Id = deterministicId,
@@ -86,6 +107,7 @@ public sealed class GetNotificationsQueryHandler
                 Message = message,
                 RelatedEntityName = entityName,
                 RelatedEntityId = entityId,
+                Metadata = metadata,
                 IsRead = readAt.HasValue,
                 ReadAt = readAt,
                 CreatedAt = createdAt
@@ -240,14 +262,30 @@ public sealed class GetNotificationsQueryHandler
             ? ordered.Where(n => !n.IsRead).ToList()
             : ordered;
 
-        var limit = Math.Clamp(request.Limit, 1, 100);
-        var pagedItems = filtered.Take(limit).ToList();
+        List<NotificationItemDto> pagedItems;
+        int page;
+        int pageSize;
+
+        if (request.PageSize > 0)
+        {
+            page = Math.Max(1, request.Page);
+            pageSize = Math.Clamp(request.PageSize, 1, 50);
+            pagedItems = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        }
+        else
+        {
+            page = 1;
+            pageSize = Math.Clamp(request.Limit, 1, 100);
+            pagedItems = filtered.Take(pageSize).ToList();
+        }
 
         return Result<NotificationsSummaryResponseDto>.Success(new NotificationsSummaryResponseDto
         {
             Items = pagedItems,
             UnreadCount = unreadCount,
-            TotalCount = ordered.Count
+            TotalCount = ordered.Count,
+            Page = page,
+            PageSize = pageSize
         });
     }
 }

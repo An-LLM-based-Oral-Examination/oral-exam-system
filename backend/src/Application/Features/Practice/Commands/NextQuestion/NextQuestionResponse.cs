@@ -17,4 +17,6 @@ public sealed class NextQuestionDto
     public string Difficulty { get; set; } = null!;
     public int QuestionOrder { get; set; }
     public List<string> RubricCriteria { get; set; } = new();
+    public string? ImageUrl { get; set; }
+    public string? ImageDescription { get; set; }
 }

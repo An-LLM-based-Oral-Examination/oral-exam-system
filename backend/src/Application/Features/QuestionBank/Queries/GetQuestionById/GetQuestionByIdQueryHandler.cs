@@ -88,7 +88,9 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             question.ReviewNotes,
             question.IsActive,
             question.CreatedAt,
-            rubricDto
+            rubricDto,
+            question.ImageUrl,
+            question.ImageDescription
         );
 
         return Result<QuestionDetailDto>.Success(detailDto);

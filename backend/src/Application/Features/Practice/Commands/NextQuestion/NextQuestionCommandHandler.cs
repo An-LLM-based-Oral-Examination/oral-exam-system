@@ -215,7 +215,9 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
                 Content = selectedQuestion.Content,
                 Difficulty = selectedQuestion.Difficulty,
                 QuestionOrder = questionOrder,
-                RubricCriteria = selectedQuestion.Rubric?.Criteria.Select(c => c.Description ?? string.Empty).ToList() ?? new List<string>()
+                RubricCriteria = selectedQuestion.Rubric?.Criteria.Select(c => c.Description ?? string.Empty).ToList() ?? new List<string>(),
+                ImageUrl = selectedQuestion.ImageUrl,
+                ImageDescription = selectedQuestion.ImageDescription
             }
         });
     }

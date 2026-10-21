@@ -81,5 +81,50 @@ public sealed class AcknowledgeOfficialGradeResponseDto
     public Guid StudentId { get; init; }
     public string StudentAcknowledgementStatus { get; init; } = "ACKNOWLEDGED";
     public DateTime AcknowledgedAtUtc { get; init; }
+    public DateTime AcknowledgedAt => AcknowledgedAtUtc;
     public string Message { get; init; } = string.Empty;
+}
+
+public sealed record StudentOfficialExamCriterionScoreDto(
+    string CriterionName,
+    decimal Score,
+    decimal MaxScore,
+    string? Comment);
+
+public sealed record StudentOfficialExamQuestionScorecardDto(
+    Guid QuestionId,
+    decimal Score,
+    List<StudentOfficialExamCriterionScoreDto> CriteriaScores,
+    string? Strengths,
+    string? Weaknesses,
+    string? ImprovementSuggestions,
+    string? QuestionTitle = null,
+    string? QuestionContent = null,
+    string? QuestionImageUrl = null,
+    string? QuestionImageDescription = null);
+
+public sealed record StudentInternalAppealInfoDto(
+    bool CanAppeal,
+    string Instruction,
+    int AppealDeadlineDays,
+    string AppealEndpoint);
+
+public sealed class StudentOfficialExamGradeDto
+{
+    public Guid TicketId { get; init; }
+    public string StudentCode { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string CourseCode { get; init; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
+    public bool IsLocked { get; init; }
+    public decimal? TotalScore { get; init; }
+    public DateTime PublishedAt { get; init; }
+    public string PublishedBy { get; init; } = string.Empty;
+    public string StudentAcknowledgementStatus { get; init; } = "PENDING";
+    public List<StudentOfficialExamQuestionScorecardDto> DetailedScorecard { get; init; } = new();
+    public StudentInternalAppealInfoDto InternalAppeal { get; init; } = new(
+        true,
+        "Nếu không đồng ý với kết quả, sinh viên có quyền nộp đơn phúc khảo trực tiếp trên cổng thông tin này.",
+        3,
+        "/api/v1/appeals");
 }

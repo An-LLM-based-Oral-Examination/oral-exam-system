@@ -715,6 +715,15 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("medium")
                         .HasColumnName("difficulty");
 
+                    b.Property<string>("ImageDescription")
+                        .HasColumnType("text")
+                        .HasColumnName("image_description");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("image_url");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1651,6 +1660,15 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("has_follow_up");
+
+                    b.Property<string>("ImageDescription")
+                        .HasColumnType("text")
+                        .HasColumnName("image_description");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("image_url");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()

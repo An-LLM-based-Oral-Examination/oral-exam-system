@@ -81,6 +81,33 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
         }
 
         var ticket = inWindow[0];
+        string? examSetCode = null;
+        IReadOnlyList<WorkstationExamQuestionDto>? workstationQuestions = null;
+        if (ticket.ExamSetId.HasValue)
+        {
+            examSetCode = await _context.ExamSets
+                .AsNoTracking()
+                .Where(es => es.Id == ticket.ExamSetId.Value)
+                .Select(es => es.SetCode)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            workstationQuestions = await _context.ExamSetQuestions
+                .AsNoTracking()
+                .Include(esq => esq.ExamQuestion)
+                .Where(esq => esq.ExamSetId == ticket.ExamSetId.Value && esq.ExamQuestion != null)
+                .OrderBy(esq => esq.OrderIndex)
+                .Select(esq => new WorkstationExamQuestionDto(
+                    esq.ExamQuestionId,
+                    esq.OrderIndex,
+                    esq.ExamQuestion.Title,
+                    esq.ExamQuestion.Content,
+                    esq.ExamQuestion.BloomLevel,
+                    esq.ExamQuestion.Difficulty,
+                    esq.ExamQuestion.ImageUrl,
+                    esq.ExamQuestion.ImageDescription))
+                .ToListAsync(cancellationToken);
+        }
+
         return Result<StudentWorkstationTicketResponse>.Success(new StudentWorkstationTicketResponse(
             ticket.Id,
             ticket.ShiftId,
@@ -89,9 +116,16 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             ticket.Shift.StartTime,
             ticket.Shift.EndTime,
             ticket.Shift.Status,
-            ticket.Shift.Session.Title,
+            ticket.Shift.Session?.Title ?? string.Empty,
             ticket.StudentId,
             ticket.SeatNumber,
-            ticket.Status));
+            ticket.Status,
+            ticket.ExamSetId,
+            examSetCode,
+            ticket.Shift.Session?.ExamInputMode ?? "VoiceWithTranscriptEdit",
+            ticket.Shift.Session?.TranscriptBufferSeconds ?? 60,
+            ticket.Shift.Session?.HasFollowUp ?? false,
+            ticket.Shift.Session?.MaxFollowUpQuestions ?? 2,
+            workstationQuestions));
     }
 }

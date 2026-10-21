@@ -68,7 +68,9 @@ public sealed class GetQuestionsQueryHandler
                 q.SubmittedBy,
                 q.ApprovedBy,
                 q.CreatedAt,
-                q.Rubric.TotalMaxScore
+                q.Rubric.TotalMaxScore,
+                q.ImageUrl,
+                q.ImageDescription
             ))
             .ToListAsync(cancellationToken);
 

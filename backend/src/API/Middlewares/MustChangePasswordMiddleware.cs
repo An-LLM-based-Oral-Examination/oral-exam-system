@@ -39,6 +39,7 @@ public class MustChangePasswordMiddleware
     public static bool IsAllowed(PathString path)
     {
         return path.StartsWithSegments("/api/v1/auth/change-password")
+            || path.StartsWithSegments("/api/v1/auth/refresh-token")
             || path.StartsWithSegments("/api/v1/auth/sign-out")
             || path.StartsWithSegments("/health")
             || path.StartsWithSegments("/swagger");

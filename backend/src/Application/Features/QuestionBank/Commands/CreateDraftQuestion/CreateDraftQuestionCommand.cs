@@ -19,5 +19,9 @@ public sealed record CreateDraftQuestionCommand(
     string UsageScope,
     bool HasFollowUp,
     string? FollowUpPrompt,
-    RubricDraftDto Rubric
+    RubricDraftDto Rubric,
+    Guid? RubricId = null,
+    Guid? ApprovedBy = null,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 ) : IRequest<Result<Guid>>;

@@ -73,6 +73,12 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     return Result<QuestionReviewDecisionResponseDto>.Failure(
                         "Barem Rubric có tiêu chí con mang điểm nhỏ hơn hoặc bằng 0, không thể phê duyệt.");
                 }
+                if (!string.IsNullOrWhiteSpace(question.ImageUrl) &&
+                    !string.Equals((question.Source ?? "manual").Trim(), "manual", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<QuestionReviewDecisionResponseDto>.Failure(
+                        "Chỉ câu hỏi tạo thủ công (manual) mới được phép đính kèm hình ảnh, không thể phê duyệt câu hỏi AI có hình ảnh.");
+                }
 
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
@@ -96,6 +102,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
                             Difficulty = question.Difficulty,
                             BloomLevel = question.BloomLevel,
                             HasFollowUp = true,
+                            ImageUrl = question.ImageUrl,
+                            ImageDescription = question.ImageDescription,
                             IsActive = true,
                             CreatedAt = now
                         });

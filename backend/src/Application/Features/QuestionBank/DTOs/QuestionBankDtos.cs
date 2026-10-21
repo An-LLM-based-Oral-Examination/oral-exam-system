@@ -3,6 +3,15 @@ using System.Collections.Generic;
 
 namespace OralExamination.Application.Features.QuestionBank.DTOs;
 
+public sealed record UploadQuestionImageResponseDto(
+    string ImageUrl,
+    string ObjectKey,
+    string FileName,
+    string ContentType,
+    long SizeBytes,
+    string? Description
+);
+
 public sealed record DifficultyDistributionDto(
     int Easy,
     int Medium,
@@ -79,7 +88,9 @@ public sealed record QuestionSummaryDto(
     Guid? SubmittedBy,
     Guid? ApprovedBy,
     DateTime CreatedAt,
-    decimal TotalRubricScore
+    decimal TotalRubricScore,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 public sealed record QuestionDetailDto(
@@ -102,7 +113,9 @@ public sealed record QuestionDetailDto(
     string? ReviewNotes,
     bool IsActive,
     DateTime CreatedAt,
-    RubricDetailDto Rubric
+    RubricDetailDto Rubric,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 public sealed record RubricDetailDto(
@@ -154,8 +167,12 @@ public sealed record CreateDraftQuestionRequestDto(
     string? UsageScope,
     bool HasFollowUp,
     string? FollowUpPrompt,
-    RubricDraftDto Rubric,
-    Guid? LecturerId = null
+    RubricDraftDto? Rubric = null,
+    Guid? LecturerId = null,
+    Guid? RubricId = null,
+    Guid? ApprovedBy = null,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 public sealed record BatchSubmitQuestionsForReviewRequestDto(
@@ -170,4 +187,92 @@ public sealed record QuestionReviewDecisionRequestDto(
     string ReviewNotes,
     string? TargetUsageScope,
     Guid? ReviewerId = null
+);
+
+public sealed record FlmCloDto(
+    string CloCode,
+    string Description,
+    string TargetBloomLevel
+);
+
+public sealed record FlmTopicDto(
+    string TopicId,
+    int SessionNumber,
+    string TopicName,
+    List<string> MappedClos
+);
+
+public sealed record FlmPaginationMetadataDto(
+    int PageNumber,
+    int PageSize,
+    int TotalTopics,
+    int TotalPages
+);
+
+public sealed record FlmSyllabusResponseDto(
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    string SyllabusCode,
+    int TotalCredits,
+    List<FlmCloDto> Clos,
+    List<FlmTopicDto> Topics,
+    FlmPaginationMetadataDto Pagination
+);
+
+public sealed record CreateRubricRequestDto(
+    Guid CourseId,
+    string Name,
+    string? Description,
+    List<RubricCriterionDraftDto> Criteria
+);
+
+public sealed record CreateRubricResponseDto(
+    Guid Id,
+    Guid CourseId,
+    string Name,
+    string? Description,
+    decimal TotalMaxScore,
+    int CriteriaCount,
+    DateTime CreatedAt,
+    List<RubricCriterionDetailDto> Criteria
+);
+
+public sealed record ApprovedQuestionItemDto(
+    string Title,
+    string Content,
+    string Difficulty,
+    string BloomLevel,
+    string UsageScope,
+    string Source,
+    string ModelAnswer,
+    List<string> KeyPoints,
+    bool HasFollowUp,
+    string? FollowUpPrompt,
+    RubricDraftDto Rubric,
+    string? ImageUrl = null,
+    string? ImageDescription = null
+);
+
+public sealed record ApprovedQuestionResultDto(
+    Guid QuestionId,
+    Guid RubricId,
+    string Title,
+    string UsageScope,
+    string Source,
+    string Status,
+    Guid ApprovedBy,
+    DateTime CreatedAt
+);
+
+public sealed record BatchApproveQuestionsRequestDto(
+    Guid CourseId,
+    List<ApprovedQuestionItemDto> Questions,
+    Guid? ApproverId = null
+);
+
+public sealed record BatchApproveQuestionsResponseDto(
+    Guid CourseId,
+    int TotalApproved,
+    List<ApprovedQuestionResultDto> ApprovedQuestions
 );

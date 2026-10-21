@@ -88,7 +88,9 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 Score: aiEval?.TotalScore ?? 0.0m,
                 Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? "Thí sinh không trả lời câu hỏi này" : null),
                 ConfidenceScore: aiEval?.ConfidenceScore,
-                CriteriaScores: criterionScores
+                CriteriaScores: criterionScores,
+                ImageUrl: q.ImageUrl,
+                ImageDescription: q.ImageDescription
             ));
         }
 

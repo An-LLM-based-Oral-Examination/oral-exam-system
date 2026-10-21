@@ -37,8 +37,10 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        var shiftExists = await _context.RealExamSessionShifts.AnyAsync(shift => shift.Id == request.ShiftId, cancellationToken);
-        if (!shiftExists)
+        var shift = await _context.RealExamSessionShifts
+            .Include(s => s.Session)
+            .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
+        if (shift is null)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftNotFound);
         }
@@ -66,10 +68,12 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         }
 
         WorkstationAddress.TryNormalize(request.IpAddress, out var ipAddress);
+        var resolvedExamSetId = await TryResolveOrCreateExamSetIdAsync(_context, shift, request.SeatNumber, cancellationToken);
         var ticket = new StudentExamTicket
         {
             ShiftId = request.ShiftId,
             StudentId = student.Id,
+            ExamSetId = resolvedExamSetId,
             SeatNumber = request.SeatNumber,
             IpAddress = ipAddress,
             Status = ExamTicketStatus.Scheduled,
@@ -82,6 +86,68 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         return Result<ExamTicketResponse>.Success(ToResponse(ticket));
     }
 
+    internal static async Task<Guid?> TryResolveOrCreateExamSetIdAsync(
+        IApplicationDbContext context,
+        RealExamSessionShift? shift,
+        int seatNumber,
+        CancellationToken cancellationToken)
+    {
+        if (shift?.Session is null)
+        {
+            return null;
+        }
+
+        var candidateSets = await context.ExamSets
+            .AsNoTracking()
+            .Where(es => es.IsActive && (es.StructureId == shift.Session.ExamStructureId || es.CourseId == shift.Session.CourseId))
+            .OrderBy(es => es.GeneratedAt)
+            .ThenBy(es => es.Id)
+            .Select(es => es.Id)
+            .ToListAsync(cancellationToken);
+
+        if (candidateSets.Count > 0)
+        {
+            return candidateSets[Math.Abs(seatNumber - 1) % candidateSets.Count];
+        }
+
+        var approvedQuestions = await context.ExamQuestions
+            .AsNoTracking()
+            .Where(q => q.CourseId == shift.Session.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .OrderBy(q => q.CreatedAt)
+            .Take(5)
+            .Select(q => q.Id)
+            .ToListAsync(cancellationToken);
+
+        if (approvedQuestions.Count == 0)
+        {
+            return null;
+        }
+
+        var autoExamSet = new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            StructureId = shift.Session.ExamStructureId,
+            CourseId = shift.Session.CourseId,
+            SetCode = $"AUTO-SET-{(seatNumber > 0 ? seatNumber : 1):D2}",
+            GeneratedAt = DateTime.UtcNow,
+            IsActive = true
+        };
+        context.ExamSets.Add(autoExamSet);
+
+        for (int i = 0; i < approvedQuestions.Count; i++)
+        {
+            context.ExamSetQuestions.Add(new ExamSetQuestion
+            {
+                Id = Guid.NewGuid(),
+                ExamSetId = autoExamSet.Id,
+                ExamQuestionId = approvedQuestions[i],
+                OrderIndex = i + 1
+            });
+        }
+
+        return autoExamSet.Id;
+    }
+
     internal static ExamTicketResponse ToResponse(StudentExamTicket ticket)
     {
         return new ExamTicketResponse(
@@ -91,6 +157,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             ticket.SeatNumber,
             ticket.IpAddress,
             ticket.Status,
-            ticket.CheckedInAt);
+            ticket.CheckedInAt,
+            ticket.ExamSetId);
     }
 }

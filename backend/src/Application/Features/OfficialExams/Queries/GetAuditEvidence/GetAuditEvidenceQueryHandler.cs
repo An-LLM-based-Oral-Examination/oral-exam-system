@@ -45,6 +45,19 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
             .OrderBy(t => t.SeatNumber)
             .ToListAsync(cancellationToken);
 
+        var questionIds = tickets
+            .SelectMany(t => t.Submissions)
+            .Select(s => s.ExamQuestionId)
+            .Distinct()
+            .ToList();
+
+        var questionMap = questionIds.Count > 0
+            ? await _context.ExamQuestions
+                .AsNoTracking()
+                .Where(q => questionIds.Contains(q.Id))
+                .ToDictionaryAsync(q => q.Id, cancellationToken)
+            : new Dictionary<Guid, Domain.Entities.ExamQuestion>();
+
         var items = new List<AuditEvidenceItemDto>();
 
         foreach (var ticket in tickets)
@@ -137,6 +150,12 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 suspiciousReason = $"Điểm giảng viên chốt ({ticket.LecturerAudit.AuditedScore:F2}) lệch lớn so với AI ban đầu ({ticket.LecturerAudit.OriginalAiScore:F2}).";
             }
 
+            Domain.Entities.ExamQuestion? latestQuestion = null;
+            if (latestSubmission != null)
+            {
+                questionMap.TryGetValue(latestSubmission.ExamQuestionId, out latestQuestion);
+            }
+
             items.Add(new AuditEvidenceItemDto
             {
                 TicketId = ticket.Id,
@@ -153,7 +172,12 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 SuspiciousReason = suspiciousReason,
                 AiChainOfThought = cotTrace,
                 FinalScore = finalScore,
-                IsLocked = ticket.IsLocked
+                IsLocked = ticket.IsLocked,
+                QuestionId = latestSubmission?.ExamQuestionId,
+                QuestionTitle = latestQuestion?.Title,
+                QuestionContent = latestQuestion?.Content,
+                QuestionImageUrl = latestQuestion?.ImageUrl,
+                QuestionImageDescription = latestQuestion?.ImageDescription
             });
         }
 

@@ -75,7 +75,7 @@ sequenceDiagram
 ```
 
 ### Các Đặc Tính Kỹ Thuật Trọng Yếu:
-1. **Hạn ngạch động (Dynamic Daily Quota):** Trưởng Bộ Môn cấu hình số lượt thi thử tối đa trong ngày qua `Course.MaxMockExamsPerDay` (mặc định $K = 3$). Reset tự động vào 00:00 GMT+7 (Giờ Việt Nam).
+1. **Hạn ngạch động (Dynamic Daily Quota):** Admin cấu hình số lượt thi thử tối đa trong ngày qua `Course.MaxMockExamsPerDay` (mặc định $K = 3$). Reset tự động vào 00:00 GMT+7 (Giờ Việt Nam).
 2. **Cô lập đề thi 100% (Zero Leakage):** Đề thi thử được rút ngẫu nhiên từ kho `practice_questions`, tuyệt đối cách ly khỏi kho `exam_questions` (kho thi thật phòng Lab Kiosk).
 3. **Voice-First Gate & Zero R2 Storage:** Sinh viên bắt buộc phát biểu qua Micro. File âm thanh được stream trực tiếp vào Cloudflare Whisper STT trong bộ nhớ RAM và bị hủy ngay lập tức sau khi bóc băng. **Tuyệt đối KHÔNG lưu file audio lên Cloudflare R2** (tiết kiệm chi phí lưu trữ; Cloudflare R2 chỉ dành riêng cho MF-04).
 4. **Server Master Timer:** Máy chủ quản lý thời gian thi chính thức: 30 phút (không follow-up) hoặc 45 phút (có follow-up). Cộng thêm **10 giây Network Grace Period** đệm trễ mạng. Quá hạn tự động thu bài, câu chưa làm nhận 0 điểm.
@@ -158,6 +158,8 @@ Khởi tạo ca thi, trừ 1 lượt hạn ngạch, bốc đề ngẫu nhiên th
         "id": "771bfa3c-535c-4c6e-9844-48b0a99ff521",
         "orderIndex": 1,
         "title": "Clean Architecture Layering",
+        "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+        "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
         "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc (Dependency Rule) của 4 phân tầng trong Clean Architecture.",
         "bloomLevel": "Apply",
         "difficulty": "medium",
@@ -248,6 +250,8 @@ Sinh viên ấn nút "Nộp bài" hoặc khi đồng hồ đếm ngược chạm
         "questionId": "771bfa3c-535c-4c6e-9844-48b0a99ff521",
         "orderIndex": 1,
         "title": "Clean Architecture Layering",
+        "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+        "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
         "content": "Hãy phân tích trách nhiệm và quy tắc phụ thuộc (Dependency Rule) của 4 phân tầng trong Clean Architecture.",
         "bloomLevel": "Apply",
         "difficulty": "medium",

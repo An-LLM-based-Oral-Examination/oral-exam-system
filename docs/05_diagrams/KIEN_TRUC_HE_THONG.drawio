@@ -18,15 +18,15 @@
         </mxCell>
 
         <!-- Actors -->
-        <mxCell id="act_student" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Sinh Viên SE (ACT-01)&#xa;• MF-01: Luyện tập tự do (Per-Q / Full-Session)&#xa;• MF-02: Thi thử bấm giờ (Hạn ngạch do Trưởng BM cấu hình)&#xa;• MF-04: Thi vấn đáp phòng Lab Kiosk" vertex="1">
+        <mxCell id="act_student" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=1.5;fontColor=#1e3a8a;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Sinh Viên SE (ACT-01)&#xa;• MF-01: Luyện tập tự do (Per-Q / Full-Session, Timeout 5m)&#xa;• MF-02: Thi thử bấm giờ (Hạn ngạch do Admin cấu hình)&#xa;• MF-04: Thi vấn đáp phòng Lab Kiosk &amp; Xem điểm/Phúc khảo" vertex="1">
           <mxGeometry x="100" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="act_instructor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Giảng Viên / Giám Thị (ACT-02)&#xa;• MF-03: Soạn đề &amp; Barem Rubric 10.0đ&#xa;• MF-03: Hiệu chuẩn qua AI Simulator&#xa;• MF-04: Cổng Hậu Kiểm &amp; One-Way Lock" vertex="1">
+        <mxCell id="act_instructor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;strokeWidth=1.5;fontColor=#78350f;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Giảng Viên / Trưởng BM / Giám Thị (ACT-02)&#xa;• MF-03: Soạn đề, Barem 10.0đ &amp; Trưởng BM Duyệt đề&#xa;• MF-04: Cổng Hậu Kiểm, One-Way Lock &amp; Giao Phúc khảo&#xa;• Trưởng BM: Cấu hình đề thi thử, kỳ thi &amp; Replay DLQ" vertex="1">
           <mxGeometry x="560" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
-        <mxCell id="act_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontColor=#581c87;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Quản Trị Viên (ACT-03)&#xa;• Quản trị danh mục môn, lớp &amp; RBAC&#xa;• Cấu hình hệ thống MF-01 &amp; mô hình AI&#xa;• Giám sát hệ thống &amp; Replay bài lỗi DLQ" vertex="1">
+        <mxCell id="act_admin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;strokeWidth=1.5;fontColor=#581c87;fontFamily=Helvetica;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" value="Quản Trị Viên (ACT-03)&#xa;• Quản trị danh mục học kỳ, người dùng &amp; RBAC 5 Roles&#xa;• Cấu hình hệ thống MF-01 (Buffer 60s, Timeout 5m)&#xa;• Cấu hình hạn ngạch thi thử MF-02 &amp; Tra cứu Audit Logs" vertex="1">
           <mxGeometry x="1020" y="180" width="380" height="90" as="geometry" />
         </mxCell>
 
@@ -62,7 +62,7 @@
           <mxGeometry x="440" y="650" width="320" height="100" as="geometry" />
         </mxCell>
 
-        <mxCell id="gw_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Xác Thực Định Danh (Google Workspace)&lt;/b&gt;&#xa;• OAuth 2.0 Auth Code Flow kèm PKCE&#xa;• Đăng nhập Google mọi email domain&#xa;• JWT Bearer Token &amp; RBAC Authorization" vertex="1">
+        <mxCell id="gw_auth" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#059669;strokeWidth=1.5;fontColor=#064e3b;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Xác Thực Định Danh Kép (Dual Auth)&lt;/b&gt;&#xa;• Google OAuth 2.0 PKCE + Tài khoản trường cấp&#xa;• Đổi mật khẩu, cấp &amp; xoay vòng Refresh Token&#xa;• JWT Bearer Token &amp; RBAC 5 Roles Authorization" vertex="1">
           <mxGeometry x="800" y="650" width="300" height="100" as="geometry" />
         </mxCell>
 
@@ -81,11 +81,11 @@
           <mxGeometry x="60" y="930" width="1380" height="420" as="geometry" />
         </mxCell>
 
-        <mxCell id="be_api_layer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;API Layer (/api/v1/*)&lt;/b&gt;&#xa;• AuthController: Token Exchange PKCE&#xa;• PracticeController: Nộp bài (HTTP 202 Accepted)&#xa;• MockExamController: Quota Check (HTTP 429)&#xa;• ExamLabController: Nộp STT_MSSV.webm &amp; SHA-256&#xa;• ExamAuditController: Override giải trình &amp; One-Way Lock&#xa;• RFC 7807 Global Exception Handling (ProblemDetails)" vertex="1">
+        <mxCell id="be_api_layer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;API Layer (/api/v1/*)&lt;/b&gt;&#xa;• AuthController: Dual Auth (Google OAuth + Password)&#xa;• PracticeController: Nộp bài (HTTP 202), Timeout 5m (410)&#xa;• MockExamController: Quota Check (HTTP 429)&#xa;• ExamLabController: Nộp STT_MSSV.webm &amp; SHA-256&#xa;• ExamAuditController: Override giải trình &amp; One-Way Lock&#xa;• RFC 7807 Global Exception Handling (ProblemDetails)" vertex="1">
           <mxGeometry x="100" y="980" width="380" height="150" as="geometry" />
         </mxCell>
 
-        <mxCell id="be_app_cqrs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Application Layer (MediatR CQRS)&lt;/b&gt;&#xa;• ValidationBehavior: FluentValidation (Sum == 10.0đ -&gt; 422)&#xa;• Logging &amp; PerformanceBehavior (Cảnh báo &gt; 500ms)&#xa;• Commands: SubmitAnswer, StartMockExam, LockGrade&#xa;• Queries: GetScorecard, GetRubricScorecard, GetAuditSession&#xa;• PostgreSqlQuotaService: Kiểm tra hạn ngạch do Trưởng BM cấu hình&#xa;• ExamGeneratorService: Bốc đề theo cấu trúc Trưởng BM thiết lập" vertex="1">
+        <mxCell id="be_app_cqrs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f3ff;strokeColor=#7c3aed;strokeWidth=1.5;fontColor=#4c1d95;fontFamily=Helvetica;fontSize=12;align=left;verticalAlign=middle;spacingLeft=15;" value="&lt;b&gt;Application Layer (MediatR CQRS)&lt;/b&gt;&#xa;• ValidationBehavior: FluentValidation (Sum == 10.0đ -&gt; 422)&#xa;• Logging &amp; PerformanceBehavior (Cảnh báo &gt; 500ms)&#xa;• Commands: SubmitAnswer, StartMockExam, LockGrade, ReplayDlq&#xa;• Queries: GetScorecard, GetRubricScorecard, GetAuditSession&#xa;• PostgreSqlQuotaService: Kiểm tra hạn ngạch do Admin cấu hình&#xa;• ExamGeneratorService: Bốc đề theo cấu trúc Trưởng BM thiết lập" vertex="1">
           <mxGeometry x="520" y="980" width="420" height="150" as="geometry" />
         </mxCell>
 
