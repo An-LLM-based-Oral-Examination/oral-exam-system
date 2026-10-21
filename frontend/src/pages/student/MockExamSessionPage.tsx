@@ -13,12 +13,14 @@ import {
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import {
   getMockExamErrorDetail,
   getMockExamErrorStatus,
   mockExamService,
 } from '@/services/mockExam.service'
+import { DEFAULT_TTS_VOICE, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
 import type {
   MockExamScorecard as MockExamScorecardData,
   StoredMockExamAnswer,
@@ -71,27 +73,10 @@ function shouldIgnoreSpace(target: EventTarget | null) {
 }
 
 function speakQuestion(content: string) {
-  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return
-  const start = () => {
-    const utterance = new SpeechSynthesisUtterance(content)
-    utterance.lang = 'vi-VN'
-    utterance.rate = 0.96
-    const voice = window.speechSynthesis
-      .getVoices()
-      .find((item) => item.lang.toLocaleLowerCase().startsWith('vi'))
-    if (voice) utterance.voice = voice
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
-  }
-  if (window.speechSynthesis.getVoices().length > 0) {
-    start()
-    return
-  }
-  const onVoices = () => {
-    window.speechSynthesis.removeEventListener('voiceschanged', onVoices)
-    start()
-  }
-  window.speechSynthesis.addEventListener('voiceschanged', onVoices)
+  void playNaturalSpeech(content, DEFAULT_TTS_VOICE, 0.96).catch((error: unknown) => {
+    if (error instanceof Error && error.name === 'AbortError') return
+    console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
+  })
 }
 
 export function MockExamSessionPage() {
@@ -272,7 +257,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         }
         if (!holdWantedRef.current || runtimeRef.current.phase !== 'exam') continue
         try {
-          if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+          stopSpeechPlayback()
           setAnswerError('')
           recordingSecondsRef.current = 0
           setRecordingSeconds(0)
@@ -369,7 +354,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
         const result = await mockExamService.submitSession(session.sessionId)
         clearMockExamSession()
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+        stopSpeechPlayback()
         setScorecard(result)
         setPhase('scorecard')
         runtimeRef.current.phase = 'scorecard'
@@ -416,7 +401,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return () => {
       document.body.style.overflow = previousOverflow
       if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      stopSpeechPlayback()
     }
   }, [])
 
@@ -495,7 +480,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     if (!autoRead || !question || phase !== 'exam') return
     speakQuestion(question.content)
     return () => {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      stopSpeechPlayback()
     }
   }, [autoRead, phase, question])
 
@@ -622,7 +607,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       tone: 'warning',
     })
     if (!confirmed) return
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    stopSpeechPlayback()
     navigate('/mock-exam')
   }
 
@@ -812,6 +797,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 Đọc câu hỏi
               </button>
             </div>
+            <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} />
             <h2 className="text-[24px] leading-snug font-semibold text-[#0F2854]">
               Câu {question.orderIndex}. {question.content}
             </h2>

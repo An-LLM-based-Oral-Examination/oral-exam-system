@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, ChevronDown, MessageSquareText, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import type { MockExamScorecard as MockExamScorecardData } from '@/types/mockExam.types'
 
 const CLASSIFICATION_STYLES: Record<string, string> = {
@@ -133,6 +134,7 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
 
               {isOpen && (
                 <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
+                  <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} />
                   <div className="rounded-xl bg-[#4988C4]/16 p-3">
                     <p className="text-xs font-bold text-[#1C4D8D]">Câu trả lời</p>
                     <p className="mt-1.5 text-sm leading-relaxed text-[#0F2854]">

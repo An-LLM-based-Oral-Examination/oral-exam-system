@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { questionService } from '@/services/question.service'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import type { UserRole } from '@/types/auth.types'
 import type {
@@ -718,6 +719,11 @@ export function QuestionStudioPage() {
                   <h3 className="mt-3 text-base leading-snug font-bold text-[#182a45]">
                     {detail.title}
                   </h3>
+                  <QuestionImage
+                    imageUrl={detail.imageUrl}
+                    imageAlt={detail.imageAlt}
+                    className="mt-4"
+                  />
                   <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-[#586a82]">
                     {detail.content}
                   </p>

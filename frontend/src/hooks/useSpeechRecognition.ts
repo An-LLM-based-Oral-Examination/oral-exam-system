@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { DEFAULT_TTS_VOICE, playNaturalSpeech } from '@/services/speech.service'
 
 interface SpeechRecognitionAlternativeLike {
   transcript: string
@@ -50,15 +51,9 @@ export function useSpeechRecognition() {
   const [error, setError] = useState<string | null>(null)
 
   const speak = useCallback((text: string) => {
-    if (!('speechSynthesis' in window)) {
-      console.warn('Web Speech Synthesis is not supported in this browser.')
-      return
-    }
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'vi-VN'
-    utterance.rate = 1.0
-    window.speechSynthesis.speak(utterance)
+    void playNaturalSpeech(text, DEFAULT_TTS_VOICE, 1).catch((speechError) => {
+      console.warn('KhÃ´ng thá»ƒ phÃ¡t giá»ng Ä‘á»c tá»± nhiÃªn.', speechError)
+    })
   }, [])
 
   const startListening = useCallback(() => {

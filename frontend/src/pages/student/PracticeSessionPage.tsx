@@ -30,10 +30,12 @@ import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { BufferScreen } from '@/components/practice/BufferScreen'
 import { ScorecardModal } from '@/components/practice/ScorecardModal'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
+import { DEFAULT_TTS_VOICE, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
 import { storageService } from '@/services/storage.service'
 import type {
   PracticeAnswerDetail,
@@ -494,7 +496,7 @@ export const PracticeSessionPage: React.FC = () => {
 
   useEffect(() => {
     return () => {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      stopSpeechPlayback()
     }
   }, [])
 
@@ -521,12 +523,11 @@ export const PracticeSessionPage: React.FC = () => {
   }, [showStopConfirmation])
 
   const handleReadQuestion = () => {
-    if (!activePrompt || !('speechSynthesis' in window)) return
-    const utterance = new SpeechSynthesisUtterance(activePrompt)
-    utterance.lang = 'vi-VN'
-    utterance.rate = 0.95
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+    if (!activePrompt) return
+    void playNaturalSpeech(activePrompt, DEFAULT_TTS_VOICE, 0.95).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'AbortError') return
+      setPageError('Không thể phát câu hỏi bằng giọng AI. Vui lòng thử lại.')
+    })
   }
 
   const handleRecording = async () => {
@@ -535,7 +536,7 @@ export const PracticeSessionPage: React.FC = () => {
     setBufferError('')
 
     if (!isRecording) {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+      stopSpeechPlayback()
       setTranscript('')
       setBufferDeadlineTimestamp(null)
       setShowBuffer(false)
@@ -948,11 +949,6 @@ export const PracticeSessionPage: React.FC = () => {
     }
 
     const completedQuestions = runtime.mainQuestionsCompleted + 1
-    if (completedQuestions >= runtime.config.questionCount) {
-      await completeAndExit()
-      isTransitioningRef.current = false
-      return
-    }
 
     setIsSubmitting(true)
     try {
@@ -966,6 +962,8 @@ export const PracticeSessionPage: React.FC = () => {
       const nextQuestion: PracticeQuestion = {
         questionId: response.question.id,
         content: response.question.content,
+        imageUrl: response.question.imageUrl,
+        imageAlt: response.question.imageAlt,
         rubricCriteria: response.question.rubricCriteria,
       }
       updateRuntime((current) => ({
@@ -1038,11 +1036,11 @@ export const PracticeSessionPage: React.FC = () => {
     !isSubmitting &&
     !isAnswerLocked &&
     (mode !== 'PER_QUESTION' || isHubConnected)
-  const totalMainQuestions =
-    mode === 'FULL_SESSION' ? runtime.questions.length : runtime.config.questionCount
-  const completedMainQuestions = Math.min(runtime.mainQuestionsCompleted, totalMainQuestions)
-  const progressPercentage =
-    totalMainQuestions > 0 ? Math.round((completedMainQuestions / totalMainQuestions) * 100) : 0
+  const totalMainQuestions = mode === 'FULL_SESSION' ? runtime.questions.length : null
+  const completedMainQuestions = runtime.mainQuestionsCompleted
+  const progressPercentage = totalMainQuestions
+    ? Math.round((completedMainQuestions / totalMainQuestions) * 100)
+    : 0
   const modeLabel = mode === 'PER_QUESTION' ? 'Luyện từng câu' : 'Luyện trọn gói · Tăng dần độ khó'
   const answerState = isVerifyingSubmission
     ? 'Đang xác minh lần nộp câu trả lời'
@@ -1144,24 +1142,34 @@ export const PracticeSessionPage: React.FC = () => {
               <div>
                 <p className="text-xs font-semibold text-[#0F2854]/70">Tiến độ câu hỏi chính</p>
                 <p className="mt-0.5 text-sm font-bold text-[#0F2854]">
-                  Đã hoàn thành {completedMainQuestions}/{totalMainQuestions} câu
+                  {mode === 'PER_QUESTION'
+                    ? `Đã luyện ${completedMainQuestions} câu`
+                    : `Đã hoàn thành ${completedMainQuestions}/${totalMainQuestions} câu`}
                 </p>
               </div>
-              <strong className="font-mono text-lg text-[#1C4D8D]">{progressPercentage}%</strong>
+              {mode === 'FULL_SESSION' && (
+                <strong className="font-mono text-lg text-[#1C4D8D]">{progressPercentage}%</strong>
+              )}
             </div>
-            <div
-              className="mt-3 h-2 overflow-hidden rounded-full bg-[#4988C4]/16"
-              role="progressbar"
-              aria-label="Tiến độ phiên luyện tập"
-              aria-valuemin={0}
-              aria-valuemax={totalMainQuestions}
-              aria-valuenow={completedMainQuestions}
-            >
+            {mode === 'FULL_SESSION' ? (
               <div
-                className="h-full rounded-full bg-[#1C4D8D] transition-[width] duration-500 motion-reduce:transition-none"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
+                className="mt-3 h-2 overflow-hidden rounded-full bg-[#4988C4]/16"
+                role="progressbar"
+                aria-label="Tiến độ phiên luyện tập"
+                aria-valuemin={0}
+                aria-valuemax={totalMainQuestions ?? undefined}
+                aria-valuenow={completedMainQuestions}
+              >
+                <div
+                  className="h-full rounded-full bg-[#1C4D8D] transition-[width] duration-500 motion-reduce:transition-none"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+            ) : (
+              <p className="mt-3 text-xs font-semibold text-[#5b6b84]">
+                Phiên sẽ tiếp tục đến khi kho câu hỏi đã chọn không còn câu phù hợp hoặc bạn kết thúc.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -1219,7 +1227,9 @@ export const PracticeSessionPage: React.FC = () => {
                     <BookOpenText className="size-3.5" />
                     {runtime.activeFollowUp
                       ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
-                      : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
+                      : mode === 'PER_QUESTION'
+                        ? `Câu ${currentQuestionNumber}`
+                        : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
                   </span>
                   {runtime.activeFollowUp && (
                     <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-bold text-violet-700">
@@ -1235,6 +1245,12 @@ export const PracticeSessionPage: React.FC = () => {
                   </span>
                 )}
               </div>
+
+              <QuestionImage
+                imageUrl={currentQuestion.imageUrl}
+                imageAlt={currentQuestion.imageAlt}
+                className="mt-5"
+              />
 
               <h2 className="mt-5 text-[clamp(1.15rem,2.1vw,1.55rem)] leading-[1.45] font-bold tracking-[-0.025em] text-[#0F2854]">
                 {activePrompt}
@@ -1584,13 +1600,17 @@ export const PracticeSessionPage: React.FC = () => {
                 <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
                   <p className="text-xs font-semibold text-[#8190a3]">Câu hiện tại</p>
                   <p className="mt-1 text-sm font-black text-[#1C4D8D]">
-                    {currentQuestionNumber}/{totalMainQuestions}
+                    {mode === 'PER_QUESTION'
+                      ? currentQuestionNumber
+                      : `${currentQuestionNumber}/${totalMainQuestions}`}
                   </p>
                 </div>
                 <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
                   <p className="text-xs font-semibold text-[#8190a3]">Đã hoàn thành</p>
                   <p className="mt-1 text-sm font-black text-[#168367]">
-                    {completedMainQuestions}/{totalMainQuestions}
+                    {mode === 'PER_QUESTION'
+                      ? completedMainQuestions
+                      : `${completedMainQuestions}/${totalMainQuestions}`}
                   </p>
                 </div>
               </div>
@@ -1602,7 +1622,7 @@ export const PracticeSessionPage: React.FC = () => {
                 <p className="mt-1.5 text-sm font-bold text-[#304159]">{modeLabel}</p>
                 <p className="mt-1 text-xs leading-relaxed text-[#7b899c]">
                   {mode === 'PER_QUESTION'
-                    ? 'Nhận phản hồi sau từng câu; câu đào sâu không tính vào số câu chính.'
+                    ? 'Nhận phản hồi sau từng câu không giới hạn; phiên dừng khi hết câu phù hợp hoặc bạn kết thúc.'
                     : 'Hoàn thành toàn bộ câu hỏi trước khi nhận bảng điểm tổng kết.'}
                 </p>
               </div>
@@ -1728,7 +1748,8 @@ export const PracticeSessionPage: React.FC = () => {
           nextActionLabel={
             latestResult?.needsFollowUp
               ? 'Trả lời câu hỏi đào sâu'
-              : runtime.mainQuestionsCompleted + 1 >= runtime.config.questionCount
+              : mode === 'FULL_SESSION' &&
+                  runtime.mainQuestionsCompleted + 1 >= (runtime.config.questionCount ?? 0)
                 ? 'Hoàn tất phiên'
                 : 'Câu chính tiếp theo'
           }

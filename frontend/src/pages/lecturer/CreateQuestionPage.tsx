@@ -20,6 +20,7 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { questionService } from '@/services/question.service'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import type {
   BloomLevel,
@@ -1132,6 +1133,11 @@ export function CreateQuestionPage() {
                       <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-[#63738a]">
                         {question.content}
                       </p>
+                      <QuestionImage
+                        imageUrl={question.imageUrl}
+                        imageAlt={question.imageAlt}
+                        className="mt-3"
+                      />
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#4988C4]/45 pt-3 text-xs font-semibold text-[#7a899c]">
                         <span>{question.rubric.criteria.length} tiêu chí rubric</span>
                         <div className="flex flex-wrap items-center justify-end gap-2">

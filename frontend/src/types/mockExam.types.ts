@@ -22,6 +22,8 @@ export interface MockExamQuestion {
   orderIndex: number
   title: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   bloomLevel: string
   difficulty: string
   rubricCriteria: MockExamRubricCriterion[]
@@ -77,6 +79,8 @@ export interface MockExamQuestionScore {
   orderIndex: number
   title: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   bloomLevel: string
   difficulty: string
   transcript: string | null

@@ -189,6 +189,8 @@ function normalizeQuestion(payload: unknown): PracticeQuestion {
   return {
     questionId: requireGuid(candidate, 'questionId', 'Câu hỏi luyện tập thiếu questionId hợp lệ.'),
     content: requireNonEmptyString(candidate, 'content', 'Câu hỏi luyện tập thiếu nội dung.'),
+    imageUrl: nullableString(candidate, 'imageUrl', 'URL hình ảnh câu hỏi không hợp lệ.'),
+    imageAlt: nullableString(candidate, 'imageAlt', 'Mô tả hình ảnh câu hỏi không hợp lệ.'),
     rubricCriteria: stringArray(
       candidate,
       'rubricCriteria',
@@ -219,6 +221,8 @@ function normalizeNextQuestion(payload: unknown): NextPracticeQuestion {
   return {
     id: requireGuid(candidate, 'id', 'Câu hỏi tiếp theo thiếu id hợp lệ.'),
     content: requireNonEmptyString(candidate, 'content', 'Câu hỏi tiếp theo thiếu nội dung.'),
+    imageUrl: nullableString(candidate, 'imageUrl', 'URL hình ảnh câu hỏi tiếp theo không hợp lệ.'),
+    imageAlt: nullableString(candidate, 'imageAlt', 'Mô tả hình ảnh câu hỏi tiếp theo không hợp lệ.'),
     difficulty: difficulty as PracticeDifficulty,
     questionOrder,
     rubricCriteria: stringArray(

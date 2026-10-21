@@ -12,6 +12,10 @@ import type {
   SubmitMockExamAnswerRequest,
   SubmitMockExamAnswerResponse,
 } from '@/types/mockExam.types'
+import {
+  TEMPORARY_QUESTION_IMAGE_ALT,
+  TEMPORARY_QUESTION_IMAGE_URL,
+} from '@/components/question/temporaryQuestionImage'
 
 type JsonRecord = Record<string, unknown>
 
@@ -129,6 +133,8 @@ function normalizeQuestion(value: unknown): MockExamQuestion {
     orderIndex: requireInteger(record, 'orderIndex', 'Câu hỏi thi thử thiếu thứ tự.'),
     title: requireString(record, 'title', 'Câu hỏi thi thử thiếu tiêu đề.'),
     content: requireString(record, 'content', 'Câu hỏi thi thử thiếu nội dung.'),
+    imageUrl: readOptionalString(record, 'imageUrl'),
+    imageAlt: readOptionalString(record, 'imageAlt'),
     bloomLevel: requireString(record, 'bloomLevel', 'Câu hỏi thi thử thiếu mức Bloom.'),
     difficulty: requireString(record, 'difficulty', 'Câu hỏi thi thử thiếu độ khó.'),
     rubricCriteria: readArray(
@@ -170,7 +176,15 @@ function normalizeStart(value: unknown): StartMockExamResponse {
     usedQuota: requireInteger(record, 'usedQuota', 'Ca thi thử thiếu số lượt đã dùng.'),
     remainingQuota: requireInteger(record, 'remainingQuota', 'Ca thi thử thiếu số lượt còn lại.'),
     maxDailyQuota: requireInteger(record, 'maxDailyQuota', 'Ca thi thử thiếu hạn ngạch tối đa.'),
-    questions,
+    questions: questions.map((question, index) =>
+      index === 0
+        ? {
+            ...question,
+            imageUrl: question.imageUrl?.trim() || TEMPORARY_QUESTION_IMAGE_URL,
+            imageAlt: question.imageAlt?.trim() || TEMPORARY_QUESTION_IMAGE_ALT,
+          }
+        : question,
+    ),
   }
 }
 
@@ -204,6 +218,8 @@ function normalizeQuestionScore(value: unknown): MockExamQuestionScore {
     orderIndex: requireInteger(record, 'orderIndex', 'Điểm câu hỏi thiếu thứ tự.'),
     title: requireString(record, 'title', 'Điểm câu hỏi thiếu tiêu đề.'),
     content: requireString(record, 'content', 'Điểm câu hỏi thiếu nội dung đề.'),
+    imageUrl: readOptionalString(record, 'imageUrl'),
+    imageAlt: readOptionalString(record, 'imageAlt'),
     bloomLevel: requireString(record, 'bloomLevel', 'Điểm câu hỏi thiếu mức Bloom.'),
     difficulty: requireString(record, 'difficulty', 'Điểm câu hỏi thiếu độ khó.'),
     transcript: readOptionalString(record, 'transcript'),
@@ -241,7 +257,15 @@ function normalizeScorecard(value: unknown): MockExamScorecard {
     isOverdue: requireBoolean(record, 'isOverdue', 'Bảng điểm thiếu cờ nộp quá hạn.'),
     startedAt: requireDateString(record, 'startedAt', 'Bảng điểm thiếu thời điểm bắt đầu.'),
     submittedAt: requireDateString(record, 'submittedAt', 'Bảng điểm thiếu thời điểm nộp.'),
-    questions,
+    questions: questions.map((question, index) =>
+      index === 0
+        ? {
+            ...question,
+            imageUrl: question.imageUrl?.trim() || TEMPORARY_QUESTION_IMAGE_URL,
+            imageAlt: question.imageAlt?.trim() || TEMPORARY_QUESTION_IMAGE_ALT,
+          }
+        : question,
+    ),
   }
 }
 

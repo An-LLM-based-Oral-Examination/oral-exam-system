@@ -74,6 +74,8 @@ export interface QuestionDetail {
   rubricId: string
   title: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   sampleAnswer: string | null
   keyPoints: string[]
   difficulty: QuestionDifficulty
@@ -134,6 +136,8 @@ export interface GeneratedQuestionDraft {
   cloCode: string
   title: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   difficulty: QuestionDifficulty
   bloomLevel: BloomLevel
   source: QuestionSource

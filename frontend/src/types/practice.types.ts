@@ -24,7 +24,7 @@ export interface PracticeSessionConfig {
   courseCode: string
   mode: PracticeMode
   selectedDifficulties: PracticeDifficulty[]
-  questionCount: number
+  questionCount: number | null
   microphoneName: string
 }
 
@@ -54,12 +54,16 @@ export interface CourseConfigurationDto {
 export interface PracticeQuestion {
   questionId: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   rubricCriteria: string[]
 }
 
 export interface NextPracticeQuestion {
   id: string
   content: string
+  imageUrl?: string | null
+  imageAlt?: string | null
   difficulty: PracticeDifficulty
   questionOrder: number
   rubricCriteria: string[]

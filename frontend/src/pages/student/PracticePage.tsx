@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -28,6 +28,12 @@ import { ds } from '@/design/system'
 import { useAuth } from '@/hooks/useAuth'
 import { courseService } from '@/services/course.service'
 import { practiceService } from '@/services/practice.service'
+import {
+  DEFAULT_TTS_VOICE,
+  isSpeechPlaybackCancellation,
+  playNaturalSpeech,
+  stopSpeechPlayback,
+} from '@/services/speech.service'
 import { savePracticeRuntime } from '@/utils/practiceSessionStorage'
 import type {
   CourseDto,
@@ -47,7 +53,6 @@ type MicrophoneState = 'idle' | 'checking' | 'ready' | 'error' | 'unsupported'
 
 const FULL_SESSION_MIN_QUESTIONS = 3
 const FULL_SESSION_MAX_QUESTIONS = 10
-const PER_QUESTION_MIN_QUESTIONS = 1
 
 const DIFFICULTY_OPTIONS: Array<{
   value: PracticeDifficulty
@@ -150,6 +155,7 @@ export function PracticePage() {
   const [microphoneName, setMicrophoneName] = useState('')
   const [isVoicePreviewPlaying, setIsVoicePreviewPlaying] = useState(false)
   const [voicePreviewMessage, setVoicePreviewMessage] = useState('')
+  const speechRequestRef = useRef(0)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [tipIndex, setTipIndex] = useState(0)
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -219,52 +225,38 @@ export function PracticePage() {
 
   useEffect(() => {
     return () => {
-      if ('speechSynthesis' in window && isVoicePreviewPlaying) {
-        window.speechSynthesis.cancel()
-      }
+      speechRequestRef.current += 1
+      stopSpeechPlayback()
     }
-  }, [isVoicePreviewPlaying])
+  }, [])
 
   const handleVoicePreview = () => {
     if (!selectedCourse) return
-    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-      setVoicePreviewMessage('Trình duyệt chưa hỗ trợ phát giọng nói.')
-      return
-    }
 
     if (isVoicePreviewPlaying) {
-      window.speechSynthesis.cancel()
+      speechRequestRef.current += 1
+      stopSpeechPlayback()
       setIsVoicePreviewPlaying(false)
       setVoicePreviewMessage('Đã dừng nghe thử giọng AI.')
       return
     }
 
-    const utterance = new SpeechSynthesisUtterance(
-      `Xin chào. Phiên luyện tập ${selectedCourse.name} đã sẵn sàng. Hãy trả lời rõ ràng và tự tin.`,
-    )
-    utterance.lang = 'vi-VN'
-    utterance.rate = 0.94
-    utterance.pitch = 1.02
-    const vietnameseVoice = window.speechSynthesis
-      .getVoices()
-      .find((voice) => voice.lang.toLocaleLowerCase().startsWith('vi'))
-    if (vietnameseVoice) utterance.voice = vietnameseVoice
+    const requestId = ++speechRequestRef.current
+    const previewText = `Xin chào. Phiên luyện tập ${selectedCourse.name} đã sẵn sàng. Hãy trả lời rõ ràng và tự tin.`
+    setIsVoicePreviewPlaying(true)
+    setVoicePreviewMessage('AI đang tạo và phát giọng tự nhiên...')
 
-    utterance.onstart = () => {
-      setIsVoicePreviewPlaying(true)
-      setVoicePreviewMessage('AI đang phát câu chào mẫu.')
-    }
-    utterance.onend = () => {
-      setIsVoicePreviewPlaying(false)
-      setVoicePreviewMessage('Đã phát xong câu chào mẫu.')
-    }
-    utterance.onerror = () => {
-      setIsVoicePreviewPlaying(false)
-      setVoicePreviewMessage('Không thể phát giọng mẫu trên thiết bị này.')
-    }
-
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+    void playNaturalSpeech(previewText, DEFAULT_TTS_VOICE, 0.94)
+      .then(() => {
+        if (speechRequestRef.current === requestId) setVoicePreviewMessage('Đã phát xong câu chào mẫu.')
+      })
+      .catch((error: unknown) => {
+        if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
+        setVoicePreviewMessage('Không thể phát giọng AI. Vui lòng thử lại.')
+      })
+      .finally(() => {
+        if (speechRequestRef.current === requestId) setIsVoicePreviewPlaying(false)
+      })
   }
 
   const handleMicrophoneCheck = async () => {
@@ -315,11 +307,6 @@ export function PracticePage() {
     )
   }
 
-  const updatePerQuestionCount = (nextValue: number) => {
-    if (!Number.isFinite(nextValue)) return
-    setQuestionCount(Math.max(PER_QUESTION_MIN_QUESTIONS, Math.round(nextValue)))
-  }
-
   const selectFeedbackMode = (mode: PracticeMode) => {
     setFeedbackMode(mode)
     if (mode === 'FULL_SESSION') {
@@ -341,7 +328,7 @@ export function PracticePage() {
       courseCode: selectedCourse.code,
       mode: feedbackMode,
       selectedDifficulties: feedbackMode === 'PER_QUESTION' ? selectedDifficulties : [],
-      questionCount,
+      questionCount: feedbackMode === 'FULL_SESSION' ? questionCount : null,
       microphoneName,
     }
 
@@ -351,7 +338,7 @@ export function PracticePage() {
         studentId: user.id,
         difficulty: feedbackMode === 'FULL_SESSION' ? 'progressive' : null,
         difficulties: feedbackMode === 'PER_QUESTION' ? selectedDifficulties : null,
-        questionCount,
+        ...(feedbackMode === 'FULL_SESSION' ? { questionCount } : {}),
         isFullSession: feedbackMode === 'FULL_SESSION',
       })
 
@@ -555,10 +542,10 @@ export function PracticePage() {
                   </div>
                   <h3 className="mt-3 text-sm font-bold text-[#20314a]">Luyện từng câu</h3>
                   <p className="mt-1 text-xs leading-relaxed text-[#6f7e92] sm:text-xs">
-                    Chọn một hoặc nhiều mức độ, số câu cần luyện và nhận phản hồi sau từng câu.
+                    Chọn một hoặc nhiều mức độ và nhận phản hồi sau từng câu cho đến khi hết câu hỏi.
                   </p>
                   <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
-                    <Radio className="size-3" /> {questionCount} câu chính · Có follow-up theo điểm
+                    <Radio className="size-3" /> Không giới hạn số câu · Có follow-up theo điểm
                   </span>
                 </label>
 
@@ -674,39 +661,17 @@ export function PracticePage() {
                   })}
                 </div>
 
-                <div className="flex flex-col gap-3 rounded-xl border border-[#cfe8df] bg-[#f0faf6] p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3 rounded-xl border border-[#cfe8df] bg-[#f0faf6] p-3">
                   <div className="flex items-center gap-3">
                     <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#168367] shadow-sm">
                       <Radio className="size-4" />
                     </span>
                     <div>
-                      <p className="text-xs font-bold text-[#176f58]">Số câu luyện từng câu</p>
+                      <p className="text-xs font-bold text-[#176f58]">Luyện không giới hạn số câu</p>
                       <p className="mt-0.5 text-xs text-[#65847a]">
-                        Follow-up không tính vào số câu chính đã chọn.
+                        Hệ thống tự lấy câu tiếp theo đến khi hết kho câu hỏi hoặc bạn chủ động kết thúc phiên.
                       </p>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl border border-[#cfe8df] bg-white p-1.5">
-                    <button
-                      type="button"
-                      onClick={() => updatePerQuestionCount(questionCount - 1)}
-                      disabled={questionCount <= PER_QUESTION_MIN_QUESTIONS}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf8f4] hover:text-[#168367] focus-visible:outline-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:opacity-35"
-                      aria-label="Giảm một câu luyện từng câu"
-                    >
-                      <Minus className="size-3.5" />
-                    </button>
-                    <span className="min-w-12 text-center font-mono text-sm font-black text-[#168367]">
-                      {questionCount}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => updatePerQuestionCount(questionCount + 1)}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#edf8f4] hover:text-[#168367] focus-visible:outline-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:opacity-35"
-                      aria-label="Tăng một câu luyện từng câu"
-                    >
-                      <Plus className="size-3.5" />
-                    </button>
                   </div>
                 </div>
               </section>
@@ -837,7 +802,7 @@ export function PracticePage() {
               {isStarting
                 ? 'Đang tạo phiên luyện tập…'
                 : feedbackMode === 'PER_QUESTION'
-                  ? `Bắt đầu luyện từng câu · ${questionCount} câu`
+                  ? 'Bắt đầu luyện từng câu · Không giới hạn'
                   : `Bắt đầu Full-Session · ${questionCount} câu`}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
             </button>
