@@ -1141,7 +1141,9 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         receivedDtos.Should().HaveCount(1);
         var firstResult = receivedDtos[0];
         firstResult.NeedsFollowUp.Should().BeTrue();
-        firstResult.FollowUpPrompt.Should().Be(question.FollowUpPrompt);
+        firstResult.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
+        firstResult.FollowUpPrompt.Should().NotBe(question.FollowUpPrompt, "Không dùng câu hỏi phụ mẫu tĩnh trong DB mà phải sinh từ ngữ cảnh câu trả lời và chủ đề câu hỏi");
+        firstResult.FollowUpPrompt.Should().Contain("Em trả lời câu hỏi chính", "Follow-up #1 phải neo trực tiếp vào ngữ cảnh câu trả lời của sinh viên");
 
         // Bước 2: Sinh viên nộp câu trả lời cho Follow-up #1 -> Chấm điểm đạt 6.0 -> Sinh Follow-up #2
         using var context2 = CreateDbContext(dbName);
@@ -1182,11 +1184,14 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         var secondResult = receivedDtos[1];
         secondResult.NeedsFollowUp.Should().BeTrue("Lượt hỏi phụ #1 đạt 6.0đ và MaxPracticeFollowUpQuestions mặc định = 2 nên phải kích hoạt Follow-up #2");
         secondResult.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
-        secondResult.FollowUpPrompt.Should().NotBe(question.FollowUpPrompt, "Follow-up #2 tuyệt đối không được lặp lại nguyên văn câu hỏi phụ #1");
+        secondResult.FollowUpPrompt.Should().NotBe(firstResult.FollowUpPrompt, "Follow-up #2 tuyệt đối không được lặp lại nguyên văn câu hỏi phụ #1");
+        secondResult.FollowUpPrompt.Should().Contain("Scoped tạo mới mỗi HTTP request", "Follow-up #2 phải bám sát ngữ cảnh câu trả lời vừa nộp của sinh viên");
 
         capturedFollowUpGradingRequest.Should().NotBeNull();
         capturedFollowUpGradingRequest!.IsFollowUp.Should().BeTrue();
-        capturedFollowUpGradingRequest.FollowUpPrompt.Should().Be(question.FollowUpPrompt);
+        capturedFollowUpGradingRequest.FollowUpPrompt.Should().Be(firstResult.FollowUpPrompt);
+        capturedFollowUpGradingRequest.OriginalAnswerTranscript.Should().Be(mainAnswer.AnswerText);
+        capturedFollowUpGradingRequest.PreviousFollowUpPrompts.Should().Contain(firstResult.FollowUpPrompt!);
 
         // Bước 3: Kiểm tra GetPracticeSessionQueryHandler đồng bộ 100% với SignalR
         using var queryContext = CreateDbContext(dbName);
@@ -1199,5 +1204,34 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         var syncedSecondAnswer = sessionDetail.Value.Answers.Single(a => a.AnswerId == followUp1Answer.Id);
         syncedSecondAnswer.NeedsFollowUp.Should().BeTrue();
         syncedSecondAnswer.FollowUpPrompt.Should().Be(secondResult.FollowUpPrompt);
+    }
+
+    [Fact(DisplayName = "ADV-FOL-05. Các câu hỏi khác chủ đề và câu trả lời khác nhau bắt buộc sinh Follow-up khác biệt, bám sát ngữ cảnh")]
+    public void FollowUpPromptBuilder_DifferentTopicsAndTranscripts_GeneratesDistinctContextAwarePrompts()
+    {
+        var followUpCleanArch = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+            courseCode: "PRN231",
+            questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
+            aiGeneratedFollowUpPrompt: null,
+            followUpSequence: 1,
+            questionContent: "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
+            sampleAnswer: "Tầng Domain chứa Entities, Value Objects và Domain Events. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ thuần khiết và dễ kiểm thử.",
+            studentTranscript: "Em nghĩ tầng Domain chỉ chứa các bảng Entities của cơ sở dữ liệu.");
+
+        var followUpCqrs = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+            courseCode: "PRN231",
+            questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
+            aiGeneratedFollowUpPrompt: null,
+            followUpSequence: 1,
+            questionContent: "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR.",
+            sampleAnswer: "Command dùng để thay đổi trạng thái dữ liệu hệ thống (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và tuyệt đối không làm biến đổi trạng thái.",
+            studentTranscript: "Command dùng khi thêm hoặc cập nhật bản ghi trong hệ thống.");
+
+        followUpCleanArch.Should().NotBe(followUpCqrs, "Hai câu hỏi khác chủ đề không bao giờ được sinh ra cùng một câu follow-up");
+        followUpCleanArch.Should().Contain("tầng Domain chỉ chứa các bảng Entities", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
+        followUpCleanArch.Should().Contain("Không phụ thuộc vào framework hay database", "Follow-up phải xoáy vào ý trong đáp án mẫu mà sinh viên chưa trình bày");
+
+        followUpCqrs.Should().Contain("Command dùng khi thêm hoặc cập nhật", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
+        followUpCqrs.Should().Contain("Query chỉ dùng để truy vấn đọc dữ liệu", "Follow-up phải xoáy vào phần Query mà sinh viên còn thiếu");
     }
 }

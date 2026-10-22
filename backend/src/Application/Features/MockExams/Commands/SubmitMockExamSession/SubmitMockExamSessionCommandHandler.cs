@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -7,6 +8,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 
@@ -21,10 +23,30 @@ public sealed class SubmitMockExamSessionCommandHandler(
     IAiGradingService aiGradingService
 ) : IRequestHandler<SubmitMockExamSessionCommand, Result<MockExamScorecardDto>>
 {
+    private static readonly ConcurrentDictionary<Guid, byte> ActiveGradingSessions = new();
     private readonly IApplicationDbContext _context = context;
     private readonly IAiGradingService _aiGradingService = aiGradingService;
 
     public async Task<Result<MockExamScorecardDto>> Handle(
+        SubmitMockExamSessionCommand request,
+        CancellationToken cancellationToken)
+    {
+        if (!ActiveGradingSessions.TryAdd(request.SessionId, 0))
+        {
+            return Result<MockExamScorecardDto>.Failure("CONFLICT: Ca thi đã được nộp và chấm điểm trước đó.");
+        }
+
+        try
+        {
+            return await HandleCoreAsync(request, cancellationToken);
+        }
+        finally
+        {
+            ActiveGradingSessions.TryRemove(request.SessionId, out _);
+        }
+    }
+
+    private async Task<Result<MockExamScorecardDto>> HandleCoreAsync(
         SubmitMockExamSessionCommand request,
         CancellationToken cancellationToken)
     {
@@ -35,6 +57,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 .ThenInclude(a => a.Question)
                     .ThenInclude(pq => pq.Rubric)
                         .ThenInclude(r => r.Criteria)
+            .Include(s => s.Answers)
+                .ThenInclude(a => a.AiEvaluations)
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
@@ -47,20 +71,24 @@ public sealed class SubmitMockExamSessionCommandHandler(
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền nộp bài cho ca thi này.");
         }
 
-        if (session.Status == "submitted" || session.Status == "graded")
+        var isRecoverableStuckSubmission = session.Status == "submitted"
+            && !session.TotalScore.HasValue
+            && session.Answers.Count > 0
+            && session.Answers.All(a => a.Status != "graded" && (a.AiEvaluations == null || !a.AiEvaluations.Any()));
+
+        if (session.Status != "in_progress" && !isRecoverableStuckSubmission)
         {
-            return Result<MockExamScorecardDto>.Failure("Ca thi đã được nộp và chấm điểm trước đó.");
+            return Result<MockExamScorecardDto>.Failure("CONFLICT: Ca thi đã được nộp và chấm điểm trước đó.");
         }
 
-        // Chống Race Condition Concurrent Double-Submit: Khóa trạng thái submitted ngay lập tức
+        // 2. Server Master Timer check (kèm 10s Network Grace Period)
+        var submittedAt = DateTime.UtcNow;
+        var isOverdue = submittedAt > session.ExpiresAt.AddSeconds(10);
         session.Status = "submitted";
+        session.SubmittedAt = submittedAt;
         await _context.SaveChangesAsync(cancellationToken);
 
-        // 2. Server Master Timer check (kèm 10s Network Grace Period)
-        var now = DateTime.UtcNow;
-        var isOverdue = now > session.ExpiresAt.AddSeconds(10);
-
-        var sessionAnswers = session.Answers.OrderBy(a => a.AnsweredAt).ToList();
+        var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
 
         // 3. Chấm điểm đồng thời tất cả các câu hỏi qua Task.WhenAll
         var gradingTasks = sessionAnswers.Select(async (a, index) =>
@@ -114,6 +142,19 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 Weight = c.Weight
             }).ToList() ?? new List<AiGradingCriterion>();
 
+            var resolvedMockFollowUpPrompt = session.HasFollowUp
+                ? FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    session.Course?.Code,
+                    q.FollowUpPrompt,
+                    null,
+                    1,
+                    null,
+                    null,
+                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
+                    q.Content,
+                    null)
+                : null;
+
             var gradingReq = new AiGradingRequest
             {
                 Transcript = a.AnswerText!,
@@ -122,7 +163,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 CourseCode = session.Course?.Code,
                 QuestionImageUrl = q.ImageUrl,
                 QuestionImageDescription = q.ImageDescription,
-                FollowUpPrompt = session.HasFollowUp ? q.FollowUpPrompt : null,
+                FollowUpPrompt = resolvedMockFollowUpPrompt,
                 Criteria = criteriaList
             };
 
@@ -210,7 +251,18 @@ public sealed class SubmitMockExamSessionCommandHandler(
             return (a, questionScoreDto, (AiEvaluation?)aiEvaluation);
         });
 
-        var results = await Task.WhenAll(gradingTasks);
+        (MockExamAnswer a, MockExamQuestionScoreDto, AiEvaluation?)[] results;
+        try
+        {
+            results = await Task.WhenAll(gradingTasks);
+        }
+        catch
+        {
+            session.Status = "in_progress";
+            session.SubmittedAt = null;
+            await _context.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
 
         // 4. Tính toán điểm tổng kết (trung bình cộng thang điểm 10.0đ làm tròn 2 chữ số thập phân)
         int totalQuestions = results.Length;
@@ -235,13 +287,13 @@ public sealed class SubmitMockExamSessionCommandHandler(
         // 5. Cập nhật phiên thi và lưu đánh giá AI vào CSDL
         session.TotalScore = totalScore;
         session.Status = "graded";
-        session.SubmittedAt = DateTime.UtcNow;
+        session.SubmittedAt = submittedAt;
 
         foreach (var r in results)
         {
+            r.a.Status = "graded";
             if (r.Item3 != null)
             {
-                r.a.Status = "graded";
                 _context.AiEvaluations.Add(r.Item3);
             }
         }

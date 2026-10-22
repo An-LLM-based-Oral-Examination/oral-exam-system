@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 
@@ -43,13 +44,18 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             return Result<MockExamScorecardDto>.Failure("Không tìm thấy thông tin ca thi thử.");
         }
 
-        if (session.StudentId != request.StudentId)
+        if (!request.IsElevatedRole && session.StudentId != request.StudentId)
         {
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền truy cập ca thi này.");
         }
 
-        var sessionAnswers = session.Answers.OrderBy(a => a.AnsweredAt).ToList();
+        var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
         var questionScores = new List<MockExamQuestionScoreDto>();
+        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(session.Course?.Code);
+        bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
+        var unansweredReason = isOverdue
+            ? "Hết giờ làm bài - Không có câu trả lời"
+            : "Thí sinh không trả lời câu hỏi này";
 
         for (int i = 0; i < sessionAnswers.Count; i++)
         {
@@ -64,7 +70,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 var detail = aiEval?.Details?.FirstOrDefault(d => d.CriterionId == c.Id);
                 var score = detail?.Score ?? 0.0m;
                 var comment = detail?.Comment ?? (string.IsNullOrWhiteSpace(a.AnswerText)
-                    ? "Thí sinh không trả lời câu hỏi này"
+                    ? unansweredReason
                     : string.Empty);
 
                 criterionScores.Add(new MockExamCriterionScoreDto(
@@ -77,16 +83,38 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 ));
             }
 
+            var displayContent = q.Content;
+            if (session.HasFollowUp)
+            {
+                var resolvedFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    session.Course?.Code,
+                    q.FollowUpPrompt,
+                    null,
+                    1,
+                    null,
+                    null,
+                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
+                    q.Content,
+                    null);
+
+                if (!displayContent.Contains(resolvedFollowUp, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayContent = isEnglishCourse
+                        ? $"{q.Content}\n\n[Follow-up Question]: {resolvedFollowUp}"
+                        : $"{q.Content}\n\n[Câu hỏi phụ đào sâu]: {resolvedFollowUp}";
+                }
+            }
+
             questionScores.Add(new MockExamQuestionScoreDto(
                 QuestionId: q.Id,
                 OrderIndex: orderIndex,
                 Title: q.Title,
-                Content: q.Content,
+                Content: displayContent,
                 BloomLevel: q.BloomLevel ?? "Remember",
                 Difficulty: q.Difficulty,
                 Transcript: a.AnswerText,
                 Score: aiEval?.TotalScore ?? 0.0m,
-                Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? "Thí sinh không trả lời câu hỏi này" : null),
+                Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? unansweredReason : null),
                 ConfidenceScore: aiEval?.ConfidenceScore,
                 CriteriaScores: criterionScores,
                 ImageUrl: q.ImageUrl,
@@ -111,7 +139,6 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             ? (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes)
             : 30;
 
-        bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
         int answeredQuestions = session.Answers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText) && (a.Status == "answered" || a.Status == "graded"));
 
         var response = new MockExamScorecardDto(

@@ -34,11 +34,6 @@ public class PracticeController : ControllerBase
             return id;
         }
 
-        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
-        {
-            return headerId;
-        }
-
         return Guid.Empty;
     }
 
@@ -91,6 +86,17 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Không tìm thấy tài nguyên.",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -157,7 +163,8 @@ public class PracticeController : ControllerBase
             return Ok(result.Value);
         }
 
-        if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
+        if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
+            result.Error.Contains("không có tương tác trong hơn", StringComparison.OrdinalIgnoreCase) ||
             result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
@@ -207,7 +214,8 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
+            if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("không có tương tác trong hơn", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
@@ -238,7 +246,8 @@ public class PracticeController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("không có tương tác trong hơn 5 phút", StringComparison.OrdinalIgnoreCase) ||
+            if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("không có tương tác trong hơn", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
             {
                 return StatusCode(StatusCodes.Status410Gone, new ProblemDetails

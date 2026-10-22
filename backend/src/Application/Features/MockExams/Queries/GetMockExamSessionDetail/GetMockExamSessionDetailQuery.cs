@@ -10,5 +10,6 @@ namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamSess
 /// </summary>
 public sealed record GetMockExamSessionDetailQuery(
     Guid SessionId,
-    Guid StudentId
+    Guid StudentId,
+    bool IsElevatedRole = false
 ) : IRequest<Result<MockExamScorecardDto>>;

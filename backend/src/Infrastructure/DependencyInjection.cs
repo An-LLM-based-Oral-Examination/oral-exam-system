@@ -64,7 +64,7 @@ public static class DependencyInjection
 
             using var tcpClient = new TcpClient();
             var connectTask = tcpClient.ConnectAsync(host, port);
-            return connectTask.Wait(TimeSpan.FromMilliseconds(450)) && tcpClient.Connected;
+            if (connectTask.Wait(TimeSpan.FromMilliseconds(3000)) && tcpClient.Connected) return true; using var retryClient = new TcpClient(); return retryClient.ConnectAsync(host, port).Wait(TimeSpan.FromMilliseconds(3000)) && retryClient.Connected;
         }
         catch
         {

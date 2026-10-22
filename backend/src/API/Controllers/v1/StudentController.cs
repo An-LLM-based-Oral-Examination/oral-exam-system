@@ -20,30 +20,28 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/student")]
-[Authorize(Roles = "student,admin")]
+[Authorize(Roles = "student,lecturer,department_head,admin")]
 public class StudentController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
 
     private Guid GetCurrentStudentId(Guid? fallbackStudentId = null)
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User?.FindFirst("sub")?.Value;
+        var claimValue = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User?.FindFirstValue("sub");
 
-        if (Guid.TryParse(claim, out var claimId) && claimId != Guid.Empty)
+        var hasClaimId = Guid.TryParse(claimValue, out var claimId) && claimId != Guid.Empty;
+        var isElevatedRole = User?.IsInRole("admin") == true
+                             || User?.IsInRole("department_head") == true
+                             || User?.IsInRole("lecturer") == true;
+
+        // Nếu là Admin / Trưởng BM / Giảng viên và có truyền ?studentId=... thì ưu tiên lấy studentId được truyền vào
+        if (isElevatedRole && fallbackStudentId.HasValue && fallbackStudentId.Value != Guid.Empty)
         {
-            return claimId;
+            return fallbackStudentId.Value;
         }
 
-        if (Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
-            Guid.TryParse(headerVal, out var headerId) &&
-            headerId != Guid.Empty)
-        {
-            return headerId;
-        }
-
-        return fallbackStudentId ?? Guid.Empty;
+        return hasClaimId ? claimId : Guid.Empty;
     }
 
     /// <summary>
@@ -147,6 +145,7 @@ public class StudentController(ISender sender) : ControllerBase
     /// <summary>
     /// Sinh viên xác nhận đồng ý kết quả điểm thi thật đã công bố (ACKNOWLEDGED) trên Student Portal (MF-04).
     /// </summary>
+    [Authorize(Roles = "student,admin")]
     [HttpPost("official-exams/{ticketId:guid}/acknowledge-grade")]
     [HttpPost("/api/v1/official-exams/tickets/{ticketId:guid}/acknowledge")]
     public async Task<IActionResult> AcknowledgeOfficialGrade(

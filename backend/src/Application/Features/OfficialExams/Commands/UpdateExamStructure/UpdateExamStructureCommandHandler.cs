@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -62,6 +65,38 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
         {
             return Result<ExamStructureDto>.Failure(
                 "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BloomDistribution) &&
+            request.BloomDistribution.Trim() != "{}")
+        {
+            Dictionary<string, int>? bloomMap;
+            try
+            {
+                bloomMap = JsonSerializer.Deserialize<Dictionary<string, int>>(request.BloomDistribution.Trim());
+            }
+            catch
+            {
+                bloomMap = null;
+            }
+
+            if (bloomMap is null)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Phân bổ mức độ nhận thức Bloom (BloomDistribution) phải là chuỗi JSON hợp lệ.");
+            }
+
+            if (bloomMap.Values.Any(v => v < 0))
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Số lượng câu hỏi của từng mức độ Bloom không được là số âm.");
+            }
+
+            if (bloomMap.Count > 0 && bloomMap.Values.Sum() > request.TotalQuestions)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    $"VALIDATION: Tổng số câu hỏi trong phân bổ Bloom ({bloomMap.Values.Sum()}) không được vượt quá tổng số câu hỏi của đề ({request.TotalQuestions}).");
+            }
         }
 
         var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}";

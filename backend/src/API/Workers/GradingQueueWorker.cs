@@ -72,19 +72,42 @@ public class GradingQueueWorker : BackgroundService
                     var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
                     var now = DateTime.UtcNow;
 
-                    var dlqEntry = new DeadLetterQueue
+                    var existingDlq = await errorDbContext.DeadLetterQueues
+                        .OrderByDescending(d => d.CreatedAt)
+                        .FirstOrDefaultAsync(d => d.TaskType == "PracticeGrading" && d.CorrelationId == task.AnswerId, CancellationToken.None);
+                    if (existingDlq != null)
                     {
-                        TaskType = "PracticeGrading",
-                        CorrelationId = task.AnswerId,
-                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                        ErrorMessage = ex.Message,
-                        RetryCount = 3,
-                        Status = "pending",
-                        NextRetryAt = now.AddMinutes(5),
-                        LastAttemptAt = now,
-                        CreatedAt = now
-                    };
-                    errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                        existingDlq.RetryCount += 3;
+                        existingDlq.ErrorMessage = ex.Message;
+                        existingDlq.LastAttemptAt = now;
+                        existingDlq.ResolvedAt = null;
+                        if (existingDlq.RetryCount >= 9)
+                        {
+                            existingDlq.Status = "abandoned";
+                            existingDlq.NextRetryAt = null;
+                        }
+                        else
+                        {
+                            existingDlq.Status = "pending";
+                            existingDlq.NextRetryAt = now.AddMinutes(5);
+                        }
+                    }
+                    else
+                    {
+                        var dlqEntry = new DeadLetterQueue
+                        {
+                            TaskType = "PracticeGrading",
+                            CorrelationId = task.AnswerId,
+                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                            ErrorMessage = ex.Message,
+                            RetryCount = 3,
+                            Status = "pending",
+                            NextRetryAt = now.AddMinutes(5),
+                            LastAttemptAt = now,
+                            CreatedAt = now
+                        };
+                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                    }
 
                     var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
                     if (answer != null)
@@ -129,12 +152,46 @@ public class GradingQueueWorker : BackgroundService
             throw new Exception("Không tìm thấy câu hỏi hoặc barem rubric.");
         }
 
-        // Đếm số lượng câu trả lời phụ đã có của câu hỏi này trong phiên luyện tập
-        var existingFollowUpsCount = await dbContext.PracticeAnswers
+        // Tải lịch sử các câu trả lời trước đó của cùng câu hỏi này trong phiên luyện tập
+        var priorQuestionAnswers = await dbContext.PracticeAnswers
             .AsNoTracking()
-            .CountAsync(a => a.SessionId == gradingTask.SessionId &&
-                             a.QuestionId == gradingTask.QuestionId &&
-                             a.IsFollowUp, cancellationToken);
+            .Include(a => a.AiEvaluations)
+                .ThenInclude(e => e.Details)
+            .Where(a => a.SessionId == gradingTask.SessionId &&
+                        a.QuestionId == gradingTask.QuestionId &&
+                        a.Id != gradingTask.AnswerId)
+            .OrderBy(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
+
+        // Đếm tổng số lượt câu trả lời phụ của câu hỏi này trong phiên (bao gồm lượt hiện tại nếu IsFollowUp == true)
+        var existingFollowUpsCount = priorQuestionAnswers.Count(a => a.IsFollowUp) + (gradingTask.IsFollowUp ? 1 : 0);
+
+        var rootAnswer = priorQuestionAnswers.FirstOrDefault(a => !a.IsFollowUp);
+        var orderedPriorAnswers = rootAnswer != null
+            ? new[] { rootAnswer }.Concat(priorQuestionAnswers.Where(a => a.Id != rootAnswer.Id).OrderBy(a => a.SubmittedAt))
+            : priorQuestionAnswers.OrderBy(a => a.SubmittedAt);
+        var priorTranscripts = orderedPriorAnswers
+            .Where(a => !string.IsNullOrWhiteSpace(a.AnswerText))
+            .Select(a => a.AnswerText!.Trim())
+            .ToList();
+        var originalAnswerTranscript = priorTranscripts.Count > 0
+            ? string.Join(" ", priorTranscripts)
+            : (!gradingTask.IsFollowUp ? gradingTask.AnswerText : null);
+
+        var priorMaxCriterionScores = priorQuestionAnswers
+            .SelectMany(a => a.AiEvaluations)
+            .Where(e => e.Details != null)
+            .SelectMany(e => e.Details)
+            .GroupBy(d => d.CriterionId)
+            .ToDictionary(g => g.Key, g => g.Max(d => d.Score));
+
+        var previousFollowUpPrompts = priorQuestionAnswers
+            .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+            .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         string? answeredFollowUpPrompt = null;
         if (gradingTask.IsFollowUp)
@@ -153,7 +210,13 @@ public class GradingQueueWorker : BackgroundService
 
             if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
             {
-                answeredFollowUpPrompt = question.FollowUpPrompt;
+                answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault() ?? question.FollowUpPrompt;
+            }
+
+            if (!string.IsNullOrWhiteSpace(answeredFollowUpPrompt) &&
+                !previousFollowUpPrompts.Contains(answeredFollowUpPrompt, StringComparer.OrdinalIgnoreCase))
+            {
+                previousFollowUpPrompts.Add(answeredFollowUpPrompt);
             }
         }
 
@@ -177,7 +240,9 @@ public class GradingQueueWorker : BackgroundService
             QuestionImageDescription = question.ImageDescription,
             IsFollowUp = gradingTask.IsFollowUp,
             FollowUpPrompt = answeredFollowUpPrompt,
-            FollowUpIndex = existingFollowUpsCount
+            FollowUpIndex = existingFollowUpsCount,
+            OriginalAnswerTranscript = originalAnswerTranscript,
+            PreviousFollowUpPrompts = previousFollowUpPrompts
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
@@ -203,6 +268,13 @@ public class GradingQueueWorker : BackgroundService
             var clampedScore = matchedDetail != null
                 ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
                 : 0.0m;
+
+            if (gradingTask.IsFollowUp &&
+                priorMaxCriterionScores.TryGetValue(criterion.Id, out var priorCritScore) &&
+                priorCritScore > clampedScore)
+            {
+                clampedScore = Math.Clamp(Math.Round(priorCritScore, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore);
+            }
             var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
                 ? matchedDetail!.Comment
                 : clampedScore > 0.0m
@@ -271,7 +343,12 @@ public class GradingQueueWorker : BackgroundService
                     nextFollowUpSequence,
                     weakestCriterion?.CriterionName,
                     weakestCriterion?.Description,
-                    orderedCriteria.Select(c => c.CriterionName));
+                    orderedCriteria.Select(c => c.CriterionName),
+                    question.Content,
+                    question.SampleAnswer,
+                    gradingTask.AnswerText,
+                    originalAnswerTranscript,
+                    previousFollowUpPrompts);
             }
         }
 

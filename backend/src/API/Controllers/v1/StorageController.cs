@@ -26,7 +26,6 @@ public class StorageController : ControllerBase
     /// Không lưu trữ lên Cloudflare R2 và không lưu URL vào database.
     /// </summary>
     [HttpPost("upload-audio")]
-    [AllowAnonymous]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadAudio(
         IFormFile? file,

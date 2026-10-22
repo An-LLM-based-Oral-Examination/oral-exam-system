@@ -746,7 +746,7 @@ public class ResilientSpeechServicesTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Gemini__ApiKey"] = "AQ.Ab8RN_MockUnitTestKey_123456"
+            ["Gemini__ApiKey"] = "AIzaSy_MockUnitTestKey_123456"
         });
 
         var crit1Id = Guid.NewGuid().ToString();
@@ -792,7 +792,7 @@ public class ResilientSpeechServicesTests
 
         var result = await gradingService.GradeAnswerAsync(request);
 
-        sentHeaderKey.Should().Be("AQ.Ab8RN_MockUnitTestKey_123456", "Khóa định dạng mới AQ.Ab8RN... của Google AI Studio phải được gửi trực tiếp qua header x-goog-api-key");
+        sentHeaderKey.Should().Be("AIzaSy_MockUnitTestKey_123456", "Khóa API của Google AI Studio phải được gửi trực tiếp qua header x-goog-api-key");
         result.Details.Should().HaveCount(2);
         result.Details[0].CriterionId.Should().Be(crit1Id);
         result.Details[0].Score.Should().Be(5.0m, "Điểm tiêu chí 1 (6.0) phải được clamp về đúng MaxScore (5.0)");

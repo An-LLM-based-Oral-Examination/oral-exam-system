@@ -34,21 +34,58 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
         var result = sessions.Select(s =>
         {
             var answers = s.Answers ?? new List<OralExamination.Domain.Entities.PracticeAnswer>();
-            var mainScoredAnswers = answers
-                .Where(a => !a.IsFollowUp && a.AiEvaluations != null && a.AiEvaluations.Any())
-                .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+            var isFullSession = string.Equals(s.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
+            var isCompleted = string.Equals(s.Status, "completed", StringComparison.OrdinalIgnoreCase);
+
+            var plannedQuestionCount = s.SelectedQuestionIds.Count;
+            var distinctMainQuestionIds = answers
+                .Where(a => !a.IsFollowUp)
+                .Select(a => a.QuestionId)
+                .Distinct()
+                .ToList();
+            var answeredMainCount = distinctMainQuestionIds.Count;
+            var totalQuestions = Math.Max(plannedQuestionCount, answeredMainCount);
+
+            var mainScores = answers
+                .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+                .GroupBy(a => a.QuestionId)
+                .Select(g => g
+                    .SelectMany(a => a.AiEvaluations)
+                    .Max(e => e.TotalScore))
                 .ToList();
 
-            var latestScores = mainScoredAnswers.Any()
-                ? mainScoredAnswers
-                : answers
-                    .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
-                    .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
-                    .ToList();
+            bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
 
-            decimal? avgScore = latestScores.Any()
-                ? Math.Round(latestScores.Average(), 2, MidpointRounding.AwayFromZero)
-                : null;
+            decimal? avgScore = null;
+            if (isFullSession && isCompleted && totalQuestions > 0)
+            {
+                if (hasPendingAnswers)
+                {
+                    avgScore = null;
+                }
+                else if (mainScores.Count > 0)
+                {
+                    avgScore = Math.Round(mainScores.Sum() / totalQuestions, 2, MidpointRounding.AwayFromZero);
+                }
+                else
+                {
+                    avgScore = 0.0m;
+                }
+            }
+            else
+            {
+                var fallbackScores = mainScores.Count > 0
+                    ? mainScores
+                    : answers
+                        .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                        .ToList();
+
+                if (fallbackScores.Count > 0)
+                {
+                    avgScore = Math.Round(fallbackScores.Average(), 2, MidpointRounding.AwayFromZero);
+                }
+            }
 
             return new PracticeHistoryItemDto
             {
@@ -60,8 +97,8 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 Status = s.Status,
                 StartedAt = s.StartedAt,
                 EndedAt = s.CompletedAt,
-                TotalQuestions = answers.Count(a => !a.IsFollowUp),
-                AnsweredQuestions = answers.Count,
+                TotalQuestions = totalQuestions,
+                AnsweredQuestions = answeredMainCount,
                 AverageScore = avgScore
             };
         }).ToList();

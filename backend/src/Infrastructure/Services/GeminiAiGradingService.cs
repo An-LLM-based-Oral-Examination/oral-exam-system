@@ -143,13 +143,21 @@ public class GeminiAiGradingService : IAiGradingService
                 : $"\n- Hình ảnh/Sơ đồ đính kèm câu hỏi: {(string.IsNullOrWhiteSpace(request.QuestionImageUrl) ? "Đã đính kèm dữ liệu ảnh trực tiếp" : request.QuestionImageUrl)}\n- Mô tả nội dung hình ảnh/sơ đồ của Giảng viên: {(string.IsNullOrWhiteSpace(request.QuestionImageDescription) ? "Hãy quan sát trực tiếp hình ảnh đính kèm và đối chiếu với Đáp án mẫu." : request.QuestionImageDescription)}\n- YÊU CẦU CHẤM CÂU HỎI CÓ HÌNH ẢNH: Đối chiếu câu trả lời của sinh viên với các thành phần, luồng dữ liệu, sơ đồ hoặc mã nguồn hiển thị trong hình ảnh/mô tả hình ảnh kết hợp cùng Đáp án mẫu và Barem Rubric.")
             : string.Empty;
 
+        var previousFollowUpsBlock = request.PreviousFollowUpPrompts != null && request.PreviousFollowUpPrompts.Count > 0
+            ? $"\n- Danh sách các câu hỏi phụ ĐÃ HỎI ở các lượt trước (TUYỆT ĐỐI CẤM LẶP LẠI): {string.Join(" | ", request.PreviousFollowUpPrompts.Select((p, idx) => $"[#{idx + 1}] \"{p}\""))}"
+            : string.Empty;
+
+        var originalAnswerBlock = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.OriginalAnswerTranscript)
+            ? $"\n- Câu trả lời gốc ban đầu của thí sinh cho câu hỏi chính: \"{request.OriginalAnswerTranscript.Replace("</student_transcript>", "").Replace("<student_transcript>", "").Trim()}\""
+            : string.Empty;
+
         var followUpContextBlock = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt)
             ? (isEnglishCourse
-                ? $"\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời của thí sinh cho CÂU HỎI PHỤ ĐÀO SÂU (Follow-up Question): \"{request.FollowUpPrompt}\". Hãy chấm điểm dựa trên mức độ thí sinh giải quyết trực tiếp câu hỏi phụ này trong bối cảnh chủ đề chính ở trên."
-                : $"\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời của sinh viên cho CÂU HỎI PHỤ ĐÀO SÂU: \"{request.FollowUpPrompt}\". Hãy chấm điểm dựa trên mức độ sinh viên giải quyết trực tiếp câu hỏi phụ này kết hợp với ngữ cảnh câu hỏi gốc và Barem Rubric.")
+                ? $"{originalAnswerBlock}{previousFollowUpsBlock}\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời của thí sinh cho CÂU HỎI PHỤ ĐÀO SÂU (Follow-up Question): \"{request.FollowUpPrompt}\". Hãy chấm điểm dựa trên mức độ thí sinh giải quyết trực tiếp câu hỏi phụ này trong bối cảnh chủ đề chính ở trên."
+                : $"{originalAnswerBlock}{previousFollowUpsBlock}\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ TÍCH LŨY - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời bổ sung của sinh viên cho CÂU HỎI PHỤ ĐÀO SÂU: \"{request.FollowUpPrompt}\". Hãy chấm điểm TÍCH LŨY (cumulative) trên Barem 10.0đ bằng cách kết hợp câu trả lời gốc ban đầu ở trên với phần trả lời bổ sung trong student_transcript: bảo toàn điểm của các tiêu chí đã đạt ở câu trả lời gốc và nâng điểm cho tiêu chí được giải quyết ở câu hỏi phụ này.")
             : (!string.IsNullOrWhiteSpace(request.FollowUpPrompt)
-                ? $"\n- Câu hỏi phụ đi kèm (Follow-up Question): {request.FollowUpPrompt}"
-                : string.Empty);
+                ? $"{previousFollowUpsBlock}\n- Câu hỏi phụ đi kèm (Follow-up Question): {request.FollowUpPrompt}"
+                : previousFollowUpsBlock);
 
         var prompt = isEnglishCourse
             ? $@"
@@ -176,7 +184,10 @@ Quy trình suy luận (Chain-of-Thought):
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng điểm các tiêu chí (tối đa 10.0). Hỗ trợ cả câu trả lời bằng Tiếng Anh và song ngữ Việt - Anh. Nếu miêu tả sai hoàn toàn tranh hoặc nói 'don't know'/'không biết', cho điểm tương ứng hoặc 0.0 điểm.
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn hoặc nghi ngờ, đặt IsSuspicious = true.
 5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
-6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Anh, ngắn gọn 1-2 câu) hỏi xoáy trực tiếp vào ý còn thiếu hoặc điểm yếu trong bài nói vừa rồi của thí sinh để đào sâu hơn (tuyệt đối không lặp lại nguyên văn câu hỏi gốc hay câu hỏi phụ đã hỏi ở trên).
+6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Anh, ngắn gọn 1-2 câu) ĐƯỢC TẠO TRỰC TIẾP TỪ NGỮ CẢNH CÂU TRẢ LỜI CỦA THÍ SINH VÀ CHỦ ĐỀ CÂU HỎI:
+   - BẮT BUỘC mở đầu bằng việc nhắc lại/liên hệ trực tiếp một ý tưởng, chi tiết hoặc ví dụ cụ thể mà thí sinh vừa nói trong student_transcript (ví dụ: ""You mentioned that..."", ""Regarding your point about..."").
+   - BẮT BUỘC hỏi đào sâu vào đúng tiểu mục/ý tưởng của Câu hỏi gốc hoặc Đáp án mẫu mà thí sinh trả lời còn thiếu hoặc chưa làm rõ.
+   - TUYỆT ĐỐI CẤM dùng câu hỏi mẫu chung chung (generic template); CẤM hỏi về tiêu chí hình thức ngôn ngữ (như Pronunciation/Grammar/Fluency); CẤM lặp lại nguyên văn câu hỏi gốc hoặc bất kỳ câu hỏi phụ nào đã hỏi trước đó.
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -186,7 +197,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""SuspiciousReason"": null,
   ""Feedback"": ""Nhận xét tổng quan..."",
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
-  ""FollowUpPrompt"": ""Could you share a specific real-life example to further explain your point?"",
+  ""FollowUpPrompt"": ""Từ việc bạn đề cập Command thay đổi dữ liệu trong MediatR, tại sao các Query Handler nên kết hợp AsNoTracking() trong EF Core 8 và điều gì xảy ra nếu thực hiện SaveChangesAsync() bên trong Query?"",
   ""Details"": [
     {{
       ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
@@ -218,7 +229,10 @@ Quy trình suy luận (Chain-of-Thought):
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng các tiêu chí (tối đa 10.0). Nếu câu trả lời không có ý kiến thức nào đúng hoặc nói 'không biết', cho 0.0 điểm.
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn, lạc đề hoặc nghi ngờ, đặt IsSuspicious = true.
 5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
-6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Việt, ngắn gọn 1-2 câu) hỏi xoáy trực tiếp vào tiêu chí còn yếu hoặc khái niệm kỹ thuật mà sinh viên trả lời chưa sâu trong transcript vừa rồi (tuyệt đối không lặp lại nguyên văn câu hỏi gốc hay câu hỏi phụ đã hỏi ở trên).
+6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Việt, ngắn gọn 1-2 câu) ĐƯỢC TẠO TRỰC TIẾP TỪ NGỮ CẢNH CÂU TRẢ LỜI CỦA SINH VIÊN VÀ CHỦ ĐỀ CÂU HỎI:
+   - BẮT BUỘC mở đầu bằng việc nhắc lại/neo vào đúng luận điểm, khái niệm hoặc cơ chế cụ thể mà sinh viên vừa trình bày trong student_transcript (ví dụ: ""Từ ý bạn vừa nêu về..."", ""Bạn có đề cập đến..."").
+   - BẮT BUỘC hỏi xoáy trực tiếp vào phần kiến thức/cơ chế kỹ thuật trong Câu hỏi gốc hoặc Đáp án mẫu (Model Answer) mà sinh viên trả lời còn thiếu hoặc chưa phân tích sâu.
+   - TUYỆT ĐỐI CẤM dùng câu hỏi mẫu chung chung (generic template) áp dụng cho nhiều đề; CẤM lặp lại nguyên văn câu hỏi gốc hoặc bất kỳ câu hỏi phụ nào đã hỏi trước đó.
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -228,7 +242,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""SuspiciousReason"": null,
   ""Feedback"": ""Nhận xét tổng quan..."",
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
-  ""FollowUpPrompt"": ""Hãy phân tích rõ hơn cơ chế hoạt động và tình huống ngoại lệ thực tế cho luận điểm vừa nêu?"",
+  ""FollowUpPrompt"": ""Trong phần trả lời bạn mới chỉ nêu khái niệm DI mà chưa phân tích vòng đời dịch vụ; vậy nếu inject một DbContext (Scoped) vào bên trong một BackgroundService (Singleton) thì lỗi Captive Dependency sẽ xảy ra như thế nào?"",
   ""Details"": [
     {{
       ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
@@ -238,7 +252,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ]
 }}";
 
-        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(_apiKey);
+        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(_apiKey) && !_apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !_apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase) && !_apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
 
         if (!hasUsableGeminiKey)
         {
@@ -541,7 +555,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(6));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(20));
 
             var cfUrl = $"https://api.cloudflare.com/client/v4/accounts/{_cloudflareAccountId}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast";
             var isEnglishCourse = IsEnglishCourse(request);
@@ -661,13 +675,21 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         if (request?.Criteria == null || request.Criteria.Count == 0)
         {
-            if (result.Score >= 4.0m && result.Score <= 8.0m && string.IsNullOrWhiteSpace(result.FollowUpPrompt))
+            if (result.Score >= 0.0m)
             {
                 result.FollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
                     request?.CourseCode,
                     null,
+                    result.FollowUpPrompt,
+                    Math.Max(1, (request?.FollowUpIndex ?? 0) + 1),
                     null,
-                    Math.Max(1, (request?.FollowUpIndex ?? 0) + 1));
+                    null,
+                    null,
+                    request?.QuestionContent,
+                    request?.SampleAnswer,
+                    request?.Transcript,
+                    request?.OriginalAnswerTranscript,
+                    request?.PreviousFollowUpPrompts);
             }
             return result;
         }
@@ -757,17 +779,22 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             result.Details = normalizedDetails;
         }
 
-        if (result.Score >= 4.0m && result.Score <= 8.0m && string.IsNullOrWhiteSpace(result.FollowUpPrompt))
+        if (result.Score >= 0.0m)
         {
             var weakestCriterion = FindWeakestCriterion(request.Criteria, result.Details);
             result.FollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
                 request.CourseCode,
                 null,
-                null,
+                result.FollowUpPrompt,
                 Math.Max(1, request.FollowUpIndex + 1),
                 weakestCriterion?.Name,
                 weakestCriterion?.Description,
-                request.Criteria.Select(c => c.Name));
+                request.Criteria.Select(c => c.Name),
+                request.QuestionContent,
+                request.SampleAnswer,
+                request.Transcript,
+                request.OriginalAnswerTranscript,
+                request.PreviousFollowUpPrompts);
         }
 
         return result;
@@ -933,10 +960,11 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             return BuildZeroScoreRefusalResult(request, reason);
         }
 
-        var words = sanitizedTranscript
+        var cumulativeTranscript = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.OriginalAnswerTranscript) ? $"{request.OriginalAnswerTranscript.Replace("</student_transcript>", "").Replace("<student_transcript>", "").Trim()} {sanitizedTranscript}".Trim() : sanitizedTranscript;
+        var words = cumulativeTranscript
             .Split(TokenSeparators, StringSplitOptions.RemoveEmptyEntries);
         var wordCount = words.Length;
-        var transcriptKeywords = ExtractKeywords(sanitizedTranscript);
+        var transcriptKeywords = ExtractKeywords(cumulativeTranscript);
         var sampleKeywords = ExtractKeywords(request.SampleAnswer);
         var questionKeywords = ExtractKeywords($"{request.QuestionContent} {request.FollowUpPrompt}");
         var imageDescriptionKeywords = ExtractKeywords(request.QuestionImageDescription);
@@ -1089,7 +1117,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                         : "Câu trả lời không chứa nội dung kiến thức chuyên môn phù hợp với câu hỏi. Điểm: 0.0/10.");
 
         string? fallbackFollowUpPrompt = null;
-        if (totalScore >= 4.0m && totalScore <= 8.0m)
+        if (totalScore >= 0.0m)
         {
             var weakestCriterion = FindWeakestCriterion(request.Criteria, details);
             fallbackFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
@@ -1099,7 +1127,12 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 Math.Max(1, request.FollowUpIndex + 1),
                 weakestCriterion?.Name,
                 weakestCriterion?.Description,
-                request.Criteria?.Select(c => c.Name));
+                request.Criteria?.Select(c => c.Name),
+                request.QuestionContent,
+                request.SampleAnswer,
+                sanitizedTranscript,
+                request.OriginalAnswerTranscript,
+                request.PreviousFollowUpPrompts);
         }
 
         return new AiGradingResult

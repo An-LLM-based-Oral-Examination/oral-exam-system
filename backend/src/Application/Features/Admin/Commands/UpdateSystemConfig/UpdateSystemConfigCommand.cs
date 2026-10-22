@@ -46,7 +46,7 @@ public sealed class UpdateSystemConfigCommandHandler
             return Result<SystemConfigItemDto>.Failure($"VALIDATION: {validationError}");
         }
 
-        var config = await _context.SystemConfigs
+        if (key == "MinMixedPracticeQuestions" && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minQ)) { var maxCfg = await _context.SystemConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.Key == "MaxMixedPracticeQuestions", cancellationToken); var maxExisting = maxCfg != null && int.TryParse(maxCfg.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedMax) ? parsedMax : 10; if (minQ > maxExisting) return Result<SystemConfigItemDto>.Failure($"VALIDATION: MinMixedPracticeQuestions ({minQ}) không được lớn hơn MaxMixedPracticeQuestions hiện tại ({maxExisting})."); } else if (key == "MaxMixedPracticeQuestions" && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var maxQ)) { var minCfg = await _context.SystemConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.Key == "MinMixedPracticeQuestions", cancellationToken); var minExisting = minCfg != null && int.TryParse(minCfg.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedMin) ? parsedMin : 3; if (maxQ < minExisting) return Result<SystemConfigItemDto>.Failure($"VALIDATION: MaxMixedPracticeQuestions ({maxQ}) không được nhỏ hơn MinMixedPracticeQuestions hiện tại ({minExisting})."); } var config = await _context.SystemConfigs
             .FirstOrDefaultAsync(c => c.Key == key, cancellationToken);
 
         var now = DateTime.UtcNow;

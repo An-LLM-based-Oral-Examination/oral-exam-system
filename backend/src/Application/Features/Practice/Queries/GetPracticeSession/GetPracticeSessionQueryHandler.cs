@@ -23,7 +23,6 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
     public async Task<Result<PracticeSessionDetailDto>> Handle(GetPracticeSessionQuery request, CancellationToken cancellationToken)
     {
         var session = await _context.PracticeSessions
-            .AsNoTracking()
             .Include(s => s.Course)
             .Include(s => s.Student)
             .Include(s => s.Answers)
@@ -42,7 +41,24 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
             return Result<PracticeSessionDetailDto>.Failure("Bạn không có quyền truy cập phiên luyện tập này.");
         }
 
-        // Lấy danh sách câu hỏi thuộc Course để tra cứu Rubric, Criteria và FollowUpPrompt
+        if (string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+        {
+            var timeoutConfig = await _context.SystemConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
+            int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout) && parsedTimeout > 0)
+                ? parsedTimeout
+                : 5;
+
+            if (DateTime.UtcNow - session.LastActivityAt > TimeSpan.FromMinutes(timeoutMinutes))
+            {
+                session.Status = "completed";
+                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        // Lấy danh sách câu hỏi thuộc Course để tra cứu Rubric, Criteria và chủ đề câu hỏi
         var courseQuestions = await _context.PracticeQuestions
             .AsNoTracking()
             .Include(q => q.Rubric)
@@ -54,17 +70,21 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
 
         var sessionAnswers = session.Answers ?? Array.Empty<Domain.Entities.PracticeAnswer>();
 
-        List<PracticeQuestionDto> questions;
-        if (sessionAnswers.Any())
+        var orderedQuestionIds = new List<Guid>(session.SelectedQuestionIds);
+        foreach (var answeredQid in sessionAnswers.OrderBy(a => a.SubmittedAt).Select(a => a.QuestionId))
         {
-            var answeredQuestionIds = sessionAnswers
-                .OrderBy(a => a.SubmittedAt)
-                .Select(a => a.QuestionId)
-                .Distinct()
-                .ToList();
+            if (answeredQid != Guid.Empty && !orderedQuestionIds.Contains(answeredQid))
+            {
+                orderedQuestionIds.Add(answeredQid);
+            }
+        }
 
-            var questionById = courseQuestions.ToDictionary(q => q.Id);
-            questions = answeredQuestionIds
+        var questionById = courseQuestions.ToDictionary(q => q.Id);
+
+        List<PracticeQuestionDto> questions;
+        if (orderedQuestionIds.Count > 0)
+        {
+            questions = orderedQuestionIds
                 .Where(id => questionById.ContainsKey(id))
                 .Select(id =>
                 {
@@ -73,7 +93,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                         q.Id,
                         q.Content,
                         q.Rubric != null
-                            ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList()
+                            ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList()
                             : new List<string>(),
                         q.ImageUrl,
                         q.ImageDescription
@@ -106,15 +126,13 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     q.Id,
                     q.Content,
                     q.Rubric != null
-                        ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList()
+                        ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList()
                         : new List<string>(),
                     q.ImageUrl,
                     q.ImageDescription
                 ))
                 .ToList();
         }
-
-        var questionFollowUpMap = courseQuestions.ToDictionary(q => q.Id, q => q.FollowUpPrompt);
 
         var maxFollowUpConfig = await _context.SystemConfigs
             .AsNoTracking()
@@ -133,8 +151,11 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                                     evaluation.TotalScore >= 4.0m &&
                                     evaluation.TotalScore <= 8.0m;
 
-                int followUpsCountForQuestion = sessionAnswers.Count(x => x.QuestionId == a.QuestionId && x.IsFollowUp);
-                bool hasChildFollowUp = sessionAnswers.Any(x => x.ParentAnswerId == a.Id);
+                int followUpsCountForQuestion = sessionAnswers.Count(x => x.QuestionId == a.QuestionId && x.IsFollowUp && x.SubmittedAt <= a.SubmittedAt);
+                bool hasChildFollowUp = sessionAnswers.Any(x =>
+                    x.Id != a.Id &&
+                    (x.ParentAnswerId == a.Id ||
+                     (x.QuestionId == a.QuestionId && x.SubmittedAt > a.SubmittedAt)));
                 bool needsFollowUp = isBorderline && !hasChildFollowUp && followUpsCountForQuestion < maxAllowedFollowUps;
 
                 string? followUpPrompt = null;
@@ -147,19 +168,38 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     }
                     else
                     {
-                        questionFollowUpMap.TryGetValue(a.QuestionId, out var rawPrompt);
+                        questionById.TryGetValue(a.QuestionId, out var qEntity);
+                        var mainAnsText = sessionAnswers
+                            .Where(x => x.QuestionId == a.QuestionId && !x.IsFollowUp)
+                            .OrderBy(x => x.SubmittedAt)
+                            .Select(x => x.AnswerText)
+                            .FirstOrDefault();
+                        var prevPrompts = sessionAnswers
+                            .Where(x => x.QuestionId == a.QuestionId && x.SubmittedAt < a.SubmittedAt)
+                            .SelectMany(x => x.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                            .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+                            .Where(p => !string.IsNullOrWhiteSpace(p))
+                            .Select(p => p!.Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
                         var weakestDetail = evaluation?.Details
                             .OrderBy(d => d.Criterion != null && d.Criterion.MaxScore > 0m ? d.Score / d.Criterion.MaxScore : d.Score)
                             .FirstOrDefault();
                         int nextFollowUpSequence = followUpsCountForQuestion + 1;
                         followUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
                             session.Course?.Code,
-                            rawPrompt,
+                            qEntity?.FollowUpPrompt,
                             null,
                             nextFollowUpSequence,
                             weakestDetail?.Criterion?.CriterionName,
                             weakestDetail?.Criterion?.Description,
-                            evaluation?.Details?.Select(d => d.Criterion?.CriterionName ?? string.Empty));
+                            evaluation?.Details?.Select(d => d.Criterion?.CriterionName ?? string.Empty),
+                            qEntity?.Content,
+                            qEntity?.SampleAnswer,
+                            a.AnswerText,
+                            mainAnsText,
+                            prevPrompts);
                     }
                 }
 
@@ -203,7 +243,9 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
 
         var bufferSeconds = int.TryParse(sysBufferStr, out var parsedBuffer)
             ? Math.Clamp(parsedBuffer, 10, 300)
-            : (session.Course != null ? Math.Clamp(session.Course.TranscriptBufferSeconds, 10, 300) : 60);
+            : (session.Course != null && session.Course.TranscriptBufferSeconds > 0
+                ? Math.Clamp(session.Course.TranscriptBufferSeconds, 10, 300)
+                : 60);
 
         var result = new PracticeSessionDetailDto
         {

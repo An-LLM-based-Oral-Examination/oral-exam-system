@@ -110,6 +110,9 @@ public class NotificationsController(ISender sender) : ControllerBase
             return Unauthorized();
         }
 
+        var summary = await _sender.Send(new GetNotificationsQuery(userId, UnreadOnly: true), cancellationToken);
+        var unreadCount = summary.IsSuccess && summary.Value != null ? summary.Value.UnreadCount : 0;
+
         var result = await _sender.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
         if (!result.IsSuccess)
         {
@@ -122,6 +125,6 @@ public class NotificationsController(ISender sender) : ControllerBase
             });
         }
 
-        return Ok(new { isReadAll = true, updatedCount = 1, message = "Đã đánh dấu tất cả thông báo là đã đọc." });
+        return Ok(new { isReadAll = true, updatedCount = unreadCount, message = "Đã đánh dấu tất cả thông báo là đã đọc." });
     }
 }

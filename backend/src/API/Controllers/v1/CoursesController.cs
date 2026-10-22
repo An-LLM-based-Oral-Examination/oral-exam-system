@@ -11,9 +11,7 @@ using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguratio
 namespace API.Controllers.v1;
 
 /// <summary>
-/// Controller quản trị cấu hình môn học (Dynamic Configurations) do Giảng viên / Trưởng Bộ Môn / Admin thiết lập.
-/// Mở quyền cho Giảng viên phụ trách cấu hình thời gian đệm sửa transcript (TranscriptBufferSeconds: 10–300s)
-/// và số lượng câu hỏi phụ chuyên sâu (MaxFollowUpQuestions: 1–2 câu, HasFollowUp).
+/// Controller quản trị cấu hình môn học (Dynamic Configurations) do Trưởng Bộ Môn / Admin thiết lập.
 /// </summary>
 [ApiController]
 [Route("api/v1/courses")]
@@ -52,15 +50,26 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật cấu hình động của môn học (Mở quyền cho Giảng viên / Trưởng Bộ Môn / Admin).
-    /// Giảng viên / Trưởng Bộ Môn cấu hình tính năng hỏi chuyên sâu (1–2 câu), thời gian đệm và cấu trúc đề.
+    /// Cập nhật cấu hình động của môn học (Mở quyền cho Trưởng Bộ Môn / Admin).
+    /// Trưởng Bộ Môn cấu hình tính năng hỏi chuyên sâu, thời gian đệm và cấu trúc đề.
     /// Riêng hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Quản trị viên (Admin).
     /// </summary>
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "department_head,admin")]
     [HttpPut("{id:guid}/configurations")]
     [HttpPut("{id:guid}/exam-config")]
     public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)
     {
+        if (User?.IsInRole("lecturer") == true && User?.IsInRole("admin") != true && User?.IsInRole("department_head") != true)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = "Giảng viên không có quyền cấu hình tham số môn học.",
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
         // R2 Check: Hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Admin
         if (request.MaxMockExamsPerDay.HasValue && (User?.IsInRole("admin") != true))
         {
@@ -73,6 +82,12 @@ public class CoursesController : ControllerBase
             });
         }
 
+        var actorRole = User?.IsInRole("admin") == true
+            ? "admin"
+            : (User?.IsInRole("department_head") == true
+                ? "department_head"
+                : (User?.IsInRole("lecturer") == true ? "lecturer" : null));
+
         var command = new UpdateCourseConfigurationCommand(
             id,
             request.TranscriptBufferSeconds,
@@ -81,12 +96,24 @@ public class CoursesController : ControllerBase
             request.ExamInputMode
         )
         {
-            MaxMockExamsPerDay = request.MaxMockExamsPerDay
+            MaxMockExamsPerDay = request.MaxMockExamsPerDay,
+            ActorRole = actorRole
         };
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error != null && result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return UnprocessableEntity(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/config-failed",

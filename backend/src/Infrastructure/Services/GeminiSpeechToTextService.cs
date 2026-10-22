@@ -45,7 +45,7 @@ public class GeminiSpeechToTextService
     private readonly IReadOnlyList<string> _candidateSttUrls;
     private readonly ILogger<GeminiSpeechToTextService>? _logger;
 
-    public bool HasCredentials => !string.IsNullOrWhiteSpace(_apiKey);
+    public bool HasCredentials => !string.IsNullOrWhiteSpace(_apiKey) && !_apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
 
     public GeminiSpeechToTextService(
         HttpClient httpClient,
@@ -111,7 +111,7 @@ public class GeminiSpeechToTextService
         string? vocabularyHint = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey))
+        if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Gemini API Key for fallback STT is missing.");
         }
@@ -260,7 +260,7 @@ public class GeminiSpeechToTextService
                     $"Gemini Multimodal STT failed: {response.StatusCode} - {responseBody}",
                     null,
                     response.StatusCode);
-                continue;
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase))) break; continue;
             }
 
             var rawText = ExtractCandidateText(responseBody);

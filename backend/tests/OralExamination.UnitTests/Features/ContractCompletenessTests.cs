@@ -946,7 +946,7 @@ public class ContractCompletenessTests
         var updateConfigAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             coursesType.GetMethod(nameof(global::API.Controllers.v1.CoursesController.UpdateConfiguration))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        updateConfigAttr.Roles.Should().Be("lecturer,department_head,admin");
+        updateConfigAttr.Roles.Should().Be("department_head,admin");
 
         var questionsType = typeof(global::API.Controllers.v1.QuestionsController);
         var reviewDecisionAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(

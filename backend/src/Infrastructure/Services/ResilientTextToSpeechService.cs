@@ -454,7 +454,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         var escapedText = SecurityElement.Escape(cleanedText) ?? cleanedText;
 
         var ssml =
-            $"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='vi-VN'>" +
+            $"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{(!string.IsNullOrWhiteSpace(resolvedVoice) && resolvedVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase) ? "en-US" : "vi-VN")}'>" +
             $"<voice name='{resolvedVoice}'>" +
             $"<prosody pitch='+0Hz' rate='{ratePercent}' volume='+0%'>{escapedText}</prosody>" +
             $"</voice></speak>";
@@ -572,7 +572,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         double clampedRate,
         CancellationToken cancellationToken)
     {
-        _ = resolvedVoice;
+        var tl = !string.IsNullOrWhiteSpace(resolvedVoice) && resolvedVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase) ? "en" : "vi";
         var ttsSpeed = clampedRate <= 0.85
             ? "0.5"
             : (Math.Abs(clampedRate - 1.0) <= 0.03
@@ -585,7 +585,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
 
         foreach (var chunk in chunks)
         {
-            var url = $"https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&ttsspeed={ttsSpeed}&q={Uri.EscapeDataString(chunk)}";
+            var url = $"https://translate.googleapis.com/translate_tts?ie=UTF-8&tl={tl}&client=tw-ob&ttsspeed={ttsSpeed}&q={Uri.EscapeDataString(chunk)}";
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation(
                 "User-Agent",

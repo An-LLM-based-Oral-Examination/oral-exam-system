@@ -40,18 +40,48 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             : 5;
 
         var elapsed = DateTime.UtcNow - session.LastActivityAt;
-        if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        if (elapsed > TimeSpan.FromMinutes(timeoutMinutes))
         {
-            session.Status = "completed";
-            session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (session.Status == "in_progress")
+            {
+                session.Status = "completed";
+                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
-            return Result<Guid>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            if (session.Status == "completed")
+            {
+                return Result<Guid>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            }
         }
 
         if (session.Status != "in_progress")
         {
             return Result<Guid>.Failure("Phiên luyện tập đã kết thúc.");
+        }
+
+        if (string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase) && request.IsFollowUp)
+        {
+            return Result<Guid>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
+        }
+
+        if (session.SelectedQuestionIds.Count > 0 && !session.SelectedQuestionIds.Contains(request.QuestionId))
+        {
+            return Result<Guid>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
+        }
+
+        var courseHasQuestions = await _context.PracticeQuestions
+            .AsNoTracking()
+            .AnyAsync(q => q.CourseId == session.CourseId && q.IsActive, cancellationToken);
+        if (courseHasQuestions)
+        {
+            var isValidCourseQuestion = await _context.PracticeQuestions
+                .AsNoTracking()
+                .AnyAsync(q => q.Id == request.QuestionId && q.CourseId == session.CourseId && q.IsActive, cancellationToken);
+            if (!isValidCourseQuestion)
+            {
+                return Result<Guid>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
+            }
         }
 
         // 2. Add Answer

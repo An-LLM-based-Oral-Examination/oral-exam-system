@@ -17,4 +17,5 @@ public sealed record UpdateCourseConfigurationCommand(
 ) : IRequest<Result<CourseConfigurationDto>>
 {
     public int? MaxMockExamsPerDay { get; init; }
+    public string? ActorRole { get; init; }
 }

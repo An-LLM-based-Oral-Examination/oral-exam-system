@@ -64,7 +64,7 @@ public sealed class SubmitMockExamAnswerCommandHandler(
 
         // 4. Trích xuất transcript từ âm thanh hoặc dùng transcript trực tiếp (hỗ trợ Hybrid Fallback)
         string transcript = string.Empty;
-        if (request.AudioStream != null && request.AudioStream.Length > 0)
+        if (request.AudioStream != null && (!request.AudioStream.CanSeek || request.AudioStream.Length > 0))
         {
             var fileName = !string.IsNullOrWhiteSpace(request.FileName) ? request.FileName : "audio.webm";
             Exception? sttException = null;
@@ -76,6 +76,11 @@ public sealed class SubmitMockExamAnswerCommandHandler(
                     .Where(q => q.Id == request.QuestionId)
                     .Select(q => q.Title + ". " + q.Content)
                     .FirstOrDefaultAsync(cancellationToken);
+
+                if (request.AudioStream.CanSeek && request.AudioStream.Position != 0)
+                {
+                    request.AudioStream.Position = 0;
+                }
 
                 OralExamination.Application.Common.Models.SpeechTranscriptionResult? detailed = null;
                 // Luôn gọi TranscribeDetailedAsync ngay cả khi questionHint rỗng/null
