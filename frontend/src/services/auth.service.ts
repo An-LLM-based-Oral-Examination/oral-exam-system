@@ -1,6 +1,7 @@
 import apiClient from './api.client'
 import type {
   GoogleLoginRequest,
+  LoginRequest,
   LoginResponse,
   ProblemDetails,
   User,
@@ -55,6 +56,12 @@ function persistSession(data: LoginResponse): LoginResponse {
 }
 
 export const authService = {
+  async passwordLogin(request: LoginRequest): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>('/auth/password-login', request)
+    clearMockExamSession()
+    return persistSession(response.data)
+  },
+
   async googleLogin(request: GoogleLoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/auth/google-login', request)
     clearMockExamSession()

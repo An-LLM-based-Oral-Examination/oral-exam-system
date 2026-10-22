@@ -18,6 +18,7 @@ import {
   Headphones,
   Info,
   LoaderCircle,
+  LockKeyhole,
   MapPinned,
   Mic2,
   Monitor,
@@ -26,16 +27,28 @@ import {
   RefreshCw,
   ScanLine,
   ShieldCheck,
+  ShieldAlert,
   Sparkles,
   UserRound,
+  UploadCloud,
   Wifi,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useKioskLockdown } from '@/hooks/useKioskLockdown'
+import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
+import { officialExamService } from '@/services/officialExam.service'
+import { proctorService } from '@/services/proctor.service'
+import type {
+  AudioUploadAuthorization,
+  OfficialExamAnswerSubmissionRequest,
+  OfficialExamSubmissionStatusResponse,
+  StudentWorkstationTicket,
+  SubmitOfficialExamResponse,
+} from '@/types/officialExam.types'
 import type { ExamSceneState } from './OfficialExamThreeScene'
 
 const OfficialExamThreeScene = lazy(() =>
@@ -68,6 +81,239 @@ interface OfficialExamAssignment {
   checkInCode?: string
   qrPayload?: string
   tokenExpiresAt?: Date
+}
+
+void LegacyOfficialExamPage
+
+type MF04StudentService = {
+  getCurrentTicket: () => Promise<StudentWorkstationTicket>
+  checkIn: (ticketId: string) => Promise<unknown>
+  createAudioUploadAuthorization: (ticketId: string) => Promise<AudioUploadAuthorization>
+  sealAudio: (ticketId: string, payload: { objectKey: string; sha256: string }) => Promise<unknown>
+  uploadAudio: (authorization: AudioUploadAuthorization, audio: Blob) => Promise<void>
+  submitExam: (ticketId: string, answers: OfficialExamAnswerSubmissionRequest[]) => Promise<SubmitOfficialExamResponse>
+  getSubmissionStatus: (ticketId: string) => Promise<OfficialExamSubmissionStatusResponse>
+  suspendTicket: (ticketId: string, payload: { reason: string; blurViolationCount?: number }) => Promise<unknown>
+}
+
+const mf04StudentService = officialExamService as unknown as MF04StudentService
+
+function mf04ErrorMessage(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'detail' in error) {
+    const detail = (error as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  return error instanceof Error ? error.message : 'Không thể hoàn tất yêu cầu MF-04.'
+}
+
+async function calculateSha256(blob: Blob) {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+function formatMf04Date(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+function formatRecordingDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(safeSeconds / 60).toString().padStart(2, '0')}:${(safeSeconds % 60).toString().padStart(2, '0')}`
+}
+
+function getExamQuestionImageUrl(url: string | null | undefined) {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url)) return url
+  return url.startsWith('/') ? url : `/${url}`
+}
+
+function OfficialExamLivePage() {
+  const { user } = useAuth()
+  const [ticket, setTicket] = useState<StudentWorkstationTicket | null>(null)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [sealed, setSealed] = useState(false)
+  const [submission, setSubmission] = useState<OfficialExamSubmissionStatusResponse | null>(null)
+  const [isSuspended, setIsSuspended] = useState(false)
+  const recordingStartedAtRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+  const suspendedRef = useRef(false)
+  const audioRecorder = useAudioRecorder()
+
+  const isInProgress = ticket?.status === 'IN_PROGRESS'
+  const isSubmitted = Boolean(ticket && ['SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED'].includes(ticket.status))
+  const questions = ticket?.questions ?? []
+
+  useEffect(() => {
+    mountedRef.current = true
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const currentTicket = await mf04StudentService.getCurrentTicket()
+        if (mountedRef.current) setTicket(currentTicket)
+      } catch (requestError) {
+        if (mountedRef.current) setError(mf04ErrorMessage(requestError))
+      } finally {
+        if (mountedRef.current) setLoading(false)
+      }
+    })()
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!audioRecorder.isRecording) return
+    recordingStartedAtRef.current ??= Date.now()
+    const timer = window.setInterval(() => {
+      if (recordingStartedAtRef.current) {
+        setRecordingSeconds(Math.floor((Date.now() - recordingStartedAtRef.current) / 1000))
+      }
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [audioRecorder.isRecording])
+
+  const suspendForLockdown = useCallback(async () => {
+    if (!ticket || suspendedRef.current) return
+    suspendedRef.current = true
+    audioRecorder.cancelRecording()
+    try {
+      await proctorService.suspendTicket(ticket.id, {
+        reason: 'Kiosk Lockdown: vượt quá số lần vi phạm cửa sổ/toàn màn hình.',
+        blurViolationCount: 3,
+      })
+      setIsSuspended(true)
+      setTicket((current) => current ? { ...current, status: 'LOCKED' } : current)
+      setError('Vé thi đã bị đình chỉ do vi phạm quy chế Kiosk. Vui lòng liên hệ giám thị.')
+    } catch (requestError) {
+      setError(`Không thể ghi nhận đình chỉ: ${mf04ErrorMessage(requestError)}`)
+    }
+  }, [audioRecorder, ticket])
+
+  const kiosk = useKioskLockdown(
+    3,
+    () => { void suspendForLockdown() },
+    Boolean(isInProgress && audioRecorder.isRecording && !isSuspended),
+  )
+
+  const refreshTicket = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const currentTicket = await mf04StudentService.getCurrentTicket()
+      setTicket(currentTicket)
+      if (currentTicket.status !== 'IN_PROGRESS') setRecordingSeconds(0)
+    } catch (requestError) {
+      setError(mf04ErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCheckIn = async () => {
+    if (!ticket) return
+    setBusy(true)
+    setError(null)
+    try {
+      await mf04StudentService.checkIn(ticket.id)
+      await refreshTicket()
+      setNotice('Check-in thành công. Hãy kiểm tra microphone và bắt đầu ghi âm bài thi.')
+    } catch (requestError) {
+      setError(mf04ErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleStartRecording = async () => {
+    if (!ticket || !isInProgress || isSubmitted || busy) return
+    setError(null)
+    try {
+      await audioRecorder.startRecording()
+      recordingStartedAtRef.current = Date.now()
+      setRecordingSeconds(0)
+      setNotice('Đang ghi âm toàn bộ bài thi. Không rời khỏi màn hình Kiosk.')
+    } catch (recordingError) {
+      setError(mf04ErrorMessage(recordingError))
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (!ticket || !isInProgress || !audioRecorder.isRecording || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const audio = await audioRecorder.stopRecording()
+      const authorization = await mf04StudentService.createAudioUploadAuthorization(ticket.id)
+      await mf04StudentService.uploadAudio(authorization, audio)
+      const audioHash = await calculateSha256(audio)
+      await mf04StudentService.sealAudio(ticket.id, { objectKey: authorization.objectKey, sha256: audioHash })
+      setSealed(true)
+      const payload = questions.map((question) => ({
+        examQuestionId: question.questionId,
+        transcriptWhisper: answers[question.questionId]?.trim() || null,
+        timestampsWhisper: null,
+        timeSpentSeconds: recordingSeconds,
+      }))
+      const submitted = await mf04StudentService.submitExam(ticket.id, payload)
+      setSubmission({
+        ticketId: submitted.ticketId,
+        status: submitted.status,
+        submittedAt: submitted.submittedAt,
+        totalSubmissions: submitted.submissionCount,
+        pendingSubmissions: submitted.submissionCount,
+        gradedSubmissions: 0,
+        failedSubmissions: 0,
+      })
+      setTicket((current) => current ? { ...current, status: submitted.status } : current)
+      setNotice('Bài thi đã được lưu an toàn và chuyển sang hàng đợi chấm ngầm.')
+    } catch (requestError) {
+      setError(mf04ErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const refreshSubmission = async () => {
+    if (!ticket) return
+    setBusy(true)
+    try {
+      setSubmission(await mf04StudentService.getSubmissionStatus(ticket.id))
+    } catch (requestError) {
+      setError(mf04ErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <div className={cn(ds.page, 'flex min-h-[420px] items-center justify-center')}><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div>
+
+  if (!ticket) return <div className={cn(ds.page, 'pb-8')}><section className="rounded-3xl border border-[#dce4ee] bg-white p-8 text-center shadow-sm"><ShieldAlert className="mx-auto size-10 text-[#1C4D8D]" /><h1 className="mt-3 text-xl font-bold text-[#0F2854]">Chưa có vé thi tại workstation này</h1><p className="mx-auto mt-2 max-w-xl text-sm text-[#596b84]">Hãy kiểm tra đúng máy Kiosk được phân công và thời gian ca thi, sau đó thử tải lại vé.</p>{error && <p className="mt-4 rounded-xl bg-[#fff4f5] px-4 py-3 text-sm text-[#b33d52]">{error}</p>}<button type="button" onClick={() => void refreshTicket()} className="mt-5 rounded-xl bg-[#1C4D8D] px-5 py-3 text-sm font-bold text-white">Tải lại vé</button></section></div>
+
+  const statusLabel = isSubmitted ? 'Đã nộp bài' : isInProgress ? 'Ca thi đang diễn ra' : 'Chờ check-in'
+  const studentName = user?.fullName ?? 'Sinh viên'
+
+  return <div className={cn(ds.page, 'pb-8')}>
+    <section className="rounded-3xl bg-[linear-gradient(135deg,#0F2854,#1C4D8D)] p-6 text-white shadow-[0_14px_38px_rgba(15,40,84,0.2)] sm:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold tracking-[0.14em] text-[#BDE8F5] uppercase">MF-04 · Thi thật phòng Lab Kiosk</p><h1 className="mt-2 text-2xl font-bold sm:text-3xl">{ticket.sessionTitle || ticket.shiftName}</h1><p className="mt-2 text-sm text-white/75">{ticket.roomLab} · Ghế {ticket.seatNumber} · {studentName}</p></div><span className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold">{statusLabel}</span></div><div className="mt-6 grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-2xl bg-white/10 p-3"><Clock3 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Thời gian ca</p><p className="mt-1 font-bold">{formatMf04Date(ticket.startTime)} – {formatMf04Date(ticket.endTime)}</p></div><div className="rounded-2xl bg-white/10 p-3"><Mic2 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Thời lượng đã ghi</p><p className="mt-1 font-bold">{formatRecordingDuration(recordingSeconds)}</p></div><div className="rounded-2xl bg-white/10 p-3"><LockKeyhole className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Trạng thái vé</p><p className="mt-1 font-bold">{ticket.status}</p></div></div></section>
+    {(error || notice) && <div className={cn('mt-4 rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}
+    {(kiosk.isLocked || audioRecorder.error) && <div className="mt-4 flex items-start gap-3 rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><div><strong>{kiosk.isLocked ? 'Kiosk đã đình chỉ vé thi.' : 'Lỗi microphone.'}</strong><p className="mt-1">{kiosk.isLocked ? `Số lần vi phạm: ${kiosk.violations}. Vui lòng liên hệ giám thị.` : audioRecorder.error}</p></div></div>}
+    <section className="mt-4 rounded-3xl border border-[#dce4ee] bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-[#0F2854]">Quy trình thi và nộp bài</h2><p className="mt-1 text-sm text-[#60718a]">Exam Input Mode: {ticket.examInputMode ?? 'VoiceWithTranscriptEdit'} · Buffer: {ticket.transcriptBufferSeconds}s</p></div>{!isSubmitted && <div className="flex flex-wrap gap-2">{!isInProgress ? <button type="button" disabled={busy} onClick={() => void handleCheckIn()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white disabled:opacity-50"><CheckCircle2 className="size-4" />Check-in</button> : !audioRecorder.isRecording ? <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleStartRecording()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white disabled:opacity-50"><Mic2 className="size-4" />Bắt đầu ghi âm</button> : <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleSubmit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#b33d52] px-4 text-sm font-bold text-white disabled:opacity-50"><UploadCloud className="size-4" />{busy ? 'Đang lưu...' : 'Nộp bài và niêm phong'}</button>}</div>}</div>{isSubmitted && <div className="mt-4 rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4 text-sm text-[#16785f]"><strong>Bài thi đã được tiếp nhận.</strong> Không thể chỉnh sửa sau khi Persist First. {submission && `Trạng thái: ${submission.status}.`}</div>}{audioRecorder.isRecording && <div className="mt-4 flex items-center gap-2 rounded-xl bg-[#fff4f5] px-3 py-2 text-sm font-semibold text-[#b33d52]"><span className="size-2 animate-pulse rounded-full bg-[#d9455d]" />Đang ghi âm · {formatRecordingDuration(recordingSeconds)} · Còn {kiosk.remainingStrikes} lần vi phạm trước khi đình chỉ</div>}<div className="mt-5 space-y-4">{questions.length === 0 ? <div className="rounded-2xl border border-dashed border-[#cdd8e6] p-6 text-center text-sm text-[#60718a]">Ca thi chưa được gán bộ câu hỏi. Hãy liên hệ giám thị.</div> : questions.map((question, index) => <article key={question.questionId} className="rounded-2xl border border-[#e3e9f1] bg-[#fafbfd] p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#4988C4]/16 text-sm font-bold text-[#1C4D8D]">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-[#5b6b84]">{question.title || `Câu hỏi ${index + 1}`} · {question.difficulty}</p><h3 className="mt-1 text-sm font-bold leading-relaxed text-[#203149]">{question.content}</h3>{getExamQuestionImageUrl(question.imageUrl) && <img src={getExamQuestionImageUrl(question.imageUrl) ?? undefined} alt={question.imageDescription || question.title || 'Hình ảnh câu hỏi'} className="mt-3 max-h-72 w-full rounded-xl border border-[#dce4ee] object-contain" />}{question.imageDescription && <p className="mt-2 text-xs italic text-[#60718a]">{question.imageDescription}</p>}<textarea value={answers[question.questionId] ?? ''} disabled={!audioRecorder.isRecording || isSubmitted} onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))} placeholder="Nhập transcript đã kiểm tra (nếu ExamInputMode cho phép)..." className="mt-4 min-h-24 w-full resize-y rounded-xl border border-[#dce4ee] bg-white p-3 text-sm text-[#203149] outline-none focus:border-[#4988C4] disabled:bg-[#f0f3f7]" /></div></div></article>)}</div></section>
+    {sealed && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-[#277662]"><CheckCircle2 className="size-4" />Audio đã được upload và xác minh SHA-256 trước khi nộp.</p>}
+    {isSubmitted && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dce4ee] bg-white p-4"><p className="text-xs text-[#60718a]">Theo dõi trạng thái chấm ngầm sau khi nộp bài.</p><button type="button" disabled={busy} onClick={() => void refreshSubmission()} className="rounded-xl border border-[#cbd8e7] px-3 py-2 text-xs font-bold text-[#1C4D8D]">Cập nhật trạng thái</button></div>}
+    <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-[#60718a]"><ShieldAlert className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" />Kiosk ghi nhận audio thi thật trên Cloudflare R2. Điểm không hiển thị tại chỗ; sinh viên xem kết quả sau khi giảng viên hậu kiểm và công bố.</p>
+  </div>
+}
+
+export function OfficialExamPage() {
+  return <OfficialExamLivePage />
 }
 
 interface DetailItem {
@@ -204,7 +450,7 @@ function toIcsDate(date: Date) {
     .replace(/\.\d{3}/, '')
 }
 
-export function OfficialExamPage() {
+function LegacyOfficialExamPage() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const assignments = useMemo(() => buildPreviewAssignments(new Date()), [])

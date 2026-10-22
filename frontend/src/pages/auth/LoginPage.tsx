@@ -1,13 +1,18 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  ArrowRight,
   AudioLines,
   BrainCircuit,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
+  Eye,
+  EyeOff,
+  LoaderCircle,
   LockKeyhole,
   ShieldCheck,
+  UserRound,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
 import { useAuth } from '@/hooks/useAuth'
@@ -63,11 +68,35 @@ function getLoginErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { loginWithGoogle } = useAuth()
+  const { loginWithPassword, loginWithGoogle } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const googleButtonRef = useRef<HTMLDivElement>(null)
   const [googleConfigured, setGoogleConfigured] = useState(Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID))
+
+  const handlePasswordLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const normalizedUsername = username.trim()
+
+    if (!normalizedUsername || !password) {
+      setError('Vui lòng nhập đầy đủ username và mật khẩu.')
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+    try {
+      await loginWithPassword(normalizedUsername, password)
+      navigate('/')
+    } catch (loginError: unknown) {
+      setError(getLoginErrorMessage(loginError))
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
@@ -229,7 +258,84 @@ export function LoginPage() {
                 </p>
               </div>
 
-              <div className="mb-5 rounded-xl border border-[#4988C4]/45 bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
+              <form onSubmit={handlePasswordLogin} className="space-y-3.5" noValidate>
+                <div>
+                  <label htmlFor="login-username" className="mb-1.5 block text-xs font-bold text-[#30415f]">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <UserRound className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#7f91ac]" />
+                    <input
+                      id="login-username"
+                      name="username"
+                      type="text"
+                      value={username}
+                      onChange={(event) => {
+                        setUsername(event.target.value)
+                        setError(null)
+                      }}
+                      autoComplete="username"
+                      placeholder="Nhập username của bạn"
+                      className="login-input min-h-11 w-full rounded-xl border border-[#cbd8ea] bg-white px-3.5 py-2.5 pl-10 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      disabled={isLoading}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="login-password" className="mb-1.5 block text-xs font-bold text-[#30415f]">
+                    Mật khẩu
+                  </label>
+                  <div className="relative">
+                    <LockKeyhole className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#7f91ac]" />
+                    <input
+                      id="login-password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(event) => {
+                        setPassword(event.target.value)
+                        setError(null)
+                      }}
+                      autoComplete="current-password"
+                      placeholder="Nhập mật khẩu"
+                      className="login-password-input min-h-11 w-full rounded-xl border border-[#cbd8ea] bg-white px-11 py-2.5 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      disabled={isLoading}
+                      required
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      className="absolute top-1/2 right-2.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#6f82a0] transition hover:bg-[#edf3fb] hover:text-[#2b5dde] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#2b5dde]"
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="login-submit inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1c5fc4] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(28,95,196,0.22)] transition hover:-translate-y-0.5 hover:bg-[#164b9d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
+                >
+                  {isLoading ? (
+                    <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <ArrowRight className="size-4" />
+                  )}
+                  {isLoading ? 'Đang đăng nhập…' : 'Đăng nhập'}
+                </button>
+              </form>
+
+              <div className="my-5 flex items-center gap-3" aria-hidden="true">
+                <span className="h-px flex-1 bg-[#e3eaf3]" />
+                <span className="text-[11px] font-semibold text-[#96a2b3]">HOẶC</span>
+                <span className="h-px flex-1 bg-[#e3eaf3]" />
+              </div>
+
+              <div className="rounded-xl border border-[#4988C4]/45 bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
                 <div className="mb-2.5 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-[#253653]">Đăng nhập bằng Google</p>
@@ -240,7 +346,7 @@ export function LoginPage() {
                 <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
                 {isLoading && (
                   <p className="mt-2 text-center text-xs font-semibold text-[#4a6dcc]">
-                    Đang xác thực tài khoản Google…
+                    Đang xác thực tài khoản…
                   </p>
                 )}
                 {!googleConfigured && (
@@ -248,15 +354,16 @@ export function LoginPage() {
                     Chưa cấu hình VITE_GOOGLE_CLIENT_ID cho môi trường này.
                   </p>
                 )}
-                {error && (
-                  <div
-                    role="alert"
-                    className="login-alert mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
-                  >
-                    {error}
-                  </div>
-                )}
               </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="login-alert mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
+                >
+                  {error}
+                </div>
+              )}
 
               <div className="login-security mt-5 border-t border-[#e5eaf1] pt-4 text-center">
                 <p className="flex items-center justify-center gap-1.5 text-xs text-[#8794a7]">

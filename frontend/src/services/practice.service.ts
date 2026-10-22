@@ -580,7 +580,9 @@ async function submitBatch(sessionId: string, payload: SubmitPracticeBatchReques
   for (const answer of payload.answers) {
     assertGuid(answer.questionId, 'questionId')
     if (answer.parentAnswerId) assertGuid(answer.parentAnswerId, 'parentAnswerId')
-    assertAnswerText(answer.answerText)
+    if (answer.answerText.trim().length > 0) {
+      assertAnswerText(answer.answerText)
+    }
   }
 
   try {
@@ -631,6 +633,7 @@ export const practiceService = {
   getNextQuestion,
   submitAnswer,
   submitBatch,
+  submitBatchAnswers: submitBatch,
   completeSession,
   getStudentHistory,
   startPracticeSession: startSession,

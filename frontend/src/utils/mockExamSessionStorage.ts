@@ -2,6 +2,26 @@ import type { StoredMockExamAnswer, StoredMockExamSession } from '@/types/mockEx
 
 const STORAGE_KEY = 'mf02_mock_exam_session'
 
+function readStorage(storage: Storage) {
+  try {
+    const raw = storage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    return isStoredSession(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeStorage(storage: Storage, session: StoredMockExamSession | null) {
+  try {
+    if (session) storage.setItem(STORAGE_KEY, JSON.stringify(session))
+    else storage.removeItem(STORAGE_KEY)
+  } catch {
+    // Một số trình duyệt có thể chặn storage ở chế độ riêng tư.
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -32,18 +52,14 @@ export function secondsUntilExpiry(expiresAt: string) {
 }
 
 export function readMockExamSession(): StoredMockExamSession | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    return isStoredSession(parsed) ? parsed : null
-  } catch {
-    return null
-  }
+  const session = readStorage(sessionStorage)
+  if (session) return session
+  return readStorage(localStorage)
 }
 
 export function saveMockExamSession(session: StoredMockExamSession) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+  writeStorage(sessionStorage, session)
+  writeStorage(localStorage, session)
 }
 
 export function saveMockExamAnswer(answer: StoredMockExamAnswer) {
@@ -55,5 +71,6 @@ export function saveMockExamAnswer(answer: StoredMockExamAnswer) {
 }
 
 export function clearMockExamSession() {
-  sessionStorage.removeItem(STORAGE_KEY)
+  writeStorage(sessionStorage, null)
+  writeStorage(localStorage, null)
 }

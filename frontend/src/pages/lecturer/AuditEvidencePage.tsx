@@ -19,6 +19,7 @@ import {
   Sparkles,
   UserRoundCheck,
   UsersRound,
+  Download,
 } from 'lucide-react'
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer'
 import { ScoreOverrideForm } from '@/components/rubric/ScoreOverrideForm'
@@ -73,7 +74,7 @@ function hasCompleteScore(candidate: AuditEvidenceItem) {
 function isPendingEvaluation(candidate: AuditEvidenceItem) {
   return (
     !hasCompleteScore(candidate) ||
-    (candidate.confidenceScore === null && !REVIEWED_STATUSES.includes(candidate.status))
+    (candidate.confidenceScore === null && !REVIEWED_STATUSES.includes(candidate.status as ExamTicketStatus))
   )
 }
 
@@ -109,6 +110,9 @@ export function AuditEvidencePage() {
   const [filter, setFilter] = useState<AuditFilter>('attention')
   const [isLoading, setIsLoading] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isSavingOverride, setIsSavingOverride] = useState(false)
+  const [isLocking, setIsLocking] = useState(false)
+  const [isExporting, setIsExporting] = useState<'excel' | 'pdf' | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -173,7 +177,7 @@ export function AuditEvidencePage() {
   const attentionCount = evidence.filter(needsLecturerAttention).length
   const reviewedAttentionCount = evidence.filter(
     (candidate) =>
-      needsLecturerAttention(candidate) && REVIEWED_STATUSES.includes(candidate.status),
+      needsLecturerAttention(candidate) && REVIEWED_STATUSES.includes(candidate.status as ExamTicketStatus),
   ).length
   const completedScoreCount = evidence.filter(hasCompleteScore).length
   const pendingCount = evidence.filter(isPendingEvaluation).length
@@ -242,6 +246,73 @@ export function AuditEvidencePage() {
     }
   }
 
+  const saveOverride = async (newScore: number, reason: string) => {
+    if (!activeCandidate) return
+    setIsSavingOverride(true)
+    setError('')
+    setNotice('')
+    try {
+      const service = officialExamService as typeof officialExamService & {
+        overrideScore: (ticketId: string, payload: { auditedScore: number; overrideReason: string }) => Promise<unknown>
+      }
+      await service.overrideScore(activeCandidate.ticketId, {
+        auditedScore: newScore,
+        overrideReason: reason,
+      })
+      setNotice('Đã lưu điểm hậu kiểm và lý do giải trình.')
+      setReloadKey((key) => key + 1)
+    } catch (overrideError) {
+      setError(getErrorMessage(overrideError))
+    } finally {
+      setIsSavingOverride(false)
+    }
+  }
+
+  const lockTicket = async () => {
+    if (!activeCandidate || activeCandidate.isLocked) return
+    setIsLocking(true)
+    setError('')
+    setNotice('')
+    try {
+      const service = officialExamService as typeof officialExamService & {
+        lockTicket: (ticketId: string) => Promise<unknown>
+      }
+      await service.lockTicket(activeCandidate.ticketId)
+      setNotice('Đã khóa một chiều điểm của thí sinh.')
+      setReloadKey((key) => key + 1)
+    } catch (lockError) {
+      setError(getErrorMessage(lockError))
+    } finally {
+      setIsLocking(false)
+    }
+  }
+
+  const exportShift = async (kind: 'excel' | 'pdf') => {
+    if (!routeShiftId) return
+    setIsExporting(kind)
+    setError('')
+    try {
+      const service = officialExamService as typeof officialExamService & {
+        exportShiftExcel: (shiftId: string) => Promise<{ blob: Blob }>
+        exportShiftPdf: (shiftId: string) => Promise<{ blob: Blob }>
+      }
+      const file = kind === 'excel'
+        ? await service.exportShiftExcel(routeShiftId)
+        : await service.exportShiftPdf(routeShiftId)
+      const blob = file instanceof Blob ? file : (file as { blob: Blob }).blob
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `official-exam-${routeShiftId}.${kind === 'excel' ? 'xlsx' : 'pdf'}`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (exportError) {
+      setError(getErrorMessage(exportError))
+    } finally {
+      setIsExporting(null)
+    }
+  }
+
   const progress =
     evidence.length === 0 ? 0 : Math.round((completedScoreCount / evidence.length) * 100)
 
@@ -284,6 +355,18 @@ export function AuditEvidencePage() {
             </button>
           </form>
         </div>
+        {routeShiftId && isUuid(routeShiftId) && (
+          <div className="relative flex flex-wrap gap-2">
+            <button type="button" className={ds.bannerButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('excel')}>
+              <Download className="size-3.5" />
+              {isExporting === 'excel' ? 'Đang xuất...' : 'Xuất Excel'}
+            </button>
+            <button type="button" className={ds.bannerButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('pdf')}>
+              <Download className="size-3.5" />
+              {isExporting === 'pdf' ? 'Đang xuất...' : 'Xuất PDF'}
+            </button>
+          </div>
+        )}
       </section>
 
       {(error || notice) && (
@@ -544,7 +627,7 @@ export function AuditEvidencePage() {
                                 {candidate.studentCode}
                               </p>
                               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                <StatusBadge status={candidate.status} />
+                                <StatusBadge status={candidate.status as ExamTicketStatus} />
                                 {attention && (
                                   <span className="rounded-full bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
                                     Cần xem kỹ
@@ -590,7 +673,7 @@ export function AuditEvidencePage() {
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <StatusBadge status={activeCandidate.status} />
+                          <StatusBadge status={activeCandidate.status as ExamTicketStatus} />
                           {activeCandidate.isLocked && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
                               <LockKeyhole className="size-3" />
@@ -702,8 +785,21 @@ export function AuditEvidencePage() {
                       key={activeCandidate.ticketId}
                       initialScore={getDisplayedScore(activeCandidate)}
                       isLocked={activeCandidate.isLocked}
-                      persistenceAvailable={false}
+                      persistenceAvailable
+                      isSaving={isSavingOverride}
+                      onSaveOverride={saveOverride}
                     />
+                    <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#4988C4]/35 bg-white p-4">
+                      <button
+                        type="button"
+                        disabled={activeCandidate.isLocked || isLocking}
+                        onClick={() => void lockTicket()}
+                        className={cn(ds.primaryButton, 'bg-[#b8404b] hover:bg-[#953943]')}
+                      >
+                        <LockKeyhole className="size-4" />
+                        {isLocking ? 'Đang khóa...' : 'Khóa điểm vé thi'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex min-h-[560px] flex-col items-center justify-center text-center">

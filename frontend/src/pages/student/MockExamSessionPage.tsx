@@ -20,7 +20,7 @@ import {
   getMockExamErrorStatus,
   mockExamService,
 } from '@/services/mockExam.service'
-import { DEFAULT_TTS_VOICE, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
+import { getTtsVoiceForCourse, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
 import type {
   MockExamScorecard as MockExamScorecardData,
   StoredMockExamAnswer,
@@ -72,8 +72,8 @@ function shouldIgnoreSpace(target: EventTarget | null) {
   return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
-function speakQuestion(content: string) {
-  void playNaturalSpeech(content, DEFAULT_TTS_VOICE, 0.96).catch((error: unknown) => {
+function speakQuestion(content: string, courseCode?: string, courseName?: string) {
+  void playNaturalSpeech(content, getTtsVoiceForCourse(courseCode, courseName), 0.96).catch((error: unknown) => {
     if (error instanceof Error && error.name === 'AbortError') return
     console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
   })
@@ -478,11 +478,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   useEffect(() => {
     if (!autoRead || !question || phase !== 'exam') return
-    speakQuestion(question.content)
+    speakQuestion(question.content, session.courseCode, session.courseName)
     return () => {
       stopSpeechPlayback()
     }
-  }, [autoRead, phase, question])
+  }, [autoRead, phase, question, session.courseCode, session.courseName])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -790,7 +790,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               <button
                 type="button"
                 data-space-ignore="true"
-                onClick={() => speakQuestion(question.content)}
+                onClick={() => speakQuestion(question.content, session.courseCode, session.courseName)}
                 className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD]"
               >
                 <Volume2 className="size-4" />

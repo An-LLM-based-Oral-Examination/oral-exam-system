@@ -66,6 +66,7 @@ apiClient.interceptors.response.use(
     const url = config?.url ?? ''
     const isAuthEndpoint =
       url.includes('/auth/login') ||
+      url.includes('/auth/password-login') ||
       url.includes('/auth/refresh-token') ||
       url.includes('/auth/google-login') ||
       url.includes('/auth/sign-out')

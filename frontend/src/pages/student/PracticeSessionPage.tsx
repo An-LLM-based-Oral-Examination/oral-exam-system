@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   BookOpenText,
   CheckCircle2,
-  Clock,
   Headphones,
   Keyboard,
   Layers,
@@ -15,8 +14,8 @@ import {
   LockKeyhole,
   Mic,
   MicOff,
-  Radio,
   RefreshCw,
+  Settings,
   Send,
   ShieldCheck,
   Sparkles,
@@ -24,6 +23,7 @@ import {
   Volume2,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
@@ -33,9 +33,10 @@ import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
-import { DEFAULT_TTS_VOICE, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
+import { getTtsVoiceForCourse, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
 import { storageService } from '@/services/storage.service'
 import type {
   PracticeAnswerDetail,
@@ -58,6 +59,26 @@ const DIFFICULTY_META: Record<PracticeDifficulty, { label: string; className: st
 }
 
 type AnswerInputMode = 'voice' | 'text'
+
+function findStoredQuestionAnswer(
+  runtime: StoredPracticeRuntime,
+  questionId: string,
+  answers: PracticeAnswerDetail[],
+  transientDrafts: Record<string, string>,
+) {
+  const transientDraft = transientDrafts[questionId]
+  if (transientDraft !== undefined) return transientDraft
+
+  const savedDraft = [...runtime.drafts]
+    .reverse()
+    .find((answer) => answer.questionId === questionId && !answer.isFollowUp)
+  if (savedDraft) return savedDraft.answerText
+
+  const submittedAnswer = [...answers]
+    .reverse()
+    .find((answer) => answer.questionId === questionId && !answer.isFollowUp)
+  return submittedAnswer?.answerText ?? ''
+}
 
 function getErrorInfo(error: unknown) {
   if (typeof error !== 'object' || error === null) {
@@ -101,53 +122,40 @@ function toScorecard(result: PracticeAnswerDetail): ScorecardPayload {
   }
 }
 
-function aggregateCriteria(results: PracticeAnswerDetail[]) {
-  const groups = new Map<
-    string,
-    { criterionId: string; criterionName: string; scores: number[]; comments: string[] }
-  >()
-
-  for (const result of results) {
-    for (const criterion of result.criteriaScores) {
-      const current = groups.get(criterion.criterionId) ?? {
-        criterionId: criterion.criterionId,
-        criterionName: criterion.criterionName,
-        scores: [],
-        comments: [],
-      }
-      current.scores.push(criterion.score)
-      if (criterion.comment) current.comments.push(criterion.comment)
-      groups.set(criterion.criterionId, current)
-    }
-  }
-
-  return [...groups.values()].map((group) => ({
-    criterionId: group.criterionId,
-    criterionName: group.criterionName,
-    score: group.scores.reduce((sum, score) => sum + score, 0) / group.scores.length,
-    comment: group.comments.join(' '),
-  }))
-}
-
 function toFullSessionScorecard(
   sessionId: string,
   questions: PracticeQuestion[],
   results: PracticeAnswerDetail[],
 ): ScorecardPayload {
   const gradedResults = questions
-    .map((question) => results.find((result) => result.questionId === question.questionId))
-    .filter((result): result is PracticeAnswerDetail =>
-      Boolean(result && result.status === 'graded' && result.totalScore !== null),
+    .map((question, index) => ({
+      questionNumber: index + 1,
+      result: results.find((result) => result.questionId === question.questionId),
+    }))
+    .filter(
+      (item): item is { questionNumber: number; result: PracticeAnswerDetail } =>
+        Boolean(item.result && item.result.status === 'graded' && item.result.totalScore !== null),
     )
   const totalScore =
-    gradedResults.reduce((sum, result) => sum + (result.totalScore ?? 0), 0) / gradedResults.length
+    gradedResults.reduce((sum, item) => sum + (item.result.totalScore ?? 0), 0) /
+    gradedResults.length
+
+  const criteriaScores = gradedResults.flatMap(({ questionNumber, result }) =>
+    result.criteriaScores.map((criterion, criterionIndex) => ({
+      criterionId: `${result.questionId}-${criterion.criterionId}-${criterionIndex}`,
+      criterionName: criterion.criterionName,
+      score: criterion.score,
+      comment: criterion.comment ?? 'Không có nhận xét bổ sung.',
+      questionNumber,
+    })),
+  )
 
   return {
     submissionId: sessionId,
     totalScore,
-    criteriaScores: aggregateCriteria(gradedResults),
+    criteriaScores,
     feedback: gradedResults
-      .map((result, index) => `Câu ${index + 1}: ${result.feedback ?? 'Không có nhận xét.'}`)
+      .map(({ questionNumber, result }) => `Câu ${questionNumber}: ${result.feedback ?? 'Không có nhận xét.'}`)
       .join('\n'),
   }
 }
@@ -242,7 +250,9 @@ export const PracticeSessionPage: React.FC = () => {
   const [textAnswer, setTextAnswer] = useState(() =>
     runtime?.draftAnswerMode === 'text' ? (runtime.draftAnswerText ?? '') : '',
   )
-  const [showBuffer, setShowBuffer] = useState(() => runtime?.showBuffer ?? false)
+  const [showBuffer, setShowBuffer] = useState(
+    () => runtime?.showBuffer === true && runtime?.draftAnswerMode !== 'text',
+  )
   const [bufferDeadlineTimestamp, setBufferDeadlineTimestamp] = useState<number | null>(
     () => runtime?.bufferDeadlineTimestamp ?? null,
   )
@@ -254,11 +264,17 @@ export const PracticeSessionPage: React.FC = () => {
   const [isCompleting, setIsCompleting] = useState(false)
   const [isManualSyncing, setIsManualSyncing] = useState(false)
   const [showStopConfirmation, setShowStopConfirmation] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [fullSessionSubmitConfirmation, setFullSessionSubmitConfirmation] = useState<{
+    answerText: string
+    unansweredCount: number
+  } | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null)
   const [scorecardTitle, setScorecardTitle] = useState('Bảng điểm câu trả lời')
   const [latestResult, setLatestResult] = useState<PracticeAnswerDetail | null>(null)
   const [syncedResults, setSyncedResults] = useState<PracticeAnswerDetail[]>([])
   const processedAnswerIds = useRef(new Set<string>())
+  const transientDraftsRef = useRef<Record<string, string>>({})
   const isTransitioningRef = useRef(false)
   const syncInFlightRef = useRef(false)
   const submissionRecoveryInFlightRef = useRef(false)
@@ -271,6 +287,12 @@ export const PracticeSessionPage: React.FC = () => {
     cancelRecording,
     clearError: clearRecorderError,
   } = useAudioRecorder()
+  const {
+    startListening: startClientTranscription,
+    stopListening: stopClientTranscription,
+    resetTranscript: resetClientTranscript,
+    getCurrentTranscript,
+  } = useSpeechRecognition()
   const {
     status: hubStatus,
     isConnected: isHubConnected,
@@ -310,6 +332,9 @@ export const PracticeSessionPage: React.FC = () => {
     ? runtime?.questionDifficulties[currentQuestion.questionId]
     : undefined
   const activePrompt = runtime?.activeFollowUp?.prompt ?? currentQuestion?.content ?? ''
+  const hasQuestionImage = Boolean(currentQuestion?.imageUrl?.trim())
+  const isTextLayout = answerInputMode === 'text'
+  const isImageTextLayout = hasQuestionImage && isTextLayout
   const currentQuestionNumber = (runtime?.currentQuestionIndex ?? 0) + 1
   const allResults = useMemo(
     () => mergeResults(syncedResults, gradingResults),
@@ -524,7 +549,11 @@ export const PracticeSessionPage: React.FC = () => {
 
   const handleReadQuestion = () => {
     if (!activePrompt) return
-    void playNaturalSpeech(activePrompt, DEFAULT_TTS_VOICE, 0.95).catch((error: unknown) => {
+    void playNaturalSpeech(
+      activePrompt,
+      getTtsVoiceForCourse(runtime?.config.courseCode, runtime?.config.courseName),
+      0.95,
+    ).catch((error: unknown) => {
       if (error instanceof Error && error.name === 'AbortError') return
       setPageError('Không thể phát câu hỏi bằng giọng AI. Vui lòng thử lại.')
     })
@@ -538,12 +567,14 @@ export const PracticeSessionPage: React.FC = () => {
     if (!isRecording) {
       stopSpeechPlayback()
       setTranscript('')
+      resetClientTranscript()
       setBufferDeadlineTimestamp(null)
       setShowBuffer(false)
       persistAnswerDraft('', 'voice', false, null)
       clearRecorderError()
       try {
         await startRecording()
+        startClientTranscription()
         setSessionNotice('Microphone đang ghi âm câu trả lời của bạn.')
       } catch (recordingError) {
         setPageError(getErrorInfo(recordingError).message)
@@ -555,7 +586,12 @@ export const PracticeSessionPage: React.FC = () => {
     setSessionNotice('Đang chuyển giọng nói thành văn bản…')
     try {
       const audio = await stopRecording()
-      const response = await storageService.uploadPracticeAudio(audio)
+      stopClientTranscription()
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
+      const response = await storageService.uploadPracticeAudio(audio, {
+        clientTranscript: getCurrentTranscript(),
+        vocabularyHint: currentQuestion?.rubricCriteria.join(', '),
+      })
       const nextDeadline = Date.now() + runtime.transcriptBufferSeconds * 1_000
       setTranscript(response.transcript)
       setBufferDeadlineTimestamp(nextDeadline)
@@ -797,6 +833,99 @@ export const PracticeSessionPage: React.FC = () => {
     return () => window.clearTimeout(recoveryTimer)
   }, [reconcilePendingSubmission, runtime])
 
+  const requestFullSessionSubmitConfirmation = (answerText = currentAnswerDraft) => {
+    if (
+      !runtime ||
+      mode !== 'FULL_SESSION' ||
+      runtime.currentQuestionIndex < runtime.questions.length - 1
+    ) {
+      return
+    }
+
+    const normalizedAnswer = answerText.trim()
+    const answeredQuestionIds = new Set(
+      runtime.drafts
+        .filter((answer) => answer.answerText.trim().length >= 10 && !answer.isFollowUp)
+        .map((answer) => answer.questionId),
+    )
+    if (normalizedAnswer.length >= 10 && currentQuestion) {
+      answeredQuestionIds.add(currentQuestion.questionId)
+    }
+
+    setFullSessionSubmitConfirmation({
+      answerText: normalizedAnswer,
+      unansweredCount: Math.max(runtime.questions.length - answeredQuestionIds.size, 0),
+    })
+  }
+
+  const submitConfirmedFullSession = async () => {
+    if (!runtime || !user || !fullSessionSubmitConfirmation || mode !== 'FULL_SESSION') return
+
+    setIsSubmitting(true)
+    setBufferError('')
+    setPageError('')
+
+    const answersByQuestionId = new Map(
+      runtime.drafts
+        .filter((answer) => !answer.isFollowUp)
+        .map((answer) => [answer.questionId, answer.answerText.trim()]),
+    )
+    const finalAnswer = fullSessionSubmitConfirmation.answerText.trim()
+    if (finalAnswer.length >= 10 && currentQuestion) {
+      answersByQuestionId.set(currentQuestion.questionId, finalAnswer)
+    }
+
+    const drafts = runtime.questions.map((question) => ({
+      questionId: question.questionId,
+      answerText: answersByQuestionId.get(question.questionId) ?? '',
+      isFollowUp: false,
+      parentAnswerId: null,
+    }))
+    const batchRuntime: StoredPracticeRuntime = {
+      ...runtime,
+      drafts,
+      mainQuestionsCompleted: runtime.questions.length,
+      pendingSubmission: null,
+      submittedAnswerIdsByQuestion: {},
+      draftAnswerText: '',
+      showBuffer: false,
+      bufferDeadlineTimestamp: null,
+    }
+
+    savePracticeRuntime(batchRuntime)
+    setRuntime(batchRuntime)
+    try {
+      await practiceService.submitBatchAnswers(runtime.sessionId, {
+        studentId: user.id,
+        answers: drafts,
+      })
+      updateRuntime((current) => ({
+        ...current,
+        drafts,
+        mainQuestionsCompleted: current.questions.length,
+        pendingSubmission: null,
+        draftAnswerText: '',
+        showBuffer: false,
+        bufferDeadlineTimestamp: null,
+        fullSessionSubmitted: true,
+      }))
+      setFullSessionSubmitConfirmation(null)
+      setShowBuffer(false)
+      setBufferDeadlineTimestamp(null)
+      setTranscript('')
+      setTextAnswer('')
+      setSessionNotice(
+        'Đã nộp bài. Những câu chưa trả lời sẽ được tính 0 điểm; AI đang tiến hành chấm điểm.',
+      )
+    } catch (batchError) {
+      const problem = getErrorInfo(batchError)
+      setBufferError(problem.message)
+      setPageError(problem.message)
+      setSessionNotice('Chưa nộp được bài. Nội dung vẫn được giữ để bạn thử lại.')
+      setIsSubmitting(false)
+    }
+  }
+
   const handleConfirmSubmit = async (finalText: string) => {
     if (
       !runtime ||
@@ -808,6 +937,13 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
     const normalizedAnswer = finalText.trim()
+    if (
+      mode === 'FULL_SESSION' &&
+      runtime.currentQuestionIndex >= runtime.questions.length - 1
+    ) {
+      requestFullSessionSubmitConfirmation(normalizedAnswer)
+      return
+    }
     if (normalizedAnswer.length < 10) {
       const validationMessage = 'Câu trả lời cần ít nhất 10 ký tự trước khi nộp.'
       setBufferError(validationMessage)
@@ -831,6 +967,83 @@ export const PracticeSessionPage: React.FC = () => {
     setIsSubmitting(true)
     setBufferError('')
     setPageError('')
+
+    if (mode === 'FULL_SESSION') {
+      const currentDraft = {
+        questionId: currentQuestion.questionId,
+        answerText: normalizedAnswer,
+        isFollowUp: false,
+        parentAnswerId: null,
+      }
+      const drafts = [
+        ...runtime.drafts.filter((answer) => answer.questionId !== currentQuestion.questionId),
+        currentDraft,
+      ]
+      const isLastQuestion = runtime.currentQuestionIndex >= runtime.questions.length - 1
+      const nextIndex = Math.min(runtime.currentQuestionIndex + 1, runtime.questions.length - 1)
+
+      if (!isLastQuestion) {
+        updateRuntime((current) => ({
+          ...current,
+          drafts,
+          currentQuestionIndex: nextIndex,
+          mainQuestionsCompleted: Math.max(current.mainQuestionsCompleted, drafts.length),
+          draftAnswerText: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+        }))
+        setShowBuffer(false)
+        setBufferDeadlineTimestamp(null)
+        setTranscript('')
+        setTextAnswer('')
+        setIsSubmitting(false)
+        setSessionNotice(
+          `Đã lưu cục bộ câu ${drafts.length}/${runtime.questions.length}. Tiếp tục câu kế tiếp.`,
+        )
+        return
+      }
+
+      const batchRuntime: StoredPracticeRuntime = {
+        ...runtime,
+        drafts,
+        mainQuestionsCompleted: runtime.questions.length,
+        pendingSubmission: null,
+        submittedAnswerIdsByQuestion: {},
+      }
+      savePracticeRuntime(batchRuntime)
+      setRuntime(batchRuntime)
+      try {
+        await practiceService.submitBatchAnswers(runtime.sessionId, {
+          studentId: user.id,
+          answers: drafts,
+        })
+        updateRuntime((current) => ({
+          ...current,
+          drafts,
+          mainQuestionsCompleted: current.questions.length,
+          pendingSubmission: null,
+          draftAnswerText: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+          fullSessionSubmitted: true,
+        }))
+        setShowBuffer(false)
+        setBufferDeadlineTimestamp(null)
+        setTranscript('')
+        setTextAnswer('')
+        setSessionNotice(
+          `Đã nhận ${drafts.length} câu trả lời. Đang chờ hoàn tất bảng điểm tổng kết…`,
+        )
+      } catch (batchError) {
+        const problem = getErrorInfo(batchError)
+        setBufferError(problem.message)
+        setPageError(problem.message)
+        setSessionNotice('Chưa gửi được trọn gói. Nội dung vẫn được giữ để bạn thử lại.')
+        setIsSubmitting(false)
+      }
+      return
+    }
+
     const activeFollowUpAtSubmission = runtime.activeFollowUp
     const knownAnswerIds = new Set(allResults.map((answer) => answer.answerId))
     for (const answerId of Object.values(runtime.submittedAnswerIdsByQuestion ?? {})) {
@@ -883,6 +1096,18 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }
 
+  const handleFinalFullSessionSubmit = () => {
+    if (
+      !runtime ||
+      mode !== 'FULL_SESSION' ||
+      runtime.currentQuestionIndex < runtime.questions.length - 1
+    ) {
+      return
+    }
+
+    requestFullSessionSubmitConfirmation()
+  }
+
   const completeAndExit = useCallback(async () => {
     if (!runtime || !user || isCompleting) return
     if (runtime.pendingSubmission) {
@@ -890,6 +1115,12 @@ export const PracticeSessionPage: React.FC = () => {
         'Câu trả lời đang được xác minh. Hãy hoàn tất xác minh trước khi kết thúc phiên.',
       )
       setShowStopConfirmation(false)
+      return
+    }
+    if (runtime.config.mode === 'FULL_SESSION' && runtime.fullSessionSubmitted) {
+      cancelRecording()
+      removePracticeRuntime(runtime.sessionId)
+      navigate('/practice')
       return
     }
     setIsCompleting(true)
@@ -998,6 +1229,187 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }
 
+  const handlePreviousQuestion = () => {
+    if (
+      !runtime ||
+      !user ||
+      runtime.currentQuestionIndex <= 0 ||
+      isRecording ||
+      isTranscribing ||
+      isSubmitting ||
+      showBuffer ||
+      runtime.pendingSubmission ||
+      runtime.pendingAnswerId ||
+      runtime.fullSessionSubmitted ||
+      runtime.activeFollowUp ||
+      isCompleting ||
+      isTransitioningRef.current
+    ) {
+      return
+    }
+
+    const currentQuestionId = runtime.questions[runtime.currentQuestionIndex]?.questionId
+    if (currentQuestionId && currentAnswerDraft.trim()) {
+      transientDraftsRef.current[currentQuestionId] = currentAnswerDraft
+    }
+
+    const previousIndex = runtime.currentQuestionIndex - 1
+    const previousQuestionId = runtime.questions[previousIndex]?.questionId
+    if (!previousQuestionId) return
+
+    const nextDrafts =
+      mode === 'FULL_SESSION' && currentQuestionId && currentAnswerDraft.trim()
+        ? [
+            ...runtime.drafts.filter((answer) => answer.questionId !== currentQuestionId),
+            {
+              questionId: currentQuestionId,
+              answerText: currentAnswerDraft,
+              isFollowUp: false,
+              parentAnswerId: null,
+            },
+          ]
+        : runtime.drafts
+    const previousAnswerText = findStoredQuestionAnswer(
+      { ...runtime, drafts: nextDrafts },
+      previousQuestionId,
+      allResults,
+      transientDraftsRef.current,
+    )
+    const nextRuntime: StoredPracticeRuntime = {
+      ...runtime,
+      drafts: nextDrafts,
+      currentQuestionIndex: previousIndex,
+      activeFollowUp: null,
+      pendingAnswerId: null,
+      resolvedAnswer: null,
+      draftAnswerText: previousAnswerText,
+      draftAnswerMode: answerInputMode,
+      showBuffer: false,
+      bufferDeadlineTimestamp: null,
+    }
+
+    isTransitioningRef.current = true
+    savePracticeRuntime(nextRuntime)
+    setRuntime(nextRuntime)
+    setShowBuffer(false)
+    setBufferDeadlineTimestamp(null)
+    setTranscript(answerInputMode === 'voice' ? previousAnswerText : '')
+    setTextAnswer(answerInputMode === 'text' ? previousAnswerText : '')
+    setScorecard(null)
+    setLatestResult(null)
+    setPageError('')
+    setBufferError('')
+    setSessionNotice(`Đã quay lại câu ${previousIndex + 1}.`)
+    isTransitioningRef.current = false
+  }
+
+  const handleSkipQuestion = async () => {
+    if (
+      !runtime ||
+      !user ||
+      isRecording ||
+      isSubmitting ||
+      showBuffer ||
+      runtime.pendingSubmission ||
+      runtime.pendingAnswerId ||
+      runtime.fullSessionSubmitted ||
+      isTransitioningRef.current
+    ) {
+      return
+    }
+
+    isTransitioningRef.current = true
+    setPageError('')
+    setSessionNotice('')
+
+    try {
+      if (mode === 'FULL_SESSION') {
+        const nextIndex = runtime.currentQuestionIndex + 1
+        if (nextIndex >= runtime.questions.length) {
+          await completeAndExit()
+          return
+        }
+
+        updateRuntime((current) => ({
+          ...current,
+          currentQuestionIndex: nextIndex,
+          activeFollowUp: null,
+          pendingAnswerId: null,
+          resolvedAnswer: null,
+          draftAnswerText: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+        }))
+      } else {
+        const loadedNextIndex = runtime.currentQuestionIndex + 1
+        if (loadedNextIndex < runtime.questions.length) {
+          const nextQuestionId = runtime.questions[loadedNextIndex]?.questionId
+          const nextAnswerText = nextQuestionId
+            ? findStoredQuestionAnswer(runtime, nextQuestionId, allResults, transientDraftsRef.current)
+            : ''
+          updateRuntime((current) => ({
+            ...current,
+            currentQuestionIndex: loadedNextIndex,
+            activeFollowUp: null,
+            pendingAnswerId: null,
+            resolvedAnswer: null,
+            draftAnswerText: nextAnswerText,
+            draftAnswerMode: answerInputMode,
+            showBuffer: false,
+            bufferDeadlineTimestamp: null,
+          }))
+          setShowBuffer(false)
+          setBufferDeadlineTimestamp(null)
+          setTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
+          setTextAnswer(answerInputMode === 'text' ? nextAnswerText : '')
+          setScorecard(null)
+          setLatestResult(null)
+          return
+        }
+
+        setIsSubmitting(true)
+        const response = await practiceService.getNextQuestion(runtime.sessionId, user.id)
+        if (!response.hasMoreQuestions || !response.question) {
+          await completeAndExit()
+          return
+        }
+
+        const nextQuestion: PracticeQuestion = {
+          questionId: response.question.id,
+          content: response.question.content,
+          imageUrl: response.question.imageUrl,
+          imageAlt: response.question.imageAlt,
+          rubricCriteria: response.question.rubricCriteria,
+        }
+        updateRuntime((current) => ({
+          ...current,
+          questions: [...current.questions, nextQuestion],
+          currentQuestionIndex: current.questions.length,
+          activeFollowUp: null,
+          pendingAnswerId: null,
+          resolvedAnswer: null,
+          draftAnswerText: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+          questionDifficulties: {
+            ...current.questionDifficulties,
+            [nextQuestion.questionId]: response.question!.difficulty,
+          },
+        }))
+      }
+
+      setScorecard(null)
+      setTranscript('')
+      setTextAnswer('')
+      setLatestResult(null)
+    } catch (skipError) {
+      setPageError(getErrorInfo(skipError).message)
+    } finally {
+      setIsSubmitting(false)
+      isTransitioningRef.current = false
+    }
+  }
+
   if (!runtime || !sessionId || !currentQuestion || !user || runtime.studentId !== user.id) {
     return (
       <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#efcbd1] bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
@@ -1006,7 +1418,7 @@ export const PracticeSessionPage: React.FC = () => {
             <AlertCircle className="size-7" />
           </span>
           <div className="mt-4">
-            <h1 className="text-lg font-bold text-[#0F2854]">Không thể mở phiên luyện tập</h1>
+            <h1 className="text-xl font-bold text-[#0F2854]">Không thể mở phiên luyện tập</h1>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#68778b]">
               {pageError || runtimeIssue || 'Dữ liệu phiên luyện tập không đầy đủ hoặc đã bị xóa.'}
             </p>
@@ -1029,9 +1441,11 @@ export const PracticeSessionPage: React.FC = () => {
   const isWaitingForGrade = Boolean(runtime.pendingAnswerId || runtime.fullSessionSubmitted)
   const isAnswerLocked = isVerifyingSubmission || isWaitingForGrade
   const currentAnswerDraft = answerInputMode === 'voice' ? transcript : textAnswer
+  const isFinalFullSessionQuestion =
+    mode === 'FULL_SESSION' && runtime.currentQuestionIndex >= runtime.questions.length - 1
   const isInputModeLocked =
     isRecording || isTranscribing || isSubmitting || isAnswerLocked || showBuffer
-  const canOpenBuffer =
+  const canSubmitCurrentAnswer =
     currentAnswerDraft.trim().length >= 10 &&
     !isSubmitting &&
     !isAnswerLocked &&
@@ -1067,113 +1481,135 @@ export const PracticeSessionPage: React.FC = () => {
             : 'Câu trả lời cần ít nhất 10 ký tự trước khi chuyển sang bước rà soát.'
           : answerInputMode === 'voice'
             ? `Bạn có ${runtime.transcriptBufferSeconds} giây để hiệu đính trước khi nộp.`
-            : 'Kiểm tra nội dung lần cuối; câu trả lời sẽ được gửi trực tiếp để chấm điểm.'
+            : 'Nội dung sẽ được gửi trực tiếp để AI chấm sau khi bạn xác nhận.'
 
   return (
-    <div className={ds.page}>
-      <section className={cn(ds.banner, 'px-5 py-5 text-white sm:px-7 sm:py-6')}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-[#6f8099]/70 p-3 font-sans text-[#0F2854] sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="practice-session-title"
+        className="flex h-[min(695px,calc(100dvh-3rem))] max-h-[calc(100dvh-3rem)] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-[#4988C4]/45 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
+      >
+      <section
+        className={cn(
+          ds.banner,
+          'shrink-0 rounded-none border-x-0 border-t-0 px-3 py-2.5 text-white shadow-none sm:px-5 sm:py-3',
+        )}
+      >
         <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-35" />
         <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#4988C4]/16/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#4988C4]/30 blur-3xl" />
 
         <div className="relative z-10">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.08em] text-white uppercase backdrop-blur-sm">
-                  <Radio className="size-3" /> Phiên luyện tập đang diễn ra
-                </span>
-                <span
-                  role="status"
-                  aria-live="polite"
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold backdrop-blur-sm ${
-                    hubStatus === 'connected'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-amber-200 bg-amber-50 text-amber-700'
-                  }`}
-                >
-                  {hubStatus === 'connected' ? (
-                    <Wifi className="size-3" />
-                  ) : (
-                    <WifiOff className="size-3" />
-                  )}
-                  {hubStatus === 'connected'
-                    ? 'Kết nối ổn định'
-                    : hubStatus === 'reconnecting'
-                      ? 'Đang kết nối lại…'
-                      : hubStatus === 'offline'
-                        ? 'Mất kết nối · đang thử lại…'
-                        : 'Đang kết nối…'}
-                </span>
-              </div>
-
-              <p className="mt-4 text-xs font-semibold tracking-[0.08em] text-[#BDE8F5] uppercase">
+              <p className="text-xs font-bold tracking-[0.08em] text-[#BDE8F5] uppercase">
                 {runtime.config.courseCode}
               </p>
-              <h1 className="mt-1 max-w-3xl text-[clamp(1.35rem,2.5vw,2rem)] leading-tight font-bold tracking-[-0.035em] text-white">
+              <h1
+                id="practice-session-title"
+                className="mt-0.5 truncate text-sm font-bold text-white sm:text-base"
+              >
                 {runtime.config.courseName}
               </h1>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/80">
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span
+                role="status"
+                aria-live="polite"
+                  className="hidden items-center gap-1.5 text-xs font-semibold text-white/80"
+              >
+                {hubStatus === 'connected' ? (
+                  <Wifi className="size-3.5 text-[#BDE8F5]" />
+                ) : (
+                  <WifiOff className="size-3.5 text-amber-200" />
+                )}
+                {hubStatus === 'connected' ? 'Kết nối ổn định' : 'Đang kết nối lại…'}
+              </span>
+              <button
+                type="button"
+                aria-label="Cài đặt phiên luyện tập"
+                aria-expanded={showSettings}
+                onClick={() => setShowSettings((current) => !current)}
+                className="flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                <Settings className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Kết thúc phiên luyện tập"
+                onClick={openStopConfirmation}
+                disabled={isTranscribing || isVerifyingSubmission}
+                className="flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          {showSettings && (
+            <div className="mt-3 rounded-2xl border border-white/25 bg-white/12 p-3 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/85">
                 <span className="inline-flex items-center gap-1.5">
                   <LockKeyhole className="size-3.5 text-[#BDE8F5]" /> {modeLabel}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-[#BDE8F5]" /> Hiệu đính trong{' '}
+                  <Sparkles className="size-3.5 text-[#BDE8F5]" /> Buffer hiệu đính{' '}
                   {runtime.transcriptBufferSeconds} giây
                 </span>
               </div>
             </div>
+          )}
 
-            <button
-              type="button"
-              onClick={openStopConfirmation}
-              disabled={isTranscribing || isVerifyingSubmission}
-              title={
-                isVerifyingSubmission ? 'Hãy xác minh lần nộp trước khi kết thúc phiên.' : undefined
-              }
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-rose-200 bg-white px-4 text-sm font-bold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
+          <div className="mt-2 flex items-center gap-2 border-t border-white/15 pt-2">
+            <span className="shrink-0 text-xs font-bold text-white/90">
+              {mode === 'FULL_SESSION'
+                ? `Câu ${currentQuestionNumber}/${totalMainQuestions}`
+                : `Câu ${currentQuestionNumber}`}
+            </span>
+            <div
+              className="flex h-1.5 min-w-0 flex-1 gap-1.5"
+              role="progressbar"
+              aria-label="Tiến độ phiên luyện tập"
+              aria-valuemin={0}
+              aria-valuemax={totalMainQuestions ?? undefined}
+              aria-valuenow={completedMainQuestions}
             >
-              <Square className="size-3.5 fill-current" /> Kết thúc phiên
-            </button>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-white/30 bg-white p-3.5 shadow-sm sm:p-4">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold text-[#0F2854]/70">Tiến độ câu hỏi chính</p>
-                <p className="mt-0.5 text-sm font-bold text-[#0F2854]">
-                  {mode === 'PER_QUESTION'
-                    ? `Đã luyện ${completedMainQuestions} câu`
-                    : `Đã hoàn thành ${completedMainQuestions}/${totalMainQuestions} câu`}
-                </p>
-              </div>
-              {mode === 'FULL_SESSION' && (
-                <strong className="font-mono text-lg text-[#1C4D8D]">{progressPercentage}%</strong>
-              )}
-            </div>
-            {mode === 'FULL_SESSION' ? (
-              <div
-                className="mt-3 h-2 overflow-hidden rounded-full bg-[#4988C4]/16"
-                role="progressbar"
-                aria-label="Tiến độ phiên luyện tập"
-                aria-valuemin={0}
-                aria-valuemax={totalMainQuestions ?? undefined}
-                aria-valuenow={completedMainQuestions}
-              >
-                <div
-                  className="h-full rounded-full bg-[#1C4D8D] transition-[width] duration-500 motion-reduce:transition-none"
-                  style={{ width: `${progressPercentage}%` }}
+              {Array.from({
+                length:
+                  mode === 'FULL_SESSION'
+                    ? Math.max(totalMainQuestions ?? 1, 1)
+                    : Math.max(Math.min(currentQuestionNumber, 5), 1),
+              }).map((_, index) => (
+                <span
+                  key={index}
+                  className={cn(
+                    'h-full flex-1 rounded-full transition-colors',
+                    index < completedMainQuestions
+                      ? 'bg-white'
+                      : index === currentQuestionNumber - 1
+                        ? 'bg-[#BDE8F5]'
+                        : 'bg-white/25',
+                  )}
                 />
-              </div>
-            ) : (
-              <p className="mt-3 text-xs font-semibold text-[#5b6b84]">
-                Phiên sẽ tiếp tục đến khi kho câu hỏi đã chọn không còn câu phù hợp hoặc bạn kết thúc.
-              </p>
+              ))}
+            </div>
+            {mode === 'FULL_SESSION' && (
+              <span className="hidden shrink-0 text-xs font-bold text-white/80 sm:inline">
+                {progressPercentage}%
+              </span>
             )}
           </div>
         </div>
       </section>
 
+      <main
+        className={cn(
+          'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-white px-5 py-5 sm:px-8 sm:py-7',
+          hasQuestionImage && 'gap-1 px-3 py-3 sm:px-6 sm:py-4',
+        )}
+      >
       {(pageError || recorderError) && (
         <div
           className="flex items-start gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3.5 text-sm font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
@@ -1182,24 +1618,24 @@ export const PracticeSessionPage: React.FC = () => {
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
             <AlertCircle className="size-4" />
           </span>
-          <span className="pt-1.5 leading-relaxed">{pageError || recorderError}</span>
+          <span className="pt-1 leading-relaxed">{pageError || recorderError}</span>
         </div>
       )}
 
       {sessionNotice && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-[#cfe0fb] bg-[#4988C4]/16 px-4 py-3.5 text-sm font-semibold text-[#2859bf]"
+          className="sr-only"
           role="status"
           aria-live="polite"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
             {isSubmitting || isTranscribing || isAnswerLocked ? (
               <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
             ) : (
               <CheckCircle2 className="size-4" />
             )}
           </span>
-          <span className="pt-1.5 leading-relaxed">{sessionNotice}</span>
+          <span className="pt-1 leading-relaxed">{sessionNotice}</span>
         </div>
       )}
 
@@ -1217,59 +1653,114 @@ export const PracticeSessionPage: React.FC = () => {
         </button>
       )}
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.72fr)]">
-        <div className="min-w-0 space-y-4">
-          <article className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="border-b border-[#4988C4]/45 px-5 py-4 sm:px-6 sm:py-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#4988C4]/16 px-2.5 py-1.5 text-xs font-bold text-[#1C4D8D]">
-                    <BookOpenText className="size-3.5" />
-                    {runtime.activeFollowUp
-                      ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
-                      : mode === 'PER_QUESTION'
-                        ? `Câu ${currentQuestionNumber}`
-                        : `Câu ${currentQuestionNumber}/${totalMainQuestions}`}
-                  </span>
-                  {runtime.activeFollowUp && (
-                    <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-bold text-violet-700">
-                      Đào sâu theo câu trả lời
-                    </span>
-                  )}
-                </div>
-                {currentDifficulty && (
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-bold ${DIFFICULTY_META[currentDifficulty].className}`}
-                  >
-                    {DIFFICULTY_META[currentDifficulty].label}
-                  </span>
-                )}
-              </div>
+      {runtime.fullSessionSubmitted && !scorecard && (
+        <button
+          type="button"
+          onClick={() => void synchronizeSession(true)}
+          disabled={isManualSyncing}
+          className="mx-auto flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
+        >
+          <RefreshCw
+            className={cn('size-3.5', isManualSyncing && 'animate-spin motion-reduce:animate-none')}
+          />
+          {isManualSyncing ? 'Đang kiểm tra…' : 'Kiểm tra tiến độ chấm'}
+        </button>
+      )}
 
+      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-1">
+        <div
+          className={cn(
+            isTextLayout
+              ? 'grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-1'
+              : 'flex min-h-0 flex-1 flex-col gap-1',
+          )}
+        >
+          <article className="shrink-0 overflow-hidden rounded-[22px] border-0 bg-white shadow-none">
+            <div
+              className={cn(
+                'border-b border-[#4988C4]/45 px-4 py-3 sm:px-5 sm:py-4',
+                hasQuestionImage &&
+                  (isImageTextLayout
+                    ? 'grid items-stretch gap-3 sm:gap-4 md:grid-cols-[minmax(13rem,34%)_minmax(0,1fr)]'
+                    : 'grid items-stretch gap-4 sm:gap-5 md:grid-cols-[minmax(16rem,40%)_minmax(0,1fr)]'),
+              )}
+            >
               <QuestionImage
                 imageUrl={currentQuestion.imageUrl}
                 imageAlt={currentQuestion.imageAlt}
-                className="mt-5"
+                className={cn(
+                  'mt-2 max-h-[14vh] [&>div]:min-h-0 [&>div]:p-1 [&_img]:max-h-[12vh]',
+                  hasQuestionImage &&
+                    (isImageTextLayout
+                      ? 'mt-0 h-[clamp(180px,22vh,230px)] max-h-[clamp(180px,22vh,230px)] md:h-[clamp(210px,26vh,270px)] md:max-h-[clamp(210px,26vh,270px)] p-1 [&>div]:h-full [&>div]:!min-h-0 [&>div]:p-1 [&_img]:!max-h-[clamp(11rem,26vh,18rem)]'
+                      : 'mt-0 h-[clamp(180px,24vh,240px)] max-h-[clamp(180px,24vh,240px)] md:h-[clamp(230px,30vh,300px)] md:max-h-[clamp(230px,30vh,300px)] p-1 [&>div]:h-full [&>div]:!min-h-0 [&>div]:p-1 [&_img]:!max-h-[clamp(12rem,30vh,19rem)]'),
+                )}
               />
 
-              <h2 className="mt-5 text-[clamp(1.15rem,2.1vw,1.55rem)] leading-[1.45] font-bold tracking-[-0.025em] text-[#0F2854]">
-                {activePrompt}
-              </h2>
+              <div className={cn(hasQuestionImage && 'min-w-0')}>
+                <div
+                  className={cn(
+                    'flex flex-wrap items-center justify-between gap-3',
+                    isTextLayout && 'gap-2',
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5b6b84]">
+                      <BookOpenText className="size-4 text-[#5276bc]" />
+                      {runtime.activeFollowUp
+                        ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
+                        : currentDifficulty
+                          ? `Luyện tập · ${DIFFICULTY_META[currentDifficulty].label}`
+                          : 'Câu hỏi luyện tập'}
+                    </span>
+                    {runtime.activeFollowUp && (
+                      <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-sm font-semibold text-violet-700">
+                        Đào sâu theo câu trả lời
+                      </span>
+                    )}
+                  </div>
+                  {currentDifficulty && (
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-sm font-semibold ${DIFFICULTY_META[currentDifficulty].className}`}
+                    >
+                      {DIFFICULTY_META[currentDifficulty].label}
+                    </span>
+                  )}
+                </div>
 
-              <button
-                type="button"
-                onClick={handleReadQuestion}
-                disabled={isRecording}
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#d8e3f3] bg-[#4988C4]/16 px-4 text-sm font-bold text-[#1C4D8D] transition hover:border-[#b7c9e4] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Volume2 className="size-4" /> Nghe đọc câu hỏi
-              </button>
+                <h2
+                  className={cn(
+                    isTextLayout
+                      ? 'mt-2 text-[clamp(17px,1.4vw,20px)] leading-[1.15]'
+                      : hasQuestionImage
+                        ? 'mt-3 text-[clamp(19px,1.7vw,24px)] leading-[1.25]'
+                        : 'mt-3 text-[24px] leading-snug',
+                    'font-semibold text-[#0F2854]',
+                  )}
+                >
+                  {activePrompt}
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={handleReadQuestion}
+                  disabled={isRecording}
+                  className={cn(
+                    isTextLayout
+                      ? 'mt-2 min-h-9'
+                      : 'mt-3 min-h-10',
+                    'inline-flex items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  <Volume2 className="size-4" /> Nghe đọc câu hỏi
+                </button>
+              </div>
             </div>
 
-            <div className="bg-white px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#6d7d92] uppercase">
+            <details className="hidden">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#5276bc] uppercase">
                 <ListChecks className="size-4 text-[#5276bc]" /> Tiêu chí cần thể hiện
-              </div>
+              </summary>
               <div className="mt-3 flex flex-wrap gap-2">
                 {currentQuestion.rubricCriteria.length > 0 ? (
                   currentQuestion.rubricCriteria.map((criterion, index) => (
@@ -1287,11 +1778,16 @@ export const PracticeSessionPage: React.FC = () => {
                   </span>
                 )}
               </div>
-            </div>
+            </details>
           </article>
 
-          <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_12px_36px_rgba(31,61,105,0.065)]">
-            <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <section
+            className={cn(
+              'min-h-0 flex-1 overflow-hidden rounded-[22px] border-0 bg-white shadow-none',
+              isTextLayout && 'flex flex-col',
+            )}
+          >
+            <div className="hidden flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-center gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   {answerInputMode === 'voice' ? (
@@ -1301,7 +1797,7 @@ export const PracticeSessionPage: React.FC = () => {
                   )}
                 </span>
                 <div>
-                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Khu vực trả lời</h2>
+                  <h2 className="text-sm font-semibold text-[#0F2854]">Khu vực trả lời</h2>
                   <p className="mt-0.5 text-xs leading-relaxed text-[#7a899c]">
                     {answerInputMode === 'voice'
                       ? 'Nói tự nhiên; bạn sẽ được hiệu đính bản nhận diện trước khi nộp.'
@@ -1315,98 +1811,24 @@ export const PracticeSessionPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="space-y-4 p-5 sm:p-6">
-              <div
-                role="group"
-                aria-label="Chọn hình thức trả lời"
-                className="grid gap-2 rounded-2xl border border-[#dfe7f2] bg-[#4988C4]/16 p-1.5 sm:grid-cols-2"
-              >
-                {(
-                  [
-                    {
-                      value: 'voice' as const,
-                      label: 'Trả lời bằng giọng nói',
-                      description: 'Ghi âm và bóc băng bằng Whisper',
-                      icon: Mic,
-                    },
-                    {
-                      value: 'text' as const,
-                      label: 'Nhập câu trả lời',
-                      description: 'Soạn nội dung trực tiếp bằng bàn phím',
-                      icon: Keyboard,
-                    },
-                  ] satisfies Array<{
-                    value: AnswerInputMode
-                    label: string
-                    description: string
-                    icon: typeof Mic
-                  }>
-                ).map((option) => {
-                  const OptionIcon = option.icon
-                  const isSelected = answerInputMode === option.value
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setAnswerInputMode(option.value)
-                        const nextDraft = option.value === 'voice' ? transcript : textAnswer
-                        persistAnswerDraft(nextDraft, option.value)
-                        setPageError('')
-                        setBufferError('')
-                        setSessionNotice(
-                          option.value === 'voice'
-                            ? 'Đã chọn trả lời bằng giọng nói.'
-                            : 'Đã chọn nhập câu trả lời bằng văn bản.',
-                        )
-                      }}
-                      disabled={isInputModeLocked}
-                      className={`flex min-h-16 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60 ${
-                        isSelected
-                          ? 'border-[#8aabff] bg-white text-[#1C4D8D] shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
-                          : 'border-transparent text-[#63738a] hover:border-[#d2deef] hover:bg-white/80'
-                      }`}
-                    >
-                      <span
-                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                          isSelected ? 'bg-[#4988C4]/16 text-[#1C4D8D]' : 'bg-white text-[#7b8da6]'
-                        }`}
-                      >
-                        <OptionIcon className="size-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold">{option.label}</span>
-                        <span className="mt-0.5 block text-xs leading-relaxed opacity-75">
-                          {option.description}
-                        </span>
-                      </span>
-                      <span
-                        aria-hidden="true"
-                        className={`ml-auto size-3.5 shrink-0 rounded-full border-2 ${
-                          isSelected
-                            ? 'border-[#4988C4] bg-[#1C4D8D] shadow-[inset_0_0_0_3px_white]'
-                            : 'border-[#b9c7da]'
-                        }`}
-                      />
-                    </button>
-                  )
-                })}
-              </div>
-
+            <div
+              className={cn(
+                'space-y-2 p-2 sm:p-3',
+                hasQuestionImage && 'space-y-0 p-1 sm:p-2',
+                isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+              )}
+            >
               {answerInputMode === 'voice' && (
-                <div
-                  className={`relative overflow-hidden rounded-2xl border p-5 text-center transition-colors sm:p-6 ${
-                    isRecording
-                      ? 'border-[#f1a9b5] bg-[linear-gradient(145deg,#fff7f8,#fff1f3)]'
-                      : isTranscribing || isAnswerLocked
-                        ? 'border-[#cdddfa] bg-[linear-gradient(145deg,#BDE8F5,#BDE8F5)]'
-                        : 'border-[#d8e4f3] bg-[linear-gradient(145deg,#f9fbff,#f3f7fc)]'
-                  }`}
-                >
-                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,#6fcfe3,transparent)] opacity-60" />
                   <div
-                    className={`mx-auto flex size-16 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(31,61,105,0.12)] transition ${
+                    className={cn(
+                      'relative overflow-hidden border-0 bg-transparent p-0 text-center',
+                      hasQuestionImage &&
+                        'flex flex-col items-center justify-center gap-0 text-center',
+                    )}
+                  >
+                  <div className="hidden" />
+                  <div
+                    className={`hidden mx-auto size-16 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(31,61,105,0.12)] transition ${
                       isRecording
                         ? 'bg-[#e94f68] text-white shadow-[0_12px_34px_rgba(233,79,104,0.28)]'
                         : 'bg-white text-[#1C4D8D]'
@@ -1421,10 +1843,23 @@ export const PracticeSessionPage: React.FC = () => {
                     )}
                   </div>
 
-                  <p className="mt-4 text-sm font-bold text-[#21324a]" aria-live="polite">
+                  <p
+                    className={cn(
+                      'mt-1 text-sm font-bold text-[#21324a]',
+                      hasQuestionImage &&
+                        'mt-0 text-center',
+                    )}
+                    aria-live="polite"
+                  >
                     {answerState}
                   </p>
-                  <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-[#728197]">
+                  <p
+                    className={cn(
+                      'mx-auto mt-0.5 max-w-md text-xs leading-relaxed text-[#728197]',
+                      hasQuestionImage &&
+                        'mt-0 max-w-none text-center',
+                    )}
+                  >
                     {isVerifyingSubmission
                       ? 'Không nộp lại hoặc kết thúc phiên cho tới khi trạng thái được xác minh.'
                       : isRecording
@@ -1437,7 +1872,7 @@ export const PracticeSessionPage: React.FC = () => {
                   </p>
 
                   <div
-                    className="mt-4 flex h-7 items-center justify-center gap-1"
+                    className="hidden mt-4 h-7 items-center justify-center gap-1"
                     aria-hidden="true"
                   >
                     {[12, 20, 28, 17, 25, 14, 30, 21, 12].map((height, index) => (
@@ -1460,10 +1895,10 @@ export const PracticeSessionPage: React.FC = () => {
                     type="button"
                     onClick={() => void handleRecording()}
                     disabled={isTranscribing || isSubmitting || isAnswerLocked}
-                    className={`mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-white shadow-lg transition sm:w-auto sm:min-w-52 ${
+                    className={`mx-auto flex ${hasQuestionImage ? 'mt-2 size-[clamp(5.5rem,14vh,7rem)]' : 'mt-1 size-[clamp(6rem,16vh,8rem)]'} flex-col items-center justify-center gap-1 rounded-full border-2 px-3 text-center text-sm font-bold shadow-[0_14px_34px_rgba(31,61,105,0.16)] transition ${
                       isRecording
-                        ? 'bg-[#df405b] shadow-[#df405b]/20 hover:bg-[#c9344d]'
-                        : 'bg-[#1C4D8D] shadow-[#4988C4]/20 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-xl'
+                        ? 'border-[#df405b] bg-[#df405b] text-white shadow-[#df405b]/20 hover:bg-[#c9344d]'
+                        : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] shadow-[#4988C4]/20 hover:-translate-y-0.5 hover:bg-[#BDE8F5] hover:shadow-xl'
                     } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
                   >
                     {isTranscribing ? (
@@ -1484,19 +1919,42 @@ export const PracticeSessionPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-[#4988C4]/45 bg-white p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-[#33445b]">
-                      {answerInputMode === 'voice'
-                        ? 'Bản trả lời nhận diện từ giọng nói'
-                        : 'Câu trả lời bằng văn bản'}
-                    </p>
+              <div
+                className={cn(
+                  'rounded-2xl border p-3 sm:p-4',
+                  answerInputMode === 'text'
+                    ? 'border-[#4988C4]/65 bg-[#f8fbff] shadow-[0_8px_22px_rgba(31,61,105,0.06)]'
+                    : 'border-[#4988C4]/45 bg-white',
+                  answerInputMode === 'voice' && !currentAnswerDraft.trim() && 'hidden',
+                  isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-hidden p-2.5 sm:p-3',
+                )}
+              >
+                <div
+                  className={cn(
+                    'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
+                    isTextLayout && 'shrink-0 gap-1',
+                  )}
+                >
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#e8f2ff] text-[#1C4D8D]">
+                      {answerInputMode === 'voice' ? (
+                        <Mic className="size-4" />
+                      ) : (
+                        <Keyboard className="size-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[#33445b]">
+                        {answerInputMode === 'voice'
+                          ? 'Bản trả lời nhận diện từ giọng nói'
+                          : 'Nhập câu trả lời bằng text'}
+                      </p>
                     <p className="mt-0.5 text-xs text-[#8390a2]">
                       {answerInputMode === 'voice'
                         ? 'Bạn có thể hiệu đính thuật ngữ kỹ thuật ở bước tiếp theo.'
-                        : 'Trình bày đầy đủ ý chính và sử dụng thuật ngữ chuyên ngành chính xác.'}
+                        : 'Trình bày đầy đủ ý chính bằng bàn phím; nội dung sẽ được gửi để AI chấm.'}
                     </p>
+                    </div>
                   </div>
                   {currentAnswerDraft.trim() && (
                     <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#eaf8f4] px-2.5 py-1 text-xs font-bold text-[#188267] sm:self-auto">
@@ -1513,11 +1971,15 @@ export const PracticeSessionPage: React.FC = () => {
                       ? 'Bản trả lời được nhận diện từ giọng nói'
                       : 'Nhập câu trả lời bằng văn bản'
                   }
-                  className={`mt-3 min-h-32 w-full rounded-xl border border-[#4988C4]/45 bg-white p-3.5 text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa] ${
+                  className={cn(
+                    'w-full rounded-xl border border-[#4988C4]/45 bg-white text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa]',
+                    isTextLayout
+                      ? 'mt-2 min-h-0 flex-1 resize-none overflow-y-auto p-3 focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
+                      : 'mt-3 min-h-28 max-h-32 p-3.5',
                     answerInputMode === 'text'
-                      ? 'resize-y focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
-                      : 'resize-none'
-                  }`}
+                      ? 'resize-none overflow-y-auto focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
+                      : 'resize-none',
+                  )}
                   value={currentAnswerDraft}
                   onChange={(event) => {
                     if (answerInputMode !== 'text') return
@@ -1535,7 +1997,12 @@ export const PracticeSessionPage: React.FC = () => {
                   }
                 />
                 {answerInputMode === 'text' && (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div
+                    className={cn(
+                      'mt-2 flex flex-wrap items-center justify-between gap-2 text-xs',
+                      isTextLayout && 'mt-1 shrink-0',
+                    )}
+                  >
                     <span className="text-[#5b6b84]">Tối thiểu 10 ký tự để gửi câu trả lời.</span>
                     <span
                       className={
@@ -1551,7 +2018,13 @@ export const PracticeSessionPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-[#4988C4]/45 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div
+              className={cn(
+                'flex flex-col gap-2 border-t border-[#4988C4]/45 bg-white px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:px-3',
+                !currentAnswerDraft.trim() && 'hidden',
+                'shrink-0',
+              )}
+            >
               <div className="flex min-w-0 items-start gap-2 text-xs leading-relaxed text-[#6d7d92]">
                 <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" />
                 <span>{reviewHint}</span>
@@ -1560,17 +2033,20 @@ export const PracticeSessionPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (answerInputMode === 'text') {
-                    void handleConfirmSubmit(textAnswer)
+                    void handleConfirmSubmit(currentAnswerDraft)
                     return
                   }
+
                   const nextDeadline =
                     bufferDeadlineTimestamp ?? Date.now() + runtime.transcriptBufferSeconds * 1_000
                   setBufferDeadlineTimestamp(nextDeadline)
                   setShowBuffer(true)
-                  persistAnswerDraft(transcript, 'voice', true, nextDeadline)
+                  persistAnswerDraft(currentAnswerDraft, 'voice', true, nextDeadline)
                 }}
-                disabled={!canOpenBuffer}
-                className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none sm:w-auto"
+                disabled={!canSubmitCurrentAnswer}
+                className={cn(
+                  'inline-flex min-h-9 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none sm:w-auto',
+                )}
               >
                 {isSubmitting ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1585,9 +2061,107 @@ export const PracticeSessionPage: React.FC = () => {
               </button>
             </div>
           </section>
+
+          {mode === 'PER_QUESTION' &&
+            answerInputMode === 'text' &&
+            !scorecard &&
+            (isSubmitting || isWaitingForGrade) && (
+              <div
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#c9d9f2] bg-[#f2f7ff] px-3 py-2 text-xs font-semibold text-[#1C4D8D]"
+                role="status"
+                aria-live="polite"
+              >
+                <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+                <span>Đang chờ AI chấm điểm câu trả lời của bạn…</span>
+              </div>
+            )}
+
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              aria-label={
+                answerInputMode === 'voice'
+                  ? 'Chuyển sang trả lời bằng text'
+                  : 'Chuyển sang trả lời bằng micro'
+              }
+              onClick={() => {
+                const nextMode: AnswerInputMode = answerInputMode === 'voice' ? 'text' : 'voice'
+                setAnswerInputMode(nextMode)
+                const nextDraft = nextMode === 'voice' ? transcript : textAnswer
+                persistAnswerDraft(nextDraft, nextMode)
+                setPageError('')
+                setBufferError('')
+                setSessionNotice(
+                  nextMode === 'voice'
+                    ? 'Đã chuyển sang trả lời bằng giọng nói.'
+                    : 'Đã chuyển sang nhập câu trả lời bằng văn bản.',
+                )
+              }}
+              disabled={isInputModeLocked}
+              className={cn(
+                'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-[#f7fbff] px-2.5 text-xs font-bold text-[#1C4D8D] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#eaf4ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3',
+              )}
+            >
+              {answerInputMode === 'voice' ? (
+                <Keyboard className="size-3.5 shrink-0" />
+              ) : (
+                <Mic className="size-3.5 shrink-0" />
+              )}
+              {answerInputMode === 'voice'
+                ? 'Chuyển sang trả lời bằng text'
+                : 'Chuyển sang trả lời bằng micro'}
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Quay lại câu trước"
+                onClick={handlePreviousQuestion}
+                disabled={
+                  !runtime ||
+                  runtime.currentQuestionIndex <= 0 ||
+                  Boolean(runtime.activeFollowUp) ||
+                  isRecording ||
+                  isSubmitting ||
+                  isTranscribing ||
+                  isAnswerLocked ||
+                  showBuffer ||
+                  isCompleting
+                }
+                className={cn(
+                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3',
+                )}
+              >
+                <ArrowLeft className="size-3.5" /> Quay lại
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isFinalFullSessionQuestion) {
+                    handleFinalFullSessionSubmit()
+                  } else {
+                    void handleSkipQuestion()
+                  }
+                }}
+                disabled={
+                  isRecording ||
+                  isSubmitting ||
+                  isTranscribing ||
+                  isAnswerLocked ||
+                  showBuffer ||
+                  isCompleting
+                }
+                className={cn(
+                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
+                )}
+              >
+                {isFinalFullSessionQuestion ? 'Nộp bài' : 'Bỏ qua'}{' '}
+                <ArrowLeft className="size-3.5 rotate-180" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <aside className="space-y-4 xl:sticky xl:top-24">
+        <aside className="hidden">
           <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
             <div className="border-b border-[#4988C4]/45 px-4 py-3.5">
               <div className="flex items-center gap-2">
@@ -1718,16 +2292,20 @@ export const PracticeSessionPage: React.FC = () => {
         </aside>
       </div>
 
-      {showBuffer && (
+      </main>
+
+      {showBuffer && answerInputMode === 'voice' && (
         <BufferScreen
           key={`${answerInputMode}-${bufferDeadlineTimestamp ?? 'practice-buffer'}`}
           initialTranscript={currentAnswerDraft}
           durationSeconds={runtime.transcriptBufferSeconds}
           deadlineTimestamp={bufferDeadlineTimestamp}
           onConfirmSubmit={(finalText) => void handleConfirmSubmit(finalText)}
-          onTranscriptChange={(text) =>
-            persistAnswerDraft(text, 'voice', true, bufferDeadlineTimestamp)
-          }
+          onTranscriptChange={(text) => {
+            if (answerInputMode === 'voice') setTranscript(text)
+            else setTextAnswer(text)
+            persistAnswerDraft(text, answerInputMode, true, bufferDeadlineTimestamp)
+          }}
           isSubmitting={isSubmitting}
           errorMessage={bufferError}
         />
@@ -1758,6 +2336,25 @@ export const PracticeSessionPage: React.FC = () => {
         />
       )}
 
+      {fullSessionSubmitConfirmation && (
+        <ConfirmDialog
+          tone="warning"
+          icon={Send}
+          eyebrow="Xác nhận nộp bài"
+          title="Bạn có chắc muốn nộp bài không?"
+          message={
+            fullSessionSubmitConfirmation.unansweredCount > 0
+              ? `Bạn còn ${fullSessionSubmitConfirmation.unansweredCount} câu chưa trả lời. Những câu này sẽ được tính 0 điểm. Nếu xác nhận, bài làm sẽ được lưu và AI bắt đầu chấm điểm.`
+              : 'Bạn đã trả lời tất cả câu hỏi. Nếu xác nhận, bài làm sẽ được lưu và AI bắt đầu chấm điểm.'
+          }
+          confirmLabel="Xác nhận nộp bài"
+          cancelLabel="Hủy và tiếp tục"
+          pending={isSubmitting}
+          onCancel={() => setFullSessionSubmitConfirmation(null)}
+          onConfirm={() => void submitConfirmedFullSession()}
+        />
+      )}
+
       {showStopConfirmation && (
         <ConfirmDialog
           tone="danger"
@@ -1778,6 +2375,7 @@ export const PracticeSessionPage: React.FC = () => {
           onConfirm={() => void completeAndExit()}
         />
       )}
+      </div>
     </div>
   )
 }

@@ -10,6 +10,7 @@ export interface AuthContextType {
   isDepartmentHead: boolean
   isProctor: boolean
   isAdmin: boolean
+  loginWithPassword: (username: string, password: string) => Promise<void>
   loginWithGoogle: (idToken: string) => Promise<void>
   logout: () => Promise<void>
   hasRole: (roles: UserRole[]) => boolean

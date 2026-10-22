@@ -17,7 +17,10 @@ function getErrorMessage(error: unknown) {
 }
 
 export const storageService = {
-  async uploadPracticeAudio(audio: Blob): Promise<UploadAudioResponse> {
+  async uploadPracticeAudio(
+    audio: Blob,
+    options: { clientTranscript?: string; vocabularyHint?: string } = {},
+  ): Promise<UploadAudioResponse> {
     if (audio.size === 0) {
       throw { status: 400, title: 'Bản ghi âm không hợp lệ', detail: 'Bản ghi âm đang trống.' }
     }
@@ -32,6 +35,10 @@ export const storageService = {
     const formData = new FormData()
     const extension = getAudioExtension(audio.type)
     formData.append('file', audio, `practice-answer-${Date.now()}.${extension}`)
+    const clientTranscript = options.clientTranscript?.trim()
+    const vocabularyHint = options.vocabularyHint?.trim()
+    if (clientTranscript) formData.append('clientTranscript', clientTranscript)
+    if (vocabularyHint) formData.append('vocabularyHint', vocabularyHint)
 
     try {
       const response = await apiClient.post<unknown>('/storage/upload-audio', formData, {

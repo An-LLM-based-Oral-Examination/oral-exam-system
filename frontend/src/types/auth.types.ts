@@ -24,7 +24,7 @@ export interface GoogleLoginRequest {
 }
 
 export interface LoginRequest {
-  email: string
+  username: string
   password: string
 }
 
@@ -36,6 +36,7 @@ export interface LoginResponse {
   refreshToken: string
   tokenType: string
   expiresIn: number
+  mustChangePassword?: boolean
   user: User
 }
 

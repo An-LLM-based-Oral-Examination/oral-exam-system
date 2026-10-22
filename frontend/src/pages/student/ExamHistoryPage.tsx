@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/hooks/useAuth'
 import {
   Award,
   BarChart3,
@@ -34,6 +35,11 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
+import apiClient from '@/services/api.client'
+import { appealsService } from '@/services/appeals.service'
+import { officialExamService } from '@/services/officialExam.service'
+import type { Appeal } from '@/types/appeal.types'
+import type { StudentOfficialExamGrade } from '@/types/officialExam.types'
 
 const StudentResultsThreeScene = lazy(() =>
   import('./StudentResultsThreeScene').then((module) => ({
@@ -45,6 +51,145 @@ interface ResultsSceneErrorBoundaryProps {
   children: ReactNode
   fallback: ReactNode
 }
+interface LiveOfficialExamSummary {
+  ticketId: string
+  shiftId: string
+  courseCode: string
+  courseName: string
+  sessionTitle: string
+  shiftName: string
+  roomLab: string
+  examDate: string
+  startTime: string
+  endTime: string
+  seatNumber: number
+  status: string
+  finalScore: number | null
+  isLocked: boolean
+  studentAcknowledgementStatus: string
+}
+
+function liveHistoryValue<T>(payload: unknown): T {
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>
+    return (record.value ?? record.Value ?? record.data ?? record.Data ?? payload) as T
+  }
+  return payload as T
+}
+
+function liveHistoryMessage(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'detail' in error) {
+    const detail = (error as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  return error instanceof Error ? error.message : 'Không thể tải dữ liệu điểm thi.'
+}
+
+function liveHistoryDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+function LiveExamHistoryPage() {
+  const { user } = useAuth()
+  const [items, setItems] = useState<LiveOfficialExamSummary[]>([])
+  const [grades, setGrades] = useState<Record<string, StudentOfficialExamGrade>>({})
+  const [appeals, setAppeals] = useState<Appeal[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [appealReason, setAppealReason] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const loadHistory = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await apiClient.get<unknown>('/student/dashboard')
+      const dashboard = liveHistoryValue<Record<string, unknown>>(response.data)
+      const raw = dashboard.officialExamTickets ?? dashboard.OfficialExamTickets
+      const list = Array.isArray(raw) ? raw : []
+      setItems(list.map((value) => {
+        const record = value as Record<string, unknown>
+        const read = (key: string) => record[key] ?? record[key.charAt(0).toUpperCase() + key.slice(1)]
+        return {
+          ticketId: String(read('ticketId') ?? ''), shiftId: String(read('shiftId') ?? ''), courseCode: String(read('courseCode') ?? ''), courseName: String(read('courseName') ?? ''), sessionTitle: String(read('sessionTitle') ?? ''), shiftName: String(read('shiftName') ?? ''), roomLab: String(read('roomLab') ?? ''), examDate: String(read('examDate') ?? ''), startTime: String(read('startTime') ?? ''), endTime: String(read('endTime') ?? ''), seatNumber: Number(read('seatNumber') ?? 0), status: String(read('status') ?? ''), finalScore: typeof read('finalScore') === 'number' ? Number(read('finalScore')) : null, isLocked: Boolean(read('isLocked')), studentAcknowledgementStatus: String(read('studentAcknowledgementStatus') ?? 'PENDING'),
+        }
+      }).filter((item) => item.ticketId))
+      try {
+        setAppeals(await appealsService.list())
+      } catch {
+        setAppeals([])
+      }
+    } catch (requestError) {
+      setError(liveHistoryMessage(requestError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadHistory() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const loadGrade = async (ticketId: string) => {
+    setSelectedId(ticketId)
+    if (grades[ticketId]) return
+    setBusy(true)
+    setError(null)
+    try {
+      const grade = await officialExamService.getStudentGrade(ticketId, user?.id)
+      setGrades((current) => ({ ...current, [ticketId]: grade }))
+    } catch (requestError) {
+      setError(liveHistoryMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const acknowledge = async (ticketId: string) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await officialExamService.acknowledgeGrade(ticketId, user?.id)
+      setItems((current) => current.map((item) => item.ticketId === ticketId ? { ...item, studentAcknowledgementStatus: 'ACKNOWLEDGED' } : item))
+      setGrades((current) => current[ticketId] ? { ...current, [ticketId]: { ...current[ticketId], studentAcknowledgementStatus: 'ACKNOWLEDGED' } } : current)
+      setNotice('Đã xác nhận kết quả điểm thi.')
+    } catch (requestError) {
+      setError(liveHistoryMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const createAppeal = async (ticketId: string) => {
+    if (appealReason.trim().length < 10) {
+      setError('Lý do phúc khảo cần có ít nhất 10 ký tự.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const created = await appealsService.create({ ticketId, reason: appealReason.trim() })
+      setAppeals((current) => [created, ...current])
+      setAppealReason('')
+      setNotice('Đã gửi đơn phúc khảo. Trưởng bộ môn sẽ tiếp nhận và phân công chấm lại.')
+    } catch (requestError) {
+      setError(liveHistoryMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <div className={cn(ds.page, 'flex min-h-[420px] items-center justify-center')}><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div>
+
+  return <div lang="vi" className={cn(ds.page, 'pb-8')}><section className={ds.banner}><div className="relative z-10 p-6 sm:p-8"><p className="text-xs font-bold tracking-[0.14em] text-[#BDE8F5] uppercase">Student Portal · MF-04</p><h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Kết quả thi chính thức</h1><p className="mt-2 max-w-2xl text-sm text-white/75">Điểm chỉ hiển thị sau khi giảng viên hậu kiểm và công bố. Dữ liệu được lấy trực tiếp từ Student Dashboard và Grade API.</p><button type="button" onClick={() => void loadHistory()} disabled={busy} className="mt-5 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#0F2854]">{busy ? 'Đang cập nhật...' : 'Cập nhật kết quả'}</button></div></section>{(error || notice) && <div className={cn('mt-4 rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}<section className="mt-4 space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-bold text-[#0F2854]">Lịch thi và điểm đã công bố</h2><span className="text-xs font-semibold text-[#60718a]">{items.length} vé thi</span></div>{items.length === 0 ? <div className="rounded-2xl border border-dashed border-[#cdd8e6] bg-white p-8 text-center text-sm text-[#60718a]">Chưa có vé thi chính thức.</div> : items.map((item) => { const grade = grades[item.ticketId]; const itemAppeal = appeals.find((appeal) => appeal.ticketId === item.ticketId); return <article key={item.ticketId} className="overflow-hidden rounded-2xl border border-[#dce4ee] bg-white shadow-sm"><button type="button" onClick={() => void loadGrade(item.ticketId)} className="grid w-full gap-3 p-4 text-left sm:grid-cols-[minmax(0,1fr)_140px_140px] sm:items-center"><div><p className="text-xs font-bold text-[#1C4D8D]">{item.courseCode} · {item.shiftName}</p><h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.courseName || item.sessionTitle}</h3><p className="mt-1 text-xs text-[#60718a]">{liveHistoryDate(item.startTime)} · {item.roomLab} · Ghế {item.seatNumber}</p></div><div><span className="text-xs font-bold text-[#60718a]">Điểm công bố</span><p className="mt-1 text-lg font-bold text-[#1C4D8D]">{item.finalScore === null ? '—' : `${item.finalScore.toFixed(1)} / 10`}</p></div><span className={cn('rounded-full px-2.5 py-1 text-center text-xs font-bold', item.isLocked ? 'bg-[#e6f8f1] text-[#1d6f5a]' : 'bg-[#fff1cf] text-[#7d540a]')}>{item.isLocked ? 'LOCKED' : item.status}</span></button>{selectedId === item.ticketId && <div className="border-t border-[#e6ebf2] bg-[#f7fbff] p-4">{!grade ? <p className="text-sm text-[#60718a]">{error ?? 'Chưa có scorecard hoặc điểm chưa được công bố.'}</p> : <><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-[#60718a]">Tổng điểm</p><p className="text-2xl font-bold text-[#0F2854]">{grade.totalScore === null ? '—' : `${grade.totalScore.toFixed(2)} / 10`}</p></div>{grade.studentAcknowledgementStatus !== 'ACKNOWLEDGED' && <button type="button" disabled={busy} onClick={() => void acknowledge(item.ticketId)} className="rounded-xl bg-[#1C4D8D] px-4 py-2.5 text-xs font-bold text-white">Xác nhận điểm</button>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2">{grade.detailedScorecard.map((score) => <article key={score.questionId} className="rounded-xl border border-[#e1e7ef] bg-white p-3"><p className="text-xs font-bold text-[#33465e]">{score.questionTitle || 'Câu hỏi'}</p>{score.questionImageUrl && <img src={score.questionImageUrl} alt={score.questionImageDescription || score.questionTitle || 'Hình ảnh câu hỏi'} className="mt-2 max-h-40 w-full rounded-lg object-contain" />}<p className="mt-2 text-sm font-bold text-[#1C4D8D]">{score.score.toFixed(2)} điểm</p>{score.criteriaScores.map((criterion) => <p key={criterion.criterionName} className="mt-1 text-xs text-[#60718a]">{criterion.criterionName}: {criterion.score.toFixed(1)}/{criterion.maxScore} · {criterion.comment || 'Không có nhận xét'}</p>)}</article>)}</div>{grade.internalAppeal.canAppeal && <div className="mt-4 rounded-xl border border-[#e5dfcf] bg-[#fffaf0] p-4"><p className="text-sm font-bold text-[#7d540a]">Phúc khảo nội bộ</p>{itemAppeal ? <p className="mt-2 text-xs text-[#60718a]">Đơn hiện tại: <strong>{itemAppeal.status}</strong> · {itemAppeal.reason}</p> : <><textarea value={appealReason} onChange={(event) => setAppealReason(event.target.value)} placeholder="Nhập lý do phúc khảo..." className="mt-3 min-h-20 w-full rounded-xl border border-[#e1d8c5] bg-white p-3 text-sm outline-none" /><button type="button" disabled={busy} onClick={() => void createAppeal(item.ticketId)} className="mt-2 rounded-xl bg-[#9d6a12] px-4 py-2 text-xs font-bold text-white">Gửi đơn phúc khảo</button></>}</div>}</>}</div>}</article> })}</section></div>
+}
+
+void LegacyExamHistoryPage
+export { LiveExamHistoryPage as ExamHistoryPage, LiveExamHistoryPage as StudentResultsPage }
 
 class ResultsSceneErrorBoundary extends Component<
   ResultsSceneErrorBoundaryProps,
@@ -377,7 +522,7 @@ function ResultsSceneFallback({
   )
 }
 
-export function ExamHistoryPage() {
+function LegacyExamHistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const results = useMemo(() => buildPreviewResults(new Date()), [])
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -1008,5 +1153,3 @@ export function ExamHistoryPage() {
     </div>
   )
 }
-
-export { ExamHistoryPage as StudentResultsPage }

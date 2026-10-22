@@ -183,6 +183,7 @@ export interface CriterionScore {
   criterionName?: string
   score: number
   comment: string
+  questionNumber?: number
 }
 
 export interface ScorecardPayload {
