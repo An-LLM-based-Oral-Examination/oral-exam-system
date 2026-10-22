@@ -140,10 +140,27 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                 string? followUpPrompt = null;
                 if (needsFollowUp)
                 {
-                    questionFollowUpMap.TryGetValue(a.QuestionId, out var rawPrompt);
-                    followUpPrompt = !string.IsNullOrWhiteSpace(rawPrompt)
-                        ? rawPrompt
-                        : "Hãy làm rõ hơn luận điểm kỹ thuật và ví dụ thực tế liên quan đến câu trả lời của bạn.";
+                    var persistedFollowUp = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
+                    if (!string.IsNullOrWhiteSpace(persistedFollowUp))
+                    {
+                        followUpPrompt = persistedFollowUp;
+                    }
+                    else
+                    {
+                        questionFollowUpMap.TryGetValue(a.QuestionId, out var rawPrompt);
+                        var weakestDetail = evaluation?.Details
+                            .OrderBy(d => d.Criterion != null && d.Criterion.MaxScore > 0m ? d.Score / d.Criterion.MaxScore : d.Score)
+                            .FirstOrDefault();
+                        int nextFollowUpSequence = followUpsCountForQuestion + 1;
+                        followUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                            session.Course?.Code,
+                            rawPrompt,
+                            null,
+                            nextFollowUpSequence,
+                            weakestDetail?.Criterion?.CriterionName,
+                            weakestDetail?.Criterion?.Description,
+                            evaluation?.Details?.Select(d => d.Criterion?.CriterionName ?? string.Empty));
+                    }
                 }
 
                 return new PracticeAnswerDetailDto

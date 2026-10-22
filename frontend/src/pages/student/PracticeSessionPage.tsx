@@ -432,7 +432,7 @@ export const PracticeSessionPage: React.FC = () => {
 
     const isBorderlineResult =
       result.totalScore !== null && result.totalScore >= 4 && result.totalScore <= 8
-    if (!liveResult && isBorderlineResult) {
+    if (!liveResult && isBorderlineResult && result.needsFollowUp && !result.followUpPrompt) {
       const warningTimer = window.setTimeout(() => {
         setIsSubmitting(false)
         setPageError(

@@ -129,6 +129,34 @@ public class GradingQueueWorker : BackgroundService
             throw new Exception("Không tìm thấy câu hỏi hoặc barem rubric.");
         }
 
+        // Đếm số lượng câu trả lời phụ đã có của câu hỏi này trong phiên luyện tập
+        var existingFollowUpsCount = await dbContext.PracticeAnswers
+            .AsNoTracking()
+            .CountAsync(a => a.SessionId == gradingTask.SessionId &&
+                             a.QuestionId == gradingTask.QuestionId &&
+                             a.IsFollowUp, cancellationToken);
+
+        string? answeredFollowUpPrompt = null;
+        if (gradingTask.IsFollowUp)
+        {
+            if (gradingTask.ParentAnswerId.HasValue)
+            {
+                var parentCot = await dbContext.AiEvaluations
+                    .AsNoTracking()
+                    .Where(e => e.PracticeAnswerId == gradingTask.ParentAnswerId.Value)
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .Select(e => e.CotTrace)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                answeredFollowUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+            }
+
+            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+            {
+                answeredFollowUpPrompt = question.FollowUpPrompt;
+            }
+        }
+
         var criteriaContext = question.Rubric.Criteria.Select(c => new AiGradingCriterion
         {
             Id = c.Id.ToString(),
@@ -146,7 +174,10 @@ public class GradingQueueWorker : BackgroundService
             Transcript = gradingTask.AnswerText,
             Criteria = criteriaContext,
             QuestionImageUrl = question.ImageUrl,
-            QuestionImageDescription = question.ImageDescription
+            QuestionImageDescription = question.ImageDescription,
+            IsFollowUp = gradingTask.IsFollowUp,
+            FollowUpPrompt = answeredFollowUpPrompt,
+            FollowUpIndex = existingFollowUpsCount
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
@@ -198,6 +229,56 @@ public class GradingQueueWorker : BackgroundService
             ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
             : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
 
+        // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
+        bool isBorderlineScore = finalTotalScore >= 4.0m && finalTotalScore <= 8.0m;
+        bool needsFollowUp = false;
+        string? resolvedFollowUpPrompt = null;
+
+        if (!gradingTask.IsFullSession && isBorderlineScore)
+        {
+            // Đọc cấu hình số câu hỏi phụ tối đa từ bảng system_configs (1-5 câu, mặc định 2 câu)
+            var maxFollowUpConfig = await dbContext.SystemConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
+            int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps))
+                ? parsedMaxFollowUps
+                : 2;
+
+            if (existingFollowUpsCount < maxAllowedFollowUps)
+            {
+                needsFollowUp = true;
+
+                // Tìm tiêu chí có tỷ lệ điểm thấp nhất để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
+                RubricCriterion? weakestCriterion = null;
+                decimal lowestRatio = decimal.MaxValue;
+                for (int i = 0; i < orderedCriteria.Count; i++)
+                {
+                    var crit = orderedCriteria[i];
+                    var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
+                    var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                    if (ratio < lowestRatio)
+                    {
+                        lowestRatio = ratio;
+                        weakestCriterion = crit;
+                    }
+                }
+
+                int nextFollowUpSequence = existingFollowUpsCount + 1;
+                resolvedFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    question.Course?.Code,
+                    question.FollowUpPrompt,
+                    gradingResult.FollowUpPrompt,
+                    nextFollowUpSequence,
+                    weakestCriterion?.CriterionName,
+                    weakestCriterion?.Description,
+                    orderedCriteria.Select(c => c.CriterionName));
+            }
+        }
+
+        var cotToPersist = needsFollowUp
+            ? FollowUpPromptBuilder.AppendFollowUpTagToCot(gradingResult.CotTrace, resolvedFollowUpPrompt)
+            : gradingResult.CotTrace;
+
         var evaluation = new AiEvaluation
         {
             AnswerType = "practice",
@@ -205,7 +286,7 @@ public class GradingQueueWorker : BackgroundService
             TotalScore = finalTotalScore,
             ConfidenceScore = gradingResult.ConfidenceScore,
             Feedback = gradingResult.Feedback,
-            CotTrace = gradingResult.CotTrace,
+            CotTrace = cotToPersist,
             Details = evalDetails
         };
 
@@ -233,34 +314,10 @@ public class GradingQueueWorker : BackgroundService
             Feedback = evaluation.Feedback,
             IsSuspicious = gradingResult.IsSuspicious,
             ConfidenceScore = evaluation.ConfidenceScore,
+            NeedsFollowUp = needsFollowUp,
+            FollowUpPrompt = resolvedFollowUpPrompt,
             CriteriaScores = criteriaScoreDtos
         };
-
-        // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
-        bool isBorderlineScore = evaluation.TotalScore >= 4.0m && evaluation.TotalScore <= 8.0m;
-        if (!gradingTask.IsFullSession && isBorderlineScore)
-        {
-            // Đọc cấu hình số câu hỏi phụ tối đa từ bảng system_configs (1-5 câu, mặc định 2 câu)
-            var maxFollowUpConfig = await dbContext.SystemConfigs
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
-            int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps)) ? parsedMaxFollowUps : 2;
-
-            // Đếm số lượng câu trả lời phụ đã có của câu hỏi này trong phiên luyện tập
-            var existingFollowUpsCount = await dbContext.PracticeAnswers
-                .AsNoTracking()
-                .CountAsync(a => a.SessionId == gradingTask.SessionId &&
-                                 a.QuestionId == gradingTask.QuestionId &&
-                                 a.IsFollowUp, cancellationToken);
-
-            if (existingFollowUpsCount < maxAllowedFollowUps)
-            {
-                detailDto.NeedsFollowUp = true;
-                detailDto.FollowUpPrompt = !string.IsNullOrWhiteSpace(question.FollowUpPrompt)
-                    ? question.FollowUpPrompt
-                    : "Hãy làm rõ hơn luận điểm kỹ thuật và ví dụ thực tế liên quan đến câu trả lời của bạn.";
-            }
-        }
 
         // Bắn SignalR RIÊNG cho nhóm Session (Bảo vệ tính riêng tư, không dùng Clients.All)
         await _hubContext.Clients.Group($"session_{gradingTask.SessionId}").ReceiveGradingResult(detailDto);

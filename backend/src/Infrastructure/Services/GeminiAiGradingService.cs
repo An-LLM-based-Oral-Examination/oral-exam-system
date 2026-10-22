@@ -121,23 +121,9 @@ public class GeminiAiGradingService : IAiGradingService
     private static bool IsEnglishCourse(AiGradingRequest? request)
     {
         if (request == null) return false;
-        if (!string.IsNullOrWhiteSpace(request.CourseCode))
-        {
-            var code = request.CourseCode.Trim().ToUpperInvariant();
-            if (code.StartsWith("ENT") || code.StartsWith("ENG")) return true;
-        }
-        if (request.Criteria != null && request.Criteria.Count > 0)
-        {
-            var names = request.Criteria.Select(c => c.Name.ToLowerInvariant()).ToList();
-            if (names.Any(n => n.Contains("pronunciation") || n.Contains("phát âm")) ||
-                names.Any(n => n.Contains("fluency") || n.Contains("lưu loát") || n.Contains("trôi chảy")) ||
-                (names.Any(n => n.Contains("grammar") || n.Contains("ngữ pháp")) &&
-                 names.Any(n => n.Contains("vocabulary") || n.Contains("từ vựng"))))
-            {
-                return true;
-            }
-        }
-        return false;
+        return FollowUpPromptBuilder.IsEnglishCourse(
+            request.CourseCode,
+            request.Criteria?.Select(c => c.Name));
     }
 
     public async Task<AiGradingResult> GradeAnswerAsync(AiGradingRequest request, CancellationToken cancellationToken = default)
@@ -157,6 +143,14 @@ public class GeminiAiGradingService : IAiGradingService
                 : $"\n- Hình ảnh/Sơ đồ đính kèm câu hỏi: {(string.IsNullOrWhiteSpace(request.QuestionImageUrl) ? "Đã đính kèm dữ liệu ảnh trực tiếp" : request.QuestionImageUrl)}\n- Mô tả nội dung hình ảnh/sơ đồ của Giảng viên: {(string.IsNullOrWhiteSpace(request.QuestionImageDescription) ? "Hãy quan sát trực tiếp hình ảnh đính kèm và đối chiếu với Đáp án mẫu." : request.QuestionImageDescription)}\n- YÊU CẦU CHẤM CÂU HỎI CÓ HÌNH ẢNH: Đối chiếu câu trả lời của sinh viên với các thành phần, luồng dữ liệu, sơ đồ hoặc mã nguồn hiển thị trong hình ảnh/mô tả hình ảnh kết hợp cùng Đáp án mẫu và Barem Rubric.")
             : string.Empty;
 
+        var followUpContextBlock = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt)
+            ? (isEnglishCourse
+                ? $"\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời của thí sinh cho CÂU HỎI PHỤ ĐÀO SÂU (Follow-up Question): \"{request.FollowUpPrompt}\". Hãy chấm điểm dựa trên mức độ thí sinh giải quyết trực tiếp câu hỏi phụ này trong bối cảnh chủ đề chính ở trên."
+                : $"\n- LƯU Ý ĐẶC BIỆT (CHẤM CÂU TRẢ LỜI PHỤ - Lượt hỏi phụ #{Math.Max(1, request.FollowUpIndex)}): Đây là câu trả lời của sinh viên cho CÂU HỎI PHỤ ĐÀO SÂU: \"{request.FollowUpPrompt}\". Hãy chấm điểm dựa trên mức độ sinh viên giải quyết trực tiếp câu hỏi phụ này kết hợp với ngữ cảnh câu hỏi gốc và Barem Rubric.")
+            : (!string.IsNullOrWhiteSpace(request.FollowUpPrompt)
+                ? $"\n- Câu hỏi phụ đi kèm (Follow-up Question): {request.FollowUpPrompt}"
+                : string.Empty);
+
         var prompt = isEnglishCourse
             ? $@"
 Bạn là Giảng viên / Giám khảo chấm thi Vấn đáp Tiếng Anh (English Oral Exam) ĐH FPT nghiêm khắc, khách quan và chuyên nghiệp.
@@ -166,7 +160,7 @@ TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 ĐÂY LÀ BÀI THI NÓI TIẾNG ANH (ENGLISH ORAL EXAM). ĐÁNH GIÁ NĂNG LỰC NGÔN NGỮ TIẾNG ANH, KHÔNG YÊU CẦU THUẬT NGỮ HOẶC KIẾN THỨC KỸ THUẬT PHẦN MỀM (SE). LOẠI BỎ HOÀN TOÀN THIÊN KIẾN CHUYÊN NGÀNH SE.
 QUY TẮC HỖ TRỢ SONG NGỮ VIỆT - ANH (BILINGUAL VIETNAMESE-ENGLISH SUPPORT): Hệ thống cho phép thí sinh trả lời bằng Tiếng Anh, Tiếng Việt hoặc kết hợp Việt - Anh (Code-Switching) trong quá trình luyện tập và kiểm thử bộ đề ENT. Chỉ khi thí sinh nói 'không biết', 'I don't know', 'pass', 'skip', bỏ cuộc hoặc trả lời hoàn toàn lạc đề không liên quan đến câu hỏi/bức tranh thì mới BẮT BUỘC cho Score = 0.0, toàn bộ các tiêu chí trong Details có Score = 0.0 và đặt IsSuspicious = true.
 Dưới đây là chi tiết:
-- Câu hỏi / Chủ đề Speaking: {request.QuestionContent}{imageContextBlock}
+- Câu hỏi / Chủ đề Speaking: {request.QuestionContent}{imageContextBlock}{followUpContextBlock}
 - Đáp án mẫu / Gợi ý phát triển ý (Model Answer): {request.SampleAnswer ?? "Không có sẵn"}
 - Barem Rubric (gồm Id, tên tiêu chí Name, mô tả Description, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
 
@@ -182,6 +176,7 @@ Quy trình suy luận (Chain-of-Thought):
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng điểm các tiêu chí (tối đa 10.0). Hỗ trợ cả câu trả lời bằng Tiếng Anh và song ngữ Việt - Anh. Nếu miêu tả sai hoàn toàn tranh hoặc nói 'don't know'/'không biết', cho điểm tương ứng hoặc 0.0 điểm.
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn hoặc nghi ngờ, đặt IsSuspicious = true.
 5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
+6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Anh, ngắn gọn 1-2 câu) hỏi xoáy trực tiếp vào ý còn thiếu hoặc điểm yếu trong bài nói vừa rồi của thí sinh để đào sâu hơn (tuyệt đối không lặp lại nguyên văn câu hỏi gốc hay câu hỏi phụ đã hỏi ở trên).
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -191,6 +186,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""SuspiciousReason"": null,
   ""Feedback"": ""Nhận xét tổng quan..."",
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
+  ""FollowUpPrompt"": ""Could you share a specific real-life example to further explain your point?"",
   ""Details"": [
     {{
       ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
@@ -206,7 +202,7 @@ Nhiệm vụ: Chấm điểm câu trả lời của sinh viên cho môn học d�
 TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 QUY TẮC NGHIÊM NGẶT: Nếu sinh viên trả lời 'không biết', 'I don't know', 'làm giùm', bỏ cuộc, hoặc trả lời hoàn toàn lạc đề không chứa kiến thức chuyên môn liên quan đến câu hỏi, BẮT BUỘC chấm Score = 0.0, toàn bộ các tiêu chí trong Details có Score = 0.0 và IsSuspicious = true.
 Dưới đây là chi tiết:
-- Câu hỏi: {request.QuestionContent}{imageContextBlock}
+- Câu hỏi: {request.QuestionContent}{imageContextBlock}{followUpContextBlock}
 - Đáp án mẫu (Model Answer) của Giảng viên để đối chiếu: {request.SampleAnswer ?? "Không có sẵn"}
 - Barem Rubric (gồm Id, tên tiêu chí Name, mô tả Description, điểm tối đa MaxScore và trọng số Weight): {criteriaJson}
 
@@ -222,6 +218,7 @@ Quy trình suy luận (Chain-of-Thought):
 3. Cho điểm từng tiêu chí trong phạm vi MaxScore. Tổng điểm là tổng các tiêu chí (tối đa 10.0). Nếu câu trả lời không có ý kiến thức nào đúng hoặc nói 'không biết', cho 0.0 điểm.
 4. Đánh giá độ tin cậy (ConfidenceScore từ 0.0 đến 1.0). Nếu bài trả lời quá ngắn, ồn, lạc đề hoặc nghi ngờ, đặt IsSuspicious = true.
 5. Trong mảng Details, trường CriterionId BẮT BUỘC copy chính xác chuỗi Id của từng tiêu chí từ Barem Rubric ở trên.
+6. Sinh thêm trường ""FollowUpPrompt"" (bằng Tiếng Việt, ngắn gọn 1-2 câu) hỏi xoáy trực tiếp vào tiêu chí còn yếu hoặc khái niệm kỹ thuật mà sinh viên trả lời chưa sâu trong transcript vừa rồi (tuyệt đối không lặp lại nguyên văn câu hỏi gốc hay câu hỏi phụ đã hỏi ở trên).
 
 BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN CODEBLOCK):
 {{
@@ -231,6 +228,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ""SuspiciousReason"": null,
   ""Feedback"": ""Nhận xét tổng quan..."",
   ""CotTrace"": ""Chuỗi suy luận CoT..."",
+  ""FollowUpPrompt"": ""Hãy phân tích rõ hơn cơ chế hoạt động và tình huống ngoại lệ thực tế cho luận điểm vừa nêu?"",
   ""Details"": [
     {{
       ""CriterionId"": ""<copy chính xác chuỗi Id của tiêu chí từ Barem Rubric>"",
@@ -435,7 +433,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                     Path.Combine(Directory.GetCurrentDirectory(), "backend", "src", "API", "wwwroot", "uploads", "questions"),
                     Path.Combine(AppContext.BaseDirectory, "wwwroot", "uploads", "questions"),
                     Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "API", "wwwroot", "uploads", "questions"),
-                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "API", "wwwroot", "uploads", "questions"),
+                    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "API", "wwwroot", "questions"),
                     Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "src", "API", "wwwroot", "uploads", "questions")
                 };
 
@@ -663,6 +661,14 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         if (request?.Criteria == null || request.Criteria.Count == 0)
         {
+            if (result.Score >= 4.0m && result.Score <= 8.0m && string.IsNullOrWhiteSpace(result.FollowUpPrompt))
+            {
+                result.FollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    request?.CourseCode,
+                    null,
+                    null,
+                    Math.Max(1, (request?.FollowUpIndex ?? 0) + 1));
+            }
             return result;
         }
 
@@ -751,7 +757,56 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             result.Details = normalizedDetails;
         }
 
+        if (result.Score >= 4.0m && result.Score <= 8.0m && string.IsNullOrWhiteSpace(result.FollowUpPrompt))
+        {
+            var weakestCriterion = FindWeakestCriterion(request.Criteria, result.Details);
+            result.FollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                request.CourseCode,
+                null,
+                null,
+                Math.Max(1, request.FollowUpIndex + 1),
+                weakestCriterion?.Name,
+                weakestCriterion?.Description,
+                request.Criteria.Select(c => c.Name));
+        }
+
         return result;
+    }
+
+    private static AiGradingCriterion? FindWeakestCriterion(
+        List<AiGradingCriterion>? criteria,
+        List<GradingDetailDto>? details)
+    {
+        if (criteria == null || criteria.Count == 0)
+        {
+            return null;
+        }
+
+        if (details == null || details.Count == 0)
+        {
+            return criteria[0];
+        }
+
+        AiGradingCriterion? weakest = null;
+        decimal lowestRatio = decimal.MaxValue;
+
+        for (int i = 0; i < criteria.Count; i++)
+        {
+            var c = criteria[i];
+            var matched = details.FirstOrDefault(d =>
+                    string.Equals(d.CriterionId?.Trim(), c.Id?.Trim(), StringComparison.OrdinalIgnoreCase))
+                ?? (i < details.Count ? details[i] : null);
+            var ratio = c.MaxScore > 0m && matched != null
+                ? matched.Score / c.MaxScore
+                : 0m;
+            if (ratio < lowestRatio)
+            {
+                lowestRatio = ratio;
+                weakest = c;
+            }
+        }
+
+        return weakest ?? criteria[0];
     }
 
     private static AiGradingResult EnforceRefusalGuard(AiGradingResult result, AiGradingRequest request, string sanitizedTranscript)
@@ -789,7 +844,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         var hasRefusalPhrase = RefusalPhrases.Any(phrase => lower.Contains(phrase, StringComparison.OrdinalIgnoreCase));
 
         var transcriptKeywords = ExtractKeywords(transcript);
-        var referenceKeywords = ExtractKeywords($"{request.QuestionContent} {request.QuestionImageDescription} {request.SampleAnswer}");
+        var referenceKeywords = ExtractKeywords($"{request.QuestionContent} {request.FollowUpPrompt} {request.QuestionImageDescription} {request.SampleAnswer}");
         if (request.Criteria != null)
         {
             foreach (var c in request.Criteria)
@@ -883,7 +938,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         var wordCount = words.Length;
         var transcriptKeywords = ExtractKeywords(sanitizedTranscript);
         var sampleKeywords = ExtractKeywords(request.SampleAnswer);
-        var questionKeywords = ExtractKeywords(request.QuestionContent);
+        var questionKeywords = ExtractKeywords($"{request.QuestionContent} {request.FollowUpPrompt}");
         var imageDescriptionKeywords = ExtractKeywords(request.QuestionImageDescription);
 
         var allReferenceKeywords = new HashSet<string>(sampleKeywords, StringComparer.OrdinalIgnoreCase);
@@ -1033,6 +1088,20 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                         ? "Bài nói không đáp ứng được yêu cầu giao tiếp Tiếng Anh cho câu hỏi này. Điểm: 0.0/10."
                         : "Câu trả lời không chứa nội dung kiến thức chuyên môn phù hợp với câu hỏi. Điểm: 0.0/10.");
 
+        string? fallbackFollowUpPrompt = null;
+        if (totalScore >= 4.0m && totalScore <= 8.0m)
+        {
+            var weakestCriterion = FindWeakestCriterion(request.Criteria, details);
+            fallbackFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                request.CourseCode,
+                null,
+                null,
+                Math.Max(1, request.FollowUpIndex + 1),
+                weakestCriterion?.Name,
+                weakestCriterion?.Description,
+                request.Criteria?.Select(c => c.Name));
+        }
+
         return new AiGradingResult
         {
             Score = totalScore,
@@ -1041,6 +1110,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             SuspiciousReason = reason,
             CotTrace = $"[SYSTEM_FALLBACK] {reason} | Đánh giá tự động theo Barem Rubric ({request.Criteria?.Count ?? 0} tiêu chí, khớp {globalMatchedCount} từ khóa chuyên môn).",
             Feedback = feedback,
+            FollowUpPrompt = fallbackFollowUpPrompt,
             Details = details
         };
     }

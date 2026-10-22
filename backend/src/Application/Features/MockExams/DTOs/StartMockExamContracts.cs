@@ -32,7 +32,8 @@ public record MockExamQuestionDto(
     string Difficulty,
     List<MockExamRubricCriterionDto> RubricCriteria,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    string? FollowUpPrompt = null
 );
 
 /// <summary>

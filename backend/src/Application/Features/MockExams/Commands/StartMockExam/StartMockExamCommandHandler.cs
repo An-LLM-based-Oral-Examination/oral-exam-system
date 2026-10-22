@@ -233,6 +233,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         await _context.SaveChangesAsync(cancellationToken);
 
         // 11. Chuẩn bị DTO phản hồi
+        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(course.Code);
         var questionDtos = selectedQuestions.Select((q, idx) =>
         {
             var criteriaDtos = q.Rubric?.Criteria != null
@@ -242,16 +243,35 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                     .ToList()
                 : new List<MockExamRubricCriterionDto>();
 
+            string? resolvedFollowUp = null;
+            var displayContent = q.Content;
+            if (request.HasFollowUp)
+            {
+                resolvedFollowUp = !string.IsNullOrWhiteSpace(q.FollowUpPrompt)
+                    ? q.FollowUpPrompt.Trim()
+                    : (isEnglishCourse
+                        ? "Could you elaborate further and provide a concrete real-life example to support your answer?"
+                        : "Hãy phân tích sâu hơn cơ chế hoạt động và đưa ra một ví dụ thực tế cho câu trả lời của bạn.");
+
+                if (!displayContent.Contains(resolvedFollowUp, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayContent = isEnglishCourse
+                        ? $"{q.Content}\n\n[Follow-up Question]: {resolvedFollowUp}"
+                        : $"{q.Content}\n\n[Câu hỏi phụ đào sâu]: {resolvedFollowUp}";
+                }
+            }
+
             return new MockExamQuestionDto(
                 Id: q.Id,
                 OrderIndex: idx + 1,
                 Title: q.Title,
-                Content: q.Content,
+                Content: displayContent,
                 BloomLevel: q.BloomLevel,
                 Difficulty: q.Difficulty,
                 RubricCriteria: criteriaDtos,
                 ImageUrl: q.ImageUrl,
-                ImageDescription: q.ImageDescription
+                ImageDescription: q.ImageDescription,
+                FollowUpPrompt: resolvedFollowUp
             );
         }).ToList();
 

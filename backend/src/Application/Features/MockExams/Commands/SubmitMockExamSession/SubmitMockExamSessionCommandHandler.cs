@@ -122,6 +122,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 CourseCode = session.Course?.Code,
                 QuestionImageUrl = q.ImageUrl,
                 QuestionImageDescription = q.ImageDescription,
+                FollowUpPrompt = session.HasFollowUp ? q.FollowUpPrompt : null,
                 Criteria = criteriaList
             };
 
