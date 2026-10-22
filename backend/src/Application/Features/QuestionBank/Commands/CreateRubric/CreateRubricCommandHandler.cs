@@ -83,6 +83,21 @@ public sealed class CreateRubricCommandHandler
         }
 
         _context.Rubrics.Add(rubric);
+
+        if (request.ActorUserId != Guid.Empty)
+        {
+            _context.AuditLogs.Add(new AuditLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = request.ActorUserId,
+                Action = "CREATE_RUBRIC",
+                EntityName = "rubrics",
+                EntityId = rubric.Id,
+                NewValues = rubric.Name,
+                CreatedAt = now
+            });
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var criteriaDto = rubric.Criteria

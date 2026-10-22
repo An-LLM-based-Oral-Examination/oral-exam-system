@@ -1,12 +1,16 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamAnswer;
 using OralExamination.Application.Features.Practice.Commands.UploadAudioPractice;
 using OralExamination.Application.Features.Speech.Commands.TranscribeSpeech;
 using OralExamination.Application.Features.Speech.Queries.GetTtsVoices;
 using OralExamination.Application.Features.Speech.Queries.SynthesizeSpeech;
+using OralExamination.Domain.Entities;
+using OralExamination.Infrastructure.Persistence;
 using OralExamination.Infrastructure.Services;
 using Polly;
 using Polly.Retry;
@@ -34,6 +38,15 @@ public class ResilientSpeechServicesTests
     private static ResiliencePipeline CreateFastNoRetryPipeline()
     {
         return new ResiliencePipelineBuilder().Build();
+    }
+
+    private static OralExamDbContext CreateDbContext()
+    {
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        return new OralExamDbContext(options);
     }
 
     [Fact(DisplayName = "1. SeTerminologyNormalizer.Normalize chuẩn hóa chính xác các thuật ngữ SE phiên âm sai sang tiếng Anh chuẩn")]
@@ -1348,4 +1361,330 @@ public class ResilientSpeechServicesTests
         result.ConfidenceScore.Should().NotBeNull();
         result.ConfidenceScore.Should().BeInRange(0.0, 1.0);
     }
+
+    [Fact(DisplayName = "32. Chặn phục hồi ảo giác tiếng ồn (Thank you very much) trong ClientTranscript với TranscribeSpeechCommandHandler và UploadAudioPracticeCommandHandler")]
+    public async Task TranscribeAndUploadAudio_WhenClientTranscriptIsNoiseHallucination_RejectsAndDoesNotResurrect()
+    {
+        var hallucination = "Thank you very much. Thank you very much.";
+
+        // 1. Kiểm thử TranscribeSpeechCommandHandler
+        var emptyConfig = BuildConfig(new Dictionary<string, string?>());
+        var primaryWhisper = new CloudflareWhisperService(new HttpClient(), emptyConfig, CreateFastNoRetryPipeline());
+        var fallbackGemini = new GeminiSpeechToTextService(new HttpClient(), emptyConfig);
+        var resilientStt = new ResilientSpeechToTextService(primaryWhisper, fallbackGemini);
+        var transcribeHandler = new TranscribeSpeechCommandHandler(resilientStt);
+
+        using var audioStream1 = new MemoryStream(Encoding.UTF8.GetBytes("empty-or-unparseable-audio"));
+        var transcribeResult = await transcribeHandler.Handle(
+            new TranscribeSpeechCommand(
+                audioStream1,
+                "answer.webm",
+                VocabularyHint: null,
+                ClientTranscript: hallucination),
+            CancellationToken.None);
+
+        transcribeResult.IsSuccess.Should().BeFalse("Ảo giác tiếng ồn trong ClientTranscript không được phép phục hồi thành công");
+        transcribeResult.Error.Should().Contain("Không nhận diện được nội dung");
+
+        // 2. Kiểm thử UploadAudioPracticeCommandHandler
+        var uploadHandler = new UploadAudioPracticeCommandHandler(resilientStt);
+        using var audioStream2 = new MemoryStream(Encoding.UTF8.GetBytes("empty-or-unparseable-audio"));
+        var uploadResult = await uploadHandler.Handle(
+            new UploadAudioPracticeCommand(
+                audioStream2,
+                "practice.webm",
+                "audio/webm",
+                ClientTranscript: hallucination),
+            CancellationToken.None);
+
+        uploadResult.IsSuccess.Should().BeFalse("Ảo giác tiếng ồn trong ClientTranscript không được phép trả về kết quả hợp lệ trong UploadAudioPractice");
+    }
+
+    [Fact(DisplayName = "33. GeminiSpeechToTextService: Trả về ConfidenceScore = 0.0 và chuỗi rỗng khi Gemini trả về ảo giác tiếng ồn hoặc văn bản rỗng")]
+    public async Task GeminiSpeechToTextService_WhenGeminiReturnsHallucinationOrEmpty_ReturnsZeroConfidenceAndEmptyText()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "fake-gemini-key"
+        });
+
+        // Kịch bản 1: Gemini trả về ảo giác lặp tiếng ồn
+        var hallucinationJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Thank you very much. Thank you very much. Thank you very much.\"}]}}]}";
+        var hallucinationHandler = new MockHttpMessageHandler((req, ct) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(hallucinationJson, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var geminiService1 = new GeminiSpeechToTextService(new HttpClient(hallucinationHandler), config);
+        using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes("noisy-audio"));
+        var result1 = await geminiService1.TranscribeDetailedAsync(stream1, "audio.webm");
+
+        result1.Should().NotBeNull();
+        result1.Text.Should().BeEmpty("Ảo giác tiếng ồn phải bị làm sạch thành chuỗi rỗng");
+        result1.RawText.Should().BeEmpty();
+        result1.ConfidenceScore.Should().Be(0.0, "Độ tin cậy phải được hiệu chuẩn về 0.0 khi phát hiện ảo giác");
+
+        // Kịch bản 2: Gemini trả về văn bản rỗng
+        var emptyJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"   \"}]}}]}";
+        var emptyHandler = new MockHttpMessageHandler((req, ct) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(emptyJson, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var geminiService2 = new GeminiSpeechToTextService(new HttpClient(emptyHandler), config);
+        using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes("silent-audio"));
+        var result2 = await geminiService2.TranscribeDetailedAsync(stream2, "audio.webm");
+
+        result2.Should().NotBeNull();
+        result2.Text.Should().BeEmpty();
+        result2.RawText.Should().BeEmpty();
+        result2.ConfidenceScore.Should().Be(0.0, "Độ tin cậy phải là 0.0 khi văn bản bóc băng rỗng");
+    }
+
+    [Fact(DisplayName = "34. SynthesizeSpeechQueryValidator chấp nhận các tốc độ đọc chuẩn giao diện [0.5x, 2.0x] bao gồm 0.5x và 1.5x")]
+    public void SynthesizeSpeechQueryValidator_AcceptsStandardPlaybackSpeeds_HalfToTwo()
+    {
+        var validator = new SynthesizeSpeechQueryValidator();
+
+        var queryHalf = new SynthesizeSpeechQuery("Kiểm tra tốc độ đọc 0.5x", SpeakingRate: 0.5);
+        var queryOneAndHalf = new SynthesizeSpeechQuery("Kiểm tra tốc độ đọc 1.5x", SpeakingRate: 1.5);
+        var queryDouble = new SynthesizeSpeechQuery("Kiểm tra tốc độ đọc 2.0x", SpeakingRate: 2.0);
+
+        var resultHalf = validator.Validate(queryHalf);
+        var resultOneAndHalf = validator.Validate(queryOneAndHalf);
+        var resultDouble = validator.Validate(queryDouble);
+
+        resultHalf.IsValid.Should().BeTrue("Tốc độ đọc 0.5x phải hợp lệ trong validator");
+        resultOneAndHalf.IsValid.Should().BeTrue("Tốc độ đọc 1.5x phải hợp lệ trong validator");
+        resultDouble.IsValid.Should().BeTrue("Tốc độ đọc 2.0x phải hợp lệ trong validator");
+
+        // Kiểm tra ngưỡng biên ngoài khoảng [0.5, 2.0]
+        var queryTooSlow = new SynthesizeSpeechQuery("Quá chậm", SpeakingRate: 0.49);
+        var queryTooFast = new SynthesizeSpeechQuery("Quá nhanh", SpeakingRate: 2.01);
+
+        validator.Validate(queryTooSlow).IsValid.Should().BeFalse("Tốc độ đọc < 0.5x phải bị từ chối");
+        validator.Validate(queryTooFast).IsValid.Should().BeFalse("Tốc độ đọc > 2.0x phải bị từ chối");
+    }
+
+    [Theory(DisplayName = "35. TranscriptHelper.IsNoiseHallucination nhận diện chính xác các biến thể ảo giác tiếng ồn (unspaced, comma, newline, loop) và không chặn câu trả lời hợp lệ")]
+    [InlineData("Thank you very much. Thank you very much.", true)]
+    [InlineData("Thank you very much.Thank you very much.", true)]
+    [InlineData("Thank you very much, thank you very much", true)]
+    [InlineData("Thank you very much\nThank you very much", true)]
+    [InlineData("Thank you very much Thank you very much Thank you very much", true)]
+    [InlineData("Thank you very much. Please subscribe. Like and subscribe.", true)]
+    [InlineData("Hãy đăng ký kênh và bấm chuông theo dõi", true)]
+    [InlineData("Cảm ơn các bạn đã theo dõi. Hẹn gặp lại các bạn.", true)]
+    [InlineData("Thank you very much. Em xin trả lời câu hỏi về Clean Architecture.", false)]
+    [InlineData("Clean Architecture gồm 4 tầng Domain, Application, Infrastructure và Web API.", false)]
+    public void TranscriptHelper_IsNoiseHallucination_EvaluatesEdgeCasesCorrectly(string input, bool expectedIsHallucination)
+    {
+        var actual = TranscriptHelper.IsNoiseHallucination(input);
+        actual.Should().Be(expectedIsHallucination, $"Input '{input}' phải được đánh giá ảo giác tiếng ồn = {expectedIsHallucination}");
+
+        // Kiểm thử NormalizeOrFallback khi mock trả về null (unconfigured mock)
+        var unconfiguredFallback = TranscriptHelper.NormalizeOrFallback(input, null);
+        if (expectedIsHallucination)
+        {
+            unconfiguredFallback.Should().BeEmpty("Ảo giác tiếng ồn không được phép trả về kết quả khi mock trả về null");
+        }
+        else
+        {
+            unconfiguredFallback.Should().Be(input.Trim(), "Nội dung hợp lệ phải được fallback về rawText khi mock trả về null");
+        }
+
+        // Kiểm thử NormalizeOrFallback khi STT service đã strip thành chuỗi rỗng
+        var strippedFallback = TranscriptHelper.NormalizeOrFallback(input, string.Empty);
+        strippedFallback.Should().BeEmpty("Khi STT service đã làm sạch thành rỗng thì cấm hồi sinh ảo giác");
+    }
+
+    [Fact(DisplayName = "36. Moq STT chưa cấu hình (NormalizeTranscript trả về null): từ chối ảo giác và giữ lại câu trả lời hợp lệ")]
+    public async Task TranscribeAndUploadAudio_WithUnconfiguredMockReturningNull_HandlesCorrectly()
+    {
+        var unconfiguredMock = new Mock<ISpeechToTextService>();
+        // Mock không cài đặt NormalizeTranscript -> trả về null mặc định
+        unconfiguredMock.Setup(s => s.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SpeechTranscriptionResult(string.Empty, string.Empty, "MockStt", false, null, 0.0));
+
+        // 1. TranscribeSpeechCommandHandler với ClientTranscript là ảo giác
+        var transcribeHandler = new TranscribeSpeechCommandHandler(unconfiguredMock.Object);
+        using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes("audio-1"));
+        var noiseResult = await transcribeHandler.Handle(
+            new TranscribeSpeechCommand(stream1, "test.webm", null, "Thank you very much.Thank you very much."),
+            CancellationToken.None);
+        noiseResult.IsSuccess.Should().BeFalse("TranscribeSpeechCommandHandler phải từ chối khi ClientTranscript là ảo giác tiếng ồn dù mock trả về null");
+
+        // 2. TranscribeSpeechCommandHandler với ClientTranscript hợp lệ
+        using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes("audio-2"));
+        var validResult = await transcribeHandler.Handle(
+            new TranscribeSpeechCommand(stream2, "test.webm", null, "Em áp dụng Dependency Inversion"),
+            CancellationToken.None);
+        validResult.IsSuccess.Should().BeTrue("TranscribeSpeechCommandHandler phải chấp nhận ClientTranscript hợp lệ khi mock trả về null");
+        validResult.Value!.Text.Should().Be("Em áp dụng Dependency Inversion");
+
+        // 3. UploadAudioPracticeCommandHandler với ClientTranscript là ảo giác lặp
+        var uploadHandler = new UploadAudioPracticeCommandHandler(unconfiguredMock.Object);
+        using var stream3 = new MemoryStream(Encoding.UTF8.GetBytes("audio-3"));
+        var uploadNoiseResult = await uploadHandler.Handle(
+            new UploadAudioPracticeCommand(stream3, "test.webm", "audio/webm", "Thank you very much, thank you very much"),
+            CancellationToken.None);
+        uploadNoiseResult.IsSuccess.Should().BeFalse("UploadAudioPracticeCommandHandler phải từ chối ảo giác lặp tiếng ồn");
+
+        // 4. UploadAudioPracticeCommandHandler với ClientTranscript hợp lệ
+        using var stream4 = new MemoryStream(Encoding.UTF8.GetBytes("audio-4"));
+        var uploadValidResult = await uploadHandler.Handle(
+            new UploadAudioPracticeCommand(stream4, "test.webm", "audio/webm", "CQRS tách biệt Command và Query"),
+            CancellationToken.None);
+        uploadValidResult.IsSuccess.Should().BeTrue("UploadAudioPracticeCommandHandler phải chấp nhận ClientTranscript hợp lệ");
+        uploadValidResult.Value!.Transcript.Should().Be("CQRS tách biệt Command và Query");
+    }
+
+    [Fact(DisplayName = "37. SubmitMockExamAnswerCommandHandler từ chối khi DirectTranscript là ảo giác tiếng ồn")]
+    public async Task SubmitMockExamAnswerCommandHandler_WhenDirectTranscriptIsNoiseHallucination_Rejects()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        });
+
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        // NormalizeTranscript trả về chuỗi rỗng khi gặp ảo giác
+        sttMock.Setup(s => s.NormalizeTranscript(It.IsAny<string>()))
+            .Returns<string>(s => TranscriptHelper.IsNoiseHallucination(s) ? string.Empty : s.Trim());
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        // Nộp DirectTranscript dạng ảo giác tiếng ồn
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: null,
+            FileName: null,
+            ContentType: null,
+            TimeTakenSeconds: 15,
+            DirectTranscript: "Thank you very much. Thank you very much."
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.IsSuccess.Should().BeFalse("DirectTranscript là ảo giác tiếng ồn bắt buộc phải bị từ chối");
+        result.Error.Should().Contain("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền)");
+    }
+
+    [Theory(DisplayName = "38. SeTerminologyNormalizer.SanitizeHallucinations và IsHallucinationOrNoise xử lý chuẩn mọi biến thể và bảo toàn câu trả lời kỹ thuật")]
+    [InlineData("Thank you very much.Thank you very much.", "", true)]
+    [InlineData("Thank you very much, thank you very much", "", true)]
+    [InlineData("Thank you very much\nThank you very much", "", true)]
+    [InlineData("Thank you very much Thank you very much Thank you very much", "", true)]
+    [InlineData("Thank you very much. Please subscribe. Like and subscribe.", "", true)]
+    [InlineData("Hãy đăng ký kênh và bấm chuông theo dõi", "", true)]
+    [InlineData("Cảm ơn các bạn đã theo dõi. Hẹn gặp lại các bạn.", "", true)]
+    [InlineData("bye bye bye", "", true)]
+    [InlineData("you you you", "", true)]
+    [InlineData("Thank you very much. Em xin trả lời câu hỏi về Clean Architecture.", "Em xin trả lời câu hỏi về Clean Architecture.", false)]
+    [InlineData("Clean Architecture gồm 4 tầng Domain, Application, Infrastructure và Web API.", "Clean Architecture gồm 4 tầng Domain, Application, Infrastructure và Web API.", false)]
+    [InlineData("Chúng ta phân tích step by step, byte by byte và point to point.", "Chúng ta phân tích step by step, byte by byte và point to point.", false)]
+    [InlineData("Quan hệ table of table trong cơ sở dữ liệu.", "Quan hệ table of table trong cơ sở dữ liệu.", false)]
+    public void SeTerminologyNormalizer_SanitizeHallucinations_HandlesEdgeCasesAndPreservesTechnicalContent(
+        string input, string expectedSanitized, bool expectedIsHallucination)
+    {
+        var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(input);
+        sanitized.Should().Be(expectedSanitized, $"SanitizeHallucinations cho '{input}' phải ra '{expectedSanitized}'");
+
+        var isNoise = SeTerminologyNormalizer.IsHallucinationOrNoise(input);
+        isNoise.Should().Be(expectedIsHallucination, $"IsHallucinationOrNoise cho '{input}' phải là {expectedIsHallucination}");
+    }
+
+    [Theory(DisplayName = "39. GeminiSpeechToTextService: Trả về ConfidenceScore = 0.0 và chuỗi rỗng trên các biến thể ảo giác (unspaced, comma, newline) và audio rỗng")]
+    [InlineData("Thank you very much.Thank you very much.")]
+    [InlineData("Thank you very much, thank you very much")]
+    [InlineData("Thank you very much\nThank you very much")]
+    [InlineData("Please subscribe. Like and subscribe.")]
+    public async Task GeminiSpeechToTextService_WithVariousHallucinations_ReturnsZeroConfidenceAndEmpty(string hallucination)
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "fake-gemini-key"
+        });
+
+        var hallucinationJson = $"{{\"candidates\":[{{\"content\":{{\"parts\":[{{\"text\":\"{hallucination.Replace("\n", "\\n")}\"}}]}}}}]}}";
+        var handler = new MockHttpMessageHandler((req, ct) =>
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(hallucinationJson, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var service = new GeminiSpeechToTextService(new HttpClient(handler), config);
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("noisy-audio"));
+        var result = await service.TranscribeDetailedAsync(stream, "audio.webm");
+
+        result.Should().NotBeNull();
+        result.Text.Should().BeEmpty();
+        result.RawText.Should().BeEmpty();
+        result.ConfidenceScore.Should().Be(0.0);
+    }
+
+    [Fact(DisplayName = "40. TranscriptHelper.NormalizeOrFallback chặn triệt để cả trường hợp mock trả về ảo giác nguyên vẹn")]
+    public void TranscriptHelper_NormalizeOrFallback_BlocksUnsanitizedNormalizedOutput()
+    {
+        // Khi mock/service trả về ảo giác mà chưa lọc sạch
+        var result = TranscriptHelper.NormalizeOrFallback("Thank you very much.Thank you very much.", "Thank you very much.Thank you very much.");
+        result.Should().BeEmpty("NormalizeOrFallback không được phép trả về ảo giác dù normalized khác null");
+
+        // Khi normalized là hợp lệ
+        var validResult = TranscriptHelper.NormalizeOrFallback("Em áp dụng CQRS", "Em áp dụng CQRS");
+        validResult.Should().Be("Em áp dụng CQRS");
+    }
+
+    [Fact(DisplayName = "41. Regex khử ảo giác và bóc tách câu có khả năng chống ReDoS với giới hạn thời gian thực thi")]
+    public void HallucinationRegex_IsResistantToCatastrophicBacktracking()
+    {
+        var longRepeatingText = string.Join(" ", Enumerable.Repeat("test", 1000));
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        var isNoiseHelper = TranscriptHelper.IsNoiseHallucination(longRepeatingText);
+        var sanitizedNormalizer = SeTerminologyNormalizer.SanitizeHallucinations(longRepeatingText);
+
+        sw.Stop();
+        sw.ElapsedMilliseconds.Should().BeLessThan(2000, "Regex khử ảo giác phải xử lý chuỗi lặp dài trong vòng 2 giây mà không bị ReDoS");
+        isNoiseHelper.Should().BeFalse();
+        sanitizedNormalizer.Should().Be("test");
+    }
 }
+

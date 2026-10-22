@@ -24,8 +24,8 @@ public sealed class SynthesizeSpeechQueryValidator : AbstractValidator<Synthesiz
             .MaximumLength(4000).WithMessage("Nội dung văn bản cần đọc không được vượt quá 4000 ký tự.");
 
         RuleFor(x => x.SpeakingRate)
-            .InclusiveBetween(0.75, 1.35)
-            .WithMessage("Tốc độ đọc phải nằm trong khoảng từ 0.75x đến 1.35x.");
+            .InclusiveBetween(0.5, 2.0)
+            .WithMessage("Tốc độ đọc phải nằm trong khoảng từ 0.5x đến 2.0x.");
     }
 }
 

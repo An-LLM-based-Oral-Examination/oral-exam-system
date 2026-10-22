@@ -177,18 +177,51 @@ public static class SeTerminologyNormalizer
     /// </summary>
     private static readonly Regex NoiseHallucinationPhraseRegex = new(
         @"^(?:thank\s+you(?:\s+very\s+much|\s+so\s+much|\s+for\s+watching)?|thanks(?:\s+for\s+watching)?|subtitles\s+by.*|amara\.org.*|please\s+subscribe.*|like\s+and\s+subscribe.*|hãy\s+đăng\s+ký\s+kênh.*|cảm\s+ơn\s+các\s+bạn\s+đã\s+theo\s+dõi.*|hẹn\s+gặp\s+lại\s+các\s+bạn.*|phụ\s+đề\s+bởi.*|you|bye(?:\s+bye)?|mbc\s+news.*)$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
 
-    private static readonly Regex SentenceSplitRegex = new(@"(?<=[.!?。])\s+", RegexOptions.Compiled);
-    private static readonly Regex PunctuationTrimRegex = new(@"^[\s\p{P}]+|[\s\p{P}]+$", RegexOptions.Compiled);
-    private static readonly Regex RepeatedNgramRegex = new(
-        @"\b(\w+(?:\s+\w+){1,6})(?:[\s,.!?]+\1){2,}\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex MultiWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
-    private static readonly Regex MarkdownSymbolsRegex = new(@"[*_`#~]+", RegexOptions.Compiled);
+    private static readonly Regex RepeatedPhraseRegex = new(
+        @"\b(\w+(?:\s+\w+){1,6})(?:[\s,.!?]+\1){1,}\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex RepeatedWordLoopRegex = new(
+        @"\b(\w+)(?:[\s,.!?]+\1){2,}\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex SentenceSplitRegex = new(
+        @"(?<=[.!?。])\s+|[\r\n]+|(?<=[\p{Ll}][.!?。])(?=[\p{Lu}])",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex PunctuationTrimRegex = new(
+        @"^[\s\p{P}]+|[\s\p{P}]+$",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex MultiWhitespaceRegex = new(
+        @"\s+",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex MarkdownSymbolsRegex = new(
+        @"[*_`#~]+",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
     private static readonly Regex TechnicalContextTokenRegex = new(
         @"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[A-Z]{2,}(?:-\d+)?|\.[A-Za-z0-9]+)\b",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+
+    /// <summary>
+    /// Thu gọn các chuỗi lặp lại do ảo giác STT: các cụm từ lặp (2-7 từ) và các từ đơn lặp liên tiếp từ 3 lần trở lên.
+    /// </summary>
+    public static string CollapseRepetitions(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var collapsed = RepeatedWordLoopRegex.Replace(text, "$1");
+        return RepeatedPhraseRegex.Replace(collapsed, "$1");
+    }
 
     /// <summary>
     /// Tạo chuỗi initial_prompt tối ưu cho Whisper (< 224 tokens), đặt ngữ cảnh câu hỏi hiện tại ở cuối
@@ -236,6 +269,17 @@ public static class SeTerminologyNormalizer
         }
 
         var trimmed = rawTranscript.Trim();
+
+        // 1. Kiểm tra nhanh khi cả văn bản sau khi khử lặp trùng khớp với mẫu ảo giác tiếng ồn
+        var collapsedAll = CollapseRepetitions(trimmed);
+        var coreAll = PunctuationTrimRegex.Replace(collapsedAll, string.Empty);
+        coreAll = MultiWhitespaceRegex.Replace(coreAll, " ").Trim();
+        if (string.IsNullOrWhiteSpace(coreAll) || NoiseHallucinationPhraseRegex.IsMatch(coreAll))
+        {
+            return string.Empty;
+        }
+
+        // 2. Tách thành các câu đơn để kiểm tra từng câu
         var rawSentences = SentenceSplitRegex.Split(trimmed);
         var keptSentences = new System.Collections.Generic.List<string>(rawSentences.Length);
         string? lastCoreSentence = null;
@@ -249,7 +293,8 @@ public static class SeTerminologyNormalizer
                 continue;
             }
 
-            var core = PunctuationTrimRegex.Replace(candidate, string.Empty);
+            var collapsedCandidate = CollapseRepetitions(candidate);
+            var core = PunctuationTrimRegex.Replace(collapsedCandidate, string.Empty);
             core = MultiWhitespaceRegex.Replace(core, " ").Trim();
             if (string.IsNullOrWhiteSpace(core))
             {
@@ -272,7 +317,7 @@ public static class SeTerminologyNormalizer
 
             lastCoreSentence = core;
             consecutiveDuplicateCount = 0;
-            keptSentences.Add(candidate);
+            keptSentences.Add(collapsedCandidate);
         }
 
         if (keptSentences.Count == 0)
@@ -281,7 +326,7 @@ public static class SeTerminologyNormalizer
         }
 
         var joined = string.Join(" ", keptSentences);
-        joined = RepeatedNgramRegex.Replace(joined, "$1");
+        joined = CollapseRepetitions(joined);
         joined = MultiWhitespaceRegex.Replace(joined, " ").Trim();
 
         var finalCore = PunctuationTrimRegex.Replace(joined, string.Empty).Trim();

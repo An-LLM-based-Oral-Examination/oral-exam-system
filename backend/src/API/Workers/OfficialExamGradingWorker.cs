@@ -73,6 +73,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
         var submission = await context.ExamQuestionSubmissions
             .Include(item => item.ExamQuestion)
+                .ThenInclude(question => question.Course)
+            .Include(item => item.ExamQuestion)
                 .ThenInclude(question => question.Rubric)
                     .ThenInclude(rubric => rubric.Criteria)
             .FirstOrDefaultAsync(item => item.Id == task.SubmissionId, cancellationToken)
@@ -108,6 +110,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         {
             QuestionContent = submission.ExamQuestion.Content,
             SampleAnswer = submission.ExamQuestion.SampleAnswer ?? string.Empty,
+            CourseCode = submission.ExamQuestion.Course?.Code,
             Transcript = submission.TranscriptWhisper,
             QuestionImageUrl = submission.ExamQuestion.ImageUrl,
             QuestionImageDescription = submission.ExamQuestion.ImageDescription,

@@ -350,6 +350,7 @@ public class QuestionsController : ControllerBase
     /// <summary>
     /// Trưởng Bộ Môn ra quyết định thẩm định (APPROVED, NEEDS_REVISION, REJECTED)
     /// </summary>
+    [Authorize(Roles = "department_head,admin")]
     [HttpPost("{id}/review-decision")]
     [HttpPut("{id}/review-decision")]
     public async Task<IActionResult> ReviewDecision(Guid id, [FromBody] QuestionReviewDecisionRequestDto request)

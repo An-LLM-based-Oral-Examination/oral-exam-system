@@ -81,10 +81,10 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             }
 
             var normalizedServer = !string.IsNullOrWhiteSpace(transcript)
-                ? (_speechToTextService.NormalizeTranscript(transcript) ?? transcript.Trim())
+                ? TranscriptHelper.NormalizeOrFallback(transcript, _speechToTextService.NormalizeTranscript(transcript))
                 : string.Empty;
             var normalizedClient = !string.IsNullOrWhiteSpace(request.ClientTranscript)
-                ? (_speechToTextService.NormalizeTranscript(request.ClientTranscript) ?? request.ClientTranscript.Trim())
+                ? TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, _speechToTextService.NormalizeTranscript(request.ClientTranscript))
                 : string.Empty;
 
             // Luôn ưu tiên kết quả từ AI Server STT (Gemini 3.5 Transcribe / Whisper) nếu khác rỗng.
@@ -113,12 +113,13 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             if (!string.IsNullOrWhiteSpace(request.ClientTranscript))
             {
                 var normalized = _speechToTextService.NormalizeTranscript(request.ClientTranscript);
-                var finalTranscript = !string.IsNullOrWhiteSpace(normalized)
-                    ? normalized
-                    : request.ClientTranscript.Trim();
+                var finalTranscript = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
-                return Result<UploadAudioPracticeResponse>.Success(
-                    new UploadAudioPracticeResponse(Transcript: finalTranscript));
+                if (!string.IsNullOrWhiteSpace(finalTranscript))
+                {
+                    return Result<UploadAudioPracticeResponse>.Success(
+                        new UploadAudioPracticeResponse(Transcript: finalTranscript));
+                }
             }
 
             return Result<UploadAudioPracticeResponse>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");

@@ -119,6 +119,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 Transcript = a.AnswerText!,
                 QuestionContent = q.Content,
                 SampleAnswer = q.SampleAnswer ?? string.Empty,
+                CourseCode = session.Course?.Code,
                 QuestionImageUrl = q.ImageUrl,
                 QuestionImageDescription = q.ImageDescription,
                 Criteria = criteriaList

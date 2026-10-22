@@ -102,10 +102,10 @@ public sealed class SubmitMockExamAnswerCommandHandler(
             }
 
             var normalizedServer = !string.IsNullOrWhiteSpace(transcript)
-                ? (_speechToTextService.NormalizeTranscript(transcript) ?? transcript.Trim())
+                ? TranscriptHelper.NormalizeOrFallback(transcript, _speechToTextService.NormalizeTranscript(transcript))
                 : string.Empty;
             var normalizedClient = !string.IsNullOrWhiteSpace(request.DirectTranscript)
-                ? (_speechToTextService.NormalizeTranscript(request.DirectTranscript) ?? request.DirectTranscript.Trim())
+                ? TranscriptHelper.NormalizeOrFallback(request.DirectTranscript, _speechToTextService.NormalizeTranscript(request.DirectTranscript))
                 : string.Empty;
 
             if (!string.IsNullOrWhiteSpace(normalizedServer))
@@ -127,7 +127,10 @@ public sealed class SubmitMockExamAnswerCommandHandler(
         }
         else if (!string.IsNullOrWhiteSpace(request.DirectTranscript))
         {
-            var normalized = _speechToTextService.NormalizeTranscript(request.DirectTranscript) ?? request.DirectTranscript.Trim();
+            var normalized = TranscriptHelper.NormalizeOrFallback(
+                request.DirectTranscript,
+                _speechToTextService.NormalizeTranscript(request.DirectTranscript));
+
             if (string.IsNullOrWhiteSpace(normalized))
             {
                 return Result<SubmitMockExamAnswerResponse>.Failure("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");

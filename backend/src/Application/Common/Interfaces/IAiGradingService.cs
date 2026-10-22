@@ -18,6 +18,7 @@ public class AiGradingRequest
     public string Transcript { get; set; } = string.Empty;
     public string QuestionContent { get; set; } = string.Empty;
     public string SampleAnswer { get; set; } = string.Empty;
+    public string? CourseCode { get; set; }
     public string? QuestionImageUrl { get; set; }
     public string? QuestionImageDescription { get; set; }
     public string? QuestionImageBase64 { get; set; }

@@ -122,7 +122,9 @@ public class GeminiSpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: "GeminiMultimodalStt",
-                UsedFallback: true);
+                UsedFallback: true,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         if (audioStream.CanSeek)
@@ -133,7 +135,9 @@ public class GeminiSpeechToTextService
                     Text: string.Empty,
                     RawText: string.Empty,
                     Provider: "GeminiMultimodalStt",
-                    UsedFallback: true);
+                    UsedFallback: true,
+                    TimestampsJson: null,
+                    ConfidenceScore: 0.0);
             }
 
             if (audioStream.Position != 0)
@@ -152,7 +156,9 @@ public class GeminiSpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: "GeminiMultimodalStt",
-                UsedFallback: true);
+                UsedFallback: true,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         var mimeType = ResolveMimeType(fileName);
@@ -196,7 +202,7 @@ public class GeminiSpeechToTextService
 
         // Payload chuẩn Multimodal Audio cho gemini-3.8-flash / gemini-3.6-flash (không dùng temperature theo chuẩn Gemini 3.8)
         var multimodalPrompt =
-            $"Bạn là bộ bóc băng âm thanh (Speech-to-Text) chuyên biệt cho kỳ thi vấn đáp Kỹ thuật Phần mềm bằng tiếng Việt kết hợp thuật ngữ tiếng Anh chuyên ngành (Code-Switching).\n" +
+            $"Bạn là bộ bóc băng âm thanh (Speech-to-Text) đa ngôn ngữ Việt - Anh chuyên biệt cho kỳ thi vấn đáp Kỹ thuật Phần mềm và Tiếng Anh tại Đại học FPT (hỗ trợ cả tiếng Việt kết hợp thuật ngữ tiếng Anh Code-Switching lẫn câu trả lời bằng tiếng Anh).\n" +
             $"Từ vựng chuyên ngành ưu tiên nhận diện chính xác: {hint}\n" +
             $"Yêu cầu: Chỉ trả về nguyên văn lời nói của sinh viên trong đoạn âm thanh dưới dạng chuỗi văn bản thuần túy (hoặc JSON {{\"text\": \"...\"}}). Tuyệt đối không tự giải thích, không thêm lời bình luận và không bịa thêm ý.";
 
@@ -258,15 +264,23 @@ public class GeminiSpeechToTextService
             }
 
             var rawText = ExtractCandidateText(responseBody);
-            var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(rawText, vocabularyHint);
+            var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
+            var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, vocabularyHint);
+
+            var isEmptyOrHallucinated = string.IsNullOrWhiteSpace(sanitizedRaw) || string.IsNullOrWhiteSpace(normalizedText);
+            var finalRaw = isEmptyOrHallucinated ? string.Empty : sanitizedRaw;
+            var finalText = isEmptyOrHallucinated ? string.Empty : normalizedText;
+            var finalConfidence = isEmptyOrHallucinated
+                ? 0.0
+                : (isDedicatedTranscribeModel ? 0.96 : 0.92);
 
             return new SpeechTranscriptionResult(
-                Text: normalizedText,
-                RawText: rawText,
+                Text: finalText,
+                RawText: finalRaw,
                 Provider: "GeminiMultimodalStt",
                 UsedFallback: true,
                 TimestampsJson: null,
-                ConfidenceScore: isDedicatedTranscribeModel ? 0.96 : 0.92);
+                ConfidenceScore: finalConfidence);
         }
 
         throw lastHttpException ?? new HttpRequestException("Gemini Multimodal STT failed across all fallback models.");

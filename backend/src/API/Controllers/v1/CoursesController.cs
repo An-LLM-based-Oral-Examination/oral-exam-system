@@ -56,6 +56,7 @@ public class CoursesController : ControllerBase
     /// Giảng viên / Trưởng Bộ Môn cấu hình tính năng hỏi chuyên sâu (1–2 câu), thời gian đệm và cấu trúc đề.
     /// Riêng hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Quản trị viên (Admin).
     /// </summary>
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [HttpPut("{id:guid}/configurations")]
     [HttpPut("{id:guid}/exam-config")]
     public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)

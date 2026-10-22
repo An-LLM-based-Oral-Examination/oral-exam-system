@@ -59,7 +59,9 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: defaultProviderName,
-                UsedFallback: false);
+                UsedFallback: false,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         if (audioStream.CanSeek)
@@ -70,7 +72,9 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                     Text: string.Empty,
                     RawText: string.Empty,
                     Provider: defaultProviderName,
-                    UsedFallback: false);
+                    UsedFallback: false,
+                    TimestampsJson: null,
+                    ConfidenceScore: 0.0);
             }
 
             if (audioStream.Position != 0)
@@ -89,7 +93,9 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: defaultProviderName,
-                UsedFallback: false);
+                UsedFallback: false,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         if (preferGeminiFirst)

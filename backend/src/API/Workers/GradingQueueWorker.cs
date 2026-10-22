@@ -119,6 +119,7 @@ public class GradingQueueWorker : BackgroundService
         var aiGradingService = scope.ServiceProvider.GetRequiredService<IAiGradingService>();
 
         var question = await dbContext.PracticeQuestions
+            .Include(q => q.Course)
             .Include(q => q.Rubric)
             .ThenInclude(r => r.Criteria)
             .FirstOrDefaultAsync(q => q.Id == gradingTask.QuestionId, cancellationToken);
@@ -141,6 +142,7 @@ public class GradingQueueWorker : BackgroundService
         {
             QuestionContent = question.Content,
             SampleAnswer = question.SampleAnswer ?? string.Empty,
+            CourseCode = question.Course?.Code,
             Transcript = gradingTask.AnswerText,
             Criteria = criteriaContext,
             QuestionImageUrl = question.ImageUrl,

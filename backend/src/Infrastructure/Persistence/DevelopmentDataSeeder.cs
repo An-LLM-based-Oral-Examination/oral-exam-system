@@ -32,21 +32,55 @@ public static class DevelopmentDataSeeder
     public static readonly Guid CourseSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000009");
     public static readonly Guid CourseSwr302Id = Guid.Parse("00000000-0000-0000-0000-00000000000a");
 
+    // ENT (English Speaking) Courses
+    public static readonly Guid CourseEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e01");
+    public static readonly Guid CourseEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000e02");
+    public static readonly Guid CourseEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000e03");
+    public static readonly Guid CourseEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000e04");
+    public static readonly Guid CourseEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000e05");
+    public static readonly Guid CourseEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e06");
+
     public static readonly Guid RubricPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000013");
     public static readonly Guid RubricSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000201");
     public static readonly Guid RubricSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000301");
 
+    // ENT (English Speaking) Rubrics (Standardized 10.0-point FPTU Speaking Rubric)
+    public static readonly Guid RubricEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e11");
+    public static readonly Guid RubricEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000e12");
+    public static readonly Guid RubricEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000e13");
+    public static readonly Guid RubricEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000e14");
+    public static readonly Guid RubricEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000e15");
+    public static readonly Guid RubricEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e16");
+
     public static readonly Guid StructurePrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000018");
     public static readonly Guid StructureSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000205");
     public static readonly Guid StructureSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000305");
+    public static readonly Guid StructureEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e91");
+    public static readonly Guid StructureEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000e92");
+    public static readonly Guid StructureEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000e93");
+    public static readonly Guid StructureEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000e94");
+    public static readonly Guid StructureEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000e95");
+    public static readonly Guid StructureEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e96");
 
     public static readonly Guid ClassPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000010");
     public static readonly Guid ClassSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000206");
     public static readonly Guid ClassSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000306");
+    public static readonly Guid ClassEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000eb1");
+    public static readonly Guid ClassEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000eb2");
+    public static readonly Guid ClassEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000eb3");
+    public static readonly Guid ClassEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000eb4");
+    public static readonly Guid ClassEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000eb5");
+    public static readonly Guid ClassEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000eb6");
 
     public static readonly Guid ExamSetPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000019");
     public static readonly Guid ExamSetSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000207");
     public static readonly Guid ExamSetSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000307");
+    public static readonly Guid ExamSetEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000ea1");
+    public static readonly Guid ExamSetEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000ea2");
+    public static readonly Guid ExamSetEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000ea3");
+    public static readonly Guid ExamSetEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000ea4");
+    public static readonly Guid ExamSetEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000ea5");
+    public static readonly Guid ExamSetEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000ea6");
 
     public static readonly Guid OfficialSessionPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000022");
     public static readonly Guid OfficialShiftPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000023");
@@ -339,6 +373,96 @@ public static class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt001Id,
+                Code = "ENT001",
+                Name = "English Preparation 1",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt104Id,
+                Code = "ENT104",
+                Name = "English Preparation 2",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt203Id,
+                Code = "ENT203",
+                Name = "English Intermediate 1",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt303Id,
+                Code = "ENT303",
+                Name = "English Intermediate 2",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt403Id,
+                Code = "ENT403",
+                Name = "English Advanced 1",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = CourseEnt503Id,
+                Code = "ENT503",
+                Name = "English Advanced 2",
+                Credits = 3,
+                SemesterId = semesterId,
+                HasFollowUp = true,
+                TranscriptBufferSeconds = 60,
+                MaxFollowUpQuestions = 2,
+                MaxMockExamsPerDay = 3,
+                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
             }
         };
 
@@ -373,6 +497,12 @@ public static class DevelopmentDataSeeder
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
         var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
+        var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
+        var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
+        var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
+        var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
+        var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
+        var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
 
         var rubrics = new List<Rubric>
         {
@@ -402,6 +532,66 @@ public static class DevelopmentDataSeeder
                 CourseId = swrCourse.Id,
                 Name = "Barem Đánh Giá Kỹ Nghệ Yêu Cầu Phần Mềm SWR302",
                 Description = "Đánh giá kỹ năng thu thập, phân tích, đặc tả SRS (IEEE 830 / ISO 29148) và thẩm định yêu cầu phần mềm theo chuẩn CLO môn SWR302",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt001Id,
+                CourseId = ent001Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT001 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt104Id,
+                CourseId = ent104Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT104 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt203Id,
+                CourseId = ent203Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT203 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt303Id,
+                CourseId = ent303Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT303 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt403Id,
+                CourseId = ent403Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT403 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
+                TotalMaxScore = 10.00m,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = RubricEnt503Id,
+                CourseId = ent503Course.Id,
+                Name = "Barem Đánh Giá Vấn Đáp Tiếng Anh ENT503 (FPTU Standard Speaking Rubric)",
+                Description = "Đánh giá 5 tiêu chuẩn kỹ năng nói tiếng Anh theo chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency) thang điểm 10.0",
                 TotalMaxScore = 10.00m,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
@@ -532,6 +722,381 @@ public static class DevelopmentDataSeeder
                 BloomLevel = BloomLevel.Analyze,
                 OrderIndex = 3,
                 CreatedAt = SeedTimestampUtc
+            },
+
+            // =========================================================================
+            // ENT001 - ENT503 Standardized 10.0-point FPTU Speaking Rubric Criteria (5 criteria x 2.00 = 10.00m)
+            // =========================================================================
+            // ENT001 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e21"),
+                RubricId = RubricEnt001Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e22"),
+                RubricId = RubricEnt001Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e23"),
+                RubricId = RubricEnt001Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e24"),
+                RubricId = RubricEnt001Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e25"),
+                RubricId = RubricEnt001Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT104 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e31"),
+                RubricId = RubricEnt104Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e32"),
+                RubricId = RubricEnt104Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e33"),
+                RubricId = RubricEnt104Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e34"),
+                RubricId = RubricEnt104Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e35"),
+                RubricId = RubricEnt104Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT203 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e41"),
+                RubricId = RubricEnt203Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e42"),
+                RubricId = RubricEnt203Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e43"),
+                RubricId = RubricEnt203Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e44"),
+                RubricId = RubricEnt203Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e45"),
+                RubricId = RubricEnt203Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT303 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e51"),
+                RubricId = RubricEnt303Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e52"),
+                RubricId = RubricEnt303Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e53"),
+                RubricId = RubricEnt303Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e54"),
+                RubricId = RubricEnt303Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e55"),
+                RubricId = RubricEnt303Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT403 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e61"),
+                RubricId = RubricEnt403Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e62"),
+                RubricId = RubricEnt403Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e63"),
+                RubricId = RubricEnt403Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e64"),
+                RubricId = RubricEnt403Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e65"),
+                RubricId = RubricEnt403Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT503 Criteria
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e71"),
+                RubricId = RubricEnt503Id,
+                CriterionName = "Ideas & Content Development",
+                Description = "Express ideas clearly with relevant details, examples, and logical development answering the prompt questions.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Understand,
+                OrderIndex = 1,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e72"),
+                RubricId = RubricEnt503Id,
+                CriterionName = "Pronunciation",
+                Description = "Clear pronunciation, correct word stress, natural intonation, and comprehensible connected speech.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 2,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e73"),
+                RubricId = RubricEnt503Id,
+                CriterionName = "Grammar & Accuracy",
+                Description = "Use of appropriate grammatical structures, correct tenses, subject-verb agreement, and sentence complexity.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 3,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e74"),
+                RubricId = RubricEnt503Id,
+                CriterionName = "Vocabulary & Lexical Resource",
+                Description = "Wide and accurate range of vocabulary, topic-appropriate expressions, idioms, and collocations.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 4,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e75"),
+                RubricId = RubricEnt503Id,
+                CriterionName = "Fluency & Cohesion",
+                Description = "Smooth flow of speech, natural pacing without excessive hesitation, and effective use of cohesive devices.",
+                MaxScore = 2.00m,
+                Weight = 0.20m,
+                BloomLevel = BloomLevel.Apply,
+                OrderIndex = 5,
+                CreatedAt = SeedTimestampUtc
             }
         };
 
@@ -552,6 +1117,12 @@ public static class DevelopmentDataSeeder
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
         var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
+        var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
+        var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
+        var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
+        var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
+        var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
+        var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
 
         var creatorUser = await context.Users
             .FirstOrDefaultAsync(u => u.Id == LecturerUserId || u.Role == UserRole.Lecturer || u.Role == UserRole.DepartmentHead, cancellationToken);
@@ -594,6 +1165,78 @@ public static class DevelopmentDataSeeder
                 BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt001Id,
+                CourseId = ent001Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT001 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt104Id,
+                CourseId = ent104Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT104 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt203Id,
+                CourseId = ent203Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT203 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt303Id,
+                CourseId = ent303Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT303 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt403Id,
+                CourseId = ent403Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT403 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StructureEnt503Id,
+                CourseId = ent503Course.Id,
+                CreatedBy = creatorId,
+                Name = "FPTU Speaking Test Structure ENT503 (FA26)",
+                TotalQuestions = 5,
+                DurationMinutes = 20,
+                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
             }
         };
 
@@ -618,6 +1261,12 @@ public static class DevelopmentDataSeeder
         var actualPrnStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == prnCourse.Id && s.IsActive, cancellationToken);
         var actualSwdStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == swdCourse.Id && s.IsActive, cancellationToken);
         var actualSwrStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == swrCourse.Id && s.IsActive, cancellationToken);
+        var actualEnt001Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent001Course.Id && s.IsActive, cancellationToken);
+        var actualEnt104Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent104Course.Id && s.IsActive, cancellationToken);
+        var actualEnt203Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent203Course.Id && s.IsActive, cancellationToken);
+        var actualEnt303Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent303Course.Id && s.IsActive, cancellationToken);
+        var actualEnt403Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent403Course.Id && s.IsActive, cancellationToken);
+        var actualEnt503Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent503Course.Id && s.IsActive, cancellationToken);
 
         var examSets = new List<ExamSet>
         {
@@ -647,6 +1296,60 @@ public static class DevelopmentDataSeeder
                 SetCode = "SWR302-SET01",
                 GeneratedAt = SeedTimestampUtc,
                 IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt001Id,
+                StructureId = actualEnt001Struct.Id,
+                CourseId = ent001Course.Id,
+                SetCode = "ENT001-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt104Id,
+                StructureId = actualEnt104Struct.Id,
+                CourseId = ent104Course.Id,
+                SetCode = "ENT104-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt203Id,
+                StructureId = actualEnt203Struct.Id,
+                CourseId = ent203Course.Id,
+                SetCode = "ENT203-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt303Id,
+                StructureId = actualEnt303Struct.Id,
+                CourseId = ent303Course.Id,
+                SetCode = "ENT303-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt403Id,
+                StructureId = actualEnt403Struct.Id,
+                CourseId = ent403Course.Id,
+                SetCode = "ENT403-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
+                Id = ExamSetEnt503Id,
+                StructureId = actualEnt503Struct.Id,
+                CourseId = ent503Course.Id,
+                SetCode = "ENT503-SET01",
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
             }
         };
 
@@ -666,6 +1369,12 @@ public static class DevelopmentDataSeeder
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
         var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
+        var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
+        var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
+        var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
+        var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
+        var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
+        var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
 
         var allQuestions = new List<PracticeQuestion>
         {
@@ -1256,6 +1965,1219 @@ public static class DevelopmentDataSeeder
                 FollowUpPrompt = "Tại sao khi đo thời gian phản hồi của API, chỉ số phân vị P95 và P99 lại phản ánh trải nghiệm người dùng chính xác hơn chỉ số trung bình cộng (Average)?",
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
+            },
+
+            // =========================================================================
+            // 4. MÔN TIẾNG ANH ENT001 - ENT503 (CÂU HỎI THỰC TẾ THEO GUIDELINE FPTU)
+            // =========================================================================
+            // ENT001 - Part 1 Introduction
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e81"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 1 - Daily Activities and Personal Introduction",
+                Content = "Topic: Activities. Please answer the following 5 personal questions in complete sentences:\n1. Where are you from?\n2. What are your favorite clothes to school?\n3. What time do you eat breakfast?\n4. What is your favorite leisure activity?\n5. What is your typical day like?",
+                SampleAnswer = "I am from Da Nang city, Vietnam. When I go to school, I like wearing a comfortable white T-shirt and jeans with sneakers. I usually eat breakfast at around 7:00 AM before heading to class, having either pho or a banh mi. In my free time, my favorite leisure activity is listening to pop music and playing badminton with my friends. On a typical day, I attend university lectures in the morning, review study materials in the afternoon, and relax with my family in the evening.",
+                KeyPoints = "[\"Answer all 5 questions using complete sentences\",\"Give specific details about hometown, clothing, breakfast time, leisure, and daily routine\",\"Demonstrate correct simple present tense and daily vocabulary\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you prefer spending your free time outdoors with friends or staying at home by yourself? Why?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT001 - Part 2 Picture Description (Multimodal Vision)
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e82"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 2 - Laundry Activity Picture Description",
+                Content = "Look at the picture and describe what you see using the following guide questions:\n1. Who are they?\n2. Where are they?\n3. What are they wearing?\n4. What are they doing?",
+                SampleAnswer = "In the picture, I see a mother and her young toddler daughter. They are in the laundry room or kitchen at home doing household chores. The mother is kneeling on the floor, wearing a casual light-colored top, and smiling warmly. The little toddler is standing next to her wearing colorful clothes. They are doing the laundry together in front of an open white front-loading washing machine. The child is reaching into a laundry basket filled with clean clothes, helping her mother put clothes into the machine.",
+                KeyPoints = "[\"Identify the mother and young child in a domestic home setting\",\"Describe the white front-loading washing machine and laundry basket\",\"Describe their casual clothing and cooperative action of doing laundry\",\"Use present continuous tense accurately\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you often help your family with household chores like doing laundry or cleaning? What chores do you enjoy or dislike?",
+                ImageUrl = "/uploads/questions/ent/ENT001_p3_Im2.png",
+                ImageDescription = "A mother and young toddler doing laundry together in front of a white front-loading washing machine in a domestic room. The mother is kneeling on the wooden floor wearing casual clothes, smiling while holding colorful laundry. The toddler stands nearby reaching into a white laundry basket filled with clothes. The setting is bright and domestic with home appliances visible.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT104 - Part 1 Introduction
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e83"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 1 - Getting Acquainted and Daily Life",
+                Content = "Topic: Getting acquainted. Please answer the following questions:\n1. Where is your hometown?\n2. Who is your favorite actor?\n3. What job does your father or mother do?\n4. How often do you go out with your friends?\n5. When you go out with your friends, where do you usually go?",
+                SampleAnswer = "My hometown is Can Tho, a peaceful city in the Mekong Delta region. My favorite actor is Tom Hanks because of his incredible versatility and inspiring performance in Forrest Gump. My father works as a civil engineer and my mother is a high school mathematics teacher. I usually hang out with my close university friends about twice a week, typically on Friday evenings or over the weekend. When we meet, we often go to a quiet coffee shop to chat or visit the cinema to watch newly released movies.",
+                KeyPoints = "[\"Address hometown, favorite actor, parents' occupations, frequency of social outings, and preferred hangout spots\",\"Use adverbs of frequency (usually, twice a week) and descriptive reasons\",\"Speak with natural fluency and appropriate sentence connectors\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why do you think maintaining friendships is important for university students during busy study periods?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT104 - Part 2 Picture Description (Multimodal Vision)
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e84"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 2 - Professional Business Meeting Picture Description",
+                Content = "Look at the picture and describe what you see using the following guide questions:\n1. How many people are there in the picture?\n2. Where do you think they are?\n3. Who do you think they are?\n4. What do you think they are talking about?",
+                SampleAnswer = "In the picture, there are five professional colleagues in a bright, modern corporate conference room with large glass walls and contemporary office decor. Three men and two women are gathered around a wooden conference table with open laptops and notepads. One man is standing near a whiteboard, holding a smartphone and actively gesturing as he presents an idea or product update. The other four team members are dressed in smart business attire and listening attentively. They appear to be discussing a business project, quarterly sales performance, or a new digital product launch.",
+                KeyPoints = "[\"Count exactly five professionals in the conference room\",\"Identify the modern office setting with glass walls and meeting table\",\"Describe the presenter holding a smartphone and gesturing\",\"Explain likely discussion topics (business strategy, quarterly review, product update)\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "In your opinion, what makes a business meeting effective and productive versus a waste of time?",
+                ImageUrl = "/uploads/questions/ent/ENT104_p2_Im1.png",
+                ImageDescription = "A professional corporate business meeting in a modern conference room with glass walls. Five business colleagues (three men and two women) are seated around a wooden conference table with laptops and notebooks. A male presenter stands near a white board holding a smartphone and gesturing, while the others listen attentively in professional business attire.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT203 - Part 1 Role-Play (Scenario 1 - Da Nang School Bus Trip)
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e85"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - School Bus Trip to Da Nang (Information Transfer)",
+                Content = "Role-Play Scenario: You are planning a school bus trip to Da Nang with your partner. Refer to the information card and answer your partner's questions:\n- Where is the trip going?\n- When is the departure time and meeting point?\n- What activities are planned during the trip?\n- What time and where is lunch served?\n- What items should participants bring?",
+                SampleAnswer = "According to the trip poster, our destination is Da Nang city. We will depart on Saturday morning at 6:30 AM sharp from the main school campus bus stop. During the trip, we will visit Ba Na Hills, swim at My Khe Beach, and explore the scenic Marble Mountains. Lunch will be provided at 12:30 PM at a local seafood restaurant near the beach. Every participant should bring their student ID card, comfortable walking shoes, sunscreen, a swimming suit, and a camera or smartphone for photos. The total ticket price is 350,000 VND per student.",
+                KeyPoints = "[\"State destination (Da Nang) and departure time (6:30 AM Saturday)\",\"List key activities: Ba Na Hills, My Khe Beach, Marble Mountains\",\"State lunch time (12:30 PM) and required personal items (ID, sunscreen, shoes, swimsuit)\",\"Use polite conversational questions and answers\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "If the weather turns rainy on Saturday, how should the organizers adjust the itinerary to keep the trip enjoyable?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM28.png",
+                ImageDescription = "An informational poster for a School Bus Trip to Da Nang. The poster features key details: Destination: Da Nang city; Departure: Saturday morning at 6:30 AM from school campus; Activities: visiting Ba Na Hills, swimming at My Khe Beach, exploring Marble Mountains; Lunch: 12:30 PM at a local seafood restaurant; Things to bring: student ID card, comfortable walking shoes, sunscreen, swimming suit, and camera; Ticket price: 350,000 VND.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT203 - Part 1 Role-Play (Scenario 2 - Hanoi City Tour)
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e86"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - Hanoi City Tour (Information Transfer)",
+                Content = "Role-Play Scenario: You are inquiring about or explaining the Hanoi City Tour. Refer to the informational flyer and address the key details:\n- When is the tour held?\n- Where do participants meet?\n- What sights and attractions will you see?\n- What is the cost per person and what does it include?\n- How can students sign up?",
+                SampleAnswer = "The Hanoi City Tour runs every weekend starting promptly at 8:00 AM. All participants will meet in front of the historic Hanoi Opera House. The tour covers iconic cultural landmarks including the Ho Chi Minh Mausoleum, the Temple of Literature, an Old Quarter walking tour, and Hoan Kiem Lake. The cost is 250,000 VND per student, which includes English-speaking tour guides and all entrance fees. Students can sign up online through the student portal or register directly at Room 204 of the Student Affairs office before Friday afternoon.",
+                KeyPoints = "[\"State tour schedule (weekends at 8:00 AM) and meeting point (Hanoi Opera House)\",\"Highlight cultural attractions (Ho Chi Minh Mausoleum, Temple of Literature, Hoan Kiem Lake)\",\"Clarify cost (250,000 VND) and registration methods (online or Room 204)\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why do you think cultural tours like this are valuable for international exchange students?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM40.png",
+                ImageDescription = "An advertising flyer for a Hanoi City Tour for university students. Key details shown include: Tour dates: Every weekend starting at 8:00 AM; Meeting location: In front of the Hanoi Opera House; Highlights: visiting Ho Chi Minh Mausoleum, Temple of Literature, Old Quarter walking tour, and Hoan Kiem Lake; Tour cost: 250,000 VND per person including guide and entrance fees; Registration: sign up online at student portal or visit Room 204 Student Affairs before Friday.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT203 - Part 2 Discussion
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e87"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 2 - Discussion on Travel and Cultural Greetings",
+                Content = "Topic: Getting Acquainted and Travel. Please answer the following discussion questions:\n1. What is a common greeting in Vietnam when you meet someone for the first time?\n2. Is it common to shake hands in Vietnam? When do people do this?\n3. What is your favorite tourist attraction in Vietnam and why?\n4. Do you prefer visiting natural attractions or cultural attractions?",
+                SampleAnswer = "When meeting someone for the first time in Vietnam, people typically say 'Xin chao' accompanied by a friendly smile and a polite nod. In formal or business settings, handshakes are common among colleagues and business partners, whereas with older elders, a slight bow is shown as a mark of respect. My favorite tourist attraction in Vietnam is Hoi An Ancient Town because of its preserved heritage architecture, colorful lantern streets, and rich cuisine. Personally, I prefer cultural and historical attractions because they provide deeper insights into local customs and history.",
+                KeyPoints = "[\"Explain traditional and business greetings in Vietnam (Xin chao, handshakes, polite bow)\",\"Identify favorite domestic destination with compelling reasons\",\"Compare natural vs cultural attractions with thoughtful justification\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can tourism in historical sites be balanced with environmental preservation?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT303 - Part 1 Role-Play
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e88"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Conversation on Country Etiquette",
+                Content = "Unit 1: Cultural Etiquette. Role-play a conversation advising a foreign friend or colleague about etiquette and manners in your country. Your conversation should include:\n- The ways people greet each other\n- Conversation topics that are appropriate versus those that should be avoided\n- The ways people address each other formally versus casually\n- Important do's and don'ts in table manners.",
+                SampleAnswer = "Welcome to Vietnam! When greeting people here, a warm smile with a nod is standard for casual meetings, while a firm handshake is used in professional contexts. For conversation topics, talking about food, travel, and cultural experiences is always welcomed; however, you should avoid sensitive topics like personal salary, marital pressure, or political opinions upon first meeting. When addressing elders or seniors, always use respectful pronouns and honorifics. At the dinner table, always wait for the oldest person to invite everyone to eat before starting, never stick your chopsticks vertically into your rice bowl as it resembles funeral incense, and use both hands when offering food or drinks.",
+                KeyPoints = "[\"Cover greetings (handshake vs nod)\",\"Identify safe topics (food, travel) vs taboo topics (salary, politics)\",\"Explain formal honorifics and addressing\",\"Detail table manners: waiting for elders, chopsticks etiquette, passing items with two hands\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How has globalization changed the way young Vietnamese people communicate compared to older generations?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT303 - Part 2 Discussion
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e89"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 2 - Discussion on Politeness and Social Success",
+                Content = "Unit 1: Politeness and Society. Please discuss the following questions:\n1. In Vietnam, what are some key things people do to show politeness?\n2. Why is being polite important in social and professional life?\n3. Is it appropriate to hug or kiss another person in greeting in Vietnam? Why or why not?\n4. How can having good manners help you become successful in your career?",
+                SampleAnswer = "In Vietnam, politeness is expressed through respectful language, using both hands when handing items to elders, and acknowledging others with a smile and gentle nod. Being polite is essential because it builds mutual trust, prevents unnecessary conflict, and reflects emotional maturity. Physical greetings like hugging or kissing on the cheek are generally not traditional in Vietnam; they are reserved only for very close family or romantic partners, as public reserve is preferred. In professional careers, strong etiquette and courteous communication open doors to networking, earning the respect of colleagues and clients, and demonstrating leadership presence.",
+                KeyPoints = "[\"Elaborate on cultural markers of politeness in Vietnam\",\"Analyze social value of courtesy in personal and business contexts\",\"Evaluate physical greeting boundaries in Vietnamese culture\",\"Connect good manners to professional networking and career advancement\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you believe strict etiquette can sometimes create unnecessary social distance between people? Why or why not?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT403 - Part 1 Monologue
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e8a"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Monologue: Describing an Unseen Part of Personality",
+                Content = "Description Monologue: Describe a part of your personality that others may not readily know.\nYou should explain:\n- What part of your personality it is\n- Why others may not know this about you\n- How you feel about this part of your personality\n- How this part of your personality affects your daily life and relationships.",
+                SampleAnswer = "Most people who meet me think I am an outspoken, high-energy extrovert who loves being in the center of attention. However, an underlying part of my personality that few people know is that I have a deeply introverted, reflective side that craves solitude. Others rarely see this because in academic and team settings, I instinctively take charge of communication and leadership tasks to keep projects moving. I value this quiet side deeply because it provides me with emotional balance and self-awareness through writing and reading. It positively influences my life by helping me process complex feelings, recharge after demanding deadlines, and listen with genuine empathy when my friends need support.",
+                KeyPoints = "[\"Identify specific hidden personality trait clearly\",\"Explain contrast between outward perception and internal reality\",\"Express personal feelings and self-acceptance\",\"Analyze concrete impacts on daily life, stress management, and interpersonal relationships\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can understanding your own personality type help you collaborate better in software engineering teams?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT403 - Part 2 Discussion
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e8b"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 2 - Discussion: Mindsets, Stress, and Social Media",
+                Content = "Discussion Questions on Psychology and Behavior:\n1. How does social media influence human behavior and self-esteem?\n2. What are healthy strategies to manage academic and workplace stress?\n3. Which mindset—pessimistic, realistic, or optimistic—leads to greater long-term happiness and success?\n4. How do you balance being realistic with staying optimistic when facing difficult setbacks?",
+                SampleAnswer = "Social media has a profound impact on behavior by creating comparison traps where people contrast their behind-the-scenes realities with others' curated highlights, often eroding self-esteem. To manage stress constructively, practicing regular physical exercise, setting digital boundaries, and adopting mindfulness techniques are far more effective than avoidance. Among mindsets, I believe an 'optimistic realist' achieves the highest fulfillment—one who maintains faith in a positive ultimate outcome while objectively acknowledging immediate constraints. When facing setbacks, I anchor myself in realistic problem-solving: breaking the challenge into actionable steps while keeping the optimistic belief that skills can be improved through perseverance.",
+                KeyPoints = "[\"Critically evaluate social media's psychological impact on behavior and self-esteem\",\"Propose actionable, healthy stress management techniques\",\"Compare pessimistic, realistic, and optimistic mindsets with logical justification\",\"Synthesize realism and optimism into a resilient problem-solving strategy\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "What role does emotional intelligence (EQ) play compared to intellectual intelligence (IQ) when resolving team conflicts?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // ENT503 - Part 1 Monologue
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e8c"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Monologue: Achieving a Significant Goal",
+                Content = "Description Monologue: Describe a time when you successfully achieved an important personal or academic goal.\nYou should discuss:\n- What the goal was and why it mattered to you\n- The steps you took and obstacles you overcame to achieve it\n- How you felt when you accomplished it\n- What key lessons you learned from the entire experience.",
+                SampleAnswer = "A defining goal I accomplished was building and publishing an open-source technical project during my third semester of university. The goal was to prove to myself that I could create software that solves a real developer problem outside of classroom assignments. To achieve it, I spent two months studying Clean Architecture and modern API patterns, waking up early each morning to write code before classes. The biggest hurdle was managing burnout when complex bugs threatened my progress, which I overcame by breaking tasks into small daily commits. When the project received its first community stars and positive feedback, I felt an exhilarating sense of validation. The greatest lesson I took away is that consistent, disciplined incremental effort consistently outperforms erratic bursts of inspiration.",
+                KeyPoints = "[\"Clearly define meaningful goal and motivation\",\"Detail specific actionable steps and obstacles overcome with grit\",\"Describe emotional impact of success\",\"Articulate enduring life lessons regarding discipline, resilience, and personal growth\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How do you distinguish between a realistic, ambitious goal and an unrealistic dream that might lead to frustration?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            // ENT503 - Part 2 Discussion
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000e8d"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 2 - Discussion: Goal Setting, Family Influence, and Career Choices",
+                Content = "Discussion Questions on Achievement and Decision-Making:\n1. How does establishing SMART goals help individuals realize their long-term ambitions?\n2. What are the most common pitfalls people encounter when striving to reach their goals?\n3. How can family guidance and support contribute positively to career success?\n4. Should parents have the final say in their children's choice of academic major and career path? Why or why not?",
+                SampleAnswer = "Establishing SMART goals—Specific, Measurable, Achievable, Relevant, and Time-bound—translates abstract aspirations into actionable milestones, drastically increasing focus and accountability. The most frequent pitfall is lack of consistency and giving up at the first sign of friction or failure. Family support provides an invaluable psychological safety net and emotional encouragement during periods of intense difficulty. However, regarding career paths, parents should act as trusted advisors rather than sole decision-makers. Because the student must live with the consequences of their career and perform the daily work, intrinsic passion and aptitude are vital for sustained excellence and mental well-being.",
+                KeyPoints = "[\"Explain mechanics and benefits of SMART goal framework\",\"Analyze root causes of goal failure (lack of discipline, vague objectives)\",\"Acknowledge the constructive role of family emotional and logistical support\",\"Argue persuasively for student autonomy in major/career choices while respecting parental counsel\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can higher education institutions better prepare graduates for an AI-driven, rapidly evolving job market?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            }            ,
+            // =========================================================================
+            // 5. BỔ SUNG ĐỦ 12 CÂU HỎI / MÔN CHO 6 MÔN ENT001 - ENT503 (4 EASY, 4 MEDIUM, 4 HARD)
+            // =========================================================================
+
+            // --- ENT001 Additional Questions (2 Easy, 4 Medium, 4 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e03"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 1 - Family Members and Home Life",
+                Content = "Topic: Family and Home. Please answer the following 5 personal questions in complete sentences:\n1. How many people are there in your family?\n2. Who do you live with right now?\n3. What does your mother or father like doing in their free time?\n4. What is your favorite room in your house?\n5. What do you and your family usually do together on weekends?",
+                SampleAnswer = "There are four people in my nuclear family: my parents, my younger brother, and me. Right now, I live with my family in a cozy house in Ho Chi Minh City. In their free time, my father enjoys gardening on the balcony while my mother loves cooking traditional Vietnamese dishes. My favorite room in our house is my bedroom because it is quiet and has a large desk by the window. On weekends, my family usually eats dinner together and watches a comedy show in the living room.",
+                KeyPoints = "[\"State family size and living arrangement clearly\",\"Describe parents hobbies and favorite room with specific details\",\"Explain weekend family activities using simple present tense\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Who are you closest to in your family, and why do you enjoy talking to them?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e04"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 1 - Food Preferences and Shopping Habits",
+                Content = "Topic: Food and Shopping. Please answer the following questions in complete sentences:\n1. What is your favorite traditional food and drink?\n2. Do you prefer eating at home or eating at a restaurant?\n3. Who usually cooks meals in your home?\n4. How often do you go shopping for clothes or groceries?\n5. Where do you usually go shopping with your friends?",
+                SampleAnswer = "My favorite traditional food is beef noodle soup, and my favorite drink is fresh orange juice. I prefer eating home-cooked meals because they are healthier, cleaner, and more affordable than restaurant food. My mother usually cooks dinner for our family, and I help her wash the vegetables. I go grocery shopping at the supermarket once a week on Sunday morning. When I shop for clothes with my friends, we usually visit a modern shopping mall in the city center.",
+                KeyPoints = "[\"Identify favorite food and drink in full sentences\",\"Compare eating at home vs restaurants with clear reasons\",\"Describe cooking and shopping frequency using adverbs of frequency\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Can you cook any dish by yourself? Please describe how you make it.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e05"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 2 - Household Chores & Family Cooperation (Picture Analysis)",
+                Content = "Look at the picture of the mother and child doing laundry. Please describe the scene and answer:\n1. How is the mother teaching her child good habits in this picture?\n2. Why is the child smiling while helping with the laundry?\n3. What safety precautions should parents take around washing machines?\n4. How do you share housework in your own home?",
+                SampleAnswer = "In this picture, the mother is kneeling beside the white front-loading washing machine and patiently guiding her toddler to sort and load clothes from the laundry basket. The child is smiling happily because the mother turns household chores into a fun, interactive bonding activity. Around washing machines, parents should keep laundry detergent out of reach and never let small children climb near the drum. In my own home, we divide chores fairly: I sweep the floor and do the laundry while my brother washes the dishes.",
+                KeyPoints = "[\"Connect the visual laundry scene to family cooperation\",\"Describe the mother and toddler interacting by the washing machine\",\"Explain household safety and personal chore sharing\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "At what age do you think children should start learning basic household chores?",
+                ImageUrl = "/uploads/questions/ent/ENT001_p3_Im2.png",
+                ImageDescription = "A mother and young toddler doing laundry together in front of a white front-loading washing machine in a domestic room. The mother is kneeling on the wooden floor wearing casual clothes, smiling while holding colorful laundry. The toddler stands nearby reaching into a white laundry basket filled with clothes.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e06"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 2 - Describing Campus Life and Study Routine",
+                Content = "Topic: University Campus Life. Please describe your daily study routine at university:\n1. How do you travel to campus every day?\n2. What subjects are you studying this semester?\n3. Where do you like to study between classes?\n4. How do you practice speaking English outside the classroom?",
+                SampleAnswer = "Every day, I travel to the FPT University campus by motorbike or electric bus, which takes about twenty minutes. This semester, I am studying English Preparation and foundational computing skills. Between classes, I enjoy studying on the second floor of the university library because it is air-conditioned and peaceful. Outside the classroom, I practice speaking English by shadowing English videos, chatting with classmates in the English club, and recording voice notes on my phone.",
+                KeyPoints = "[\"Explain daily commute and current semester subjects\",\"Describe preferred campus study spot with reasons\",\"Detail practical methods for practicing spoken English\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "What is the biggest difficulty you face when speaking English in front of others?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e07"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 2 - Weather, Seasons, and Outdoor Leisure",
+                Content = "Topic: Weather and Free Time. Please answer the following questions with examples:\n1. What is the weather like in your city today?\n2. Which season of the year do you like best and why?\n3. What outdoor activities do you enjoy when the weather is sunny?\n4. What do you usually do when it rains heavily all day?",
+                SampleAnswer = "Today in Ho Chi Minh City, the weather is warm and sunny with a gentle breeze in the morning. My favorite season is the cool dry season from December to February because the temperature is pleasant for traveling and outdoor festivals. When the weather is sunny, I enjoy jogging in the park and playing badminton with my neighbors. When it rains heavily all day, I prefer staying indoors, drinking hot tea, reading books, and watching English movies.",
+                KeyPoints = "[\"Describe current weather and favorite season accurately\",\"Contrast sunny outdoor activities with rainy indoor activities\",\"Use descriptive weather adjectives and clear examples\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Does bad weather ever affect your mood or motivation to study? How do you deal with it?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e08"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 2 - Describing a Memorable Weekend or Holiday",
+                Content = "Topic: Weekend and Holidays. Please talk about a memorable weekend or holiday you had recently:\n1. Where did you go and who went with you?\n2. What activities did you do there?\n3. What food did you try?\n4. Why was this trip special to you?",
+                SampleAnswer = "Last month, I had a memorable weekend trip to Vung Tau beach with my family. We traveled there by car early on Saturday morning. During the trip, we swam in the sea, walked along the coastal road at sunset, and took many family photos. We also ate fresh grilled seafood and local banh khot at a famous seaside restaurant. This weekend was special to me because it helped all of us relax and bond after a busy month of work and exams.",
+                KeyPoints = "[\"Use past simple tense accurately to narrate a recent trip\",\"Specify destination, companions, activities, and local food\",\"Explain emotional significance of the experience\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "For your next holiday, would you prefer visiting the mountains or the beach? Why?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e09"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 3 - Modern Home Appliances & Family Bonding (Picture Discussion)",
+                Content = "Look at the picture of the mother and child by the washing machine and discuss:\n1. How have modern home appliances like washing machines changed family life compared to the past?\n2. Why is it important for parents to spend quality time with young children even during daily chores?\n3. Do you think technology gives families more time together or makes them busier?",
+                SampleAnswer = "Looking at the mother and toddler beside the modern front-loading washing machine, we can see how home appliances have transformed domestic life. In the past, washing clothes by hand took hours of exhausting labor, whereas modern machines save time and physical effort. Spending quality time with children during daily routines teaches them responsibility and strengthens emotional attachment. Overall, household technology gives families more free time together, provided we put away smartphones and interact face-to-face like the mother and child in the picture.",
+                KeyPoints = "[\"Compare past manual housework with modern home appliances shown in the image\",\"Analyze the educational value of parent-child interaction during chores\",\"Evaluate how technology impacts family bonding time\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Which home appliance in your house do you think is the most indispensable, and why?",
+                ImageUrl = "/uploads/questions/ent/ENT001_p3_Im2.png",
+                ImageDescription = "A mother and young toddler doing laundry together in front of a white front-loading washing machine in a domestic room. The mother is kneeling on the wooden floor wearing casual clothes, smiling while holding colorful laundry. The toddler stands nearby reaching into a white laundry basket filled with clothes.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e0a"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 3 - Balancing Study, Hobbies, and Healthy Habits",
+                Content = "Extended Discussion: Many first-year university students struggle to manage their time. Please discuss:\n1. Why is it important to balance academic study with physical exercise and hobbies?\n2. What happens when students stay up late playing games or using social media?\n3. What daily habits help you stay healthy and focused at university?",
+                SampleAnswer = "Balancing study with exercise and hobbies is essential because physical activity refreshes the brain, reduces stress, and prevents burnout. When students stay up late playing video games or scrolling through social media, they suffer from sleep deprivation, poor concentration in morning lectures, and lower academic performance. To stay healthy and focused, I maintain a regular sleep schedule of seven hours, drink plenty of water, exercise for thirty minutes every afternoon, and review my lessons daily.",
+                KeyPoints = "[\"Explain benefits of balancing study with exercise and hobbies\",\"Analyze negative consequences of late-night gaming and social media\",\"Propose concrete daily habits for student health and focus\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "If a friend of yours is always tired in class because of late-night gaming, what advice would you give them?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e0b"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 3 - Living with Family vs Living Independently in a Dormitory",
+                Content = "Extended Discussion: Compare living at home with your parents versus living in a university dormitory:\n1. What are the main advantages of living with your family?\n2. What life skills do students learn when living in a dormitory?\n3. Which living arrangement do you think is better for freshmen, and why?",
+                SampleAnswer = "Living at home with parents offers emotional warmth, nutritious home-cooked meals, and lower living expenses. On the other hand, living in a university dormitory teaches students valuable life skills such as budgeting money, managing time, doing laundry, and resolving conflicts with roommates. In my view, living in a dormitory for at least one semester is better for freshmen because it builds self-reliance, maturity, and lifelong campus friendships.",
+                KeyPoints = "[\"Compare advantages of living with family vs living in a dormitory\",\"Identify independent life skills gained in dorm life\",\"Justify a clear recommendation for first-year students\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "What are the most important rules roommates should agree on to live together peacefully?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000001e0c"),
+                CourseId = ent001Course.Id,
+                RubricId = RubricEnt001Id,
+                Title = "ENT001 Part 3 - The Role of English in Daily Life and Future Jobs",
+                Content = "Extended Discussion: Discuss why learning English from the foundation level is important:\n1. How does English help you in your daily entertainment and online learning?\n2. Why do technology companies require employees to communicate in English?\n3. What is your personal plan to improve your English speaking skills this year?",
+                SampleAnswer = "English is a gateway to global knowledge and entertainment, allowing me to watch international videos, read technical articles, and take online courses without waiting for translations. Technology companies require English proficiency because software documentation, international clients, and multicultural engineering teams all operate in English. My personal plan this year is to practice speaking for twenty minutes daily, learn ten new topic collocations each week, and actively participate in every oral practice session.",
+                KeyPoints = "[\"Explain practical value of English for online learning and media\",\"Connect English proficiency to career opportunities in technology\",\"Outline a structured personal improvement plan\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you think AI translation tools will ever replace the need to speak English fluently in person? Why or why not?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // --- ENT104 Additional Questions (3 Easy, 3 Medium, 4 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e03"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 1 - Movies, Music, and Entertainment Preferences",
+                Content = "Topic: Entertainment. Please answer the following 5 questions:\n1. What kind of music do you like listening to?\n2. When do you usually listen to music?\n3. What is your favorite movie genre?\n4. Do you prefer watching movies at the cinema or at home?\n5. Who is your favorite singer or band?",
+                SampleAnswer = "I really enjoy listening to acoustic pop and lo-fi instrumental music. I usually listen to music in the evening while studying or when commuting on the bus. My favorite movie genre is science fiction and action adventure because the visual effects are exciting. I prefer watching blockbuster movies at the cinema with friends for the big screen and surround sound. My favorite singer is Taylor Swift because her storytelling and melodies are very catchy.",
+                KeyPoints = "[\"Specify favorite music genres, listening habits, and movie preferences\",\"Compare cinema vs home viewing with clear reasons\",\"Use appropriate entertainment vocabulary and complete sentences\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Can listening to English songs and watching movies with English subtitles help improve your pronunciation? How?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e04"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 1 - Sports, Fitness, and Healthy Lifestyle",
+                Content = "Topic: Health and Fitness. Please answer the following 5 questions:\n1. What sports can you play?\n2. How often do you exercise each week?\n3. Where do you usually go to work out or play sports?\n4. What healthy food do you eat every day?\n5. How many hours do you sleep each night?",
+                SampleAnswer = "I can play badminton, football, and table tennis quite well. I exercise about three to four times a week after finishing my afternoon classes. I usually go to the university sports complex or the neighborhood park to jog and play badminton. Every day, I try to eat green vegetables, fresh fruit like bananas and apples, and lean protein. I make sure to sleep at least seven hours each night so I feel energetic the next morning.",
+                KeyPoints = "[\"Describe sports abilities, exercise frequency, and workout locations\",\"Mention daily healthy diet and sleep duration\",\"Demonstrate accurate present tense and health vocabulary\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you prefer team sports like football or individual exercises like running? Why?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e05"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 1 - Observing Workplace Attire & Office Environment (Picture Intro)",
+                Content = "Look at the picture of the office meeting room and answer these introductory questions:\n1. What kind of clothes are the people in the room wearing?\n2. What objects can you see on the wooden table?\n3. What is the man standing near the board holding in his hand?\n4. Does the room look bright and modern? Why?",
+                SampleAnswer = "The people in the conference room are wearing neat, professional business attire such as blazers, dress shirts, and smart office clothes. On the wooden table, I can see open laptop computers, notebooks, pens, and water glasses. The man standing near the whiteboard is holding a smartphone in his hand while gesturing to his colleagues. The room looks very bright and modern because it has large floor-to-ceiling glass walls, indoor plants, and clean contemporary furniture.",
+                KeyPoints = "[\"Identify professional business attire of the five colleagues\",\"List objects on the conference table (laptops, notebooks)\",\"Describe the standing presenter holding a smartphone and the glass-walled room\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Would you like to work in a modern office environment like the one in the picture after graduation?",
+                ImageUrl = "/uploads/questions/ent/ENT104_p2_Im1.png",
+                ImageDescription = "A professional corporate business meeting in a modern conference room with glass walls. Five business colleagues (three men and two women) are seated around a wooden conference table with laptops and notebooks. A male presenter stands near a white board holding a smartphone and gesturing, while the others listen attentively in professional business attire.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e06"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 2 - Describing a Part-Time Job or Volunteer Work",
+                Content = "Topic: Work and Experience. Talk about a part-time job, club activity, or volunteer experience you have participated in:\n1. What was the role or activity?\n2. Where and when did you do it?\n3. What tasks were you responsible for?\n4. What skills did you learn from that experience?",
+                SampleAnswer = "Last semester, I volunteered as an event organizer for the university orientation week on campus. My team was responsible for welcoming new freshmen, guiding them to lecture halls, and answering questions about campus facilities. Through this activity, I learned how to communicate clearly with strangers, coordinate tasks under time pressure, and solve unexpected scheduling problems calmly as a team.",
+                KeyPoints = "[\"Describe the volunteer or part-time role and setting clearly\",\"Detail specific responsibilities and actions taken\",\"Reflect on soft skills gained such as teamwork and communication\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Should university students take a part-time job during the semester, or focus 100% on studying?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e07"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 2 - Technology and Smartphone Usage in Study",
+                Content = "Topic: Digital Devices. Describe how you use your smartphone and laptop every day:\n1. What apps or software do you use most frequently for studying?\n2. How do you use technology to stay connected with classmates on group projects?\n3. What problems can happen if you rely too much on digital devices?",
+                SampleAnswer = "Every day, I use my laptop for writing code, reading PDF textbooks, and submitting assignments on the learning portal, while I use my smartphone for dictionary apps and flashcard review. For group projects, my team uses messaging apps and online document sharing to divide tasks and track deadlines in real time. However, relying too much on digital devices can cause eye strain, distraction from constant notifications, and reduced critical thinking if students copy answers without understanding.",
+                KeyPoints = "[\"Identify specific study apps and academic uses of laptop/smartphone\",\"Explain digital collaboration tools for group projects\",\"Discuss drawbacks of excessive screen time and notification distractions\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How do you prevent smartphone notifications from distracting you when preparing for an exam?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e08"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 2 - Describing an Inspiring Person or Role Model",
+                Content = "Topic: People and Personalities. Describe a person you admire (such as a family member, teacher, or leader):\n1. Who is this person and how do you know them?\n2. What is their personality like?\n3. What achievements or qualities make them special?\n4. How have they influenced your attitude toward study or life?",
+                SampleAnswer = "A person I deeply admire is my high school informatics teacher, who taught me for two years. He is remarkably patient, approachable, and passionate about technology. Whenever students struggled with difficult algorithms, he stayed after class to explain the logic step by step using real-world analogies. His dedication inspired me to pursue Software Engineering at university and taught me never to give up when facing complex technical problems.",
+                KeyPoints = "[\"Introduce the admired person and relationship clearly\",\"Use rich personality adjectives (patient, approachable, dedicated)\",\"Explain concrete ways they influenced personal or academic growth\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "What qualities do you think make a good team leader in a university project?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e09"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 3 - Teamwork Dynamics & Presentation Skills (Picture Analysis)",
+                Content = "Look at the picture of the five business colleagues in the conference room and analyze:\n1. How do the body language and eye contact of the seated colleagues show active listening?\n2. Why is combining a whiteboard presentation with laptops and mobile devices effective in modern meetings?\n3. What communication skills are most important when presenting an idea to your team?",
+                SampleAnswer = "In the conference room picture, the four seated colleagues demonstrate active listening by turning their posture toward the standing presenter, maintaining focused eye contact, and keeping their laptops and notebooks ready for taking notes. Combining a whiteboard with laptops and a smartphone allows the presenter to sketch high-level concepts visually while referencing real-time data. When presenting an idea to a team, structured organization, confident body language, and openness to constructive feedback are the most critical skills.",
+                KeyPoints = "[\"Analyze body language and eye contact of the five colleagues in the image\",\"Explain synergy between visual whiteboards and digital laptops/smartphones\",\"Evaluate key presentation and active listening skills\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How should a presenter handle a situation where two team members strongly disagree during a meeting?",
+                ImageUrl = "/uploads/questions/ent/ENT104_p2_Im1.png",
+                ImageDescription = "A professional corporate business meeting in a modern conference room with glass walls. Five business colleagues (three men and two women) are seated around a wooden conference table with laptops and notebooks. A male presenter stands near a white board holding a smartphone and gesturing, while the others listen attentively in professional business attire.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e0a"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 3 - In-Person Office Meetings vs Remote Online Meetings",
+                Content = "Extended Discussion: Compare traditional face-to-face meetings with online video meetings:\n1. What are the main benefits of meeting face-to-face in a conference room?\n2. When are online meetings on Zoom or Microsoft Teams more convenient?\n3. Which mode of collaboration do you think is better for software engineering teams?",
+                SampleAnswer = "Face-to-face meetings in a conference room build stronger interpersonal trust, allow natural reading of non-verbal cues, and make brainstorming on a physical whiteboard much faster. Conversely, online video meetings save commuting time, enable flexible remote work across different cities, and make screen-sharing code repositories effortless. For software engineering teams, a hybrid approach works best: holding in-person meetings for sprint planning and architecture design while using short online stand-ups for daily progress updates.",
+                KeyPoints = "[\"Compare non-verbal communication in face-to-face meetings vs convenience of remote calls\",\"Identify scenarios where each meeting mode excels\",\"Synthesize a practical hybrid collaboration model\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why do people sometimes feel exhausted after attending too many online video calls in one day?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e0b"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 3 - Online Shopping vs Traditional Retail Stores",
+                Content = "Extended Discussion: E-commerce has grown rapidly in Vietnam. Please discuss:\n1. Why do young people prefer shopping on e-commerce platforms?\n2. What are the risks or disadvantages of buying products online?\n3. Will physical retail stores disappear in the future, or how will they adapt?",
+                SampleAnswer = "Young consumers prefer e-commerce platforms because they can compare prices instantly, read verified customer reviews, and enjoy doorstep delivery with discount vouchers. However, online shopping carries risks such as receiving counterfeit or damaged goods, sizing mismatches for clothing, and delayed shipping. Physical retail stores will not disappear completely; instead, they will evolve into experiential showrooms where customers test products in person before ordering digitally.",
+                KeyPoints = "[\"Analyze drivers of e-commerce popularity among youth\",\"Evaluate risks such as quality mismatch and shipping delays\",\"Predict how physical stores will adapt with omnichannel experiences\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Have you ever bought something online that looked completely different from the advertisement? What did you do?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000002e0c"),
+                CourseId = ent104Course.Id,
+                RubricId = RubricEnt104Id,
+                Title = "ENT104 Part 3 - Preparing for Career Readiness at University",
+                Content = "Extended Discussion: Beyond passing exams, how should students prepare for their future careers?\n1. Why are soft skills like teamwork and English communication just as important as technical grades?\n2. How can internships and student clubs bridge the gap between classroom theory and industry practice?\n3. What is one skill you want to master before your On-the-Job Training (OJT) semester?",
+                SampleAnswer = "Technical grades alone are not enough because real-world engineering projects require constant collaboration, client requirement clarification, and cross-functional teamwork. Internships and student clubs expose students to real deadlines, version control workflows, and professional accountability that textbooks cannot simulate. Before my On-the-Job Training semester, I aim to master fluent English technical presentation so I can confidently explain software architecture to international mentors.",
+                KeyPoints = "[\"Argue why soft skills and English complement technical knowledge\",\"Explain practical value of clubs and internships\",\"Identify a specific target skill for OJT readiness\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "If an employer had to choose between a candidate with high grades but poor teamwork and one with average grades but great attitude, who would they hire?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // --- ENT203 Additional Questions (4 Easy, 1 Medium, 4 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e04"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - Reading Key Details on the Da Nang Trip Poster (Visual Check)",
+                Content = "Look at the School Bus Trip to Da Nang poster and answer these basic information questions:\n1. Which city is the bus trip going to?\n2. What day and time does the bus leave?\n3. Name two tourist places students will visit on this trip.\n4. How much does the ticket cost per student?",
+                SampleAnswer = "Looking at the poster, the school bus trip is going to Da Nang city. The bus departs on Saturday morning at 6:30 AM from the school campus. During the trip, students will visit famous places including Ba Na Hills, My Khe Beach, and the Marble Mountains. The ticket price for the trip is 350,000 VND per student, including lunch at a local seafood restaurant.",
+                KeyPoints = "[\"Correctly read destination (Da Nang) and departure time (6:30 AM Saturday) from poster\",\"Mention at least two attractions (Ba Na Hills, My Khe Beach, Marble Mountains)\",\"State the ticket price accurately\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Have you ever visited Da Nang or another coastal city in Vietnam? What did you like most?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM28.png",
+                ImageDescription = "An informational poster for a School Bus Trip to Da Nang. The poster features key details: Destination: Da Nang city; Departure: Saturday morning at 6:30 AM from school campus; Activities: visiting Ba Na Hills, swimming at My Khe Beach, exploring Marble Mountains; Lunch: 12:30 PM at a local seafood restaurant; Things to bring: student ID card, comfortable walking shoes, sunscreen, swimming suit, and camera; Ticket price: 350,000 VND.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e05"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - Reading Key Details on the Hanoi City Tour Flyer (Visual Check)",
+                Content = "Look at the Hanoi City Tour flyer and answer these basic questions:\n1. What time does the Hanoi City Tour start on weekends?\n2. Where is the meeting point for participants?\n3. Name two historical or cultural sights included in the tour.\n4. Where can students register for the tour?",
+                SampleAnswer = "According to the flyer, the Hanoi City Tour starts at 8:00 AM every weekend. Participants meet in front of the Hanoi Opera House. The tour visits famous cultural sights such as the Ho Chi Minh Mausoleum, the Temple of Literature, and Hoan Kiem Lake. Students can register online on the student portal or visit Room 204 of the Student Affairs office before Friday.",
+                KeyPoints = "[\"Identify start time (8:00 AM weekends) and meeting point (Hanoi Opera House)\",\"Name two cultural sights from the flyer\",\"State registration options clearly\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Which attraction on the Hanoi City Tour flyer would you want to visit first, and why?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM40.png",
+                ImageDescription = "An advertising flyer for a Hanoi City Tour for university students. Key details shown include: Tour dates: Every weekend starting at 8:00 AM; Meeting location: In front of the Hanoi Opera House; Highlights: visiting Ho Chi Minh Mausoleum, Temple of Literature, Old Quarter walking tour, and Hoan Kiem Lake; Tour cost: 250,000 VND per person including guide and entrance fees; Registration: sign up online at student portal or visit Room 204 Student Affairs before Friday.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e06"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - Travel Preferences and Packing Essentials",
+                Content = "Topic: Travel Preparation. Please answer the following questions:\n1. How do you usually travel when going on a trip (by bus, train, plane, or motorbike)?\n2. Do you prefer traveling with a large group of friends or with one or two close friends?\n3. What three essential items do you always pack in your backpack?\n4. Do you like taking photos when you travel?",
+                SampleAnswer = "For long-distance trips, I usually travel by sleeper bus or airplane because it is safe and comfortable. I prefer traveling with a small group of three or four close friends so we can easily agree on the schedule and food choices. Three essential items I always pack in my backpack are my student ID card, a portable power bank for my phone, and sunscreen. I love taking photos of landscapes and local street food to keep memories of each trip.",
+                KeyPoints = "[\"State preferred transport mode and travel group size with reasons\",\"List three practical travel items\",\"Express attitude toward travel photography\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Have you ever forgotten an important item when packing for a trip? How did you solve the problem?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e07"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 1 - Welcoming a New Student or Visitor to Your City",
+                Content = "Topic: Hospitality and Local Guide. Please answer the following questions:\n1. If a friend visits your city for the first time, where would you take them for breakfast?\n2. What is the best time of day to walk around your city?\n3. What local souvenir or gift would you recommend they buy?\n4. How would you help them travel around the city safely?",
+                SampleAnswer = "If a friend visits Ho Chi Minh City for the first time, I would take them to a famous local stall for broken rice (com tam) and iced milk coffee for breakfast. The best time to walk around the city center is early in the morning or after 5:00 PM when the weather cools down. I would recommend buying Vietnamese roasted coffee beans or handcrafted bamboo souvenirs. To help them travel safely, I would accompany them on the metro or book rides through reputable ride-hailing apps.",
+                KeyPoints = "[\"Recommend local breakfast dish and best walking hours\",\"Suggest authentic local souvenirs\",\"Provide practical and safe transportation advice\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "What is one common mistake tourists sometimes make when visiting a busy city in Vietnam?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e08"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 2 - Role-Play: Resolving a Travel Booking or Hotel Issue",
+                Content = "Role-Play Scenario: You arrived at a hotel for your class trip, but there is a problem with your room reservation (for example, the air conditioner is not working or the room type is wrong). Speak politely to the hotel receptionist:\n- Explain the problem clearly\n- State your booking details\n- Politely request a room change or immediate technician support.",
+                SampleAnswer = "Excuse me, good afternoon. I just checked into Room 305 under the reservation for the FPT University student group, but I noticed that the air conditioner in our room is not blowing cool air at all. Since the weather outside is very hot today, it is quite uncomfortable to stay inside. Could you please send a maintenance technician to inspect it right away, or move us to another twin room on the same floor? I would really appreciate your prompt assistance.",
+                KeyPoints = "[\"Use polite opening and formal register suitable for customer service\",\"Clearly describe the room issue and reservation context\",\"Propose actionable solutions (technician repair or room change)\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why is remaining calm and polite more effective than getting angry when dealing with service staff?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e09"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 3 - Comparing the Da Nang Bus Trip vs Hanoi Cultural Tour (Poster Analysis)",
+                Content = "Look at the Da Nang School Bus Trip poster and consider a cultural city tour like Hanoi. Please compare and analyze:\n1. How does an outdoor coastal trip (Ba Na Hills, My Khe Beach) differ from a historical city tour?\n2. What safety and logistical challenges must student organizers prepare for on a 6:30 AM bus trip?\n3. Which trip offers better team-building value for university classmates, and why?",
+                SampleAnswer = "Comparing the Da Nang trip poster with a cultural city tour, the Da Nang itinerary focuses on dynamic outdoor recreation—visiting Ba Na Hills, swimming at My Khe Beach, and hiking the Marble Mountains—whereas a city tour emphasizes historical museums and architecture. For a 6:30 AM bus departure, organizers must manage punctuality, motion sickness medication, beach water safety, and sun protection. Overall, the Da Nang trip offers stronger team-building value because shared beach games and group dining create lively bonding moments.",
+                KeyPoints = "[\"Reference specific details from the Da Nang trip poster (6:30 AM, Ba Na Hills, My Khe Beach)\",\"Analyze logistical and safety responsibilities for outdoor student trips\",\"Evaluate team-building benefits with persuasive justification\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can trip organizers ensure that introverted students also feel included during large group excursions?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM28.png",
+                ImageDescription = "An informational poster for a School Bus Trip to Da Nang. The poster features key details: Destination: Da Nang city; Departure: Saturday morning at 6:30 AM from school campus; Activities: visiting Ba Na Hills, swimming at My Khe Beach, exploring Marble Mountains; Lunch: 12:30 PM at a local seafood restaurant; Things to bring: student ID card, comfortable walking shoes, sunscreen, swimming suit, and camera; Ticket price: 350,000 VND.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e0a"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 3 - Cultural Heritage Preservation on the Hanoi City Tour (Flyer Analysis)",
+                Content = "Look at the Hanoi City Tour flyer (Ho Chi Minh Mausoleum, Temple of Literature, Old Quarter, Hoan Kiem Lake) and discuss:\n1. Why is it important for university students to visit historical landmarks like the Temple of Literature?\n2. What rules of dress code and respectful behavior should visitors follow at sacred historical sites?\n3. How can modern digital guides enhance the experience of walking through the Old Quarter?",
+                SampleAnswer = "Visiting landmarks on the Hanoi City Tour flyer—especially the Temple of Literature, Vietnam's first national university, and the Ho Chi Minh Mausoleum—connects students with centuries of scholarly tradition and national history. At these solemn sites, visitors must wear modest clothing covering shoulders and knees, speak quietly, and refrain from littering. Modern mobile audio guides and QR-code storytelling in the Old Quarter can enrich the tour by allowing students to listen to historical narratives in multiple languages.",
+                KeyPoints = "[\"Connect the flyers landmarks (Temple of Literature, Mausoleum, Old Quarter) to educational value\",\"Specify respectful dress code and conduct at historical sites\",\"Propose digital innovations for cultural tourism\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you think entrance fees to historical monuments should be free for all students? Why or why not?",
+                ImageUrl = "/uploads/questions/ent/ENT203_p2_IM40.png",
+                ImageDescription = "An advertising flyer for a Hanoi City Tour for university students. Key details shown include: Tour dates: Every weekend starting at 8:00 AM; Meeting location: In front of the Hanoi Opera House; Highlights: visiting Ho Chi Minh Mausoleum, Temple of Literature, Old Quarter walking tour, and Hoan Kiem Lake; Tour cost: 250,000 VND per person including guide and entrance fees; Registration: sign up online at student portal or visit Room 204 Student Affairs before Friday.",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e0b"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 3 - Guided Package Tours vs Independent Backpacking",
+                Content = "Extended Discussion: Compare joining an organized package tour with planning an independent backpacking trip:\n1. What are the main advantages of an organized package tour?\n2. Why do many young travelers prefer independent self-planned trips?\n3. How do you evaluate safety, budget, and flexibility when choosing between the two?",
+                SampleAnswer = "Organized package tours offer convenience, fixed budgeting, professional tour guides, and guaranteed transportation, which is ideal for families or large school groups. In contrast, young travelers often prefer independent backpacking because it provides total freedom to explore hidden local spots and adjust schedules spontaneously. When choosing between the two, I weigh familiarity with the destination: for a first-time visit to a remote area, a guided tour ensures safety, whereas for familiar cities, independent travel maximizes flexibility.",
+                KeyPoints = "[\"Contrast convenience/safety of package tours with flexibility of independent travel\",\"Analyze decision factors: budget, group size, and destination familiarity\",\"Use cohesive comparative structures (whereas, in contrast, on the other hand)\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How have travel vlogs and social media reviews changed the way people plan their trips today?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000003e0c"),
+                CourseId = ent203Course.Id,
+                RubricId = RubricEnt203Id,
+                Title = "ENT203 Part 3 - Cross-Cultural Communication and Avoiding Misunderstandings",
+                Content = "Extended Discussion: When traveling abroad or working with international students, cultural differences are common. Please discuss:\n1. What non-verbal gestures or habits can cause misunderstandings between different cultures?\n2. How should you react if you accidentally offend someone from another culture?\n3. Why is cultural curiosity important for future software engineers?",
+                SampleAnswer = "Non-verbal gestures such as eye contact, personal space, hand signals, and punctuality norms vary widely across cultures and can easily cause unintended misunderstandings. If I accidentally offend someone from another culture, the best response is to apologize sincerely, ask politely about the custom, and show willingness to learn. For future software engineers, cultural curiosity is vital because we build products for diverse global users and collaborate daily with international clients.",
+                KeyPoints = "[\"Identify cross-cultural differences in non-verbal communication and norms\",\"Explain how to handle cultural missteps with humility and respect\",\"Connect cultural awareness to global software engineering work\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Can you share an interesting custom from another country that you learned about from books or movies?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // --- ENT303 Additional Questions (4 Easy, 3 Medium, 3 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e03"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Everyday Manners and Polite Expressions",
+                Content = "Unit 1: Everyday Politeness. Please answer the following questions:\n1. How do you greet your university lecturers when you meet them on campus?\n2. What polite words do you use when asking a classmate for a favor?\n3. What should you do if you arrive late to a class or meeting?\n4. How do you show respect to elderly people on public transport?",
+                SampleAnswer = "When I meet my lecturers on campus, I bow my head slightly, smile, and greet them respectfully. When asking a classmate for a favor, I always say 'Could you please help me' and thank them warmly afterward. If I arrive late to a class, I knock gently, apologize to the lecturer, and take a seat quietly without disturbing others. On public buses, I immediately stand up and offer my seat to elderly passengers, pregnant women, or young children.",
+                KeyPoints = "[\"Describe respectful greetings for lecturers and polite request expressions\",\"Explain proper classroom etiquette when arriving late\",\"Give concrete examples of public transport courtesy\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "How do you feel when someone helps you on the street or holds the door open for you?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e04"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Reading Habits, News, and Information Sources",
+                Content = "Unit 2: Media and Information. Please answer the following questions:\n1. How do you usually get your daily news?\n2. What topics of news or articles interest you the most?\n3. Do you prefer reading printed books or e-books on a screen?\n4. How much time do you spend reading every day?",
+                SampleAnswer = "I usually get my daily news from reputable online news portals and technology newsletters on my smartphone each morning. The topics that interest me most are artificial intelligence breakthroughs, education, and sports. For long novels or textbooks, I still prefer reading printed paper books because they are easier on my eyes and help me remember details better. I try to spend at least thirty minutes reading before going to bed every night.",
+                KeyPoints = "[\"State daily news sources and preferred topics\",\"Compare printed books vs e-books with personal reasons\",\"Specify daily reading duration\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "What is the most interesting book or article you have read recently?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e05"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Gift-Giving Customs and Special Occasions",
+                Content = "Unit 3: Celebrations and Customs. Please answer the following questions:\n1. On what occasions do people in Vietnam usually give gifts?\n2. What kind of gifts do you like giving to your close friends on their birthdays?\n3. Is it better to open a gift immediately in front of the giver or later in private?\n4. What is the best gift you have ever received?",
+                SampleAnswer = "In Vietnam, people commonly exchange gifts on birthdays, Lunar New Year (Tet), weddings, Teacher's Day, and housewarming parties. For my close friends' birthdays, I like giving practical gifts such as books, stationery, or a personalized mug. Traditionally in Vietnam, people often open gifts later in private to avoid appearing greedy, unless the giver invites them to open it right away. The best gift I ever received was a mechanical keyboard from my parents when I passed my university entrance exam.",
+                KeyPoints = "[\"List common gift-giving occasions in Vietnam\",\"Explain cultural etiquette around opening gifts\",\"Describe a meaningful personal gift received\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you think a handmade gift is more meaningful than an expensive store-bought gift?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e06"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Environmental Habits and Green Living",
+                Content = "Unit 4: Environment and Daily Life. Please answer the following questions:\n1. What do you do every day to save electricity and water at home?\n2. Do you bring your own reusable water bottle or bag when going to school?\n3. How is trash sorted in your neighborhood or university campus?\n4. Why is planting trees important for big cities?",
+                SampleAnswer = "To save electricity and water at home, I always turn off lights, fans, and air conditioners when leaving a room and close the tap while brushing my teeth. I bring my own stainless-steel water bottle and canvas tote bag to campus every day to reduce single-use plastic waste. At our university, trash bins are clearly separated into recyclable plastic, paper, and general waste. Planting trees is vital for big cities because trees absorb carbon dioxide, provide shade, and cool down urban heat.",
+                KeyPoints = "[\"Describe concrete daily energy and water saving habits\",\"Mention reusable bottles/bags and campus recycling\",\"Explain environmental benefits of urban trees\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can student clubs encourage more classmates to stop using disposable plastic cups?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e07"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Role-Play: Advising an Intern on Workplace & Email Etiquette",
+                Content = "Role-Play Scenario: A friend is starting their first software engineering internship next week and asks for your advice on workplace manners. Explain:\n- How to dress and arrive on the first day\n- How to write polite, professional emails and chat messages to senior engineers\n- What habits to avoid during team meetings.",
+                SampleAnswer = "Congratulations on your internship! On your first day, you should dress in smart-casual attire and arrive at least fifteen minutes early to show reliability. When sending emails or chat messages to senior engineers, always include a clear subject line, a polite greeting, a concise summary of what you have already tried, and appreciation for their time. During team meetings, avoid checking your phone, interrupting speakers, or staying silent when you do not understand a task—always take notes and ask constructive questions.",
+                KeyPoints = "[\"Advise on punctuality and smart-casual dress code\",\"Detail professional email and technical chat etiquette\",\"Warn against distracting behaviors in team meetings\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "If an intern makes a mistake in their code during the first week, how should they report it to their mentor?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e08"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 1 - Role-Play: Discussing Community Service and Volunteering",
+                Content = "Role-Play Scenario: You and your classmate are planning a weekend volunteer activity for your English club. Discuss and propose:\n- What community activity to organize (e.g., teaching kids, park clean-up, charity book drive)\n- Where and when it will take place\n- How to recruit student volunteers and measure the impact.",
+                SampleAnswer = "For our English club's monthly volunteer project, I suggest organizing a 'Coding and English Fun Day' at a local community center this Sunday morning. We can teach primary school children basic English vocabulary through interactive games and simple visual puzzles. To recruit volunteers, we can post an announcement on our campus fanpage and assign pairs of members to prepare flashcards. This project will make a meaningful impact by inspiring local kids while helping our club members practice leadership.",
+                KeyPoints = "[\"Propose a clear, feasible community volunteer project\",\"Specify time, location, and task division\",\"Explain benefit for both the community and student volunteers\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "What challenges might volunteers face when teaching young children, and how can they prepare?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e09"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 2 - Storytelling: A Time When Good Manners Solved a Problem",
+                Content = "Narrative Task: Describe a real or memorable situation where being polite, patient, and respectful helped you resolve a misunderstanding or difficult situation:\n- What was the situation and who was involved?\n- What caused the problem?\n- How did you communicate politely to solve it?\n- What was the final outcome?",
+                SampleAnswer = "Last semester, during a busy group project, a teammate accidentally overwrote part of my frontend code right before our rehearsal. Instead of blaming him angrily in the group chat, I called him privately, calmly explained the version conflict, and asked if we could review the Git commit history together. Because I spoke respectfully, he immediately apologized and stayed up with me for an hour to merge both changes cleanly. In the end, our presentation succeeded and our friendship became even stronger.",
+                KeyPoints = "[\"Narrate a structured past incident with clear context and conflict\",\"Demonstrate how calm, respectful communication de-escalated tension\",\"Highlight positive resolution and lesson learned\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How do you stop yourself from reacting emotionally when you feel frustrated or stressed?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e0a"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 2 - Digital Netiquette and Cyberbullying in Online Communities",
+                Content = "Extended Discussion: Discuss the importance of digital etiquette ('netiquette') on social media and online forums:\n1. Why do some people behave more aggressively online than they do in face-to-face conversations?\n2. What are the key rules of respectful online communication?\n3. How should universities and platforms promote healthy digital citizenship?",
+                SampleAnswer = "Many people behave more aggressively online because screen anonymity and the lack of immediate eye contact reduce their sense of empathy and accountability. Key rules of digital netiquette include verifying facts before sharing, critiquing ideas rather than attacking individuals, and respecting others' privacy. Universities and digital platforms can promote healthy online citizenship by educating students on media literacy, enforcing clear community guidelines, and encouraging constructive dialogue.",
+                KeyPoints = "[\"Analyze psychological reasons behind online aggression (anonymity, distance)\",\"Formulate clear principles of digital netiquette\",\"Propose educational and platform solutions for healthy online culture\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "When you see a heated argument in the comments section of a post, how should you respond?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e0b"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 2 - Preserving Traditional Cultural Values in a Modernizing Society",
+                Content = "Extended Discussion: As Vietnam integrates deeply with the global economy, lifestyle and culture are changing rapidly. Please discuss:\n1. Which traditional Vietnamese customs are most important to preserve for future generations?\n2. Are there any outdated customs that should be simplified in modern life?\n3. How can young people embrace global culture without losing their cultural identity?",
+                SampleAnswer = "Core Vietnamese traditions such as filial piety, respect for teachers, family reunion during Tet, and community solidarity are timeless values that must be preserved. At the same time, overly lavish or wasteful ceremonies that place heavy financial burdens on families can be simplified to remain meaningful yet practical. Young people can embrace global languages and technology while preserving their roots by learning national history, honoring family traditions, and sharing Vietnamese culture proudly with international friends.",
+                KeyPoints = "[\"Identify core traditional values worth preserving\",\"Critically evaluate which rituals can be modernized\",\"Synthesize a balanced approach to global integration and cultural identity\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can modern media such as music, movies, or video games make traditional culture more appealing to Gen Z?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000004e0c"),
+                CourseId = ent303Course.Id,
+                RubricId = RubricEnt303Id,
+                Title = "ENT303 Part 2 - Generational Differences in Workplace Communication",
+                Content = "Extended Discussion: Today's workplace brings together multiple generations (Gen X, Millennials, and Gen Z). Please discuss:\n1. What are the main differences in how older and younger generations prefer to communicate at work?\n2. What misunderstandings can arise from these differences?\n3. How can both generations adapt to build a harmonious and productive workplace?",
+                SampleAnswer = "Older generations often value formal hierarchy, phone calls, or detailed face-to-face discussions, whereas Gen Z employees frequently prefer instant messaging, concise feedback, and flexible workflows. Misunderstandings arise when seniors view short chat replies as disrespectful or when younger staff feel micromanaged by formal procedures. To build harmony, both sides should practice mutual empathy: young professionals can adopt respectful workplace etiquette while senior leaders mentor with open-minded communication.",
+                KeyPoints = "[\"Compare communication preferences across generations at work\",\"Analyze root causes of intergenerational friction\",\"Propose mutual adaptation strategies for workplace harmony\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "What is the most valuable lesson you have learned from working or talking with someone much older than you?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // --- ENT403 Additional Questions (4 Easy, 4 Medium, 2 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e03"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Describing Personal Strengths and Daily Moods",
+                Content = "Topic: Personality and Moods. Please answer the following questions:\n1. What three adjectives best describe your personality?\n2. Are you more of a morning person or a night owl?\n3. What small things in daily life always put you in a good mood?\n4. Who do you usually talk to when you feel stressed?",
+                SampleAnswer = "The three adjectives that best describe my personality are reliable, curious, and calm. I am definitely a morning person because my mind feels sharpest between 6:00 AM and 10:00 AM. Small daily moments like drinking a warm cup of coffee, finishing a coding task without bugs, or seeing a sunny sky always put me in a cheerful mood. When I feel stressed, I usually talk to my mother or my best friend because they listen patiently and give practical encouragement.",
+                KeyPoints = "[\"Identify three accurate personality adjectives with examples\",\"Explain chronotype (morning person vs night owl) and mood boosters\",\"Describe healthy social support when stressed\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Has your personality changed since you graduated from high school and entered university?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e04"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Stress Relief Activities and Relaxation",
+                Content = "Topic: Relaxation and Well-Being. Please answer the following questions:\n1. What do you usually do to relax after a long day of exams?\n2. Does listening to music or exercising help you reduce stress more?\n3. Where is your favorite quiet place to clear your mind?\n4. How do you prepare yourself for a good night's sleep?",
+                SampleAnswer = "After a long day of exams, I love taking a warm shower, eating a comforting meal, and watching a lighthearted comedy episode. For me, jogging outdoors reduces stress more effectively than sitting still because physical movement releases tension. My favorite quiet place to clear my mind is the lakeside walkway near my campus at sunset. To sleep well at night, I turn off my computer screen thirty minutes before bed and read a few pages of a book.",
+                KeyPoints = "[\"Describe post-exam relaxation routines clearly\",\"Compare music vs physical exercise for stress relief\",\"Identify a peaceful place and pre-sleep routine\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why do many students find it hard to put down their phones before going to sleep?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e05"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Social Media Habits and Online Friends",
+                Content = "Topic: Social Networking. Please answer the following questions:\n1. Which social media platforms do you use every day?\n2. How much time do you spend on social media daily?\n3. What kind of content do you enjoy watching or sharing online?\n4. Do you prefer messaging friends online or meeting them in person?",
+                SampleAnswer = "I use Facebook, YouTube, and Discord every day to stay updated with university announcements and tech communities. I try to limit my social media usage to about one hour per day so it does not cut into my study time. Online, I enjoy watching software development tutorials, science channels, and travel vlogs. Even though online messaging is convenient for quick updates, I strongly prefer meeting friends in person at a cafe because real conversations feel much warmer.",
+                KeyPoints = "[\"State platforms used, daily screen time, and preferred content\",\"Compare online messaging with face-to-face meetings\",\"Demonstrate fluent delivery and clear time expressions\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Have you ever tried taking a digital detox (staying away from social media) for a weekend?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e06"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Teamwork Preferences and Study Habits",
+                Content = "Topic: Learning Styles. Please answer the following questions:\n1. Do you prefer studying alone or studying in a group?\n2. What role do you usually take when working in a team project?\n3. How do you keep track of your homework and exam deadlines?\n4. What motivates you when a subject is very difficult?",
+                SampleAnswer = "I prefer studying alone when I need to understand new theoretical concepts, but I enjoy group study when reviewing for exams and debugging projects. In team projects, I usually take the role of backend developer or coordinator who tracks milestones. I use a digital calendar and a daily to-do list on Notion to keep track of all my deadlines. When a subject is difficult, breaking it into small topics and seeing my progress each day keeps me motivated.",
+                KeyPoints = "[\"Compare solo study vs group study contexts\",\"Identify typical team role and deadline tracking tools\",\"Explain personal motivation strategy for hard subjects\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "What do you do when a group member misses a deadline in a team assignment?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e07"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Monologue: A Stressful Situation and How You Coped With It",
+                Content = "Description Monologue: Describe a stressful academic or personal situation you experienced recently.\nYou should explain:\n- What caused the stressful situation\n- How you felt physically and emotionally at that time\n- What specific actions you took to overcome the stress\n- What you learned about managing pressure.",
+                SampleAnswer = "A stressful situation I faced occurred during midterms last semester when three project deadlines and an oral exam fell in the same week. At first, I felt overwhelmed and anxious because I tried to multitask everything at once. To regain control, I wrote down a prioritized hourly schedule, tackled the hardest programming module each morning, and took short walks to clear my head. By completing one task at a time and asking my lecturer for early feedback, I passed all assessments with high grades and learned that structured planning defeats panic.",
+                KeyPoints = "[\"Describe the stressor and emotional reaction authentically\",\"Detail concrete coping actions (prioritization, time-blocking, exercise)\",\"Reflect on resilience and stress management lessons\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How can universities better support students who experience high academic anxiety during exam weeks?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e08"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Monologue: A Positive Habit That Changed Your Daily Life",
+                Content = "Description Monologue: Describe a positive habit you developed that significantly improved your mental or physical well-being.\nYou should explain:\n- What the habit is and when you started it\n- How you stayed consistent when it was difficult\n- What positive changes you noticed in your energy and mindset.",
+                SampleAnswer = "Six months ago, I developed the habit of waking up at 6:00 AM every day to do twenty minutes of stretching and plan my top three daily priorities before checking my phone. During the first two weeks, it was tempting to hit the snooze button, so I placed my alarm across the room and went to sleep before 11:00 PM. Within a month, I noticed a dramatic improvement in my morning focus, lower anxiety during classes, and a strong sense of proactive control over my day.",
+                KeyPoints = "[\"Define the positive habit and starting timeline clearly\",\"Explain practical strategies used to maintain consistency\",\"Highlight measurable benefits to mental clarity and energy\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why is breaking a bad habit often much harder than starting a new one?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e09"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Monologue: An Experience of Stepping Outside Your Comfort Zone",
+                Content = "Description Monologue: Describe a time when you stepped outside your comfort zone to try something new or challenging.\nYou should explain:\n- What the activity or challenge was\n- Why you felt nervous or hesitant at first\n- How you prepared and performed\n- How the experience changed your self-confidence.",
+                SampleAnswer = "Stepping outside my comfort zone happened when I volunteered to deliver the live English pitch for our team's hackathon project in front of fifty students and judges. Initially, I felt nervous because I used to be shy about speaking English on stage. To prepare, I rehearsed my script ten times in front of a mirror, timed my slides, and focused on speaking slowly and clearly. When the audience applauded our demo, my fear vanished and I realized that confidence comes from preparation and courage.",
+                KeyPoints = "[\"Narrate a specific comfort-zone challenge with clear context\",\"Contrast initial hesitation with disciplined preparation\",\"Explain lasting impact on personal self-confidence\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "What advice would you give to a student who is afraid of making mistakes when speaking English?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e0a"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 1 - Monologue: A Friend or Colleague With an Inspiring Mindset",
+                Content = "Description Monologue: Describe a friend, classmate, or colleague whose positive mindset inspires you.\nYou should explain:\n- Who this person is and how you work or study together\n- How they react when facing setbacks or difficult tasks\n- What specific lesson you have adopted from their attitude.",
+                SampleAnswer = "My project teammate Minh has the most resilient and optimistic mindset of anyone I know. We have worked together on three software engineering courses over the past year. Whenever our code fails a test or requirements change at the last minute, he never complains or blames others; instead, he smiles, brews a cup of tea, and calmly breaks the bug down into testable hypotheses. Working with him taught me to view failures as diagnostic feedback rather than personal defeat.",
+                KeyPoints = "[\"Introduce the peer and shared context clearly\",\"Illustrate their resilient attitude with concrete examples\",\"Articulate the mindset lesson learned\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you think optimism is an inborn personality trait, or a skill that anyone can train?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e0b"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 2 - Discussion: Introverts vs Extroverts in Leadership and Teamwork",
+                Content = "Extended Discussion on Personality Psychology:\n1. Do you think extroverts naturally make better leaders than introverts, or can introverts be equally effective leaders?\n2. How can a team leader bring out the best contributions from both introverted and extroverted team members?\n3. Why is diversity of personality types valuable in an engineering team?",
+                SampleAnswer = "Introverts can be just as effective leaders as extroverts, and often excel when leading proactive, analytical teams because they listen deeply, think before speaking, and empower others without dominating the room. A wise leader brings out the best in everyone by combining open group brainstorming for extroverts with written pre-meeting agendas that give introverts time to formulate thoughtful insights. Personality diversity prevents groupthink and balances bold communication with careful risk analysis.",
+                KeyPoints = "[\"Compare leadership strengths of introverts and extroverts objectively\",\"Propose inclusive management techniques for diverse personalities\",\"Explain how personality balance strengthens engineering teams\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Have you ever had to adapt your own communication style to work effectively with someone very different from you?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000005e0c"),
+                CourseId = ent403Course.Id,
+                RubricId = RubricEnt403Id,
+                Title = "ENT403 Part 2 - Discussion: Academic Burnout, Perfectionism, and Growth Mindset",
+                Content = "Extended Discussion on Mental Resilience:\n1. How does unhealthy perfectionism contribute to academic burnout among high-achieving students?\n2. What is the difference between a 'fixed mindset' and a 'growth mindset' when receiving critical feedback?\n3. How can students maintain high standards of excellence without sacrificing their mental health?",
+                SampleAnswer = "Unhealthy perfectionism drives burnout because students equate a single imperfect grade or bug with personal inadequacy, leading to procrastination out of fear of failure. According to Carol Dweck's psychology framework, a fixed mindset views critical feedback as a judgment of permanent intelligence, whereas a growth mindset welcomes critique as a roadmap for skill improvement. Students can pursue excellence sustainably by focusing on continuous progress, celebrating incremental milestones, and treating rest as part of peak performance.",
+                KeyPoints = "[\"Analyze link between perfectionism, fear of failure, and burnout\",\"Contrast fixed mindset vs growth mindset when handling criticism\",\"Synthesize sustainable practices for high achievement and mental health\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "How do you personally respond when an AI grader or lecturer points out weaknesses in your speaking performance?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+
+            // --- ENT503 Additional Questions (4 Easy, 4 Medium, 2 Hard) ---
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e03"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Short-Term Study Goals and Daily Planning",
+                Content = "Topic: Personal Goals. Please answer the following questions:\n1. What is your main academic goal for this semester?\n2. How do you plan your study tasks at the beginning of each week?\n3. Who do you share your goals with to stay accountable?\n4. How do you reward yourself when you finish a big project?",
+                SampleAnswer = "My main academic goal this semester is to achieve a distinction grade in both my software engineering project and my advanced English speaking course. Every Sunday evening, I write down my weekly goals and assign specific tasks to each morning and afternoon block. I share my study targets with my project partner so we can check on each other's progress. When I complete a major project, I reward myself by going out for a nice hotpot dinner with my friends.",
+                KeyPoints = "[\"State clear semester goal and weekly planning method\",\"Explain peer accountability and self-reward habits\",\"Speak with clear structure and accurate vocabulary\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you prefer writing your goals on paper or using a digital app on your phone?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e04"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Choosing a University Major and Career Interest",
+                Content = "Topic: Academic Major and Career. Please answer the following questions:\n1. Why did you choose your current major at university?\n2. Which subject in your major do you enjoy the most?\n3. What kind of company would you like to work for after graduation?\n4. Did your parents support your choice of major?",
+                SampleAnswer = "I chose Software Engineering because I love building practical applications that solve everyday problems for users. My favorite subject is Backend Web Development with .NET because designing clean APIs and databases is logical and rewarding. After graduation, I would love to work for an international product company where I can collaborate with global engineers. My parents wholeheartedly supported my choice and encouraged me to follow my passion for technology.",
+                KeyPoints = "[\"Explain motivation for choosing major and favorite course\",\"Describe ideal future workplace and parental support\",\"Use appropriate academic and career vocabulary\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "If you could study a second minor subject outside of IT, what subject would you choose?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e05"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Time Management and Overcoming Procrastination",
+                Content = "Topic: Productivity. Please answer the following questions:\n1. What time of day are you most productive?\n2. What distractions usually cause you to procrastinate?\n3. What simple trick do you use to start a task you don't feel like doing?\n4. How do you feel at the end of a productive day?",
+                SampleAnswer = "I am most productive in the morning between 7:00 AM and 11:00 AM when my energy is high and the house is quiet. Social media notifications and short video feeds are the main distractions that tempt me to procrastinate. When I don't feel like starting a hard task, I use the five-minute rule: I tell myself to work on it for just five minutes, which builds momentum to keep going. At the end of a productive day, I feel proud, peaceful, and ready to rest.",
+                KeyPoints = "[\"Identify peak productivity hours and common distractions\",\"Explain a practical anti-procrastination technique (e.g., 5-minute rule, Pomodoro)\",\"Express positive feelings associated with productivity\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Do you listen to background music while working, or do you need complete silence?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e06"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Mentors, Advice, and Important Decisions",
+                Content = "Topic: Advice and Decisions. Please answer the following questions:\n1. Who do you usually ask for advice when making an important decision?\n2. What is the best piece of advice your parents or teachers ever gave you?\n3. Do you prefer making decisions quickly or taking time to research carefully?\n4. How do you feel when you help a younger student with their studies?",
+                SampleAnswer = "When making an important academic or career decision, I usually consult both my parents and my academic advisor. The best advice my father ever gave me was to focus on mastering fundamentals rather than chasing shortcuts. I prefer taking time to research options and list pros and cons carefully before committing to a major decision. Whenever I help a younger freshman debug their code, I feel happy and find that teaching others deepens my own understanding.",
+                KeyPoints = "[\"Identify trusted advisors and share a memorable piece of advice\",\"Explain personal decision-making style\",\"Reflect on the value of mentoring younger peers\"]",
+                Difficulty = QuestionDifficulty.Easy,
+                BloomLevel = BloomLevel.Understand,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why is it sometimes helpful to write down the pros and cons on paper before making a choice?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e07"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Monologue: A Difficult Decision You Had to Make",
+                Content = "Description Monologue: Describe an important or difficult decision you had to make in your academic or personal life.\nYou should discuss:\n- What the options were and why the decision was difficult\n- Who you consulted or how you weighed the pros and cons\n- What final choice you made and why\n- How that decision shaped your current path.",
+                SampleAnswer = "A difficult decision I faced at the end of high school was choosing between studying Economics at a local university near home or pursuing Software Engineering at FPT University in a new city. The choice was tough because staying near home was comfortable, whereas moving away required financial discipline and independence. After discussing with my parents and hablar with alumni about industry prospects, I chose Software Engineering because of my passion for building technology. Looking back, that decision transformed my confidence and opened doors to exciting engineering projects.",
+                KeyPoints = "[\"Present the dilemma and competing options clearly\",\"Explain analytical process of weighing trade-offs and seeking counsel\",\"Reflect on long-term impact of the decision\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "When making a big life decision, should people listen more to logical analysis or intuition?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e08"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Monologue: Learning from a Setback or Failure",
+                Content = "Description Monologue: Describe a time when you did not achieve a goal on your first attempt and had to try again.\nYou should discuss:\n- What the goal or competition was\n- Why your first attempt did not succeed\n- What adjustments you made for the second attempt\n- How this setback made you stronger.",
+                SampleAnswer = "During my freshman year, I applied to join the core technical team of our campus programming club, but I failed the live coding interview on my first attempt. I realized my failure happened because I memorized solutions without truly understanding data structures and panicked under time pressure. Over the next semester, I practiced solving two algorithm problems every morning and did mock interviews with a friend. When I reapplied the following term, I passed with top marks and learned that failure is simply a stepping stone when paired with honest reflection.",
+                KeyPoints = "[\"Describe initial failure honestly and identify root cause\",\"Detail concrete corrective actions taken before retrying\",\"Connect perseverance to personal growth\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "Why are many people afraid to talk about their failures, and how can we change that culture?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e09"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Monologue: Your Five-Year Professional Career Plan",
+                Content = "Description Monologue: Describe your five-year career vision after graduating from university.\nYou should discuss:\n- What professional role or specialization you aim to achieve\n- What certifications, languages, or technical skills you need to build\n- What challenges you expect in the industry\n- Why this career path gives you a sense of purpose.",
+                SampleAnswer = "Over the next five years after graduation, my goal is to grow from a junior backend developer into a Lead Cloud & AI System Architect. To reach this milestone, I am focusing on mastering distributed systems in .NET, cloud infrastructure, and fluent professional English communication. I anticipate rapid changes in AI tooling and cybersecurity requirements, which will demand continuous lifelong learning. This career path gives me a deep sense of purpose because designing reliable software systems can positively impact thousands of users every day.",
+                KeyPoints = "[\"Articulate a coherent 5-year career progression roadmap\",\"Identify specific technical and language competencies required\",\"Connect career ambition to continuous learning and purpose\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "How often should professionals review and adjust their five-year career plan as technology evolves?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e0a"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 1 - Monologue: A Team Project Achievement You Are Proud Of",
+                Content = "Description Monologue: Describe a challenging team project at university that you and your teammates completed successfully.\nYou should discuss:\n- What the project was about and your specific responsibility\n- How your team coordinated tasks and resolved disagreements\n- What the final result was and why you are proud of it.",
+                SampleAnswer = "A team achievement I am deeply proud of is building our Capstone Oral Exam System with three fellow software engineering teammates. My responsibility was designing the backend architecture, real-time SignalR notification hubs, and automated grading workers. Whenever we had different views on API contracts, we held short design reviews grounded in objective test evidence rather than personal ego. Delivering a complete, verified system with over one thousand passing tests taught us the true power of disciplined engineering teamwork.",
+                KeyPoints = "[\"Explain project scope and individual technical ownership\",\"Describe collaborative conflict resolution and coordination\",\"Highlight measurable outcome and shared team pride\"]",
+                Difficulty = QuestionDifficulty.Medium,
+                BloomLevel = BloomLevel.Apply,
+                HasFollowUp = true,
+                FollowUpPrompt = "What is the single most important factor that separates a high-performing student team from a struggling one?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e0b"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 2 - Discussion: Artificial Intelligence, Automation, and the Future of Work",
+                Content = "Extended Discussion on Technology and Careers:\n1. How is Artificial Intelligence transforming the skills required of newly graduated engineers and business professionals?\n2. Which human qualities—such as critical thinking, empathy, and ethical judgment—cannot be replaced by AI?\n3. How should university students use AI tools responsibly to accelerate learning rather than become dependent on them?",
+                SampleAnswer = "Artificial Intelligence is automating repetitive coding and routine drafting, shifting the value of young professionals toward system architecture, problem formulation, and rigorous verification. Human qualities such as genuine empathy, ethical accountability, cross-cultural negotiation, and first-principles critical thinking remain irreplaceable because AI lacks lived human responsibility. Students should treat AI as an interactive tutor and pair-programming partner to challenge their understanding, while always verifying every output independently.",
+                KeyPoints = "[\"Analyze how AI shifts entry-level job expectations\",\"Defend uniquely human strengths: critical thinking, ethics, empathy\",\"Formulate responsible, verification-driven practices for student AI usage\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "In oral examinations, why is evaluating a student's live spoken reasoning and follow-up defense more authentic than grading take-home essays?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000006e0c"),
+                CourseId = ent503Course.Id,
+                RubricId = RubricEnt503Id,
+                Title = "ENT503 Part 2 - Discussion: Defining Personal Success, Financial Ambition, and Social Contribution",
+                Content = "Extended Discussion on Success and Values:\n1. How do different people define 'success'—is it measured more by financial wealth, career title, or positive impact on others?\n2. What happens when young professionals sacrifice their health and family relationships in pursuit of rapid career promotion?\n3. How can a person achieve ambitious professional goals while living a balanced and meaningful life?",
+                SampleAnswer = "While society often measures success by salary or job title, enduring fulfillment comes from mastering meaningful craft, uplifting family, and contributing value to the community. When young professionals sacrifice health and relationships for short-term promotion, they frequently experience emptiness and severe burnout even after reaching their financial target. True sustainable success requires aligning daily habits with core values: setting ambitious career milestones while protecting non-negotiable time for health, family, and personal integrity.",
+                KeyPoints = "[\"Critically evaluate multidimensional definitions of success\",\"Analyze long-term costs of sacrificing health and family for work\",\"Synthesize a philosophy of ambitious yet balanced living\"]",
+                Difficulty = QuestionDifficulty.Hard,
+                BloomLevel = BloomLevel.Analyze,
+                HasFollowUp = true,
+                FollowUpPrompt = "Looking ten years into the future, what achievement would make you feel most proud of yourself?",
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
             }
         };
 
@@ -1283,6 +3205,12 @@ public static class DevelopmentDataSeeder
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
         var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
+        var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
+        var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
+        var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
+        var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
+        var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
+        var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
 
         var lecturer = await context.Users
             .FirstOrDefaultAsync(u => u.Id == LecturerUserId || u.Role == UserRole.Lecturer, cancellationToken);
@@ -1317,6 +3245,72 @@ public static class DevelopmentDataSeeder
                 Id = ClassSwr302Id,
                 Code = "SE1801-SWR",
                 CourseId = swrCourse.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt001Id,
+                Code = "SE1801-ENT001",
+                CourseId = ent001Course.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt104Id,
+                Code = "SE1801-ENT104",
+                CourseId = ent104Course.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt203Id,
+                Code = "SE1801-ENT203",
+                CourseId = ent203Course.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt303Id,
+                Code = "SE1801-ENT303",
+                CourseId = ent303Course.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt403Id,
+                Code = "SE1801-ENT403",
+                CourseId = ent403Course.Id,
+                SemesterId = semesterId,
+                LecturerId = lecturerId,
+                MaxStudents = 35,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ClassEnt503Id,
+                Code = "SE1801-ENT503",
+                CourseId = ent503Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,

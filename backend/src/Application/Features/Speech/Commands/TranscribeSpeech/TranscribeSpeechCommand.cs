@@ -69,14 +69,18 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
         if (!string.IsNullOrWhiteSpace(request.ClientTranscript))
         {
             var normalized = speechToTextService.NormalizeTranscript(request.ClientTranscript);
-            var finalText = !string.IsNullOrWhiteSpace(normalized) ? normalized : request.ClientTranscript.Trim();
-            return Result<SpeechTranscriptionResult>.Success(new SpeechTranscriptionResult(
-                Text: finalText,
-                RawText: request.ClientTranscript.Trim(),
-                Provider: "BrowserWebSpeechHybrid",
-                UsedFallback: true,
-                TimestampsJson: null,
-                ConfidenceScore: 0.90));
+            var finalText = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
+
+            if (!string.IsNullOrWhiteSpace(finalText))
+            {
+                return Result<SpeechTranscriptionResult>.Success(new SpeechTranscriptionResult(
+                    Text: finalText,
+                    RawText: request.ClientTranscript.Trim(),
+                    Provider: "BrowserWebSpeechHybrid",
+                    UsedFallback: true,
+                    TimestampsJson: null,
+                    ConfidenceScore: 0.90));
+            }
         }
 
         return Result<SpeechTranscriptionResult>.Failure("Không nhận diện được nội dung giọng nói trong bản ghi.");

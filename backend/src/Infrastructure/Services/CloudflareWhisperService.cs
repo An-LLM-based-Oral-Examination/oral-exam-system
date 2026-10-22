@@ -120,7 +120,9 @@ public class CloudflareWhisperService : ISpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: "CloudflareWhisper",
-                UsedFallback: false);
+                UsedFallback: false,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         if (audioStream.CanSeek)
@@ -131,7 +133,9 @@ public class CloudflareWhisperService : ISpeechToTextService
                     Text: string.Empty,
                     RawText: string.Empty,
                     Provider: "CloudflareWhisper",
-                    UsedFallback: false);
+                    UsedFallback: false,
+                    TimestampsJson: null,
+                    ConfidenceScore: 0.0);
             }
 
             if (audioStream.Position != 0)
@@ -150,7 +154,9 @@ public class CloudflareWhisperService : ISpeechToTextService
                 Text: string.Empty,
                 RawText: string.Empty,
                 Provider: "CloudflareWhisper",
-                UsedFallback: false);
+                UsedFallback: false,
+                TimestampsJson: null,
+                ConfidenceScore: 0.0);
         }
 
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken);

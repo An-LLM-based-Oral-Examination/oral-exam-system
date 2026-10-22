@@ -124,7 +124,13 @@ public class DevelopmentDataSeederTests
         {
             DevelopmentDataSeeder.CoursePrn231Id,
             DevelopmentDataSeeder.CourseSwd392Id,
-            DevelopmentDataSeeder.CourseSwr302Id
+            DevelopmentDataSeeder.CourseSwr302Id,
+            DevelopmentDataSeeder.CourseEnt001Id,
+            DevelopmentDataSeeder.CourseEnt104Id,
+            DevelopmentDataSeeder.CourseEnt203Id,
+            DevelopmentDataSeeder.CourseEnt303Id,
+            DevelopmentDataSeeder.CourseEnt403Id,
+            DevelopmentDataSeeder.CourseEnt503Id
         };
 
         foreach (var courseId in courseIds)
@@ -143,6 +149,24 @@ public class DevelopmentDataSeederTests
 
             practiceResult.IsSuccess.Should().BeTrue($"MF-01 Full-Session 10 câu phải thành công cho môn {courseId}");
             practiceResult.Value.Questions.Should().HaveCount(10);
+
+            // Kiểm tra MF-01 Per-Question On-Demand trên cả 3 độ khó
+            foreach (var diff in new[] { "easy", "medium", "hard" })
+            {
+                var perQResult = await startPracticeHandler.Handle(
+                    new StartPracticeSessionCommand(
+                        StudentId: DevelopmentDataSeeder.StudentHoangId,
+                        CourseId: courseId,
+                        Difficulty: diff,
+                        QuestionCount: null,
+                        IsFullSession: false,
+                        Topic: null,
+                        Difficulties: new List<string> { diff }),
+                    CancellationToken.None);
+
+                perQResult.IsSuccess.Should().BeTrue($"MF-01 Per-Question ({diff}) phải thành công cho môn {courseId}");
+                perQResult.Value.Questions.Should().HaveCount(1);
+            }
 
             // Kiểm tra MF-02 StartMockExam 5 câu
             var mockResult = await startMockExamHandler.Handle(

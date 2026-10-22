@@ -141,6 +141,11 @@ public class ContractCompletenessTests
         validResult.Value.TotalMaxScore.Should().Be(10.00m);
         validResult.Value.CriteriaCount.Should().Be(2);
 
+        var auditLog = await db.AuditLogs.FirstOrDefaultAsync(a => a.Action == "CREATE_RUBRIC" && a.EntityId == validResult.Value.Id);
+        auditLog.Should().NotBeNull("CreateRubricCommandHandler phải ghi AuditLog khi ActorUserId khác Guid.Empty");
+        auditLog!.EntityName.Should().Be("rubrics");
+        auditLog.NewValues.Should().Be("Barem chuẩn 10đ");
+
         var getHandler = new GetRubricsQueryHandler(db);
         var rubricsResult = await getHandler.Handle(new GetRubricsQuery(course.Id), CancellationToken.None);
         rubricsResult.IsSuccess.Should().BeTrue();
@@ -935,6 +940,19 @@ public class ContractCompletenessTests
             .GetMethod(nameof(global::API.Controllers.v1.QuestionsController.UploadQuestionImage))
             .Should()
             .NotBeNull();
+
+        // 6. Kiểm tra RBAC AuthorizeAttribute trên CoursesController.UpdateConfiguration và QuestionsController.ReviewDecision
+        var coursesType = typeof(global::API.Controllers.v1.CoursesController);
+        var updateConfigAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
+            coursesType.GetMethod(nameof(global::API.Controllers.v1.CoursesController.UpdateConfiguration))!,
+            typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
+        updateConfigAttr.Roles.Should().Be("lecturer,department_head,admin");
+
+        var questionsType = typeof(global::API.Controllers.v1.QuestionsController);
+        var reviewDecisionAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
+            questionsType.GetMethod(nameof(global::API.Controllers.v1.QuestionsController.ReviewDecision))!,
+            typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
+        reviewDecisionAttr.Roles.Should().Be("department_head,admin");
     }
 
     private sealed class FakeHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment
