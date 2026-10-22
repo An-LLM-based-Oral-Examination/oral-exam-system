@@ -9,11 +9,17 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Scale,
+  ServerCog,
+  ShieldCheck,
+  TicketCheck,
+  UserRoundCheck,
   X,
   type LucideIcon,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
+import type { UserRole } from '@/types/auth.types'
 
 interface SidebarProps {
   collapsed: boolean
@@ -27,6 +33,7 @@ interface InstructorNavigationItem {
   path: string
   icon: LucideIcon
   end?: boolean
+  roles?: UserRole[]
 }
 
 const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
@@ -51,10 +58,39 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     label: 'Hậu kiểm & công bố',
     path: '/lecturer/audit',
     icon: ClipboardCheck,
+    roles: ['Instructor', 'DepartmentHead'],
+  },
+  {
+    label: 'MF-04 Official Exams',
+    path: '/official-exams/manage',
+    icon: TicketCheck,
+    roles: ['DepartmentHead', 'Admin'],
+  },
+  {
+    label: 'Internal Appeals',
+    path: '/appeals',
+    icon: UserRoundCheck,
+    roles: ['Instructor', 'DepartmentHead', 'Admin'],
+  },
+  {
+    label: 'Proctor Attendance',
+    path: '/proctor/attendance',
+    icon: ShieldCheck,
+    roles: ['Proctor', 'Instructor', 'DepartmentHead', 'Admin'],
+  },
+  {
+    label: 'AI Grading DLQ',
+    path: '/dlq',
+    icon: ServerCog,
+    roles: ['DepartmentHead', 'Admin'],
   },
 ]
 
 export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: SidebarProps) {
+  const { hasRole } = useAuth()
+  const visibleNavigation = INSTRUCTOR_NAVIGATION.filter(
+    (item) => !item.roles || hasRole(item.roles),
+  )
   useEffect(() => {
     if (!mobileOpen) return
 
@@ -132,7 +168,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           </p>
 
           <nav className="space-y-1.5" aria-label="Các phân hệ giảng viên">
-            {INSTRUCTOR_NAVIGATION.map(({ label, path, icon: Icon, end }) => (
+            {visibleNavigation.map(({ label, path, icon: Icon, end }) => (
               <NavLink
                 key={path}
                 to={path}

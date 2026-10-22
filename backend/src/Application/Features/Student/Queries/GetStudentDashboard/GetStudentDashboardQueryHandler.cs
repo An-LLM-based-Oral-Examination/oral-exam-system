@@ -56,12 +56,42 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         var practiceSessionScores = new List<decimal>();
         foreach (var session in practiceSessions)
         {
-            var mainScores = session.Answers
-                .Where(a => !a.IsFollowUp && a.AiEvaluations.Any())
-                .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+            var answers = session.Answers ?? new List<Domain.Entities.PracticeAnswer>();
+            var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
+            var isCompleted = string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase);
+
+            var distinctMainCount = answers
+                .Where(a => !a.IsFollowUp)
+                .Select(a => a.QuestionId)
+                .Distinct()
+                .Count();
+            var plannedCount = Math.Max(session.SelectedQuestionIds.Count, distinctMainCount);
+
+            var mainScores = answers
+                .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+                .GroupBy(a => a.QuestionId)
+                .Select(g => g
+                    .SelectMany(a => a.AiEvaluations)
+                    .Max(e => e.TotalScore))
                 .ToList();
 
-            if (mainScores.Count > 0)
+            bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
+
+            if (isFullSession && isCompleted && plannedCount > 0)
+            {
+                if (!hasPendingAnswers)
+                {
+                    if (mainScores.Count > 0)
+                    {
+                        practiceSessionScores.Add(mainScores.Sum() / plannedCount);
+                    }
+                    else if (session.SelectedQuestionIds.Count > 0)
+                    {
+                        practiceSessionScores.Add(0.0m);
+                    }
+                }
+            }
+            else if (mainScores.Count > 0)
             {
                 practiceSessionScores.Add(mainScores.Average());
             }
@@ -96,7 +126,9 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         var enrolledCourseIds = await context.ClassEnrollments
             .AsNoTracking()
             .Include(ce => ce.Class)
-            .Where(ce => ce.StudentId == request.StudentId && ce.Class != null)
+            .Where(ce => ce.StudentId == request.StudentId &&
+                         ce.Class != null &&
+                         (ce.Status == null || ce.Status == "enrolled" || ce.Status == "active"))
             .Select(ce => ce.Class.CourseId)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -105,6 +137,13 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         var courses = enrolledCourseIds.Count > 0
             ? await activeCoursesQuery.Where(c => enrolledCourseIds.Contains(c.Id)).OrderBy(c => c.Code).ToListAsync(cancellationToken)
             : await activeCoursesQuery.OrderBy(c => c.Code).ToListAsync(cancellationToken);
+
+        var sysQuotaStr = await context.SystemConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "max_mock_exams_per_day" || c.Key == "MaxMockExamsPerDay")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+        var fallbackQuota = int.TryParse(sysQuotaStr, out var parsedSysQuota) && parsedSysQuota > 0 ? parsedSysQuota : 3;
 
         var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -116,9 +155,9 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         var courseQuotaDtos = courses.Select(course =>
         {
             var quotaRecord = todayQuotas.FirstOrDefault(q => q.CourseId == course.Id && q.QuotaDate == todayVn)
-                ?? todayQuotas.FirstOrDefault(q => q.CourseId == course.Id && q.QuotaDate == todayUtc);
+                ?? todayQuotas.FirstOrDefault(q => q.CourseId == course.Id && q.QuotaDate == todayUtc && DateOnly.FromDateTime(q.UpdatedAt.AddHours(7)) == todayVn);
             var usedToday = quotaRecord?.UsedCount ?? 0;
-            var maxPerDay = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
+            var maxPerDay = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : fallbackQuota;
             var remaining = Math.Max(0, maxPerDay - usedToday);
 
             return new StudentCourseQuotaDto

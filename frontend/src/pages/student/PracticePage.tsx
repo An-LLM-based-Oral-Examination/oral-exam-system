@@ -29,7 +29,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { courseService } from '@/services/course.service'
 import { practiceService } from '@/services/practice.service'
 import {
-  DEFAULT_TTS_VOICE,
+  getTtsVoiceForCourse,
+  isEnglishCourse,
   isSpeechPlaybackCancellation,
   playNaturalSpeech,
   stopSpeechPlayback,
@@ -242,11 +243,18 @@ export function PracticePage() {
     }
 
     const requestId = ++speechRequestRef.current
+    const isEnglish = isEnglishCourse(selectedCourse.code, selectedCourse.name)
     const previewText = `Xin chào. Phiên luyện tập ${selectedCourse.name} đã sẵn sàng. Hãy trả lời rõ ràng và tự tin.`
     setIsVoicePreviewPlaying(true)
     setVoicePreviewMessage('AI đang tạo và phát giọng tự nhiên...')
 
-    void playNaturalSpeech(previewText, DEFAULT_TTS_VOICE, 0.94)
+    void playNaturalSpeech(
+      isEnglish
+        ? `Hello. The ${selectedCourse.name} practice session is ready. Please answer clearly and confidently.`
+        : previewText,
+      getTtsVoiceForCourse(selectedCourse.code, selectedCourse.name),
+      0.94,
+    )
       .then(() => {
         if (speechRequestRef.current === requestId) setVoicePreviewMessage('Đã phát xong câu chào mẫu.')
       })

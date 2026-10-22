@@ -13,6 +13,7 @@ public sealed class GetMockExamSessionDetailQueryValidator : AbstractValidator<G
             .NotEmpty().WithMessage("Mã ca thi thử không được để trống.");
 
         RuleFor(x => x.StudentId)
-            .NotEmpty().WithMessage("Mã sinh viên không được để trống.");
+            .NotEmpty().WithMessage("Mã sinh viên không được để trống.")
+            .When(x => !x.IsElevatedRole);
     }
 }

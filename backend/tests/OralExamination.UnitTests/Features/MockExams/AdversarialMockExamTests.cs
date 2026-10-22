@@ -1104,5 +1104,61 @@ public class AdversarialMockExamTests
         openTagCount.Should().Be(1, "Chỉ được phép có duy nhất 1 thẻ mở <student_transcript> do hệ thống tạo.");
         closeTagCount.Should().Be(1, "Chỉ được phép có duy nhất 1 thẻ đóng </student_transcript> do hệ thống tạo.");
     }
+
+    [Fact(DisplayName = "ADV-20: StartMockExam tự động khởi tạo và lưu ExamStructure mặc định hợp lệ (Id != Guid.Empty) và SetCode duy nhất khi môn học chưa có cấu trúc đề")]
+    public async Task StartMockExam_WithoutExistingStructure_PersistsValidStructureAndUniqueSetCodes()
+    {
+        using var context = CreateDbContext();
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWR302",
+            Name = "Software Requirements",
+            MaxMockExamsPerDay = 5,
+            IsActive = true
+        };
+        context.Courses.Add(course);
+
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Barem SWR302",
+            TotalMaxScore = 10.0m,
+            IsActive = true
+        };
+        context.Rubrics.Add(rubric);
+
+        for (int i = 0; i < 5; i++)
+        {
+            context.PracticeQuestions.Add(new PracticeQuestion
+            {
+                Id = Guid.NewGuid(),
+                CourseId = course.Id,
+                RubricId = rubric.Id,
+                Title = $"Câu hỏi SWR #{i + 1}",
+                Content = $"Nội dung #{i + 1}",
+                Difficulty = "medium",
+                BloomLevel = "Apply",
+                IsActive = true
+            });
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var student1 = Guid.NewGuid();
+        var student2 = Guid.NewGuid();
+
+        var res1 = await handler.Handle(new StartMockExamCommand(course.Id, student1, false), CancellationToken.None);
+        var res2 = await handler.Handle(new StartMockExamCommand(course.Id, student2, false), CancellationToken.None);
+
+        res1.IsSuccess.Should().BeTrue();
+        res2.IsSuccess.Should().BeTrue();
+
+        var examSets = await context.ExamSets.Where(e => e.CourseId == course.Id).ToListAsync();
+        examSets.Should().HaveCount(2);
+        examSets[0].StructureId.Should().NotBe(Guid.Empty);
+        examSets[0].SetCode.Should().NotBe(examSets[1].SetCode, "Hai đề thi tạo cùng giây phải có SetCode khác nhau để không vi phạm UNIQUE index.");
+    }
 }
 

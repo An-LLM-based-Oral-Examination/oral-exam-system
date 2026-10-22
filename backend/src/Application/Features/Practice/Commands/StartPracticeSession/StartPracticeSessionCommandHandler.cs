@@ -25,7 +25,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
     public async Task<Result<StartPracticeSessionResponse>> Handle(StartPracticeSessionCommand request, CancellationToken cancellationToken)
     {
         // 1. Lấy thông tin Course
-        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
+        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
         if (course == null)
         {
             return Result<StartPracticeSessionResponse>.Failure("Môn học không tồn tại.");
@@ -127,7 +127,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             new(
                 selectedQuestion.Id,
                 selectedQuestion.Content,
-                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
                 selectedQuestion.ImageUrl,
                 selectedQuestion.ImageDescription
             )
@@ -140,7 +140,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = JsonSerializer.Serialize(normalizedDifficulties),
+            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
+                normalizedDifficulties,
+                selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 
@@ -227,7 +229,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
                 q.ImageUrl,
                 q.ImageDescription
             ))
@@ -241,7 +243,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = request.IsFullSession ? "full_session" : "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = "[\"easy\",\"medium\",\"hard\"]",
+            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
+                new List<string> { "easy", "medium", "hard" },
+                selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 
@@ -311,7 +315,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
                 q.ImageUrl,
                 q.ImageDescription
             ))
@@ -325,7 +329,9 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = request.IsFullSession ? "full_session" : "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = JsonSerializer.Serialize(new[] { normalizedDifficulty }),
+            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
+                new[] { normalizedDifficulty },
+                selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 

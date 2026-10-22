@@ -120,7 +120,7 @@ public sealed class SubmitMockExamAnswerCommandHandler(
         SubmitMockExamAnswerCommand request,
         CancellationToken cancellationToken)
     {
-        if (request.AudioStream != null && request.AudioStream.Length > 0)
+        if (request.AudioStream != null && (!request.AudioStream.CanSeek || request.AudioStream.Length > 0))
         {
             var fileName = !string.IsNullOrWhiteSpace(request.FileName) ? request.FileName : "audio.webm";
             Exception? sttException = null;
@@ -128,6 +128,12 @@ public sealed class SubmitMockExamAnswerCommandHandler(
 
             try
             {
+                if (request.AudioStream.CanSeek && request.AudioStream.Position != 0)
+                {
+                    request.AudioStream.Position = 0;
+                }
+
+                // Không truyền Title/Content làm vocabularyHint — tránh STT bịa đáp án khi im lặng.
                 SpeechTranscriptionResult? detailed = await _speechToTextService.TranscribeDetailedAsync(
                     request.AudioStream,
                     fileName,

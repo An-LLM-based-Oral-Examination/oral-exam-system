@@ -66,6 +66,15 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
     }
   }, [])
 
+  const questionNumbers = Array.from(
+    new Set(
+      scorecard.criteriaScores
+        .map((item) => item.questionNumber)
+        .filter((questionNumber): questionNumber is number => questionNumber !== undefined),
+    ),
+  )
+  const hasQuestionBreakdown = questionNumbers.length > 0
+
   return (
     <div
       ref={dialogRef}
@@ -78,7 +87,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#0F2854]/70 px-3 py-4 backdrop-blur-[3px] outline-none sm:p-6"
     >
       <Card className="flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white text-[#0F2854] shadow-[0_28px_80px_rgba(4,20,48,0.3)]">
-        <CardHeader className="relative space-y-0 overflow-hidden border-b border-white/10 bg-[linear-gradient(125deg,#071a35_0%,#123263_58%,#24528e_100%)] p-0 text-white">
+        <CardHeader className="relative shrink-0 space-y-0 overflow-hidden border-b border-white/10 bg-[linear-gradient(125deg,#071a35_0%,#123263_58%,#24528e_100%)] p-0 text-white">
           <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(129,220,255,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(129,220,255,0.18)_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.13]" />
           <div className="pointer-events-none absolute -top-20 -right-12 size-56 rounded-full bg-[#5de0f2]/16 blur-3xl" />
 
@@ -136,32 +145,43 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                 </p>
               </div>
               <span className="shrink-0 rounded-full border border-[#dce6f4] bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
-                {scorecard.criteriaScores.length} tiêu chí
+                {hasQuestionBreakdown ? `${questionNumbers.length} câu` : `${scorecard.criteriaScores.length} tiêu chí`}
               </span>
             </div>
 
             <div className="space-y-2.5">
-              {scorecard.criteriaScores.map((item, idx) => (
-                <article
-                  key={idx}
-                  className="flex flex-col gap-3 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)] sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-[#25364e] sm:text-xs">
-                      {item.criterionName || `Tiêu chí: ${item.criterionId}`}
-                    </p>
-                    <p className="mt-1.5 text-xs leading-relaxed text-[#65758b]">
-                      {item.comment}
-                    </p>
-                  </div>
-                  <Badge
-                    variant="success"
-                    className="w-fit shrink-0 border border-[#cfe8df] bg-[#effaf6] px-2.5 py-1 font-mono text-xs font-bold text-[#168367]"
-                  >
-                    {item.score.toFixed(1)} đ
-                  </Badge>
-                </article>
-              ))}
+              {scorecard.criteriaScores.map((item, idx) => {
+                const previousItem = scorecard.criteriaScores[idx - 1]
+                const showQuestionHeading =
+                  item.questionNumber !== undefined &&
+                  item.questionNumber !== previousItem?.questionNumber
+
+                return (
+                  <React.Fragment key={`${item.criterionId}-${idx}`}>
+                    {showQuestionHeading && (
+                      <div className="pt-2 text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
+                        Câu {item.questionNumber}
+                      </div>
+                    )}
+                    <article className="flex flex-col gap-3 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)] sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#25364e] sm:text-xs">
+                          {item.criterionName || `Tiêu chí: ${item.criterionId}`}
+                        </p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-[#65758b]">
+                          {item.comment}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="success"
+                        className="w-fit shrink-0 border border-[#cfe8df] bg-[#effaf6] px-2.5 py-1 font-mono text-xs font-bold text-[#168367]"
+                      >
+                        {item.score.toFixed(1)} đ
+                      </Badge>
+                    </article>
+                  </React.Fragment>
+                )
+              })}
             </div>
           </section>
 
@@ -206,7 +226,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
           )}
         </CardContent>
 
-        <CardFooter className="mt-0 flex-col-reverse justify-end gap-2 border-t border-[#e8edf4] bg-white p-4 sm:flex-row sm:px-5">
+        <CardFooter className="mt-0 shrink-0 flex-col-reverse justify-end gap-2 border-t border-[#e8edf4] bg-white p-4 sm:flex-row sm:px-5">
           {onNextQuestion ? (
             <Button
               variant="primary"

@@ -62,6 +62,14 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         {
             if (string.Equals(entry.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase))
             {
+                if (entry.RetryCount >= 9)
+                {
+                    entry.Status = "abandoned";
+                    entry.NextRetryAt = null;
+                    entry.LastAttemptAt = now;
+                    continue;
+                }
+
                 GradingTask? practiceTask;
                 try
                 {

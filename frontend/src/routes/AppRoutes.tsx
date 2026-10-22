@@ -36,6 +36,26 @@ const AuditEvidencePage = lazy(() =>
     default: module.AuditEvidencePage,
   })),
 )
+const OfficialExamManagementPage = lazy(() =>
+  import('@/pages/lecturer/OfficialExamManagementPage').then((module) => ({
+    default: module.OfficialExamManagementPage,
+  })),
+)
+const AppealManagementPage = lazy(() =>
+  import('@/pages/lecturer/AppealManagementPage').then((module) => ({
+    default: module.AppealManagementPage,
+  })),
+)
+const ProctorAttendancePage = lazy(() =>
+  import('@/pages/proctor/ProctorAttendancePage').then((module) => ({
+    default: module.ProctorAttendancePage,
+  })),
+)
+const DeadLetterQueuePage = lazy(() =>
+  import('@/pages/lecturer/DeadLetterQueuePage').then((module) => ({
+    default: module.DeadLetterQueuePage,
+  })),
+)
 
 function InstructorPageFallback() {
   return (
@@ -88,6 +108,37 @@ export const AppRoutes: React.FC = () => {
               <Route path="/question-bank" element={<QuestionStudioPage />} />
               <Route path="/question-bank/create" element={<CreateQuestionPage />} />
               <Route path="/lecturer/audit" element={<AuditEvidencePage />} />
+              <Route path="/official-exams/manage" element={<OfficialExamManagementPage />} />
+              <Route path="/appeals" element={<AppealManagementPage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        {/* Proctor portal: attendance, seat monitor and Kiosk suspension. */}
+        <Route element={<ProtectedRoute allowedRoles={['Proctor', 'Instructor', 'DepartmentHead', 'Admin']} />}>
+          <Route element={<AppLayout />}>
+            <Route
+              element={
+                <Suspense fallback={<InstructorPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              }
+            >
+              <Route path="/proctor/attendance" element={<ProctorAttendancePage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedRoute allowedRoles={['DepartmentHead', 'Admin']} />}>
+          <Route element={<AppLayout />}>
+            <Route
+              element={
+                <Suspense fallback={<InstructorPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              }
+            >
+              <Route path="/dlq" element={<DeadLetterQueuePage />} />
             </Route>
           </Route>
         </Route>

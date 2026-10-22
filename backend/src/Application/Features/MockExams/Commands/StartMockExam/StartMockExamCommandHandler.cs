@@ -8,6 +8,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 
@@ -36,7 +37,13 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         // 2. Kiểm tra Daily Quota Guard do Quản trị viên (Admin) cấu hình (Múi giờ GMT+7)
         var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
-        var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : 3;
+        var sysQuotaStr = await _context.SystemConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "max_mock_exams_per_day" || c.Key == "MaxMockExamsPerDay")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+        var fallbackQuota = int.TryParse(sysQuotaStr, out var parsedSysQuota) && parsedSysQuota > 0 ? parsedSysQuota : 3;
+        var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : fallbackQuota;
 
         var quota = await _context.MockExamQuotas
             .FirstOrDefaultAsync(q => q.StudentId == request.StudentId && q.CourseId == request.CourseId && q.QuotaDate == todayVn, cancellationToken);
@@ -46,17 +53,32 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             return Result<StartMockExamResponse>.Failure($"QUOTA_EXCEEDED:Bạn đã sử dụng hết hạn ngạch thi thử trong ngày ({maxDailyQuota}/{maxDailyQuota} lượt) cho môn học này.");
         }
 
-        // 3. Tra cứu hoặc tạo ExamStructure của môn học
+        // 3. Tra cứu ExamStructure mới nhất của môn học (nếu chưa có cấu trúc đề, khởi tạo và lưu cấu trúc mặc định để đảm bảo khóa ngoại FK exam_sets -> exam_structures)
         var structure = await _context.ExamStructures
-            .FirstOrDefaultAsync(s => s.CourseId == request.CourseId && s.IsActive, cancellationToken);
+            .AsNoTracking()
+            .Where(s => s.CourseId == request.CourseId && s.IsActive)
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (structure == null)
         {
+            var creatorId = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive && (u.Role == "department_head" || u.Role == "admin" || u.Id == request.StudentId))
+                .OrderBy(u => u.Role == "department_head" ? 0 : u.Role == "admin" ? 1 : 2)
+                .Select(u => u.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (creatorId == Guid.Empty)
+            {
+                creatorId = request.StudentId;
+            }
+
             structure = new ExamStructure
             {
                 Id = Guid.NewGuid(),
                 CourseId = request.CourseId,
-                CreatedBy = request.StudentId,
+                CreatedBy = creatorId,
                 Name = $"Cấu trúc mặc định - {course.Code}",
                 TotalQuestions = 5,
                 DurationMinutes = 30,
@@ -182,18 +204,20 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         // 8. Tính toán thời lượng làm bài
         // Không Follow-up: thời lượng từ structure (mặc định 30 phút).
-        // Có Follow-up: 45 phút.
-        var durationMinutes = request.HasFollowUp ? 45 : (structure.DurationMinutes > 0 ? structure.DurationMinutes : 30);
+        // Có Follow-up: cộng thêm 15 phút (tối thiểu 45 phút).
+        var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : 30;
+        var durationMinutes = request.HasFollowUp ? Math.Max(45, baseDuration + 15) : baseDuration;
         var startedAt = DateTime.UtcNow;
         var expiresAt = startedAt.AddMinutes(durationMinutes);
 
         // 9. Khởi tạo ExamSet & MockExamSession & MockExamAnswer
+        var uniqueSuffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         var examSet = new ExamSet
         {
             Id = Guid.NewGuid(),
             StructureId = structure.Id,
             CourseId = request.CourseId,
-            SetCode = $"MOCK-{course.Code}-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            SetCode = $"MOCK-{course.Code}-{DateTime.UtcNow:yyyyMMddHHmmss}-{uniqueSuffix}",
             GeneratedAt = startedAt,
             IsActive = true
         };
@@ -217,14 +241,14 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             var q = selectedQuestions[i];
             session.Answers.Add(new MockExamAnswer
             {
-                Id = Guid.NewGuid(),
+                Id = MockExamAnswerOrdering.CreateOrderedAnswerId(i + 1),
                 SessionId = session.Id,
                 QuestionId = q.Id,
                 OrderIndex = i + 1,
                 AnswerText = null,
                 TimeTakenSeconds = 0,
                 Status = "pending",
-                AnsweredAt = startedAt,
+                AnsweredAt = startedAt.AddMilliseconds(i),
                 IsFollowUp = false,
                 ParentAnswerId = null,
                 PromptText = null
@@ -237,6 +261,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         await _context.SaveChangesAsync(cancellationToken);
 
         // 11. Chuẩn bị DTO phản hồi
+        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(course.Code);
         var questionDtos = selectedQuestions.Select((q, idx) =>
         {
             var criteriaDtos = q.Rubric?.Criteria != null
@@ -246,16 +271,40 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                     .ToList()
                 : new List<MockExamRubricCriterionDto>();
 
+            string? resolvedFollowUp = null;
+            var displayContent = q.Content;
+            if (request.HasFollowUp)
+            {
+                resolvedFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    course.Code,
+                    q.FollowUpPrompt,
+                    null,
+                    1,
+                    null,
+                    null,
+                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
+                    q.Content,
+                    null);
+
+                if (!displayContent.Contains(resolvedFollowUp, StringComparison.OrdinalIgnoreCase))
+                {
+                    displayContent = isEnglishCourse
+                        ? $"{q.Content}\n\n[Follow-up Question]: {resolvedFollowUp}"
+                        : $"{q.Content}\n\n[Câu hỏi phụ đào sâu]: {resolvedFollowUp}";
+                }
+            }
+
             return new MockExamQuestionDto(
                 Id: q.Id,
                 OrderIndex: idx + 1,
                 Title: q.Title,
-                Content: q.Content,
+                Content: displayContent,
                 BloomLevel: q.BloomLevel,
                 Difficulty: q.Difficulty,
                 RubricCriteria: criteriaDtos,
                 ImageUrl: q.ImageUrl,
-                ImageDescription: q.ImageDescription
+                ImageDescription: q.ImageDescription,
+                FollowUpPrompt: resolvedFollowUp
             );
         }).ToList();
 

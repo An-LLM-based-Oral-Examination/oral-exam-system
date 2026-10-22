@@ -1058,4 +1058,180 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         capturedDto!.NeedsFollowUp.Should().BeFalse(
             "Luật bất biến MF-01: Chế độ Full-Session Progressive CẤM câu hỏi phụ (IsFullSession = true)");
     }
+
+    [Fact(DisplayName = "ADV-FOL-04. Chuỗi Follow-up #1 -> Follow-up #2: Không lặp lại câu hỏi phụ cũ, truyền ngữ cảnh vào AI và đồng bộ GetPracticeSession")]
+    public async Task BorderlineFollowUp_SecondFollowUp_NeverRepeatsFirstPrompt_AndSyncsWithGetSession()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateDbContext(dbName);
+        var (course, student, session) = await SeedPracticeSessionAsync(context, DateTime.UtcNow);
+        var questions = await SeedPracticeQuestionsAsync(context, course.Id, "medium", 1);
+        var question = questions[0];
+        question.FollowUpPrompt = "Câu hỏi phụ gốc #1: Hãy giải thích sự khác biệt giữa Scoped và Transient?";
+
+        var mainAnswer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            AnswerText = "Em trả lời câu hỏi chính ở mức điểm 6.0",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-2),
+            IsFollowUp = false
+        };
+        context.PracticeAnswers.Add(mainAnswer);
+        await context.SaveChangesAsync();
+
+        AiGradingRequest? capturedFollowUpGradingRequest = null;
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(a => a.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AiGradingRequest, CancellationToken>((req, _) =>
+            {
+                if (req.IsFollowUp)
+                {
+                    capturedFollowUpGradingRequest = req;
+                }
+            })
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 6.0m,
+                ConfidenceScore = 0.92m,
+                Feedback = "Trả lời đạt mức khá nhưng cần phân tích sâu hơn.",
+                Details = new List<GradingDetailDto>
+                {
+                    new GradingDetailDto { CriterionId = question.Rubric!.Criteria.First().Id.ToString(), Score = 6.0m, Comment = "Khá" }
+                }
+            });
+
+        var services = new ServiceCollection();
+        services.AddScoped<IApplicationDbContext>(_ => CreateDbContext(dbName));
+        services.AddScoped(_ => aiMock.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var hubMock = new Mock<IHubContext<PracticeHub, IPracticeClient>>();
+        var hubClientsMock = new Mock<IHubClients<IPracticeClient>>();
+        var clientMock = new Mock<IPracticeClient>();
+        hubMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+        hubClientsMock.Setup(c => c.Group($"session_{session.Id}")).Returns(clientMock.Object);
+
+        var receivedDtos = new List<PracticeAnswerDetailDto>();
+        clientMock.Setup(c => c.ReceiveGradingResult(It.IsAny<PracticeAnswerDetailDto>()))
+            .Callback<PracticeAnswerDetailDto>(dto => receivedDtos.Add(dto))
+            .Returns(Task.CompletedTask);
+
+        // Bước 1: Chấm câu trả lời chính -> Sinh Follow-up #1
+        var channel1 = new TestGradingChannel();
+        var worker1 = new GradingQueueWorker(channel1, serviceProvider, hubMock.Object, NullLogger<GradingQueueWorker>.Instance);
+        await worker1.StartAsync(CancellationToken.None);
+        await channel1.EnqueueAsync(new GradingTask
+        {
+            AnswerId = mainAnswer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            AnswerText = mainAnswer.AnswerText,
+            IsFollowUp = false,
+            IsFullSession = false
+        });
+        channel1.Complete();
+        for (int i = 0; i < 50 && receivedDtos.Count < 1; i++) await Task.Delay(50);
+        await worker1.StopAsync(CancellationToken.None);
+
+        receivedDtos.Should().HaveCount(1);
+        var firstResult = receivedDtos[0];
+        firstResult.NeedsFollowUp.Should().BeTrue();
+        firstResult.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
+        firstResult.FollowUpPrompt.Should().NotBe(question.FollowUpPrompt, "Không dùng câu hỏi phụ mẫu tĩnh trong DB mà phải sinh từ ngữ cảnh câu trả lời và chủ đề câu hỏi");
+        firstResult.FollowUpPrompt.Should().Contain("Em trả lời câu hỏi chính", "Follow-up #1 phải neo trực tiếp vào ngữ cảnh câu trả lời của sinh viên");
+
+        // Bước 2: Sinh viên nộp câu trả lời cho Follow-up #1 -> Chấm điểm đạt 6.0 -> Sinh Follow-up #2
+        using var context2 = CreateDbContext(dbName);
+        var followUp1Answer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            ParentAnswerId = mainAnswer.Id,
+            AnswerText = "Scoped tạo mới mỗi HTTP request còn Transient tạo mới mỗi lần inject.",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-1),
+            IsFollowUp = true
+        };
+        context2.PracticeAnswers.Add(followUp1Answer);
+        await context2.SaveChangesAsync();
+
+        var channel2 = new TestGradingChannel();
+        var worker2 = new GradingQueueWorker(channel2, serviceProvider, hubMock.Object, NullLogger<GradingQueueWorker>.Instance);
+        await worker2.StartAsync(CancellationToken.None);
+        await channel2.EnqueueAsync(new GradingTask
+        {
+            AnswerId = followUp1Answer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            ParentAnswerId = mainAnswer.Id,
+            AnswerText = followUp1Answer.AnswerText,
+            IsFollowUp = true,
+            IsFullSession = false
+        });
+        channel2.Complete();
+        for (int i = 0; i < 50 && receivedDtos.Count < 2; i++) await Task.Delay(50);
+        await worker2.StopAsync(CancellationToken.None);
+
+        receivedDtos.Should().HaveCount(2);
+        var secondResult = receivedDtos[1];
+        secondResult.NeedsFollowUp.Should().BeTrue("Lượt hỏi phụ #1 đạt 6.0đ và MaxPracticeFollowUpQuestions mặc định = 2 nên phải kích hoạt Follow-up #2");
+        secondResult.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
+        secondResult.FollowUpPrompt.Should().NotBe(firstResult.FollowUpPrompt, "Follow-up #2 tuyệt đối không được lặp lại nguyên văn câu hỏi phụ #1");
+        secondResult.FollowUpPrompt.Should().Contain("Scoped tạo mới mỗi HTTP request", "Follow-up #2 phải bám sát ngữ cảnh câu trả lời vừa nộp của sinh viên");
+
+        capturedFollowUpGradingRequest.Should().NotBeNull();
+        capturedFollowUpGradingRequest!.IsFollowUp.Should().BeTrue();
+        capturedFollowUpGradingRequest.FollowUpPrompt.Should().Be(firstResult.FollowUpPrompt);
+        capturedFollowUpGradingRequest.OriginalAnswerTranscript.Should().Be(mainAnswer.AnswerText);
+        capturedFollowUpGradingRequest.PreviousFollowUpPrompts.Should().Contain(firstResult.FollowUpPrompt!);
+
+        // Bước 3: Kiểm tra GetPracticeSessionQueryHandler đồng bộ 100% với SignalR
+        using var queryContext = CreateDbContext(dbName);
+        var queryHandler = new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQueryHandler(queryContext);
+        var sessionDetail = await queryHandler.Handle(
+            new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQuery(session.Id, student.Id, false),
+            CancellationToken.None);
+
+        sessionDetail.IsSuccess.Should().BeTrue();
+        var syncedSecondAnswer = sessionDetail.Value.Answers.Single(a => a.AnswerId == followUp1Answer.Id);
+        syncedSecondAnswer.NeedsFollowUp.Should().BeTrue();
+        syncedSecondAnswer.FollowUpPrompt.Should().Be(secondResult.FollowUpPrompt);
+    }
+
+    [Fact(DisplayName = "ADV-FOL-05. Các câu hỏi khác chủ đề và câu trả lời khác nhau bắt buộc sinh Follow-up khác biệt, bám sát ngữ cảnh")]
+    public void FollowUpPromptBuilder_DifferentTopicsAndTranscripts_GeneratesDistinctContextAwarePrompts()
+    {
+        var followUpCleanArch = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+            courseCode: "PRN231",
+            questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
+            aiGeneratedFollowUpPrompt: null,
+            followUpSequence: 1,
+            questionContent: "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
+            sampleAnswer: "Tầng Domain chứa Entities, Value Objects và Domain Events. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ thuần khiết và dễ kiểm thử.",
+            studentTranscript: "Em nghĩ tầng Domain chỉ chứa các bảng Entities của cơ sở dữ liệu.");
+
+        var followUpCqrs = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+            courseCode: "PRN231",
+            questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
+            aiGeneratedFollowUpPrompt: null,
+            followUpSequence: 1,
+            questionContent: "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR.",
+            sampleAnswer: "Command dùng để thay đổi trạng thái dữ liệu hệ thống (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và tuyệt đối không làm biến đổi trạng thái.",
+            studentTranscript: "Command dùng khi thêm hoặc cập nhật bản ghi trong hệ thống.");
+
+        followUpCleanArch.Should().NotBe(followUpCqrs, "Hai câu hỏi khác chủ đề không bao giờ được sinh ra cùng một câu follow-up");
+        followUpCleanArch.Should().Contain("tầng Domain chỉ chứa các bảng Entities", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
+        followUpCleanArch.Should().Contain("Không phụ thuộc vào framework hay database", "Follow-up phải xoáy vào ý trong đáp án mẫu mà sinh viên chưa trình bày");
+
+        followUpCqrs.Should().Contain("Command dùng khi thêm hoặc cập nhật", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
+        followUpCqrs.Should().Contain("Query chỉ dùng để truy vấn đọc dữ liệu", "Follow-up phải xoáy vào phần Query mà sinh viên còn thiếu");
+    }
 }

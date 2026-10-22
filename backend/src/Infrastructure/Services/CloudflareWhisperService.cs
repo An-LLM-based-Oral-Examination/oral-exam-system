@@ -177,7 +177,7 @@ public class CloudflareWhisperService : ISpeechToTextService
 
     /// <summary>
     /// Gọi mô hình @cf/openai/whisper-large-v3-turbo kèm bộ lọc tiếng ồn Silero VAD (vad_filter = true),
-    /// khóa ngôn ngữ tiếng Việt (language = "vi") và gợi ý thuật ngữ Kỹ thuật Phần mềm (initial_prompt).
+    /// ngôn ngữ tiếng Việt kết hợp gợi ý thuật ngữ chuyên ngành SE song ngữ Anh - Việt (initial_prompt).
     /// Tự động fallback về @cf/openai/whisper nếu endpoint turbo bị từ chối.
     /// </summary>
     private async Task<string> SendWhisperTurboWithVadAsync(

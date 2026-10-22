@@ -30,7 +30,7 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()
-              .WithExposedHeaders("X-TTS-Provider", "X-TTS-Voice", "X-TTS-Fallback", "X-TTS-Cache");
+              .WithExposedHeaders("X-STT-Confidence", "X-STT-Provider", "X-TTS-Provider", "X-TTS-Voice", "X-TTS-Rate", "X-TTS-Fallback", "X-TTS-Cache");
     });
 });
 
@@ -71,8 +71,8 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("AllowFrontend");
-app.UseStaticFiles();
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();

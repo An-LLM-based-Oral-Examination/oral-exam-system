@@ -385,6 +385,34 @@ public class PracticeControllerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact(DisplayName = "12. StartSession trả về 404 NotFound kèm ProblemDetails khi môn học không tồn tại")]
+    public async Task StartSession_Should_Return_404_When_Course_Not_Found()
+    {
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        var request = new StartPracticeSessionRequest(
+            StudentId: studentId,
+            CourseId: courseId,
+            Difficulty: "easy",
+            QuestionCount: 3,
+            IsFullSession: false,
+            Topic: null
+        );
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<StartPracticeSessionCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StartPracticeSessionResponse>.Failure("Môn học không tồn tại."));
+
+        var actionResult = await _controller.StartSession(request);
+
+        var notFoundResult = actionResult.Should().BeOfType<NotFoundObjectResult>().Subject;
+        notFoundResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        var problemDetails = notFoundResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problemDetails.Detail.Should().Be("Môn học không tồn tại.");
+    }
+
     [Fact(DisplayName = "11. GetStudentHistory: Khi caller có role student, phớt lờ studentId query param và ghim vào CurrentUserId")]
     public async Task GetStudentHistory_WhenStudentRole_PinsToCurrentUserId()
     {

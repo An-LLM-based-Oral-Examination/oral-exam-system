@@ -44,12 +44,23 @@ public class MockExamsController : ControllerBase
             return id;
         }
 
-        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
+        return Guid.Empty;
+    }
+
+    private bool IsElevatedRole() =>
+        User?.IsInRole("admin") == true ||
+        User?.IsInRole("department_head") == true ||
+        User?.IsInRole("lecturer") == true;
+
+    private Guid ResolveEffectiveStudentId(Guid? requestedStudentId)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (IsElevatedRole() && requestedStudentId.HasValue && requestedStudentId.Value != Guid.Empty)
         {
-            return headerId;
+            return requestedStudentId.Value;
         }
 
-        return Guid.Empty;
+        return currentUserId;
     }
 
     /// <summary>
@@ -57,10 +68,9 @@ public class MockExamsController : ControllerBase
     /// Hạn ngạch tối đa do Quản trị viên (Admin) cấu hình trong Course.MaxMockExamsPerDay (mặc định K = 3).
     /// </summary>
     [HttpGet("quota")]
-    public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId)
+    public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId = null)
     {
-        var currentUserId = GetCurrentUserId();
-        var effectiveStudentId = currentUserId != Guid.Empty ? currentUserId : (studentId ?? Guid.Empty);
+        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
 
         var query = new GetMockExamQuotaQuery(courseId, effectiveStudentId);
         var result = await _sender.Send(query);
@@ -207,6 +217,30 @@ public class MockExamsController : ControllerBase
                     });
                 }
 
+                if (result.Error?.Contains("không có quyền", StringComparison.OrdinalIgnoreCase) == true ||
+                    result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                        title = "Forbidden",
+                        status = 403,
+                        detail = result.Error
+                    });
+                }
+
+                if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true ||
+                    result.Error?.Contains("đã được nộp", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return Conflict(new
+                    {
+                        type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                        title = "Conflict",
+                        status = 409,
+                        detail = result.Error
+                    });
+                }
+
                 if (result.Error?.Contains("hết thời gian") == true)
                 {
                     return StatusCode(StatusCodes.Status410Gone, new
@@ -277,6 +311,30 @@ public class MockExamsController : ControllerBase
                 });
             }
 
+            if (result.Error?.Contains("không có quyền", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                    title = "Forbidden",
+                    status = 403,
+                    detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.Contains("đã được nộp", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(new
+                {
+                    type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                    title = "Conflict",
+                    status = 409,
+                    detail = result.Error
+                });
+            }
+
             return BadRequest(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/command-failed",
@@ -339,13 +397,14 @@ public class MockExamsController : ControllerBase
     /// </summary>
     [HttpGet("history")]
     public async Task<IActionResult> GetHistory(
-        [FromQuery] Guid? courseId,
+        [FromQuery] Guid? courseId = null,
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] string? status = null)
+        [FromQuery] string? status = null,
+        [FromQuery] Guid? studentId = null)
     {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == Guid.Empty)
+        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
+        if (effectiveStudentId == Guid.Empty)
         {
             return Unauthorized(new
             {
@@ -357,7 +416,7 @@ public class MockExamsController : ControllerBase
         }
 
         var query = new GetMockExamHistoryQuery(
-            StudentId: currentUserId,
+            StudentId: effectiveStudentId,
             CourseId: courseId,
             PageIndex: pageIndex,
             PageSize: pageSize,
@@ -384,10 +443,12 @@ public class MockExamsController : ControllerBase
     /// Tra cứu chi tiết một bài thi thử trong quá khứ kèm Bảng điểm Scorecard (MF-02 - FE-02).
     /// </summary>
     [HttpGet("history/{sessionId:guid}")]
-    public async Task<IActionResult> GetHistoryDetail([FromRoute] Guid sessionId)
+    public async Task<IActionResult> GetHistoryDetail(
+        [FromRoute] Guid sessionId,
+        [FromQuery] Guid? studentId = null)
     {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == Guid.Empty)
+        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
+        if (effectiveStudentId == Guid.Empty && !IsElevatedRole())
         {
             return Unauthorized(new
             {
@@ -400,7 +461,8 @@ public class MockExamsController : ControllerBase
 
         var query = new GetMockExamSessionDetailQuery(
             SessionId: sessionId,
-            StudentId: currentUserId
+            StudentId: effectiveStudentId,
+            IsElevatedRole: IsElevatedRole()
         );
 
         var result = await _sender.Send(query);
@@ -414,6 +476,18 @@ public class MockExamsController : ControllerBase
                     type = "https://oralexam.fpt.edu.vn/errors/not-found",
                     title = "Not Found",
                     status = 404,
+                    detail = result.Error
+                });
+            }
+
+            if (result.Error?.Contains("không có quyền", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                    title = "Forbidden",
+                    status = 403,
                     detail = result.Error
                 });
             }
@@ -442,4 +516,3 @@ public class SubmitMockExamAnswerFormRequest
     public int TimeTakenSeconds { get; set; }
     public string? Transcript { get; set; }
 }
-

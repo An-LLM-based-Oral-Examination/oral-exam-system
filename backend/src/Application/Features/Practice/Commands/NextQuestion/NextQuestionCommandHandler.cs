@@ -41,13 +41,19 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
             : 5;
 
         var elapsed = DateTime.UtcNow - session.LastActivityAt;
-        if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        if (elapsed > TimeSpan.FromMinutes(timeoutMinutes))
         {
-            session.Status = "completed";
-            session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (session.Status == "in_progress")
+            {
+                session.Status = "completed";
+                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
-            return Result<NextQuestionResponse>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            if (session.Status == "completed")
+            {
+                return Result<NextQuestionResponse>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            }
         }
 
         if (session.Status != "in_progress")
@@ -68,38 +74,27 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
             .OrderBy(a => a.SubmittedAt)
             .ToListAsync(cancellationToken);
 
-        var excludedQuestionIds = answeredAnswers.Select(a => a.QuestionId).Distinct().ToHashSet();
+        var priorMainQuestionIds = new List<Guid>(session.SelectedQuestionIds);
+        foreach (var ansQid in answeredAnswers.Select(a => a.QuestionId))
+        {
+            if (ansQid != Guid.Empty && !priorMainQuestionIds.Contains(ansQid))
+            {
+                priorMainQuestionIds.Add(ansQid);
+            }
+        }
 
-        var answeredQuestionIds = answeredAnswers.Select(a => a.QuestionId).Distinct().ToList();
+        var excludedQuestionIds = priorMainQuestionIds.ToHashSet();
+
         var questionDifficulties = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => answeredQuestionIds.Contains(q.Id))
+            .Where(q => priorMainQuestionIds.Contains(q.Id))
             .ToDictionaryAsync(q => q.Id, q => q.Difficulty.Trim().ToLowerInvariant(), cancellationToken);
 
         // 4. Xác định danh sách độ khó đã chọn của session
-        List<string> selectedDifficulties;
-        if (!string.IsNullOrWhiteSpace(session.SelectedDifficulties))
-        {
-            try
-            {
-                selectedDifficulties = JsonSerializer.Deserialize<List<string>>(session.SelectedDifficulties) ?? new List<string>();
-            }
-            catch
-            {
-                selectedDifficulties = session.SelectedDifficulties
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(d => d.Trim().ToLowerInvariant())
-                    .ToList();
-            }
-        }
-        else
-        {
-            selectedDifficulties = new List<string> { "easy", "medium", "hard" };
-        }
-
-        selectedDifficulties = selectedDifficulties
+        var selectedDifficulties = session.DifficultiesList
             .Where(d => !string.IsNullOrWhiteSpace(d))
             .Select(d => d.Trim().ToLowerInvariant())
+            .Where(d => d is "easy" or "medium" or "hard")
             .Distinct()
             .ToList();
 
@@ -133,24 +128,24 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         // - Kiểm tra 2 câu hỏi non-follow-up liền trước trong phiên này.
         // - Nếu cả 2 đều có cùng độ khó D và selectedDifficulties có > 1 độ khó: loại trừ D khỏi candidate pool.
         string? excludeDifficulty = null;
-        if (selectedDifficulties.Count > 1 && answeredAnswers.Count >= 2)
+        if (selectedDifficulties.Count > 1 && priorMainQuestionIds.Count >= 2)
         {
             string? last1 = null;
             string? last2 = null;
 
-            var qId1 = answeredAnswers[^1].QuestionId;
-            var qId2 = answeredAnswers[^2].QuestionId;
+            var qId1 = priorMainQuestionIds[^1];
+            var qId2 = priorMainQuestionIds[^2];
 
             questionDifficulties.TryGetValue(qId1, out last1);
             questionDifficulties.TryGetValue(qId2, out last2);
 
-            if (string.IsNullOrEmpty(last1) && answeredAnswers[^1].Question != null)
+            if (string.IsNullOrEmpty(last1))
             {
-                last1 = answeredAnswers[^1].Question.Difficulty?.Trim().ToLowerInvariant();
+                last1 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId1)?.Question?.Difficulty?.Trim().ToLowerInvariant();
             }
-            if (string.IsNullOrEmpty(last2) && answeredAnswers[^2].Question != null)
+            if (string.IsNullOrEmpty(last2))
             {
-                last2 = answeredAnswers[^2].Question.Difficulty?.Trim().ToLowerInvariant();
+                last2 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId2)?.Question?.Difficulty?.Trim().ToLowerInvariant();
             }
 
             if (!string.IsNullOrEmpty(last1) && last1 == last2)
@@ -199,11 +194,17 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         var diffPool = candidatePool.Where(q => q.Difficulty.Trim().ToLowerInvariant() == chosenDiff).ToList();
         var selectedQuestion = diffPool[Random.Shared.Next(diffPool.Count)];
 
-        // 8. Cập nhật LastActivityAt
+        // 8. Cập nhật danh sách câu hỏi đã bốc và LastActivityAt
+        var currentSelectedIds = session.SelectedQuestionIds;
+        if (!currentSelectedIds.Contains(selectedQuestion.Id))
+        {
+            currentSelectedIds.Add(selectedQuestion.Id);
+            session.SelectedQuestionIds = currentSelectedIds;
+        }
         session.LastActivityAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
-        int questionOrder = answeredAnswers.Count + 1;
+        int questionOrder = Math.Max(answeredAnswers.Count, priorMainQuestionIds.Count) + 1;
 
         return Result<NextQuestionResponse>.Success(new NextQuestionResponse
         {
@@ -215,7 +216,7 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
                 Content = selectedQuestion.Content,
                 Difficulty = selectedQuestion.Difficulty,
                 QuestionOrder = questionOrder,
-                RubricCriteria = selectedQuestion.Rubric?.Criteria.Select(c => c.Description ?? string.Empty).ToList() ?? new List<string>(),
+                RubricCriteria = selectedQuestion.Rubric?.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() ?? new List<string>(),
                 ImageUrl = selectedQuestion.ImageUrl,
                 ImageDescription = selectedQuestion.ImageDescription
             }

@@ -34,6 +34,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthState({ user: data.user, token: data.accessToken })
   }, [])
 
+  const loginWithPassword = useCallback(async (username: string, password: string) => {
+    const data = await authService.passwordLogin({ username, password })
+    setAuthState({ user: data.user, token: data.accessToken })
+  }, [])
+
   const logout = async () => {
     await authService.logout()
     setAuthState({ user: null, token: null })
@@ -62,6 +67,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isDepartmentHead,
         isProctor,
         isAdmin,
+        loginWithPassword,
         loginWithGoogle,
         logout,
         hasRole,

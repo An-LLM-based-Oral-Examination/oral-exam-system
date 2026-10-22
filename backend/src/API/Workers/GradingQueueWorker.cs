@@ -72,19 +72,42 @@ public class GradingQueueWorker : BackgroundService
                     var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
                     var now = DateTime.UtcNow;
 
-                    var dlqEntry = new DeadLetterQueue
+                    var existingDlq = await errorDbContext.DeadLetterQueues
+                        .OrderByDescending(d => d.CreatedAt)
+                        .FirstOrDefaultAsync(d => d.TaskType == "PracticeGrading" && d.CorrelationId == task.AnswerId, CancellationToken.None);
+                    if (existingDlq != null)
                     {
-                        TaskType = "PracticeGrading",
-                        CorrelationId = task.AnswerId,
-                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                        ErrorMessage = ex.Message,
-                        RetryCount = 3,
-                        Status = "pending",
-                        NextRetryAt = now.AddMinutes(5),
-                        LastAttemptAt = now,
-                        CreatedAt = now
-                    };
-                    errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                        existingDlq.RetryCount += 3;
+                        existingDlq.ErrorMessage = ex.Message;
+                        existingDlq.LastAttemptAt = now;
+                        existingDlq.ResolvedAt = null;
+                        if (existingDlq.RetryCount >= 9)
+                        {
+                            existingDlq.Status = "abandoned";
+                            existingDlq.NextRetryAt = null;
+                        }
+                        else
+                        {
+                            existingDlq.Status = "pending";
+                            existingDlq.NextRetryAt = now.AddMinutes(5);
+                        }
+                    }
+                    else
+                    {
+                        var dlqEntry = new DeadLetterQueue
+                        {
+                            TaskType = "PracticeGrading",
+                            CorrelationId = task.AnswerId,
+                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                            ErrorMessage = ex.Message,
+                            RetryCount = 3,
+                            Status = "pending",
+                            NextRetryAt = now.AddMinutes(5),
+                            LastAttemptAt = now,
+                            CreatedAt = now
+                        };
+                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                    }
 
                     var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
                     if (answer != null)
@@ -129,6 +152,74 @@ public class GradingQueueWorker : BackgroundService
             throw new Exception("Không tìm thấy câu hỏi hoặc barem rubric.");
         }
 
+        // Tải lịch sử các câu trả lời trước đó của cùng câu hỏi này trong phiên luyện tập
+        var priorQuestionAnswers = await dbContext.PracticeAnswers
+            .AsNoTracking()
+            .Include(a => a.AiEvaluations)
+                .ThenInclude(e => e.Details)
+            .Where(a => a.SessionId == gradingTask.SessionId &&
+                        a.QuestionId == gradingTask.QuestionId &&
+                        a.Id != gradingTask.AnswerId)
+            .OrderBy(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
+
+        // Đếm tổng số lượt câu trả lời phụ của câu hỏi này trong phiên (bao gồm lượt hiện tại nếu IsFollowUp == true)
+        var existingFollowUpsCount = priorQuestionAnswers.Count(a => a.IsFollowUp) + (gradingTask.IsFollowUp ? 1 : 0);
+
+        var rootAnswer = priorQuestionAnswers.FirstOrDefault(a => !a.IsFollowUp);
+        var orderedPriorAnswers = rootAnswer != null
+            ? new[] { rootAnswer }.Concat(priorQuestionAnswers.Where(a => a.Id != rootAnswer.Id).OrderBy(a => a.SubmittedAt))
+            : priorQuestionAnswers.OrderBy(a => a.SubmittedAt);
+        var priorTranscripts = orderedPriorAnswers
+            .Where(a => !string.IsNullOrWhiteSpace(a.AnswerText))
+            .Select(a => a.AnswerText!.Trim())
+            .ToList();
+        var originalAnswerTranscript = priorTranscripts.Count > 0
+            ? string.Join(" ", priorTranscripts)
+            : (!gradingTask.IsFollowUp ? gradingTask.AnswerText : null);
+
+        var priorMaxCriterionScores = priorQuestionAnswers
+            .SelectMany(a => a.AiEvaluations)
+            .Where(e => e.Details != null)
+            .SelectMany(e => e.Details)
+            .GroupBy(d => d.CriterionId)
+            .ToDictionary(g => g.Key, g => g.Max(d => d.Score));
+
+        var previousFollowUpPrompts = priorQuestionAnswers
+            .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+            .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string? answeredFollowUpPrompt = null;
+        if (gradingTask.IsFollowUp)
+        {
+            if (gradingTask.ParentAnswerId.HasValue)
+            {
+                var parentCot = await dbContext.AiEvaluations
+                    .AsNoTracking()
+                    .Where(e => e.PracticeAnswerId == gradingTask.ParentAnswerId.Value)
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .Select(e => e.CotTrace)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                answeredFollowUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+            }
+
+            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+            {
+                answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault() ?? question.FollowUpPrompt;
+            }
+
+            if (!string.IsNullOrWhiteSpace(answeredFollowUpPrompt) &&
+                !previousFollowUpPrompts.Contains(answeredFollowUpPrompt, StringComparer.OrdinalIgnoreCase))
+            {
+                previousFollowUpPrompts.Add(answeredFollowUpPrompt);
+            }
+        }
+
         var criteriaContext = question.Rubric.Criteria.Select(c => new AiGradingCriterion
         {
             Id = c.Id.ToString(),
@@ -146,7 +237,12 @@ public class GradingQueueWorker : BackgroundService
             Transcript = gradingTask.AnswerText,
             Criteria = criteriaContext,
             QuestionImageUrl = question.ImageUrl,
-            QuestionImageDescription = question.ImageDescription
+            QuestionImageDescription = question.ImageDescription,
+            IsFollowUp = gradingTask.IsFollowUp,
+            FollowUpPrompt = answeredFollowUpPrompt,
+            FollowUpIndex = existingFollowUpsCount,
+            OriginalAnswerTranscript = originalAnswerTranscript,
+            PreviousFollowUpPrompts = previousFollowUpPrompts
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
@@ -172,6 +268,13 @@ public class GradingQueueWorker : BackgroundService
             var clampedScore = matchedDetail != null
                 ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
                 : 0.0m;
+
+            if (gradingTask.IsFollowUp &&
+                priorMaxCriterionScores.TryGetValue(criterion.Id, out var priorCritScore) &&
+                priorCritScore > clampedScore)
+            {
+                clampedScore = Math.Clamp(Math.Round(priorCritScore, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore);
+            }
             var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
                 ? matchedDetail!.Comment
                 : clampedScore > 0.0m
@@ -198,6 +301,61 @@ public class GradingQueueWorker : BackgroundService
             ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
             : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
 
+        // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
+        bool isBorderlineScore = finalTotalScore >= 4.0m && finalTotalScore <= 8.0m;
+        bool needsFollowUp = false;
+        string? resolvedFollowUpPrompt = null;
+
+        if (!gradingTask.IsFullSession && isBorderlineScore)
+        {
+            // Đọc cấu hình số câu hỏi phụ tối đa từ bảng system_configs (1-5 câu, mặc định 2 câu)
+            var maxFollowUpConfig = await dbContext.SystemConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
+            int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps))
+                ? parsedMaxFollowUps
+                : 2;
+
+            if (existingFollowUpsCount < maxAllowedFollowUps)
+            {
+                needsFollowUp = true;
+
+                // Tìm tiêu chí có tỷ lệ điểm thấp nhất để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
+                RubricCriterion? weakestCriterion = null;
+                decimal lowestRatio = decimal.MaxValue;
+                for (int i = 0; i < orderedCriteria.Count; i++)
+                {
+                    var crit = orderedCriteria[i];
+                    var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
+                    var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                    if (ratio < lowestRatio)
+                    {
+                        lowestRatio = ratio;
+                        weakestCriterion = crit;
+                    }
+                }
+
+                int nextFollowUpSequence = existingFollowUpsCount + 1;
+                resolvedFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    question.Course?.Code,
+                    question.FollowUpPrompt,
+                    gradingResult.FollowUpPrompt,
+                    nextFollowUpSequence,
+                    weakestCriterion?.CriterionName,
+                    weakestCriterion?.Description,
+                    orderedCriteria.Select(c => c.CriterionName),
+                    question.Content,
+                    question.SampleAnswer,
+                    gradingTask.AnswerText,
+                    originalAnswerTranscript,
+                    previousFollowUpPrompts);
+            }
+        }
+
+        var cotToPersist = needsFollowUp
+            ? FollowUpPromptBuilder.AppendFollowUpTagToCot(gradingResult.CotTrace, resolvedFollowUpPrompt)
+            : gradingResult.CotTrace;
+
         var evaluation = new AiEvaluation
         {
             AnswerType = "practice",
@@ -205,7 +363,7 @@ public class GradingQueueWorker : BackgroundService
             TotalScore = finalTotalScore,
             ConfidenceScore = gradingResult.ConfidenceScore,
             Feedback = gradingResult.Feedback,
-            CotTrace = gradingResult.CotTrace,
+            CotTrace = cotToPersist,
             Details = evalDetails
         };
 
@@ -233,34 +391,10 @@ public class GradingQueueWorker : BackgroundService
             Feedback = evaluation.Feedback,
             IsSuspicious = gradingResult.IsSuspicious,
             ConfidenceScore = evaluation.ConfidenceScore,
+            NeedsFollowUp = needsFollowUp,
+            FollowUpPrompt = resolvedFollowUpPrompt,
             CriteriaScores = criteriaScoreDtos
         };
-
-        // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
-        bool isBorderlineScore = evaluation.TotalScore >= 4.0m && evaluation.TotalScore <= 8.0m;
-        if (!gradingTask.IsFullSession && isBorderlineScore)
-        {
-            // Đọc cấu hình số câu hỏi phụ tối đa từ bảng system_configs (1-5 câu, mặc định 2 câu)
-            var maxFollowUpConfig = await dbContext.SystemConfigs
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
-            int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps)) ? parsedMaxFollowUps : 2;
-
-            // Đếm số lượng câu trả lời phụ đã có của câu hỏi này trong phiên luyện tập
-            var existingFollowUpsCount = await dbContext.PracticeAnswers
-                .AsNoTracking()
-                .CountAsync(a => a.SessionId == gradingTask.SessionId &&
-                                 a.QuestionId == gradingTask.QuestionId &&
-                                 a.IsFollowUp, cancellationToken);
-
-            if (existingFollowUpsCount < maxAllowedFollowUps)
-            {
-                detailDto.NeedsFollowUp = true;
-                detailDto.FollowUpPrompt = !string.IsNullOrWhiteSpace(question.FollowUpPrompt)
-                    ? question.FollowUpPrompt
-                    : "Hãy làm rõ hơn luận điểm kỹ thuật và ví dụ thực tế liên quan đến câu trả lời của bạn.";
-            }
-        }
 
         // Bắn SignalR RIÊNG cho nhóm Session (Bảo vệ tính riêng tư, không dùng Clients.All)
         await _hubContext.Clients.Group($"session_{gradingTask.SessionId}").ReceiveGradingResult(detailDto);

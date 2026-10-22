@@ -46,7 +46,6 @@ public class SpeechController : ControllerBase
     /// Hỗ trợ tự động chuyển đổi dự phòng từ Edge Neural TTS (Option 1) sang Google Neural TTS (Option 2).
     /// </summary>
     [HttpPost("tts")]
-    [AllowAnonymous]
     public async Task<IActionResult> SynthesizeSpeechPost(
         [FromBody] SynthesizeSpeechHttpRequest? request,
         CancellationToken ct = default)
@@ -67,7 +66,6 @@ public class SpeechController : ControllerBase
     /// Tổng hợp giọng đọc AI giám khảo (Text-to-Speech) qua phương thức GET.
     /// </summary>
     [HttpGet("tts")]
-    [AllowAnonymous]
     public async Task<IActionResult> SynthesizeSpeechGet(
         [FromQuery] string? text,
         [FromQuery] string? voiceName = null,
@@ -87,7 +85,6 @@ public class SpeechController : ControllerBase
     /// Cloudflare Whisper AI (Option 1) sang Gemini Multimodal STT (Option 2) và chuẩn hóa thuật ngữ SE.
     /// </summary>
     [HttpPost("stt")]
-    [AllowAnonymous]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> TranscribeSpeech(
         IFormFile? file,

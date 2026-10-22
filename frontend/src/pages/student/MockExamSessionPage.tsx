@@ -23,7 +23,7 @@ import {
   mockExamService,
 } from '@/services/mockExam.service'
 import {
-  DEFAULT_TTS_VOICE,
+  getTtsVoiceForCourse,
   isSpeechPlaybackCancellation,
   playNaturalSpeech,
   stopSpeechPlayback,
@@ -492,21 +492,28 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     setIsReadingQuestion(false)
   }, [])
 
-  const startReadingQuestion = useCallback((content: string) => {
-    const text = content.trim()
-    if (!text) return
+  const startReadingQuestion = useCallback(
+    (content: string) => {
+      const text = content.trim()
+      if (!text) return
 
-    const requestId = ++speechRequestRef.current
-    setIsReadingQuestion(true)
-    void playNaturalSpeech(text, DEFAULT_TTS_VOICE, 0.96)
-      .catch((error: unknown) => {
-        if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
-        console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
-      })
-      .finally(() => {
-        if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
-      })
-  }, [])
+      const requestId = ++speechRequestRef.current
+      setIsReadingQuestion(true)
+      void playNaturalSpeech(
+        text,
+        getTtsVoiceForCourse(session?.courseCode, session?.courseName),
+        0.96,
+      )
+        .catch((error: unknown) => {
+          if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
+          console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
+        })
+        .finally(() => {
+          if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
+        })
+    },
+    [session?.courseCode, session?.courseName],
+  )
 
   const displayPrompt = activeFollowUp?.prompt ?? question?.content ?? ''
 

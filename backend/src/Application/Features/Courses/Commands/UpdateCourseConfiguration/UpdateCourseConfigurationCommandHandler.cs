@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -19,6 +20,20 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
 
     public async Task<Result<CourseConfigurationDto>> Handle(UpdateCourseConfigurationCommand request, CancellationToken cancellationToken)
     {
+        if (string.Equals(request.ActorRole, "lecturer", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(request.ActorRole, "student", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(request.ActorRole, "proctor", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Giảng viên không có quyền cấu hình tham số môn học.");
+        }
+
+        if (request.MaxMockExamsPerDay.HasValue &&
+            !string.IsNullOrWhiteSpace(request.ActorRole) &&
+            !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ có Quản trị viên (Admin) mới có quyền cấu hình hạn ngạch thi thử (MaxMockExamsPerDay).");
+        }
+
         var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course == null)
         {

@@ -1,7 +1,21 @@
 import apiClient from './api.client'
 
 export const DEFAULT_TTS_VOICE = 'vi-VN-HoaiMyNeural'
+export const DEFAULT_ENGLISH_TTS_VOICE = 'en-US-JennyNeural'
 const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024
+
+export function isEnglishCourse(courseCode?: string | null, courseName?: string | null): boolean {
+  const code = courseCode?.trim().toUpperCase() ?? ''
+  const name = courseName?.trim().toLowerCase() ?? ''
+  return /^ENT\d{3}$/.test(code) || /\benglish\b/.test(name)
+}
+
+export function getTtsVoiceForCourse(
+  courseCode?: string | null,
+  courseName?: string | null,
+): string {
+  return isEnglishCourse(courseCode, courseName) ? DEFAULT_ENGLISH_TTS_VOICE : DEFAULT_TTS_VOICE
+}
 
 export interface SpeechTranscriptionResponse {
   transcript: string

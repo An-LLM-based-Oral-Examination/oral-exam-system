@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { DEFAULT_TTS_VOICE, playNaturalSpeech } from '@/services/speech.service'
 
 interface SpeechRecognitionAlternativeLike {
@@ -32,6 +32,7 @@ interface SpeechRecognitionLike {
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null
   onend: (() => void) | null
   start: () => void
+  stop: () => void
 }
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
@@ -49,6 +50,8 @@ export function useSpeechRecognition() {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const transcriptRef = useRef('')
 
   const speak = useCallback((text: string) => {
     void playNaturalSpeech(text, DEFAULT_TTS_VOICE, 1).catch((speechError) => {
@@ -71,6 +74,10 @@ export function useSpeechRecognition() {
       recognition.continuous = true
       recognition.interimResults = true
 
+      transcriptRef.current = ''
+      setTranscript('')
+      recognitionRef.current = recognition
+
       recognition.onstart = () => {
         setIsListening(true)
         setError(null)
@@ -78,10 +85,11 @@ export function useSpeechRecognition() {
 
       recognition.onresult = (event) => {
         let currentTranscript = ''
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        for (let i = 0; i < event.results.length; i++) {
           currentTranscript += event.results[i][0].transcript
         }
-        setTranscript(currentTranscript)
+        transcriptRef.current = currentTranscript.trim()
+        setTranscript(transcriptRef.current)
       }
 
       recognition.onerror = (event) => {
@@ -91,21 +99,28 @@ export function useSpeechRecognition() {
 
       recognition.onend = () => {
         setIsListening(false)
+        if (recognitionRef.current === recognition) recognitionRef.current = null
       }
 
       recognition.start()
     } catch (err: unknown) {
+      recognitionRef.current = null
       setError(err instanceof Error ? err.message : 'Error initializing speech recognition')
     }
   }, [])
 
   const stopListening = useCallback(() => {
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
     setIsListening(false)
   }, [])
 
   const resetTranscript = useCallback(() => {
+    transcriptRef.current = ''
     setTranscript('')
   }, [])
+
+  const getCurrentTranscript = useCallback(() => transcriptRef.current, [])
 
   return {
     isListening,
@@ -115,6 +130,7 @@ export function useSpeechRecognition() {
     startListening,
     stopListening,
     resetTranscript,
+    getCurrentTranscript,
     setTranscript,
   }
 }

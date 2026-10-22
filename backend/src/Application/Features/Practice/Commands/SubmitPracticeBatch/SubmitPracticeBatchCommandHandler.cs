@@ -42,13 +42,19 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             : 5;
 
         var elapsed = DateTime.UtcNow - session.LastActivityAt;
-        if (session.Status == "in_progress" && elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        if (elapsed > TimeSpan.FromMinutes(timeoutMinutes))
         {
-            session.Status = "completed";
-            session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (session.Status == "in_progress")
+            {
+                session.Status = "completed";
+                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
-            return Result<Unit>.Failure("Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            if (session.Status == "completed")
+            {
+                return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
+            }
         }
 
         if (session.Status != "in_progress")
@@ -61,11 +67,60 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             return Result<Unit>.Failure("Tính năng nộp trọn gói chỉ hỗ trợ cho phiên [Full-Session].");
         }
 
+        if (request.Answers == null || request.Answers.Count == 0)
+        {
+            return Result<Unit>.Failure("VALIDATION: Danh sách câu trả lời nộp hàng loạt không được để trống.");
+        }
+
+        if (string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase) && request.Answers.Any(a => a.IsFollowUp))
+        {
+            return Result<Unit>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
+        }
+
+        var courseHasQuestions = await _context.PracticeQuestions
+            .AsNoTracking()
+            .AnyAsync(q => q.CourseId == session.CourseId && q.IsActive, cancellationToken);
+
+        foreach (var answerDto in request.Answers)
+        {
+            if (answerDto.QuestionId == Guid.Empty)
+            {
+                return Result<Unit>.Failure("VALIDATION: Mã câu hỏi (QuestionId) trong danh sách nộp hàng loạt không hợp lệ.");
+            }
+
+            if (string.IsNullOrWhiteSpace(answerDto.AnswerText))
+            {
+                return Result<Unit>.Failure("VALIDATION: Nội dung câu trả lời trong danh sách nộp hàng loạt không được để trống.");
+            }
+
+            if (session.SelectedQuestionIds.Count > 0 && !session.SelectedQuestionIds.Contains(answerDto.QuestionId))
+            {
+                return Result<Unit>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
+            }
+
+            if (courseHasQuestions)
+            {
+                var isValidCourseQuestion = await _context.PracticeQuestions
+                    .AsNoTracking()
+                    .AnyAsync(q => q.Id == answerDto.QuestionId && q.CourseId == session.CourseId && q.IsActive, cancellationToken);
+                if (!isValidCourseQuestion)
+                {
+                    return Result<Unit>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
+                }
+            }
+        }
+
+        // Khử trùng lặp theo QuestionId (lấy câu trả lời cuối cùng cho mỗi QuestionId trong batch)
+        var deduplicatedAnswers = request.Answers
+            .GroupBy(a => a.QuestionId)
+            .Select(g => g.Last())
+            .ToList();
+
         // 2. Prepare Entities for Bulk Insert
         var answers = new List<PracticeAnswer>();
         var gradingTasks = new List<GradingTask>();
 
-        foreach (var answerDto in request.Answers)
+        foreach (var answerDto in deduplicatedAnswers)
         {
             var answer = new PracticeAnswer
             {
@@ -84,7 +139,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             // Queue Tasks
             gradingTasks.Add(new GradingTask
             {
-                AnswerId = answer.Id, // Note: EF Core will auto-generate Guid if not set, but let's assume it's created or we set it manually. Wait, in .NET Guid is generated on Add, but it's better to assign it upfront for the Task.
+                AnswerId = answer.Id,
                 SessionId = session.Id,
                 QuestionId = answerDto.QuestionId,
                 StudentId = request.StudentId,

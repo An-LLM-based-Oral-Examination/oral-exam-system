@@ -1,4 +1,5 @@
 using FluentValidation;
+using OralExamination.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,9 +10,12 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
 {
     private static readonly string[] AllowedDifficulties = ["easy", "medium", "hard", "progressive"];
     private static readonly string[] AllowedSingleDifficulties = ["easy", "medium", "hard"];
+    private readonly IApplicationDbContext? _context;
 
-    public StartPracticeSessionCommandValidator()
+    public StartPracticeSessionCommandValidator(IApplicationDbContext? context = null)
     {
+        _context = context;
+
         RuleFor(v => v.StudentId)
             .NotEmpty().WithMessage("StudentId không được để trống.");
 
@@ -41,16 +45,63 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
         When(v => v.IsFullSession, () =>
         {
             RuleFor(v => v.QuestionCount)
-                .NotNull().WithMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu.")
-                .InclusiveBetween(3, 10)
-                .WithMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu.");
+                .NotNull().WithMessage(_ => GetMixedRangeMessage())
+                .Must(IsWithinMixedQuestionRange)
+                .WithMessage(_ => GetMixedRangeMessage());
         });
 
         When(v => string.Equals(v.Difficulty?.Trim(), "progressive", StringComparison.OrdinalIgnoreCase), () =>
         {
             RuleFor(v => v.QuestionCount)
-                .InclusiveBetween(3, 10)
-                .WithMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu.");
+                .Must(count => !count.HasValue || IsWithinMixedQuestionRange(count))
+                .WithMessage(_ => GetMixedRangeMessage());
         });
+    }
+
+    private (int Min, int Max) ResolveMixedQuestionBounds()
+    {
+        int minAllowed = 3;
+        int maxAllowed = 10;
+
+        if (_context != null)
+        {
+            try
+            {
+                var minConfig = _context.SystemConfigs.FirstOrDefault(c => c.Key == "MinMixedPracticeQuestions");
+                if (minConfig != null && int.TryParse(minConfig.Value, out var parsedMin) && parsedMin > 0)
+                {
+                    minAllowed = parsedMin;
+                }
+
+                var maxConfig = _context.SystemConfigs.FirstOrDefault(c => c.Key == "MaxMixedPracticeQuestions");
+                if (maxConfig != null && int.TryParse(maxConfig.Value, out var parsedMax) && parsedMax >= minAllowed)
+                {
+                    maxAllowed = parsedMax;
+                }
+            }
+            catch
+            {
+                // Fallback an toàn về khoảng mặc định [3, 10]
+            }
+        }
+
+        return (minAllowed, maxAllowed);
+    }
+
+    private bool IsWithinMixedQuestionRange(int? count)
+    {
+        if (!count.HasValue)
+        {
+            return false;
+        }
+
+        var (min, max) = ResolveMixedQuestionBounds();
+        return count.Value >= min && count.Value <= max;
+    }
+
+    private string GetMixedRangeMessage()
+    {
+        var (min, max) = ResolveMixedQuestionBounds();
+        return $"Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ {min} đến {max} câu.";
     }
 }

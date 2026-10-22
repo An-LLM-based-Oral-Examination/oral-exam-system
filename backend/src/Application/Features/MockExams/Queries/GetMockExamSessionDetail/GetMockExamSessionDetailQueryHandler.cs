@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 
@@ -43,20 +44,20 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             return Result<MockExamScorecardDto>.Failure("Không tìm thấy thông tin ca thi thử.");
         }
 
-        if (session.StudentId != request.StudentId)
+        if (!request.IsElevatedRole && session.StudentId != request.StudentId)
         {
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền truy cập ca thi này.");
         }
 
-        // Giữ đúng thứ tự đề thi (OrderIndex); follow-up đi sau câu chính.
-        var sessionAnswers = session.Answers
-            .OrderBy(a => a.OrderIndex)
-            .ThenBy(a => a.IsFollowUp)
-            .ThenBy(a => a.AnsweredAt)
-            .ThenBy(a => a.Id)
+        // Giữ đúng thứ tự đề thi; follow-up đi sau câu chính. Bỏ slot phụ pending chưa trả lời.
+        var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers)
             .Where(a => !(a.IsFollowUp && string.IsNullOrWhiteSpace(a.AnswerText)))
             .ToList();
         var questionScores = new List<MockExamQuestionScoreDto>();
+        bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
+        var unansweredReason = isOverdue
+            ? "Hết giờ làm bài - Không có câu trả lời"
+            : "Thí sinh không trả lời câu hỏi này";
 
         for (int i = 0; i < sessionAnswers.Count; i++)
         {
@@ -75,7 +76,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 var detail = aiEval?.Details?.FirstOrDefault(d => d.CriterionId == c.Id);
                 var score = detail?.Score ?? 0.0m;
                 var comment = detail?.Comment ?? (string.IsNullOrWhiteSpace(a.AnswerText)
-                    ? "Thí sinh không trả lời câu hỏi này"
+                    ? unansweredReason
                     : string.Empty);
 
                 criterionScores.Add(new MockExamCriterionScoreDto(
@@ -97,7 +98,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 Difficulty: q.Difficulty,
                 Transcript: a.AnswerText,
                 Score: aiEval?.TotalScore ?? 0.0m,
-                Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? "Thí sinh không trả lời câu hỏi này" : null),
+                Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? unansweredReason : null),
                 ConfidenceScore: aiEval?.ConfidenceScore,
                 CriteriaScores: criterionScores,
                 ImageUrl: a.IsFollowUp ? null : q.ImageUrl,
@@ -126,7 +127,6 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             ? (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes)
             : 30;
 
-        bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
         int answeredQuestions = session.Answers.Count(a =>
             !a.IsFollowUp
             && !string.IsNullOrWhiteSpace(a.AnswerText)
