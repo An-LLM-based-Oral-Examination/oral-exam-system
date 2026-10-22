@@ -220,10 +220,14 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 Id = Guid.NewGuid(),
                 SessionId = session.Id,
                 QuestionId = q.Id,
+                OrderIndex = i + 1,
                 AnswerText = null,
                 TimeTakenSeconds = 0,
                 Status = "pending",
-                AnsweredAt = startedAt
+                AnsweredAt = startedAt,
+                IsFollowUp = false,
+                ParentAnswerId = null,
+                PromptText = null
             });
         }
 

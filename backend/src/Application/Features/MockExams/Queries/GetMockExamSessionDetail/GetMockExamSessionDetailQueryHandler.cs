@@ -48,15 +48,26 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền truy cập ca thi này.");
         }
 
-        var sessionAnswers = session.Answers.OrderBy(a => a.AnsweredAt).ToList();
+        // Giữ đúng thứ tự đề thi (OrderIndex); follow-up đi sau câu chính.
+        var sessionAnswers = session.Answers
+            .OrderBy(a => a.OrderIndex)
+            .ThenBy(a => a.IsFollowUp)
+            .ThenBy(a => a.AnsweredAt)
+            .ThenBy(a => a.Id)
+            .Where(a => !(a.IsFollowUp && string.IsNullOrWhiteSpace(a.AnswerText)))
+            .ToList();
         var questionScores = new List<MockExamQuestionScoreDto>();
 
         for (int i = 0; i < sessionAnswers.Count; i++)
         {
             var a = sessionAnswers[i];
             var q = a.Question;
-            int orderIndex = i + 1;
+            int orderIndex = a.OrderIndex > 0 ? a.OrderIndex : i + 1;
             var aiEval = a.AiEvaluations?.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+            var displayTitle = a.IsFollowUp ? $"Câu hỏi phụ · {q.Title}" : q.Title;
+            var displayContent = a.IsFollowUp
+                ? (!string.IsNullOrWhiteSpace(a.PromptText) ? a.PromptText! : q.Content)
+                : q.Content;
 
             var criterionScores = new List<MockExamCriterionScoreDto>();
             foreach (var c in q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex) ?? Enumerable.Empty<RubricCriterion>())
@@ -80,8 +91,8 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             questionScores.Add(new MockExamQuestionScoreDto(
                 QuestionId: q.Id,
                 OrderIndex: orderIndex,
-                Title: q.Title,
-                Content: q.Content,
+                Title: displayTitle,
+                Content: displayContent,
                 BloomLevel: q.BloomLevel ?? "Remember",
                 Difficulty: q.Difficulty,
                 Transcript: a.AnswerText,
@@ -89,13 +100,17 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? "Thí sinh không trả lời câu hỏi này" : null),
                 ConfidenceScore: aiEval?.ConfidenceScore,
                 CriteriaScores: criterionScores,
-                ImageUrl: q.ImageUrl,
-                ImageDescription: q.ImageDescription
+                ImageUrl: a.IsFollowUp ? null : q.ImageUrl,
+                ImageDescription: a.IsFollowUp ? null : q.ImageDescription,
+                IsFollowUp: a.IsFollowUp,
+                AnswerId: a.Id,
+                ParentAnswerId: a.ParentAnswerId
             ));
         }
 
-        decimal totalScore = session.TotalScore ?? (questionScores.Count > 0
-            ? Math.Round(questionScores.Sum(x => x.Score) / questionScores.Count, 2, MidpointRounding.AwayFromZero)
+        var mainScores = questionScores.Where(x => !x.IsFollowUp).ToList();
+        decimal totalScore = session.TotalScore ?? (mainScores.Count > 0
+            ? Math.Round(mainScores.Sum(x => x.Score) / mainScores.Count, 2, MidpointRounding.AwayFromZero)
             : 0.0m);
 
         string classification = totalScore switch
@@ -112,7 +127,10 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             : 30;
 
         bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
-        int answeredQuestions = session.Answers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText) && (a.Status == "answered" || a.Status == "graded"));
+        int answeredQuestions = session.Answers.Count(a =>
+            !a.IsFollowUp
+            && !string.IsNullOrWhiteSpace(a.AnswerText)
+            && (a.Status == "answered" || a.Status == "graded"));
 
         var response = new MockExamScorecardDto(
             SessionId: session.Id,
@@ -121,7 +139,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             CourseName: session.Course?.Name ?? string.Empty,
             TotalScore: totalScore,
             Classification: classification,
-            TotalQuestions: questionScores.Count,
+            TotalQuestions: mainScores.Count,
             AnsweredQuestions: answeredQuestions,
             DurationMinutes: durationMinutes,
             IsOverdue: isOverdue,

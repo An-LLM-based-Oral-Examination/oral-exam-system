@@ -1282,6 +1282,26 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("answered_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<bool>("IsFollowUp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_follow_up");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid?>("ParentAnswerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_answer_id");
+
+                    b.Property<string>("PromptText")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_text");
+
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid")
                         .HasColumnName("question_id");
@@ -1305,6 +1325,9 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("time_taken_seconds");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ParentAnswerId")
+                        .HasDatabaseName("ix_mock_exam_answers_parent");
 
                     b.HasIndex("QuestionId")
                         .HasDatabaseName("ix_mock_exam_answers_question");
@@ -2969,6 +2992,11 @@ namespace OralExamination.Infrastructure.Migrations
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
                 {
+                    b.HasOne("OralExamination.Domain.Entities.MockExamAnswer", "ParentAnswer")
+                        .WithMany("FollowUpAnswers")
+                        .HasForeignKey("ParentAnswerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("OralExamination.Domain.Entities.PracticeQuestion", "Question")
                         .WithMany("MockExamAnswers")
                         .HasForeignKey("QuestionId")
@@ -2980,6 +3008,8 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ParentAnswer");
 
                     b.Navigation("Question");
 
@@ -3278,6 +3308,8 @@ namespace OralExamination.Infrastructure.Migrations
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>
                 {
                     b.Navigation("AiEvaluations");
+
+                    b.Navigation("FollowUpAnswers");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamSession", b =>

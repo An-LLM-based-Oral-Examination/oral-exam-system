@@ -12,8 +12,8 @@ using OralExamination.Infrastructure.Persistence;
 namespace OralExamination.Infrastructure.Migrations
 {
     [DbContext(typeof(OralExamDbContext))]
-    [Migration("20261019162939_CompleteBe10OfficialExamGrading")]
-    partial class CompleteBe10OfficialExamGrading
+    [Migration("20261022125559_InitialDB")]
+    partial class InitialDB
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -718,6 +718,15 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("medium")
                         .HasColumnName("difficulty");
 
+                    b.Property<string>("ImageDescription")
+                        .HasColumnType("text")
+                        .HasColumnName("image_description");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("image_url");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1276,6 +1285,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("answered_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("order_index");
+
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid")
                         .HasColumnName("question_id");
@@ -1654,6 +1669,15 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("has_follow_up");
+
+                    b.Property<string>("ImageDescription")
+                        .HasColumnType("text")
+                        .HasColumnName("image_description");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("image_url");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()

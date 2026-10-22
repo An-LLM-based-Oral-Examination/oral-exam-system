@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, ChevronDown, MessageSquareText, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuestionImage } from '@/components/question/QuestionImage'
-import type { MockExamScorecard as MockExamScorecardData } from '@/types/mockExam.types'
+import type {
+  MockExamQuestionScore,
+  MockExamScorecard as MockExamScorecardData,
+} from '@/types/mockExam.types'
 
 const CLASSIFICATION_STYLES: Record<string, string> = {
   'Xuất sắc': 'bg-[#edfbf6] text-[#0f8f6b]',
@@ -37,9 +40,98 @@ function difficultyLabel(difficulty: string) {
   return difficulty
 }
 
+function questionKey(question: MockExamQuestionScore) {
+  return question.answerId ?? `${question.questionId}-${question.orderIndex}-${question.isFollowUp ? 'fu' : 'main'}`
+}
+
+function AnswerBlock({
+  label,
+  transcript,
+}: {
+  label: string
+  transcript: string | null | undefined
+}) {
+  return (
+    <div className="rounded-xl bg-[#4988C4]/16 p-3">
+      <p className="text-xs font-bold text-[#1C4D8D]">{label}</p>
+      <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#0F2854]">
+        {transcript?.trim() || 'Không có câu trả lời.'}
+      </p>
+    </div>
+  )
+}
+
+function FeedbackBlock({ question }: { question: MockExamQuestionScore }) {
+  return (
+    <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
+      <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
+        <MessageSquareText className="size-3.5" />
+        Nhận xét
+      </p>
+      <p className="mt-1.5 text-sm leading-relaxed text-[#3f5c52]">
+        {question.feedback?.trim() || 'Chưa có nhận xét cho câu này.'}
+      </p>
+      {question.confidenceScore !== null && question.confidenceScore !== undefined && (
+        <p className="mt-2 text-xs text-[#5f8f80]">
+          Độ tin cậy {Math.round(question.confidenceScore * 100)}%
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CriteriaBlock({ question }: { question: MockExamQuestionScore }) {
+  if (question.criteriaScores.length === 0) return null
+  return (
+    <div className="space-y-2">
+      {question.criteriaScores.map((criterion) => {
+        const ratio =
+          criterion.maxScore > 0
+            ? Math.min(100, Math.max(0, (criterion.score / criterion.maxScore) * 100))
+            : 0
+        return (
+          <div key={criterion.criterionId} className="rounded-xl border border-[#e6edf5] px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-bold text-[#25364e]">{criterion.criterionName}</p>
+              <p className="shrink-0 text-sm font-bold text-[#1C4D8D]">
+                {formatScore(criterion.score, 1)}/{formatScore(criterion.maxScore, 1)}
+              </p>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]">
+              <div className="h-full rounded-full bg-[#4f7df0]" style={{ width: `${ratio}%` }} />
+            </div>
+            {criterion.comment && (
+              <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">{criterion.comment}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardData }) {
-  const [openQuestionId, setOpenQuestionId] = useState<string | null>(
-    scorecard.questions[0]?.questionId ?? null,
+  const mainQuestions = useMemo(
+    () => scorecard.questions.filter((item) => !item.isFollowUp),
+    [scorecard.questions],
+  )
+  const followUpsByParent = useMemo(() => {
+    const map = new Map<string, MockExamQuestionScore[]>()
+    for (const item of scorecard.questions) {
+      if (!item.isFollowUp) continue
+      const parentKey =
+        item.parentAnswerId ??
+        mainQuestions.find((main) => main.orderIndex === item.orderIndex)?.answerId ??
+        `order-${item.orderIndex}`
+      const list = map.get(parentKey) ?? []
+      list.push(item)
+      map.set(parentKey, list)
+    }
+    return map
+  }, [mainQuestions, scorecard.questions])
+
+  const [openQuestionKey, setOpenQuestionKey] = useState<string | null>(() =>
+    mainQuestions[0] ? questionKey(mainQuestions[0]) : null,
   )
   const classificationClassName =
     CLASSIFICATION_STYLES[scorecard.classification] ?? 'bg-[#4988C4]/16 text-[#5b6b84]'
@@ -95,16 +187,22 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
       </section>
 
       <div className="space-y-2">
-        {scorecard.questions.map((question) => {
-          const isOpen = openQuestionId === question.questionId
+        {mainQuestions.map((question) => {
+          const key = questionKey(question)
+          const isOpen = openQuestionKey === key
+          const followUps =
+            followUpsByParent.get(question.answerId ?? '') ??
+            followUpsByParent.get(`order-${question.orderIndex}`) ??
+            []
+
           return (
             <article
-              key={question.questionId}
+              key={key}
               className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white"
             >
               <button
                 type="button"
-                onClick={() => setOpenQuestionId(isOpen ? null : question.questionId)}
+                onClick={() => setOpenQuestionKey(isOpen ? null : key)}
                 className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#4988C4]/18"
                 aria-expanded={isOpen}
               >
@@ -112,10 +210,11 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                   <span className="text-xs font-bold text-[#1C4D8D]">
                     Câu {question.orderIndex} · {question.bloomLevel} ·{' '}
                     {difficultyLabel(question.difficulty)}
+                    {followUps.length > 0 ? ` · ${followUps.length} câu phụ` : ''}
                   </span>
                   <span
                     className={cn(
-                      'mt-1 block text-sm leading-relaxed font-semibold text-[#0F2854]',
+                      'mt-1 block text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]',
                       !isOpen && 'line-clamp-2',
                     )}
                   >
@@ -134,61 +233,52 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
 
               {isOpen && (
                 <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
-                  <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} />
-                  <div className="rounded-xl bg-[#4988C4]/16 p-3">
-                    <p className="text-xs font-bold text-[#1C4D8D]">Câu trả lời</p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-[#0F2854]">
-                      {question.transcript?.trim() || 'Không có câu trả lời.'}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
-                    <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
-                      <MessageSquareText className="size-3.5" />
-                      Nhận xét
-                    </p>
-                    <p className="mt-1.5 text-sm leading-relaxed text-[#3f5c52]">
-                      {question.feedback?.trim() || 'Chưa có nhận xét cho câu này.'}
-                    </p>
-                    {question.confidenceScore !== null && (
-                      <p className="mt-2 text-xs text-[#5f8f80]">
-                        Độ tin cậy {Math.round(question.confidenceScore * 100)}%
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    {question.criteriaScores.map((criterion) => {
-                      const ratio =
-                        criterion.maxScore > 0
-                          ? Math.min(100, Math.max(0, (criterion.score / criterion.maxScore) * 100))
-                          : 0
-                      return (
-                        <div
-                          key={criterion.criterionId}
-                          className="rounded-xl border border-[#e6edf5] px-3 py-2.5"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <p className="text-sm font-bold text-[#25364e]">
-                              {criterion.criterionName}
-                            </p>
-                            <p className="shrink-0 text-sm font-bold text-[#1C4D8D]">
-                              {formatScore(criterion.score, 1)}/{formatScore(criterion.maxScore, 1)}
-                            </p>
-                          </div>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]">
-                            <div
-                              className="h-full rounded-full bg-[#4f7df0]"
-                              style={{ width: `${ratio}%` }}
-                            />
-                          </div>
-                          {criterion.comment && (
-                            <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">
-                              {criterion.comment}
-                            </p>
-                          )}
+                  {question.imageUrl?.trim() ? (
+                    <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white">
+                      <div className="grid grid-cols-1 md:grid-cols-2">
+                        <div className="flex items-center p-3">
+                          <p className="text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                            {question.content}
+                          </p>
                         </div>
-                      )
-                    })}
-                  </div>
+                        <div className="relative min-h-[10rem] md:min-h-0">
+                          <QuestionImage
+                            imageUrl={question.imageUrl}
+                            fillHeight
+                            framed={false}
+                            showCaption={false}
+                            className="overflow-hidden rounded-xl max-md:min-h-[10rem] max-md:p-3 md:absolute md:inset-3 md:h-auto md:w-auto"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  <AnswerBlock label="Câu trả lời" transcript={question.transcript} />
+                  <FeedbackBlock question={question} />
+                  <CriteriaBlock question={question} />
+
+                  {followUps.map((followUp, index) => (
+                    <div
+                      key={questionKey(followUp)}
+                      className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[#1C4D8D]">
+                            Câu hỏi phụ {index + 1}
+                          </p>
+                          <p className="mt-1.5 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                            {followUp.content}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                          {formatScore(followUp.score, 1)}/10
+                        </span>
+                      </div>
+                      <AnswerBlock label="Câu trả lời phụ" transcript={followUp.transcript} />
+                      <FeedbackBlock question={followUp} />
+                    </div>
+                  ))}
                 </div>
               )}
             </article>

@@ -1021,12 +1021,17 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
             entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
+            entity.Property(e => e.OrderIndex).HasColumnName("order_index").HasDefaultValue(1);
             entity.Property(e => e.AnswerText).HasColumnName("answer_text");
             entity.Property(e => e.TimeTakenSeconds).HasColumnName("time_taken_seconds").HasDefaultValue(0);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("answered");
             entity.Property(e => e.AnsweredAt).HasColumnName("answered_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.IsFollowUp).HasColumnName("is_follow_up").HasDefaultValue(false);
+            entity.Property(e => e.ParentAnswerId).HasColumnName("parent_answer_id");
+            entity.Property(e => e.PromptText).HasColumnName("prompt_text");
             entity.HasIndex(e => e.SessionId).HasDatabaseName("ix_mock_exam_answers_session");
             entity.HasIndex(e => e.QuestionId).HasDatabaseName("ix_mock_exam_answers_question");
+            entity.HasIndex(e => e.ParentAnswerId).HasDatabaseName("ix_mock_exam_answers_parent");
 
             entity.HasOne(d => d.Session)
                 .WithMany(p => p.Answers)
@@ -1037,6 +1042,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.MockExamAnswers)
                 .HasForeignKey(d => d.QuestionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.ParentAnswer)
+                .WithMany(p => p.FollowUpAnswers)
+                .HasForeignKey(d => d.ParentAnswerId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // 20. official_exam_sessions

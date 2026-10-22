@@ -1,5 +1,6 @@
 import apiClient from './api.client'
 import type {
+  MockExamActiveFollowUp,
   MockExamCriterionScore,
   MockExamHistoryItem,
   MockExamHistoryPage,
@@ -8,7 +9,9 @@ import type {
   MockExamQuota,
   MockExamRubricCriterion,
   MockExamScorecard,
+  ResumeMockExamResponse,
   StartMockExamResponse,
+  StoredMockExamAnswer,
   SubmitMockExamAnswerRequest,
   SubmitMockExamAnswerResponse,
 } from '@/types/mockExam.types'
@@ -92,6 +95,18 @@ function readOptionalString(record: JsonRecord, key: string): string | null {
   const value = field(record, key)
   if (value === null || value === undefined) return null
   return typeof value === 'string' ? value : null
+}
+
+function readOptionalBoolean(record: JsonRecord, key: string): boolean | null {
+  const value = field(record, key)
+  if (typeof value === 'boolean') return value
+  return null
+}
+
+function readOptionalGuid(record: JsonRecord, key: string): string | null {
+  const value = readOptionalString(record, key)
+  if (!value || !UUID_PATTERN.test(value)) return null
+  return value
 }
 
 function readOptionalStringFromKeys(record: JsonRecord, keys: readonly string[]): string | null {
@@ -186,6 +201,58 @@ function normalizeStart(value: unknown): StartMockExamResponse {
   }
 }
 
+function normalizeStoredAnswer(value: unknown): StoredMockExamAnswer {
+  const record = requireRecord(value, 'Một câu trả lời đã lưu không hợp lệ.')
+  return {
+    answerId: requireGuid(record, 'answerId', 'Câu trả lời thiếu mã bản ghi.'),
+    questionId: requireGuid(record, 'questionId', 'Câu trả lời thiếu mã câu hỏi.'),
+    transcript: readOptionalString(record, 'transcript') ?? '',
+    timeTakenSeconds: readOptionalInteger(record, 'timeTakenSeconds') ?? 0,
+    answeredAt: requireDateString(record, 'answeredAt', 'Câu trả lời thiếu thời điểm nộp.'),
+    isFollowUp: readOptionalBoolean(record, 'isFollowUp') ?? false,
+    parentAnswerId: readOptionalGuid(record, 'parentAnswerId'),
+    promptText: readOptionalString(record, 'promptText'),
+  }
+}
+
+function normalizeActiveFollowUp(value: unknown): MockExamActiveFollowUp | null {
+  if (value === null || value === undefined || value === '') return null
+  const record = requireRecord(value, 'Câu hỏi phụ đang mở không hợp lệ.')
+  const prompt = readOptionalString(record, 'prompt')?.trim()
+  if (!prompt) return null
+  return {
+    answerId: requireGuid(record, 'answerId', 'Câu hỏi phụ thiếu mã bản ghi.'),
+    questionId: requireGuid(record, 'questionId', 'Câu hỏi phụ thiếu mã câu hỏi.'),
+    parentAnswerId: requireGuid(record, 'parentAnswerId', 'Câu hỏi phụ thiếu mã câu chính.'),
+    prompt,
+    followUpIndex: readOptionalInteger(record, 'followUpIndex') ?? 1,
+    maxFollowUps: readOptionalInteger(record, 'maxFollowUps') ?? 1,
+  }
+}
+
+function normalizeResume(value: unknown): ResumeMockExamResponse {
+  const base = normalizeStart(value)
+  const record = requireRecord(value, 'Phản hồi khôi phục ca thi thử không hợp lệ.')
+  const answers = readArray(record, 'answers', 'Ca thi thử thiếu danh sách câu đã trả lời.').map(
+    normalizeStoredAnswer,
+  )
+  return {
+    ...base,
+    answers,
+    activeFollowUp: normalizeActiveFollowUp(field(record, 'activeFollowUp')),
+  }
+}
+
+function readOptionalInteger(record: JsonRecord, key: string) {
+  const value = field(record, key)
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+    return Math.trunc(Number(value))
+  }
+  return null
+}
+
 function normalizeAnswer(value: unknown): SubmitMockExamAnswerResponse {
   const record = requireRecord(value, 'Phản hồi nộp câu trả lời không hợp lệ.')
   return {
@@ -194,6 +261,13 @@ function normalizeAnswer(value: unknown): SubmitMockExamAnswerResponse {
     transcript: readOptionalString(record, 'transcript') ?? '',
     status: requireString(record, 'status', 'Câu trả lời thiếu trạng thái.'),
     answeredAt: requireDateString(record, 'answeredAt', 'Câu trả lời thiếu thời điểm nộp.'),
+    isFollowUp: readOptionalBoolean(record, 'isFollowUp') ?? false,
+    parentAnswerId: readOptionalGuid(record, 'parentAnswerId'),
+    needsFollowUp: readOptionalBoolean(record, 'needsFollowUp') ?? false,
+    followUpPrompt: readOptionalString(record, 'followUpPrompt'),
+    followUpAnswerId: readOptionalGuid(record, 'followUpAnswerId'),
+    followUpIndex: readOptionalInteger(record, 'followUpIndex') ?? 0,
+    maxFollowUps: readOptionalInteger(record, 'maxFollowUps') ?? 0,
   }
 }
 
@@ -229,6 +303,9 @@ function normalizeQuestionScore(value: unknown): MockExamQuestionScore {
       'criteriaScores',
       'Danh sách điểm tiêu chí không hợp lệ.',
     ).map(normalizeCriterionScore),
+    isFollowUp: readOptionalBoolean(record, 'isFollowUp') ?? false,
+    answerId: readOptionalGuid(record, 'answerId'),
+    parentAnswerId: readOptionalGuid(record, 'parentAnswerId'),
   }
 }
 
@@ -316,6 +393,11 @@ export const mockExamService = {
     return normalizeStart(unwrapPayload(response.data))
   },
 
+  async resumeSession(sessionId: string): Promise<ResumeMockExamResponse> {
+    const response = await apiClient.get<unknown>(`/mock-exams/sessions/${sessionId}/resume`)
+    return normalizeResume(unwrapPayload(response.data))
+  },
+
   async submitAnswer(
     sessionId: string,
     payload: SubmitMockExamAnswerRequest,
@@ -332,6 +414,9 @@ export const mockExamService = {
     const formData = new FormData()
     formData.append('QuestionId', payload.questionId)
     formData.append('TimeTakenSeconds', String(Math.max(0, Math.round(payload.timeTakenSeconds))))
+    if (payload.answerId?.trim()) {
+      formData.append('AnswerId', payload.answerId.trim())
+    }
     if (payload.file) {
       const extension = audioExtension(payload.file.type)
       formData.append(
@@ -340,15 +425,14 @@ export const mockExamService = {
         payload.fileName ?? `mock-answer-${payload.questionId}.${extension}`,
       )
     }
-    if (transcript && !payload.file) formData.append('Transcript', transcript)
+    // Luôn gửi transcript khi có (kể cả kèm file) để backend dùng hybrid fallback từ /speech/stt.
+    if (transcript) formData.append('Transcript', transcript)
 
+    // Không set Content-Type thủ công — axios cần tự gắn boundary để bind AnswerId.
     const response = await apiClient.post<unknown>(
       `/mock-exams/sessions/${sessionId}/answers`,
       formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120_000,
-      },
+      { timeout: 120_000 },
     )
     return normalizeAnswer(unwrapPayload(response.data))
   },

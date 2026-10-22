@@ -54,8 +54,12 @@ public sealed class GetMockExamHistoryQueryHandler(
                 ? (int)Math.Round((s.ExpiresAt - s.StartedAt).TotalMinutes)
                 : 30;
 
-            int answeredQuestions = s.Answers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText) && (a.Status == "answered" || a.Status == "graded"));
-            int totalQuestions = s.Answers.Count;
+            // Chỉ đếm câu gốc — không cộng câu hỏi phụ.
+            int answeredQuestions = s.Answers.Count(a =>
+                !a.IsFollowUp
+                && !string.IsNullOrWhiteSpace(a.AnswerText)
+                && (a.Status == "answered" || a.Status == "graded"));
+            int totalQuestions = s.Answers.Count(a => !a.IsFollowUp);
 
             return new MockExamHistoryItemDto(
                 SessionId: s.Id,

@@ -60,18 +60,34 @@ public sealed class SubmitMockExamSessionCommandHandler(
         var now = DateTime.UtcNow;
         var isOverdue = now > session.ExpiresAt.AddSeconds(10);
 
-        var sessionAnswers = session.Answers.OrderBy(a => a.AnsweredAt).ToList();
+        // Giữ đúng thứ tự đề thi (OrderIndex); follow-up đi sau câu chính cùng OrderIndex.
+        var sessionAnswers = session.Answers
+            .OrderBy(a => a.OrderIndex)
+            .ThenBy(a => a.IsFollowUp)
+            .ThenBy(a => a.AnsweredAt)
+            .ThenBy(a => a.Id)
+            .ToList();
 
         // 3. Chấm điểm đồng thời tất cả các câu hỏi qua Task.WhenAll
         var gradingTasks = sessionAnswers.Select(async (a, index) =>
         {
             var q = a.Question;
-            int orderIndex = index + 1;
+            int orderIndex = a.OrderIndex > 0 ? a.OrderIndex : index + 1;
             bool isAnswered = !string.IsNullOrWhiteSpace(a.AnswerText) && a.Status == "answered";
+            var displayTitle = a.IsFollowUp ? $"Câu hỏi phụ · {q.Title}" : q.Title;
+            var displayContent = a.IsFollowUp
+                ? (!string.IsNullOrWhiteSpace(a.PromptText) ? a.PromptText! : q.Content)
+                : q.Content;
 
             if (!isAnswered)
             {
                 // Câu hỏi chưa làm hoặc hết giờ chưa kịp trả lời -> 0 điểm
+                // Bỏ qua slot follow-up pending khi tính điểm (không hiện trên scorecard)
+                if (a.IsFollowUp && string.IsNullOrWhiteSpace(a.AnswerText))
+                {
+                    return (a, (MockExamQuestionScoreDto?)null, (AiEvaluation?)null);
+                }
+
                 var reason = isOverdue
                     ? "Hết giờ làm bài - Không có câu trả lời"
                     : "Thí sinh không trả lời câu hỏi này";
@@ -88,8 +104,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 var emptyQuestionScore = new MockExamQuestionScoreDto(
                     q.Id,
                     orderIndex,
-                    q.Title,
-                    q.Content,
+                    displayTitle,
+                    displayContent,
                     q.BloomLevel ?? "Remember",
                     q.Difficulty,
                     null,
@@ -97,8 +113,11 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     reason,
                     1.0m,
                     emptyCriteria,
-                    q.ImageUrl,
-                    q.ImageDescription
+                    a.IsFollowUp ? null : q.ImageUrl,
+                    a.IsFollowUp ? null : q.ImageDescription,
+                    a.IsFollowUp,
+                    a.Id,
+                    a.ParentAnswerId
                 );
 
                 return (a, emptyQuestionScore, (AiEvaluation?)null);
@@ -117,11 +136,11 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var gradingReq = new AiGradingRequest
             {
                 Transcript = a.AnswerText!,
-                QuestionContent = q.Content,
-                SampleAnswer = q.SampleAnswer ?? string.Empty,
+                QuestionContent = displayContent,
+                SampleAnswer = a.IsFollowUp ? string.Empty : (q.SampleAnswer ?? string.Empty),
                 CourseCode = session.Course?.Code,
-                QuestionImageUrl = q.ImageUrl,
-                QuestionImageDescription = q.ImageDescription,
+                QuestionImageUrl = a.IsFollowUp ? null : q.ImageUrl,
+                QuestionImageDescription = a.IsFollowUp ? null : q.ImageDescription,
                 Criteria = criteriaList
             };
 
@@ -178,8 +197,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var questionScoreDto = new MockExamQuestionScoreDto(
                 q.Id,
                 orderIndex,
-                q.Title,
-                q.Content,
+                displayTitle,
+                displayContent,
                 q.BloomLevel ?? "Remember",
                 q.Difficulty,
                 a.AnswerText,
@@ -187,8 +206,11 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 gradingResult.Feedback,
                 gradingResult.ConfidenceScore,
                 criterionScores,
-                q.ImageUrl,
-                q.ImageDescription
+                a.IsFollowUp ? null : q.ImageUrl,
+                a.IsFollowUp ? null : q.ImageDescription,
+                a.IsFollowUp,
+                a.Id,
+                a.ParentAnswerId
             );
 
             var aiEvaluation = new AiEvaluation
@@ -209,16 +231,21 @@ public sealed class SubmitMockExamSessionCommandHandler(
             return (a, questionScoreDto, (AiEvaluation?)aiEvaluation);
         });
 
-        var results = await Task.WhenAll(gradingTasks);
+        var results = (await Task.WhenAll(gradingTasks))
+            .Where(r => r.Item2 is not null)
+            .Select(r => (a: r.a, score: r.Item2!, eval: r.Item3))
+            .ToList();
 
-        // 4. Tính toán điểm tổng kết (trung bình cộng thang điểm 10.0đ làm tròn 2 chữ số thập phân)
-        int totalQuestions = results.Length;
-        int answeredQuestions = results.Count(r => !string.IsNullOrWhiteSpace(r.a.AnswerText) && r.a.Status == "answered");
+        // 4. Điểm tổng = trung bình các câu chính (follow-up không làm loãng điểm đề)
+        var mainResults = results.Where(r => !r.a.IsFollowUp).ToList();
+        int totalQuestions = mainResults.Count;
+        int answeredQuestions = mainResults.Count(r =>
+            !string.IsNullOrWhiteSpace(r.a.AnswerText) && r.a.Status == "answered");
 
         decimal totalScore = 0.0m;
         if (totalQuestions > 0)
         {
-            var sumScores = results.Sum(r => r.Item2.Score);
+            var sumScores = mainResults.Sum(r => r.score.Score);
             totalScore = Math.Round(sumScores / totalQuestions, 2, MidpointRounding.AwayFromZero);
         }
 
@@ -238,10 +265,10 @@ public sealed class SubmitMockExamSessionCommandHandler(
 
         foreach (var r in results)
         {
-            if (r.Item3 != null)
+            if (r.eval != null)
             {
                 r.a.Status = "graded";
-                _context.AiEvaluations.Add(r.Item3);
+                _context.AiEvaluations.Add(r.eval);
             }
         }
 
@@ -265,7 +292,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
             IsOverdue: isOverdue,
             StartedAt: session.StartedAt,
             SubmittedAt: session.SubmittedAt.Value,
-            Questions: results.Select(r => r.Item2).ToList()
+            Questions: results.Select(r => r.score).ToList()
         );
 
         return Result<MockExamScorecardDto>.Success(scorecard);

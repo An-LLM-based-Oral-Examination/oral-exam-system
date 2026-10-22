@@ -18,5 +18,6 @@ public sealed record SubmitMockExamAnswerCommand(
     string? FileName,
     string? ContentType,
     int TimeTakenSeconds,
-    string? DirectTranscript = null
+    string? DirectTranscript = null,
+    Guid? AnswerId = null
 ) : IRequest<Result<SubmitMockExamAnswerResponse>>;

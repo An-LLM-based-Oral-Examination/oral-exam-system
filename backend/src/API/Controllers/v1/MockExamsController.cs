@@ -13,6 +13,7 @@ using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamHistory;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail;
+using OralExamination.Application.Features.MockExams.Queries.ResumeMockExamSession;
 
 namespace API.Controllers.v1;
 
@@ -187,7 +188,8 @@ public class MockExamsController : ControllerBase
                 FileName: fileName,
                 ContentType: contentType,
                 TimeTakenSeconds: request.TimeTakenSeconds,
-                DirectTranscript: request.Transcript
+                DirectTranscript: request.Transcript,
+                AnswerId: request.AnswerId
             );
 
             var result = await _sender.Send(command);
@@ -278,6 +280,51 @@ public class MockExamsController : ControllerBase
             return BadRequest(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/command-failed",
+                title = "Bad Request",
+                status = 400,
+                detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Khôi phục ca thi thử đang in_progress để tiếp tục làm bài (không tạo ca mới).
+    /// </summary>
+    [HttpGet("sessions/{id:guid}/resume")]
+    public async Task<IActionResult> ResumeSession([FromRoute] Guid id)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
+                title = "Unauthorized",
+                status = 401,
+                detail = "Không tìm thấy thông tin định danh sinh viên."
+            });
+        }
+
+        var result = await _sender.Send(new ResumeMockExamSessionQuery(id, currentUserId));
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.Contains("Không tìm thấy") == true)
+            {
+                return NotFound(new
+                {
+                    type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                    title = "Not Found",
+                    status = 404,
+                    detail = result.Error
+                });
+            }
+
+            return BadRequest(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/query-failed",
                 title = "Bad Request",
                 status = 400,
                 detail = result.Error
@@ -390,6 +437,7 @@ public class MockExamsController : ControllerBase
 public class SubmitMockExamAnswerFormRequest
 {
     public Guid QuestionId { get; set; }
+    public Guid? AnswerId { get; set; }
     public IFormFile? File { get; set; }
     public int TimeTakenSeconds { get; set; }
     public string? Transcript { get; set; }

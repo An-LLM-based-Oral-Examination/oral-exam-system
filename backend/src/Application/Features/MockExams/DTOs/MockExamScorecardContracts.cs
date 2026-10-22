@@ -31,7 +31,10 @@ public record MockExamQuestionScoreDto(
     decimal? ConfidenceScore,
     List<MockExamCriterionScoreDto> CriteriaScores,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    bool IsFollowUp = false,
+    Guid? AnswerId = null,
+    Guid? ParentAnswerId = null
 );
 
 /// <summary>

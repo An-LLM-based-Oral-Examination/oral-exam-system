@@ -51,6 +51,7 @@ export interface StartMockExamResponse {
 
 export interface SubmitMockExamAnswerRequest {
   questionId: string
+  answerId?: string | null
   file?: Blob | null
   fileName?: string
   timeTakenSeconds: number
@@ -63,6 +64,22 @@ export interface SubmitMockExamAnswerResponse {
   transcript: string
   status: string
   answeredAt: string
+  isFollowUp: boolean
+  parentAnswerId: string | null
+  needsFollowUp: boolean
+  followUpPrompt: string | null
+  followUpAnswerId: string | null
+  followUpIndex: number
+  maxFollowUps: number
+}
+
+export interface MockExamActiveFollowUp {
+  answerId: string
+  questionId: string
+  parentAnswerId: string
+  prompt: string
+  followUpIndex: number
+  maxFollowUps: number
 }
 
 export interface MockExamCriterionScore {
@@ -88,6 +105,9 @@ export interface MockExamQuestionScore {
   feedback: string | null
   confidenceScore: number | null
   criteriaScores: MockExamCriterionScore[]
+  isFollowUp?: boolean
+  answerId?: string | null
+  parentAnswerId?: string | null
 }
 
 export interface MockExamScorecard {
@@ -133,8 +153,20 @@ export interface StoredMockExamAnswer {
   timeTakenSeconds: number
   answerId: string
   answeredAt: string
+  isFollowUp?: boolean
+  parentAnswerId?: string | null
+  /** Nội dung câu hỏi phụ (để xem lại trong phiên). */
+  promptText?: string | null
 }
 
 export interface StoredMockExamSession extends StartMockExamResponse {
   answers: StoredMockExamAnswer[]
+  /** Chỉ số câu xa nhất đã mở (làm hoặc bỏ qua). Không nhảy tới câu chưa xem. */
+  furthestQuestionIndex?: number
+  activeFollowUp?: MockExamActiveFollowUp | null
+}
+
+export interface ResumeMockExamResponse extends StartMockExamResponse {
+  answers: StoredMockExamAnswer[]
+  activeFollowUp?: MockExamActiveFollowUp | null
 }

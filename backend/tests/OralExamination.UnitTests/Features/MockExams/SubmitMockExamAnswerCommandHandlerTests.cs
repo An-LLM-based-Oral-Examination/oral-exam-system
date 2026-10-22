@@ -488,8 +488,8 @@ public class SubmitMockExamAnswerCommandHandlerTests
         sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), "loose_moq.webm", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact(DisplayName = "10. Khi câu hỏi có trong PracticeQuestions: trích xuất questionHint (Title + Content) truyền cho TranscribeDetailedAsync")]
-    public async Task Handle_WhenQuestionHintExists_PassesTitleAndContentToTranscribeDetailedAsync()
+    [Fact(DisplayName = "10. Không truyền Title/Content làm vocabularyHint (tránh STT bịa đáp án khi im lặng)")]
+    public async Task Handle_DoesNotPassQuestionContentAsVocabularyHint()
     {
         using var context = CreateDbContext();
         var studentId = Guid.NewGuid();
@@ -534,7 +534,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
-        string? capturedHint = null;
+        string? capturedHint = "sentinel";
         var sttMock = new Mock<ISpeechToTextService>();
         sttMock.Setup(x => x.TranscribeDetailedAsync(
                 It.IsAny<Stream>(),
@@ -565,7 +565,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        capturedHint.Should().Be("Nguyên lý Single Responsibility. Giải thích tại sao một class chỉ nên có một lý do để thay đổi.");
+        capturedHint.Should().BeNull();
         sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
