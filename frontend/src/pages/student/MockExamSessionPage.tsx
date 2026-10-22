@@ -39,7 +39,6 @@ import {
   clearMockExamSession,
   readMockExamSessionById,
   removeMockExamAnswer,
-  removeMockExamAnswerById,
   saveMockExamAnswer,
   saveMockExamSession,
   secondsUntilExpiry,
