@@ -19,11 +19,14 @@ namespace OralExamination.Infrastructure.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     task_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    correlation_id = table.Column<Guid>(type: "uuid", nullable: true),
                     payload_json = table.Column<string>(type: "jsonb", nullable: false),
                     error_message = table.Column<string>(type: "text", nullable: false),
                     retry_count = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "pending"),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    next_retry_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    last_attempt_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     resolved_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
@@ -442,6 +445,8 @@ namespace OralExamination.Infrastructure.Migrations
                     approval_status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false, defaultValue: "DRAFT"),
                     submitted_by = table.Column<Guid>(type: "uuid", nullable: true),
                     review_notes = table.Column<string>(type: "text", nullable: true),
+                    image_url = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    image_description = table.Column<string>(type: "text", nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
@@ -491,6 +496,8 @@ namespace OralExamination.Infrastructure.Migrations
                     bloom_level = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "Understand"),
                     has_follow_up = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     follow_up_prompt = table.Column<string>(type: "text", nullable: true),
+                    image_url = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    image_description = table.Column<string>(type: "text", nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
@@ -689,6 +696,7 @@ namespace OralExamination.Infrastructure.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
                     session_id = table.Column<Guid>(type: "uuid", nullable: false),
                     question_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    order_index = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
                     answer_text = table.Column<string>(type: "text", nullable: true),
                     time_taken_seconds = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "answered"),
@@ -722,6 +730,10 @@ namespace OralExamination.Infrastructure.Migrations
                     exam_set_id = table.Column<Guid>(type: "uuid", nullable: true),
                     seat_number = table.Column<int>(type: "integer", nullable: false),
                     ip_address = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
+                    audio_object_key = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    audio_r2_url = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    audio_hash_sha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    audio_verified_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "SCHEDULED"),
                     student_acknowledgement_status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "PENDING"),
                     is_locked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
@@ -769,6 +781,9 @@ namespace OralExamination.Infrastructure.Migrations
                     ai_score = table.Column<decimal>(type: "numeric(4,2)", precision: 4, scale: 2, nullable: true),
                     final_score = table.Column<decimal>(type: "numeric(4,2)", precision: 4, scale: 2, nullable: true),
                     grading_status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "pending"),
+                    is_suspicious = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    suspicious_reason = table.Column<string>(type: "text", nullable: true),
+                    grading_started_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     submitted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
@@ -925,6 +940,34 @@ namespace OralExamination.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "grading_jobs",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    submission_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "pending"),
+                    attempt_count = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    next_attempt_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    locked_until = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    last_error = table.Column<string>(type: "text", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    completed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_grading_jobs", x => x.id);
+                    table.CheckConstraint("ck_grading_jobs_attempt_count", "attempt_count >= 0");
+                    table.CheckConstraint("ck_grading_jobs_status", "status IN ('pending', 'processing', 'completed', 'failed')");
+                    table.ForeignKey(
+                        name: "FK_grading_jobs_exam_question_submissions_submission_id",
+                        column: x => x.submission_id,
+                        principalTable: "exam_question_submissions",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "lecturer_audit_details",
                 columns: table => new
                 {
@@ -1059,8 +1102,8 @@ namespace OralExamination.Infrastructure.Migrations
 
             migrationBuilder.InsertData(
                 table: "exam_questions",
-                columns: new[] { "id", "approval_status", "approved_by", "bloom_level", "content", "course_id", "created_at", "difficulty", "is_active", "key_points", "review_notes", "rubric_id", "sample_answer", "source", "submitted_by", "title" },
-                values: new object[] { new Guid("00000000-0000-0000-0000-000000000020"), "APPROVED", new Guid("00000000-0000-0000-0000-000000000002"), "Analyze", "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", true, "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]", null, new Guid("00000000-0000-0000-0000-000000000013"), "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.", "manual", null, "Phân biệt BackgroundService và IHostedService trong .NET 8" });
+                columns: new[] { "id", "approval_status", "approved_by", "bloom_level", "content", "course_id", "created_at", "difficulty", "image_description", "image_url", "is_active", "key_points", "review_notes", "rubric_id", "sample_answer", "source", "submitted_by", "title" },
+                values: new object[] { new Guid("00000000-0000-0000-0000-000000000020"), "APPROVED", new Guid("00000000-0000-0000-0000-000000000002"), "Analyze", "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", null, null, true, "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]", null, new Guid("00000000-0000-0000-0000-000000000013"), "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.", "manual", null, "Phân biệt BackgroundService và IHostedService trong .NET 8" });
 
             migrationBuilder.InsertData(
                 table: "exam_sets",
@@ -1074,15 +1117,15 @@ namespace OralExamination.Infrastructure.Migrations
 
             migrationBuilder.InsertData(
                 table: "practice_questions",
-                columns: new[] { "id", "bloom_level", "content", "course_id", "created_at", "difficulty", "follow_up_prompt", "has_follow_up", "is_active", "key_points", "rubric_id", "sample_answer", "title" },
+                columns: new[] { "id", "bloom_level", "content", "course_id", "created_at", "difficulty", "follow_up_prompt", "has_follow_up", "image_description", "image_url", "is_active", "key_points", "rubric_id", "sample_answer", "title" },
                 values: new object[,]
                 {
-                    { new Guid("00000000-0000-0000-0000-000000000017"), "Apply", "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?", true, true, "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.", "Nguyên lý Dependency Inversion" },
-                    { new Guid("00000000-0000-0000-0000-000000000101"), "Understand", "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?", true, true, "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.", "Vai trò tầng Domain trong Clean Architecture" },
-                    { new Guid("00000000-0000-0000-0000-000000000102"), "Understand", "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?", true, true, "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.", "Phân biệt Command và Query trong mẫu CQRS" },
-                    { new Guid("00000000-0000-0000-0000-000000000103"), "Apply", "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?", true, true, "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]", new Guid("00000000-0000-0000-0000-000000000013"), "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.", "Cơ chế Pipeline Behavior với FluentValidation" },
-                    { new Guid("00000000-0000-0000-0000-000000000104"), "Analyze", "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?", true, true, "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]", new Guid("00000000-0000-0000-0000-000000000013"), "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.", "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue" },
-                    { new Guid("00000000-0000-0000-0000-000000000105"), "Analyze", "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?", true, true, "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).", "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query" }
+                    { new Guid("00000000-0000-0000-0000-000000000017"), "Apply", "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?", true, null, null, true, "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.", "Nguyên lý Dependency Inversion" },
+                    { new Guid("00000000-0000-0000-0000-000000000101"), "Understand", "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?", true, null, null, true, "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.", "Vai trò tầng Domain trong Clean Architecture" },
+                    { new Guid("00000000-0000-0000-0000-000000000102"), "Understand", "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "easy", "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?", true, null, null, true, "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.", "Phân biệt Command và Query trong mẫu CQRS" },
+                    { new Guid("00000000-0000-0000-0000-000000000103"), "Apply", "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "medium", "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?", true, null, null, true, "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]", new Guid("00000000-0000-0000-0000-000000000013"), "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.", "Cơ chế Pipeline Behavior với FluentValidation" },
+                    { new Guid("00000000-0000-0000-0000-000000000104"), "Analyze", "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?", true, null, null, true, "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]", new Guid("00000000-0000-0000-0000-000000000013"), "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.", "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue" },
+                    { new Guid("00000000-0000-0000-0000-000000000105"), "Analyze", "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.", new Guid("00000000-0000-0000-0000-000000000008"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), "hard", "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?", true, null, null, true, "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]", new Guid("00000000-0000-0000-0000-000000000013"), "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).", "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query" }
                 });
 
             migrationBuilder.InsertData(
@@ -1107,11 +1150,11 @@ namespace OralExamination.Infrastructure.Migrations
 
             migrationBuilder.InsertData(
                 table: "student_exam_tickets",
-                columns: new[] { "id", "checked_in_at", "exam_set_id", "ip_address", "seat_number", "shift_id", "status", "student_acknowledgement_status", "student_id", "submitted_at" },
+                columns: new[] { "id", "audio_hash_sha256", "audio_object_key", "audio_r2_url", "audio_verified_at", "checked_in_at", "exam_set_id", "ip_address", "seat_number", "shift_id", "status", "student_acknowledgement_status", "student_id", "submitted_at" },
                 values: new object[,]
                 {
-                    { new Guid("00000000-0000-0000-0000-000000000024"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.101", 1, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000005"), null },
-                    { new Guid("00000000-0000-0000-0000-000000000025"), new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.102", 2, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000006"), null }
+                    { new Guid("00000000-0000-0000-0000-000000000024"), null, null, null, null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.101", 1, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000005"), null },
+                    { new Guid("00000000-0000-0000-0000-000000000025"), null, null, null, null, new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc), new Guid("00000000-0000-0000-0000-000000000019"), "192.168.1.102", 2, new Guid("00000000-0000-0000-0000-000000000023"), "SCHEDULED", "PENDING", new Guid("00000000-0000-0000-0000-000000000006"), null }
                 });
 
             migrationBuilder.InsertData(
@@ -1130,11 +1173,6 @@ namespace OralExamination.Infrastructure.Migrations
                 column: "evaluation_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_ai_evaluations_exam_submission",
-                table: "ai_evaluations",
-                column: "exam_submission_id");
-
-            migrationBuilder.CreateIndex(
                 name: "ix_ai_evaluations_mock_exam_answer",
                 table: "ai_evaluations",
                 column: "mock_exam_answer_id");
@@ -1143,6 +1181,13 @@ namespace OralExamination.Infrastructure.Migrations
                 name: "ix_ai_evaluations_practice_answer",
                 table: "ai_evaluations",
                 column: "practice_answer_id");
+
+            migrationBuilder.CreateIndex(
+                name: "uq_ai_evaluations_exam_submission",
+                table: "ai_evaluations",
+                column: "exam_submission_id",
+                unique: true,
+                filter: "exam_submission_id IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "ix_appeal_requests_assigned",
@@ -1238,6 +1283,16 @@ namespace OralExamination.Infrastructure.Migrations
                 column: "semester_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_dead_letter_queues_correlation",
+                table: "dead_letter_queues",
+                columns: new[] { "task_type", "correlation_id", "status" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_dead_letter_queues_retry",
+                table: "dead_letter_queues",
+                columns: new[] { "status", "next_retry_at" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_dead_letter_queues_status",
                 table: "dead_letter_queues",
                 columns: new[] { "status", "created_at" });
@@ -1318,6 +1373,17 @@ namespace OralExamination.Infrastructure.Migrations
                 name: "ix_exam_structures_created_by",
                 table: "exam_structures",
                 column: "created_by");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_grading_jobs_dispatch",
+                table: "grading_jobs",
+                columns: new[] { "status", "next_attempt_at", "locked_until" });
+
+            migrationBuilder.CreateIndex(
+                name: "uq_grading_jobs_submission",
+                table: "grading_jobs",
+                column: "submission_id",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_lecturer_audit_details_audit",
@@ -1545,6 +1611,9 @@ namespace OralExamination.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "exam_set_questions");
+
+            migrationBuilder.DropTable(
+                name: "grading_jobs");
 
             migrationBuilder.DropTable(
                 name: "lecturer_audit_details");

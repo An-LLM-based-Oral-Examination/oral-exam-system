@@ -37,7 +37,7 @@ import type {
   MockExamScorecard as MockExamScorecardData,
 } from '@/types/mockExam.types'
 import {
-  readMockExamSession,
+  listMockExamSessions,
   saveMockExamSession,
   secondsUntilExpiry,
 } from '@/utils/mockExamSessionStorage'
@@ -309,14 +309,32 @@ function formatClock(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+function normalizeHistoryStatus(status: string) {
+  return status.trim().toLowerCase()
+}
+
 function statusLabel(status: string) {
-  return HISTORY_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status
+  const normalized = normalizeHistoryStatus(status)
+  return HISTORY_STATUS_OPTIONS.find((option) => option.value === normalized)?.label ?? status
 }
 
 function statusChipClass(status: string) {
-  if (status === 'graded' || status === 'submitted') return 'bg-[#e8f8f1] text-[#16836a]'
-  if (status === 'abandoned') return 'bg-[#fdecec] text-[#c2415b]'
+  const normalized = normalizeHistoryStatus(status)
+  if (normalized === 'graded') return 'bg-[#e8f8f1] text-[#16836a]'
+  if (normalized === 'submitted') return 'bg-[#fff8eb] text-[#9a6414]'
+  if (normalized === 'abandoned') return 'bg-[#fdecec] text-[#c2415b]'
+  if (normalized === 'in_progress') return 'bg-[#F4FBFD] text-[#1C4D8D]'
   return 'bg-[#F4FBFD] text-[#1C4D8D]'
+}
+
+/** Ca chưa nộp — có thể vào phòng thi tiếp. */
+function canResumeHistoryItem(status: string) {
+  return normalizeHistoryStatus(status) === 'in_progress'
+}
+
+/** Chỉ ca đã chấm mới xem bảng điểm. */
+function canViewScorecard(status: string) {
+  return normalizeHistoryStatus(status) === 'graded'
 }
 
 export function MockExamPage() {
@@ -336,7 +354,6 @@ export function MockExamPage() {
   const micTestRef = useRef<{ cancelled: boolean; stop: () => void } | null>(null)
   const [pageError, setPageError] = useState('')
   const [quotaModal, setQuotaModal] = useState('')
-  const [confirmReplace, setConfirmReplace] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [historyItems, setHistoryItems] = useState<MockExamHistoryItem[]>([])
   const [historyTotal, setHistoryTotal] = useState(0)
@@ -357,11 +374,10 @@ export function MockExamPage() {
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null)
   const [activeSessionVersion, setActiveSessionVersion] = useState(0)
 
-  const activeSession = useMemo(() => {
+  const localSessions = useMemo(() => {
     void activeSessionVersion
-    return readMockExamSession()
+    return listMockExamSessions()
   }, [activeSessionVersion])
-  const activeSecondsLeft = activeSession ? secondsUntilExpiry(activeSession.expiresAt) : 0
   const modalCourse = courses.find((course) => course.id === openCourseId) ?? null
   const modalQuota = modalCourse ? (quotas[modalCourse.id] ?? null) : null
   const deviceStatus = DEVICE_STATUS[deviceState]
@@ -629,7 +645,6 @@ export function MockExamPage() {
     setPageError('')
     try {
       const session = await mockExamService.startSession(modalCourse.id, hasFollowUp)
-      setConfirmReplace(false)
       saveMockExamSession({ ...session, questions: session.questions, answers: [] })
       setActiveSessionVersion((current) => current + 1)
       navigate(`/mock-exam/session?session=${encodeURIComponent(session.sessionId)}`)
@@ -644,7 +659,6 @@ export function MockExamPage() {
               }
             : current
         })
-        setConfirmReplace(false)
         setQuotaModal(
           getMockExamErrorDetail(
             error,
@@ -658,7 +672,6 @@ export function MockExamPage() {
         }
         return
       }
-      setConfirmReplace(false)
       setPageError(getMockExamErrorDetail(error, 'Không thể bắt đầu ca thi thử.'))
     } finally {
       setIsStarting(false)
@@ -667,18 +680,26 @@ export function MockExamPage() {
 
   const handleStartExam = () => {
     if (!modalCourse || !modalQuota?.canStartExam || deviceState !== 'ready') return
-    if (activeSession && activeSecondsLeft > 0) {
-      setConfirmReplace(true)
-      return
-    }
     void startExam()
   }
 
+  const resumeSession = (sessionId: string) => {
+    setActiveSessionVersion((current) => current + 1)
+    navigate(`/mock-exam/session?session=${encodeURIComponent(sessionId)}`)
+  }
+
   const handleToggleHistory = async (item: MockExamHistoryItem) => {
-    if (item.status === 'in_progress' && activeSession?.sessionId === item.sessionId) {
-      navigate(`/mock-exam/session?session=${encodeURIComponent(item.sessionId)}`)
+    if (canResumeHistoryItem(item.status)) {
+      resumeSession(item.sessionId)
       return
     }
+
+    if (!canViewScorecard(item.status)) {
+      setDetailError('')
+      setExpandedHistoryId(null)
+      return
+    }
+
     if (expandedHistoryId === item.sessionId) {
       setExpandedHistoryId(null)
       return
@@ -701,17 +722,41 @@ export function MockExamPage() {
 
   const renderHistoryAction = (item: MockExamHistoryItem) => {
     const isOpen = expandedHistoryId === item.sessionId
-    const canResume = item.status === 'in_progress' && activeSession?.sessionId === item.sessionId
+    const canResume = canResumeHistoryItem(item.status)
+    const canView = canViewScorecard(item.status)
+    const status = normalizeHistoryStatus(item.status)
+
+    if (canResume) {
+      return (
+        <button
+          type="button"
+          onClick={() => void handleToggleHistory(item)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4]/45 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+        >
+          <ArrowRight className="size-3" />
+          Tiếp tục ca thi
+        </button>
+      )
+    }
+
+    if (canView) {
+      return (
+        <button
+          type="button"
+          onClick={() => void handleToggleHistory(item)}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4]/45 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+          aria-expanded={isOpen}
+        >
+          <Eye className="size-3" />
+          {isOpen ? 'Đóng bảng điểm' : 'Xem bảng điểm'}
+        </button>
+      )
+    }
+
     return (
-      <button
-        type="button"
-        onClick={() => void handleToggleHistory(item)}
-        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4]/45 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-        aria-expanded={canResume ? undefined : isOpen}
-      >
-        <Eye className="size-3" />
-        {canResume ? 'Tiếp tục ca thi' : isOpen ? 'Đóng bảng điểm' : 'Xem bảng điểm'}
-      </button>
+      <span className="inline-flex min-h-9 items-center rounded-lg border border-[#d5deea] bg-[#f7f9fc] px-3 text-xs font-semibold text-[#74839a]">
+        {status === 'submitted' ? 'Đang chấm điểm' : status === 'abandoned' ? 'Không có bảng điểm' : 'Chưa có bảng điểm'}
+      </span>
     )
   }
 
@@ -769,28 +814,44 @@ export function MockExamPage() {
         </div>
       </section>
 
-      {activeSession && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-[#4988C4]/45 bg-white px-5 py-4 shadow-[0_1px_0_#fff_inset,0_14px_32px_rgba(36,78,170,0.12)] sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#0F2854]">
-              Ca thi {activeSession.courseCode} vẫn đang mở
-            </p>
-            <p className="mt-1 text-sm text-[#5b6b84]">
-              {activeSecondsLeft > 0
-                ? `Còn ${formatClock(activeSecondsLeft)}`
-                : 'Đã hết giờ. Vào phòng để nộp bài.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              navigate(`/mock-exam/session?session=${encodeURIComponent(activeSession.sessionId)}`)
-            }
-            className={ds.primaryButton}
-          >
-            Tiếp tục ca thi
-            <ArrowRight className="size-4" />
-          </button>
+      {localSessions.length > 0 && (
+        <div className="space-y-2 rounded-2xl border border-[#4988C4]/45 bg-white px-5 py-4 shadow-[0_1px_0_#fff_inset,0_14px_32px_rgba(36,78,170,0.12)]">
+          <p className="text-sm font-bold text-[#0F2854]">
+            Ca thi chưa hoàn thành ({localSessions.length})
+          </p>
+          <p className="text-xs text-[#5b6b84]">
+            Có thể mở nhiều ca cùng lúc. Tiếp tục sẽ vào đúng câu đã làm, không tạo đề mới.
+          </p>
+          <ul className="space-y-2">
+            {localSessions.map((item) => {
+              const secondsLeft = secondsUntilExpiry(item.expiresAt)
+              return (
+                <li
+                  key={item.sessionId}
+                  className="flex flex-col gap-2 rounded-xl border border-[#4988C4]/35 bg-[#F8FBFE] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-[#0F2854]">
+                      {item.courseCode} · {item.courseName}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#5b6b84]">
+                      {secondsLeft > 0
+                        ? `Còn ${formatClock(secondsLeft)} · Đã trả lời ${item.answers.length}/${item.questions.length}`
+                        : `Đã hết giờ · Đã trả lời ${item.answers.length}/${item.questions.length}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => resumeSession(item.sessionId)}
+                    className={ds.primaryButton}
+                  >
+                    Tiếp tục
+                    <ArrowRight className="size-4" />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
 
@@ -1534,19 +1595,6 @@ export function MockExamPage() {
           onConfirm={() => setQuotaModal('')}
         />
       )}
-      {confirmReplace && (
-        <ConfirmDialog
-          tone="warning"
-          title="Ca thi trước vẫn đang mở"
-          message="Bắt đầu ca mới sẽ dùng thêm một lượt hạn ngạch. Ca chưa nộp không được khôi phục sau khi bạn vào đề mới."
-          confirmLabel="Bắt đầu ca mới"
-          cancelLabel="Ở lại"
-          pending={isStarting}
-          onCancel={() => setConfirmReplace(false)}
-          onConfirm={() => void startExam()}
-        />
-      )}
-
       <div className="sr-only" aria-live="polite">
         {deviceStatus.title}. {deviceNames || deviceStatus.helper}
       </div>

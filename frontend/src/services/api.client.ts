@@ -33,6 +33,10 @@ apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = sessionStorage.getItem('access_token')
     if (token && config.headers) config.headers.Authorization = `Bearer ${token}`
+    // Default Content-Type là application/json — FormData phải để browser gắn multipart + boundary.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+      config.headers.delete('Content-Type')
+    }
     return config
   },
   (error) => Promise.reject(error),

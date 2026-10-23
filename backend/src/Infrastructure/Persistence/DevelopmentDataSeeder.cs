@@ -3634,6 +3634,7 @@ public static class DevelopmentDataSeeder
                 Id = answerId,
                 SessionId = sessionId,
                 QuestionId = q.Id,
+                OrderIndex = i + 1,
                 AnswerText = !string.IsNullOrWhiteSpace(q.SampleAnswer)
                     ? $"{q.SampleAnswer} Bên cạnh đó, em xin phân tích thêm ưu nhược điểm và cách vận dụng trong hệ thống thực tế."
                     : "Em trình bày chi tiết các luận điểm kỹ thuật, phân tích trade-off và nêu ví dụ áp dụng cụ thể.",

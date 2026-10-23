@@ -49,9 +49,11 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền truy cập ca thi này.");
         }
 
-        var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
+        // Giữ đúng thứ tự đề thi; follow-up đi sau câu chính. Bỏ slot phụ pending chưa trả lời.
+        var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers)
+            .Where(a => !(a.IsFollowUp && string.IsNullOrWhiteSpace(a.AnswerText)))
+            .ToList();
         var questionScores = new List<MockExamQuestionScoreDto>();
-        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(session.Course?.Code);
         bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
         var unansweredReason = isOverdue
             ? "Hết giờ làm bài - Không có câu trả lời"
@@ -61,8 +63,12 @@ public sealed class GetMockExamSessionDetailQueryHandler(
         {
             var a = sessionAnswers[i];
             var q = a.Question;
-            int orderIndex = i + 1;
+            int orderIndex = a.OrderIndex > 0 ? a.OrderIndex : i + 1;
             var aiEval = a.AiEvaluations?.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+            var displayTitle = a.IsFollowUp ? $"Câu hỏi phụ · {q.Title}" : q.Title;
+            var displayContent = a.IsFollowUp
+                ? (!string.IsNullOrWhiteSpace(a.PromptText) ? a.PromptText! : q.Content)
+                : q.Content;
 
             var criterionScores = new List<MockExamCriterionScoreDto>();
             foreach (var c in q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex) ?? Enumerable.Empty<RubricCriterion>())
@@ -83,32 +89,10 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 ));
             }
 
-            var displayContent = q.Content;
-            if (session.HasFollowUp)
-            {
-                var resolvedFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    session.Course?.Code,
-                    q.FollowUpPrompt,
-                    null,
-                    1,
-                    null,
-                    null,
-                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
-                    q.Content,
-                    null);
-
-                if (!displayContent.Contains(resolvedFollowUp, StringComparison.OrdinalIgnoreCase))
-                {
-                    displayContent = isEnglishCourse
-                        ? $"{q.Content}\n\n[Follow-up Question]: {resolvedFollowUp}"
-                        : $"{q.Content}\n\n[Câu hỏi phụ đào sâu]: {resolvedFollowUp}";
-                }
-            }
-
             questionScores.Add(new MockExamQuestionScoreDto(
                 QuestionId: q.Id,
                 OrderIndex: orderIndex,
-                Title: q.Title,
+                Title: displayTitle,
                 Content: displayContent,
                 BloomLevel: q.BloomLevel ?? "Remember",
                 Difficulty: q.Difficulty,
@@ -117,13 +101,17 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? unansweredReason : null),
                 ConfidenceScore: aiEval?.ConfidenceScore,
                 CriteriaScores: criterionScores,
-                ImageUrl: q.ImageUrl,
-                ImageDescription: q.ImageDescription
+                ImageUrl: a.IsFollowUp ? null : q.ImageUrl,
+                ImageDescription: a.IsFollowUp ? null : q.ImageDescription,
+                IsFollowUp: a.IsFollowUp,
+                AnswerId: a.Id,
+                ParentAnswerId: a.ParentAnswerId
             ));
         }
 
-        decimal totalScore = session.TotalScore ?? (questionScores.Count > 0
-            ? Math.Round(questionScores.Sum(x => x.Score) / questionScores.Count, 2, MidpointRounding.AwayFromZero)
+        var mainScores = questionScores.Where(x => !x.IsFollowUp).ToList();
+        decimal totalScore = session.TotalScore ?? (mainScores.Count > 0
+            ? Math.Round(mainScores.Sum(x => x.Score) / mainScores.Count, 2, MidpointRounding.AwayFromZero)
             : 0.0m);
 
         string classification = totalScore switch
@@ -139,7 +127,10 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             ? (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes)
             : 30;
 
-        int answeredQuestions = session.Answers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText) && (a.Status == "answered" || a.Status == "graded"));
+        int answeredQuestions = session.Answers.Count(a =>
+            !a.IsFollowUp
+            && !string.IsNullOrWhiteSpace(a.AnswerText)
+            && (a.Status == "answered" || a.Status == "graded"));
 
         var response = new MockExamScorecardDto(
             SessionId: session.Id,
@@ -148,7 +139,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             CourseName: session.Course?.Name ?? string.Empty,
             TotalScore: totalScore,
             Classification: classification,
-            TotalQuestions: questionScores.Count,
+            TotalQuestions: mainScores.Count,
             AnsweredQuestions: answeredQuestions,
             DurationMinutes: durationMinutes,
             IsOverdue: isOverdue,

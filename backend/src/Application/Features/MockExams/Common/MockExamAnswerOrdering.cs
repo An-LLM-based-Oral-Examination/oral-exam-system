@@ -49,7 +49,10 @@ public static class MockExamAnswerOrdering
     public static List<MockExamAnswer> OrderAnswers(IEnumerable<MockExamAnswer> answers)
     {
         return (answers ?? Enumerable.Empty<MockExamAnswer>())
-            .OrderBy(a => TryGetEmbeddedOrderIndex(a.Id, out var idx) ? idx : int.MaxValue)
+            .OrderBy(a => TryGetEmbeddedOrderIndex(a.Id, out var idx)
+                ? idx
+                : (a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue))
+            .ThenBy(a => a.IsFollowUp)
             .ThenBy(a => a.AnsweredAt)
             .ThenBy(a => a.Id)
             .ToList();

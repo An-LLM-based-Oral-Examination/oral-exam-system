@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -8,11 +8,13 @@ import {
   Mic,
   Settings,
   Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
+import { AutoFitQuestionText } from '@/components/question/AutoFitQuestionText'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import {
@@ -20,20 +22,34 @@ import {
   getMockExamErrorStatus,
   mockExamService,
 } from '@/services/mockExam.service'
-import { getTtsVoiceForCourse, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
+import {
+  getTtsVoiceForCourse,
+  isSpeechPlaybackCancellation,
+  playNaturalSpeech,
+  stopSpeechPlayback,
+  transcribeSpeech,
+} from '@/services/speech.service'
 import type {
+  MockExamActiveFollowUp,
   MockExamScorecard as MockExamScorecardData,
   StoredMockExamAnswer,
   StoredMockExamSession,
 } from '@/types/mockExam.types'
 import {
   clearMockExamSession,
-  readMockExamSession,
+  readMockExamSessionById,
+  removeMockExamAnswer,
   saveMockExamAnswer,
+  saveMockExamSession,
   secondsUntilExpiry,
 } from '@/utils/mockExamSessionStorage'
 
 type RoomPhase = 'exam' | 'submitting-exam' | 'scorecard'
+
+/** Đang ghi âm lại đáp án nào khi xem lại (null = lần ghi đầu / chưa mở mic). */
+type ReRecordTarget =
+  | { kind: 'main'; questionId: string }
+  | { kind: 'followUp'; answerId: string; questionId: string }
 
 interface ExamWarning {
   title: string
@@ -57,6 +73,20 @@ function formatClock(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+/** Cao theo nội dung, tối đa 3 dòng; vượt thì scroll. */
+function fitTranscriptTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  const styles = window.getComputedStyle(el)
+  const lineHeight = Number.parseFloat(styles.lineHeight) || 22
+  const paddingY =
+    (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0)
+  const maxHeight = lineHeight * 3 + paddingY
+  const contentHeight = el.scrollHeight
+  el.style.height = `${Math.min(Math.max(contentHeight, lineHeight + paddingY), maxHeight)}px`
+  el.style.overflowY = contentHeight > maxHeight + 1 ? 'auto' : 'hidden'
+}
+
 function difficultyLabel(difficulty: string) {
   if (difficulty === 'easy') return 'Dễ'
   if (difficulty === 'medium') return 'Trung bình'
@@ -72,33 +102,144 @@ function shouldIgnoreSpace(target: EventTarget | null) {
   return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
-function speakQuestion(content: string, courseCode?: string, courseName?: string) {
-  void playNaturalSpeech(content, getTtsVoiceForCourse(courseCode, courseName), 0.96).catch((error: unknown) => {
-    if (error instanceof Error && error.name === 'AbortError') return
-    console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
-  })
+/** Chỉ lấy thuật ngữ ngắn — không gửi nguyên đề (tránh STT bịa câu trả lời khi im lặng). */
+function buildVocabularyHint(question: { title: string }) {
+  const title = question.title.trim()
+  return title || undefined
+}
+
+function isLikelySilentOrInvalidTranscript(transcript: string, recordingSeconds: number) {
+  const text = transcript.trim()
+  if (!text) return true
+  // Ghi quá ngắn mà transcript dài → thường là ảo giác khi không nói.
+  if (recordingSeconds > 0 && recordingSeconds < 2 && text.split(/\s+/).length > 12) return true
+  return false
+}
+
+function normalizeForCompare(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** STT đôi khi “đọc” lại đề khi im lặng — không phải lời học sinh. */
+function looksLikeQuestionEcho(
+  transcript: string,
+  question: { title: string; content: string },
+) {
+  const t = normalizeForCompare(transcript)
+  if (t.length < 24) return false
+  const title = normalizeForCompare(question.title)
+  const content = normalizeForCompare(question.content)
+  if (title.length >= 16 && t.includes(title)) return true
+  if (content.length >= 40) {
+    const snippet = content.slice(0, Math.min(80, content.length))
+    if (snippet.length >= 40 && t.includes(snippet)) return true
+  }
+  return false
+}
+
+function initialQuestionIndex(session: StoredMockExamSession) {
+  const answeredIds = new Set(session.answers.map((answer) => answer.questionId))
+  const firstUnanswered = session.questions.findIndex((question) => !answeredIds.has(question.id))
+  if (firstUnanswered >= 0) return firstUnanswered
+  return Math.max(0, session.questions.length - 1)
+}
+
+function initialFurthestIndex(session: StoredMockExamSession) {
+  const start = initialQuestionIndex(session)
+  let maxAnswered = -1
+  for (let index = 0; index < session.questions.length; index += 1) {
+    const question = session.questions[index]
+    if (session.answers.some((answer) => answer.questionId === question.id)) {
+      maxAnswered = index
+    }
+  }
+  const stored =
+    typeof session.furthestQuestionIndex === 'number' &&
+    Number.isFinite(session.furthestQuestionIndex)
+      ? Math.max(0, Math.min(session.questions.length - 1, Math.floor(session.furthestQuestionIndex)))
+      : -1
+  return Math.max(0, start, maxAnswered, stored)
 }
 
 export function MockExamSessionPage() {
   const [searchParams] = useSearchParams()
   const sessionId = searchParams.get('session')
-  const [session] = useState<StoredMockExamSession | null>(() => {
-    const stored = readMockExamSession()
-    return stored && stored.sessionId === sessionId ? stored : null
-  })
+  const [session, setSession] = useState<StoredMockExamSession | null>(() =>
+    sessionId ? readMockExamSessionById(sessionId) : null,
+  )
+  const [isRestoring, setIsRestoring] = useState(() => Boolean(sessionId && !session))
+  const [restoreError, setRestoreError] = useState('')
 
-  if (!session) return <MissingSession />
+  useEffect(() => {
+    if (!sessionId || session) return
+
+    let cancelled = false
+    // isRestoring đã true từ initial state — chỉ gọi API, cập nhật state trong callback.
+    void mockExamService
+      .resumeSession(sessionId)
+      .then((resumed) => {
+        if (cancelled) return
+        const stored: StoredMockExamSession = {
+          ...resumed,
+          answers: resumed.answers,
+          activeFollowUp: resumed.activeFollowUp ?? null,
+        }
+        saveMockExamSession(stored)
+        setSession(stored)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setRestoreError(
+          getMockExamErrorDetail(error, 'Không thể khôi phục ca thi. Ca có thể đã hết hạn hoặc đã nộp.'),
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setIsRestoring(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [session, sessionId])
+
+  if (!sessionId) return <MissingSession message="Thiếu mã ca thi trên đường dẫn." />
+  if (isRestoring) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-white px-4 text-[#0F2854]">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
+          <LoaderCircle className="size-4 animate-spin" />
+          Đang khôi phục ca thi…
+        </div>
+      </div>
+    )
+  }
+  if (!session) {
+    return (
+      <MissingSession
+        message={
+          restoreError ||
+          'Không tìm thấy ca thi đang mở. Hãy quay lại phòng chờ để tiếp tục hoặc tạo ca mới.'
+        }
+      />
+    )
+  }
   return <MockExamRoom session={session} />
 }
 
-function MissingSession() {
+function MissingSession({ message }: { message?: string }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-white px-4 text-[#0F2854]">
       <section className="max-w-md text-center">
         <h1 className="text-xl font-bold">Không tìm thấy ca thi đang mở</h1>
         <p className="mt-2 text-sm leading-relaxed text-[#5f6f87]">
-          Ca thi chỉ được khôi phục trên trình duyệt đã bắt đầu bài. Hãy quay lại phòng chờ để tạo
-          ca mới.
+          {message ||
+            'Ca thi chỉ được khôi phục trên trình duyệt đã bắt đầu bài. Hãy quay lại phòng chờ để tạo ca mới.'}
         </p>
         <Link
           to="/mock-exam"
@@ -115,14 +256,69 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const navigate = useNavigate()
   const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
   const [phase, setPhase] = useState<RoomPhase>('exam')
-  const [questionIndex, setQuestionIndex] = useState(0)
+  const [questionIndex, setQuestionIndex] = useState(() => initialQuestionIndex(session))
+  const [furthestIndex, setFurthestIndex] = useState(() => initialFurthestIndex(session))
   const [secondsLeft, setSecondsLeft] = useState(() => secondsUntilExpiry(session.expiresAt))
+  const [activeFollowUp, setActiveFollowUp] = useState<MockExamActiveFollowUp | null>(
+    () => session.activeFollowUp ?? null,
+  )
+  /** Câu phụ tiếp theo (đã tạo phía BE) — chỉ mở sau khi SV chỉnh transcript câu phụ hiện tại. */
+  const [queuedFollowUp, setQueuedFollowUp] = useState<MockExamActiveFollowUp | null>(null)
+  /** Xem lại: mic chỉ mở dưới đúng câu (chính / phụ) được chọn ghi lại. */
+  const [reRecordTarget, setReRecordTarget] = useState<ReRecordTarget | null>(null)
+  const reRecordTargetRef = useRef<ReRecordTarget | null>(null)
   const [answers, setAnswers] = useState<Record<string, StoredMockExamAnswer>>(() =>
-    Object.fromEntries(session.answers.map((answer) => [answer.questionId, answer])),
+    Object.fromEntries(
+      session.answers
+        .filter((answer) => !answer.isFollowUp)
+        .map((answer) => [answer.questionId, answer]),
+    ),
   )
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(session.answers.map((answer) => [answer.questionId, answer.transcript])),
+    Object.fromEntries(
+      session.answers
+        .filter((answer) => !answer.isFollowUp)
+        .map((answer) => [answer.questionId, answer.transcript]),
+    ),
   )
+  const [followUpAnswers, setFollowUpAnswers] = useState<Record<string, StoredMockExamAnswer>>(() =>
+    Object.fromEntries(
+      session.answers
+        .filter((answer) => answer.isFollowUp && answer.answerId)
+        .map((answer) => [answer.answerId, answer]),
+    ),
+  )
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      session.answers
+        .filter((answer) => answer.isFollowUp && answer.answerId)
+        .map((answer) => [answer.answerId, answer.transcript]),
+    ),
+  )
+  const draftsRef = useRef(drafts)
+  const answersRef = useRef<Record<string, StoredMockExamAnswer>>(
+    Object.fromEntries(
+      session.answers
+        .filter((answer) => !answer.isFollowUp)
+        .map((answer) => [answer.questionId, answer]),
+    ),
+  )
+  const followUpDraftsRef = useRef(followUpDrafts)
+  const followUpAnswersRef = useRef(followUpAnswers)
+  const activeFollowUpRef = useRef(activeFollowUp)
+  /** Cache đề câu phụ theo answerId — tránh mất promptText khi xem lại. */
+  const [followUpPromptByAnswerId, setFollowUpPromptByAnswerId] = useState<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        session.answers
+          .filter((answer) => answer.isFollowUp && answer.answerId && answer.promptText?.trim())
+          .map((answer) => [answer.answerId, answer.promptText!.trim()]),
+      ),
+  )
+  const followUpPromptByAnswerIdRef = useRef(followUpPromptByAnswerId)
+  const draftSaveTimerRef = useRef<number | null>(null)
+  const transcriptAreaRef = useRef<HTMLTextAreaElement | null>(null)
+  const transcriptFitRootRef = useRef<HTMLElement | null>(null)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [recordedSeconds, setRecordedSeconds] = useState(0)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -131,11 +327,13 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const [submitError, setSubmitError] = useState('')
   const [scorecard, setScorecard] = useState<MockExamScorecardData | null>(null)
   const [autoRead, setAutoRead] = useState(false)
+  const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [warning, setWarning] = useState<ExamWarning | null>(null)
   const warningResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
   const warningOpenRef = useRef(false)
   const urgentWarnedRef = useRef(false)
+  const speechRequestRef = useRef(0)
   const playbackUrlRef = useRef<string | null>(null)
   const recordingSecondsRef = useRef(0)
   const finalizeLock = useRef(false)
@@ -153,21 +351,151 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const settingsRef = useRef<HTMLDivElement>(null)
   const runtimeRef = useRef<ExamRuntime>({
     phase: 'exam',
-    questionId: session.questions[0]?.id ?? '',
+    questionId: session.questions[initialQuestionIndex(session)]?.id ?? session.questions[0]?.id ?? '',
     audioBlob: null,
     recordedSeconds: 0,
-    answers: Object.fromEntries(session.answers.map((answer) => [answer.questionId, answer])),
+    answers: Object.fromEntries(
+      session.answers
+        .filter((answer) => !answer.isFollowUp)
+        .map((answer) => [answer.questionId, answer]),
+    ),
   })
+
+  const rememberFollowUpPrompt = useCallback((answerId: string, prompt: string) => {
+    const trimmed = prompt.trim()
+    if (!answerId || !trimmed) return
+    setFollowUpPromptByAnswerId((current) => {
+      if (current[answerId] === trimmed) return current
+      const next = { ...current, [answerId]: trimmed }
+      followUpPromptByAnswerIdRef.current = next
+      return next
+    })
+  }, [])
+
+  const persistActiveFollowUp = useCallback(
+    (next: MockExamActiveFollowUp | null) => {
+      if (next?.answerId && next.prompt) {
+        rememberFollowUpPrompt(next.answerId, next.prompt)
+      }
+      setActiveFollowUp(next)
+      const stored = readMockExamSessionById(session.sessionId)
+      if (stored) {
+        saveMockExamSession({ ...stored, activeFollowUp: next })
+      }
+    },
+    [rememberFollowUpPrompt, session.sessionId],
+  )
 
   const question = session.questions[questionIndex] ?? null
   const savedAnswer = question ? answers[question.id] : undefined
-  const draft = question ? (drafts[question.id] ?? '') : ''
-  const transcriptDirty = Boolean(
-    savedAnswer && draft.trim() && draft.trim() !== savedAnswer.transcript,
-  )
+  const savedFollowUpAnswer = activeFollowUp
+    ? followUpAnswers[activeFollowUp.answerId]
+    : undefined
+  /** Câu phụ đã trả lời của câu chính đang xem (để hiện khi quay lại). */
+  const reviewedFollowUps = question
+    ? Object.values(followUpAnswers)
+        .filter(
+          (item) =>
+            item.isFollowUp &&
+            item.questionId === question.id &&
+            (item.transcript.trim().length > 0 ||
+              (reRecordTarget?.kind === 'followUp' &&
+                reRecordTarget.answerId === item.answerId)) &&
+            (!activeFollowUp || item.answerId !== activeFollowUp.answerId),
+        )
+        .map((item) => ({
+          ...item,
+          promptText:
+            item.promptText?.trim() || followUpPromptByAnswerId[item.answerId] || null,
+        }))
+        .sort((left, right) => left.answeredAt.localeCompare(right.answeredAt))
+    : []
+  const isReviewingAnsweredMain =
+    !activeFollowUp &&
+    (Boolean(savedAnswer) ||
+      reviewedFollowUps.length > 0 ||
+      (reRecordTarget?.kind === 'main' && reRecordTarget.questionId === question?.id))
+  const draft = activeFollowUp
+    ? (followUpDrafts[activeFollowUp.answerId] ?? '')
+    : question
+      ? (drafts[question.id] ?? '')
+      : ''
   const isUrgent = secondsLeft <= 60
-  const showTranscript =
-    Boolean(question) && !isRecording && (isSendingAnswer || Boolean(savedAnswer))
+  /** Lần ghi đầu (chưa có đáp án) — mic dùng chung phía dưới câu hỏi. */
+  const isFirstRecordingPass = activeFollowUp
+    ? !savedFollowUpAnswer && !isSendingAnswer
+    : !savedAnswer && reviewedFollowUps.length === 0 && !isSendingAnswer
+  const showFirstPassMic =
+    isFirstRecordingPass ||
+    (Boolean(activeFollowUp) && isSendingAnswer && !savedFollowUpAnswer) ||
+    (!activeFollowUp && isSendingAnswer && !savedAnswer && !isReviewingAnsweredMain)
+  const micAllowed =
+    showFirstPassMic ||
+    reRecordTarget !== null ||
+    isRecording ||
+    (isSendingAnswer && reRecordTarget !== null)
+  const showMicSectionRef = useRef(micAllowed)
+  const isMicOpenForMain = Boolean(
+    question && reRecordTarget?.kind === 'main' && reRecordTarget.questionId === question.id,
+  )
+  const isMicOpenForFollowUp = (answerId: string) =>
+    Boolean(reRecordTarget?.kind === 'followUp' && reRecordTarget.answerId === answerId)
+
+  const reviewContextKey = `${question?.id ?? ''}:${activeFollowUp?.answerId ?? ''}`
+  const [reviewContextSeen, setReviewContextSeen] = useState(reviewContextKey)
+  if (reviewContextSeen !== reviewContextKey) {
+    setReviewContextSeen(reviewContextKey)
+    setReRecordTarget(null)
+  }
+
+  useEffect(() => {
+    draftsRef.current = drafts
+  }, [drafts])
+
+  useEffect(() => {
+    answersRef.current = answers
+  }, [answers])
+
+  useEffect(() => {
+    followUpDraftsRef.current = followUpDrafts
+  }, [followUpDrafts])
+
+  useEffect(() => {
+    followUpAnswersRef.current = followUpAnswers
+  }, [followUpAnswers])
+
+  useEffect(() => {
+    activeFollowUpRef.current = activeFollowUp
+  }, [activeFollowUp])
+
+  useEffect(() => {
+    reRecordTargetRef.current = reRecordTarget
+  }, [reRecordTarget])
+
+  useEffect(() => {
+    showMicSectionRef.current = micAllowed
+  }, [micAllowed])
+
+  useEffect(() => {
+    followUpPromptByAnswerIdRef.current = followUpPromptByAnswerId
+  }, [followUpPromptByAnswerId])
+
+  useLayoutEffect(() => {
+    const root = transcriptFitRootRef.current
+    if (!root) return
+    root.querySelectorAll<HTMLTextAreaElement>('[data-transcript-fit]').forEach(fitTranscriptTextarea)
+  }, [
+    drafts,
+    followUpDrafts,
+    draft,
+    isRecording,
+    isSendingAnswer,
+    isReviewingAnsweredMain,
+    activeFollowUp?.answerId,
+    question?.id,
+    reviewedFollowUps.length,
+    reRecordTarget,
+  ])
 
   const replacePlayback = useCallback((blob: Blob | null) => {
     if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
@@ -176,37 +504,260 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     runtimeRef.current.audioBlob = blob
   }, [])
 
+  const stopReadingQuestion = useCallback(() => {
+    speechRequestRef.current += 1
+    stopSpeechPlayback()
+    setIsReadingQuestion(false)
+  }, [])
+
+  const startReadingQuestion = useCallback(
+    (content: string) => {
+      const text = content.trim()
+      if (!text) return
+
+      const requestId = ++speechRequestRef.current
+      setIsReadingQuestion(true)
+      void playNaturalSpeech(
+        text,
+        getTtsVoiceForCourse(session?.courseCode, session?.courseName),
+        0.96,
+      )
+        .catch((error: unknown) => {
+          if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
+          console.warn('Không thể phát câu hỏi bằng giọng AI.', error)
+        })
+        .finally(() => {
+          if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
+        })
+    },
+    [session.courseCode, session.courseName],
+  )
+
+  const displayPrompt = activeFollowUp?.prompt ?? question?.content ?? ''
+
+  const toggleReadQuestion = useCallback(() => {
+    if (!displayPrompt.trim()) return
+    if (isReadingQuestion) {
+      stopReadingQuestion()
+      return
+    }
+    startReadingQuestion(displayPrompt)
+  }, [displayPrompt, isReadingQuestion, startReadingQuestion, stopReadingQuestion])
+
   const uploadAnswer = useCallback(
     async (
       questionId: string,
       file: Blob | null,
       timeTakenSeconds: number,
       transcript?: string,
+      answerId?: string | null,
     ) => {
+      // Luôn gắn AnswerId khi đang trả lời câu phụ — thiếu thì BE ghi đè transcript câu chính.
+      const activeFu = activeFollowUpRef.current
+      const reRecord = reRecordTargetRef.current
+      const resolvedAnswerId =
+        answerId?.trim() ||
+        (reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+          ? reRecord.answerId
+          : null) ||
+        (activeFu && activeFu.questionId === questionId ? activeFu.answerId : null) ||
+        null
+      const submittingFollowUp = Boolean(resolvedAnswerId)
+
       const response = await mockExamService.submitAnswer(session.sessionId, {
         questionId,
+        answerId: resolvedAnswerId,
         file,
         timeTakenSeconds,
         transcript,
       })
-      const stored: StoredMockExamAnswer = {
+
+      // Nếu FE đang nộp câu phụ mà BE trả về không phải follow-up → coi như lỗi binding;
+      // vẫn lưu vào follow-up local, không ghi đè câu chính trên UI.
+      const treatAsFollowUp = response.isFollowUp || submittingFollowUp
+
+      if (!treatAsFollowUp) {
+        const stored: StoredMockExamAnswer = {
+          questionId: response.questionId,
+          transcript: response.transcript,
+          timeTakenSeconds,
+          answerId: response.answerId,
+          answeredAt: response.answeredAt,
+          isFollowUp: false,
+        }
+        setAnswers((current) => {
+          const next = { ...current, [stored.questionId]: stored }
+          runtimeRef.current.answers = next
+          answersRef.current = next
+          return next
+        })
+        setDrafts((current) => {
+          const next = { ...current, [stored.questionId]: stored.transcript }
+          draftsRef.current = next
+          return next
+        })
+        saveMockExamAnswer(stored, session.sessionId)
+
+        replacePlayback(null)
+        // Xếp hàng câu phụ — chỉ mở sau khi SV chỉnh xong transcript câu chính.
+        // Không xóa hàng đợi khi chỉ chỉnh sửa transcript (needsFollowUp = false).
+        if (
+          response.needsFollowUp &&
+          response.followUpAnswerId &&
+          response.followUpPrompt?.trim()
+        ) {
+          rememberFollowUpPrompt(response.followUpAnswerId, response.followUpPrompt)
+          setQueuedFollowUp({
+            answerId: response.followUpAnswerId,
+            questionId: response.questionId,
+            parentAnswerId: response.answerId,
+            prompt: response.followUpPrompt.trim(),
+            followUpIndex: response.followUpIndex > 0 ? response.followUpIndex : 1,
+            maxFollowUps: response.maxFollowUps > 0 ? response.maxFollowUps : 1,
+          })
+        }
+        setReRecordTarget(null)
+        return response
+      }
+
+      const followUpAnswerId = resolvedAnswerId ?? response.answerId
+      const promptForAnswer =
+        followUpPromptByAnswerIdRef.current[followUpAnswerId] ??
+        (activeFu?.answerId === followUpAnswerId ? activeFu.prompt : null) ??
+        followUpAnswersRef.current[followUpAnswerId]?.promptText ??
+        null
+      if (promptForAnswer) {
+        rememberFollowUpPrompt(followUpAnswerId, promptForAnswer)
+      }
+      const storedFollowUp: StoredMockExamAnswer = {
         questionId: response.questionId,
         transcript: response.transcript,
         timeTakenSeconds,
-        answerId: response.answerId,
+        answerId: followUpAnswerId,
         answeredAt: response.answeredAt,
+        isFollowUp: true,
+        parentAnswerId: response.parentAnswerId ?? activeFu?.parentAnswerId ?? null,
+        promptText: promptForAnswer,
       }
-      setAnswers((current) => {
-        const next = { ...current, [stored.questionId]: stored }
-        runtimeRef.current.answers = next
+      setFollowUpAnswers((current) => {
+        const next = { ...current, [storedFollowUp.answerId]: storedFollowUp }
+        followUpAnswersRef.current = next
         return next
       })
-      setDrafts((current) => ({ ...current, [stored.questionId]: stored.transcript }))
-      saveMockExamAnswer(stored)
-      if (file) replacePlayback(null)
-      return stored
+      setFollowUpDrafts((current) => {
+        const next = { ...current, [storedFollowUp.answerId]: storedFollowUp.transcript }
+        followUpDraftsRef.current = next
+        return next
+      })
+      saveMockExamAnswer(storedFollowUp, session.sessionId)
+      replacePlayback(null)
+
+      if (
+        response.needsFollowUp &&
+        response.followUpAnswerId &&
+        response.followUpPrompt?.trim()
+      ) {
+        // Giữ câu phụ vừa trả lời để SV chỉnh transcript; câu phụ tiếp xếp hàng.
+        rememberFollowUpPrompt(response.followUpAnswerId, response.followUpPrompt)
+        setQueuedFollowUp({
+          answerId: response.followUpAnswerId,
+          questionId: response.questionId,
+          parentAnswerId: response.parentAnswerId ?? response.answerId,
+          prompt: response.followUpPrompt.trim(),
+          followUpIndex: response.followUpIndex > 0 ? response.followUpIndex : 1,
+          maxFollowUps: response.maxFollowUps > 0 ? response.maxFollowUps : 1,
+        })
+      } else {
+        setQueuedFollowUp(null)
+      }
+
+      setReRecordTarget(null)
+      return response
     },
-    [replacePlayback, session.sessionId],
+    [rememberFollowUpPrompt, replacePlayback, session.sessionId],
+  )
+
+  const persistQuestionTranscript = useCallback(
+    async (questionId: string) => {
+      const answer = answersRef.current[questionId]
+      const nextTranscript = (draftsRef.current[questionId] ?? '').trim()
+      if (!answer) return true
+      if (!nextTranscript) return false
+      if (nextTranscript === answer.transcript.trim()) return true
+      await uploadAnswer(questionId, null, answer.timeTakenSeconds, nextTranscript)
+      return true
+    },
+    [uploadAnswer],
+  )
+
+  const persistFollowUpTranscript = useCallback(
+    async (answerId: string) => {
+      const answer = followUpAnswersRef.current[answerId]
+      const nextTranscript = (followUpDraftsRef.current[answerId] ?? '').trim()
+      if (!answer) return true
+      if (!nextTranscript) return false
+      if (nextTranscript === answer.transcript.trim()) return true
+      await uploadAnswer(
+        answer.questionId,
+        null,
+        answer.timeTakenSeconds,
+        nextTranscript,
+        answerId,
+      )
+      return true
+    },
+    [uploadAnswer],
+  )
+
+  const flushDirtyTranscripts = useCallback(async () => {
+    if (draftSaveTimerRef.current !== null) {
+      window.clearTimeout(draftSaveTimerRef.current)
+      draftSaveTimerRef.current = null
+    }
+    for (const item of session.questions) {
+      const answer = answersRef.current[item.id]
+      const nextTranscript = (draftsRef.current[item.id] ?? '').trim()
+      if (!answer || !nextTranscript || nextTranscript === answer.transcript.trim()) continue
+      await uploadAnswer(item.id, null, answer.timeTakenSeconds, nextTranscript)
+    }
+  }, [session.questions, uploadAnswer])
+
+  const scheduleDraftPersist = useCallback(
+    (questionId: string) => {
+      if (draftSaveTimerRef.current !== null) {
+        window.clearTimeout(draftSaveTimerRef.current)
+      }
+      draftSaveTimerRef.current = window.setTimeout(() => {
+        draftSaveTimerRef.current = null
+        void persistQuestionTranscript(questionId).catch((error: unknown) => {
+          if (getMockExamErrorStatus(error) === 410) {
+            void finalizeExamRef.current('timeout')
+            return
+          }
+          setAnswerError(getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa.'))
+        })
+      }, 450)
+    },
+    [persistQuestionTranscript],
+  )
+
+  const scheduleFollowUpDraftPersist = useCallback(
+    (answerId: string) => {
+      if (draftSaveTimerRef.current !== null) {
+        window.clearTimeout(draftSaveTimerRef.current)
+      }
+      draftSaveTimerRef.current = window.setTimeout(() => {
+        draftSaveTimerRef.current = null
+        void persistFollowUpTranscript(answerId).catch((error: unknown) => {
+          if (getMockExamErrorStatus(error) === 410) {
+            void finalizeExamRef.current('timeout')
+            return
+          }
+          setAnswerError(getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa.'))
+        })
+      }, 450)
+    },
+    [persistFollowUpTranscript],
   )
 
   const finishRecording = useCallback(() => {
@@ -229,24 +780,65 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     async (blob: Blob) => {
       const questionId = runtimeRef.current.questionId
       if (!questionId) return
+      const currentQuestion =
+        session.questions.find((item) => item.id === questionId) ?? null
+      const recordedSeconds = Math.max(1, recordingSecondsRef.current)
       sendingRef.current = true
       setIsSendingAnswer(true)
       setAnswerError('')
       try {
-        await uploadAnswer(questionId, blob, Math.max(1, recordingSecondsRef.current))
+        // Chỉ STT qua /speech/stt — không gửi nguyên đề, không fallback sang BE
+        // (tránh model bịa câu trả lời / nhầm với sample answer khi im lặng).
+        const speech = await transcribeSpeech(blob, {
+          vocabularyHint: currentQuestion
+            ? buildVocabularyHint(currentQuestion)
+            : undefined,
+          fileName: `mock-answer-${questionId}.webm`,
+        })
+
+        const transcript = speech.transcript.trim()
+        if (
+          isLikelySilentOrInvalidTranscript(transcript, recordedSeconds) ||
+          (typeof speech.confidenceScore === 'number' &&
+            speech.confidenceScore > 0 &&
+            speech.confidenceScore < 0.25) ||
+          (currentQuestion != null && looksLikeQuestionEcho(transcript, currentQuestion))
+        ) {
+          replacePlayback(null)
+          setAnswerError(
+            'Không nhận diện được giọng nói rõ ràng. Hãy nói gần micro hơn và ghi âm lại.',
+          )
+          return
+        }
+
+        const reRecord = reRecordTargetRef.current
+        const followUp = activeFollowUpRef.current
+        const answerIdForUpload =
+          reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+            ? reRecord.answerId
+            : followUp && followUp.questionId === questionId
+              ? followUp.answerId
+              : null
+        await uploadAnswer(questionId, null, recordedSeconds, transcript, answerIdForUpload)
       } catch (error) {
         if (getMockExamErrorStatus(error) === 410) {
           holdWantedRef.current = false
           forceSubmitRef.current = true
           return
         }
-        setAnswerError(getMockExamErrorDetail(error, 'Không thể tạo transcript từ bản ghi.'))
+        replacePlayback(null)
+        setAnswerError(
+          getMockExamErrorDetail(
+            error,
+            'Không nhận diện được giọng nói rõ ràng. Hãy nói gần micro hơn và ghi âm lại.',
+          ),
+        )
       } finally {
         sendingRef.current = false
         setIsSendingAnswer(false)
       }
     },
-    [uploadAnswer],
+    [replacePlayback, session.questions, uploadAnswer],
   )
 
   const applyHold = useCallback(async () => {
@@ -257,10 +849,92 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         }
         if (!holdWantedRef.current || runtimeRef.current.phase !== 'exam') continue
         try {
+          speechRequestRef.current += 1
           stopSpeechPlayback()
+          setIsReadingQuestion(false)
           setAnswerError('')
           recordingSecondsRef.current = 0
           setRecordingSeconds(0)
+          // Ghi âm lại: chỉ xóa transcript đúng target (main / một câu phụ).
+          const questionId = runtimeRef.current.questionId
+          const reRecord = reRecordTargetRef.current
+          const recordingFollowUp = activeFollowUpRef.current
+          const followUpIdToClear =
+            reRecord?.kind === 'followUp'
+              ? reRecord.answerId
+              : recordingFollowUp?.questionId === questionId
+                ? recordingFollowUp.answerId
+                : null
+          const clearingMainOnly =
+            reRecord?.kind === 'main' ||
+            (!followUpIdToClear && Boolean(questionId) && !recordingFollowUp)
+
+          if (questionId && followUpIdToClear) {
+            setFollowUpDrafts((current) => {
+              const next = { ...current, [followUpIdToClear]: '' }
+              followUpDraftsRef.current = next
+              return next
+            })
+            // Giữ slot câu phụ (prompt) khi ghi lại — chỉ xóa transcript.
+            setFollowUpAnswers((current) => {
+              const existing = current[followUpIdToClear]
+              if (!existing) return current
+              const next = {
+                ...current,
+                [followUpIdToClear]: { ...existing, transcript: '' },
+              }
+              followUpAnswersRef.current = next
+              return next
+            })
+          } else if (questionId && clearingMainOnly) {
+            setDrafts((current) => ({ ...current, [questionId]: '' }))
+            if (reRecord?.kind === 'main') {
+              // Ghi lại câu chính khi xem lại: chỉ xóa transcript, giữ slot + câu phụ.
+              setAnswers((current) => {
+                const existing = current[questionId]
+                if (!existing) return current
+                const next = {
+                  ...current,
+                  [questionId]: { ...existing, transcript: '' },
+                }
+                runtimeRef.current.answers = next
+                answersRef.current = next
+                return next
+              })
+            } else if (!reRecord) {
+              setAnswers((current) => {
+                if (!current[questionId]) return current
+                const next = { ...current }
+                delete next[questionId]
+                runtimeRef.current.answers = next
+                answersRef.current = next
+                return next
+              })
+              const removedFollowUpIds = Object.entries(followUpAnswersRef.current)
+                .filter(([, item]) => item.questionId === questionId)
+                .map(([id]) => id)
+              if (removedFollowUpIds.length > 0) {
+                setFollowUpAnswers((current) => {
+                  const next = { ...current }
+                  for (const id of removedFollowUpIds) delete next[id]
+                  followUpAnswersRef.current = next
+                  return next
+                })
+                setFollowUpDrafts((current) => {
+                  const next = { ...current }
+                  for (const id of removedFollowUpIds) delete next[id]
+                  followUpDraftsRef.current = next
+                  return next
+                })
+              }
+              setQueuedFollowUp(null)
+              if (activeFollowUpRef.current?.questionId === questionId) {
+                persistActiveFollowUp(null)
+              }
+              removeMockExamAnswer(questionId, session.sessionId)
+            }
+          }
+          replacePlayback(null)
           await startRecording()
           recorderLiveRef.current = true
         } catch (error) {
@@ -287,7 +961,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       forceSubmitRef.current = false
       await finalizeExamRef.current('timeout')
     }
-  }, [finishRecording, startRecording, transcribeReleased])
+  }, [
+    finishRecording,
+    persistActiveFollowUp,
+    replacePlayback,
+    session.sessionId,
+    startRecording,
+    transcribeReleased,
+  ])
 
   const requestHold = useCallback((wanted: boolean) => {
     if (wanted && (sendingRef.current || runtimeRef.current.phase !== 'exam'))
@@ -321,6 +1002,35 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       runtimeRef.current.phase = 'submitting-exam'
       setSubmitError('')
 
+      const submitPendingAudio = async (blob: Blob, questionId: string, seconds: number) => {
+        const currentQuestion =
+          session.questions.find((item) => item.id === questionId) ?? null
+        const speech = await transcribeSpeech(blob, {
+          vocabularyHint: currentQuestion
+            ? buildVocabularyHint(currentQuestion)
+            : undefined,
+          fileName: `mock-answer-${questionId}.webm`,
+        })
+        const transcript = speech.transcript.trim()
+        if (
+          isLikelySilentOrInvalidTranscript(transcript, seconds) ||
+          (typeof speech.confidenceScore === 'number' &&
+            speech.confidenceScore > 0 &&
+            speech.confidenceScore < 0.25) ||
+          (currentQuestion != null && looksLikeQuestionEcho(transcript, currentQuestion))
+        ) {
+          return
+        }
+        const followUp = activeFollowUpRef.current
+        await uploadAnswer(
+          questionId,
+          null,
+          seconds,
+          transcript,
+          followUp && followUp.questionId === questionId ? followUp.answerId : null,
+        )
+      }
+
       try {
         if (recorderLiveRef.current) {
           try {
@@ -328,9 +1038,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             recorderLiveRef.current = false
             if (blob && runtimeRef.current.questionId) {
               try {
-                await uploadAnswer(
-                  runtimeRef.current.questionId,
+                await submitPendingAudio(
                   blob,
+                  runtimeRef.current.questionId,
                   runtimeRef.current.recordedSeconds,
                 )
               } catch (error) {
@@ -342,9 +1052,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           }
         } else if (runtimeRef.current.audioBlob && runtimeRef.current.questionId) {
           try {
-            await uploadAnswer(
-              runtimeRef.current.questionId,
+            await submitPendingAudio(
               runtimeRef.current.audioBlob,
+              runtimeRef.current.questionId,
               runtimeRef.current.recordedSeconds,
             )
           } catch (error) {
@@ -352,8 +1062,15 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           }
         }
 
+        // Luôn đẩy transcript đã chỉnh sửa lên server trước khi nộp bài.
+        try {
+          await flushDirtyTranscripts()
+        } catch (error) {
+          if (reason === 'manual' && getMockExamErrorStatus(error) !== 410) throw error
+        }
+
         const result = await mockExamService.submitSession(session.sessionId)
-        clearMockExamSession()
+        clearMockExamSession(session.sessionId)
         stopSpeechPlayback()
         setScorecard(result)
         setPhase('scorecard')
@@ -374,7 +1091,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         })
       }
     },
-    [finishRecording, session.sessionId, uploadAnswer],
+    [finishRecording, flushDirtyTranscripts, session.questions, session.sessionId, uploadAnswer],
   )
 
   useEffect(() => {
@@ -401,6 +1118,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return () => {
       document.body.style.overflow = previousOverflow
       if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
+      if (draftSaveTimerRef.current !== null) {
+        window.clearTimeout(draftSaveTimerRef.current)
+        draftSaveTimerRef.current = null
+      }
       stopSpeechPlayback()
     }
   }, [])
@@ -455,34 +1176,39 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return () => window.clearInterval(interval)
   }, [isRecording, requestHold])
 
+  const toggleRecording = useCallback(() => {
+    if (sendingRef.current || runtimeRef.current.phase !== 'exam') return
+    if (isRecording || holdWantedRef.current) {
+      void requestHold(false)
+      return
+    }
+    // Không cho Space/ghi âm khi đang xem lại (mic đang ẩn).
+    if (!showMicSectionRef.current) return
+    void requestHold(true)
+  }, [isRecording, requestHold])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== 'Space' || event.repeat || phase !== 'exam') return
       if (warningOpenRef.current || shouldIgnoreSpace(event.target)) return
       event.preventDefault()
-      void requestHold(true)
-    }
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || phase !== 'exam') return
-      if (warningOpenRef.current || shouldIgnoreSpace(event.target)) return
-      event.preventDefault()
-      void requestHold(false)
+      toggleRecording()
     }
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [phase, requestHold])
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [phase, toggleRecording])
 
   useEffect(() => {
     if (!autoRead || !question || phase !== 'exam') return
-    speakQuestion(question.content, session.courseCode, session.courseName)
+    const prompt = activeFollowUp?.prompt ?? question.content
+    const timer = window.setTimeout(() => {
+      startReadingQuestion(prompt)
+    }, 0)
     return () => {
-      stopSpeechPlayback()
+      window.clearTimeout(timer)
+      stopReadingQuestion()
     }
-  }, [autoRead, phase, question, session.courseCode, session.courseName])
+  }, [activeFollowUp?.prompt, autoRead, phase, question, startReadingQuestion, stopReadingQuestion])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -521,34 +1247,87 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [closeWarning, warning])
 
-  const moveToQuestion = async (nextIndex: number) => {
+  const canNavigateTo = (targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= session.questions.length) return false
+    // Đã xem (làm / bỏ qua) → được quay lại
+    if (targetIndex <= furthestIndex) return true
+    // Chỉ được tiến đúng 1 câu kế tiếp từ câu đang mở xa nhất
+    return targetIndex === questionIndex + 1 && questionIndex === furthestIndex
+  }
+
+  const moveToQuestion = async (
+    nextIndex: number,
+    options?: { skipFollowUpWarning?: boolean },
+  ) => {
     if (isRecording || isSendingAnswer || nextIndex === questionIndex) return
-    if (nextIndex < 0 || nextIndex >= session.questions.length) return
-    if (transcriptDirty && question && savedAnswer) {
-      const nextTranscript = draft.trim()
-      if (!nextTranscript) {
+    if (!canNavigateTo(nextIndex)) return
+    if (activeFollowUp) {
+      if (savedFollowUpAnswer) {
+        const nextTranscript = draft.trim()
+        if (!nextTranscript) {
+          setAnswerError('Transcript không được để trống. Hãy giữ nội dung hoặc nói lại.')
+          return
+        }
+        if (nextTranscript !== savedFollowUpAnswer.transcript.trim()) {
+          setIsSendingAnswer(true)
+          try {
+            await persistFollowUpTranscript(activeFollowUp.answerId)
+          } catch (error) {
+            if (getMockExamErrorStatus(error) === 410) {
+              void finalizeExam('timeout')
+              return
+            }
+            setAnswerError(
+              getMockExamErrorDetail(error, 'Không thể lưu transcript trước khi chuyển câu.'),
+            )
+            return
+          } finally {
+            setIsSendingAnswer(false)
+          }
+        }
+      } else if (!options?.skipFollowUpWarning) {
+        const confirmed = await askWarning({
+          title: 'Bỏ qua câu hỏi phụ?',
+          message:
+            'Bạn đang có câu hỏi phụ chưa trả lời. Chuyển câu sẽ bỏ qua câu phụ này (tính chưa trả lời).',
+          confirmLabel: 'Bỏ qua câu phụ',
+          cancelLabel: 'Ở lại',
+          tone: 'warning',
+        })
+        if (!confirmed) return
+      }
+      persistActiveFollowUp(null)
+      setQueuedFollowUp(null)
+    }
+    if (question && savedAnswer) {
+      const mainDraft = (draftsRef.current[question.id] ?? '').trim()
+      if (!mainDraft) {
         setAnswerError('Transcript không được để trống. Hãy giữ nội dung hoặc nói lại.')
         return
       }
-      setIsSendingAnswer(true)
-      try {
-        await uploadAnswer(question.id, null, savedAnswer.timeTakenSeconds, nextTranscript)
-      } catch (error) {
-        if (getMockExamErrorStatus(error) === 410) {
-          void finalizeExam('timeout')
+      if (mainDraft !== savedAnswer.transcript.trim()) {
+        setIsSendingAnswer(true)
+        try {
+          await persistQuestionTranscript(question.id)
+        } catch (error) {
+          if (getMockExamErrorStatus(error) === 410) {
+            void finalizeExam('timeout')
+            return
+          }
+          setAnswerError(
+            getMockExamErrorDetail(error, 'Không thể lưu transcript trước khi chuyển câu.'),
+          )
           return
+        } finally {
+          setIsSendingAnswer(false)
         }
-        setAnswerError(
-          getMockExamErrorDetail(error, 'Không thể lưu transcript trước khi chuyển câu.'),
-        )
-        return
-      } finally {
-        setIsSendingAnswer(false)
       }
-    } else if (audioBlob) {
+    } else if (audioBlob && !savedAnswer) {
+      // Chỉ cảnh báo khi còn blob local mà câu chưa có transcript đã nộp.
       const confirmed = await askWarning({
         title: 'Bỏ bản ghi chưa gửi?',
-        message: 'Bản ghi này chưa được gửi. Chuyển câu sẽ bỏ bản ghi và không chấm câu hiện tại.',
+        message:
+          'Bản ghi này chưa tạo được transcript. Chuyển câu sẽ bỏ bản ghi và không chấm câu hiện tại.',
         confirmLabel: 'Vẫn chuyển câu',
         cancelLabel: 'Ở lại',
         tone: 'warning',
@@ -561,23 +1340,101 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     setAnswerError('')
     setRecordedSeconds(0)
     setQuestionIndex(nextIndex)
+    setFurthestIndex((current) => {
+      const nextFurthest = Math.max(current, nextIndex)
+      if (nextFurthest !== current) {
+        const stored = readMockExamSessionById(session.sessionId)
+        if (stored) {
+          saveMockExamSession({ ...stored, furthestQuestionIndex: nextFurthest })
+        }
+      }
+      return nextFurthest
+    })
   }
 
-  const handleUpdateTranscript = async () => {
-    if (!question || !savedAnswer || !transcriptDirty || isSendingAnswer) return
-    setIsSendingAnswer(true)
+  const advanceToNextMainQuestion = async () => {
+    persistActiveFollowUp(null)
+    setQueuedFollowUp(null)
+    replacePlayback(null)
     setAnswerError('')
-    try {
-      await uploadAnswer(question.id, null, savedAnswer.timeTakenSeconds, draft.trim())
-    } catch (error) {
-      if (getMockExamErrorStatus(error) === 410) {
-        void finalizeExam('timeout')
+    setRecordedSeconds(0)
+    if (!isLastQuestion) {
+      await moveToQuestion(questionIndex + 1, { skipFollowUpWarning: true })
+    }
+  }
+
+  /** Sau khi chỉnh transcript câu chính → mở câu phụ đang xếp hàng. */
+  const openQueuedFollowUp = async () => {
+    if (isRecording || isSendingAnswer || !queuedFollowUp || !question) return
+    if (savedAnswer) {
+      const mainDraft = (draftsRef.current[question.id] ?? '').trim()
+      if (!mainDraft) {
+        setAnswerError('Transcript không được để trống. Hãy giữ nội dung hoặc nói lại.')
         return
       }
-      setAnswerError(getMockExamErrorDetail(error, 'Không thể cập nhật transcript.'))
-    } finally {
-      setIsSendingAnswer(false)
+      if (mainDraft !== savedAnswer.transcript.trim()) {
+        setIsSendingAnswer(true)
+        try {
+          await persistQuestionTranscript(question.id)
+        } catch (error) {
+          if (getMockExamErrorStatus(error) === 410) {
+            void finalizeExam('timeout')
+            return
+          }
+          setAnswerError(
+            getMockExamErrorDetail(error, 'Không thể lưu transcript trước khi sang câu phụ.'),
+          )
+          return
+        } finally {
+          setIsSendingAnswer(false)
+        }
+      }
     }
+    const next = queuedFollowUp
+    setQueuedFollowUp(null)
+    persistActiveFollowUp(next)
+    replacePlayback(null)
+    setAnswerError('')
+    setRecordedSeconds(0)
+  }
+
+  const continueAfterFollowUp = async () => {
+    if (isRecording || isSendingAnswer || !activeFollowUp) return
+    if (savedFollowUpAnswer) {
+      const nextTranscript = draft.trim()
+      if (!nextTranscript) {
+        setAnswerError('Transcript không được để trống. Hãy giữ nội dung hoặc nói lại.')
+        return
+      }
+      if (nextTranscript !== savedFollowUpAnswer.transcript.trim()) {
+        setIsSendingAnswer(true)
+        try {
+          await persistFollowUpTranscript(activeFollowUp.answerId)
+        } catch (error) {
+          if (getMockExamErrorStatus(error) === 410) {
+            void finalizeExam('timeout')
+            return
+          }
+          setAnswerError(
+            getMockExamErrorDetail(error, 'Không thể lưu transcript trước khi tiếp tục.'),
+          )
+          return
+        } finally {
+          setIsSendingAnswer(false)
+        }
+      }
+    }
+
+    if (queuedFollowUp) {
+      persistActiveFollowUp(queuedFollowUp)
+      setQueuedFollowUp(null)
+      replacePlayback(null)
+      setAnswerError('')
+      setRecordedSeconds(0)
+      return
+    }
+
+    await advanceToNextMainQuestion()
   }
 
   const handleSubmit = async () => {
@@ -593,6 +1450,19 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         tone: 'danger',
       })
       if (!confirmed) return
+    }
+    setIsSendingAnswer(true)
+    try {
+      await flushDirtyTranscripts()
+    } catch (error) {
+      if (getMockExamErrorStatus(error) === 410) {
+        void finalizeExam('timeout')
+        return
+      }
+      setAnswerError(getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa trước khi nộp.'))
+      return
+    } finally {
+      setIsSendingAnswer(false)
     }
     void finalizeExam('manual')
   }
@@ -678,7 +1548,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-y-auto rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:max-h-[calc(100dvh-2rem)]"
       >
         <header className="relative z-20 shrink-0 bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white">
-          <div className="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-2.5 px-4 py-3.5 sm:px-5">
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-[0.08em] text-white/75 uppercase">
               {session.courseCode}
@@ -759,122 +1629,660 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             </button>
           </div>
           </div>
-          <div className="flex items-center gap-3 border-t border-white/15 px-5 py-3 sm:px-6">
+          <div className="flex items-center gap-2.5 border-t border-white/15 px-4 py-2.5 sm:px-5">
             <span className="text-xs font-bold text-white/90">
               Câu {session.questions.length === 0 ? 0 : questionIndex + 1}/{session.questions.length}
             </span>
-            <div className="flex h-1.5 min-w-0 flex-1 gap-1.5">
-              {session.questions.map((item, index) => (
-                <span
-                  key={item.id}
-                  className={cn(
-                    'h-full flex-1 rounded-full',
-                    answers[item.id]
-                      ? 'bg-white'
-                      : index === questionIndex
-                        ? 'bg-[#BDE8F5]'
-                        : 'bg-white/25',
-                  )}
-                />
-              ))}
+            <div className="flex h-2.5 min-w-0 flex-1 gap-1.5">
+              {session.questions.map((item, index) => {
+                const unlocked = index <= furthestIndex
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-space-ignore="true"
+                    aria-label={
+                      unlocked
+                        ? `Chuyển tới câu ${index + 1}`
+                        : `Câu ${index + 1} chưa mở`
+                    }
+                    aria-current={index === questionIndex ? 'step' : undefined}
+                    disabled={
+                      !unlocked ||
+                      isRecording ||
+                      isSendingAnswer ||
+                      secondsLeft <= 0
+                    }
+                    onClick={() => void moveToQuestion(index)}
+                    className={cn(
+                      'h-full min-w-0 flex-1 rounded-full transition enabled:hover:opacity-90 disabled:cursor-not-allowed',
+                      !unlocked
+                        ? 'bg-white/10'
+                        : answers[item.id]
+                          ? 'bg-white'
+                          : index === questionIndex
+                            ? 'bg-[#BDE8F5]'
+                            : 'bg-white/25',
+                    )}
+                  />
+                )
+              })}
             </div>
           </div>
         </header>
 
         {question ? (
-          <section className="flex flex-col gap-4 px-5 py-5 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <section
+            ref={transcriptFitRootRef}
+            className="flex flex-col gap-3 px-4 py-4 sm:px-5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
               <p className="text-sm font-semibold text-[#5b6b84]">
-                {question.bloomLevel} · {difficultyLabel(question.difficulty)}
+                {activeFollowUp
+                  ? `Câu hỏi phụ ${activeFollowUp.followUpIndex}/${activeFollowUp.maxFollowUps}`
+                  : `${question.bloomLevel} · ${difficultyLabel(question.difficulty)}`}
               </p>
               <button
                 type="button"
                 data-space-ignore="true"
-                onClick={() => speakQuestion(question.content, session.courseCode, session.courseName)}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD]"
-              >
-                <Volume2 className="size-4" />
-                Đọc câu hỏi
-              </button>
-            </div>
-            <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} />
-            <h2 className="text-[24px] leading-snug font-semibold text-[#0F2854]">
-              Câu {question.orderIndex}. {question.content}
-            </h2>
-
-            <div className="flex flex-col items-center gap-3 py-1">
-              <button
-                type="button"
-                disabled={isSendingAnswer}
-                aria-label={isRecording ? 'Đang nói, thả ra để kết thúc' : 'Nhấn giữ để trả lời'}
-                onPointerDown={(event) => {
-                  if (event.button !== 0 || isSendingAnswer) return
-                  event.preventDefault()
-                  event.currentTarget.setPointerCapture(event.pointerId)
-                  void requestHold(true)
-                }}
-                onPointerUp={() => void requestHold(false)}
-                onPointerCancel={() => void requestHold(false)}
+                aria-pressed={isReadingQuestion}
+                onClick={toggleReadQuestion}
                 className={cn(
-                  'flex size-32 touch-none flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
-                  isRecording
-                    ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                    : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                  'inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-sm font-bold transition',
+                  isReadingQuestion
+                    ? 'border-[#ff8fa0] bg-[#fff1f3] text-[#c43b52] hover:bg-[#ffe4e9]'
+                    : 'border-[#4988C4] bg-white text-[#1C4D8D] hover:bg-[#F4FBFD]',
                 )}
               >
-                <Mic
-                  className={cn(
-                    'size-8',
-                    isRecording && 'animate-pulse motion-reduce:animate-none',
-                  )}
-                />
-                <span className="text-xs font-bold">
-                  {isRecording ? formatClock(recordingSeconds) : 'Giữ để nói'}
-                </span>
+                {isReadingQuestion ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                {isReadingQuestion ? 'Tắt đọc' : 'Đọc câu hỏi'}
               </button>
-              <p className="text-center text-sm font-bold text-[#0F2854]">
-                {isRecording ? 'Thả ra để kết thúc' : 'Nhấn giữ để trả lời'}
+            </div>
+            {activeFollowUp && (
+              <p className="rounded-xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
+                AI yêu cầu làm rõ thêm trước khi sang câu chính tiếp theo.
               </p>
-              <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
-                Giữ nút tròn hoặc phím{' '}
-                <kbd className="rounded bg-[#F4FBFD] px-1.5 py-0.5 font-bold text-[#0F2854]">Space</kbd>
-                . Thả ra để xem transcript.
+            )}
+            {!activeFollowUp && savedAnswer && queuedFollowUp && (
+              <p className="rounded-xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
+                Hãy kiểm tra và chỉnh transcript câu chính, rồi chọn <span className="font-bold">Câu hỏi phụ</span> hoặc bỏ qua để sang câu kế.
               </p>
+            )}
+            <div className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white">
+              {!activeFollowUp && question.imageUrl?.trim() ? (
+                <div data-question-panel className="grid grid-cols-1 md:grid-cols-2">
+                  {/* Text absolute on md: row height = image; font auto-fits that height */}
+                  <div className="relative p-3.5 md:p-0">
+                    <h2 className="text-[18px] leading-snug font-semibold whitespace-pre-line text-[#0F2854] md:hidden">
+                      <span className="font-semibold">Câu {question.orderIndex}. </span>
+                      {question.content}
+                    </h2>
+                    <div className="hidden md:absolute md:inset-0 md:block md:p-3.5">
+                      <AutoFitQuestionText
+                        orderIndex={question.orderIndex}
+                        content={question.content}
+                        minPx={12}
+                        maxPx={24}
+                      />
+                    </div>
+                  </div>
+                  <div className="p-3.5">
+                    <QuestionImage
+                      imageUrl={question.imageUrl}
+                      framed={false}
+                      showCaption={false}
+                      className="w-full overflow-hidden rounded-xl"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5">
+                  <h2 className="text-[18px] leading-snug font-semibold whitespace-pre-line text-[#0F2854]">
+                    <span className="font-semibold">
+                      {activeFollowUp
+                        ? `Câu hỏi phụ ${activeFollowUp.followUpIndex}. `
+                        : `Câu ${question.orderIndex}. `}
+                    </span>
+                    {activeFollowUp ? activeFollowUp.prompt : question.content}
+                  </h2>
+                </div>
+              )}
             </div>
 
-            {showTranscript && (
-              <div className="flex flex-col gap-2">
-                <label htmlFor="mock-transcript" className="text-sm font-semibold text-[#0F2854]">
-                  Transcript để kiểm tra và chỉnh sửa
-                </label>
-                {isSendingAnswer && !savedAnswer ? (
-                  <div className="flex h-28 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-4 text-sm text-[#5b6b84]">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    Đang nhận diện giọng nói tiếng Việt…
+            {/* Xem lại: mỗi câu (chính/phụ) = input + nút ghi lại; mic chỉ dưới đúng câu đó */}
+            {isReviewingAnsweredMain && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="mock-transcript-main" className="text-sm font-semibold text-[#0F2854]">
+                    Câu trả lời chính
+                  </label>
+                  <p className="text-xs leading-relaxed text-[#5b6b84]">
+                    Nội dung chỉnh sửa được lưu tự động và dùng khi nộp bài.
+                  </p>
+                  {isSendingAnswer && isMicOpenForMain && !savedAnswer ? (
+                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      Đang nhận diện giọng nói tiếng Việt…
+                    </div>
+                  ) : savedAnswer || isMicOpenForMain ? (
+                    <textarea
+                      id="mock-transcript-main"
+                      data-transcript-fit
+                      rows={1}
+                      value={drafts[question.id] ?? ''}
+                      data-space-ignore="true"
+                      disabled={isRecording && isMicOpenForMain}
+                      onChange={(event) => {
+                        fitTranscriptTextarea(event.currentTarget)
+                        const value = event.target.value
+                        setDrafts((current) => {
+                          const next = { ...current, [question.id]: value }
+                          draftsRef.current = next
+                          return next
+                        })
+                        scheduleDraftPersist(question.id)
+                      }}
+                      onBlur={() => {
+                        if (draftSaveTimerRef.current !== null) {
+                          window.clearTimeout(draftSaveTimerRef.current)
+                          draftSaveTimerRef.current = null
+                        }
+                        void persistQuestionTranscript(question.id).catch((error: unknown) => {
+                          if (getMockExamErrorStatus(error) === 410) {
+                            void finalizeExam('timeout')
+                            return
+                          }
+                          setAnswerError(
+                            getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa.'),
+                          )
+                        })
+                      }}
+                      className="min-h-10 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-3.5 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
+                    />
+                  ) : (
+                    <p className="rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-3 text-sm text-[#5b6b84]">
+                      Chưa có transcript câu chính trên máy này. Hãy ghi âm lại hoặc tiếp tục câu khác.
+                    </p>
+                  )}
+                  {savedAnswer &&
+                    !isMicOpenForMain &&
+                    !isRecording &&
+                    !isSendingAnswer && (
+                      <button
+                        type="button"
+                        data-space-ignore="true"
+                        onClick={() =>
+                          setReRecordTarget({ kind: 'main', questionId: question.id })
+                        }
+                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                      >
+                        <Mic className="size-4" />
+                        Ghi âm lại câu trả lời
+                      </button>
+                    )}
+                  {isMicOpenForMain && (
+                    <div className="flex flex-col items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={isSendingAnswer}
+                        aria-pressed={isRecording}
+                        aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm'}
+                        onClick={toggleRecording}
+                        className={cn(
+                          'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
+                          isRecording
+                            ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                            : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                        )}
+                      >
+                        <Mic
+                          className={cn(
+                            'size-7',
+                            isRecording && 'animate-pulse motion-reduce:animate-none',
+                          )}
+                        />
+                        <span className="text-xs font-bold">
+                          {isRecording ? formatClock(recordingSeconds) : 'Ghi âm'}
+                        </span>
+                      </button>
+                      <p className="text-center text-sm font-bold text-[#0F2854]">
+                        {isRecording
+                          ? 'Nhấn để dừng ghi âm'
+                          : isSendingAnswer
+                            ? 'Đang nhận diện giọng nói…'
+                            : 'Ghi âm lại câu trả lời chính'}
+                      </p>
+                      {!isRecording && !isSendingAnswer && (
+                        <button
+                          type="button"
+                          data-space-ignore="true"
+                          onClick={() => setReRecordTarget(null)}
+                          className="text-sm font-bold text-[#1C4D8D] hover:underline"
+                        >
+                          Hủy ghi âm lại
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {reviewedFollowUps.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-[#0F2854]">Câu hỏi phụ đã trả lời</p>
+                    {reviewedFollowUps.map((item, index) => {
+                      const micOpen = isMicOpenForFollowUp(item.answerId)
+                      const fuDraft = followUpDrafts[item.answerId] ?? item.transcript
+                      return (
+                        <div
+                          key={item.answerId}
+                          className="space-y-2 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-3"
+                        >
+                          <p className="text-xs font-bold text-[#1C4D8D]">
+                            Câu hỏi phụ {index + 1}
+                          </p>
+                          <p className="text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                            {item.promptText?.trim() || 'Không có nội dung câu hỏi phụ.'}
+                          </p>
+                          <label
+                            htmlFor={`mock-transcript-fu-${item.answerId}`}
+                            className="text-xs font-bold text-[#5b6b84]"
+                          >
+                            Câu trả lời phụ
+                          </label>
+                          <textarea
+                            id={`mock-transcript-fu-${item.answerId}`}
+                            data-transcript-fit
+                            rows={1}
+                            value={fuDraft}
+                            data-space-ignore="true"
+                            disabled={isRecording && micOpen}
+                            onChange={(event) => {
+                              fitTranscriptTextarea(event.currentTarget)
+                              const value = event.target.value
+                              setFollowUpDrafts((current) => {
+                                const next = { ...current, [item.answerId]: value }
+                                followUpDraftsRef.current = next
+                                return next
+                              })
+                              scheduleFollowUpDraftPersist(item.answerId)
+                            }}
+                            onBlur={() => {
+                              if (draftSaveTimerRef.current !== null) {
+                                window.clearTimeout(draftSaveTimerRef.current)
+                                draftSaveTimerRef.current = null
+                              }
+                              void persistFollowUpTranscript(item.answerId).catch(
+                                (error: unknown) => {
+                                  if (getMockExamErrorStatus(error) === 410) {
+                                    void finalizeExam('timeout')
+                                    return
+                                  }
+                                  setAnswerError(
+                                    getMockExamErrorDetail(
+                                      error,
+                                      'Không thể lưu transcript đã chỉnh sửa.',
+                                    ),
+                                  )
+                                },
+                              )
+                            }}
+                            className="min-h-10 w-full resize-none rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
+                          />
+                          {!micOpen && !isRecording && !isSendingAnswer && (
+                            <button
+                              type="button"
+                              data-space-ignore="true"
+                              onClick={() =>
+                                setReRecordTarget({
+                                  kind: 'followUp',
+                                  answerId: item.answerId,
+                                  questionId: question.id,
+                                })
+                              }
+                              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                            >
+                              <Mic className="size-4" />
+                              Ghi âm lại câu trả lời
+                            </button>
+                          )}
+                          {micOpen && (
+                            <div className="flex flex-col items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                disabled={isSendingAnswer}
+                                aria-pressed={isRecording}
+                                aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm'}
+                                onClick={toggleRecording}
+                                className={cn(
+                                  'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
+                                  isRecording
+                                    ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                                    : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                                )}
+                              >
+                                <Mic
+                                  className={cn(
+                                    'size-7',
+                                    isRecording && 'animate-pulse motion-reduce:animate-none',
+                                  )}
+                                />
+                                <span className="text-xs font-bold">
+                                  {isRecording ? formatClock(recordingSeconds) : 'Ghi âm'}
+                                </span>
+                              </button>
+                              <p className="text-center text-sm font-bold text-[#0F2854]">
+                                {isRecording
+                                  ? 'Nhấn để dừng ghi âm'
+                                  : isSendingAnswer
+                                    ? 'Đang nhận diện câu trả lời phụ…'
+                                    : 'Ghi âm lại câu trả lời phụ'}
+                              </p>
+                              {!isRecording && !isSendingAnswer && (
+                                <button
+                                  type="button"
+                                  data-space-ignore="true"
+                                  onClick={() => setReRecordTarget(null)}
+                                  className="text-sm font-bold text-[#1C4D8D] hover:underline"
+                                >
+                                  Hủy ghi âm lại
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                ) : (
-                  <textarea
-                    id="mock-transcript"
-                    value={draft}
-                    onChange={(event) =>
-                      setDrafts((current) => ({ ...current, [question.id]: event.target.value }))
-                    }
-                    className="h-28 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-4 py-3 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30"
-                  />
-                )}
-                {transcriptDirty && (
-                  <button
-                    type="button"
-                    data-space-ignore="true"
-                    onClick={() => void handleUpdateTranscript()}
-                    disabled={isSendingAnswer}
-                    className="inline-flex min-h-10 w-fit items-center rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] disabled:opacity-50"
-                  >
-                    Lưu chỉnh sửa
-                  </button>
                 )}
               </div>
             )}
+
+            {/* Đang làm câu phụ: sau khi có đáp án — input + nút ghi lại + mic dưới câu đó */}
+            {activeFollowUp && (savedFollowUpAnswer || isSendingAnswer) && (
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="mock-transcript-active-fu"
+                  className="text-sm font-semibold text-[#0F2854]"
+                >
+                  Câu trả lời phụ
+                </label>
+                {isSendingAnswer && !savedFollowUpAnswer ? (
+                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    Đang nhận diện câu trả lời phụ…
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs leading-relaxed text-[#5b6b84]">
+                      Nội dung chỉnh sửa được lưu tự động và dùng khi nộp bài.
+                    </p>
+                    <textarea
+                      id="mock-transcript-active-fu"
+                      data-transcript-fit
+                      ref={transcriptAreaRef}
+                      rows={1}
+                      value={draft}
+                      data-space-ignore="true"
+                      disabled={
+                        isRecording && isMicOpenForFollowUp(activeFollowUp.answerId)
+                      }
+                      onChange={(event) => {
+                        fitTranscriptTextarea(event.currentTarget)
+                        const value = event.target.value
+                        const answerId = activeFollowUp.answerId
+                        setFollowUpDrafts((current) => {
+                          const next = { ...current, [answerId]: value }
+                          followUpDraftsRef.current = next
+                          return next
+                        })
+                        scheduleFollowUpDraftPersist(answerId)
+                      }}
+                      onBlur={() => {
+                        if (draftSaveTimerRef.current !== null) {
+                          window.clearTimeout(draftSaveTimerRef.current)
+                          draftSaveTimerRef.current = null
+                        }
+                        void persistFollowUpTranscript(activeFollowUp.answerId).catch(
+                          (error: unknown) => {
+                            if (getMockExamErrorStatus(error) === 410) {
+                              void finalizeExam('timeout')
+                              return
+                            }
+                            setAnswerError(
+                              getMockExamErrorDetail(
+                                error,
+                                'Không thể lưu transcript đã chỉnh sửa.',
+                              ),
+                            )
+                          },
+                        )
+                      }}
+                      className="min-h-10 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-3.5 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
+                    />
+                    {!isMicOpenForFollowUp(activeFollowUp.answerId) &&
+                      !isRecording &&
+                      !isSendingAnswer && (
+                        <button
+                          type="button"
+                          data-space-ignore="true"
+                          onClick={() =>
+                            setReRecordTarget({
+                              kind: 'followUp',
+                              answerId: activeFollowUp.answerId,
+                              questionId: question.id,
+                            })
+                          }
+                          className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                        >
+                          <Mic className="size-4" />
+                          Ghi âm lại câu trả lời
+                        </button>
+                      )}
+                    {isMicOpenForFollowUp(activeFollowUp.answerId) && (
+                      <div className="flex flex-col items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={isSendingAnswer}
+                          aria-pressed={isRecording}
+                          aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm'}
+                          onClick={toggleRecording}
+                          className={cn(
+                            'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
+                            isRecording
+                              ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                              : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                          )}
+                        >
+                          <Mic
+                            className={cn(
+                              'size-7',
+                              isRecording && 'animate-pulse motion-reduce:animate-none',
+                            )}
+                          />
+                          <span className="text-xs font-bold">
+                            {isRecording ? formatClock(recordingSeconds) : 'Ghi âm'}
+                          </span>
+                        </button>
+                        <p className="text-center text-sm font-bold text-[#0F2854]">
+                          {isRecording ? 'Nhấn để dừng ghi âm' : 'Ghi âm lại câu trả lời phụ'}
+                        </p>
+                        {!isRecording && !isSendingAnswer && (
+                          <button
+                            type="button"
+                            data-space-ignore="true"
+                            onClick={() => setReRecordTarget(null)}
+                            className="text-sm font-bold text-[#1C4D8D] hover:underline"
+                          >
+                            Hủy ghi âm lại
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Lần ghi đầu (chưa có đáp án): mic dưới câu hỏi */}
+            {showFirstPassMic && (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSendingAnswer}
+                  aria-pressed={isRecording}
+                  aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm'}
+                  onClick={toggleRecording}
+                  className={cn(
+                    'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
+                    isRecording
+                      ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                      : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                  )}
+                >
+                  <Mic
+                    className={cn(
+                      'size-7',
+                      isRecording && 'animate-pulse motion-reduce:animate-none',
+                    )}
+                  />
+                  <span className="text-xs font-bold">
+                    {isRecording ? formatClock(recordingSeconds) : 'Ghi âm'}
+                  </span>
+                </button>
+                <p className="text-center text-sm font-bold text-[#0F2854]">
+                  {isRecording
+                    ? 'Nhấn để dừng ghi âm'
+                    : isSendingAnswer
+                      ? activeFollowUp
+                        ? 'Đang nhận diện câu trả lời phụ…'
+                        : 'Đang nhận diện giọng nói tiếng Việt…'
+                      : 'Nhấn để bắt đầu ghi âm'}
+                </p>
+                <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
+                  Nhấn nút hoặc phím{' '}
+                  <kbd className="rounded bg-[#F4FBFD] px-1.5 py-0.5 font-bold text-[#0F2854]">
+                    Space
+                  </kbd>{' '}
+                  để bật/tắt. Dừng để xem transcript.
+                </p>
+              </div>
+            )}
+
+            {/* Lần ghi đầu câu chính xong (chưa sang xem lại đầy đủ): transcript dưới mic */}
+            {!isReviewingAnsweredMain &&
+              !activeFollowUp &&
+              !isRecording &&
+              (isSendingAnswer || Boolean(savedAnswer)) && (
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="mock-transcript-live"
+                    className="text-sm font-semibold text-[#0F2854]"
+                  >
+                    Transcript để kiểm tra và chỉnh sửa
+                  </label>
+                  <p className="text-xs leading-relaxed text-[#5b6b84]">
+                    Nội dung chỉnh sửa được lưu tự động và dùng khi nộp bài.
+                  </p>
+                  {isSendingAnswer && !savedAnswer ? (
+                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      Đang nhận diện giọng nói tiếng Việt…
+                    </div>
+                  ) : (
+                    <textarea
+                      id="mock-transcript-live"
+                      data-transcript-fit
+                      ref={transcriptAreaRef}
+                      rows={1}
+                      value={draft}
+                      data-space-ignore="true"
+                      onChange={(event) => {
+                        fitTranscriptTextarea(event.currentTarget)
+                        const value = event.target.value
+                        setDrafts((current) => {
+                          const next = { ...current, [question.id]: value }
+                          draftsRef.current = next
+                          return next
+                        })
+                        scheduleDraftPersist(question.id)
+                      }}
+                      onBlur={() => {
+                        if (draftSaveTimerRef.current !== null) {
+                          window.clearTimeout(draftSaveTimerRef.current)
+                          draftSaveTimerRef.current = null
+                        }
+                        void persistQuestionTranscript(question.id).catch((error: unknown) => {
+                          if (getMockExamErrorStatus(error) === 410) {
+                            void finalizeExam('timeout')
+                            return
+                          }
+                          setAnswerError(
+                            getMockExamErrorDetail(
+                              error,
+                              'Không thể lưu transcript đã chỉnh sửa.',
+                            ),
+                          )
+                        })
+                      }}
+                      className="min-h-10 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-3.5 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30"
+                    />
+                  )}
+                  {savedAnswer &&
+                    !isSendingAnswer &&
+                    !(
+                      reRecordTarget?.kind === 'main' &&
+                      reRecordTarget.questionId === question.id
+                    ) && (
+                      <button
+                        type="button"
+                        data-space-ignore="true"
+                        onClick={() =>
+                          setReRecordTarget({ kind: 'main', questionId: question.id })
+                        }
+                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                      >
+                        <Mic className="size-4" />
+                        Ghi âm lại câu trả lời
+                      </button>
+                    )}
+                  {isMicOpenForMain && (
+                    <div className="flex flex-col items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={isSendingAnswer}
+                        aria-pressed={isRecording}
+                        onClick={toggleRecording}
+                        className={cn(
+                          'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
+                          isRecording
+                            ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                            : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                        )}
+                      >
+                        <Mic
+                          className={cn(
+                            'size-7',
+                            isRecording && 'animate-pulse motion-reduce:animate-none',
+                          )}
+                        />
+                        <span className="text-xs font-bold">
+                          {isRecording ? formatClock(recordingSeconds) : 'Ghi âm'}
+                        </span>
+                      </button>
+                      {!isRecording && !isSendingAnswer && (
+                        <button
+                          type="button"
+                          data-space-ignore="true"
+                          onClick={() => setReRecordTarget(null)}
+                          className="text-sm font-bold text-[#1C4D8D] hover:underline"
+                        >
+                          Hủy ghi âm lại
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
             {(answerError || recorderError) && (
               <p className="text-sm leading-relaxed text-[#c2415b]">
@@ -885,42 +2293,117 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               <p className="text-sm leading-relaxed text-[#c2415b]">{submitError}</p>
             )}
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {!isLastQuestion && !savedAnswer && (
-                <button
-                  type="button"
-                  data-space-ignore="true"
-                  onClick={() => void moveToQuestion(questionIndex + 1)}
-                  disabled={isRecording || isSendingAnswer}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
-                >
-                  Bỏ qua
-                  <ArrowRight className="size-4" />
-                </button>
-              )}
-              {!isLastQuestion && savedAnswer && (
-                <button
-                  type="button"
-                  data-space-ignore="true"
-                  onClick={() => void moveToQuestion(questionIndex + 1)}
-                  disabled={isRecording || isSendingAnswer}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
-                >
-                  Câu tiếp
-                  <ArrowRight className="size-4" />
-                </button>
-              )}
-              {isLastQuestion && (
-                <button
-                  type="button"
-                  data-space-ignore="true"
-                  onClick={handleSubmit}
-                  disabled={isRecording || isSendingAnswer}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
-                >
-                  Nộp bài
-                </button>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+              <button
+                type="button"
+                data-space-ignore="true"
+                onClick={() => void moveToQuestion(questionIndex - 1)}
+                disabled={questionIndex <= 0 || isRecording || isSendingAnswer || secondsLeft <= 0}
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+              >
+                <ArrowLeft className="size-4" />
+                Câu trước
+              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {activeFollowUp && !savedFollowUpAnswer && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={() => void advanceToNextMainQuestion()}
+                    disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                  >
+                    Bỏ qua câu phụ
+                    <ArrowRight className="size-4" />
+                  </button>
+                )}
+                {activeFollowUp && savedFollowUpAnswer && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={() => void continueAfterFollowUp()}
+                    disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
+                  >
+                    {queuedFollowUp
+                      ? 'Câu phụ tiếp'
+                      : isLastQuestion
+                        ? 'Xong câu phụ'
+                        : 'Câu tiếp'}
+                    <ArrowRight className="size-4" />
+                  </button>
+                )}
+                {!activeFollowUp && !isLastQuestion && !savedAnswer && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={() => void moveToQuestion(questionIndex + 1)}
+                    disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                  >
+                    Bỏ qua
+                    <ArrowRight className="size-4" />
+                  </button>
+                )}
+                {!activeFollowUp && savedAnswer && queuedFollowUp && (
+                  <>
+                    <button
+                      type="button"
+                      data-space-ignore="true"
+                      onClick={() => void advanceToNextMainQuestion()}
+                      disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                    >
+                      Bỏ qua câu phụ
+                      <ArrowRight className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      data-space-ignore="true"
+                      onClick={() => void openQueuedFollowUp()}
+                      disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
+                    >
+                      Câu hỏi phụ
+                      <ArrowRight className="size-4" />
+                    </button>
+                  </>
+                )}
+                {!activeFollowUp && savedAnswer && !queuedFollowUp && !isLastQuestion && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={() => void moveToQuestion(questionIndex + 1)}
+                    disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
+                  >
+                    Câu tiếp
+                    <ArrowRight className="size-4" />
+                  </button>
+                )}
+                {!activeFollowUp && savedAnswer && !queuedFollowUp && isLastQuestion && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={handleSubmit}
+                    disabled={isRecording || isSendingAnswer}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
+                  >
+                    Nộp bài
+                  </button>
+                )}
+                {!activeFollowUp && !savedAnswer && isLastQuestion && (
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={handleSubmit}
+                    disabled={isRecording || isSendingAnswer}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
+                  >
+                    Nộp bài
+                  </button>
+                )}
+              </div>
             </div>
           </section>
         ) : (

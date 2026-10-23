@@ -244,10 +244,14 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 Id = MockExamAnswerOrdering.CreateOrderedAnswerId(i + 1),
                 SessionId = session.Id,
                 QuestionId = q.Id,
+                OrderIndex = i + 1,
                 AnswerText = null,
                 TimeTakenSeconds = 0,
                 Status = "pending",
-                AnsweredAt = startedAt.AddMilliseconds(i)
+                AnsweredAt = startedAt.AddMilliseconds(i),
+                IsFollowUp = false,
+                ParentAnswerId = null,
+                PromptText = null
             });
         }
 
