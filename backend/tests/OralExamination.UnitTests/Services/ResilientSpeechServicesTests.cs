@@ -1578,6 +1578,17 @@ public class ResilientSpeechServicesTests
             AnswerText = null
         });
 
+        // Include(Course) bắt buộc — thiếu Course thì session bị lọc mất (INNER JOIN).
+        context.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = "PRN231",
+            Name = "Mock Exam STT Test",
+            Credits = 3,
+            SemesterId = Guid.NewGuid(),
+            MaxFollowUpQuestions = 2,
+            IsActive = true,
+        });
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 

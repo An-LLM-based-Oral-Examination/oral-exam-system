@@ -25,6 +25,23 @@ public class SubmitMockExamAnswerCommandHandlerTests
         return new OralExamDbContext(options);
     }
 
+    /// <summary>
+    /// Handler Include(Course) — quan hệ bắt buộc dùng INNER JOIN; thiếu Course thì session bị lọc mất.
+    /// </summary>
+    private static void SeedCourse(OralExamDbContext context, Guid courseId)
+    {
+        context.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = "PRN231",
+            Name = "Mock Exam Test Course",
+            Credits = 3,
+            SemesterId = Guid.NewGuid(),
+            MaxFollowUpQuestions = 2,
+            IsActive = true,
+        });
+    }
+
     [Fact(DisplayName = "1. Nộp câu trả lời Voice-First thành công: stream Whisper bóc băng, lưu transcript và Zero R2")]
     public async Task Handle_Should_Transcribe_And_Save_Answer_Without_R2_Upload()
     {
@@ -54,6 +71,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
             AnswerText = null
         };
 
+        SeedCourse(context, courseId);
         session.Answers.Add(answer);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
@@ -121,6 +139,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         };
 
         session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -163,6 +182,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
             ExpiresAt = DateTime.UtcNow.AddMinutes(-5), // Đã hết giờ 5 phút trước
             Status = "in_progress"
         };
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -201,6 +221,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
             ExpiresAt = DateTime.UtcNow.AddMinutes(10),
             Status = "graded"
         };
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -239,6 +260,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
             ExpiresAt = DateTime.UtcNow.AddMinutes(20),
             Status = "in_progress"
         };
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -317,6 +339,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         };
 
         session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -387,6 +410,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         };
 
         session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -456,6 +480,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         };
 
         session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -531,6 +556,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
         };
 
         session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 
@@ -601,6 +627,7 @@ public class SubmitMockExamAnswerCommandHandlerTests
             });
         }
 
+        SeedCourse(context, session.CourseId);
         context.MockExamSessions.Add(session);
         await context.SaveChangesAsync();
 

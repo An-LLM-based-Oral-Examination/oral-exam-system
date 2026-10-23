@@ -180,8 +180,7 @@ export function MockExamSessionPage() {
     if (!sessionId || session) return
 
     let cancelled = false
-    setIsRestoring(true)
-    setRestoreError('')
+    // isRestoring đã true từ initial state — chỉ gọi API, cập nhật state trong callback.
     void mockExamService
       .resumeSession(sessionId)
       .then((resumed) => {
@@ -268,7 +267,6 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   /** Xem lại: mic chỉ mở dưới đúng câu (chính / phụ) được chọn ghi lại. */
   const [reRecordTarget, setReRecordTarget] = useState<ReRecordTarget | null>(null)
   const reRecordTargetRef = useRef<ReRecordTarget | null>(null)
-  reRecordTargetRef.current = reRecordTarget
   const [answers, setAnswers] = useState<Record<string, StoredMockExamAnswer>>(() =>
     Object.fromEntries(
       session.answers
@@ -308,15 +306,16 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const followUpDraftsRef = useRef(followUpDrafts)
   const followUpAnswersRef = useRef(followUpAnswers)
   const activeFollowUpRef = useRef(activeFollowUp)
-  activeFollowUpRef.current = activeFollowUp
   /** Cache đề câu phụ theo answerId — tránh mất promptText khi xem lại. */
-  const followUpPromptByAnswerIdRef = useRef<Record<string, string>>(
-    Object.fromEntries(
-      session.answers
-        .filter((answer) => answer.isFollowUp && answer.answerId && answer.promptText?.trim())
-        .map((answer) => [answer.answerId, answer.promptText!.trim()]),
-    ),
+  const [followUpPromptByAnswerId, setFollowUpPromptByAnswerId] = useState<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        session.answers
+          .filter((answer) => answer.isFollowUp && answer.answerId && answer.promptText?.trim())
+          .map((answer) => [answer.answerId, answer.promptText!.trim()]),
+      ),
   )
+  const followUpPromptByAnswerIdRef = useRef(followUpPromptByAnswerId)
   const draftSaveTimerRef = useRef<number | null>(null)
   const transcriptAreaRef = useRef<HTMLTextAreaElement | null>(null)
   const transcriptFitRootRef = useRef<HTMLElement | null>(null)
@@ -365,7 +364,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const rememberFollowUpPrompt = useCallback((answerId: string, prompt: string) => {
     const trimmed = prompt.trim()
     if (!answerId || !trimmed) return
-    followUpPromptByAnswerIdRef.current[answerId] = trimmed
+    setFollowUpPromptByAnswerId((current) => {
+      if (current[answerId] === trimmed) return current
+      const next = { ...current, [answerId]: trimmed }
+      followUpPromptByAnswerIdRef.current = next
+      return next
+    })
   }, [])
 
   const persistActiveFollowUp = useCallback(
@@ -402,9 +406,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         .map((item) => ({
           ...item,
           promptText:
-            item.promptText?.trim() ||
-            followUpPromptByAnswerIdRef.current[item.answerId] ||
-            null,
+            item.promptText?.trim() || followUpPromptByAnswerId[item.answerId] || null,
         }))
         .sort((left, right) => left.answeredAt.localeCompare(right.answeredAt))
     : []
@@ -433,13 +435,18 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     isRecording ||
     (isSendingAnswer && reRecordTarget !== null)
   const showMicSectionRef = useRef(micAllowed)
-  showMicSectionRef.current = micAllowed
-
   const isMicOpenForMain = Boolean(
     question && reRecordTarget?.kind === 'main' && reRecordTarget.questionId === question.id,
   )
   const isMicOpenForFollowUp = (answerId: string) =>
     Boolean(reRecordTarget?.kind === 'followUp' && reRecordTarget.answerId === answerId)
+
+  const reviewContextKey = `${question?.id ?? ''}:${activeFollowUp?.answerId ?? ''}`
+  const [reviewContextSeen, setReviewContextSeen] = useState(reviewContextKey)
+  if (reviewContextSeen !== reviewContextKey) {
+    setReviewContextSeen(reviewContextKey)
+    setReRecordTarget(null)
+  }
 
   useEffect(() => {
     draftsRef.current = drafts
@@ -458,8 +465,20 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   }, [followUpAnswers])
 
   useEffect(() => {
-    setReRecordTarget(null)
-  }, [question?.id, activeFollowUp?.answerId])
+    activeFollowUpRef.current = activeFollowUp
+  }, [activeFollowUp])
+
+  useEffect(() => {
+    reRecordTargetRef.current = reRecordTarget
+  }, [reRecordTarget])
+
+  useEffect(() => {
+    showMicSectionRef.current = micAllowed
+  }, [micAllowed])
+
+  useEffect(() => {
+    followUpPromptByAnswerIdRef.current = followUpPromptByAnswerId
+  }, [followUpPromptByAnswerId])
 
   useLayoutEffect(() => {
     const root = transcriptFitRootRef.current
@@ -511,7 +530,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
         })
     },
-    [session?.courseCode, session?.courseName],
+    [session.courseCode, session.courseName],
   )
 
   const displayPrompt = activeFollowUp?.prompt ?? question?.content ?? ''
@@ -1181,8 +1200,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   useEffect(() => {
     if (!autoRead || !question || phase !== 'exam') return
-    startReadingQuestion(activeFollowUp?.prompt ?? question.content)
+    const prompt = activeFollowUp?.prompt ?? question.content
+    const timer = window.setTimeout(() => {
+      startReadingQuestion(prompt)
+    }, 0)
     return () => {
+      window.clearTimeout(timer)
       stopReadingQuestion()
     }
   }, [activeFollowUp?.prompt, autoRead, phase, question, startReadingQuestion, stopReadingQuestion])
