@@ -15,7 +15,6 @@ public sealed class SubmitOfficialExamCommandValidator : AbstractValidator<Submi
         {
             answer.RuleFor(x => x.ExamQuestionId).NotEmpty();
             answer.RuleFor(x => x.TranscriptWhisper)
-                .NotEmpty()
                 .MaximumLength(50_000);
             answer.RuleFor(x => x.TimeSpentSeconds).InclusiveBetween(0, 14_400);
             answer.RuleFor(x => x.TimestampsWhisper)

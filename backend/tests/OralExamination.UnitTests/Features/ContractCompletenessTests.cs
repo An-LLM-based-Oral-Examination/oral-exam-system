@@ -679,6 +679,100 @@ public class ContractCompletenessTests
         lockRes.IsSuccess.Should().BeTrue();
         lockRes.Value.IsLocked.Should().BeTrue();
         lockRes.Value.Status.Should().Be(ExamTicketStatus.Locked);
+        submission.FinalScore.Should().Be(8.25m);
+
+        // Khi ca thi có vé chỉ có AiScore (FinalScore == null), LockExamTicket tự đồng bộ FinalScore ??= AiScore,
+        // và PublishGrades vẫn công bố toàn ca thi thành công khi có vé đã khóa lẻ trước đó
+        var shift = new RealExamSessionShift
+        {
+            Id = gradedTicket.ShiftId,
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Kiểm Chứng Khóa Lẻ & Công Bố",
+            RoomLab = "Lab 201",
+            StartTime = DateTime.UtcNow.AddHours(-2),
+            EndTime = DateTime.UtcNow.AddHours(-1),
+            Status = "in_progress"
+        };
+        var studentUser = new User
+        {
+            Id = gradedTicket.StudentId,
+            Email = "student.contract@fpt.edu.vn",
+            FullName = "Sinh Viên Khảo Thí",
+            StudentCode = "SE170100",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var aiOnlyTicket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = studentUser.Id,
+            SeatNumber = 8,
+            IpAddress = "10.0.0.18",
+            Status = ExamTicketStatus.AiGraded,
+            IsLocked = false
+        };
+        var aiOnlySub = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = aiOnlyTicket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 7.50m,
+            FinalScore = null,
+            GradingStatus = "ai_graded",
+            SubmittedAt = DateTime.UtcNow
+        };
+        aiOnlyTicket.Submissions.Add(aiOnlySub);
+
+        var secondGradedTicket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = studentUser.Id,
+            SeatNumber = 7,
+            IpAddress = "10.0.0.17",
+            Status = ExamTicketStatus.AiGraded,
+            IsLocked = false
+        };
+        var secondSub = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = secondGradedTicket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 4.50m,
+            GradingStatus = "ai_graded",
+            SubmittedAt = DateTime.UtcNow
+        };
+        secondGradedTicket.Submissions.Add(secondSub);
+        db.Users.Add(studentUser);
+        db.RealExamSessionShifts.Add(shift);
+        db.StudentExamTickets.Remove(ungradedTicket);
+        db.StudentExamTickets.AddRange(aiOnlyTicket, secondGradedTicket);
+        db.ExamQuestionSubmissions.AddRange(aiOnlySub, secondSub);
+        await db.SaveChangesAsync();
+
+        var lockAiOnlyRes = await lockHandler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket.LockExamTicketCommand(lecturer.Id, aiOnlyTicket.Id),
+            CancellationToken.None);
+        lockAiOnlyRes.IsSuccess.Should().BeTrue();
+        aiOnlySub.FinalScore.Should().Be(7.50m);
+
+        // Kiểm chứng GetAuditEvidence đánh dấu IsSuspicious = true cho bài thi dưới điểm đạt (< 5.00)
+        var evidenceHandler = new OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence.GetAuditEvidenceQueryHandler(db);
+        var evidenceRes = await evidenceHandler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence.GetAuditEvidenceQuery(shift.Id),
+            CancellationToken.None);
+        evidenceRes.IsSuccess.Should().BeTrue();
+        var lowScoreEvidence = evidenceRes.Value.Single(x => x.TicketId == secondGradedTicket.Id);
+        lowScoreEvidence.IsSuspicious.Should().BeTrue();
+        lowScoreEvidence.SuspiciousReason.Should().Contain("< 5.00");
+
+        var publishHandler = new OralExamination.Application.Features.OfficialExams.Commands.PublishGrades.PublishGradesCommandHandler(db);
+        var publishRes = await publishHandler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Commands.PublishGrades.PublishGradesCommand(shift.Id, lecturer.Id),
+            CancellationToken.None);
+        publishRes.IsSuccess.Should().BeTrue();
+        publishRes.Value.TotalPublished.Should().Be(3);
     }
 
     [Fact(DisplayName = "11. OfficialExamDlqReplayWorker tự động replay cả tác vụ PracticeGrading quá hạn 5 phút về IGradingQueueChannel")]

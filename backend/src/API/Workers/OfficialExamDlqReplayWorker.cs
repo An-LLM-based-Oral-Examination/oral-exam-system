@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
 using OralExamination.Infrastructure.Persistence;
 
 namespace OralExamination.API.Workers;
@@ -28,21 +29,28 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(PollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            try
+            using var timer = new PeriodicTimer(PollInterval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                await ReplayDueAsync(stoppingToken);
+                try
+                {
+                    await ReplayDueAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "Failed to replay official-exam DLQ entries.");
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Failed to replay official-exam DLQ entries.");
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown khi Host dừng
         }
     }
 
@@ -156,5 +164,82 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        await RecoverInterruptedPracticeAndMockSessionsAsync(scope.ServiceProvider, context, now, cancellationToken);
+    }
+
+    private async Task RecoverInterruptedPracticeAndMockSessionsAsync(
+        IServiceProvider serviceProvider,
+        OralExamDbContext context,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        // 1. Khôi phục các câu trả lời Luyện tập (MF-01) bị treo ở trạng thái "pending" quá 2 phút (do sập mạng / restart tiến trình)
+        var channel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
+        if (channel != null)
+        {
+            var stuckPracticeAnswers = await context.PracticeAnswers
+                .AsNoTracking()
+                .Include(a => a.Session)
+                .Include(a => a.AiEvaluations)
+                .Where(a => a.Status == "pending" && a.SubmittedAt <= now.AddMinutes(-2))
+                .OrderBy(a => a.SubmittedAt)
+                .Take(20)
+                .ToListAsync(cancellationToken);
+
+            foreach (var stuckAnswer in stuckPracticeAnswers)
+            {
+                if (stuckAnswer.AiEvaluations != null && stuckAnswer.AiEvaluations.Any())
+                {
+                    continue;
+                }
+
+                await channel.EnqueueAsync(new GradingTask
+                {
+                    AnswerId = stuckAnswer.Id,
+                    SessionId = stuckAnswer.SessionId,
+                    QuestionId = stuckAnswer.QuestionId,
+                    StudentId = stuckAnswer.StudentId,
+                    AnswerText = stuckAnswer.AnswerText ?? string.Empty,
+                    IsFollowUp = stuckAnswer.IsFollowUp,
+                    ParentAnswerId = stuckAnswer.ParentAnswerId,
+                    IsFullSession = string.Equals(stuckAnswer.Session?.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
+                }, cancellationToken);
+            }
+        }
+
+        // 2. Tự động chốt và chấm điểm các ca Thi thử (MF-02) bị mất mạng / tắt ngang quá giờ hoặc đang chờ chấm bù ("submitted" chưa có điểm)
+        var aiGradingService = serviceProvider.GetService<IAiGradingService>();
+        if (aiGradingService == null)
+        {
+            return;
+        }
+
+        var interruptedMockSessions = await context.MockExamSessions
+            .AsNoTracking()
+            .Where(s =>
+                (s.Status == "in_progress" && now > s.ExpiresAt.AddSeconds(15)) ||
+                (s.Status == "submitted" && s.TotalScore == null))
+            .OrderBy(s => s.ExpiresAt)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        foreach (var mockSession in interruptedMockSessions)
+        {
+            try
+            {
+                var submitHandler = new SubmitMockExamSessionCommandHandler(context, aiGradingService);
+                await submitHandler.Handle(
+                    new SubmitMockExamSessionCommand(mockSession.Id, mockSession.StudentId),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Deferred grading for interrupted MockExamSession {SessionId} failed transiently; will retry on next cycle.",
+                    mockSession.Id);
+            }
+        }
     }
 }

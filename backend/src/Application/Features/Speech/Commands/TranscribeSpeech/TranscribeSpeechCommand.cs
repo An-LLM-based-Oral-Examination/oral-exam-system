@@ -45,28 +45,36 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
             return Result<SpeechTranscriptionResult>.Failure("File ghi âm không hợp lệ hoặc rỗng.");
         }
 
+        SpeechTranscriptionResult? detailedResult = null;
+        Exception? sttException = null;
         try
         {
-            var result = await speechToTextService.TranscribeDetailedAsync(
+            var result = detailedResult = await speechToTextService.TranscribeDetailedAsync(
                 request.AudioStream,
                 string.IsNullOrWhiteSpace(request.FileName) ? "speech.webm" : request.FileName,
                 request.VocabularyHint,
                 cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(result.Text))
+            var sanitizedServer = !string.IsNullOrWhiteSpace(result?.Text)
+                ? TranscriptHelper.NormalizeOrFallback(result.Text, speechToTextService.NormalizeTranscript(result.Text))
+                : string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(sanitizedServer))
             {
-                return Result<SpeechTranscriptionResult>.Success(result);
+                TranscriptHelper.RegisterVerifiedTranscript(sanitizedServer);
+                return Result<SpeechTranscriptionResult>.Success(result! with { Text = sanitizedServer });
             }
         }
         catch (Exception ex)
         {
+            sttException = ex;
             if (string.IsNullOrWhiteSpace(request.ClientTranscript))
             {
                 return Result<SpeechTranscriptionResult>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ClientTranscript))
+        if (!string.IsNullOrWhiteSpace(request.ClientTranscript) && !TranscriptHelper.IsServerConfirmedSilence(detailedResult, sttException))
         {
             var normalized = speechToTextService.NormalizeTranscript(request.ClientTranscript);
             var finalText = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
@@ -79,7 +87,7 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
                     Provider: "BrowserWebSpeechHybrid",
                     UsedFallback: true,
                     TimestampsJson: null,
-                    ConfidenceScore: 0.90));
+                    ConfidenceScore: 0.65));
             }
         }
 

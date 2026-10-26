@@ -30,6 +30,17 @@ export interface MockExamQuota {
   canStartExam: boolean
 }
 
+export interface OfficialExamTicketOverview {
+  ticketId: string
+  courseCode: string
+  courseName: string
+  shiftName: string
+  roomLab: string
+  startTime: string
+  seatNumber: number
+  status: string
+}
+
 type JsonRecord = Record<string, unknown>
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -126,10 +137,13 @@ export const studentOverviewService = {
   },
 
   async getMockExamQuota(courseId: string): Promise<MockExamQuota> {
-    const response = await apiClient.get<unknown>('/mockexams/quota', {
+    const response = await apiClient.get<unknown>('/mock-exams/quota', {
       params: { courseId },
     })
-    const record = isRecord(response.data) ? response.data : null
+    const raw = isRecord(response.data)
+      ? (response.data.value ?? response.data.Value ?? response.data.data ?? response.data.Data ?? response.data)
+      : null
+    const record = isRecord(raw) ? raw : null
     const quota = record ? mapQuota(record) : null
     if (!quota) {
       throw {
@@ -139,5 +153,29 @@ export const studentOverviewService = {
       }
     }
     return quota
+  },
+
+  async getOfficialExamTickets(): Promise<OfficialExamTicketOverview[]> {
+    const response = await apiClient.get<unknown>('/student/dashboard')
+    const root = isRecord(response.data)
+      ? (response.data.value ?? response.data.Value ?? response.data.data ?? response.data.Data ?? response.data)
+      : null
+    const rawList = isRecord(root)
+      ? (root.officialExamTickets ?? root.OfficialExamTickets)
+      : null
+    if (!Array.isArray(rawList)) return []
+    return rawList
+      .filter(isRecord)
+      .map((item) => ({
+        ticketId: readString(item, 'ticketId', 'TicketId'),
+        courseCode: readString(item, 'courseCode', 'CourseCode'),
+        courseName: readString(item, 'courseName', 'CourseName', 'sessionTitle', 'SessionTitle'),
+        shiftName: readString(item, 'shiftName', 'ShiftName'),
+        roomLab: readString(item, 'roomLab', 'RoomLab'),
+        startTime: readString(item, 'startTime', 'StartTime', 'examDate', 'ExamDate'),
+        seatNumber: readNumber(item, 'seatNumber', 'SeatNumber') ?? 0,
+        status: readString(item, 'status', 'Status'),
+      }))
+      .filter((t) => Boolean(t.ticketId))
   },
 }

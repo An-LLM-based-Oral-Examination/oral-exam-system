@@ -98,7 +98,7 @@ export function StudentSidebar({
               Cổng sinh viên
             </p>
             <p className="mt-0.5 truncate text-sm font-bold tracking-[-0.02em] text-[#0F2854]">
-              OralExam AI
+              FPTU Viva Voce
             </p>
           </div>
 
@@ -125,7 +125,7 @@ export function StudentSidebar({
                   cn(
                     'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                     isActive
-                      ? 'bg-[#1C4D8D] text-white'
+                      ? 'bg-[#1C4D8D] text-white shadow-[0_6px_16px_rgba(28,77,141,0.22)]'
                       : 'bg-[#D7F1F8] text-[#1C4D8D] hover:bg-[#c5e8f3] hover:text-[#0F2854]',
                     collapsed && 'md:justify-center md:px-0',
                   )
@@ -139,26 +139,11 @@ export function StudentSidebar({
         </div>
 
         <div className="shrink-0 border-t border-[#4988C4] bg-[#D7F1F8] p-3">
-          <div
-            className={cn(
-              'mb-2 flex items-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-3 py-2.5',
-              collapsed && 'md:hidden',
-            )}
-          >
-            <span className="size-2 shrink-0 rounded-full bg-[#16836a]" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-[#16836a]">AI sẵn sàng</p>
-              <p className="mt-0.5 text-xs leading-snug text-[#16836a]/80">
-                Micro được kiểm tra trước mỗi bài.
-              </p>
-            </div>
-          </div>
-
           <button
             type="button"
             onClick={onCollapse}
             className={cn(
-              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] text-xs font-semibold text-[#0F2854] transition hover:bg-[#c5e8f3] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:flex',
+              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-[#F4FBFD] text-xs font-semibold text-[#0F2854] transition hover:bg-[#c5e8f3] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:flex',
               !collapsed && 'justify-between px-3',
             )}
             aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}

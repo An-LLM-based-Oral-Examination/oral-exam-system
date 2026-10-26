@@ -785,16 +785,8 @@ public sealed class EntSpeakingMultimodalGradingTests
         // Act
         var act = () => gradingService.GradeAnswerAsync(request, CancellationToken.None);
 
-        // Assert - Fallback must execute gracefully without throwing unhandled exceptions
-        var result = await act.Should().NotThrowAsync("Grading service must fall back to local heuristic without throwing exception");
-        result.Subject.Should().NotBeNull();
-
-        var fallbackResult = result.Subject;
-        fallbackResult.Score.Should().BeGreaterThan(0.0m, "Legitimate transcript matching keywords must receive partial heuristic score");
-        fallbackResult.Details.Should().HaveCount(5, "Fallback heuristic must generate breakdown across all 5 FPTU criteria");
-        fallbackResult.Details.Sum(d => d.Score).Should().Be(fallbackResult.Score, "Sum of fallback criteria scores must equal total score");
-        fallbackResult.ConfidenceScore.Should().Be(0.85m, "Fallback score provides deterministic confidence score for heuristic evaluation");
-        fallbackResult.Feedback.Should().NotBeNullOrWhiteSpace();
+        // Assert - Must fail-fast with HttpRequestException for DLQ isolation (Zero Fake Grading)
+        await act.Should().ThrowAsync<HttpRequestException>();
     }
 
     [Fact(DisplayName = "M3-14: GradeAnswerAsync supports bilingual Vietnamese-English (Việt - Anh) transcript for ENT test courses without zeroing score")]

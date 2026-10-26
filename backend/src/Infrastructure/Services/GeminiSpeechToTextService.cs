@@ -26,11 +26,9 @@ public class GeminiSpeechToTextService
     private static readonly string[] FallbackSttUrls =
     [
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     ];
 
@@ -163,9 +161,14 @@ public class GeminiSpeechToTextService
 
         var mimeType = ResolveMimeType(fileName);
         var base64Audio = Convert.ToBase64String(audioBytes);
-        var hint = string.IsNullOrWhiteSpace(vocabularyHint)
-            ? SeTerminologyNormalizer.DefaultSeWhisperPrompt
-            : vocabularyHint.Trim();
+        var isEnglishCourse = string.Equals(vocabularyHint?.Trim(), "lang:en", StringComparison.OrdinalIgnoreCase);
+        var explicitHint = !isEnglishCourse && !string.IsNullOrWhiteSpace(vocabularyHint)
+            ? vocabularyHint.Trim()
+            : null;
+        // Luôn nhận diện song ngữ Việt - Anh cho mọi môn học (kể cả ENT và SE) để tránh dịch ép tiếng Việt sang tiếng Anh
+        var languageCodes = new[] { "vi-VN", "en-US" };
+
+
 
         var customVocabulary = SeTerminologyNormalizer.BuildCustomVocabularyList(vocabularyHint, maxTerms: 100);
 
@@ -193,7 +196,7 @@ public class GeminiSpeechToTextService
             {
                 audioTranscriptionConfig = new
                 {
-                    languageCodes = new[] { "vi-VN", "en-US" },
+                    languageCodes = languageCodes,
                     customVocabulary = customVocabulary,
                     mode = "SMART"
                 }
@@ -203,8 +206,8 @@ public class GeminiSpeechToTextService
         // Payload chuẩn Multimodal Audio cho gemini-3.8-flash / gemini-3.6-flash (không dùng temperature theo chuẩn Gemini 3.8)
         var multimodalPrompt =
             $"Bạn là bộ bóc băng âm thanh (Speech-to-Text) đa ngôn ngữ Việt - Anh chuyên biệt cho kỳ thi vấn đáp Kỹ thuật Phần mềm và Tiếng Anh tại Đại học FPT (hỗ trợ cả tiếng Việt kết hợp thuật ngữ tiếng Anh Code-Switching lẫn câu trả lời bằng tiếng Anh).\n" +
-            $"Từ vựng chuyên ngành ưu tiên nhận diện chính xác: {hint}\n" +
-            $"Yêu cầu: Chỉ trả về nguyên văn lời nói của sinh viên trong đoạn âm thanh dưới dạng chuỗi văn bản thuần túy (hoặc JSON {{\"text\": \"...\"}}). Tuyệt đối không tự giải thích, không thêm lời bình luận và không bịa thêm ý.";
+            (explicitHint is not null ? $"Từ vựng gợi ý theo ngữ cảnh câu hỏi (chỉ sử dụng khi âm thanh thực sự phát âm từ đó, tuyệt đối không tự điền nếu băng ghi âm im lặng): {explicitHint}\n" : string.Empty) +
+            $"Yêu cầu: Chỉ trả về nguyên văn lời nói của sinh viên trong đoạn âm thanh dưới dạng chuỗi văn bản thuần túy (hoặc JSON {{\"text\": \"...\"}}). DO NOT translate from Vietnamese to English. Output verbatim transcript in the exact original language spoken. Tuyệt đối giữ nguyên ngôn ngữ người nói, KHÔNG ĐƯỢC TỰ DỊCH tiếng Việt sang tiếng Anh hoặc ngược lại, không tự giải thích, không thêm lời bình luận và không bịa thêm ý.";
 
         var multimodalPayload = new
         {

@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Practice.DTOs;
 
 namespace OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory;
@@ -22,6 +23,21 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
 
     public async Task<Result<List<PracticeHistoryItemDto>>> Handle(GetStudentPracticeHistoryQuery request, CancellationToken cancellationToken)
     {
+        var timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
+        var inProgressSessions = await _context.PracticeSessions
+            .Include(s => s.Answers)
+            .Where(s => s.StudentId == request.StudentId && s.Status == "in_progress")
+            .ToListAsync(cancellationToken);
+
+        foreach (var activeSession in inProgressSessions)
+        {
+            await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(
+                _context,
+                activeSession,
+                timeoutMinutes,
+                cancellationToken);
+        }
+
         var sessions = await _context.PracticeSessions
             .AsNoTracking()
             .Include(s => s.Course)
@@ -44,14 +60,44 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 .Distinct()
                 .ToList();
             var answeredMainCount = distinctMainQuestionIds.Count;
+            var actualAnsweredMainCount = answers
+                .Where(a => !a.IsFollowUp && !string.IsNullOrWhiteSpace(a.AnswerText))
+                .Select(a => a.QuestionId)
+                .Distinct()
+                .Count();
             var totalQuestions = Math.Max(plannedQuestionCount, answeredMainCount);
 
             var mainScores = answers
                 .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
                 .GroupBy(a => a.QuestionId)
-                .Select(g => g
-                    .SelectMany(a => a.AiEvaluations)
-                    .Max(e => e.TotalScore))
+                .Select(g =>
+                {
+                    var mainAnswerEval = g
+                        .Where(a => !a.IsFollowUp)
+                        .SelectMany(a => a.AiEvaluations)
+                        .OrderByDescending(e => e.EvaluatedAt)
+                        .FirstOrDefault();
+                    var followUpScores = g
+                        .Where(a => a.IsFollowUp)
+                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                        .ToList();
+
+                    if (followUpScores.Count == 0)
+                    {
+                        return mainAnswerEval?.TotalScore ?? 0.0m;
+                    }
+
+                    var mainScore = mainAnswerEval?.TotalScore ?? 0.0m;
+                    var avgFollowUp = followUpScores.Average();
+                    if (avgFollowUp >= mainScore)
+                    {
+                        return g.SelectMany(a => a.AiEvaluations).Max(e => e.TotalScore);
+                    }
+
+                    var allScores = new List<decimal> { mainScore };
+                    allScores.AddRange(followUpScores);
+                    return Math.Round(allScores.Average(), 2, MidpointRounding.AwayFromZero);
+                })
                 .ToList();
 
             bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
@@ -98,7 +144,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 StartedAt = s.StartedAt,
                 EndedAt = s.CompletedAt,
                 TotalQuestions = totalQuestions,
-                AnsweredQuestions = answeredMainCount,
+                AnsweredQuestions = actualAnsweredMainCount,
                 AverageScore = avgScore
             };
         }).ToList();

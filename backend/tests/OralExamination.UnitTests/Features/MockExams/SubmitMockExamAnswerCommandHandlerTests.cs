@@ -672,4 +672,169 @@ public class SubmitMockExamAnswerCommandHandlerTests
         updatedAnswers.Should().HaveCount(10);
         updatedAnswers.Should().OnlyContain(a => a.Status == "answered" && a.AnswerText != null);
     }
+
+    [Fact(DisplayName = "12. Chặn lỗ hổng Compound Baseline Drift: sửa văn bản cộng dồn nhiều lần qua API không thể vượt chốt VOICE_FIRST_GATE")]
+    public async Task Handle_MultiStepDirectTranscriptEdits_BlocksCompoundBaselineDrift()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        // Bản thu âm gốc có 10 từ: "mot hai ba bon nam sau bay tam chin muoi"
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: "mot hai ba bon nam sau bay tam chin muoi",
+                RawText: "mot hai ba bon nam sau bay tam chin muoi",
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.95));
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("voice-stream-data"));
+        var voiceResult = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "voice.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 20), CancellationToken.None);
+        voiceResult.IsSuccess.Should().BeTrue();
+
+        // Lần sửa 1: giữ 5/10 từ gốc (50% >= 45%) -> Hợp lệ
+        var edit1Result = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: null,
+            FileName: string.Empty,
+            ContentType: string.Empty,
+            TimeTakenSeconds: 20,
+            DirectTranscript: "mot hai ba bon nam alpha beta gamma delta epsilon"), CancellationToken.None);
+        edit1Result.IsSuccess.Should().BeTrue();
+
+        // Lần sửa 2: giữ 5 từ của bản sửa 1 ("alpha beta gamma delta epsilon") nhưng chỉ còn 1/10 từ của bản thu âm gốc (10% < 45%)
+        // Nếu bị lỗi Compound Baseline Drift thì sẽ lọt qua, nhưng hệ thống khóa mốc gốc nên BẮT BUỘC bị chặn bởi VOICE_FIRST_GATE!
+        var edit2Result = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: null,
+            FileName: string.Empty,
+            ContentType: string.Empty,
+            TimeTakenSeconds: 20,
+            DirectTranscript: "mot alpha beta gamma delta epsilon zeta eta theta iota"), CancellationToken.None);
+
+        edit2Result.IsSuccess.Should().BeFalse();
+        edit2Result.Error.Should().Contain("VOICE_FIRST_GATE");
+    }
+
+    [Fact(DisplayName = "13. Chặn lỗ hổng bypass VOICE_FIRST_GATE khi gửi file WebM container thật im lặng kèm DirectTranscript giả mạo")]
+    public async Task Handle_WithRealWebmSilenceContainerAndUnverifiedDirectTranscript_BlocksBypass()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        var answer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0,
+            AnswerText = null
+        };
+
+        session.Answers.Add(answer);
+        SeedCourse(context, session.CourseId);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: string.Empty,
+                RawText: string.Empty,
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.0));
+        sttMock.Setup(x => x.NormalizeTranscript(It.IsAny<string>()))
+            .Returns<string>(s => s);
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+
+        // Tạo payload >= 256 bytes có EBML WebM magic bytes (1A 45 DF A3) mô phỏng container thu âm im lặng thật
+        var webmSilenceBytes = new byte[300];
+        webmSilenceBytes[0] = 0x1A;
+        webmSilenceBytes[1] = 0x45;
+        webmSilenceBytes[2] = 0xDF;
+        webmSilenceBytes[3] = 0xA3;
+
+        using var audioStream = new MemoryStream(webmSilenceBytes);
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "silent_attack.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 15,
+            DirectTranscript: "Văn bản gian lận chèn qua API không hề nói vào microphone"
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Không nhận diện được giọng nói rõ ràng");
+    }
 }

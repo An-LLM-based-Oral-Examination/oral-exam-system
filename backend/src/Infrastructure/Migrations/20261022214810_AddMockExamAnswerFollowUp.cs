@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,6 +11,8 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("ALTER TABLE mock_exam_answers ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 1;");
+
             migrationBuilder.AddColumn<bool>(
                 name: "is_follow_up",
                 table: "mock_exam_answers",

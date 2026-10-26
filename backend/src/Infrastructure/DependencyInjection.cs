@@ -1,3 +1,4 @@
+using System;
 using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,7 +28,13 @@ public static class DependencyInjection
             if (usePostgres)
             {
                 options.UseNpgsql(connectionString, npgsql =>
-                    npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+                {
+                    npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                    npgsql.EnableRetryOnFailure(
+                        maxRetryCount: 3,
+                        maxRetryDelay: TimeSpan.FromSeconds(5),
+                        errorCodesToAdd: null);
+                });
             }
             else
             {
@@ -64,7 +71,9 @@ public static class DependencyInjection
 
             using var tcpClient = new TcpClient();
             var connectTask = tcpClient.ConnectAsync(host, port);
-            if (connectTask.Wait(TimeSpan.FromMilliseconds(3000)) && tcpClient.Connected) return true; using var retryClient = new TcpClient(); return retryClient.ConnectAsync(host, port).Wait(TimeSpan.FromMilliseconds(3000)) && retryClient.Connected;
+            if (connectTask.Wait(TimeSpan.FromMilliseconds(3000)) && tcpClient.Connected) return true;
+            using var retryClient = new TcpClient();
+            return retryClient.ConnectAsync(host, port).Wait(TimeSpan.FromMilliseconds(3000)) && retryClient.Connected;
         }
         catch
         {

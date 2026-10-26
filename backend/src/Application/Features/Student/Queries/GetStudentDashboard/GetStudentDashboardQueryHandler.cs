@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Student.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -41,11 +42,27 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             return Result<StudentDashboardDto>.Failure("Sinh viên không tồn tại trong hệ thống.");
         }
 
-        // 1. Thống kê Luyện tập (MF-01)
+        // 1. Thống kê Luyện tập (MF-01) — Tự động đóng các phiên quá hạn không tương tác
+        var timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(context, cancellationToken);
+        var activePracticeSessions = await context.PracticeSessions
+            .Include(ps => ps.Answers)
+            .Where(ps => ps.StudentId == request.StudentId && ps.Status == "in_progress")
+            .ToListAsync(cancellationToken);
+
+        foreach (var activeSession in activePracticeSessions)
+        {
+            await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(
+                context,
+                activeSession,
+                timeoutMinutes,
+                cancellationToken);
+        }
+
         var practiceSessions = await context.PracticeSessions
             .AsNoTracking()
             .Include(ps => ps.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+            .AsSplitQuery()
             .Where(ps => ps.StudentId == request.StudentId)
             .ToListAsync(cancellationToken);
 
@@ -70,9 +87,34 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             var mainScores = answers
                 .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
                 .GroupBy(a => a.QuestionId)
-                .Select(g => g
-                    .SelectMany(a => a.AiEvaluations)
-                    .Max(e => e.TotalScore))
+                .Select(g =>
+                {
+                    var mainAnswerEval = g
+                        .Where(a => !a.IsFollowUp)
+                        .SelectMany(a => a.AiEvaluations)
+                        .OrderByDescending(e => e.EvaluatedAt)
+                        .FirstOrDefault();
+                    var followUpScores = g
+                        .Where(a => a.IsFollowUp)
+                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                        .ToList();
+
+                    if (followUpScores.Count == 0)
+                    {
+                        return mainAnswerEval?.TotalScore ?? 0.0m;
+                    }
+
+                    var mainScore = mainAnswerEval?.TotalScore ?? 0.0m;
+                    var avgFollowUp = followUpScores.Average();
+                    if (avgFollowUp >= mainScore)
+                    {
+                        return g.SelectMany(a => a.AiEvaluations).Max(e => e.TotalScore);
+                    }
+
+                    var allScores = new List<decimal> { mainScore };
+                    allScores.AddRange(followUpScores);
+                    return Math.Round(allScores.Average(), 2, MidpointRounding.AwayFromZero);
+                })
                 .ToList();
 
             bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
@@ -101,7 +143,26 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             ? Math.Round(practiceSessionScores.Average(), 2, MidpointRounding.AwayFromZero)
             : null;
 
-        // 2. Thống kê Thi thử (MF-02)
+        // 2. Thống kê Thi thử (MF-02) — Tự động đóng các phiên thi thử đã hết giờ
+        var nowUtc = DateTime.UtcNow;
+        var expiredMockSessions = await context.MockExamSessions
+            .Where(ms => ms.StudentId == request.StudentId &&
+                         ms.Status == "in_progress" &&
+                         nowUtc > ms.ExpiresAt.AddSeconds(10))
+            .ToListAsync(cancellationToken);
+
+        if (expiredMockSessions.Count > 0)
+        {
+            foreach (var expired in expiredMockSessions)
+            {
+                expired.Status = "graded";
+                expired.SubmittedAt ??= expired.ExpiresAt;
+                expired.TotalScore ??= 0.0m;
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
         var mockSessions = await context.MockExamSessions
             .AsNoTracking()
             .Where(ms => ms.StudentId == request.StudentId)
@@ -180,6 +241,7 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             .Include(d => d.Evaluation)
                 .ThenInclude(e => e.MockExamAnswer)
                     .ThenInclude(ma => ma!.Session)
+            .AsSplitQuery()
             .Where(d =>
                 (d.Evaluation.PracticeAnswer != null && d.Evaluation.PracticeAnswer.StudentId == request.StudentId) ||
                 (d.Evaluation.MockExamAnswer != null && d.Evaluation.MockExamAnswer.Session.StudentId == request.StudentId))
@@ -272,5 +334,35 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             CriterionMastery = criterionMastery,
             OfficialExamTickets = officialExamDtos
         });
+    }
+}
+
+internal static class QueryableSplitExtensions
+{
+    public static IQueryable<TEntity> AsSplitQuery<TEntity>(this IQueryable<TEntity> source) where TEntity : class
+    {
+        try
+        {
+            var relationalExtType = Type.GetType("Microsoft.EntityFrameworkCore.RelationalQueryableExtensions, Microsoft.EntityFrameworkCore.Relational");
+            if (relationalExtType != null)
+            {
+                var method = relationalExtType.GetMethod("AsSplitQuery", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (method != null)
+                {
+                    var genericMethod = method.MakeGenericMethod(typeof(TEntity));
+                    var result = genericMethod.Invoke(null, [source]);
+                    if (result is IQueryable<TEntity> queryable)
+                    {
+                        return queryable;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Fallback gracefully
+        }
+
+        return source;
     }
 }

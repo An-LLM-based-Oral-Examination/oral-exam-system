@@ -10,7 +10,7 @@ export type QuestionDifficulty = 'easy' | 'medium' | 'hard'
 
 export type QuestionSource = 'manual' | 'flm_api'
 
-export type UsageScope = 'practice' | 'exam' | 'shared'
+export type UsageScope = 'practice' | 'exam' | 'both' | 'shared'
 
 export interface DifficultyDistribution {
   easy: number
@@ -184,7 +184,19 @@ export interface BatchSubmitForReviewResponse {
   message: string
 }
 
+export interface ReviewQuestionDecisionRequest {
+  decision: 'APPROVED' | 'NEEDS_REVISION' | 'REJECTED'
+  reviewNotes?: string
+  targetUsageScope?: UsageScope
+  reviewerId?: string
+}
+
+export interface BatchApproveQuestionsResult {
+  approvedCount: number
+}
+
 /** Compatibility aliases for components that use shorter rubric names. */
 export type RubricCriterion = RubricCriterionDetail
 export type Question = QuestionDetail
+export type QuestionBankItem = QuestionDetail
 export type CreateQuestionRequest = CreateDraftQuestionRequest

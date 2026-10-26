@@ -31,7 +31,9 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(PollInterval);
+        try
+        {
+            using var timer = new PeriodicTimer(PollInterval);
         do
         {
             try
@@ -48,6 +50,11 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown khi Host dừng
+        }
     }
 
     internal async Task DispatchBatchAsync(CancellationToken cancellationToken)

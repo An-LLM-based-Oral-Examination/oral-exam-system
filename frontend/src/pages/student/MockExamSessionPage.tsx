@@ -12,6 +12,11 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  checkTranscriptRevision,
+  isLikelySilentOrInvalidTranscript,
+  looksLikeQuestionEcho,
+} from '@/lib/transcriptGuards'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { AutoFitQuestionText } from '@/components/question/AutoFitQuestionText'
@@ -28,6 +33,7 @@ import {
   playNaturalSpeech,
   stopSpeechPlayback,
   transcribeSpeech,
+  type SpeechTranscriptionResponse,
 } from '@/services/speech.service'
 import type {
   MockExamActiveFollowUp,
@@ -37,7 +43,9 @@ import type {
 } from '@/types/mockExam.types'
 import {
   clearMockExamSession,
+  readMockExamQueuedFollowUp,
   readMockExamSessionById,
+  saveMockExamQueuedFollowUp,
   removeMockExamAnswer,
   saveMockExamAnswer,
   saveMockExamSession,
@@ -102,48 +110,30 @@ function shouldIgnoreSpace(target: EventTarget | null) {
   return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
-/** Chỉ lấy thuật ngữ ngắn — không gửi nguyên đề (tránh STT bịa câu trả lời khi im lặng). */
-function buildVocabularyHint(question: { title: string }) {
-  const title = question.title.trim()
-  return title || undefined
+/** Không ép lang:en để Whisper Large-v3-Turbo nhận diện song ngữ Việt - Anh cho mọi môn học (kể cả ENT và SE). */
+function buildVocabularyHint(
+  question: { title: string },
+  courseCode?: string | null,
+  courseName?: string | null,
+): string | undefined {
+  void question
+  void courseCode
+  void courseName
+  return undefined
 }
 
-function isLikelySilentOrInvalidTranscript(transcript: string, recordingSeconds: number) {
-  const text = transcript.trim()
-  if (!text) return true
-  // Ghi quá ngắn mà transcript dài → thường là ảo giác khi không nói.
-  if (recordingSeconds > 0 && recordingSeconds < 2 && text.split(/\s+/).length > 12) return true
-  return false
-}
 
-function normalizeForCompare(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** STT đôi khi “đọc” lại đề khi im lặng — không phải lời học sinh. */
-function looksLikeQuestionEcho(
-  transcript: string,
-  question: { title: string; content: string },
-) {
-  const t = normalizeForCompare(transcript)
-  if (t.length < 24) return false
-  const title = normalizeForCompare(question.title)
-  const content = normalizeForCompare(question.content)
-  if (title.length >= 16 && t.includes(title)) return true
-  if (content.length >= 40) {
-    const snippet = content.slice(0, Math.min(80, content.length))
-    if (snippet.length >= 40 && t.includes(snippet)) return true
-  }
-  return false
-}
 
 function initialQuestionIndex(session: StoredMockExamSession) {
+  if (session?.activeFollowUp?.questionId) {
+    const activeIdx = session.questions.findIndex((q) => q.id === session.activeFollowUp!.questionId)
+    if (activeIdx >= 0) return activeIdx
+  }
+  const queuedQuestionId = readMockExamQueuedFollowUp(session.sessionId)?.questionId
+  if (queuedQuestionId) {
+    const queuedIdx = session.questions.findIndex((q) => q.id === queuedQuestionId)
+    if (queuedIdx >= 0) return queuedIdx
+  }
   const answeredIds = new Set(session.answers.map((answer) => answer.questionId))
   const firstUnanswered = session.questions.findIndex((question) => !answeredIds.has(question.id))
   if (firstUnanswered >= 0) return firstUnanswered
@@ -254,7 +244,20 @@ function MissingSession({ message }: { message?: string }) {
 
 function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const navigate = useNavigate()
-  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder()
+  const segmentPromisesRef = useRef<Array<Promise<SpeechTranscriptionResponse | null>>>([])
+  const lastSegmentBlobRef = useRef<Blob | null>(null)
+  const handleRecorderSegment = useCallback((segmentBlob: Blob, segmentIndex: number) => {
+    lastSegmentBlobRef.current = segmentBlob
+    const promise = transcribeSpeech(segmentBlob, {
+      vocabularyHint: undefined,
+      fileName: `mock-answer-seg-${segmentIndex}.webm`,
+    }).catch(() => null)
+    segmentPromisesRef.current.push(promise)
+  }, [])
+  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder({
+    segmentDurationMs: 20_000,
+    onSegment: handleRecorderSegment,
+  })
   const [phase, setPhase] = useState<RoomPhase>('exam')
   const [questionIndex, setQuestionIndex] = useState(() => initialQuestionIndex(session))
   const [furthestIndex, setFurthestIndex] = useState(() => initialFurthestIndex(session))
@@ -263,7 +266,19 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     () => session.activeFollowUp ?? null,
   )
   /** Câu phụ tiếp theo (đã tạo phía BE) — chỉ mở sau khi SV chỉnh transcript câu phụ hiện tại. */
-  const [queuedFollowUp, setQueuedFollowUp] = useState<MockExamActiveFollowUp | null>(null)
+  const [queuedFollowUp, setQueuedFollowUp] = useState<MockExamActiveFollowUp | null>(() => {
+    const storedQueued = readMockExamQueuedFollowUp(session.sessionId)
+    if (
+      storedQueued &&
+      session.activeFollowUp?.answerId &&
+      storedQueued.answerId === session.activeFollowUp.answerId
+    ) {
+      saveMockExamQueuedFollowUp(session.sessionId, null)
+      return null
+    }
+    return storedQueued
+  })
+  const queuedFollowUpRef = useRef<MockExamActiveFollowUp | null>(queuedFollowUp)
   /** Xem lại: mic chỉ mở dưới đúng câu (chính / phụ) được chọn ghi lại. */
   const [reRecordTarget, setReRecordTarget] = useState<ReRecordTarget | null>(null)
   const reRecordTargetRef = useRef<ReRecordTarget | null>(null)
@@ -308,12 +323,21 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const activeFollowUpRef = useRef(activeFollowUp)
   /** Cache đề câu phụ theo answerId — tránh mất promptText khi xem lại. */
   const [followUpPromptByAnswerId, setFollowUpPromptByAnswerId] = useState<Record<string, string>>(
-    () =>
-      Object.fromEntries(
+    () => {
+      const init: Record<string, string> = Object.fromEntries(
         session.answers
           .filter((answer) => answer.isFollowUp && answer.answerId && answer.promptText?.trim())
           .map((answer) => [answer.answerId, answer.promptText!.trim()]),
-      ),
+      )
+      if (session.activeFollowUp?.answerId && session.activeFollowUp.prompt?.trim()) {
+        init[session.activeFollowUp.answerId] = session.activeFollowUp.prompt.trim()
+      }
+      const storedQueued = queuedFollowUp ?? readMockExamQueuedFollowUp(session.sessionId)
+      if (storedQueued?.answerId && storedQueued.prompt?.trim()) {
+        init[storedQueued.answerId] = storedQueued.prompt.trim()
+      }
+      return init
+    },
   )
   const followUpPromptByAnswerIdRef = useRef(followUpPromptByAnswerId)
   const draftSaveTimerRef = useRef<number | null>(null)
@@ -337,6 +361,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const playbackUrlRef = useRef<string | null>(null)
   const recordingSecondsRef = useRef(0)
   const finalizeLock = useRef(false)
+  const pendingFinalizeReasonRef = useRef<'manual' | 'timeout' | null>(null)
   const didAutoSubmit = useRef(false)
   const stopPromiseRef = useRef<Promise<Blob> | null>(null)
   const holdWantedRef = useRef(false)
@@ -372,11 +397,24 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     })
   }, [])
 
+  const updateQueuedFollowUp = useCallback(
+    (next: MockExamActiveFollowUp | null) => {
+      if (next?.answerId && next.prompt) {
+        rememberFollowUpPrompt(next.answerId, next.prompt)
+      }
+      queuedFollowUpRef.current = next
+      setQueuedFollowUp(next)
+      saveMockExamQueuedFollowUp(session.sessionId, next)
+    },
+    [rememberFollowUpPrompt, session.sessionId],
+  )
+
   const persistActiveFollowUp = useCallback(
     (next: MockExamActiveFollowUp | null) => {
       if (next?.answerId && next.prompt) {
         rememberFollowUpPrompt(next.answerId, next.prompt)
       }
+      activeFollowUpRef.current = next
       setActiveFollowUp(next)
       const stored = readMockExamSessionById(session.sessionId)
       if (stored) {
@@ -469,6 +507,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   }, [activeFollowUp])
 
   useEffect(() => {
+    queuedFollowUpRef.current = queuedFollowUp
+  }, [queuedFollowUp])
+
+  useEffect(() => {
     reRecordTargetRef.current = reRecordTarget
   }, [reRecordTarget])
 
@@ -519,7 +561,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       setIsReadingQuestion(true)
       void playNaturalSpeech(
         text,
-        getTtsVoiceForCourse(session?.courseCode, session?.courseName),
+        getTtsVoiceForCourse(session?.courseCode, session?.courseName, text),
         0.96,
       )
         .catch((error: unknown) => {
@@ -551,17 +593,20 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       timeTakenSeconds: number,
       transcript?: string,
       answerId?: string | null,
+      isDraftOnly = false,
     ) => {
       // Luôn gắn AnswerId khi đang trả lời câu phụ — thiếu thì BE ghi đè transcript câu chính.
+      // Khi chỉ lưu nháp (isDraftOnly = true), tuyệt đối không fallback sang reRecord hay activeFu.
       const activeFu = activeFollowUpRef.current
       const reRecord = reRecordTargetRef.current
-      const resolvedAnswerId =
-        answerId?.trim() ||
-        (reRecord?.kind === 'followUp' && reRecord.questionId === questionId
-          ? reRecord.answerId
-          : null) ||
-        (activeFu && activeFu.questionId === questionId ? activeFu.answerId : null) ||
-        null
+      const resolvedAnswerId = isDraftOnly
+        ? answerId?.trim() || null
+        : answerId?.trim() ||
+          (reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+            ? reRecord.answerId
+            : null) ||
+          (activeFu && activeFu.questionId === questionId ? activeFu.answerId : null) ||
+          null
       const submittingFollowUp = Boolean(resolvedAnswerId)
 
       const response = await mockExamService.submitAnswer(session.sessionId, {
@@ -577,9 +622,13 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       const treatAsFollowUp = response.isFollowUp || submittingFollowUp
 
       if (!treatAsFollowUp) {
+        const existingMain = answersRef.current[response.questionId]
         const stored: StoredMockExamAnswer = {
           questionId: response.questionId,
           transcript: response.transcript,
+          initialTranscript: file
+            ? response.transcript
+            : (existingMain?.initialTranscript ?? existingMain?.transcript ?? response.transcript),
           timeTakenSeconds,
           answerId: response.answerId,
           answeredAt: response.answeredAt,
@@ -607,7 +656,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           response.followUpPrompt?.trim()
         ) {
           rememberFollowUpPrompt(response.followUpAnswerId, response.followUpPrompt)
-          setQueuedFollowUp({
+          updateQueuedFollowUp({
             answerId: response.followUpAnswerId,
             questionId: response.questionId,
             parentAnswerId: response.answerId,
@@ -629,9 +678,15 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       if (promptForAnswer) {
         rememberFollowUpPrompt(followUpAnswerId, promptForAnswer)
       }
+      const existingFollowUp = followUpAnswersRef.current[followUpAnswerId]
       const storedFollowUp: StoredMockExamAnswer = {
         questionId: response.questionId,
         transcript: response.transcript,
+        initialTranscript: file
+          ? response.transcript
+          : (existingFollowUp?.initialTranscript ??
+            existingFollowUp?.transcript ??
+            response.transcript),
         timeTakenSeconds,
         answerId: followUpAnswerId,
         answeredAt: response.answeredAt,
@@ -659,7 +714,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       ) {
         // Giữ câu phụ vừa trả lời để SV chỉnh transcript; câu phụ tiếp xếp hàng.
         rememberFollowUpPrompt(response.followUpAnswerId, response.followUpPrompt)
-        setQueuedFollowUp({
+        updateQueuedFollowUp({
           answerId: response.followUpAnswerId,
           questionId: response.questionId,
           parentAnswerId: response.parentAnswerId ?? response.answerId,
@@ -668,13 +723,19 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           maxFollowUps: response.maxFollowUps > 0 ? response.maxFollowUps : 1,
         })
       } else {
-        setQueuedFollowUp(null)
+        if (
+          !isDraftOnly ||
+          !queuedFollowUpRef.current ||
+          queuedFollowUpRef.current.answerId === followUpAnswerId
+        ) {
+          updateQueuedFollowUp(null)
+        }
       }
 
       setReRecordTarget(null)
       return response
     },
-    [rememberFollowUpPrompt, replacePlayback, session.sessionId],
+    [rememberFollowUpPrompt, replacePlayback, session.sessionId, updateQueuedFollowUp],
   )
 
   const persistQuestionTranscript = useCallback(
@@ -684,7 +745,16 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       if (!answer) return true
       if (!nextTranscript) return false
       if (nextTranscript === answer.transcript.trim()) return true
-      await uploadAnswer(questionId, null, answer.timeTakenSeconds, nextTranscript)
+      const baseline = answer.initialTranscript ?? answer.transcript
+      const revision = checkTranscriptRevision(baseline, nextTranscript)
+      if (!revision.isAllowed) {
+        setAnswerError(
+          revision.reason ??
+            'VOICE_FIRST_GATE: Chỉ được hiệu đính thuật ngữ trên bản bóc băng giọng nói.',
+        )
+        return false
+      }
+      await uploadAnswer(questionId, null, answer.timeTakenSeconds, nextTranscript, null, true)
       return true
     },
     [uploadAnswer],
@@ -697,12 +767,22 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       if (!answer) return true
       if (!nextTranscript) return false
       if (nextTranscript === answer.transcript.trim()) return true
+      const baseline = answer.initialTranscript ?? answer.transcript
+      const revision = checkTranscriptRevision(baseline, nextTranscript)
+      if (!revision.isAllowed) {
+        setAnswerError(
+          revision.reason ??
+            'VOICE_FIRST_GATE: Chỉ được hiệu đính thuật ngữ trên bản bóc băng giọng nói.',
+        )
+        return false
+      }
       await uploadAnswer(
         answer.questionId,
         null,
         answer.timeTakenSeconds,
         nextTranscript,
         answerId,
+        true,
       )
       return true
     },
@@ -718,7 +798,35 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       const answer = answersRef.current[item.id]
       const nextTranscript = (draftsRef.current[item.id] ?? '').trim()
       if (!answer || !nextTranscript || nextTranscript === answer.transcript.trim()) continue
-      await uploadAnswer(item.id, null, answer.timeTakenSeconds, nextTranscript)
+      const baseline = answer.initialTranscript ?? answer.transcript
+      const revision = checkTranscriptRevision(baseline, nextTranscript)
+      if (!revision.isAllowed) {
+        throw new Error(
+          revision.reason ??
+            'VOICE_FIRST_GATE: Chỉ được hiệu đính thuật ngữ trên bản bóc băng giọng nói.',
+        )
+      }
+      await uploadAnswer(item.id, null, answer.timeTakenSeconds, nextTranscript, null, true)
+    }
+    for (const [answerId, answer] of Object.entries(followUpAnswersRef.current)) {
+      const nextTranscript = (followUpDraftsRef.current[answerId] ?? '').trim()
+      if (!answer || !nextTranscript || nextTranscript === answer.transcript.trim()) continue
+      const baseline = answer.initialTranscript ?? answer.transcript
+      const revision = checkTranscriptRevision(baseline, nextTranscript)
+      if (!revision.isAllowed) {
+        throw new Error(
+          revision.reason ??
+            'VOICE_FIRST_GATE: Chỉ được hiệu đính thuật ngữ trên bản bóc băng giọng nói.',
+        )
+      }
+      await uploadAnswer(
+        answer.questionId,
+        null,
+        answer.timeTakenSeconds,
+        nextTranscript,
+        answerId,
+        true,
+      )
     }
   }, [session.questions, uploadAnswer])
 
@@ -776,6 +884,72 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return stopping
   }, [replacePlayback, stopRecording])
 
+  const transcribeAudioWithSegments = useCallback(
+    async (
+      tailBlob: Blob,
+      questionId: string,
+      vocabularyHint?: string,
+    ): Promise<{ speech: SpeechTranscriptionResponse; uploadBlob: Blob }> => {
+      const preTranscribedPromises = [...segmentPromisesRef.current]
+      const fallbackSegmentBlob = lastSegmentBlobRef.current
+      segmentPromisesRef.current = []
+      lastSegmentBlobRef.current = null
+
+      const uploadBlob =
+        tailBlob.size >= 1_024 ? tailBlob : (fallbackSegmentBlob ?? tailBlob)
+
+      if (preTranscribedPromises.length > 0) {
+        const tailPromise =
+          tailBlob.size >= 2_048
+            ? transcribeSpeech(tailBlob, {
+                vocabularyHint,
+                fileName: `mock-answer-${questionId}-tail.webm`,
+              }).catch(() => null)
+            : Promise.resolve(null)
+
+        const segmentResults = await Promise.all([...preTranscribedPromises, tailPromise])
+        const validResults = segmentResults.filter(
+          (item): item is SpeechTranscriptionResponse =>
+            item !== null &&
+            Boolean(item.transcript?.trim()) &&
+            !isLikelySilentOrInvalidTranscript(item.transcript, 20),
+        )
+
+        if (validResults.length > 0) {
+          const joinedTranscript = validResults
+            .map((item) => item.transcript.trim())
+            .join(' ')
+            .trim()
+          const confidences = validResults
+            .map((item) => item.confidenceScore)
+            .filter((score): score is number => typeof score === 'number' && score > 0)
+          const avgConfidence =
+            confidences.length > 0
+              ? confidences.reduce((sum, val) => sum + val, 0) / confidences.length
+              : 0.9
+
+          return {
+            speech: {
+              transcript: joinedTranscript,
+              rawText: joinedTranscript,
+              provider: validResults[0].provider ?? 'CloudflareWhisper',
+              usedFallback: validResults.some((item) => item.usedFallback),
+              confidenceScore: avgConfidence,
+            },
+            uploadBlob,
+          }
+        }
+      }
+
+      const singleSpeech = await transcribeSpeech(uploadBlob, {
+        vocabularyHint,
+        fileName: `mock-answer-${questionId}.webm`,
+      })
+      return { speech: singleSpeech, uploadBlob }
+    },
+    [],
+  )
+
   const transcribeReleased = useCallback(
     async (blob: Blob) => {
       const questionId = runtimeRef.current.questionId
@@ -787,14 +961,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       setIsSendingAnswer(true)
       setAnswerError('')
       try {
-        // Chỉ STT qua /speech/stt — không gửi nguyên đề, không fallback sang BE
-        // (tránh model bịa câu trả lời / nhầm với sample answer khi im lặng).
-        const speech = await transcribeSpeech(blob, {
-          vocabularyHint: currentQuestion
-            ? buildVocabularyHint(currentQuestion)
+        // Bóc băng cuốn chiếu kết hợp phân đoạn 20s ngầm + phần đuôi để hỗ trợ trả lời dài > 2-5 phút tức thì
+        const { speech, uploadBlob } = await transcribeAudioWithSegments(
+          blob,
+          questionId,
+          currentQuestion
+            ? buildVocabularyHint(currentQuestion, session.courseCode, session.courseName)
             : undefined,
-          fileName: `mock-answer-${questionId}.webm`,
-        })
+        )
 
         const transcript = speech.transcript.trim()
         if (
@@ -802,7 +976,25 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           (typeof speech.confidenceScore === 'number' &&
             speech.confidenceScore > 0 &&
             speech.confidenceScore < 0.25) ||
-          (currentQuestion != null && looksLikeQuestionEcho(transcript, currentQuestion))
+          (() => {
+            const reRecord = reRecordTargetRef.current
+            const followUp = activeFollowUpRef.current
+            const activeFollowUpForRecording =
+              reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+                ? {
+                    prompt:
+                      followUpPromptByAnswerIdRef.current[reRecord.answerId] ??
+                      followUpAnswersRef.current[reRecord.answerId]?.promptText ??
+                      '',
+                  }
+                : followUp && followUp.questionId === questionId
+                  ? followUp
+                  : null
+            const echoTarget = activeFollowUpForRecording?.prompt
+              ? { title: currentQuestion?.title ?? '', content: activeFollowUpForRecording.prompt }
+              : currentQuestion
+            return echoTarget != null && looksLikeQuestionEcho(transcript, echoTarget)
+          })()
         ) {
           replacePlayback(null)
           setAnswerError(
@@ -819,7 +1011,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             : followUp && followUp.questionId === questionId
               ? followUp.answerId
               : null
-        await uploadAnswer(questionId, null, recordedSeconds, transcript, answerIdForUpload)
+        await uploadAnswer(questionId, uploadBlob, recordedSeconds, transcript, answerIdForUpload)
       } catch (error) {
         if (getMockExamErrorStatus(error) === 410) {
           holdWantedRef.current = false
@@ -838,7 +1030,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         setIsSendingAnswer(false)
       }
     },
-    [replacePlayback, session.questions, uploadAnswer],
+    [
+      replacePlayback,
+      session.courseCode,
+      session.courseName,
+      session.questions,
+      transcribeAudioWithSegments,
+      uploadAnswer,
+    ],
   )
 
   const applyHold = useCallback(async () => {
@@ -927,7 +1126,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   return next
                 })
               }
-              setQueuedFollowUp(null)
+              updateQueuedFollowUp(null)
               if (activeFollowUpRef.current?.questionId === questionId) {
                 persistActiveFollowUp(null)
               }
@@ -935,6 +1134,8 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             }
           }
           replacePlayback(null)
+          segmentPromisesRef.current = []
+          lastSegmentBlobRef.current = null
           await startRecording()
           recorderLiveRef.current = true
         } catch (error) {
@@ -968,6 +1169,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     session.sessionId,
     startRecording,
     transcribeReleased,
+    updateQueuedFollowUp,
   ])
 
   const requestHold = useCallback((wanted: boolean) => {
@@ -1005,30 +1207,50 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       const submitPendingAudio = async (blob: Blob, questionId: string, seconds: number) => {
         const currentQuestion =
           session.questions.find((item) => item.id === questionId) ?? null
-        const speech = await transcribeSpeech(blob, {
-          vocabularyHint: currentQuestion
-            ? buildVocabularyHint(currentQuestion)
+        const { speech, uploadBlob } = await transcribeAudioWithSegments(
+          blob,
+          questionId,
+          currentQuestion
+            ? buildVocabularyHint(currentQuestion, session.courseCode, session.courseName)
             : undefined,
-          fileName: `mock-answer-${questionId}.webm`,
-        })
+        )
         const transcript = speech.transcript.trim()
         if (
           isLikelySilentOrInvalidTranscript(transcript, seconds) ||
           (typeof speech.confidenceScore === 'number' &&
             speech.confidenceScore > 0 &&
             speech.confidenceScore < 0.25) ||
-          (currentQuestion != null && looksLikeQuestionEcho(transcript, currentQuestion))
+          (() => {
+            const reRecord = reRecordTargetRef.current
+            const followUp = activeFollowUpRef.current
+            const activeFollowUpForRecording =
+              reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+                ? {
+                    prompt:
+                      followUpPromptByAnswerIdRef.current[reRecord.answerId] ??
+                      followUpAnswersRef.current[reRecord.answerId]?.promptText ??
+                      '',
+                  }
+                : followUp && followUp.questionId === questionId
+                  ? followUp
+                  : null
+            const echoTarget = activeFollowUpForRecording?.prompt
+              ? { title: currentQuestion?.title ?? '', content: activeFollowUpForRecording.prompt }
+              : currentQuestion
+            return echoTarget != null && looksLikeQuestionEcho(transcript, echoTarget)
+          })()
         ) {
           return
         }
+        const reRecord = reRecordTargetRef.current
         const followUp = activeFollowUpRef.current
-        await uploadAnswer(
-          questionId,
-          null,
-          seconds,
-          transcript,
-          followUp && followUp.questionId === questionId ? followUp.answerId : null,
-        )
+        const targetAnswerId =
+          reRecord?.kind === 'followUp' && reRecord.questionId === questionId
+            ? reRecord.answerId
+            : followUp && followUp.questionId === questionId
+              ? followUp.answerId
+              : null
+        await uploadAnswer(questionId, uploadBlob, seconds, transcript, targetAnswerId)
       }
 
       try {
@@ -1070,29 +1292,71 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         }
 
         const result = await mockExamService.submitSession(session.sessionId)
+        pendingFinalizeReasonRef.current = null
         clearMockExamSession(session.sessionId)
         stopSpeechPlayback()
         setScorecard(result)
         setPhase('scorecard')
         runtimeRef.current.phase = 'scorecard'
       } catch (error) {
+        const status = getMockExamErrorStatus(error)
+        if (status === 404 || status === 409) {
+          pendingFinalizeReasonRef.current = null
+          clearMockExamSession(session.sessionId)
+        } else {
+          pendingFinalizeReasonRef.current = reason
+        }
         finalizeLock.current = false
         closingRef.current = false
+        didAutoSubmit.current = false
         setPhase('exam')
         runtimeRef.current.phase = 'exam'
-        const message = getMockExamErrorDetail(error, 'Không thể nộp bài thi thử.')
+        const message = getMockExamErrorDetail(
+          error,
+          'Không thể nộp bài thi thử ngay lúc này (hệ thống đã lưu các câu trả lời đã thu âm và sẽ tự động chấm bù). Bạn có thể ở lại thử nộp lại hoặc thoát về phòng chờ.',
+        )
         setSubmitError(message)
         warningOpenRef.current = true
+        warningResolveRef.current = (shouldExit) => {
+          if (shouldExit) {
+            pendingFinalizeReasonRef.current = null
+            clearMockExamSession(session.sessionId)
+            stopSpeechPlayback()
+            navigate('/mock-exam', { replace: true })
+          }
+        }
         setWarning({
-          title: 'Không nộp được bài',
+          title: 'Chưa thể hoàn tất chấm điểm ngay lúc này',
           message,
-          confirmLabel: 'Đã hiểu',
+          confirmLabel: 'Thoát về phòng chờ',
+          cancelLabel: 'Ở lại thử lại',
           tone: 'danger',
         })
       }
     },
-    [finishRecording, flushDirtyTranscripts, session.questions, session.sessionId, uploadAnswer],
+    [
+      finishRecording,
+      flushDirtyTranscripts,
+      navigate,
+      session.courseCode,
+      session.courseName,
+      session.questions,
+      session.sessionId,
+      transcribeAudioWithSegments,
+      uploadAnswer,
+    ],
   )
+
+  useEffect(() => {
+    const onOnline = () => {
+      const pendingReason = pendingFinalizeReasonRef.current
+      if (pendingReason && runtimeRef.current.phase === 'exam' && !finalizeLock.current) {
+        void finalizeExamRef.current(pendingReason)
+      }
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [])
 
   useEffect(() => {
     applyHoldRef.current = applyHold
@@ -1297,7 +1561,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         if (!confirmed) return
       }
       persistActiveFollowUp(null)
-      setQueuedFollowUp(null)
+      updateQueuedFollowUp(null)
     }
     if (question && savedAnswer) {
       const mainDraft = (draftsRef.current[question.id] ?? '').trim()
@@ -1336,6 +1600,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     }
     const nextQuestion = session.questions[nextIndex]
     if (nextQuestion) runtimeRef.current.questionId = nextQuestion.id
+    if (queuedFollowUpRef.current && queuedFollowUpRef.current.questionId !== nextQuestion?.id) {
+      updateQueuedFollowUp(null)
+    }
     replacePlayback(null)
     setAnswerError('')
     setRecordedSeconds(0)
@@ -1354,7 +1621,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   const advanceToNextMainQuestion = async () => {
     persistActiveFollowUp(null)
-    setQueuedFollowUp(null)
+    updateQueuedFollowUp(null)
     replacePlayback(null)
     setAnswerError('')
     setRecordedSeconds(0)
@@ -1390,8 +1657,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         }
       }
     }
-    const next = queuedFollowUp
-    setQueuedFollowUp(null)
+    const next = queuedFollowUpRef.current ?? queuedFollowUp
+    if (!next) return
+    updateQueuedFollowUp(null)
     persistActiveFollowUp(next)
     replacePlayback(null)
     setAnswerError('')
@@ -1425,9 +1693,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       }
     }
 
-    if (queuedFollowUp) {
-      persistActiveFollowUp(queuedFollowUp)
-      setQueuedFollowUp(null)
+    const nextQueued = queuedFollowUpRef.current ?? queuedFollowUp
+    if (nextQueued) {
+      persistActiveFollowUp(nextQueued)
+      updateQueuedFollowUp(null)
       replacePlayback(null)
       setAnswerError('')
       setRecordedSeconds(0)
@@ -1441,10 +1710,16 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     if (isRecording || isSendingAnswer) return
     const savedCount = session.questions.filter((item) => answers[item.id]).length
     const unanswered = session.questions.length - savedCount
-    if (unanswered > 0) {
+    const hasPendingFollowUp =
+      Boolean(activeFollowUp && !savedFollowUpAnswer) || Boolean(queuedFollowUp)
+    if (unanswered > 0 || hasPendingFollowUp) {
+      const warningMessage =
+        unanswered > 0
+          ? `Còn ${unanswered} câu chưa trả lời${hasPendingFollowUp ? ' (kèm câu hỏi phụ hiện tại chưa hoàn thành)' : ''}. Những câu chính chưa trả lời sẽ được tính 0 điểm.`
+          : 'Câu hỏi phụ hiện tại chưa trả lời và sẽ bị bỏ qua khi nộp bài.'
       const confirmed = await askWarning({
-        title: 'Nộp khi còn câu chưa làm?',
-        message: `Còn ${unanswered} câu chưa trả lời. Những câu này được tính 0 điểm.`,
+        title: unanswered > 0 ? 'Nộp khi còn câu chưa làm?' : 'Bỏ qua câu phụ và nộp bài?',
+        message: warningMessage,
         confirmLabel: 'Vẫn nộp bài',
         cancelLabel: 'Quay lại',
         tone: 'danger',
@@ -1464,21 +1739,29 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     } finally {
       setIsSendingAnswer(false)
     }
+    persistActiveFollowUp(null)
+    updateQueuedFollowUp(null)
     void finalizeExam('manual')
   }
 
   const leaveRoom = async () => {
+    const isExpiredOrErrored = secondsLeft <= 0 || Boolean(submitError) || Boolean(answerError)
     const confirmed = await askWarning({
       title: 'Rời phòng thi?',
-      message:
-        'Đồng hồ máy chủ vẫn tiếp tục chạy. Bạn có thể quay lại phòng thi trước khi hết giờ.',
+      message: isExpiredOrErrored
+        ? 'Các câu trả lời đã thu âm trên máy chủ đã được lưu an toàn để chấm bù. Bạn có muốn đóng phiên này trên trình duyệt và quay về phòng chờ không?'
+        : 'Đồng hồ máy chủ vẫn tiếp tục chạy. Bạn có thể quay lại phòng thi trước khi hết giờ.',
       confirmLabel: 'Rời phòng',
       cancelLabel: 'Ở lại',
       tone: 'warning',
     })
     if (!confirmed) return
+    if (isExpiredOrErrored) {
+      pendingFinalizeReasonRef.current = null
+      clearMockExamSession(session.sessionId)
+    }
     stopSpeechPlayback()
-    navigate('/mock-exam')
+    navigate('/mock-exam', { replace: true })
   }
 
   const warningDialog = warning ? (
@@ -1762,7 +2045,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   {isSendingAnswer && isMicOpenForMain && !savedAnswer ? (
                     <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                       <LoaderCircle className="size-4 animate-spin" />
-                      Đang nhận diện giọng nói tiếng Việt…
+                      Đang nhận diện giọng nói (Việt / Anh)…
                     </div>
                   ) : savedAnswer || isMicOpenForMain ? (
                     <textarea
@@ -2155,7 +2438,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     : isSendingAnswer
                       ? activeFollowUp
                         ? 'Đang nhận diện câu trả lời phụ…'
-                        : 'Đang nhận diện giọng nói tiếng Việt…'
+                        : 'Đang nhận diện giọng nói (Việt / Anh)…'
                       : 'Nhấn để bắt đầu ghi âm'}
                 </p>
                 <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
@@ -2186,7 +2469,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   {isSendingAnswer && !savedAnswer ? (
                     <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                       <LoaderCircle className="size-4 animate-spin" />
-                      Đang nhận diện giọng nói tiếng Việt…
+                      Đang nhận diện giọng nói (Việt / Anh)…
                     </div>
                   ) : (
                     <textarea
@@ -2381,28 +2664,15 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     <ArrowRight className="size-4" />
                   </button>
                 )}
-                {!activeFollowUp && savedAnswer && !queuedFollowUp && isLastQuestion && (
-                  <button
-                    type="button"
-                    data-space-ignore="true"
-                    onClick={handleSubmit}
-                    disabled={isRecording || isSendingAnswer}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
-                  >
-                    Nộp bài
-                  </button>
-                )}
-                {!activeFollowUp && !savedAnswer && isLastQuestion && (
-                  <button
-                    type="button"
-                    data-space-ignore="true"
-                    onClick={handleSubmit}
-                    disabled={isRecording || isSendingAnswer}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] disabled:opacity-40"
-                  >
-                    Nộp bài
-                  </button>
-                )}
+                <button
+                  type="button"
+                  data-space-ignore="true"
+                  onClick={() => void handleSubmit()}
+                  disabled={isRecording || isSendingAnswer}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition hover:bg-[#0F2854] disabled:opacity-40"
+                >
+                  Nộp bài
+                </button>
               </div>
             </div>
           </section>

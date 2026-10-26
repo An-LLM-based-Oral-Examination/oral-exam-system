@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  ShieldCheck,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -109,7 +110,15 @@ function canManageQuestion(
   role: UserRole | undefined,
   userId: string | undefined,
 ) {
-  if (role === 'Admin') return true
+  const rawRole = String(role ?? '')
+  if (
+    rawRole === 'Admin' ||
+    rawRole === 'admin' ||
+    rawRole === 'DepartmentHead' ||
+    rawRole === 'department_head'
+  ) {
+    return true
+  }
   return Boolean(userId && question.submittedBy?.toLowerCase() === userId.toLowerCase())
 }
 
@@ -129,6 +138,13 @@ function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
 
 export function QuestionStudioPage() {
   const { user } = useAuth()
+  const rawRole = String(user?.role ?? '')
+  const canReviewQuestions =
+    rawRole === 'DepartmentHead' ||
+    rawRole === 'Admin' ||
+    rawRole === 'department_head' ||
+    rawRole === 'admin'
+
   const [questions, setQuestions] = useState<QuestionSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
@@ -145,10 +161,12 @@ export function QuestionStudioPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [submissionNotes, setSubmissionNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [detail, setDetail] = useState<QuestionDetail | null>(null)
+  const [selectedQuestion, setSelectedQuestion] = useState<QuestionDetail | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [reviewNotes, setReviewNotes] = useState('')
+  const [isReviewing, setIsReviewing] = useState(false)
   const closeDetailButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -166,7 +184,8 @@ export function QuestionStudioPage() {
           result.items
             .filter(
               (question) =>
-                question.approvalStatus === 'DRAFT' &&
+                (question.approvalStatus === 'DRAFT' ||
+                  question.approvalStatus === 'NEEDS_REVISION') &&
                 canManageQuestion(question, user?.role, user?.id),
             )
             .map(({ id }) => id),
@@ -210,7 +229,12 @@ export function QuestionStudioPage() {
   const selectedCourseId = selectedQuestions[0]?.courseId
   const draftQuestions = questions.filter(
     (question) =>
-      question.approvalStatus === 'DRAFT' && canManageQuestion(question, user?.role, user?.id),
+      (question.approvalStatus === 'DRAFT' || question.approvalStatus === 'NEEDS_REVISION') &&
+      canManageQuestion(question, user?.role, user?.id),
+  )
+  const pendingReviewQuestions = useMemo(
+    () => questions.filter((question) => question.approvalStatus === 'SUBMITTED_FOR_REVIEW'),
+    [questions],
   )
   const allSelectableDraftsChecked =
     draftQuestions.length > 0 &&
@@ -232,7 +256,7 @@ export function QuestionStudioPage() {
   }
 
   const toggleQuestion = (question: QuestionSummary) => {
-    if (question.approvalStatus !== 'DRAFT') return
+    if (question.approvalStatus !== 'DRAFT' && question.approvalStatus !== 'NEEDS_REVISION') return
     if (!canManageQuestion(question, user?.role, user?.id)) {
       setNotice('Bạn chỉ có thể gửi thẩm định các bản nháp do chính mình tạo.')
       return
@@ -270,10 +294,13 @@ export function QuestionStudioPage() {
   const openDetail = async (questionId: string) => {
     setIsDetailOpen(true)
     setIsDetailLoading(true)
-    setDetail(null)
+    setSelectedQuestion(null)
     setDetailError('')
+    setReviewNotes('')
     try {
-      setDetail(await questionService.getQuestionById(questionId))
+      const loaded = await questionService.getQuestionById(questionId)
+      setSelectedQuestion(loaded)
+      setReviewNotes(loaded.reviewNotes ?? '')
     } catch (loadError) {
       setDetailError(getErrorMessage(loadError))
     } finally {
@@ -317,6 +344,112 @@ export function QuestionStudioPage() {
     }
   }
 
+  const handleSubmitSingleFromDrawer = async () => {
+    if (!selectedQuestion || isSubmitting) return
+    setIsSubmitting(true)
+    setDetailError('')
+    setError('')
+    setNotice('')
+    try {
+      const result = await questionService.batchSubmitReview(
+        [selectedQuestion.id],
+        selectedQuestion.courseId,
+        submissionNotes.trim() || 'Gửi Trưởng Bộ môn thẩm định từ chi tiết câu hỏi.',
+        user?.id,
+      )
+      const updatedDetail: QuestionDetail = {
+        ...selectedQuestion,
+        approvalStatus: result.approvalStatus,
+      }
+      setSelectedQuestion(updatedDetail)
+      setQuestions((current) =>
+        current.map((item) =>
+          item.id === selectedQuestion.id
+            ? { ...item, approvalStatus: result.approvalStatus }
+            : item,
+        ),
+      )
+      setNotice(result.message || 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.')
+    } catch (submitError) {
+      setDetailError(getErrorMessage(submitError))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleReviewDecision = async (
+    decision: 'APPROVED' | 'NEEDS_REVISION' | 'REJECTED',
+  ) => {
+    if (!selectedQuestion || isReviewing) return
+    if (
+      (decision === 'NEEDS_REVISION' || decision === 'REJECTED') &&
+      reviewNotes.trim().length < 10
+    ) {
+      setDetailError(
+        'Vui lòng nhập nhận xét/góp ý tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối câu hỏi.',
+      )
+      return
+    }
+
+    setIsReviewing(true)
+    setDetailError('')
+    setError('')
+    setNotice('')
+    try {
+      const updated = await questionService.reviewDecision(selectedQuestion.id, {
+        decision,
+        reviewNotes: reviewNotes.trim() || undefined,
+        reviewerId: user?.id,
+      })
+      setSelectedQuestion(updated)
+      setReviewNotes(updated.reviewNotes ?? '')
+      setQuestions((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? {
+                ...item,
+                approvalStatus: updated.approvalStatus,
+                approvedBy: updated.approvedBy,
+              }
+            : item,
+        ),
+      )
+      const decisionLabel =
+        decision === 'APPROVED'
+          ? 'Đã phê duyệt câu hỏi vào ngân hàng đề.'
+          : decision === 'NEEDS_REVISION'
+            ? 'Đã gửi yêu cầu chỉnh sửa câu hỏi cho giảng viên.'
+            : 'Đã từ chối câu hỏi.'
+      setNotice(decisionLabel)
+    } catch (reviewError) {
+      setDetailError(getErrorMessage(reviewError))
+    } finally {
+      setIsReviewing(false)
+    }
+  }
+
+  const handleBatchApprovePending = async () => {
+    if (!canReviewQuestions || pendingReviewQuestions.length === 0 || isReviewing) return
+    setIsReviewing(true)
+    setError('')
+    setNotice('')
+    try {
+      const targetIds = pendingReviewQuestions.map((item) => item.id)
+      const result = await questionService.batchApprove(targetIds)
+      setQuestions((current) =>
+        current.map((item) =>
+          targetIds.includes(item.id) ? { ...item, approvalStatus: 'APPROVED' } : item,
+        ),
+      )
+      setNotice(`Đã phê duyệt nhanh ${result.approvedCount} câu hỏi chờ duyệt.`)
+      setReloadKey((key) => key + 1)
+    } catch (approveError) {
+      setError(getErrorMessage(approveError))
+    } finally {
+      setIsReviewing(false)
+    }
+  }
+
   return (
     <div className={ds.page}>
       <section className={cn(ds.banner, 'p-5 sm:p-6')}>
@@ -327,18 +460,13 @@ export function QuestionStudioPage() {
               <BookOpenCheck className="size-4" aria-hidden="true" />
               MF-03 · Ngân hàng đề & Rubric
             </div>
-            <h1 className={ds.bannerTitle}>
-              Ngân hàng câu hỏi của giảng viên
-            </h1>
+            <h1 className={ds.bannerTitle}>Ngân hàng câu hỏi của giảng viên</h1>
             <p className={ds.bannerText}>
               Biên soạn câu hỏi thủ công hoặc bằng AI, kiểm tra Barem Rubric đúng 10.0 điểm và gửi
               Trưởng Bộ môn thẩm định trước khi đưa vào ngân hàng đề chính thức.
             </p>
           </div>
-          <Link
-            to="/question-bank/create"
-            className={cn(ds.bannerButton, 'shrink-0')}
-          >
+          <Link to="/question-bank/create" className={cn(ds.bannerButton, 'shrink-0')}>
             <Plus className="size-4" aria-hidden="true" />
             Tạo câu hỏi & Rubric
           </Link>
@@ -496,7 +624,22 @@ export function QuestionStudioPage() {
               {isLoading ? 'Đang đồng bộ...' : `${totalCount} câu hỏi phù hợp bộ lọc`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canReviewQuestions && pendingReviewQuestions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleBatchApprovePending()}
+                disabled={isReviewing}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#197158] px-3 text-xs font-bold text-white transition hover:bg-[#135a46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#197158] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isReviewing ? (
+                  <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <ShieldCheck className="size-3.5" aria-hidden="true" />
+                )}
+                Phê duyệt nhanh các câu chờ duyệt ({pendingReviewQuestions.length})
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleAllDrafts}
@@ -547,7 +690,8 @@ export function QuestionStudioPage() {
               const isSelected = selectedIds.has(question.id)
               const isOwned = canManageQuestion(question, user?.role, user?.id)
               const canSelect =
-                question.approvalStatus === 'DRAFT' &&
+                (question.approvalStatus === 'DRAFT' ||
+                  question.approvalStatus === 'NEEDS_REVISION') &&
                 isOwned &&
                 (!selectedCourseId || selectedCourseId === question.courseId || isSelected)
 
@@ -697,35 +841,44 @@ export function QuestionStudioPage() {
                   Đang tải chi tiết...
                 </p>
               </div>
-            ) : detailError ? (
+            ) : detailError && !selectedQuestion ? (
               <div className="m-5 rounded-2xl border border-[#efc8cc] bg-[#fff5f6] p-4 text-sm text-[#a43c47]">
                 <p className="flex items-start gap-2 font-semibold">
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
                   {detailError}
                 </p>
               </div>
-            ) : detail ? (
+            ) : selectedQuestion ? (
               <div className="space-y-4 p-4 sm:p-5">
+                {detailError && (
+                  <div className="rounded-2xl border border-[#efc8cc] bg-[#fff5f6] p-3.5 text-xs font-semibold text-[#a43c47]">
+                    <p className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                      <span>{detailError}</span>
+                    </p>
+                  </div>
+                )}
+
                 <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs font-bold text-[#1C4D8D]">
-                      {detail.courseCode}
+                      {selectedQuestion.courseCode}
                     </span>
-                    <StatusBadge status={detail.approvalStatus} />
+                    <StatusBadge status={selectedQuestion.approvalStatus} />
                     <span className="rounded-full bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#6558c8]">
-                      {detail.bloomLevel}
+                      {selectedQuestion.bloomLevel}
                     </span>
                   </div>
                   <h3 className="mt-3 text-base leading-snug font-bold text-[#182a45]">
-                    {detail.title}
+                    {selectedQuestion.title}
                   </h3>
                   <QuestionImage
-                    imageUrl={detail.imageUrl}
-                    imageAlt={detail.imageAlt}
+                    imageUrl={selectedQuestion.imageUrl}
+                    imageAlt={selectedQuestion.imageAlt}
                     className="mt-4"
                   />
                   <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-[#586a82]">
-                    {detail.content}
+                    {selectedQuestion.content}
                   </p>
                 </section>
 
@@ -736,22 +889,22 @@ export function QuestionStudioPage() {
                         Barem Rubric
                       </p>
                       <h3 className="mt-1 text-sm font-bold text-[#0F2854]">
-                        {detail.rubric.name}
+                        {selectedQuestion.rubric.name}
                       </h3>
                     </div>
                     <span
                       className={cn(
                         'rounded-xl px-3 py-2 text-sm font-black',
-                        detail.rubric.totalMaxScore === 10
+                        selectedQuestion.rubric.totalMaxScore === 10
                           ? 'bg-[#eaf9f4] text-[#14765c]'
                           : 'bg-[#fff0f1] text-[#ae3945]',
                       )}
                     >
-                      {detail.rubric.totalMaxScore.toFixed(1)} / 10
+                      {selectedQuestion.rubric.totalMaxScore.toFixed(1)} / 10
                     </span>
                   </div>
                   <div className="mt-4 space-y-2">
-                    {detail.rubric.criteria.map((criterion, index) => (
+                    {selectedQuestion.rubric.criteria.map((criterion, index) => (
                       <div
                         key={criterion.id}
                         className="rounded-xl border border-[#e3e9f1] bg-white p-3"
@@ -779,29 +932,104 @@ export function QuestionStudioPage() {
                     Model Answer
                   </p>
                   <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#586a82]">
-                    {detail.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
+                    {selectedQuestion.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
                   </p>
                 </section>
 
-                {detail.reviewNotes && (
+                {selectedQuestion.reviewNotes && (
                   <section className="rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4">
                     <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
                       <Sparkles className="size-4" />
                       Phản hồi của Trưởng Bộ môn
                     </p>
                     <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap text-[#755826]">
-                      {detail.reviewNotes}
+                      {selectedQuestion.reviewNotes}
                     </p>
                   </section>
                 )}
 
-                {(detail.approvalStatus === 'DRAFT' ||
-                  detail.approvalStatus === 'NEEDS_REVISION') && (
-                  <section className="rounded-2xl border border-[#4988C4]/45 bg-[#4988C4]/16 p-4 text-xs leading-relaxed text-[#62748c]">
-                    Backend hiện chưa cung cấp API cập nhật bản nháp. Màn hình này chỉ hiển thị nội
-                    dung đã lưu và không mô phỏng thao tác chỉnh sửa.
+                {(selectedQuestion.approvalStatus === 'DRAFT' ||
+                  selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
+                  <section className="space-y-3 rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-bold tracking-[0.07em] text-[#1C4D8D] uppercase">
+                      Trình thẩm định Bộ môn
+                    </p>
+                    <p className="text-xs leading-relaxed text-[#586a82]">
+                      Câu hỏi đang ở trạng thái{' '}
+                      <strong>
+                        {selectedQuestion.approvalStatus === 'DRAFT' ? 'Bản nháp' : 'Cần chỉnh sửa'}
+                      </strong>
+                      . Bạn có thể gửi trực tiếp câu hỏi này lên Trưởng Bộ môn để phê duyệt.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => void handleSubmitSingleFromDrawer()}
+                      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white transition hover:bg-[#0F2854] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSubmitting ? (
+                        <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <Send className="size-3.5" />
+                      )}
+                      Gửi Trưởng BM duyệt
+                    </button>
                   </section>
                 )}
+
+                {canReviewQuestions &&
+                  (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
+                    selectedQuestion.approvalStatus === 'DRAFT' ||
+                    selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
+                    <section className="space-y-3 rounded-2xl border border-[#4988C4] bg-[#F4FBFD] p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="size-4 text-[#1C4D8D]" />
+                        <h3 className="text-xs font-bold tracking-[0.06em] text-[#0F2854] uppercase">
+                          Phê duyệt của Trưởng Bộ môn (MF-03)
+                        </h3>
+                      </div>
+                      <label className="block">
+                        <span className="text-xs font-semibold text-[#52647d]">
+                          Nhận xét thẩm định / Lý do yêu cầu chỉnh sửa hoặc từ chối
+                        </span>
+                        <textarea
+                          value={reviewNotes}
+                          onChange={(event) => setReviewNotes(event.target.value)}
+                          placeholder="Nhập nhận xét chuyên môn hoặc góp ý chỉnh sửa Barem Rubric (tối thiểu 10 ký tự khi yêu cầu sửa/từ chối)..."
+                          className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white p-3 text-xs text-[#0F2854] outline-none focus:border-[#1C4D8D]"
+                        />
+                      </label>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <button
+                          type="button"
+                          disabled={isReviewing}
+                          onClick={() => void handleReviewDecision('APPROVED')}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#197158] px-3 text-xs font-bold text-white transition hover:bg-[#135a46] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Phê duyệt (APPROVED)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isReviewing}
+                          onClick={() => void handleReviewDecision('NEEDS_REVISION')}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#b86b14] px-3 text-xs font-bold text-white transition hover:bg-[#96550d] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <RefreshCw className="size-3.5" />
+                          Yêu cầu sửa (NEEDS_REVISION)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isReviewing}
+                          onClick={() => void handleReviewDecision('REJECTED')}
+                          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#b33d52] px-3 text-xs font-bold text-white transition hover:bg-[#932c3f] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <X className="size-3.5" />
+                          Từ chối (REJECTED)
+                        </button>
+                      </div>
+                    </section>
+                  )}
               </div>
             ) : null}
           </aside>

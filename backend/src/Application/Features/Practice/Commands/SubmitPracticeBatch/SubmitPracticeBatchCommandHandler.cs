@@ -1,6 +1,7 @@
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
 using System;
 using System.Linq;
@@ -34,27 +35,10 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         }
 
         // Lazy Inactivity Timeout Check (5 phút)
-        var timeoutConfig = await _context.SystemConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
-        int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout))
-            ? parsedTimeout
-            : 5;
-
-        var elapsed = DateTime.UtcNow - session.LastActivityAt;
-        if (elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
+        if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            if (session.Status == "in_progress")
-            {
-                session.Status = "completed";
-                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-
-            if (session.Status == "completed")
-            {
-                return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
-            }
+            return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
         }
 
         if (session.Status != "in_progress")
@@ -88,11 +72,6 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
                 return Result<Unit>.Failure("VALIDATION: Mã câu hỏi (QuestionId) trong danh sách nộp hàng loạt không hợp lệ.");
             }
 
-            if (string.IsNullOrWhiteSpace(answerDto.AnswerText))
-            {
-                return Result<Unit>.Failure("VALIDATION: Nội dung câu trả lời trong danh sách nộp hàng loạt không được để trống.");
-            }
-
             if (session.SelectedQuestionIds.Count > 0 && !session.SelectedQuestionIds.Contains(answerDto.QuestionId))
             {
                 return Result<Unit>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
@@ -116,39 +95,101 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             .Select(g => g.Last())
             .ToList();
 
+        if (session.SelectedQuestionIds.Count > 0)
+        {
+            var submittedIds = deduplicatedAnswers.Select(a => a.QuestionId).ToHashSet();
+            foreach (var selectedQId in session.SelectedQuestionIds)
+            {
+                if (!submittedIds.Contains(selectedQId))
+                {
+                    deduplicatedAnswers.Add(new BatchAnswerDto(selectedQId, string.Empty, false, null));
+                }
+            }
+        }
+
+        var skippedQuestionIds = deduplicatedAnswers
+            .Where(a => string.IsNullOrWhiteSpace(a.AnswerText))
+            .Select(a => a.QuestionId)
+            .Distinct()
+            .ToList();
+
+        var skippedQuestionsWithRubrics = skippedQuestionIds.Count > 0
+            ? await _context.PracticeQuestions
+                .AsNoTracking()
+                .Include(q => q.Rubric)
+                    .ThenInclude(r => r.Criteria)
+                .Where(q => skippedQuestionIds.Contains(q.Id))
+                .ToDictionaryAsync(q => q.Id, cancellationToken)
+            : new Dictionary<Guid, PracticeQuestion>();
+
         // 2. Prepare Entities for Bulk Insert
         var answers = new List<PracticeAnswer>();
-        var gradingTasks = new List<GradingTask>();
+        var skippedEvaluations = new List<AiEvaluation>();
+        var pendingQueuePairs = new List<(GradingTask Task, PracticeAnswer Answer)>();
 
         foreach (var answerDto in deduplicatedAnswers)
         {
+            var isSkipped = string.IsNullOrWhiteSpace(answerDto.AnswerText);
             var answer = new PracticeAnswer
             {
                 SessionId = request.SessionId,
                 QuestionId = answerDto.QuestionId,
                 StudentId = request.StudentId,
-                AnswerText = answerDto.AnswerText,
-                IsFollowUp = answerDto.IsFollowUp,
-                ParentAnswerId = answerDto.ParentAnswerId,
-                Status = "pending",
+                AnswerText = isSkipped ? string.Empty : answerDto.AnswerText.Trim(),
+                IsFollowUp = false,
+                ParentAnswerId = null,
+                Status = isSkipped ? "graded" : "pending",
                 SubmittedAt = DateTime.UtcNow
             };
 
             answers.Add(answer);
-            
-            // Queue Tasks
-            gradingTasks.Add(new GradingTask
+
+            if (isSkipped)
             {
-                AnswerId = answer.Id,
-                SessionId = session.Id,
-                QuestionId = answerDto.QuestionId,
-                StudentId = request.StudentId,
-                AnswerText = answerDto.AnswerText,
-                IsFollowUp = answerDto.IsFollowUp,
-                ParentAnswerId = answerDto.ParentAnswerId,
-                IsFullSession = true,
-                ConnectionId = string.Empty
-            });
+                var eval = new AiEvaluation
+                {
+                    AnswerType = "practice",
+                    PracticeAnswerId = answer.Id,
+                    TotalScore = 0.0m,
+                    ConfidenceScore = 1.0m,
+                    Feedback = "Sinh viên bỏ qua câu hỏi này (0.0/10đ).",
+                    CotTrace = "[SKIPPED_QUESTION] Câu hỏi bị bỏ qua trong phiên Full-Session Progressive nên được tính 0.0 điểm.",
+                    EvaluatedAt = DateTime.UtcNow
+                };
+
+                if (skippedQuestionsWithRubrics.TryGetValue(answerDto.QuestionId, out var skippedQ) && skippedQ.Rubric?.Criteria != null)
+                {
+                    foreach (var crit in skippedQ.Rubric.Criteria.OrderBy(c => c.OrderIndex))
+                    {
+                        eval.Details.Add(new AiEvaluationDetail
+                        {
+                            EvaluationId = eval.Id,
+                            CriterionId = crit.Id,
+                            Score = 0.0m,
+                            Comment = "Chưa trả lời tiêu chí này (0 điểm)."
+                        });
+                    }
+                }
+
+                skippedEvaluations.Add(eval);
+            }
+            else
+            {
+                var task = new GradingTask
+                {
+                    AnswerId = answer.Id,
+                    SessionId = session.Id,
+                    QuestionId = answerDto.QuestionId,
+                    StudentId = request.StudentId,
+                    AnswerText = answer.AnswerText,
+                    IsFollowUp = false,
+                    ParentAnswerId = null,
+                    IsFullSession = true,
+                    ConnectionId = string.Empty
+                };
+
+                pendingQueuePairs.Add((task, answer));
+            }
         }
 
         // 3. Update Session Status
@@ -158,10 +199,14 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
 
         // 4. Bulk Insert & Save
         _context.PracticeAnswers.AddRange(answers);
+        if (skippedEvaluations.Count > 0)
+        {
+            _context.AiEvaluations.AddRange(skippedEvaluations);
+        }
         await _context.SaveChangesAsync(cancellationToken); // 1 Transaction cho tất cả
 
-        // 5. Đẩy vào Hàng đợi BoundedChannel
-        foreach (var (task, answer) in gradingTasks.Zip(answers))
+        // 5. Đẩy vào Hàng đợi BoundedChannel (chỉ đẩy các câu có nội dung trả lời)
+        foreach (var (task, answer) in pendingQueuePairs)
         {
             task.AnswerId = answer.Id; // Ensure Id is set after save
             await _queueChannel.EnqueueAsync(task, cancellationToken);

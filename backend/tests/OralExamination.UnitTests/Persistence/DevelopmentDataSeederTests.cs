@@ -46,6 +46,9 @@ public class DevelopmentDataSeederTests
         var practiceSessionsAfterFirst = await context.PracticeSessions.CountAsync();
         var mockSessionsAfterFirst = await context.MockExamSessions.CountAsync();
 
+        practiceSessionsAfterFirst.Should().Be(0, "SeedAsync mặc định không được chèn sẵn phiên PracticeSession lịch sử");
+        mockSessionsAfterFirst.Should().Be(0, "SeedAsync mặc định không được chèn sẵn phiên MockExamSession lịch sử");
+
         // Lần chạy 2
         await DevelopmentDataSeeder.SeedAsync(context);
 
@@ -54,8 +57,8 @@ public class DevelopmentDataSeederTests
         (await context.Rubrics.CountAsync()).Should().Be(rubricsCountAfterFirst);
         (await context.RubricCriteria.CountAsync()).Should().Be(criteriaCountAfterFirst);
         (await context.ExamStructures.CountAsync()).Should().Be(structuresCountAfterFirst);
-        (await context.PracticeSessions.CountAsync()).Should().Be(practiceSessionsAfterFirst);
-        (await context.MockExamSessions.CountAsync()).Should().Be(mockSessionsAfterFirst);
+        (await context.PracticeSessions.CountAsync()).Should().Be(0);
+        (await context.MockExamSessions.CountAsync()).Should().Be(0);
     }
 
     [Fact(DisplayName = "2. SeedAsync khởi tạo đầy đủ 3 học phần PRN231, SWD392, SWR302 kèm Rubric 10.0đ, ExamStructure và 12 câu hỏi (4 Easy, 4 Medium, 4 Hard) mỗi môn")]
@@ -181,8 +184,8 @@ public class DevelopmentDataSeederTests
         }
     }
 
-    [Fact(DisplayName = "4. SeedAsync tạo sẵn lịch sử PracticeSession và MockExamSession đã chấm điểm kèm Scorecard chi tiết cho mọi sinh viên")]
-    public async Task SeedAsync_Should_Create_Graded_Practice_And_MockExam_History_For_Students()
+    [Fact(DisplayName = "4. SeedAsync giữ lịch sử sinh viên rỗng cho UAT sạch, và SeedStudentPracticeAndMockExamHistoryAsync tạo sẵn lịch sử kèm Scorecard chi tiết cho mọi sinh viên khi cần")]
+    public async Task SeedAsync_Should_Keep_History_Empty_And_SeedStudentPracticeAndMockExamHistoryAsync_Should_Populate_History()
     {
         await using var context = CreateInMemoryContext();
 
@@ -213,6 +216,26 @@ public class DevelopmentDataSeederTests
         var mockHistoryHandler = new GetMockExamHistoryQueryHandler(context);
         var mockDetailHandler = new GetMockExamSessionDetailQueryHandler(context);
 
+        // 1. Kiểm tra sau SeedAsync, lịch sử sinh viên hoàn toàn rỗng (Zero-Mock / UAT sạch)
+        foreach (var studentId in targetStudents)
+        {
+            var initialPracticeRes = await practiceHistoryHandler.Handle(
+                new GetStudentPracticeHistoryQuery(studentId),
+                CancellationToken.None);
+            initialPracticeRes.IsSuccess.Should().BeTrue();
+            initialPracticeRes.Value.Should().BeEmpty();
+
+            var initialMockRes = await mockHistoryHandler.Handle(
+                new GetMockExamHistoryQuery(studentId, null, 1, 10),
+                CancellationToken.None);
+            initialMockRes.IsSuccess.Should().BeTrue();
+            initialMockRes.Value.Items.Should().BeEmpty();
+        }
+
+        // 2. Gọi tường minh phương thức SeedStudentPracticeAndMockExamHistoryAsync để tạo dữ liệu mẫu khi cần
+        await DevelopmentDataSeeder.SeedStudentPracticeAndMockExamHistoryAsync(context);
+
+        // 3. Kiểm tra rằng lịch sử được tạo thành công (>= 3 sessions) kèm Scorecard chi tiết
         foreach (var studentId in targetStudents)
         {
             // Kiểm tra lịch sử MF-01

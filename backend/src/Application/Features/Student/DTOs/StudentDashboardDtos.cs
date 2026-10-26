@@ -101,7 +101,9 @@ public sealed record StudentOfficialExamQuestionScorecardDto(
     string? QuestionTitle = null,
     string? QuestionContent = null,
     string? QuestionImageUrl = null,
-    string? QuestionImageDescription = null);
+    string? QuestionImageDescription = null,
+    string? StudentTranscript = null,
+    string? LecturerOverrideReason = null);
 
 public sealed record StudentInternalAppealInfoDto(
     bool CanAppeal,

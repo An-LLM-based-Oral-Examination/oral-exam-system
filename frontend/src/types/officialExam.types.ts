@@ -294,6 +294,8 @@ export interface StudentOfficialExamQuestionScorecard {
   questionContent: string | null
   questionImageUrl: string | null
   questionImageDescription: string | null
+  studentTranscript: string | null
+  lecturerOverrideReason: string | null
 }
 
 export interface StudentInternalAppealInfo {

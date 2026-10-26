@@ -71,7 +71,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
         }
 
         // 4. Kiểm tra ca thi đã bị khóa từ trước chưa
-        if (tickets.Any(t => t.IsLocked || t.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked))
+        if (tickets.All(t => t.IsLocked) || tickets.Any(t => t.Status == ExamTicketStatus.Published))
         {
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.AlreadyPublished);
         }
@@ -88,6 +88,11 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
 
         foreach (var ticket in tickets)
         {
+            if (ticket.IsLocked)
+            {
+                continue;
+            }
+
             // Đồng bộ điểm FinalScore nếu còn để trống nhưng đã có AiScore
             foreach (var sub in ticket.Submissions)
             {
@@ -100,7 +105,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             ticket.Status = ExamTicketStatus.Published;
             ticket.IsLocked = true;
 
-            if (ticket.LecturerAudit != null)
+            if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)
             {
                 ticket.LecturerAudit.IsLocked = true;
             }
@@ -129,7 +134,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
     /// </summary>
     private static bool HasCompleteScore(StudentExamTicket ticket)
     {
-        if (ticket.Status is not (ExamTicketStatus.AiGraded or ExamTicketStatus.Audited))
+        if (ticket.Status is not (ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Locked))
         {
             return false;
         }

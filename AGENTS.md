@@ -12,7 +12,7 @@
    - **Evidence-Based Verdict:** Mở đầu bằng phán quyết `[ĐÚNG]` / `[CHƯA CHÍNH XÁC]` / `[ĐÚNG MỘT PHẦN]` kèm dẫn chứng `file:///...#L...` và lý luận nhân quả rõ ràng.
    - **Agreement Gate:** Chờ User xác nhận đồng ý trước khi sửa code (Mức M/L). Mức S ($\le 3$ files) chạy Fast-Path SOLO.
 2. **12 Cam Kết Bất Biến Cốt Lõi:**
-   - **Zero Placeholder & Anti-Mocking:** Cấm `// TODO`, cấm dummy data trong production.
+   - **Zero Placeholder, Anti-Mocking & Zero-Bypass (Chống Gian Lận Tuyệt Đối):** Cấm `// TODO`, cấm dummy/fake data trong production, cấm bypass logic nghiệp vụ/Voice-First Gate/duyệt đề/AI/STT/DB thật và cấm mọi hình thức gian lận để làm cho xong dự án.
    - **Ports:** FE `3000`, BE `5000`, PostgreSQL `5432` (nội bộ).
    - **MF-01 (Practice):** Admin cấu hình (`TranscriptBufferSeconds` 10–300s mặc định 60s, follow-up 1–5 mặc định 2, progressive 3–10, timeout `SessionInactivityTimeoutMinutes = 5` phút trả `HTTP 410 Gone`). Không lưu audio R2.
    - **MF-02 (Mock Exam):** Quota do Admin cấu hình theo môn (`max_mock_exams_per_day`), vượt trả `HTTP 429`. Trưởng BM cấu hình cấu trúc đề & Bloom. Kho `practice_questions`. Không lưu audio R2.

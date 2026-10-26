@@ -694,12 +694,8 @@ public class ResilientSpeechServicesTests
             }
         };
 
-        var result = await gradingService.GradeAnswerAsync(request);
-
-        result.Score.Should().BeInRange(4.0m, 8.0m, "Câu trả lời mức khá cần rơi vào vùng 4.0 - 8.0 để kích hoạt Follow-up Question MF-01");
-        result.IsSuspicious.Should().BeFalse();
-        result.Details.Should().HaveCount(2);
-        result.Details.Select(d => d.CriterionId).Should().Contain(new[] { crit1Id, crit2Id });
+        Func<Task> act = () => gradingService.GradeAnswerAsync(request);
+        await act.Should().ThrowAsync<HttpRequestException>();
     }
 
     [Theory(DisplayName = "19b. GeminiAiGradingService: Chấm 0.0 điểm tuyệt đối khi sinh viên trả lời không biết, nhờ làm hộ hoặc lạc đề")]
@@ -1480,6 +1476,9 @@ public class ResilientSpeechServicesTests
     [InlineData("Thank you very much Thank you very much Thank you very much", true)]
     [InlineData("Thank you very much. Please subscribe. Like and subscribe.", true)]
     [InlineData("Hãy đăng ký kênh và bấm chuông theo dõi", true)]
+    [InlineData("Các bạn hãy đăng kí cho kênh lalaschool", true)]
+    [InlineData("lalaschool", true)]
+    [InlineData("Ghiền Mì Gõ", true)]
     [InlineData("Cảm ơn các bạn đã theo dõi. Hẹn gặp lại các bạn.", true)]
     [InlineData("Thank you very much. Em xin trả lời câu hỏi về Clean Architecture.", false)]
     [InlineData("Clean Architecture gồm 4 tầng Domain, Application, Infrastructure và Web API.", false)]
@@ -1623,6 +1622,9 @@ public class ResilientSpeechServicesTests
     [InlineData("Thank you very much Thank you very much Thank you very much", "", true)]
     [InlineData("Thank you very much. Please subscribe. Like and subscribe.", "", true)]
     [InlineData("Hãy đăng ký kênh và bấm chuông theo dõi", "", true)]
+    [InlineData("Các bạn hãy đăng kí cho kênh lalaschool", "", true)]
+    [InlineData("lalaschool", "", true)]
+    [InlineData("Ghiền Mì Gõ", "", true)]
     [InlineData("Cảm ơn các bạn đã theo dõi. Hẹn gặp lại các bạn.", "", true)]
     [InlineData("bye bye bye", "", true)]
     [InlineData("you you you", "", true)]
@@ -1696,6 +1698,355 @@ public class ResilientSpeechServicesTests
         sw.ElapsedMilliseconds.Should().BeLessThan(2000, "Regex khử ảo giác phải xử lý chuỗi lặp dài trong vòng 2 giây mà không bị ReDoS");
         isNoiseHelper.Should().BeFalse();
         sanitizedNormalizer.Should().Be("test");
+    }
+
+    [Fact(DisplayName = "42. Khắc phục 5 lỗ hổng STT/TTS: bảo toàn từ tiếng Việt đời thường, nhấn mạnh 3 từ, giữ vocabularyHint tiếng Anh và bảo toàn mũi tên ASCII")]
+    public void SeTerminologyNormalizer_FiveSpeechVulnerabilities_PreservesEverydayVietnameseAndEnglishHintsAndArrows()
+    {
+        // Lỗ hổng 3: Không biến từ tiếng Việt thông thường thành thuật ngữ tiếng Anh, và không cắt cụm nhấn mạnh 3 từ
+        var everydayVi = "Em cần in một đơn hàng rất rất rất quan trọng và áp lai sơ tuyển";
+        var normalizedVi = SeTerminologyNormalizer.Normalize(everydayVi);
+        normalizedVi.Should().Contain("in một đơn hàng");
+        normalizedVi.Should().NotContain("In-Memory");
+        normalizedVi.Should().Contain("rất rất rất quan trọng");
+        normalizedVi.Should().NotContain("Apply");
+
+        // Lỗ hổng 4: BuildContextualWhisperPrompt giữ nguyên từ khóa tiếng Anh và trả chuỗi rỗng khi null hoặc lang:en
+        SeTerminologyNormalizer.BuildContextualWhisperPrompt(null).Should().BeEmpty();
+        SeTerminologyNormalizer.BuildContextualWhisperPrompt("lang:en").Should().BeEmpty();
+        var englishHintPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt("SOLID, Microservices, CQRS");
+        englishHintPrompt.Should().Contain("SOLID, Microservices, CQRS");
+        englishHintPrompt.Should().NotContain("Dạ vâng, em xin trả lời");
+
+        // Lỗ hổng 2: BuildCustomVocabularyList trả rỗng khi không có hint hoặc lang:en
+        SeTerminologyNormalizer.BuildCustomVocabularyList(null).Should().BeEmpty();
+        SeTerminologyNormalizer.BuildCustomVocabularyList("lang:en").Should().BeEmpty();
+
+        // Lỗ hổng 5: PrepareTextForTts bảo toàn mũi tên <=>, =>, <== và từ kết thúc bằng c#
+        var ttsArrows = SeTerminologyNormalizer.PrepareTextForTts("Biểu thức A <=> B và x => y với điểm >= 5 và <= 10 trong C# (không phải abc#)");
+        ttsArrows.Should().Contain("<=>");
+        ttsArrows.Should().Contain("=>");
+        ttsArrows.Should().Contain("lớn hơn hoặc bằng 5");
+        ttsArrows.Should().Contain("nhỏ hơn hoặc bằng 10");
+        ttsArrows.Should().Contain("C sharp");
+        ttsArrows.Should().Contain("abc");
+        ttsArrows.Should().NotContain("abc sharp");
+    }
+
+    [Fact(DisplayName = "43. Khắc phục Lỗi 7 & 8: IsEnglishCourse không nhận nhầm câu hỏi SE viết bằng tiếng Anh thành môn ENT và ThrowOnTransientFailure ném lỗi HTTP 429 cho DLQ")]
+    public async Task GeminiAiGradingService_CourseClassificationAndTransientFailure_BehavesCorrectly()
+    {
+        OralExamination.Application.Common.Interfaces.FollowUpPromptBuilder.IsEnglishCourse(
+            "SWD392",
+            null,
+            "Explain SOLID principles and Dependency Injection in .NET 8?").Should().BeFalse();
+        OralExamination.Application.Common.Interfaces.FollowUpPromptBuilder.IsEnglishCourse(
+            "ENT203",
+            null,
+            "Describe the picture in detail.").Should().BeTrue();
+
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini__ApiKey"] = "AIzaSy_TestKey_RateLimit"
+        });
+        var rateLimitHandler = new MockHttpMessageHandler((req, ct) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent(@"{""error"":{""message"":""Resource has been exhausted""}}", Encoding.UTF8, "application/json")
+            }));
+        var gradingService = new GeminiAiGradingService(new HttpClient(rateLimitHandler), config);
+        var request = new OralExamination.Application.Common.Interfaces.AiGradingRequest
+        {
+            CourseCode = "SWD392",
+            QuestionContent = "Explain Clean Architecture",
+            SampleAnswer = "Domain, Application, Infrastructure, API",
+            Transcript = "Clean Architecture separates Domain and Application from Infrastructure.",
+            ThrowOnTransientFailure = true
+        };
+
+        Func<Task> act = () => gradingService.GradeAnswerAsync(request);
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact(DisplayName = "44. GeminiAiGradingService: ThrowOnTransientFailure mặc định bằng true và System Prompt cho phép sinh FollowUpPrompt khi Score > 0.0 (phục vụ MF-02)")]
+    public async Task GeminiAiGradingService_PromptAllowsFollowUpForAnyPositiveScore_AndDefaultsThrowOnTransientFailure()
+    {
+        var defaultRequest = new OralExamination.Application.Common.Interfaces.AiGradingRequest();
+        defaultRequest.ThrowOnTransientFailure.Should().BeTrue();
+
+        string? capturedPayload = null;
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini__ApiKey"] = "AIzaSy_TestKey_PromptCheck"
+        });
+        var captureHandler = new MockHttpMessageHandler(async (req, ct) =>
+        {
+            capturedPayload = req.Content != null
+                ? await req.Content.ReadAsStringAsync(ct)
+                : string.Empty;
+            var geminiJson = @"{
+                ""candidates"": [{
+                    ""content"": {
+                        ""parts"": [{
+                            ""text"": ""{\""Score\"": 2.5, \""ConfidenceScore\"": 0.92, \""IsSuspicious\"": false, \""Feedback\"": \""Còn thiếu nhiều ý.\"", \""CotTrace\"": \""Sinh viên mới nêu được khái niệm cơ bản.\"", \""FollowUpPrompt\"": \""Bạn vừa nhắc đến tầng Domain, vậy tại sao tầng Domain không được phụ thuộc vào Infrastructure?\"", \""Details\"": []}""
+                        }]
+                    }
+                }]
+            }";
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(geminiJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var gradingService = new GeminiAiGradingService(new HttpClient(captureHandler), config);
+        var result = await gradingService.GradeAnswerAsync(new OralExamination.Application.Common.Interfaces.AiGradingRequest
+        {
+            CourseCode = "SWD392",
+            QuestionContent = "Trình bày Clean Architecture.",
+            SampleAnswer = "Domain, Application, Infrastructure, API.",
+            Transcript = "Em nhớ là có tầng Domain chứa các thực thể chính."
+        });
+
+        capturedPayload.Should().NotBeNullOrWhiteSpace();
+        capturedPayload.Should().NotContain("Nếu Score < 4.0");
+        capturedPayload.Should().Contain("Nếu Score == 0.0 hoặc IsSuspicious == true");
+        result.Score.Should().Be(2.5m);
+        result.FollowUpPrompt.Should().Contain("tầng Domain");
+    }
+
+    [Fact(DisplayName = "45. GeminiQuestionGenerationService: Tự động chuyển sang Cloudflare Workers AI Llama-3.1 khi khóa AQ.Ab8... và ném lỗi khi cả 2 AI đều lỗi (không sinh đề văn mẫu giả)")]
+    public async Task GeminiQuestionGenerationService_WithAqKey_UsesCloudflareWorkersAiAndThrowsWhenUnavailable()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini__ApiKey"] = "AQ.Ab8RN6I_TestVertexKey",
+            ["Cloudflare__AccountId"] = "cf-acc-999",
+            ["Cloudflare__ApiToken"] = "cf-tok-999"
+        });
+
+        var cfLlamaJson = @"{
+            ""result"": {
+                ""response"": ""[{\""cloCode\"": \""CLO1\"", \""title\"": \""Vai trò của MediatR trong CQRS\"", \""content\"": \""Phân tích vai trò của MediatR trong kiến trúc CQRS .NET 8?\"", \""difficulty\"": \""medium\"", \""bloomLevel\"": \""Analyze\"", \""modelAnswer\"": \""MediatR đóng vai trò In-Process Mediator giúp tách rời hoàn toàn Sender (Controller) và Handler (Application Use Case) thông qua IRequest và IRequestHandler.\"", \""rubric\"": {\""name\"": \""Barem CQRS\"", \""description\"": \""Đánh giá CQRS\"", \""totalMaxScore\"": 10.0, \""criteria\"": [{\""criterionName\"": \""Khái niệm Mediator\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Understand\"", \""description\"": \""Nêu đúng nguyên lý In-Process Mediator\"", \""orderIndex\"": 1}, {\""criterionName\"": \""Triển khai IRequest/IRequestHandler\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Analyze\"", \""description\"": \""Giải thích luồng xử lý Command/Query\"", \""orderIndex\"": 2}]}}]""
+            }
+        }";
+
+        var successHandler = new MockHttpMessageHandler((req, ct) =>
+        {
+            req.RequestUri!.ToString().Should().Contain("@cf/meta/llama-3.1-8b-instruct");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(cfLlamaJson, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<GeminiQuestionGenerationService>.Instance;
+        var genService = new GeminiQuestionGenerationService(config, logger, new HttpClient(successHandler));
+        var genParams = new OralExamination.Application.Common.Interfaces.AiQuestionGenerationParams(
+            CourseCode: "SWD392",
+            CourseName: "Kiến trúc phần mềm",
+            SelectedCloCodes: new List<string> { "CLO1" },
+            Topics: new List<string> { "CQRS & Clean Architecture" },
+            NumberOfQuestions: 1,
+            UsageScope: "both",
+            TargetBloomLevels: new List<string> { "Analyze" },
+            EasyCount: 0,
+            MediumCount: 1,
+            HardCount: 0);
+
+        var generated = await genService.GenerateQuestionsAsync(genParams);
+
+        generated.Should().ContainSingle();
+        generated[0].Content.Should().Contain("MediatR");
+        generated[0].Rubric.Criteria.Sum(c => c.MaxScore).Should().Be(10.0m);
+
+        var failHandler = new MockHttpMessageHandler((req, ct) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        var failingService = new GeminiQuestionGenerationService(config, logger, new HttpClient(failHandler));
+        Func<Task> act = () => failingService.GenerateQuestionsAsync(genParams);
+        await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact(DisplayName = "46. Phục hồi bài thi thử MF-02 khi mất mạng/tắt trình duyệt: GetMockExamHistory bảo toàn trạng thái submitted (không xóa về 0đ) và GetMockExamSessionDetail tự động chấm bù")]
+    public async Task MockExamDisconnectRecovery_PreservesAnsweredQuestionsAndLazilyGradesOnDetailView()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+        var rubricId = Guid.NewGuid();
+        var criterionId = Guid.NewGuid();
+
+        var course = new Course
+        {
+            Id = courseId,
+            Code = "SWD392",
+            Name = "Software Architecture",
+            Credits = 3,
+            SemesterId = Guid.NewGuid(),
+            MaxFollowUpQuestions = 2,
+            IsActive = true
+        };
+        var rubric = new Rubric
+        {
+            Id = rubricId,
+            CourseId = courseId,
+            Name = "Barem Clean Architecture",
+            TotalMaxScore = 10.0m,
+            Criteria = new List<RubricCriterion>
+            {
+                new()
+                {
+                    Id = criterionId,
+                    RubricId = rubricId,
+                    CriterionName = "Nguyên lý phụ thuộc",
+                    Description = "Nêu đúng DIP",
+                    MaxScore = 10.0m,
+                    Weight = 1.0m
+                }
+            }
+        };
+        var question = new PracticeQuestion
+        {
+            Id = questionId,
+            CourseId = courseId,
+            RubricId = rubricId,
+            Title = "Dependency Inversion",
+            Content = "Trình bày nguyên lý Dependency Inversion trong Clean Architecture.",
+            SampleAnswer = "Các tầng bên trong (Domain, Application) định nghĩa Interfaces, còn tầng Infrastructure triển khai Interfaces đó.",
+            Difficulty = "medium",
+            IsActive = true
+        };
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-30),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-5), // Đã quá giờ do sinh viên bị mất mạng/tắt máy
+            Status = "in_progress",
+            HasFollowUp = false
+        };
+
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "answered",
+            TimeTakenSeconds = 45,
+            AnswerText = "Tầng Application định nghĩa các interface và tầng Infrastructure implement chúng để đảo ngược sự phụ thuộc."
+        });
+
+        context.Courses.Add(course);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        // 1. Khi mở trang Lịch sử thi thử: phiên đã trả lời nhưng quá giờ phải chuyển sang "submitted" chờ chấm bù, KHÔNG được gán 0.0đ
+        var historyHandler = new OralExamination.Application.Features.MockExams.Queries.GetMockExamHistory.GetMockExamHistoryQueryHandler(context);
+        var historyResult = await historyHandler.Handle(
+            new OralExamination.Application.Features.MockExams.Queries.GetMockExamHistory.GetMockExamHistoryQuery(studentId),
+            CancellationToken.None);
+
+        historyResult.IsSuccess.Should().BeTrue();
+        historyResult.Value.Items.Should().ContainSingle();
+        historyResult.Value.Items[0].Status.Should().Be("submitted");
+        historyResult.Value.Items[0].TotalScore.Should().BeNull();
+
+        // 2. Khi mở chi tiết Scorecard (hoặc khi Worker chạy): tự động gọi AI chấm bù câu đã lưu và chốt điểm thực tế
+        var aiMock = new Mock<OralExamination.Application.Common.Interfaces.IAiGradingService>();
+        aiMock.Setup(a => a.GradeAnswerAsync(It.IsAny<OralExamination.Application.Common.Interfaces.AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Interfaces.AiGradingResult
+            {
+                Score = 8.5m,
+                ConfidenceScore = 0.94m,
+                IsSuspicious = false,
+                Feedback = "Trả lời chính xác nguyên lý Dependency Inversion.",
+                CotTrace = "Nêu đúng vai trò Application và Infrastructure.",
+                Details = new List<OralExamination.Application.Common.Interfaces.GradingDetailDto>
+                {
+                    new() { CriterionId = criterionId.ToString(), Score = 8.5m, Comment = "Đúng bản chất" }
+                }
+            });
+
+        var detailHandler = new OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail.GetMockExamSessionDetailQueryHandler(context, aiMock.Object);
+        var detailResult = await detailHandler.Handle(
+            new OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail.GetMockExamSessionDetailQuery(session.Id, studentId),
+            CancellationToken.None);
+
+        detailResult.IsSuccess.Should().BeTrue();
+        detailResult.Value.TotalScore.Should().Be(8.5m);
+        var reloadedSession = await context.MockExamSessions.FindAsync(session.Id);
+        reloadedSession!.Status.Should().Be("graded");
+    }
+
+    [Fact(DisplayName = "47. STT Song ngữ Việt-Anh cho môn ENT & Bóc băng câu trả lời dài (> 2 phút): giữ language='vi' chống dịch ép tiếng Việt sang tiếng Anh và tự động tắt vad_filter khi audio lớn")]
+    public async Task BilingualEntStt_AndLongAudioVadBypass_WorksAndEliminatesDoubleSttInMockExam()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Cloudflare:AccountId"] = "cf-acc-ent",
+            ["Cloudflare:ApiToken"] = "cf-tok-ent",
+            ["Gemini:ApiKey"] = "gemini-key-ent"
+        });
+
+        var capturedPayloads = new List<string>();
+        var callCount = 0;
+        var whisperHandler = new MockHttpMessageHandler(async (req, ct) =>
+        {
+            callCount++;
+            var body = req.Content != null ? await req.Content.ReadAsStringAsync(ct) : string.Empty;
+            capturedPayloads.Add(body);
+
+            // Lần 1: Môn ENT203 nói tiếng Việt kết hợp tiếng Anh -> language phải là "vi", task = "transcribe"
+            if (callCount == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "{\"result\":{\"text\":\"Dạ theo em trong bức tranh này có một gia đình đang picnic ở park.\"}}",
+                        Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            // Lần 2: Audio dài > 250KB -> vad_filter tự động đặt bằng false
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"result\":{\"text\":\"Câu trả lời dài hơn 2 phút được nhận diện đầy đủ không bị lọc rỗng.\"}}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var whisperService = new CloudflareWhisperService(new HttpClient(whisperHandler), config, CreateFastNoRetryPipeline());
+
+        // 1. Kiểm tra môn ENT (hint lang:en) vẫn dùng language = "vi" để nhận diện cả Tiếng Việt lẫn Tiếng Anh
+        using var entStream = new MemoryStream(Encoding.UTF8.GetBytes("ent-bilingual-voice-bytes"));
+        var entResult = await whisperService.TranscribeDetailedAsync(entStream, "ent.webm", "lang:en");
+        entResult.Text.Should().Be("Dạ theo em trong bức tranh này có một gia đình đang picnic ở park.");
+        using (var doc1 = System.Text.Json.JsonDocument.Parse(capturedPayloads[0]))
+        {
+            doc1.RootElement.GetProperty("language").GetString().Should().Be("vi");
+            doc1.RootElement.GetProperty("task").GetString().Should().Be("transcribe");
+            doc1.RootElement.GetProperty("vad_filter").GetBoolean().Should().BeTrue();
+        }
+
+        // 2. Kiểm tra file âm thanh lớn (> 250KB, tương đương > 2 phút) tự động tắt vad_filter để không bị treo 40s hoặc trả chuỗi rỗng
+        var largeAudioBytes = new byte[260_000];
+        Array.Fill(largeAudioBytes, (byte)0x55);
+        using var longStream = new MemoryStream(largeAudioBytes);
+        var longResult = await whisperService.TranscribeDetailedAsync(longStream, "long_2min.webm", null);
+        longResult.Text.Should().Contain("Câu trả lời dài hơn 2 phút");
+        using (var doc2 = System.Text.Json.JsonDocument.Parse(capturedPayloads[1]))
+        {
+            doc2.RootElement.GetProperty("vad_filter").GetBoolean().Should().BeFalse();
+        }
     }
 }
 

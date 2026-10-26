@@ -85,14 +85,27 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ReviewNotes = request.ReviewNotes;
 
                 var targetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
-                if (targetScope is "both" or "practice" or "all")
+                if (targetScope == "practice")
                 {
-                    var existsInPracticePool = await _context.PracticeQuestions
-                        .AnyAsync(p => p.CourseId == question.CourseId && p.Title == question.Title, cancellationToken);
-                    if (!existsInPracticePool)
+                    question.IsActive = false;
+                }
+                else if (targetScope is "exam" or "official_exam" or "both" or "all")
+                {
+                    question.IsActive = true;
+                }
+
+                var existingPracticeQ = await _context.PracticeQuestions
+                    .FirstOrDefaultAsync(
+                        p => p.Id == question.Id || (p.CourseId == question.CourseId && p.Title == question.Title),
+                        cancellationToken);
+
+                if (targetScope is "both" or "practice" or "all" || existingPracticeQ != null)
+                {
+                    if (existingPracticeQ == null)
                     {
                         _context.PracticeQuestions.Add(new PracticeQuestion
                         {
+                            Id = question.Id,
                             CourseId = question.CourseId,
                             RubricId = question.RubricId,
                             Title = question.Title,
@@ -107,6 +120,17 @@ public sealed class ReviewQuestionDecisionCommandHandler
                             IsActive = true,
                             CreatedAt = now
                         });
+                    }
+                    else
+                    {
+                        existingPracticeQ.IsActive = true;
+                        existingPracticeQ.Content = question.Content;
+                        existingPracticeQ.SampleAnswer = question.SampleAnswer;
+                        existingPracticeQ.KeyPoints = question.KeyPoints;
+                        existingPracticeQ.Difficulty = question.Difficulty;
+                        existingPracticeQ.BloomLevel = question.BloomLevel;
+                        existingPracticeQ.ImageUrl = question.ImageUrl;
+                        existingPracticeQ.ImageDescription = question.ImageDescription;
                     }
                 }
 
@@ -123,6 +147,12 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ApprovalStatus = ApprovalStatus.Rejected;
                 question.ReviewNotes = request.ReviewNotes;
                 question.IsActive = false; // Loại hẳn khỏi kho thi
+                var rejectedPracticeQ = await _context.PracticeQuestions
+                    .FirstOrDefaultAsync(p => p.CourseId == question.CourseId && p.Title == question.Title, cancellationToken);
+                if (rejectedPracticeQ != null)
+                {
+                    rejectedPracticeQ.IsActive = false;
+                }
                 message = "Câu hỏi đã bị từ chối và loại khỏi danh sách thẩm định.";
                 break;
 

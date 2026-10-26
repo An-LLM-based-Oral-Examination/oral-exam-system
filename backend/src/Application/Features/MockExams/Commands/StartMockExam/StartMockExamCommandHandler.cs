@@ -260,8 +260,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // 10. Lưu đồng bộ xuống CSDL
         await _context.SaveChangesAsync(cancellationToken);
 
-        // 11. Chuẩn bị DTO phản hồi
-        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(course.Code);
+        // 11. Chuẩn bị DTO phản hồi (Câu hỏi phụ chỉ được sinh động sau khi sinh viên nộp câu trả lời)
         var questionDtos = selectedQuestions.Select((q, idx) =>
         {
             var criteriaDtos = q.Rubric?.Criteria != null
@@ -271,40 +270,17 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                     .ToList()
                 : new List<MockExamRubricCriterionDto>();
 
-            string? resolvedFollowUp = null;
-            var displayContent = q.Content;
-            if (request.HasFollowUp)
-            {
-                resolvedFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    course.Code,
-                    q.FollowUpPrompt,
-                    null,
-                    1,
-                    null,
-                    null,
-                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
-                    q.Content,
-                    null);
-
-                if (!displayContent.Contains(resolvedFollowUp, StringComparison.OrdinalIgnoreCase))
-                {
-                    displayContent = isEnglishCourse
-                        ? $"{q.Content}\n\n[Follow-up Question]: {resolvedFollowUp}"
-                        : $"{q.Content}\n\n[Câu hỏi phụ đào sâu]: {resolvedFollowUp}";
-                }
-            }
-
             return new MockExamQuestionDto(
                 Id: q.Id,
                 OrderIndex: idx + 1,
                 Title: q.Title,
-                Content: displayContent,
+                Content: q.Content,
                 BloomLevel: q.BloomLevel,
                 Difficulty: q.Difficulty,
                 RubricCriteria: criteriaDtos,
                 ImageUrl: q.ImageUrl,
                 ImageDescription: q.ImageDescription,
-                FollowUpPrompt: resolvedFollowUp
+                FollowUpPrompt: null
             );
         }).ToList();
 

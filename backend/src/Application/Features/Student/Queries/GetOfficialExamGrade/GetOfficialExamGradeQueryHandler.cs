@@ -110,7 +110,9 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
                     examQuestion?.Title,
                     examQuestion?.Content,
                     examQuestion?.ImageUrl,
-                    examQuestion?.ImageDescription);
+                    examQuestion?.ImageDescription,
+                    sub.TranscriptWhisper,
+                    ticket.LecturerAudit?.OverrideReason);
             })
             .ToList();
 

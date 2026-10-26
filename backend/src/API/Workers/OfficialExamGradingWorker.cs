@@ -36,7 +36,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var task in _queue.ReadAllAsync(stoppingToken))
+        try
+        {
+            await foreach (var task in _queue.ReadAllAsync(stoppingToken))
         {
             try
             {
@@ -44,7 +46,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                throw;
+                break;
             }
             catch (Exception exception)
             {
@@ -53,6 +55,12 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     task.SubmissionId);
                 await MarkFailedAsync(task, exception, CancellationToken.None);
             }
+        }
+    }
+
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown khi Host dừng
         }
     }
 
@@ -114,6 +122,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             Transcript = submission.TranscriptWhisper,
             QuestionImageUrl = submission.ExamQuestion.ImageUrl,
             QuestionImageDescription = submission.ExamQuestion.ImageDescription,
+            ThrowOnTransientFailure = true,
             Criteria = orderedCriteria.Select(item => new AiGradingCriterion
             {
                 Id = item.Id.ToString(),
@@ -130,7 +139,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         var score = rawDetails.Count > 0
             ? Math.Clamp(Math.Round(details.Sum(item => item.Score), 2, MidpointRounding.AwayFromZero), 0m, 10m)
             : Math.Clamp(Math.Round(result.Score, 2, MidpointRounding.AwayFromZero), 0m, 10m);
-        var suspicious = result.ConfidenceScore < SuspiciousConfidenceThreshold;
+        var isSystemFallback = result.CotTrace?.StartsWith("[SYSTEM_FALLBACK]", StringComparison.OrdinalIgnoreCase) == true;
+        var suspicious = result.IsSuspicious || isSystemFallback || result.ConfidenceScore < SuspiciousConfidenceThreshold;
         var now = DateTime.UtcNow;
 
         context.AiEvaluations.Add(new AiEvaluation
@@ -151,7 +161,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         submission.SuspiciousReason = suspicious
             ? (!string.IsNullOrWhiteSpace(result.SuspiciousReason)
                 ? result.SuspiciousReason
-                : $"AI confidence {result.ConfidenceScore:0.00} is below {SuspiciousConfidenceThreshold:0.00}.")
+                : isSystemFallback
+                    ? "Bài thi được chấm bằng cơ chế dự phòng [SYSTEM_FALLBACK], bắt buộc Giảng viên hậu kiểm."
+                    : $"AI confidence {result.ConfidenceScore:0.00} is below {SuspiciousConfidenceThreshold:0.00}.")
             : null;
         CompleteJob(job, now);
 

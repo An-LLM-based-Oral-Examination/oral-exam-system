@@ -1,6 +1,7 @@
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -28,13 +29,13 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
         }
 
         Stream streamToTranscribe = request.FileStream;
-        System.IO.MemoryStream? bufferStream = null;
+        MemoryStream? bufferStream = null;
 
         try
         {
             if (!request.FileStream.CanSeek)
             {
-                bufferStream = new System.IO.MemoryStream();
+                bufferStream = new MemoryStream();
                 await request.FileStream.CopyToAsync(bufferStream, cancellationToken);
                 if (bufferStream.Length == 0)
                 {
@@ -51,12 +52,10 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             // Bóc băng Whisper STT trực tiếp dạng stream (không lưu R2, không hash SHA-256 cho MF-01/02)
             System.Exception? sttException = null;
             string? transcript = null;
+            SpeechTranscriptionResult? detailed = null;
 
             try
             {
-                SpeechTranscriptionResult? detailed = null;
-                // Luôn gọi TranscribeDetailedAsync ngay cả khi VocabularyHint là null/rỗng
-                // để kích hoạt Silero VAD, default SE prompt và bộ lọc ảo giác tiếng ồn.
                 detailed = await _speechToTextService.TranscribeDetailedAsync(
                     streamToTranscribe,
                     request.FileName,
@@ -87,15 +86,16 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                 ? TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, _speechToTextService.NormalizeTranscript(request.ClientTranscript))
                 : string.Empty;
 
-            // Luôn ưu tiên kết quả từ AI Server STT (Gemini 3.5 Transcribe / Whisper) nếu khác rỗng.
-            // Chỉ dùng Browser WebSpeech ClientTranscript khi Server STT rỗng hoặc lỗi.
+            // Luôn ưu tiên tuyệt đối kết quả từ AI Server STT (Whisper / Gemini) nếu khác rỗng.
+            // Tuyệt đối không để ClientTranscript ghi đè khi Server STT đã xác nhận im lặng/nhiễu.
             if (!string.IsNullOrWhiteSpace(normalizedServer))
             {
+                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer);
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedServer));
             }
 
-            if (!string.IsNullOrWhiteSpace(normalizedClient))
+            if (!string.IsNullOrWhiteSpace(normalizedClient) && !TranscriptHelper.IsServerConfirmedSilence(detailed, sttException))
             {
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedClient));

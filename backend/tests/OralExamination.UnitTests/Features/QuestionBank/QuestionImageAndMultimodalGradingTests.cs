@@ -281,6 +281,29 @@ public sealed class QuestionImageAndMultimodalGradingTests
         var savedPracticeQuestion = await context.PracticeQuestions.FirstAsync(q => q.CourseId == courseId);
         savedPracticeQuestion.ImageUrl.Should().Be("/uploads/questions/202610/oauth2-sequence.png");
         savedPracticeQuestion.ImageDescription.Should().Contain("PKCE");
+        savedPracticeQuestion.IsActive.Should().BeFalse("câu hỏi do giảng viên tạo ở trạng thái DRAFT chưa được kích hoạt vào kho luyện tập trước khi Trưởng Bộ môn duyệt");
+
+        // Trưởng Bộ môn phê duyệt để kích hoạt câu hỏi vào kho luyện tập
+        var headId = Guid.NewGuid();
+        context.Users.Add(new User
+        {
+            Id = headId,
+            Email = "head.swd@fpt.edu.vn",
+            FullName = "Trưởng Bộ Môn SWD",
+            Role = "department_head",
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var reviewHandler = new ReviewQuestionDecisionCommandHandler(context);
+        var approveResult = await reviewHandler.Handle(new ReviewQuestionDecisionCommand(
+            savedExamQuestion.Id,
+            headId,
+            ApprovalStatus.Approved,
+            "Duyệt câu hỏi sơ đồ Sequence Diagram OAuth2",
+            "both"), CancellationToken.None);
+        approveResult.IsSuccess.Should().BeTrue();
+        savedPracticeQuestion.IsActive.Should().BeTrue();
 
         // 3. Kiểm tra Query chi tiết câu hỏi (MF-03) trả về đúng ImageUrl & ImageDescription
         var getByIdHandler = new GetQuestionByIdQueryHandler(context);

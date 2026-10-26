@@ -1,39 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import QRCode from 'qrcode'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  BadgeCheck,
-  BookOpenCheck,
-  Building2,
-  CalendarDays,
-  CalendarPlus,
-  Check,
   CheckCircle2,
-  ChevronDown,
-  Clipboard,
   Clock3,
-  Copy,
-  DoorOpen,
-  Headphones,
-  Info,
   LoaderCircle,
   LockKeyhole,
-  MapPinned,
   Mic2,
-  Monitor,
-  Printer,
-  QrCode,
-  RefreshCw,
-  ScanLine,
-  ShieldCheck,
   ShieldAlert,
-  Sparkles,
-  UserRound,
   UploadCloud,
-  Wifi,
-  XCircle,
-  type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useKioskLockdown } from '@/hooks/useKioskLockdown'
@@ -42,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
 import { officialExamService } from '@/services/officialExam.service'
 import { proctorService } from '@/services/proctor.service'
+import { transcribeSpeech } from '@/services/speech.service'
 import type {
   AudioUploadAuthorization,
   OfficialExamAnswerSubmissionRequest,
@@ -49,41 +24,6 @@ import type {
   StudentWorkstationTicket,
   SubmitOfficialExamResponse,
 } from '@/types/officialExam.types'
-import type { ExamSceneState } from './OfficialExamThreeScene'
-
-const OfficialExamThreeScene = lazy(() =>
-  import('./OfficialExamThreeScene').then((module) => ({
-    default: module.OfficialExamThreeScene,
-  })),
-)
-
-type AssignmentStatus = 'CHECK_IN_OPEN' | 'SCHEDULED'
-type ExamPhase = 'check-in' | 'scheduled' | 'in-progress' | 'closed'
-type MicState = 'idle' | 'checking' | 'ready' | 'error' | 'unsupported'
-
-interface OfficialExamAssignment {
-  id: string
-  academicTerm: string
-  subjectCode: string
-  subjectName: string
-  track: string
-  startAt: Date
-  durationMinutes: number
-  questionCount: number
-  room: string
-  building: string
-  kioskNumber: number
-  workstationId: string
-  seatZone: string
-  sessionCode: string
-  candidateNumber: string
-  status: AssignmentStatus
-  checkInCode?: string
-  qrPayload?: string
-  tokenExpiresAt?: Date
-}
-
-void LegacyOfficialExamPage
 
 type MF04StudentService = {
   getCurrentTicket: () => Promise<StudentWorkstationTicket>
@@ -103,7 +43,7 @@ function mf04ErrorMessage(error: unknown) {
     const detail = (error as { detail?: unknown }).detail
     if (typeof detail === 'string' && detail.trim()) return detail
   }
-  return error instanceof Error ? error.message : 'Không thể hoàn tất yêu cầu MF-04.'
+  return error instanceof Error ? error.message : 'Không thể hoàn tất yêu cầu phòng thi.'
 }
 
 async function calculateSha256(blob: Blob) {
@@ -134,6 +74,8 @@ function OfficialExamLivePage() {
   const { user } = useAuth()
   const [ticket, setTicket] = useState<StudentWorkstationTicket | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [timestampsByQuestion, setTimestampsByQuestion] = useState<Record<string, string | null>>({})
+  const [transcribingQuestionId, setTranscribingQuestionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -143,13 +85,60 @@ function OfficialExamLivePage() {
   const [submission, setSubmission] = useState<OfficialExamSubmissionStatusResponse | null>(null)
   const [isSuspended, setIsSuspended] = useState(false)
   const recordingStartedAtRef = useRef<number | null>(null)
+  const recordedExamAudioRef = useRef<Blob | null>(null)
+  const [hasRecordedAudioBlob, setHasRecordedAudioBlob] = useState(false)
   const mountedRef = useRef(true)
   const suspendedRef = useRef(false)
+  const questionSegmentPromisesRef = useRef<Array<Promise<string>>>([])
+  const handleQuestionSegment = useCallback((segmentBlob: Blob) => {
+    const segmentPromise = transcribeSpeech(segmentBlob, {
+      fileName: `question-segment-${Date.now()}.webm`,
+    })
+      .then((res) => res.transcript.trim())
+      .catch(() => '')
+    questionSegmentPromisesRef.current.push(segmentPromise)
+  }, [])
   const audioRecorder = useAudioRecorder()
+  const questionRecorder = useAudioRecorder({
+    segmentDurationMs: 20_000,
+    onSegment: handleQuestionSegment,
+  })
+  const [recordingQuestionId, setRecordingQuestionId] = useState<string | null>(null)
+
+  const transcribeQuestionAudio = useCallback(async (questionAudio: Blob, fileName: string) => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
+    const preTranscribedPromises = [...questionSegmentPromisesRef.current]
+    questionSegmentPromisesRef.current = []
+
+    let text = ''
+    let timestampsJson: string | null = null
+    if (preTranscribedPromises.length > 0) {
+      const tailPromise =
+        questionAudio.size >= 2_048
+          ? transcribeSpeech(questionAudio, { fileName })
+              .then((res) => {
+                timestampsJson = res.timestampsJson ?? null
+                return res.transcript.trim()
+              })
+              .catch(() => '')
+          : Promise.resolve('')
+      const allParts = await Promise.all([...preTranscribedPromises, tailPromise])
+      text = allParts.filter((part) => part.length > 0).join(' ').trim()
+    }
+
+    if (!text && questionAudio.size > 0) {
+      const sttResponse = await transcribeSpeech(questionAudio, { fileName })
+      text = sttResponse.transcript.trim()
+      timestampsJson = sttResponse.timestampsJson ?? null
+    }
+
+    return { text, timestampsJson }
+  }, [])
 
   const isInProgress = ticket?.status === 'IN_PROGRESS'
   const isSubmitted = Boolean(ticket && ['SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED'].includes(ticket.status))
-  const questions = ticket?.questions ?? []
+  const isVoiceOnly = ticket?.examInputMode === 'VoiceOnly'
+  const questions = useMemo(() => ticket?.questions ?? [], [ticket?.questions])
 
   useEffect(() => {
     mountedRef.current = true
@@ -158,7 +147,28 @@ function OfficialExamLivePage() {
       setError(null)
       try {
         const currentTicket = await mf04StudentService.getCurrentTicket()
-        if (mountedRef.current) setTicket(currentTicket)
+        if (mountedRef.current) {
+          setTicket(currentTicket)
+          if (currentTicket.status === 'IN_PROGRESS') {
+            try {
+              const rawDraft = localStorage.getItem(`mf04_kiosk_draft_${currentTicket.id}`)
+              if (rawDraft) {
+                const parsedDraft = JSON.parse(rawDraft) as {
+                  answers?: Record<string, string>
+                  timestamps?: Record<string, string | null>
+                }
+                if (parsedDraft.answers && typeof parsedDraft.answers === 'object') {
+                  setAnswers(parsedDraft.answers)
+                }
+                if (parsedDraft.timestamps && typeof parsedDraft.timestamps === 'object') {
+                  setTimestampsByQuestion(parsedDraft.timestamps)
+                }
+              }
+            } catch {
+              // Ignore localStorage parse errors
+            }
+          }
+        }
       } catch (requestError) {
         if (mountedRef.current) setError(mf04ErrorMessage(requestError))
       } finally {
@@ -169,6 +179,18 @@ function OfficialExamLivePage() {
       mountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'IN_PROGRESS') return
+    try {
+      localStorage.setItem(
+        `mf04_kiosk_draft_${ticket.id}`,
+        JSON.stringify({ answers, timestamps: timestampsByQuestion }),
+      )
+    } catch {
+      // Ignore quota errors
+    }
+  }, [answers, timestampsByQuestion, ticket])
 
   useEffect(() => {
     if (!audioRecorder.isRecording) return
@@ -225,7 +247,7 @@ function OfficialExamLivePage() {
     try {
       await mf04StudentService.checkIn(ticket.id)
       await refreshTicket()
-      setNotice('Check-in thành công. Hãy kiểm tra microphone và bắt đầu ghi âm bài thi.')
+      setNotice('Điểm danh nhận máy thành công. Hãy kiểm tra microphone và bắt đầu ghi âm bài thi.')
     } catch (requestError) {
       setError(mf04ErrorMessage(requestError))
     } finally {
@@ -240,30 +262,126 @@ function OfficialExamLivePage() {
       await audioRecorder.startRecording()
       recordingStartedAtRef.current = Date.now()
       setRecordingSeconds(0)
-      setNotice('Đang ghi âm toàn bộ bài thi. Không rời khỏi màn hình Kiosk.')
+      setNotice('Đang ghi âm toàn bộ bài thi. Không rời khỏi màn hình phòng thi.')
     } catch (recordingError) {
       setError(mf04ErrorMessage(recordingError))
     }
   }
 
-  const handleSubmit = async () => {
-    if (!ticket || !isInProgress || !audioRecorder.isRecording || busy) return
+  const handleToggleQuestionVoice = async (questionId: string, index: number) => {
+    if (!ticket || !isInProgress || !audioRecorder.isRecording || isSubmitted || busy) return
+    setError(null)
+    if (recordingQuestionId === questionId && questionRecorder.isRecording) {
+      setTranscribingQuestionId(questionId)
+      try {
+        const questionAudio = await questionRecorder.stopRecording()
+        setRecordingQuestionId(null)
+        setNotice(`Đang bóc băng giọng nói Câu ${index + 1}...`)
+        const { text, timestampsJson } = await transcribeQuestionAudio(
+          questionAudio,
+          `question-${index + 1}-${questionId}.webm`,
+        )
+        setAnswers((current) => ({ ...current, [questionId]: text }))
+        setTimestampsByQuestion((current) => ({
+          ...current,
+          [questionId]: timestampsJson,
+        }))
+        setNotice(`Đã ghi nhận bản bóc băng giọng nói cho Câu ${index + 1}.`)
+      } catch (sttError) {
+        setRecordingQuestionId(null)
+        setError(mf04ErrorMessage(sttError))
+      } finally {
+        setTranscribingQuestionId(null)
+      }
+      return
+    }
+
+    if (questionRecorder.isRecording) {
+      questionRecorder.cancelRecording()
+    }
+    questionSegmentPromisesRef.current = []
+    try {
+      await questionRecorder.startRecording()
+      setRecordingQuestionId(questionId)
+      setNotice(`Đang thu âm trả lời riêng cho Câu ${index + 1}...`)
+    } catch (recError) {
+      setError(mf04ErrorMessage(recError))
+    }
+  }
+
+  const handleSubmit = useCallback(async () => {
+    if (!ticket || !isInProgress || (!audioRecorder.isRecording && !recordedExamAudioRef.current) || busy) return
     setBusy(true)
     setError(null)
     try {
-      const audio = await audioRecorder.stopRecording()
+      const effectiveAnswers = { ...answers }
+      const effectiveTimestamps = { ...timestampsByQuestion }
+      if (recordingQuestionId && questionRecorder.isRecording) {
+        const activeQId = recordingQuestionId
+        const questionAudio = await questionRecorder.stopRecording()
+        setRecordingQuestionId(null)
+        const { text, timestampsJson } = await transcribeQuestionAudio(
+          questionAudio,
+          `question-${activeQId}.webm`,
+        )
+        effectiveAnswers[activeQId] = text
+        effectiveTimestamps[activeQId] = timestampsJson
+        setAnswers((current) => ({ ...current, [activeQId]: text }))
+        setTimestampsByQuestion((current) => ({
+          ...current,
+          [activeQId]: timestampsJson,
+        }))
+      }
+
+      const audio = audioRecorder.isRecording
+        ? await audioRecorder.stopRecording()
+        : recordedExamAudioRef.current!
+      recordedExamAudioRef.current = audio
+      setHasRecordedAudioBlob(true)
+
       const authorization = await mf04StudentService.createAudioUploadAuthorization(ticket.id)
       await mf04StudentService.uploadAudio(authorization, audio)
       const audioHash = await calculateSha256(audio)
       await mf04StudentService.sealAudio(ticket.id, { objectKey: authorization.objectKey, sha256: audioHash })
       setSealed(true)
-      const payload = questions.map((question) => ({
+
+      const hasAnyQuestionTranscript = questions.some((question) => Boolean(effectiveAnswers[question.questionId]?.trim()))
+      let sttTranscript: string | null = null
+      let sttTimestamps: string | null = null
+      if (!hasAnyQuestionTranscript && questions.length > 0) {
+        setNotice('Đang bóc băng giọng nói trước khi niêm phong nộp bài...')
+        const fileName = authorization.objectKey.split('/').pop() || 'exam-audio.webm'
+        const sttResponse = await transcribeSpeech(audio, { fileName })
+        sttTranscript = sttResponse.transcript.trim()
+        sttTimestamps = sttResponse.timestampsJson ?? null
+        const firstQuestionId = questions[0]?.questionId
+        if (firstQuestionId) {
+          setAnswers((current) => ({
+            ...current,
+            [firstQuestionId]: sttTranscript ?? '',
+          }))
+        }
+      }
+
+      const payload = questions.map((question, index) => ({
         examQuestionId: question.questionId,
-        transcriptWhisper: answers[question.questionId]?.trim() || null,
-        timestampsWhisper: null,
+        transcriptWhisper:
+          effectiveAnswers[question.questionId]?.trim() ||
+          (!hasAnyQuestionTranscript && index === 0 ? sttTranscript : null) ||
+          '',
+        timestampsWhisper:
+          effectiveTimestamps[question.questionId] ??
+          (!hasAnyQuestionTranscript && index === 0 ? sttTimestamps : null),
         timeSpentSeconds: recordingSeconds,
       }))
       const submitted = await mf04StudentService.submitExam(ticket.id, payload)
+      recordedExamAudioRef.current = null
+      setHasRecordedAudioBlob(false)
+      try {
+        localStorage.removeItem(`mf04_kiosk_draft_${ticket.id}`)
+      } catch {
+        // Ignore
+      }
       setSubmission({
         ticketId: submitted.ticketId,
         status: submitted.status,
@@ -274,13 +392,24 @@ function OfficialExamLivePage() {
         failedSubmissions: 0,
       })
       setTicket((current) => current ? { ...current, status: submitted.status } : current)
-      setNotice('Bài thi đã được lưu an toàn và chuyển sang hàng đợi chấm ngầm.')
+      setNotice('Bài thi đã được lưu an toàn và chuyển vào hệ thống chấm điểm.')
     } catch (requestError) {
-      setError(mf04ErrorMessage(requestError))
+      setError(`${mf04ErrorMessage(requestError)} (Bản ghi âm và bài làm đã được giữ an toàn trên máy trạm; hệ thống sẽ tự động nộp lại ngay khi có mạng hoặc khi bấm Nộp bài).`)
     } finally {
       setBusy(false)
     }
-  }
+  }, [answers, audioRecorder, busy, isInProgress, questionRecorder, questions, recordingQuestionId, recordingSeconds, ticket, timestampsByQuestion, transcribeQuestionAudio])
+
+  useEffect(() => {
+    const onOnline = () => {
+      if (recordedExamAudioRef.current && ticket?.status === 'IN_PROGRESS' && !busy) {
+        setNotice('Đã kết nối mạng trở lại. Đang tự động nộp bản ghi âm đã lưu...')
+        void handleSubmit()
+      }
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [busy, handleSubmit, ticket?.status])
 
   const refreshSubmission = async () => {
     if (!ticket) return
@@ -296,1181 +425,23 @@ function OfficialExamLivePage() {
 
   if (loading) return <div className={cn(ds.page, 'flex min-h-[420px] items-center justify-center')}><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div>
 
-  if (!ticket) return <div className={cn(ds.page, 'pb-8')}><section className="rounded-3xl border border-[#dce4ee] bg-white p-8 text-center shadow-sm"><ShieldAlert className="mx-auto size-10 text-[#1C4D8D]" /><h1 className="mt-3 text-xl font-bold text-[#0F2854]">Chưa có vé thi tại workstation này</h1><p className="mx-auto mt-2 max-w-xl text-sm text-[#596b84]">Hãy kiểm tra đúng máy Kiosk được phân công và thời gian ca thi, sau đó thử tải lại vé.</p>{error && <p className="mt-4 rounded-xl bg-[#fff4f5] px-4 py-3 text-sm text-[#b33d52]">{error}</p>}<button type="button" onClick={() => void refreshTicket()} className="mt-5 rounded-xl bg-[#1C4D8D] px-5 py-3 text-sm font-bold text-white">Tải lại vé</button></section></div>
+  if (!ticket) return <div className={cn(ds.page, 'pb-8')}><section className={cn(ds.section, 'p-8 text-center')}><ShieldAlert className="mx-auto size-10 text-[#1C4D8D]" /><h1 className="mt-3 text-xl font-bold text-[#0F2854]">Chưa có vé thi tại máy trạm này</h1><p className="mx-auto mt-2 max-w-xl text-sm text-[#596b84]">Hãy kiểm tra đúng máy phòng Lab được phân công và thời gian ca thi, sau đó thử tải lại vé thi.</p>{error && <p className="mt-4 rounded-xl bg-[#fff4f5] px-4 py-3 text-sm text-[#b33d52]">{error}</p>}<button type="button" onClick={() => void refreshTicket()} className="mt-5 rounded-xl bg-[#1C4D8D] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#0F2854]">Tải lại vé thi</button></section></div>
 
-  const statusLabel = isSubmitted ? 'Đã nộp bài' : isInProgress ? 'Ca thi đang diễn ra' : 'Chờ check-in'
+  const statusLabel = isSubmitted ? 'Đã nộp bài' : isInProgress ? 'Ca thi đang diễn ra' : 'Chờ nhận máy'
   const studentName = user?.fullName ?? 'Sinh viên'
+  const inputModeLabel = isVoiceOnly ? 'Chỉ thu âm giọng nói' : 'Thu âm kèm hiệu đính thuật ngữ'
 
   return <div className={cn(ds.page, 'pb-8')}>
-    <section className="rounded-3xl bg-[linear-gradient(135deg,#0F2854,#1C4D8D)] p-6 text-white shadow-[0_14px_38px_rgba(15,40,84,0.2)] sm:p-8"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold tracking-[0.14em] text-[#BDE8F5] uppercase">MF-04 · Thi thật phòng Lab Kiosk</p><h1 className="mt-2 text-2xl font-bold sm:text-3xl">{ticket.sessionTitle || ticket.shiftName}</h1><p className="mt-2 text-sm text-white/75">{ticket.roomLab} · Ghế {ticket.seatNumber} · {studentName}</p></div><span className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold">{statusLabel}</span></div><div className="mt-6 grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-2xl bg-white/10 p-3"><Clock3 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Thời gian ca</p><p className="mt-1 font-bold">{formatMf04Date(ticket.startTime)} – {formatMf04Date(ticket.endTime)}</p></div><div className="rounded-2xl bg-white/10 p-3"><Mic2 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Thời lượng đã ghi</p><p className="mt-1 font-bold">{formatRecordingDuration(recordingSeconds)}</p></div><div className="rounded-2xl bg-white/10 p-3"><LockKeyhole className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/65">Trạng thái vé</p><p className="mt-1 font-bold">{ticket.status}</p></div></div></section>
-    {(error || notice) && <div className={cn('mt-4 rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}
-    {(kiosk.isLocked || audioRecorder.error) && <div className="mt-4 flex items-start gap-3 rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><div><strong>{kiosk.isLocked ? 'Kiosk đã đình chỉ vé thi.' : 'Lỗi microphone.'}</strong><p className="mt-1">{kiosk.isLocked ? `Số lần vi phạm: ${kiosk.violations}. Vui lòng liên hệ giám thị.` : audioRecorder.error}</p></div></div>}
-    <section className="mt-4 rounded-3xl border border-[#dce4ee] bg-white p-5 shadow-sm sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-[#0F2854]">Quy trình thi và nộp bài</h2><p className="mt-1 text-sm text-[#60718a]">Exam Input Mode: {ticket.examInputMode ?? 'VoiceWithTranscriptEdit'} · Buffer: {ticket.transcriptBufferSeconds}s</p></div>{!isSubmitted && <div className="flex flex-wrap gap-2">{!isInProgress ? <button type="button" disabled={busy} onClick={() => void handleCheckIn()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white disabled:opacity-50"><CheckCircle2 className="size-4" />Check-in</button> : !audioRecorder.isRecording ? <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleStartRecording()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white disabled:opacity-50"><Mic2 className="size-4" />Bắt đầu ghi âm</button> : <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleSubmit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#b33d52] px-4 text-sm font-bold text-white disabled:opacity-50"><UploadCloud className="size-4" />{busy ? 'Đang lưu...' : 'Nộp bài và niêm phong'}</button>}</div>}</div>{isSubmitted && <div className="mt-4 rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4 text-sm text-[#16785f]"><strong>Bài thi đã được tiếp nhận.</strong> Không thể chỉnh sửa sau khi Persist First. {submission && `Trạng thái: ${submission.status}.`}</div>}{audioRecorder.isRecording && <div className="mt-4 flex items-center gap-2 rounded-xl bg-[#fff4f5] px-3 py-2 text-sm font-semibold text-[#b33d52]"><span className="size-2 animate-pulse rounded-full bg-[#d9455d]" />Đang ghi âm · {formatRecordingDuration(recordingSeconds)} · Còn {kiosk.remainingStrikes} lần vi phạm trước khi đình chỉ</div>}<div className="mt-5 space-y-4">{questions.length === 0 ? <div className="rounded-2xl border border-dashed border-[#cdd8e6] p-6 text-center text-sm text-[#60718a]">Ca thi chưa được gán bộ câu hỏi. Hãy liên hệ giám thị.</div> : questions.map((question, index) => <article key={question.questionId} className="rounded-2xl border border-[#e3e9f1] bg-[#fafbfd] p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#4988C4]/16 text-sm font-bold text-[#1C4D8D]">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-[#5b6b84]">{question.title || `Câu hỏi ${index + 1}`} · {question.difficulty}</p><h3 className="mt-1 text-sm font-bold leading-relaxed text-[#203149]">{question.content}</h3>{getExamQuestionImageUrl(question.imageUrl) && <img src={getExamQuestionImageUrl(question.imageUrl) ?? undefined} alt={question.imageDescription || question.title || 'Hình ảnh câu hỏi'} className="mt-3 max-h-72 w-full rounded-xl border border-[#dce4ee] object-contain" />}{question.imageDescription && <p className="mt-2 text-xs italic text-[#60718a]">{question.imageDescription}</p>}<textarea value={answers[question.questionId] ?? ''} disabled={!audioRecorder.isRecording || isSubmitted} onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))} placeholder="Nhập transcript đã kiểm tra (nếu ExamInputMode cho phép)..." className="mt-4 min-h-24 w-full resize-y rounded-xl border border-[#dce4ee] bg-white p-3 text-sm text-[#203149] outline-none focus:border-[#4988C4] disabled:bg-[#f0f3f7]" /></div></div></article>)}</div></section>
-    {sealed && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-[#277662]"><CheckCircle2 className="size-4" />Audio đã được upload và xác minh SHA-256 trước khi nộp.</p>}
-    {isSubmitted && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dce4ee] bg-white p-4"><p className="text-xs text-[#60718a]">Theo dõi trạng thái chấm ngầm sau khi nộp bài.</p><button type="button" disabled={busy} onClick={() => void refreshSubmission()} className="rounded-xl border border-[#cbd8e7] px-3 py-2 text-xs font-bold text-[#1C4D8D]">Cập nhật trạng thái</button></div>}
-    <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-[#60718a]"><ShieldAlert className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" />Kiosk ghi nhận audio thi thật trên Cloudflare R2. Điểm không hiển thị tại chỗ; sinh viên xem kết quả sau khi giảng viên hậu kiểm và công bố.</p>
+    <section className={cn(ds.banner, 'p-6 text-white sm:p-8')}><div className="relative z-10 flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold tracking-[0.12em] text-[#BDE8F5] uppercase">Kỳ thi vấn đáp chính thức · Phòng Lab</p><h1 className="mt-2 text-2xl font-bold sm:text-3xl">{ticket.sessionTitle || ticket.shiftName}</h1><p className="mt-2 text-sm text-white/80">Phòng {ticket.roomLab} · Máy số {ticket.seatNumber} · {studentName}</p></div><span className="rounded-full bg-white/15 px-3.5 py-1.5 text-xs font-bold">{statusLabel}</span></div><div className="relative z-10 mt-6 grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-2xl bg-white/12 p-3.5"><Clock3 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/70">Thời gian ca thi</p><p className="mt-1 font-bold">{formatMf04Date(ticket.startTime)} – {formatMf04Date(ticket.endTime)}</p></div><div className="rounded-2xl bg-white/12 p-3.5"><Mic2 className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/70">Thời lượng ghi âm</p><p className="mt-1 font-bold">{formatRecordingDuration(recordingSeconds)}</p></div><div className="rounded-2xl bg-white/12 p-3.5"><LockKeyhole className="size-4 text-[#BDE8F5]" /><p className="mt-2 text-xs text-white/70">Trạng thái vé thi</p><p className="mt-1 font-bold">{ticket.status}</p></div></div></section>
+    {(error || notice) && <div className={cn('rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}
+    {(kiosk.isLocked || audioRecorder.error) && <div className="flex items-start gap-3 rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><div><strong>{kiosk.isLocked ? 'Phòng thi đã đình chỉ vé thi.' : 'Lỗi microphone.'}</strong><p className="mt-1">{kiosk.isLocked ? `Số lần rời màn hình vượt quy định (${kiosk.violations} lần). Vui lòng liên hệ giám thị.` : audioRecorder.error}</p></div></div>}
+    <section className={cn(ds.section, 'overflow-hidden')}><div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}><div><div className={ds.sectionTitleRow}><span className={ds.sectionIconWrap}><Mic2 className="size-4 text-[#1C4D8D]" /></span><h2 className={ds.sectionTitle}>Bài thi vấn đáp chính thức</h2></div><p className={ds.sectionHint}>Chế độ trả lời: {inputModeLabel} · Thời gian đệm hiệu đính: {ticket.transcriptBufferSeconds} giây</p></div>{!isSubmitted && <div className="flex flex-wrap gap-2">{!isInProgress ? <button type="button" disabled={busy} onClick={() => void handleCheckIn()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition hover:bg-[#0F2854] disabled:opacity-50"><CheckCircle2 className="size-4" />Xác nhận nhận máy (Check-in)</button> : (!audioRecorder.isRecording && !hasRecordedAudioBlob) ? <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleStartRecording()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition hover:bg-[#0F2854] disabled:opacity-50"><Mic2 className="size-4" />Bắt đầu ghi âm</button> : <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleSubmit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#b33d52] px-4 text-sm font-bold text-white transition hover:bg-[#932c3f] disabled:opacity-50"><UploadCloud className="size-4" />{busy ? 'Đang lưu...' : 'Nộp bài và niêm phong'}</button>}</div>}</div><div className="p-5 sm:p-6">{isSubmitted && <div className="mb-4 rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4 text-sm text-[#16785f]"><strong>Bài thi đã được tiếp nhận và niêm phong an toàn.</strong> Bạn có thể ký biên bản phòng thi và theo dõi kết quả sau khi giảng viên công bố điểm. {submission && `Trạng thái: ${submission.status}.`}</div>}{audioRecorder.isRecording && <div className="mb-4 flex items-center gap-2 rounded-xl bg-[#fff4f5] px-3.5 py-2.5 text-sm font-semibold text-[#b33d52]"><span className="size-2 animate-pulse rounded-full bg-[#d9455d]" />Đang ghi âm · {formatRecordingDuration(recordingSeconds)} · Còn {kiosk.remainingStrikes} lần nhắc nhở toàn màn hình</div>}<div className="space-y-4">{questions.length === 0 ? <div className="rounded-2xl border border-dashed border-[#cdd8e6] p-6 text-center text-sm text-[#60718a]">Ca thi chưa được gán bộ câu hỏi. Hãy liên hệ giám thị phòng thi.</div> : questions.map((question, index) => <article key={question.questionId} className="rounded-2xl border border-[#dce4ee] bg-[#F4FBFD] p-4"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#1C4D8D] text-sm font-bold text-white">{index + 1}</span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-[#1C4D8D]">{question.title || `Câu hỏi ${index + 1}`} · {question.difficulty}</p>{audioRecorder.isRecording && !isSubmitted && <button type="button" disabled={busy || transcribingQuestionId === question.questionId} onClick={() => void handleToggleQuestionVoice(question.questionId, index)} className={cn('inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-50', recordingQuestionId === question.questionId ? 'bg-[#b33d52] text-white' : 'bg-[#1C4D8D] text-white')}><Mic2 className="size-3.5" />{transcribingQuestionId === question.questionId ? 'Đang bóc băng...' : recordingQuestionId === question.questionId ? 'Dừng & Bóc băng câu này' : 'Thu âm trả lời câu này'}</button>}</div><h3 className="mt-1 text-sm font-bold leading-relaxed text-[#0F2854]">{question.content}</h3>{getExamQuestionImageUrl(question.imageUrl) && <img src={getExamQuestionImageUrl(question.imageUrl) ?? undefined} alt={question.imageDescription || question.title || 'Hình ảnh câu hỏi'} className="mt-3 max-h-72 w-full rounded-xl border border-[#dce4ee] bg-white object-contain" />}{question.imageDescription && <p className="mt-2 text-xs italic text-[#60718a]">{question.imageDescription}</p>}<textarea value={answers[question.questionId] ?? ''} readOnly={isVoiceOnly} disabled={!audioRecorder.isRecording || isSubmitted || isVoiceOnly} onChange={(event) => { if (!isVoiceOnly) setAnswers((current) => ({ ...current, [question.questionId]: event.target.value })) }} placeholder={isVoiceOnly ? 'Chế độ Chỉ Giọng Nói: Hệ thống tự động bóc băng âm thanh cho từng câu hoặc khi nộp bài, không cho phép gõ phím.' : 'Kiểm tra và hiệu đính các thuật ngữ chuyên ngành sau khi thu âm...'} className="mt-4 min-h-24 w-full resize-y rounded-xl border border-[#dce4ee] bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D] disabled:bg-[#f0f3f7]" /></div></div></article>)}</div></div></section>
+    {sealed && <p className="flex items-center gap-2 text-xs font-semibold text-[#16836a]"><CheckCircle2 className="size-4" />Bản ghi âm đã được tải lên và niêm phong mã băm SHA-256 an toàn.</p>}
+    {isSubmitted && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4"><p className="text-xs font-medium text-[#0F2854]">Theo dõi trạng thái xử lý bài thi sau khi nộp.</p><button type="button" disabled={busy} onClick={() => void refreshSubmission()} className="rounded-xl border border-[#4988C4] bg-[#F4FBFD] px-3.5 py-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/16">Cập nhật trạng thái</button></div>}
+    <p className="flex items-start gap-2 text-xs leading-relaxed text-[#5b6b84]"><ShieldAlert className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" />Bản thu âm ca thi chính thức được niêm phong bảo mật. Kết quả điểm thi sẽ hiển thị tại mục Kết quả sau khi giảng viên hoàn tất hậu kiểm và công bố.</p>
   </div>
 }
 
 export function OfficialExamPage() {
   return <OfficialExamLivePage />
-}
-
-interface DetailItem {
-  label: string
-  value: string
-  helper: string
-  icon: LucideIcon
-  accentClassName: string
-}
-
-function addMinutes(date: Date, minutes: number) {
-  return new Date(date.getTime() + minutes * 60_000)
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * 86_400_000)
-}
-
-function buildPreviewAssignments(now: Date): OfficialExamAssignment[] {
-  const firstStart = addMinutes(now, 18)
-  const secondStart = addDays(now, 5)
-  secondStart.setHours(13, 30, 0, 0)
-
-  return [
-    {
-      id: 'assignment-int3201',
-      academicTerm: 'Học kỳ Fall 2026',
-      subjectCode: 'INT3201',
-      subjectName: 'Mạng Máy tính & Truyền thông',
-      track: 'Học phần chuyên ngành',
-      startAt: firstStart,
-      durationMinutes: 15,
-      questionCount: 3,
-      room: 'Lab B402',
-      building: 'Tòa nhà Công nghệ',
-      kioskNumber: 12,
-      workstationId: 'LAB-B402-K12',
-      seatZone: 'Dãy B · Ghế 04',
-      sessionCode: 'ES-F26-INT3201-04',
-      candidateNumber: 'SBD-2026-0456',
-      status: 'CHECK_IN_OPEN',
-      checkInCode: '749 203',
-      qrPayload:
-        'oralexam://kiosk-check-in?assignment=assignment-int3201&session=ES-F26-INT3201-04&kiosk=LAB-B402-K12&token=preview-signed-token',
-      tokenExpiresAt: addMinutes(now, 15),
-    },
-    {
-      id: 'assignment-swe3003',
-      academicTerm: 'Học kỳ Fall 2026',
-      subjectCode: 'SWE3003',
-      subjectName: 'Kiến trúc & Thiết kế Phần mềm',
-      track: 'Học phần chuyên ngành',
-      startAt: secondStart,
-      durationMinutes: 18,
-      questionCount: 4,
-      room: 'Lab A305',
-      building: 'Tòa nhà Alpha',
-      kioskNumber: 8,
-      workstationId: 'LAB-A305-K08',
-      seatZone: 'Dãy A · Ghế 08',
-      sessionCode: 'ES-F26-SWE3003-02',
-      candidateNumber: 'SBD-2026-0456',
-      status: 'SCHEDULED',
-    },
-  ]
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat('vi-VN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatShortDate(date: Date) {
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-  }).format(date)
-}
-
-function formatTime(date: Date) {
-  return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-function formatCountdown(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
-  const days = Math.floor(totalSeconds / 86_400)
-  const hours = Math.floor((totalSeconds % 86_400) / 3_600)
-  const minutes = Math.floor((totalSeconds % 3_600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (days > 0) return `${days} ngày ${hours} giờ ${minutes} phút`
-  if (hours > 0) return `${hours} giờ ${minutes} phút ${seconds} giây`
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-}
-
-function getExamPhase(assignment: OfficialExamAssignment, now: Date): ExamPhase {
-  const endAt = addMinutes(assignment.startAt, assignment.durationMinutes)
-  if (now >= endAt) return 'closed'
-  if (now >= assignment.startAt) return 'in-progress'
-  if (assignment.status === 'CHECK_IN_OPEN') return 'check-in'
-  return 'scheduled'
-}
-
-function getInitials(fullName: string) {
-  return fullName
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(-2)
-    .map((word) => word.charAt(0).toLocaleUpperCase('vi-VN'))
-    .join('')
-}
-
-function escapeCalendarText(value: string) {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/,/g, '\\,')
-    .replace(/;/g, '\\;')
-    .replace(/\n/g, '\\n')
-}
-
-function toIcsDate(date: Date) {
-  return date
-    .toISOString()
-    .replace(/[-:]/g, '')
-    .replace(/\.\d{3}/, '')
-}
-
-function LegacyOfficialExamPage() {
-  const { user } = useAuth()
-  const [searchParams] = useSearchParams()
-  const assignments = useMemo(() => buildPreviewAssignments(new Date()), [])
-  const [selectedId, setSelectedId] = useState(assignments[0].id)
-  const [now, setNow] = useState(() => new Date())
-  const [rulesOpen, setRulesOpen] = useState(true)
-  const [roomMapOpen, setRoomMapOpen] = useState(false)
-  const [devicePanelOpen, setDevicePanelOpen] = useState(
-    () => searchParams.get('device-check') === '1',
-  )
-  const [confirmedAtKiosk, setConfirmedAtKiosk] = useState(false)
-  const [micState, setMicState] = useState<MicState>('idle')
-  const [micDeviceLabel, setMicDeviceLabel] = useState('')
-  const [micCheckSecondsRemaining, setMicCheckSecondsRemaining] = useState(0)
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const [qrDataUrl, setQrDataUrl] = useState('')
-  const [qrError, setQrError] = useState(false)
-  const devicePanelRef = useRef<HTMLDivElement>(null)
-  const copyResetTimerRef = useRef<number | null>(null)
-
-  const selectedExam =
-    assignments.find((assignment) => assignment.id === selectedId) ?? assignments[0]
-  const phase = getExamPhase(selectedExam, now)
-  const tokenTimeLeft = selectedExam.tokenExpiresAt
-    ? selectedExam.tokenExpiresAt.getTime() - now.getTime()
-    : 0
-  const canShowCheckIn =
-    phase === 'check-in' &&
-    Boolean(selectedExam.qrPayload && selectedExam.checkInCode) &&
-    tokenTimeLeft > 0
-  const studentName = user?.fullName ?? 'Nguyễn Văn An'
-  const studentCode = user?.studentCode ?? 'SE172428'
-  const sceneState: ExamSceneState =
-    micState === 'checking' ? 'checking' : micState === 'ready' ? 'ready' : 'waiting'
-  const handleKioskLockdown = useCallback(() => setMicState('error'), [])
-  const kioskLockdown = useKioskLockdown(
-    3,
-    handleKioskLockdown,
-    confirmedAtKiosk && micState === 'ready' && phase === 'in-progress',
-  )
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000)
-    return () => {
-      window.clearInterval(timer)
-      if (copyResetTimerRef.current !== null) {
-        window.clearTimeout(copyResetTimerRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (searchParams.get('device-check') !== '1') return
-    const scrollTimer = window.setTimeout(() => {
-      devicePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 180)
-    return () => window.clearTimeout(scrollTimer)
-  }, [searchParams])
-
-  useEffect(() => {
-    let cancelled = false
-
-    if (!canShowCheckIn || !selectedExam.qrPayload) return
-
-    QRCode.toDataURL(selectedExam.qrPayload, {
-      width: 320,
-      margin: 2,
-      errorCorrectionLevel: 'M',
-      color: {
-        dark: '#07172eff',
-        light: '#ffffffff',
-      },
-    })
-      .then((dataUrl) => {
-        if (!cancelled) {
-          setQrDataUrl(dataUrl)
-          setQrError(false)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setQrError(true)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [canShowCheckIn, selectedExam.qrPayload])
-
-  const phaseConfig = {
-    'check-in': {
-      label: 'Giảng viên đã mở check-in',
-      helper: `Còn ${formatCountdown(selectedExam.startAt.getTime() - now.getTime())} tới giờ thi`,
-      className: 'border-[#bcebdc] bg-[#ecfbf5] text-[#16785f]',
-      dotClassName: 'bg-[#35c897]',
-    },
-    scheduled: {
-      label: 'Đã công bố · Chờ mở ca',
-      helper: `Bắt đầu sau ${formatCountdown(selectedExam.startAt.getTime() - now.getTime())}`,
-      className: 'border-[#cfdaf8] bg-[#4988C4]/16 text-[#1C4D8D]',
-      dotClassName: 'bg-[#1C4D8D]',
-    },
-    'in-progress': {
-      label: 'Ca thi đang diễn ra',
-      helper: 'Chỉ Kiosk đã xác thực mới được truy cập phiên thi',
-      className: 'border-[#c9e5f8] bg-[#edf8ff] text-[#24749d]',
-      dotClassName: 'bg-[#42b9df]',
-    },
-    closed: {
-      label: 'Ca thi đã kết thúc',
-      helper: 'Bài làm đang chờ xử lý và hậu kiểm',
-      className: 'border-[#dce2ea] bg-[#f4f6f9] text-[#627186]',
-      dotClassName: 'bg-[#8c99aa]',
-    },
-  }[phase]
-
-  const details: DetailItem[] = [
-    {
-      label: 'Ngày & giờ thi',
-      value: formatTime(selectedExam.startAt),
-      helper: formatDate(selectedExam.startAt),
-      icon: CalendarDays,
-      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-    },
-    {
-      label: 'Phòng thi (Lab)',
-      value: selectedExam.room,
-      helper: selectedExam.building,
-      icon: MapPinned,
-      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-    },
-    {
-      label: 'Vị trí Kiosk / Bàn',
-      value: `Kiosk số ${selectedExam.kioskNumber}`,
-      helper: `${selectedExam.workstationId} · ${selectedExam.seatZone}`,
-      icon: Monitor,
-      accentClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-    },
-    {
-      label: 'Thời lượng vấn đáp',
-      value: `${selectedExam.durationMinutes} phút`,
-      helper: `${selectedExam.questionCount} câu hỏi chuyên sâu`,
-      icon: Clock3,
-      accentClassName: 'bg-[#ecfaf7] text-[#168d76]',
-    },
-  ]
-
-  const handleMicCheck = async () => {
-    if (!confirmedAtKiosk || micState === 'checking') return
-
-    const AudioContextConstructor =
-      window.AudioContext ??
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-
-    if (!navigator.mediaDevices?.getUserMedia || !AudioContextConstructor) {
-      setMicState('unsupported')
-      return
-    }
-
-    setMicState('checking')
-    setMicDeviceLabel('')
-    setMicCheckSecondsRemaining(30)
-    let stream: MediaStream | null = null
-    let audioContext: AudioContext | null = null
-    let sourceNode: MediaStreamAudioSourceNode | null = null
-
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      })
-      const audioTrack = stream.getAudioTracks()[0]
-      if (!audioTrack || audioTrack.readyState !== 'live') {
-        throw new Error('No active audio track')
-      }
-
-      audioContext = new AudioContextConstructor()
-      if (audioContext.state === 'suspended') await audioContext.resume()
-      const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 2048
-      analyser.smoothingTimeConstant = 0.25
-      sourceNode = audioContext.createMediaStreamSource(stream)
-      sourceNode.connect(analyser)
-
-      const samples = new Uint8Array(analyser.fftSize)
-      const signalDeadline = performance.now() + 30_000
-      let lastCountdownUpdate = 0
-      let peakRms = 0
-
-      while (performance.now() < signalDeadline) {
-        analyser.getByteTimeDomainData(samples)
-        let squareSum = 0
-        for (const sample of samples) {
-          const normalized = (sample - 128) / 128
-          squareSum += normalized * normalized
-        }
-        peakRms = Math.max(peakRms, Math.sqrt(squareSum / samples.length))
-        const currentTime = performance.now()
-        if (currentTime - lastCountdownUpdate >= 200) {
-          setMicCheckSecondsRemaining(Math.ceil(Math.max(0, signalDeadline - currentTime) / 1000))
-          lastCountdownUpdate = currentTime
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 90))
-      }
-      setMicCheckSecondsRemaining(0)
-
-      if (audioTrack.muted || peakRms < 0.008) {
-        throw new Error('No microphone signal detected')
-      }
-
-      setMicDeviceLabel(audioTrack.label || 'Microphone mặc định của Kiosk')
-      setMicState('ready')
-    } catch {
-      setMicCheckSecondsRemaining(0)
-      setMicState('error')
-    } finally {
-      sourceNode?.disconnect()
-      if (audioContext) {
-        await audioContext.close().catch(() => undefined)
-      }
-      stream?.getTracks().forEach((track) => track.stop())
-    }
-  }
-
-  const handleSelectExam = (assignmentId: string) => {
-    setSelectedId(assignmentId)
-    setMicState('idle')
-    setMicDeviceLabel('')
-    setMicCheckSecondsRemaining(0)
-    setConfirmedAtKiosk(false)
-    setCopyState('idle')
-    setQrDataUrl('')
-    setQrError(false)
-  }
-
-  const handleCopyCode = async () => {
-    if (!canShowCheckIn || !selectedExam.checkInCode) return
-    try {
-      await navigator.clipboard.writeText(selectedExam.checkInCode.replace(/\s/g, ''))
-      setCopyState('copied')
-      if (copyResetTimerRef.current !== null) window.clearTimeout(copyResetTimerRef.current)
-      copyResetTimerRef.current = window.setTimeout(() => {
-        setCopyState('idle')
-        copyResetTimerRef.current = null
-      }, 2200)
-    } catch {
-      setCopyState('error')
-    }
-  }
-
-  const handleAddToCalendar = () => {
-    const endAt = addMinutes(selectedExam.startAt, selectedExam.durationMinutes)
-    const calendar = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//OralExam AI//Official Exam//VI',
-      'BEGIN:VEVENT',
-      `UID:${selectedExam.id}@oralexam.local`,
-      `DTSTAMP:${toIcsDate(new Date())}`,
-      `DTSTART:${toIcsDate(selectedExam.startAt)}`,
-      `DTEND:${toIcsDate(endAt)}`,
-      `SUMMARY:${escapeCalendarText(`Thi vấn đáp ${selectedExam.subjectCode}`)}`,
-      `DESCRIPTION:${escapeCalendarText(`Có mặt trước 15 phút. Kiosk ${selectedExam.kioskNumber}, ${selectedExam.room}.`)}`,
-      `LOCATION:${escapeCalendarText(`${selectedExam.room}, ${selectedExam.building}`)}`,
-      'BEGIN:VALARM',
-      'TRIGGER:-PT30M',
-      'ACTION:DISPLAY',
-      'DESCRIPTION:Nhắc lịch thi vấn đáp',
-      'END:VALARM',
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ].join('\r\n')
-    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `lich-thi-${selectedExam.subjectCode.toLowerCase()}.ics`
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-
-  const micStatus = {
-    idle: {
-      icon: Mic2,
-      title: 'Chưa kiểm tra micro',
-      helper: 'Xác nhận đúng Kiosk trước khi cấp quyền truy cập micro.',
-      className: 'border-[#dce5f0] bg-white text-[#5d6c80]',
-    },
-    checking: {
-      icon: LoaderCircle,
-      title: 'Đang kiểm tra tín hiệu...',
-      helper: 'Giữ yên kết nối và nói thử một câu ngắn.',
-      className: 'border-[#cfdaf8] bg-[#4988C4]/16 text-[#1C4D8D]',
-    },
-    ready: {
-      icon: CheckCircle2,
-      title: 'Mic Health · Đã nhận tín hiệu',
-      helper: micDeviceLabel || 'Microphone đã thu được tín hiệu giọng nói.',
-      className: 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
-    },
-    error: {
-      icon: XCircle,
-      title: 'Mic Bad · Không nhận được tín hiệu',
-      helper: 'Không bỏ qua lỗi. Hãy báo giám thị để được đổi sang máy dự phòng.',
-      className: 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]',
-    },
-    unsupported: {
-      icon: AlertTriangle,
-      title: 'Trình duyệt chưa hỗ trợ kiểm tra',
-      helper: 'Hãy dùng trình duyệt Kiosk hoặc liên hệ giám thị phòng thi.',
-      className: 'border-[#f3dfb8] bg-[#fff9eb] text-[#9a6c16]',
-    },
-  }[micState]
-  const MicStatusIcon = micStatus.icon
-
-  return (
-    <div className={cn(ds.page, 'pb-5')}>
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 14mm; }
-          body * { visibility: hidden !important; }
-          #official-exam-print-ticket,
-          #official-exam-print-ticket * { visibility: visible !important; }
-          #official-exam-print-ticket {
-            display: block !important;
-            position: fixed;
-            inset: 0;
-            width: 100%;
-            padding: 24px;
-            background: white;
-            color: #0F2854;
-          }
-        }
-      `}</style>
-
-      <section id="official-exam-print-ticket" className="hidden" aria-hidden="true">
-        <div className="rounded-2xl border-2 border-[#0F2854] p-8">
-          <div className="flex items-start justify-between gap-8 border-b border-[#4988C4]/45 pb-5">
-            <div>
-              <p className="text-sm font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
-                OralExam AI · University Tech
-              </p>
-              <h1 className="mt-2 text-3xl font-bold">Phiếu dự thi vấn đáp chính thức</h1>
-              <p className="mt-2 text-sm text-[#5b6b84]">
-                {selectedExam.academicTerm} · Mã ca {selectedExam.sessionCode}
-              </p>
-            </div>
-            {qrDataUrl && canShowCheckIn && (
-              <img src={qrDataUrl} alt="QR minh họa trên phiếu dự thi" className="size-32" />
-            )}
-          </div>
-          <div className="mt-6 grid grid-cols-2 gap-x-10 gap-y-5 text-sm">
-            <div>
-              <strong>Thí sinh:</strong> {studentName}
-            </div>
-            <div>
-              <strong>MSSV:</strong> {studentCode}
-            </div>
-            <div>
-              <strong>Số báo danh:</strong> {selectedExam.candidateNumber}
-            </div>
-            <div>
-              <strong>Học phần:</strong> {selectedExam.subjectCode}
-            </div>
-            <div className="col-span-2">
-              <strong>Tên học phần:</strong> {selectedExam.subjectName}
-            </div>
-            <div>
-              <strong>Thời gian:</strong> {formatTime(selectedExam.startAt)} ·{' '}
-              {formatDate(selectedExam.startAt)}
-            </div>
-            <div>
-              <strong>Thời lượng:</strong> {selectedExam.durationMinutes} phút
-            </div>
-            <div>
-              <strong>Phòng thi:</strong> {selectedExam.room} · {selectedExam.building}
-            </div>
-            <div>
-              <strong>Vị trí:</strong> Kiosk {selectedExam.kioskNumber} · {selectedExam.seatZone}
-            </div>
-          </div>
-          <div className="mt-7 rounded-xl bg-[#4988C4]/16 p-4 text-sm leading-relaxed">
-            Có mặt trước 15 phút, mang thẻ sinh viên và đến đúng Kiosk được phân công. QR/mã trên
-            giao diện hiện là dữ liệu xem trước; thông tin xác thực thật phải do hệ thống backend
-            cấp.
-          </div>
-        </div>
-      </section>
-
-      <section className={cn(ds.banner, 'min-h-[210px] sm:min-h-[226px]')}>
-        <div
-          className="pointer-events-none absolute inset-0 opacity-60"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(43,112,175,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(43,112,175,0.055) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            maskImage: 'linear-gradient(90deg, black 0%, transparent 74%)',
-          }}
-        />
-        <div className="absolute inset-y-0 right-0 hidden w-[48%] lg:block">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_50%,rgba(76,212,233,0.2),transparent_58%)]" />
-          <Suspense
-            fallback={
-              <div className="flex size-full items-center justify-center text-[#4ba3c6]">
-                <LoaderCircle className="size-6 animate-spin" />
-              </div>
-            }
-          >
-            <OfficialExamThreeScene
-              state={sceneState}
-              roomLabel={selectedExam.room}
-              kioskNumber={selectedExam.kioskNumber}
-            />
-          </Suspense>
-        </div>
-
-        <div className="relative z-10 flex min-h-[210px] max-w-[760px] flex-col justify-center p-5 sm:min-h-[226px] sm:p-7 lg:w-[58%] xl:p-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.04em] text-white uppercase">
-              <ShieldCheck className="size-3.5" />
-              Kỳ thi chính thức
-            </span>
-            <span className="text-xs font-semibold text-white/75">
-              {selectedExam.academicTerm} · {selectedExam.subjectCode}
-            </span>
-            <span className="rounded-full bg-white/15 px-2 py-1 text-xs font-bold text-white">
-              Dữ liệu xem trước FE
-            </span>
-          </div>
-          <h1 className="mt-3 text-[26px] leading-[1.08] font-bold tracking-[-0.035em] text-white sm:text-[34px]">
-            Lịch Thi Vấn Đáp Chính Thức
-          </h1>
-          <p className="mt-2 max-w-[620px] text-sm leading-relaxed text-white/80 sm:text-xs">
-            Theo dõi ca thi, vị trí Kiosk được phân công và các bước check-in bắt buộc tại phòng Lab
-            của nhà trường.
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2.5">
-            <div
-              className={cn(
-                'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold shadow-sm',
-                phaseConfig.className,
-              )}
-            >
-              <span className={cn('size-2 rounded-full', phaseConfig.dotClassName)} />
-              {phaseConfig.label}
-            </div>
-            <span className="text-xs font-medium text-white/75" role="timer" aria-live="off">
-              {phaseConfig.helper}
-            </span>
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute right-4 bottom-3 hidden items-center gap-2 rounded-full border border-white/70 bg-white/78 px-3 py-1.5 text-xs font-bold text-[#41647e] shadow-lg backdrop-blur-md lg:flex">
-          <span className="size-1.5 rounded-full bg-[#38c997] shadow-[0_0_8px_rgba(56,201,151,0.75)]" />
-          {selectedExam.room} · Kiosk {selectedExam.kioskNumber}
-        </div>
-      </section>
-
-      {(kioskLockdown.violations > 0 || kioskLockdown.isLocked) && (
-        <section
-          role="alert"
-          className={cn(
-            'rounded-2xl border px-4 py-3 text-sm shadow-sm',
-            kioskLockdown.isLocked
-              ? 'border-rose-200 bg-rose-50 text-rose-800'
-              : 'border-amber-200 bg-amber-50 text-amber-800',
-          )}
-        >
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <div>
-              <p className="font-bold">
-                {kioskLockdown.isLocked ? 'Kiosk đã đình chỉ phiên thi' : 'Cảnh báo an ninh Kiosk'}
-              </p>
-              <p className="mt-1 leading-relaxed">
-                {kioskLockdown.isLocked
-                  ? 'Đã ghi nhận từ 3 lần mất focus hoặc thao tác bị cấm. Hãy báo giám thị để lập biên bản.'
-                  : `Đã ghi nhận ${kioskLockdown.violations}/3 cảnh báo; còn ${kioskLockdown.remainingStrikes} lần trước khi đình chỉ.`}
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="flex items-start gap-3 rounded-2xl border border-[#d9e4f0] bg-white p-4 shadow-[0_7px_24px_rgba(31,61,105,0.045)] sm:px-5">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
-          <AlertTriangle className="size-[18px]" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Lưu ý bắt buộc về địa điểm thi</h2>
-          <p className="mt-1 text-xs leading-relaxed text-[#68788e]">
-            Không thể thực hiện bài thi chính thức trên thiết bị cá nhân. Hãy có mặt trước 15 phút,
-            đến đúng Kiosk được Admin phân công và chờ Giảng viên mở ca thi.
-          </p>
-        </div>
-        <span className="hidden rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-[#718095] sm:inline-flex">
-          MF-04 · Lab Viva
-        </span>
-      </section>
-
-      <section aria-label="Chọn lịch thi" className="overflow-x-auto pb-1">
-        <div className="flex min-w-max gap-2" aria-label="Các ca thi đã công bố">
-          {assignments.map((assignment) => {
-            const isSelected = assignment.id === selectedExam.id
-            const assignmentPhase = getExamPhase(assignment, now)
-            return (
-              <button
-                key={assignment.id}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => handleSelectExam(assignment.id)}
-                className={cn(
-                  'group flex min-h-12 items-center gap-3 rounded-xl border px-3.5 py-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
-                  isSelected
-                    ? 'border-[#7896ed] bg-[#4988C4]/16 shadow-[0_6px_18px_rgba(36,94,234,0.1)]'
-                    : 'border-[#dce4ee] bg-white hover:border-[#4988C4]/45 hover:bg-white',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex size-8 items-center justify-center rounded-lg text-xs font-bold',
-                    isSelected ? 'bg-[#1C4D8D] text-white' : 'bg-[#f0f4f9] text-[#59708e]',
-                  )}
-                >
-                  {formatShortDate(assignment.startAt)}
-                </span>
-                <span>
-                  <span className="block text-xs font-bold text-[#25364e]">
-                    {assignment.subjectCode} · {formatTime(assignment.startAt)}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-[#7c899b]">
-                    {assignment.room} · Kiosk {assignment.kioskNumber}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    'ml-1 size-2 rounded-full',
-                    assignmentPhase === 'check-in' ? 'bg-[#35c897]' : 'bg-[#8ea2bf]',
-                  )}
-                />
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_310px] xl:grid-cols-[minmax(0,1fr)_340px]">
-        <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
-          <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#0F2854] text-white shadow-[0_7px_18px_rgba(7,23,46,0.16)]">
-                <BookOpenCheck className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
-                  {selectedExam.track}
-                </p>
-                <h2 className="mt-1 text-base leading-tight font-bold text-[#0F2854] sm:text-lg">
-                  {selectedExam.subjectCode} · {selectedExam.subjectName}
-                </h2>
-                <p className="mt-1 text-xs font-medium text-[#8a97a9]">
-                  Mã ca: {selectedExam.sessionCode}
-                </p>
-              </div>
-            </div>
-            <span
-              className={cn(
-                'self-start rounded-full border px-2.5 py-1 text-xs font-bold',
-                phaseConfig.className,
-              )}
-            >
-              {phaseConfig.label}
-            </span>
-          </div>
-
-          <div className="p-4 sm:p-5 lg:p-6">
-            <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
-              {details.map(({ label, value, helper, icon: Icon, accentClassName }) => (
-                <article
-                  key={label}
-                  className="min-w-0 rounded-2xl border border-[#e6ebf2] bg-[#fafbfd] p-3.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[7px] font-bold tracking-[0.05em] text-[#8592a5] uppercase">
-                      {label}
-                    </span>
-                    <span
-                      className={cn(
-                        'flex size-7 shrink-0 items-center justify-center rounded-lg',
-                        accentClassName,
-                      )}
-                    >
-                      <Icon className="size-3.5" />
-                    </span>
-                  </div>
-                  <p className="mt-3 truncate text-sm font-bold text-[#203149]">{value}</p>
-                  <p className="mt-1 line-clamp-2 min-h-[24px] text-xs leading-relaxed text-[#77859a]">
-                    {helper}
-                  </p>
-                </article>
-              ))}
-            </div>
-
-            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[#e1e8f1] bg-[#f6f8fb] p-3.5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#4988C4,#0F2854)] text-sm font-bold text-white shadow-[0_7px_18px_rgba(36,94,234,0.2)]">
-                  {getInitials(studentName) || 'SV'}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[7px] font-bold tracking-[0.06em] text-[#8794a6] uppercase">
-                    Thông tin thí sinh dự thi
-                  </p>
-                  <p className="mt-1 truncate text-sm font-bold text-[#23344d]">
-                    {studentName}
-                  </p>
-                  <p className="mt-1 text-xs text-[#5b6b84]">
-                    {selectedExam.candidateNumber} <span className="mx-1.5 text-[#bcc5d1]">•</span>{' '}
-                    MSSV: {studentCode}
-                  </p>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-[#cfebe1] bg-white px-3 py-2 text-xs font-semibold text-[#277c67]">
-                <BadgeCheck className="size-4 text-[#35bd91]" />
-                Danh tính đã liên kết
-              </div>
-            </div>
-
-            <div className="mt-4 overflow-hidden rounded-2xl border border-[#e1e7ef]">
-              <button
-                type="button"
-                onClick={() => setRulesOpen((isOpen) => !isOpen)}
-                aria-expanded={rulesOpen}
-                className="flex min-h-12 w-full items-center justify-between gap-3 bg-white px-4 text-left transition hover:bg-white focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <span className="flex items-center gap-2 text-xs font-bold text-[#27384f]">
-                  <Clipboard className="size-4 text-[#1C4D8D]" />
-                  Quy chế phòng Kiosk & tiến trình thi
-                </span>
-                <span className="flex items-center gap-2 text-xs font-semibold text-[#697a91]">
-                  3 bước bắt buộc
-                  <ChevronDown
-                    className={cn('size-4 transition-transform', rulesOpen && 'rotate-180')}
-                  />
-                </span>
-              </button>
-
-              {rulesOpen && (
-                <ol className="space-y-2 border-t border-[#edf1f5] bg-white p-3 sm:p-4">
-                  {[
-                    {
-                      title: 'Đến sớm & đối chiếu hồ sơ',
-                      detail: `Có mặt tại ${selectedExam.room} trước giờ thi 15 phút, mang thẻ sinh viên và kiểm tra đúng ${selectedExam.candidateNumber}.`,
-                    },
-                    {
-                      title: `Check-in tại Kiosk số ${selectedExam.kioskNumber}`,
-                      detail:
-                        'Quét QR hoặc nhập mã trên đúng Kiosk được phân công. Kiosk xác nhận mã và danh tính theo cấu hình của ca thi.',
-                    },
-                    {
-                      title: 'Kiểm tra Mic rồi chờ Giảng viên mở timer',
-                      detail:
-                        'Nếu Mic Bad, báo giám thị để đổi máy. Chỉ khi Mic Health và Giảng viên mở ca, Kiosk mới khóa màn hình và bắt đầu tính giờ.',
-                    },
-                  ].map((rule, index) => (
-                    <li
-                      key={rule.title}
-                      className="flex gap-3 rounded-xl border border-[#e8edf3] bg-white p-3"
-                    >
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#4988C4]/16 text-xs font-bold text-[#1C4D8D]">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <h3 className="text-xs font-bold text-[#2c3c53]">{rule.title}</h3>
-                        <p className="mt-1 text-xs leading-relaxed text-[#76859a]">
-                          {rule.detail}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-
-            <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => setDevicePanelOpen((isOpen) => !isOpen)}
-                aria-expanded={devicePanelOpen}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              >
-                <Mic2 className="size-4" />
-                Kiểm tra micro tại Kiosk
-              </button>
-              <button
-                type="button"
-                onClick={() => setRoomMapOpen((isOpen) => !isOpen)}
-                aria-expanded={roomMapOpen}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <MapPinned className="size-4 text-[#1C4D8D]" />
-                {roomMapOpen ? 'Ẩn sơ đồ phòng' : `Xem sơ đồ ${selectedExam.room}`}
-              </button>
-              <button
-                type="button"
-                onClick={handleAddToCalendar}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <CalendarPlus className="size-4 text-[#1C4D8D]" />
-                Thêm vào lịch
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <Printer className="size-4 text-[#1C4D8D]" />
-                In / lưu phiếu dự thi
-              </button>
-            </div>
-
-            {devicePanelOpen && (
-              <div
-                ref={devicePanelRef}
-                id="exam-readiness"
-                className="mt-4 scroll-mt-24 rounded-2xl border border-[#cfdcf1] bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#1C4D8D] shadow-sm">
-                      <Headphones className="size-[18px]" />
-                    </span>
-                    <div>
-                      <h3 className="text-xs font-bold text-[#263a57]">
-                        Kiểm tra phần cứng tại Kiosk
-                      </h3>
-                      <p className="mt-1 max-w-[560px] text-xs leading-relaxed text-[#687b95]">
-                        Bài kiểm tra này chỉ xác nhận micro của trình duyệt hiện tại. Kết quả chính
-                        thức được Kiosk kiểm tra lại ngay trước khi Giảng viên bắt đầu timer.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#657993] shadow-sm">
-                    {selectedExam.workstationId}
-                  </span>
-                </div>
-
-                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#4988C4]/45 bg-white p-3 text-xs leading-relaxed text-[#52647d]">
-                  <input
-                    type="checkbox"
-                    checked={confirmedAtKiosk}
-                    onChange={(event) => {
-                      setConfirmedAtKiosk(event.target.checked)
-                      if (!event.target.checked && micState !== 'checking') {
-                        setMicState('idle')
-                        setMicDeviceLabel('')
-                        setMicCheckSecondsRemaining(0)
-                      }
-                    }}
-                    className="mt-0.5 size-4 accent-[#4988C4]"
-                  />
-                  Tôi xác nhận đang ngồi tại {selectedExam.room}, Kiosk {selectedExam.kioskNumber}{' '}
-                  được phân công.
-                </label>
-
-                <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                  <div
-                    className={cn(
-                      'flex min-h-14 items-start gap-3 rounded-xl border p-3',
-                      micStatus.className,
-                    )}
-                  >
-                    <MicStatusIcon
-                      className={cn(
-                        'mt-0.5 size-4 shrink-0',
-                        micState === 'checking' && 'animate-spin',
-                      )}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold">{micStatus.title}</p>
-                      <p className="mt-1 text-xs leading-relaxed break-words opacity-80">
-                        {micStatus.helper}
-                      </p>
-                      {micState === 'checking' && (
-                        <p className="mt-1 text-xs font-bold text-[#1C4D8D]" role="timer" aria-live="polite">
-                          Còn {micCheckSecondsRemaining} giây kiểm tra tín hiệu
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleMicCheck}
-                    disabled={!confirmedAtKiosk || micState === 'checking'}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#0F2854] px-4 text-sm font-bold text-white transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {micState === 'checking' ? (
-                      <LoaderCircle className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                    {micState === 'ready' || micState === 'error'
-                      ? 'Kiểm tra lại'
-                      : 'Bắt đầu kiểm tra'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {roomMapOpen && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-[#dfe6ef] bg-[#4988C4]/16 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="flex items-center gap-2 text-xs font-bold text-[#26384f]">
-                      <Building2 className="size-4 text-[#1C4D8D]" /> Sơ đồ {selectedExam.room}
-                    </h3>
-                    <p className="mt-1 text-xs text-[#75849a]">
-                      Đi theo lối vào bên phải và tìm Kiosk được tô xanh.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-[#718095]">
-                    <span className="flex items-center gap-1.5">
-                      <span className="size-2 rounded-sm bg-[#1C4D8D]" /> Vị trí của bạn
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="size-2 rounded-sm border border-[#cbd6e4] bg-white" /> Kiosk
-                      khác
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
-                  <div className="flex min-h-20 items-center justify-center rounded-xl border border-dashed border-[#b9c8da] bg-white text-center text-xs font-bold text-[#5b6b84]">
-                    <div>
-                      <UserRound className="mx-auto mb-1 size-4 text-[#1C4D8D]" />
-                      Bàn giám thị
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {Array.from({ length: 16 }, (_, index) => index + 1).map((kiosk) => {
-                      const isAssigned = kiosk === selectedExam.kioskNumber
-                      return (
-                        <div
-                          key={kiosk}
-                          className={cn(
-                            'flex min-h-11 items-center justify-center rounded-xl border text-sm font-bold',
-                            isAssigned
-                              ? 'border-[#4988C4] bg-[#1C4D8D] text-white shadow-[0_6px_16px_rgba(36,94,234,0.2)]'
-                              : 'border-[#dce4ee] bg-white text-[#75849a]',
-                          )}
-                        >
-                          K{kiosk.toString().padStart(2, '0')}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-end gap-2 text-xs font-semibold text-[#5f728c]">
-                  <DoorOpen className="size-4 text-[#2aa380]" /> Lối vào phòng
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="space-y-4">
-          <section className="overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]">
-            <div className="flex items-center justify-between border-b border-[#4988C4]/45 px-4 py-3.5">
-              <div className="flex items-center gap-2">
-                <QrCode className="size-4 text-[#1C4D8D]" />
-                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Bản xem trước QR Check-in</h2>
-              </div>
-              <span className="flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
-                <ScanLine className="size-3.5" /> Đúng tại Kiosk
-              </span>
-            </div>
-
-            <div className="p-4">
-              {canShowCheckIn ? (
-                <>
-                  <div className="relative mx-auto aspect-square w-full max-w-[220px] overflow-hidden rounded-2xl border border-[#dce4ee] bg-white p-3 shadow-[0_8px_24px_rgba(26,49,83,0.08)]">
-                    {qrDataUrl ? (
-                      <img
-                        src={qrDataUrl}
-                        alt={`QR check-in cho ${selectedExam.room}, Kiosk ${selectedExam.kioskNumber}`}
-                        className="size-full object-contain"
-                        draggable={false}
-                      />
-                    ) : qrError ? (
-                      <div className="flex size-full flex-col items-center justify-center gap-2 text-center text-xs text-[#a14354]">
-                        <XCircle className="size-7" /> Không thể tạo mã QR
-                      </div>
-                    ) : (
-                      <div className="flex size-full items-center justify-center text-[#1C4D8D]">
-                        <LoaderCircle className="size-6 animate-spin" />
-                      </div>
-                    )}
-                    <span className="pointer-events-none absolute top-2 left-2 size-5 rounded-tl-lg border-t-2 border-l-2 border-[#46cfe5]" />
-                    <span className="pointer-events-none absolute right-2 bottom-2 size-5 rounded-br-lg border-r-2 border-b-2 border-[#46cfe5]" />
-                  </div>
-                  <p className="mt-3 text-center font-mono text-xs font-bold text-[#26384f]">
-                    {selectedExam.candidateNumber} · {selectedExam.subjectCode}
-                  </p>
-                  <p className="mt-1 text-center text-xs leading-relaxed text-[#8290a3]">
-                    QR minh họa UI · token thật sẽ do backend cấp cho {selectedExam.workstationId}
-                  </p>
-
-                  <div className="mt-3 rounded-xl border border-[#dfe6ef] bg-[#4988C4]/16 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold tracking-[0.05em] text-[#8794a6] uppercase">
-                          Mã demo dự phòng
-                        </p>
-                        <p className="mt-1 font-mono text-[17px] font-bold tracking-[0.18em] text-[#1C4D8D]">
-                          {selectedExam.checkInCode}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyCode}
-                        className="flex size-10 items-center justify-center rounded-xl border border-[#4988C4]/45 bg-white text-[#4461b4] transition hover:border-[#9cb0d9] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-                        aria-label="Sao chép mã check-in dự phòng"
-                      >
-                        {copyState === 'copied' ? (
-                          <Check className="size-4" />
-                        ) : (
-                          <Copy className="size-4" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between border-t border-[#e4eaf1] pt-2 text-xs">
-                      <span className="text-[#7a889b]">Token giao diện mẫu hết hạn sau</span>
-                      <span
-                        className="font-mono font-bold text-[#1C4D8D]"
-                        role="timer"
-                        aria-live="off"
-                      >
-                        {formatCountdown(tokenTimeLeft)}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex min-h-[285px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#cad5e3] bg-[#4988C4]/16 px-5 text-center">
-                  <div className="flex size-14 items-center justify-center rounded-2xl bg-white text-[#7184a0] shadow-sm">
-                    <QrCode className="size-7" />
-                  </div>
-                  <h3 className="mt-4 text-xs font-bold text-[#36485f]">
-                    {phase === 'check-in' ? 'Mã check-in đã hết hạn' : 'QR chưa được phát hành'}
-                  </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-[#5b6b84]">
-                    {phase === 'check-in'
-                      ? 'Hãy chờ Kiosk đồng bộ token mới hoặc liên hệ giám thị.'
-                      : 'Mã chỉ xuất hiện khi Giảng viên mở ca và cửa sổ check-in bắt đầu.'}
-                  </p>
-                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-[#edf2fa] px-3 py-1.5 text-xs font-bold text-[#5e718d]">
-                    <Clock3 className="size-3.5" /> {phaseConfig.label}
-                  </span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[22px] border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold tracking-[0.05em] text-[#7890aa] uppercase">
-                  Không gian Kiosk thi
-                </p>
-                <h2 className="mt-1 text-base font-bold text-[#0F2854] sm:text-lg">
-                  {selectedExam.room} · Kiosk {selectedExam.kioskNumber}
-                </h2>
-              </div>
-              <span className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
-                <Monitor className="size-4" />
-              </span>
-            </div>
-            <div className="mt-3 overflow-hidden rounded-2xl border border-[#dce6f1] bg-[linear-gradient(145deg,#071a38,#0a315d)] p-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-xs text-[#bdd2eb]">
-                  <Wifi className="mb-1 size-3.5 text-[#68e4cd]" /> Mạng Lab
-                  <strong className="mt-0.5 block text-white">Ổn định</strong>
-                </div>
-                <div className="rounded-lg border border-white/10 bg-white/6 p-2 text-xs text-[#bdd2eb]">
-                  <Mic2 className="mb-1 size-3.5 text-[#75eaf3]" /> Micro Kiosk
-                  <strong className="mt-0.5 block text-white">Chờ kiểm tra</strong>
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#071326]/70 px-2.5 py-2 text-xs text-[#b9cbe1]">
-                <Sparkles className="size-3.5 text-[#6ce8f1]" /> AI Voice Core kết nối khi Giảng
-                viên mở timer.
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[22px] border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_34px_rgba(31,61,105,0.05)]">
-            <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#eef8f5] text-[#218c72]">
-                <Info className="size-4" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Cần hỗ trợ kỹ thuật?</h2>
-                <p className="mt-1 text-xs leading-relaxed text-[#7a899c]">
-                  Báo trực tiếp giám thị tại {selectedExam.room}. Không tự ý đổi Kiosk hoặc bỏ qua
-                  bước kiểm tra micro.
-                </p>
-              </div>
-            </div>
-          </section>
-        </aside>
-      </div>
-
-      <div className="sr-only" aria-live="polite">
-        {copyState === 'copied' && 'Đã sao chép mã check-in.'}
-        {copyState === 'error' && 'Không thể sao chép mã check-in.'}
-        {micState === 'ready' && 'Micro hoạt động tốt. Hãy chờ Giảng viên mở ca thi.'}
-        {micState === 'error' && 'Không nhận được micro. Hãy báo giám thị để đổi máy.'}
-      </div>
-    </div>
-  )
 }

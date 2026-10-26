@@ -794,6 +794,7 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
                 Score = score,
                 ConfidenceScore = 0.95m,
                 Feedback = $"Điểm số {score}",
+                FollowUpPrompt = "Em hãy phân tích rõ hơn cơ chế hoạt động trong thực tế?",
                 Details = new List<GradingDetailDto>
                 {
                     new GradingDetailDto { CriterionId = question.Rubric!.Criteria.First().Id.ToString(), Score = score, Comment = "Đạt" }
@@ -1093,11 +1094,12 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
                     capturedFollowUpGradingRequest = req;
                 }
             })
-            .ReturnsAsync(new AiGradingResult
+            .ReturnsAsync((AiGradingRequest req, CancellationToken _) => new AiGradingResult
             {
                 Score = 6.0m,
                 ConfidenceScore = 0.92m,
                 Feedback = "Trả lời đạt mức khá nhưng cần phân tích sâu hơn.",
+                FollowUpPrompt = $"Dựa trên câu trả lời '{req.Transcript}', em hãy phân tích sâu hơn cơ chế quản lý vòng đời trong thực tế?",
                 Details = new List<GradingDetailDto>
                 {
                     new GradingDetailDto { CriterionId = question.Rubric!.Criteria.First().Id.ToString(), Score = 6.0m, Comment = "Khá" }
@@ -1212,7 +1214,7 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         var followUpCleanArch = FollowUpPromptBuilder.ResolveFollowUpPrompt(
             courseCode: "PRN231",
             questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
-            aiGeneratedFollowUpPrompt: null,
+            aiGeneratedFollowUpPrompt: "Bạn nói tầng Domain chỉ chứa các bảng Entities, vậy tại sao Domain Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ?",
             followUpSequence: 1,
             questionContent: "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
             sampleAnswer: "Tầng Domain chứa Entities, Value Objects và Domain Events. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ thuần khiết và dễ kiểm thử.",
@@ -1221,11 +1223,21 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         var followUpCqrs = FollowUpPromptBuilder.ResolveFollowUpPrompt(
             courseCode: "PRN231",
             questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
-            aiGeneratedFollowUpPrompt: null,
+            aiGeneratedFollowUpPrompt: "Bạn đã nêu Command dùng khi thêm hoặc cập nhật, vậy còn Query chỉ dùng để truy vấn đọc dữ liệu khác biệt như thế nào?",
             followUpSequence: 1,
             questionContent: "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR.",
             sampleAnswer: "Command dùng để thay đổi trạng thái dữ liệu hệ thống (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và tuyệt đối không làm biến đổi trạng thái.",
             studentTranscript: "Command dùng khi thêm hoặc cập nhật bản ghi trong hệ thống.");
+
+        var noFakeTemplateWhenAiNull = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+            courseCode: "PRN231",
+            questionFollowUpPrompt: "Câu mẫu tĩnh không được ưu tiên",
+            aiGeneratedFollowUpPrompt: null,
+            followUpSequence: 1,
+            questionContent: "Câu hỏi kiểm thử",
+            sampleAnswer: "Đáp án mẫu",
+            studentTranscript: "Sinh viên trả lời");
+        noFakeTemplateWhenAiNull.Should().BeEmpty("Cấm tự ghép chuỗi 12 từ cuối sinh câu hỏi phụ giả khi AI trả về null");
 
         followUpCleanArch.Should().NotBe(followUpCqrs, "Hai câu hỏi khác chủ đề không bao giờ được sinh ra cùng một câu follow-up");
         followUpCleanArch.Should().Contain("tầng Domain chỉ chứa các bảng Entities", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
@@ -1233,5 +1245,161 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
 
         followUpCqrs.Should().Contain("Command dùng khi thêm hoặc cập nhật", "Follow-up phải nhắc tới ngữ cảnh câu trả lời của sinh viên");
         followUpCqrs.Should().Contain("Query chỉ dùng để truy vấn đọc dữ liệu", "Follow-up phải xoáy vào phần Query mà sinh viên còn thiếu");
+    }
+
+    [Fact(DisplayName = "ADV-FOL-06. Khi không thể tạo câu hỏi Follow-up (lỗi/rỗng), bỏ qua Follow-up, thông báo và cho phép chuyển sang câu hỏi tiếp theo")]
+    public async Task BorderlineFollowUp_WhenFollowUpGenerationReturnsEmpty_SkipsFollowUpAndNotifiesStudent()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateDbContext(dbName);
+        var (course, student, session) = await SeedPracticeSessionAsync(context, DateTime.UtcNow);
+        var questions = await SeedPracticeQuestionsAsync(context, course.Id, "easy", 1);
+        var question = questions[0];
+
+        // Dù DB có FollowUpPrompt tĩnh, hệ thống tuyệt đối KHÔNG được dùng nó
+        question.FollowUpPrompt = "Câu hỏi tĩnh trong DB không bao giờ được sử dụng";
+        question.Content = "OOP?";
+        question.SampleAnswer = string.Empty;
+        foreach (var crit in question.Rubric!.Criteria)
+        {
+            crit.CriterionName = "A";
+            crit.Description = null;
+        }
+
+        var answer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            AnswerText = "Em trình bày ngắn gọn.",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow,
+            IsFollowUp = false
+        };
+        context.PracticeAnswers.Add(answer);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(a => a.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 6.0m,
+                ConfidenceScore = 0.90m,
+                Feedback = "Đã chấm câu trả lời.",
+                FollowUpPrompt = null,
+                Details = new List<GradingDetailDto>
+                {
+                    new GradingDetailDto { CriterionId = question.Rubric!.Criteria.First().Id.ToString(), Score = 6.0m, Comment = "Đạt mức trung bình" }
+                }
+            });
+
+        var services = new ServiceCollection();
+        services.AddScoped<IApplicationDbContext>(_ => CreateDbContext(dbName));
+        services.AddScoped(_ => aiMock.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var hubMock = new Mock<IHubContext<PracticeHub, IPracticeClient>>();
+        var hubClientsMock = new Mock<IHubClients<IPracticeClient>>();
+        var clientMock = new Mock<IPracticeClient>();
+        hubMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+        hubClientsMock.Setup(c => c.Group($"session_{session.Id}")).Returns(clientMock.Object);
+
+        PracticeAnswerDetailDto? capturedDto = null;
+        clientMock.Setup(c => c.ReceiveGradingResult(It.IsAny<PracticeAnswerDetailDto>()))
+            .Callback<PracticeAnswerDetailDto>(dto => capturedDto = dto)
+            .Returns(Task.CompletedTask);
+
+        var channel = new TestGradingChannel();
+        var worker = new GradingQueueWorker(channel, serviceProvider, hubMock.Object, NullLogger<GradingQueueWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+        await channel.EnqueueAsync(new GradingTask
+        {
+            AnswerId = answer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            AnswerText = answer.AnswerText,
+            IsFollowUp = false,
+            IsFullSession = false
+        });
+        channel.Complete();
+
+        for (int i = 0; i < 50 && capturedDto == null; i++)
+        {
+            await Task.Delay(50);
+        }
+        await worker.StopAsync(CancellationToken.None);
+
+        capturedDto.Should().NotBeNull();
+        capturedDto!.NeedsFollowUp.Should().BeFalse("Khi không tạo được câu hỏi follow-up hợp lệ thì phải tắt NeedsFollowUp để chuyển sang câu tiếp theo");
+        capturedDto.FollowUpPrompt.Should().BeNull();
+        capturedDto.Feedback.Should().Contain("Không thể tạo câu hỏi đào sâu, hệ thống chuyển sang câu hỏi tiếp theo.");
+
+        using var queryContext = CreateDbContext(dbName);
+        var queryHandler = new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQueryHandler(queryContext);
+        var sessionDetail = await queryHandler.Handle(
+            new OralExamination.Application.Features.Practice.Queries.GetPracticeSession.GetPracticeSessionQuery(session.Id, student.Id, false),
+            CancellationToken.None);
+
+        sessionDetail.IsSuccess.Should().BeTrue();
+        var syncedAnswer = sessionDetail.Value.Answers.Single(a => a.AnswerId == answer.Id);
+        syncedAnswer.NeedsFollowUp.Should().BeFalse();
+        syncedAnswer.FollowUpPrompt.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "ADV-BATCH-01. SubmitPracticeBatch: Chế độ Full-Session cho phép bỏ qua câu hỏi (AnswerText rỗng) -> Câu bỏ qua chấm ngay 0.0đ, câu có trả lời đẩy vào hàng đợi AI")]
+    public async Task SubmitPracticeBatch_WithSkippedQuestions_ScoresSkippedAsZeroAndEnqueuesAnsweredOnes()
+    {
+        using var context = CreateDbContext();
+        var (course, student, session) = await SeedPracticeSessionAsync(
+            context,
+            DateTime.UtcNow.AddMinutes(-1),
+            practiceMode: "full_session");
+        var questions = await SeedPracticeQuestionsAsync(context, course.Id, "medium", 3);
+        session.SelectedQuestionIds = questions.Select(q => q.Id).ToList();
+        await context.SaveChangesAsync();
+
+        var queueMock = new Mock<IGradingQueueChannel>();
+        var enqueuedTasks = new List<GradingTask>();
+        queueMock.Setup(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Callback<GradingTask, CancellationToken>((task, _) => enqueuedTasks.Add(task))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new SubmitPracticeBatchCommandHandler(context, queueMock.Object);
+        var batchAnswers = new List<BatchAnswerDto>
+        {
+            new BatchAnswerDto(questions[0].Id, "Em trả lời đầy đủ câu số 1.", false, null),
+            new BatchAnswerDto(questions[1].Id, "", false, null), // Bỏ qua câu số 2
+            new BatchAnswerDto(questions[2].Id, "Em trả lời đầy đủ câu số 3.", false, null)
+        };
+
+        var command = new SubmitPracticeBatchCommand(session.Id, student.Id, batchAnswers);
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        enqueuedTasks.Should().HaveCount(2, "Chỉ đẩy 2 câu có nội dung trả lời vào hàng đợi chấm điểm AI");
+        enqueuedTasks.Select(t => t.QuestionId).Should().BeEquivalentTo(new[] { questions[0].Id, questions[2].Id });
+
+        var savedAnswers = await context.PracticeAnswers
+            .Include(a => a.AiEvaluations)
+                .ThenInclude(e => e.Details)
+            .Where(a => a.SessionId == session.Id)
+            .ToListAsync();
+
+        savedAnswers.Should().HaveCount(3);
+
+        var skippedAnswer = savedAnswers.Single(a => a.QuestionId == questions[1].Id);
+        skippedAnswer.Status.Should().Be("graded");
+        skippedAnswer.AnswerText.Should().BeEmpty();
+        skippedAnswer.AiEvaluations.Should().ContainSingle();
+        var skippedEval = skippedAnswer.AiEvaluations.First();
+        skippedEval.TotalScore.Should().Be(0.0m);
+        skippedEval.Details.Should().NotBeEmpty();
+        skippedEval.Details.All(d => d.Score == 0.0m).Should().BeTrue();
     }
 }

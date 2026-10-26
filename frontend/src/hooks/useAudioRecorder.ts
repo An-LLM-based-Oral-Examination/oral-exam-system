@@ -16,20 +16,58 @@ interface PendingStop {
   reject: (reason: Error) => void
 }
 
-export function useAudioRecorder() {
+export interface UseAudioRecorderOptions {
+  /** Thời lượng mỗi phân đoạn (ms) để bóc băng cuốn chiếu ngầm khi nói dài (ví dụ: 20_000ms = 20 giây) */
+  segmentDurationMs?: number
+  /** Callback nhận từng phân đoạn WebM hoàn chỉnh ngay trong lúc sinh viên đang nói */
+  onSegment?: (segment: Blob, segmentIndex: number) => void
+}
+
+function createMediaRecorder(stream: MediaStream, mimeType: string): MediaRecorder {
+  if (mimeType) {
+    try {
+      return new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 24_000,
+      })
+    } catch {
+      return new MediaRecorder(stream, { mimeType })
+    }
+  }
+  return new MediaRecorder(stream)
+}
+
+export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const pendingStopRef = useRef<PendingStop | null>(null)
+  const segmentTimerRef = useRef<number | null>(null)
+  const segmentIndexRef = useRef<number>(0)
+  const lastEmittedSegmentRef = useRef<Blob | null>(null)
+  const onSegmentRef = useRef(options?.onSegment)
+  const segmentDurationMs = options?.segmentDurationMs ?? 0
+
+  useEffect(() => {
+    onSegmentRef.current = options?.onSegment
+  }, [options?.onSegment])
+
+  const clearSegmentTimer = useCallback(() => {
+    if (segmentTimerRef.current !== null) {
+      window.clearInterval(segmentTimerRef.current)
+      segmentTimerRef.current = null
+    }
+  }, [])
 
   const releaseRecorder = useCallback(() => {
+    clearSegmentTimer()
     stopMediaStream(streamRef.current)
     streamRef.current = null
     recorderRef.current = null
     setIsRecording(false)
-  }, [])
+  }, [clearSegmentTimer])
 
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -43,6 +81,8 @@ export function useAudioRecorder() {
     setError(null)
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
+        channelCount: 1,
+        sampleRate: 16000,
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
@@ -51,44 +91,85 @@ export function useAudioRecorder() {
 
     try {
       const mimeType = getSupportedMimeType()
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream)
-
       streamRef.current = stream
-      recorderRef.current = recorder
-      chunksRef.current = []
+      segmentIndexRef.current = 0
+      lastEmittedSegmentRef.current = null
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data)
-      }
+      const bindAndStartRecorder = () => {
+        const localChunks: BlobPart[] = []
+        const recorder = createMediaRecorder(stream, mimeType)
+        recorderRef.current = recorder
+        chunksRef.current = localChunks
 
-      recorder.onerror = () => {
-        const recordingError = new Error('Không thể tiếp tục ghi âm. Vui lòng kiểm tra microphone.')
-        setError(recordingError.message)
-        pendingStopRef.current?.reject(recordingError)
-        pendingStopRef.current = null
-        releaseRecorder()
-      }
-
-      recorder.onstop = () => {
-        const audio = new Blob(chunksRef.current, {
-          type: recorder.mimeType || mimeType || 'audio/webm',
-        })
-        chunksRef.current = []
-        const pendingStop = pendingStopRef.current
-        pendingStopRef.current = null
-        releaseRecorder()
-
-        if (!pendingStop) return
-        if (audio.size === 0) {
-          pendingStop.reject(new Error('Bản ghi âm đang trống. Vui lòng ghi âm lại câu trả lời.'))
-          return
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) localChunks.push(event.data)
         }
-        pendingStop.resolve(audio)
+
+        recorder.onerror = () => {
+          const recordingError = new Error('Không thể tiếp tục ghi âm. Vui lòng kiểm tra microphone.')
+          setError(recordingError.message)
+          pendingStopRef.current?.reject(recordingError)
+          pendingStopRef.current = null
+          releaseRecorder()
+        }
+
+        recorder.onstop = () => {
+          const audio = new Blob(localChunks, {
+            type: recorder.mimeType || mimeType || 'audio/webm',
+          })
+
+          // Nếu đây là phân đoạn 20s tự xoay vòng trong khi recorder mới đã chạy tiếp
+          if (recorderRef.current !== recorder && !pendingStopRef.current) {
+            if (audio.size > 0) {
+              const currentIdx = segmentIndexRef.current++
+              lastEmittedSegmentRef.current = audio
+              onSegmentRef.current?.(audio, currentIdx)
+            }
+            return
+          }
+
+          const pendingStop = pendingStopRef.current
+          pendingStopRef.current = null
+          const fallbackSegment = lastEmittedSegmentRef.current
+          releaseRecorder()
+
+          if (!pendingStop) return
+          if (audio.size === 0 && !fallbackSegment) {
+            pendingStop.reject(new Error('Bản ghi âm đang trống. Vui lòng ghi âm lại câu trả lời.'))
+            return
+          }
+          pendingStop.resolve(audio)
+        }
+
+        recorder.start(250)
+        return recorder
       }
 
-      recorder.start(250)
+      bindAndStartRecorder()
+      clearSegmentTimer()
+      if (segmentDurationMs >= 5_000 && onSegmentRef.current) {
+        segmentTimerRef.current = window.setInterval(() => {
+          const prevRecorder = recorderRef.current
+          const activeStream = streamRef.current
+          if (
+            !activeStream ||
+            !prevRecorder ||
+            prevRecorder.state !== 'recording' ||
+            pendingStopRef.current
+          ) {
+            return
+          }
+          try {
+            // Khởi tạo và chạy recorder kế tiếp trên cùng MediaStream trước khi đóng phân đoạn cũ (Zero-Gap < 2ms)
+            bindAndStartRecorder()
+            prevRecorder.requestData()
+            prevRecorder.stop()
+          } catch {
+            // Giữ nguyên recorder hiện tại nếu trình duyệt không cho xoay vòng
+          }
+        }, segmentDurationMs)
+      }
+
       setIsRecording(true)
     } catch (recordingError) {
       stopMediaStream(stream)
@@ -99,9 +180,10 @@ export function useAudioRecorder() {
       setError(message)
       throw recordingError
     }
-  }, [releaseRecorder])
+  }, [clearSegmentTimer, releaseRecorder, segmentDurationMs])
 
   const stopRecording = useCallback(async () => {
+    clearSegmentTimer()
     const recorder = recorderRef.current
     if (!recorder || recorder.state === 'inactive') {
       throw new Error('Chưa có bản ghi âm đang hoạt động.')
@@ -112,13 +194,15 @@ export function useAudioRecorder() {
       recorder.requestData()
       recorder.stop()
     })
-  }, [])
+  }, [clearSegmentTimer])
 
   const cancelRecording = useCallback(() => {
+    clearSegmentTimer()
     const recorder = recorderRef.current
     pendingStopRef.current?.reject(new Error('Đã hủy bản ghi âm.'))
     pendingStopRef.current = null
     chunksRef.current = []
+    lastEmittedSegmentRef.current = null
 
     if (recorder && recorder.state !== 'inactive') {
       recorder.ondataavailable = null
@@ -127,7 +211,7 @@ export function useAudioRecorder() {
       recorder.stop()
     }
     releaseRecorder()
-  }, [releaseRecorder])
+  }, [clearSegmentTimer, releaseRecorder])
 
   useEffect(() => cancelRecording, [cancelRecording])
 

@@ -9,19 +9,18 @@ import {
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
+  Award,
+  BarChart3,
   BookOpenCheck,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clock3,
-  Code2,
-  Database,
+  FileCheck2,
   Gauge,
+  History,
   Mic2,
-  Network,
-  ShieldCheck,
-  Sparkles,
-  Target,
+  TimerReset,
   TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
@@ -33,8 +32,11 @@ import {
   studentOverviewService,
   type CourseSummary,
   type MockExamQuota,
+  type OfficialExamTicketOverview,
   type PracticeHistoryItem,
 } from '@/services/studentOverview.service'
+import { mockExamService } from '@/services/mockExam.service'
+import type { MockExamHistoryItem } from '@/types/mockExam.types'
 
 const StudentOverviewThreeScene = lazy(() =>
   import('./StudentOverviewThreeScene').then((module) => ({
@@ -48,21 +50,40 @@ interface OverviewStat {
   suffix?: string
   helper: string
   icon: LucideIcon
+  cardClassName: string
   iconClassName: string
+  badgeText: string
+  badgeClassName: string
   trend?: string
 }
+
 interface RecentActivity {
   id: string
   type: 'practice' | 'mock' | 'guided'
   typeLabel: string
+  courseCode: string
+  courseName: string
   title: string
   completedLabel: string
   score: number | null
-  icon: LucideIcon
   destination: string
 }
 
-const ACTIVITY_ICONS = [Network, Database, Code2, Target, ShieldCheck]
+const COURSE_CODE_TONES = [
+  'bg-[#4988C4]/16 text-[#1C4D8D]',
+  'bg-[#e8f8f3] text-[#16836a]',
+  'bg-[#fff4e8] text-[#c26a12]',
+  'bg-[#f3eefe] text-[#6d4cc4]',
+  'bg-[#e7f6fb] text-[#0e7490]',
+  'bg-[#fdecef] text-[#c2415b]',
+  'bg-[#eef8e8] text-[#3d7a2a]',
+]
+
+function courseCodeTone(code?: string) {
+  if (!code) return COURSE_CODE_TONES[0]
+  const hash = Array.from(code).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return COURSE_CODE_TONES[hash % COURSE_CODE_TONES.length]
+}
 
 function padCount(value: number) {
   return String(value).padStart(2, '0')
@@ -147,7 +168,7 @@ function buildOverviewStats(
 
   return [
     {
-      label: 'Môn học kích hoạt',
+      label: 'Học phần đang mở',
       value: padCount(courses.length),
       suffix: 'Môn',
       helper:
@@ -155,53 +176,97 @@ function buildOverviewStats(
           ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
           : courseCodes || 'Chưa có môn học đang mở',
       icon: BookOpenCheck,
-      iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
+      cardClassName: 'border-[#9ec4e8] bg-[#f3f9fd]',
+      iconClassName: 'bg-[#1C4D8D] text-white',
+      badgeText: 'Học kỳ hiện tại',
+      badgeClassName: 'bg-white text-[#1C4D8D]',
     },
     {
-      label: 'Phiên luyện tập đã hoàn thành',
+      label: 'Phiên luyện tập hoàn tất',
       value: padCount(completed.length),
       suffix: 'Phiên',
       helper:
-        passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% đánh giá đạt từ 5.0 điểm`,
+        passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% phiên đạt từ 5.0 điểm`,
       icon: Mic2,
-      iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
+      cardClassName: 'border-[#b7e4cf] bg-[#f3fbf7]',
+      iconClassName: 'bg-[#16836a] text-white',
+      badgeText: 'Tích lũy',
+      badgeClassName: 'bg-white text-[#16836a]',
     },
     {
-      label: 'Điểm trung bình AI',
+      label: 'Điểm trung bình tích lũy',
       value: overallAverage === null ? '—' : formatScore(overallAverage),
       suffix: overallAverage === null ? undefined : '/10',
       helper:
         scoreDelta === null
           ? 'Tính trên các phiên đã hoàn thành'
-          : `${formatSignedDelta(scoreDelta)} so với tuần trước`,
+          : `${formatSignedDelta(scoreDelta)} điểm so với tuần trước`,
       trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
       icon: Gauge,
-      iconClassName: 'bg-[#eef8f7] text-[#168f86]',
+      cardClassName: 'border-[#d4c4f5] bg-[#f7f3fd]',
+      iconClassName: 'bg-[#6d4cc4] text-white',
+      badgeText: 'Theo Rubric',
+      badgeClassName: 'bg-white text-[#6d4cc4]',
     },
   ]
 }
 
-function buildRecentActivities(history: PracticeHistoryItem[], now: Date): RecentActivity[] {
-  return history.map((item, index) => {
+function buildRecentActivities(
+  history: PracticeHistoryItem[],
+  now: Date,
+  mockHistory: MockExamHistoryItem[] = [],
+): RecentActivity[] {
+  const practiceActivities: Array<RecentActivity & { sortTime: number }> = history.map((item) => {
     const inProgress = item.status !== 'completed'
     const isFullSession = item.practiceMode === 'full_session'
+    const iso = item.endedAt ?? item.startedAt
     return {
-      id: item.sessionId,
+      id: `practice-${item.sessionId}`,
       type: isFullSession ? 'guided' : 'practice',
-      typeLabel: isFullSession ? 'Luyện tập cả phiên' : 'Luyện tập theo câu',
-      title: [item.courseCode, item.courseName].filter(Boolean).join(': ') || 'Phiên luyện tập',
-      completedLabel: formatRelativeCompletion(
-        item.endedAt ?? item.startedAt,
-        now,
-        inProgress,
-      ),
+      typeLabel: isFullSession ? 'Luyện trọn gói' : 'Luyện từng câu',
+      courseCode: item.courseCode,
+      courseName: item.courseName,
+      title: item.courseName || 'Phiên luyện tập',
+      completedLabel: formatRelativeCompletion(iso, now, inProgress),
       score: item.averageScore,
-      icon: ACTIVITY_ICONS[index % ACTIVITY_ICONS.length],
       destination: inProgress
         ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
-        : '/results',
+        : `/results?type=practice&id=${encodeURIComponent(item.sessionId)}`,
+      sortTime: new Date(iso).getTime() || 0,
     }
   })
+
+  const mockActivities: Array<RecentActivity & { sortTime: number }> = mockHistory.map((item) => {
+    const inProgress = item.status.toLowerCase() === 'in_progress'
+    return {
+      id: `mock-${item.sessionId}`,
+      type: 'mock',
+      typeLabel: 'Thi thử tính giờ',
+      courseCode: item.courseCode,
+      courseName: item.courseName,
+      title: item.courseName || 'Ca thi thử',
+      completedLabel: formatRelativeCompletion(item.startedAt, now, inProgress),
+      score: item.totalScore,
+      destination: inProgress
+        ? `/mock-exam/session?session=${encodeURIComponent(item.sessionId)}`
+        : `/results?type=mock&id=${encodeURIComponent(item.sessionId)}`,
+      sortTime: new Date(item.startedAt).getTime() || 0,
+    }
+  })
+
+  return [...practiceActivities, ...mockActivities]
+    .sort((a, b) => b.sortTime - a.sortTime)
+    .map((entry) => ({
+      id: entry.id,
+      type: entry.type,
+      typeLabel: entry.typeLabel,
+      courseCode: entry.courseCode,
+      courseName: entry.courseName,
+      title: entry.title,
+      completedLabel: entry.completedLabel,
+      score: entry.score,
+      destination: entry.destination,
+    }))
 }
 
 function getGreeting(hour: number) {
@@ -217,9 +282,9 @@ function getSemesterLabel(date: Date) {
 }
 
 function getActivityBadgeClass(type: RecentActivity['type']) {
-  if (type === 'mock') return 'bg-[#fff5df] text-[#9a6411]'
-  if (type === 'guided') return 'bg-[#4988C4]/16 text-[#6546bd]'
-  return 'bg-[#4988C4]/16 text-[#1C4D8D]'
+  if (type === 'mock') return 'bg-[#0F2854] text-[#BDE8F5]'
+  if (type === 'guided') return 'bg-[#f3eefe] text-[#6d4cc4]'
+  return 'bg-[#e8f8f3] text-[#16836a]'
 }
 
 export function StudentDashboardPage() {
@@ -228,6 +293,8 @@ export function StudentDashboardPage() {
   const [showAllActivities, setShowAllActivities] = useState(false)
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [history, setHistory] = useState<PracticeHistoryItem[]>([])
+  const [mockHistory, setMockHistory] = useState<MockExamHistoryItem[]>([])
+  const [officialTickets, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
   const [quotas, setQuotas] = useState<MockExamQuota[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -241,17 +308,26 @@ export function StudentDashboardPage() {
     let cancelled = false
 
     void (async () => {
-      const [coursesResult, historyResult] = await Promise.allSettled([
-        studentOverviewService.getCourses(),
-        studentOverviewService.getPracticeHistory(),
-      ])
+      const [coursesResult, historyResult, mockHistoryResult, officialTicketsResult] =
+        await Promise.allSettled([
+          studentOverviewService.getCourses(),
+          studentOverviewService.getPracticeHistory(),
+          mockExamService.getHistory({ pageIndex: 1, pageSize: 10 }),
+          studentOverviewService.getOfficialExamTickets(),
+        ])
 
       if (cancelled) return
 
       const nextCourses = coursesResult.status === 'fulfilled' ? coursesResult.value : []
       const nextHistory = historyResult.status === 'fulfilled' ? historyResult.value : []
+      const nextMockHistory =
+        mockHistoryResult.status === 'fulfilled' ? mockHistoryResult.value.items : []
+      const nextOfficialTickets =
+        officialTicketsResult.status === 'fulfilled' ? officialTicketsResult.value : []
       setCourses(nextCourses)
       setHistory(nextHistory)
+      setMockHistory(nextMockHistory)
+      setOfficialTickets(nextOfficialTickets)
 
       if (coursesResult.status === 'rejected' && historyResult.status === 'rejected') {
         setLoadError(getLoadErrorMessage(coursesResult.reason))
@@ -291,10 +367,10 @@ export function StudentDashboardPage() {
     [courses, history, quotas, now],
   )
   const recentActivities = useMemo(
-    () => buildRecentActivities(history, now),
-    [history, now],
+    () => buildRecentActivities(history, now, mockHistory),
+    [history, now, mockHistory],
   )
-  const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 3)
+  const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 5)
   const studentName = user?.fullName ?? 'Sinh viên'
   const studentIdentifier = user?.studentCode ?? user?.email ?? user?.id ?? 'Student'
 
@@ -338,69 +414,66 @@ export function StudentDashboardPage() {
         <div className="pointer-events-none absolute -top-24 -right-20 size-80 rounded-full bg-[#57dcff]/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-28 left-[35%] size-72 rounded-full bg-[#5674ef]/8 blur-3xl" />
 
-        <div className="relative grid min-h-[310px] lg:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.65fr)]">
-          <div className="relative z-10 flex flex-col justify-center px-5 py-6 sm:px-7 sm:py-8 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-white/75">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 font-semibold text-white">
-                <Sparkles className="size-3" />
+        <div className="relative grid min-h-[285px] lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+          <div className="relative z-10 flex flex-col justify-center px-5 py-6 sm:px-7 sm:py-7 xl:px-9">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-white/80">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/14 px-3 py-1 font-bold text-white">
+                <Award className="size-3.5 text-[#BDE8F5]" />
                 Học kỳ {getSemesterLabel(now)}
               </span>
-              <span className="text-white/40">•</span>
-              <span>Khoa Công nghệ Phần mềm</span>
-              <span className="text-white/40">•</span>
-              <span className="inline-flex items-center gap-1 text-[#25856e]">
-                <span className="size-1.5 rounded-full bg-[#35c992]" />
-                AI sẵn sàng
+              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 font-semibold text-[#BDE8F5]">
+                Khoa Kỹ thuật Phần mềm · FPTU
+              </span>
+              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 font-semibold text-white">
+                MSSV: {studentIdentifier}
               </span>
             </div>
 
-            <div className="max-w-[690px]">
-              <p className="text-xs font-semibold tracking-[0.08em] text-[#BDE8F5] uppercase">
-                Hệ thống vấn đáp tự động hóa AI
-              </p>
-              <h1 className="mt-2 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.045em] text-white">
+            <div className="max-w-[680px]">
+              <h1 className="text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.04em] text-white">
                 {getGreeting(now.getHours())},{' '}
                 <span className="block text-[#BDE8F5] sm:inline">{studentName}</span>
               </h1>
-              <p className="mt-2 max-w-[640px] text-sm leading-relaxed text-white/80">
-                Sẵn sàng cho chu kỳ đánh giá khẩu vấn học thuật định kỳ. Tiếp tục luyện tập, kiểm
-                tra lịch thi và theo dõi phản hồi AI trong một không gian thống nhất.
-              </p>
-              <p className="mt-1 text-xs font-medium text-white/70">
-                Mã sinh viên: {studentIdentifier}
+              <p className="mt-2 max-w-[620px] text-sm leading-relaxed text-white/85">
+                Theo dõi lộ trình ôn tập vấn đáp chuyên ngành, chủ động luyện phản xạ câu hỏi theo
+                học phần và tra cứu bảng điểm chi tiết từng ca thi.
               </p>
             </div>
 
             <div className="mt-5 flex max-w-[660px] flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#4988C4]/45 bg-white/84 p-3 shadow-[0_6px_20px_rgba(40,73,120,0.055)] backdrop-blur-md">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
+              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#4988C4]/45 bg-white/92 p-3 shadow-[0_6px_20px_rgba(15,40,84,0.08)] backdrop-blur-md">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white">
                   <CalendarDays className="size-[18px]" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold tracking-[0.08em] text-[#8aa0b8] uppercase">
-                    Lịch thi gần nhất
+                  <p className="text-[11px] font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
+                    Ca thi chính thức sắp tới
                   </p>
                   <p className="truncate text-sm font-bold text-[#0F2854]">
-                    Chưa có ca thi phòng lab được công bố
+                    {officialTickets[0]
+                      ? `${officialTickets[0].courseCode} · ${officialTickets[0].shiftName}`
+                      : 'Chưa có lịch thi phòng Lab'}
                   </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
-                    <Clock3 className="size-3" />
-                    Lịch sẽ hiện khi nhà trường công bố ca thi
+                  <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#5b6b84]">
+                    <Clock3 className="size-3 text-[#1C4D8D]" />
+                    {officialTickets[0]
+                      ? `Phòng ${officialTickets[0].roomLab} · Máy ${officialTickets[0].seatNumber}`
+                      : 'Sẽ hiển thị khi Bộ môn phân công ca thi'}
                   </p>
                 </div>
               </div>
 
               <Link
-                to="/exam?device-check=1"
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_14px_30px_rgba(36,94,234,0.3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+                to="/exam"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                Kiểm tra phòng thi & thiết bị
-                <ArrowRight className="size-3.5" />
+                Vào phòng thi Kiosk
+                <ArrowRight className="size-4 text-[#1C4D8D]" />
               </Link>
             </div>
           </div>
 
-          <div className="relative min-h-[230px] overflow-hidden lg:min-h-full">
+          <div className="relative min-h-[210px] overflow-hidden lg:min-h-full">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(76,206,245,0.16),transparent_48%)]" />
             <div
               className="absolute inset-[-8%] transition-transform duration-200 ease-out motion-reduce:transform-none"
@@ -417,10 +490,6 @@ export function StudentDashboardPage() {
               >
                 <StudentOverviewThreeScene />
               </Suspense>
-            </div>
-            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#4988C4]/45 bg-white/72 px-3 py-1.5 text-xs font-semibold text-[#5b6b84] shadow-sm backdrop-blur-md sm:flex">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#38cfa0] motion-reduce:animate-none" />
-              AI Voice Core đang hoạt động
             </div>
           </div>
         </div>
@@ -440,147 +509,254 @@ export function StudentDashboardPage() {
           ? buildOverviewStats([], [], [], now).map((stat) => ({
               ...stat,
               value: '…',
-              helper: 'Đang tải',
+              helper: 'Đang đồng bộ dữ liệu...',
             }))
           : overviewStats
         ).map(
-          ({ label, value, suffix, helper, icon: Icon, iconClassName, trend }) => (
+          ({
+            label,
+            value,
+            suffix,
+            helper,
+            icon: Icon,
+            cardClassName,
+            iconClassName,
+            badgeText,
+            badgeClassName,
+            trend,
+          }) => (
             <article
               key={label}
-              className="group rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)] sm:p-5"
+              className={cn(
+                'group rounded-2xl border p-4 shadow-[0_7px_24px_rgba(15,40,84,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,40,84,0.09)] sm:p-5',
+                cardClassName,
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium text-[#5b6b84]">{label}</p>
-                  <div className="mt-3 flex items-baseline gap-1.5">
-                    <strong className="text-2xl font-bold tracking-[-0.045em] text-[#0F2854] sm:text-[1.7rem]">
+                  <span
+                    className={cn(
+                      'inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-2xs',
+                      badgeClassName,
+                    )}
+                  >
+                    {badgeText}
+                  </span>
+                  <p className="mt-2.5 text-xs font-bold text-[#0F2854]/80">{label}</p>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <strong className="text-3xl font-black tracking-[-0.04em] text-[#0F2854]">
                       {value}
                     </strong>
                     {suffix && (
-                      <span className="text-xs font-semibold text-[#42536b]">{suffix}</span>
+                      <span className="text-xs font-bold text-[#1C4D8D]">{suffix}</span>
                     )}
                   </div>
                 </div>
                 <div
                   className={cn(
-                    'flex size-9 items-center justify-center rounded-xl',
+                    'flex size-10 items-center justify-center rounded-xl shadow-xs',
                     iconClassName,
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-5" />
                 </div>
               </div>
-              <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#5b6b84]">
+              <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-[#0F2854]/75">
                 {trend ? (
-                  <TrendingUp className="size-3 text-[#1d9a78]" />
+                  <TrendingUp className="size-3.5 text-[#16836a]" />
                 ) : (
-                  <span className="size-1.5 rounded-full bg-[#1C4D8D]" />
+                  <CheckCircle2 className="size-3.5 text-[#1C4D8D]" />
                 )}
-                <span className={cn(trend && 'text-[#167e65]')}>{helper}</span>
+                <span className={cn(trend && 'text-[#16836a]')}>{helper}</span>
               </p>
             </article>
           ),
         )}
       </section>
 
-      <section className={ds.section}>
-        <div className="flex items-start justify-between gap-4 border-b border-[#4988C4]/45 px-4 py-4 sm:items-center sm:px-5">
+      <section aria-label="Lối tắt học tập" className="grid gap-3 sm:grid-cols-3">
+        <Link
+          to="/practice"
+          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#e8f8f3] text-[#16836a]">
+              <Mic2 className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-[#0F2854]">Luyện tập tự do</h2>
+              <p className="mt-0.5 text-xs text-[#5b6b84]">
+                Luyện từng câu hoặc trọn gói 3–10 câu
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
+        </Link>
+
+        <Link
+          to="/mock-exam"
+          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
+              <TimerReset className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-[#0F2854]">Thi thử tính giờ</h2>
+              <p className="mt-0.5 text-xs text-[#5b6b84]">
+                Mô phỏng áp lực phòng thi & chấm theo CLO
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
+        </Link>
+
+        <Link
+          to="/results"
+          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#f3eefe] text-[#6d4cc4]">
+              <BarChart3 className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-[#0F2854]">Lịch sử & Bảng điểm</h2>
+              <p className="mt-0.5 text-xs text-[#5b6b84]">
+                Xem lại câu hỏi, bài trả lời & nhận xét
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
+        </Link>
+      </section>
+
+      <section className={cn(ds.section, 'overflow-hidden')}>
+        <div
+          className={cn(
+            ds.sectionHeader,
+            'flex flex-col justify-between gap-2 sm:flex-row sm:items-center',
+          )}
+        >
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
-                Hoạt động luyện tập gần đây
-              </h2>
-              <span className="hidden rounded-full bg-[#4988C4]/16 px-2 py-0.5 text-xs font-semibold text-[#1C4D8D] sm:inline">
+            <div className={ds.sectionTitleRow}>
+              <span className={ds.sectionIconWrap}>
+                <History className="size-4 text-[#1C4D8D]" />
+              </span>
+              <h2 className={ds.sectionTitle}>Hoạt động gần đây</h2>
+              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D] shadow-2xs">
                 {isLoading ? '…' : recentActivities.length} phiên
               </span>
             </div>
-            <p className="mt-1 text-xs text-[#5b6b84]">
-              Lịch sử đánh giá giọng nói và phản hồi rubric gần nhất
+            <p className={ds.sectionHint}>
+              Các phiên luyện tập và ca thi thử vừa thực hiện kèm điểm đánh giá và nhận xét chi tiết
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
-            className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-            aria-expanded={showAllActivities}
-          >
-            {showAllActivities ? 'Thu gọn' : 'Xem tất cả'}
-            <ChevronRight
-              className={cn('size-3.5 transition-transform', showAllActivities && 'rotate-90')}
-            />
-          </button>
-        </div>
-
-        <div className="divide-y divide-[#4988C4]/30 px-4 sm:px-5">
-          {!isLoading && displayedActivities.length === 0 && (
-            <p className="py-6 text-center text-sm text-[#5b6b84]">
-              Chưa có phiên luyện tập. Bắt đầu ở mục Luyện tập để xem lịch sử tại đây.
-            </p>
+          {recentActivities.length > 5 && (
+            <button
+              type="button"
+              onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
+              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+              aria-expanded={showAllActivities}
+            >
+              {showAllActivities ? 'Thu gọn danh sách' : 'Xem toàn bộ'}
+              <ChevronRight
+                className={cn('size-3.5 transition-transform', showAllActivities && 'rotate-90')}
+              />
+            </button>
           )}
-          {displayedActivities.map((activity) => {
-            const Icon = activity.icon
-
-            return (
-              <article
-                key={activity.id}
-                className="group grid gap-3 py-3 transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#e4e9f1] bg-[#4988C4]/16 text-[#1C4D8D] transition group-hover:border-[#cddaf0] group-hover:bg-[#4988C4]/18">
-                    <Icon className="size-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          'rounded-md px-2 py-0.5 text-xs font-bold',
-                          getActivityBadgeClass(activity.type),
-                        )}
-                      >
-                        {activity.typeLabel}
-                      </span>
-                      <span className="text-xs text-[#8a96a8]">{activity.completedLabel}</span>
-                    </div>
-                    <h3 className="mt-1 truncate text-sm font-bold text-[#0F2854]">
-                      {activity.title}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 pl-12 sm:justify-end sm:pl-0">
-                  <p className="text-xs text-[#5b6b84]">
-                    Điểm AI:{' '}
-                    <strong className="text-sm text-[#0F2854]">
-                      {activity.score === null ? '—' : activity.score.toFixed(1)}
-                    </strong>
-                    {activity.score !== null && <span className="text-xs"> /10</span>}
-                  </p>
-                  <Link
-                    to={activity.destination}
-                    className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#4988C4]/16 px-3 text-xs font-semibold text-[#1C4D8D] transition hover:bg-[#e8effc] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-                    aria-label={`Xem nhận xét cho ${activity.title}`}
-                  >
-                    Xem nhận xét
-                    <ChevronRight className="size-3" />
-                  </Link>
-                </div>
-              </article>
-            )
-          })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#4988C4]/45 bg-white px-4 py-3 text-xs text-[#5b6b84] sm:px-5">
-          <span className="inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-3.5 text-[#20a47e]" />
-            Dữ liệu được đồng bộ từ các phiên luyện tập gần nhất
+        <div className="divide-y divide-[#4988C4]/30 px-4 sm:px-6">
+          {!isLoading && displayedActivities.length === 0 && (
+            <div className="py-10 text-center">
+              <p className="text-sm font-bold text-[#0F2854]">
+                Chưa có phiên luyện tập hoặc thi thử nào
+              </p>
+              <p className="mt-1 text-xs text-[#5b6b84]">
+                Hãy chọn Luyện tập hoặc Thi thử ở phía trên để bắt đầu phiên đầu tiên của bạn.
+              </p>
+            </div>
+          )}
+
+          {displayedActivities.map((activity) => (
+            <article
+              key={activity.id}
+              className="group grid gap-3 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            >
+              <div className="flex min-w-0 items-center gap-3.5">
+                <span
+                  className={cn(
+                    'inline-flex h-9 min-w-[74px] shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-black tracking-[0.02em]',
+                    courseCodeTone(activity.courseCode),
+                  )}
+                >
+                  {activity.courseCode || 'MÔN'}
+                </span>
+
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        'rounded-md px-2 py-0.5 text-xs font-bold',
+                        getActivityBadgeClass(activity.type),
+                      )}
+                    >
+                      {activity.typeLabel}
+                    </span>
+                    <span className="text-xs font-medium text-[#5b6b84]">
+                      {activity.completedLabel}
+                    </span>
+                  </div>
+                  <h3 className="mt-1 truncate text-sm font-bold text-[#0F2854]">
+                    {activity.title}
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pl-12 sm:justify-end sm:pl-0">
+                <span
+                  className={cn(
+                    'inline-flex items-baseline gap-1 rounded-xl px-3 py-1.5 text-xs font-bold',
+                    activity.score === null
+                      ? 'bg-[#fff8eb] text-[#9a6414]'
+                      : activity.score >= 8
+                        ? 'bg-[#e8f8f3] text-[#16836a]'
+                        : activity.score >= 5
+                          ? 'bg-[#4988C4]/16 text-[#1C4D8D]'
+                          : 'bg-[#fdecef] text-[#c2415b]',
+                  )}
+                >
+                  <strong className="text-sm font-black">
+                    {activity.score === null ? 'Đang chấm' : activity.score.toFixed(1)}
+                  </strong>
+                  {activity.score !== null && <span>/10</span>}
+                </span>
+
+                <Link
+                  to={activity.destination}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-2xs transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+                  aria-label={`Xem chi tiết cho ${activity.title}`}
+                >
+                  <FileCheck2 className="size-3.5" />
+                  Xem câu hỏi & nhận xét
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#4988C4]/45 bg-[#F4FBFD] px-4 py-3 text-xs text-[#5b6b84] sm:px-6">
+          <span className="inline-flex items-center gap-1.5 font-medium text-[#0F2854]">
+            <CheckCircle2 className="size-3.5 text-[#16836a]" />
+            Lưu trữ đầy đủ câu hỏi, bản ghi câu trả lời và điểm từng tiêu chí Rubric
           </span>
           <Link
             to="/results"
-            className="inline-flex items-center gap-1 font-semibold text-[#1C4D8D] hover:underline"
+            className="inline-flex items-center gap-1 font-bold text-[#1C4D8D] hover:underline"
           >
-            Mở trang kết quả
-            <ArrowRight className="size-3" />
+            Mở trang Kết quả & Lịch sử đầy đủ
+            <ArrowRight className="size-3.5" />
           </Link>
         </div>
       </section>
@@ -588,7 +764,7 @@ export function StudentDashboardPage() {
       <div className="sr-only" aria-live="polite">
         {showAllActivities
           ? 'Đang hiển thị toàn bộ hoạt động'
-          : 'Đang hiển thị ba hoạt động gần nhất'}
+          : 'Đang hiển thị năm hoạt động gần nhất'}
       </div>
     </div>
   )

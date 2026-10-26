@@ -17,6 +17,11 @@ function wait(delay: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, delay))
 }
 
+function isPermanentHubSessionError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  return /NOT_FOUND|FORBIDDEN|BAD_REQUEST/i.test(msg)
+}
+
 export function useSignalR(
   sessionId: string | null,
   hubUrl: string = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice',
@@ -109,10 +114,21 @@ export function useSignalR(
           setStatus('connected')
           if (isReconnect) setReconnectVersion((current) => current + 1)
         }
-      } catch {
+      } catch (joinError) {
         if (!disposed) {
           setStatus('offline')
-          scheduleGroupRejoin()
+          if (isPermanentHubSessionError(joinError)) {
+            disposed = true
+            setGradingErrors((current) => [
+              ...current.filter((item) => item.answerId !== 'unknown'),
+              {
+                answerId: 'unknown',
+                message: 'Phiên luyện tập không còn tồn tại hoặc đã hết hạn trên máy chủ. Vui lòng tạo phiên mới.',
+              },
+            ])
+          } else {
+            scheduleGroupRejoin()
+          }
         }
       } finally {
         isJoiningGroup = false
@@ -159,9 +175,24 @@ export function useSignalR(
           setStatus('connected')
           isStarting = false
           return
-        } catch {
+        } catch (startError) {
           if (connection.state !== HubConnectionState.Disconnected) {
             await connection.stop()
+          }
+          if (isPermanentHubSessionError(startError)) {
+            isStarting = false
+            if (!disposed) {
+              disposed = true
+              setStatus('offline')
+              setGradingErrors((current) => [
+                ...current.filter((item) => item.answerId !== 'unknown'),
+                {
+                  answerId: 'unknown',
+                  message: 'Phiên luyện tập không còn tồn tại hoặc đã hết hạn trên máy chủ. Vui lòng tạo phiên mới.',
+                },
+              ])
+            }
+            return
           }
         }
       }

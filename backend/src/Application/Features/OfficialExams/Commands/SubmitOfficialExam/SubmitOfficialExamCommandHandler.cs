@@ -97,7 +97,7 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
                 ExamQuestionId = answer.ExamQuestionId,
                 AudioR2Url = ticket.AudioObjectKey,
                 AudioHashSha256 = ticket.AudioHashSha256,
-                TranscriptWhisper = answer.TranscriptWhisper!.Trim(),
+                TranscriptWhisper = (answer.TranscriptWhisper ?? string.Empty).Trim(),
                 TimestampsWhisper = string.IsNullOrWhiteSpace(answer.TimestampsWhisper)
                     ? null
                     : answer.TimestampsWhisper,

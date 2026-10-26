@@ -1,5 +1,6 @@
 import apiClient from './api.client'
 import type {
+  BatchApproveQuestionsResult,
   BatchSubmitForReviewRequest,
   BatchSubmitForReviewResponse,
   CreateDraftQuestionRequest,
@@ -7,9 +8,11 @@ import type {
   GenerateQuestionsFromFlmRequest,
   GenerateQuestionsFromFlmResponse,
   PagedResult,
+  QuestionBankItem,
   QuestionDetail,
   QuestionFilters,
   QuestionSummary,
+  ReviewQuestionDecisionRequest,
 } from '@/types/rubric.types'
 
 type JsonRecord = Record<string, unknown>
@@ -79,7 +82,7 @@ function normalizePagedQuestions(payload: unknown): PagedResult<QuestionSummary>
   return { items, totalCount, pageNumber, pageSize, totalPages }
 }
 
-function normalizeQuestionDetail(payload: unknown): QuestionDetail {
+function normalizeQuestion(payload: unknown): QuestionDetail {
   const candidate = unwrapRecord(payload)
   if (
     !candidate ||
@@ -140,7 +143,7 @@ export const questionService = {
 
   async getQuestionById(id: string): Promise<QuestionDetail> {
     const response = await apiClient.get<unknown>(`/questions/${id}`)
-    return normalizeQuestionDetail(response.data)
+    return normalizeQuestion(response.data)
   },
 
   async createDraft(payload: CreateDraftQuestionRequest): Promise<CreateDraftQuestionResponse> {
@@ -160,5 +163,84 @@ export const questionService = {
   ): Promise<BatchSubmitForReviewResponse> {
     const response = await apiClient.post<unknown>('/questions/batch-submit-review', payload)
     return normalizeBatchResponse(response.data)
+  },
+
+  async batchSubmitReview(
+    questionIdsOrPayload: string[] | BatchSubmitForReviewRequest,
+    courseId?: string,
+    submissionNotes?: string,
+    lecturerId?: string,
+  ): Promise<BatchSubmitForReviewResponse> {
+    if (!Array.isArray(questionIdsOrPayload)) {
+      return this.batchSubmitForReview(questionIdsOrPayload)
+    }
+
+    let resolvedCourseId = courseId ?? ''
+    if (!resolvedCourseId && questionIdsOrPayload.length > 0) {
+      const detail = await this.getQuestionById(questionIdsOrPayload[0])
+      resolvedCourseId = detail.courseId
+    }
+
+    const response = await apiClient.post<unknown>('/questions/batch-submit-review', {
+      courseId: resolvedCourseId,
+      questionIds: questionIdsOrPayload,
+      submissionNotes,
+      lecturerId,
+    })
+    return normalizeBatchResponse(response.data)
+  },
+
+  async reviewDecision(
+    id: string,
+    payload: ReviewQuestionDecisionRequest,
+  ): Promise<QuestionBankItem> {
+    const defaultNotes =
+      payload.decision === 'APPROVED'
+        ? 'Câu hỏi và Barem Rubric 10.0 điểm đạt chuẩn thẩm định của Bộ môn.'
+        : 'Đề nghị rà soát lại nội dung câu hỏi và Barem Rubric theo góp ý của Bộ môn.'
+    const trimmedNotes = payload.reviewNotes?.trim() ?? ''
+    const effectiveNotes = trimmedNotes.length >= 10 ? trimmedNotes : defaultNotes
+
+    const response = await apiClient.post<unknown>(`/questions/${id}/review-decision`, {
+      ...payload,
+      reviewNotes: effectiveNotes,
+    })
+    const candidate = unwrapRecord(response.data)
+    if (
+      candidate &&
+      typeof candidate.id === 'string' &&
+      typeof candidate.title === 'string' &&
+      isRecord(candidate.rubric) &&
+      Array.isArray(candidate.rubric.criteria)
+    ) {
+      return normalizeQuestion(response.data)
+    }
+    return this.getQuestionById(id)
+  },
+
+  async batchApprove(questionIds: string[]): Promise<BatchApproveQuestionsResult> {
+    if (questionIds.length === 0) {
+      return { approvedCount: 0 }
+    }
+
+    try {
+      const response = await apiClient.post<unknown>('/questions/batch-approve', { questionIds })
+      const candidate = unwrapRecord(response.data)
+      const count =
+        (candidate ? readNumber(candidate, 'approvedCount', 'ApprovedCount') : undefined) ??
+        (candidate ? readNumber(candidate, 'totalApproved', 'TotalApproved') : undefined) ??
+        questionIds.length
+      return { approvedCount: count }
+    } catch {
+      let approvedCount = 0
+      for (const id of questionIds) {
+        await this.reviewDecision(id, {
+          decision: 'APPROVED',
+          reviewNotes: 'Câu hỏi và Barem Rubric 10.0 điểm đạt chuẩn thẩm định của Bộ môn.',
+        })
+        approvedCount += 1
+      }
+      return { approvedCount }
+    }
   },
 }

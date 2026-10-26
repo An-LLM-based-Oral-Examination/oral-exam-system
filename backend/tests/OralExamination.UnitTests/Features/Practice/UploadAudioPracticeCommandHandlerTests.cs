@@ -233,7 +233,7 @@ public class UploadAudioPracticeCommandHandlerTests
                 RawText: string.Empty,
                 Provider: "CloudflareWhisper",
                 UsedFallback: false,
-                ConfidenceScore: 0.0));
+                ConfidenceScore: 0.20) with { Provider = "MockStt" });
 
         _sttServiceMock
             .Setup(s => s.NormalizeTranscript(It.IsAny<string>()))
@@ -257,6 +257,41 @@ public class UploadAudioPracticeCommandHandlerTests
             It.IsAny<Stream>(),
             It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "10b. Khi CloudflareWhisper xác nhận im lặng (Text rỗng, ConfidenceScore == 0.0): chặn ClientTranscript đè lên kết quả lọc im lặng")]
+    public async Task Handle_WhenWhisperConfirmsSilence_DoesNotLetClientTranscriptOverrideSilence()
+    {
+        _sttServiceMock
+            .Setup(s => s.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: string.Empty,
+                RawText: string.Empty,
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.0));
+
+        _sttServiceMock
+            .Setup(s => s.NormalizeTranscript(It.IsAny<string>()))
+            .Returns<string>(s => s);
+
+        var audioBytes = Encoding.UTF8.GetBytes("confirmed-silence-audio");
+        using var stream = new MemoryStream(audioBytes);
+        var command = new UploadAudioPracticeCommand(
+            FileStream: stream,
+            FileName: "silence.webm",
+            ContentType: "audio/webm",
+            ClientTranscript: "Text rác từ trình duyệt khi im lặng"
+        );
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Không nhận diện được giọng nói rõ ràng");
     }
 
     [Fact(DisplayName = "11. Loose Moq (detailed is null) với seekable stream có Position > 0: tự động tua stream và gọi TranscribeAudioAsync dự phòng")]

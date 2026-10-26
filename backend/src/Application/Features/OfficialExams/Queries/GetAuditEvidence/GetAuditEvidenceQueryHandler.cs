@@ -149,6 +149,11 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 isSuspicious = true;
                 suspiciousReason = $"Điểm giảng viên chốt ({ticket.LecturerAudit.AuditedScore:F2}) lệch lớn so với AI ban đầu ({ticket.LecturerAudit.OriginalAiScore:F2}).";
             }
+            else if ((finalScore ?? aiScore) is < 5.0m)
+            {
+                isSuspicious = true;
+                suspiciousReason = $"Điểm bài thi dưới mức đạt ({(finalScore ?? aiScore)!.Value:F2} < 5.00). Cần giảng viên hậu kiểm trước khi công bố.";
+            }
 
             Domain.Entities.ExamQuestion? latestQuestion = null;
             if (latestSubmission != null)

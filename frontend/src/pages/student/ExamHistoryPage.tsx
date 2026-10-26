@@ -1,56 +1,64 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
-  Component,
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useAuth } from '@/hooks/useAuth'
-import {
+  AlertCircle,
+  ArrowRight,
   Award,
   BarChart3,
   BookOpenCheck,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   Clock3,
-  Download,
-  FileClock,
-  GraduationCap,
-  Info,
+  FileCheck2,
+  Filter,
+  History,
   LoaderCircle,
-  LockKeyhole,
   MessageSquareText,
+  Mic2,
   RefreshCw,
+  Search,
   ShieldCheck,
-  Sparkles,
-  TimerReset,
   Trophy,
-  type LucideIcon,
+  X,
 } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
 import apiClient from '@/services/api.client'
 import { appealsService } from '@/services/appeals.service'
+import { mockExamService } from '@/services/mockExam.service'
 import { officialExamService } from '@/services/officialExam.service'
+import { practiceService } from '@/services/practice.service'
+import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
+import { PracticeSessionScorecard } from '@/components/practice/PracticeSessionScorecard'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import type { Appeal } from '@/types/appeal.types'
+import type {
+  MockExamHistoryItem,
+  MockExamScorecard as MockExamScorecardData,
+} from '@/types/mockExam.types'
 import type { StudentOfficialExamGrade } from '@/types/officialExam.types'
+import type { PracticeHistoryItem, PracticeSessionDetail } from '@/types/practice.types'
 
-const StudentResultsThreeScene = lazy(() =>
-  import('./StudentResultsThreeScene').then((module) => ({
-    default: module.StudentResultsThreeScene,
-  })),
-)
+type HistoryCategory = 'all' | 'practice' | 'mock' | 'official'
 
-interface ResultsSceneErrorBoundaryProps {
-  children: ReactNode
-  fallback: ReactNode
+const COURSE_CODE_TONES = [
+  'bg-[#4988C4]/16 text-[#1C4D8D]',
+  'bg-[#e8f8f3] text-[#16836a]',
+  'bg-[#fff4e8] text-[#c26a12]',
+  'bg-[#f3eefe] text-[#6d4cc4]',
+  'bg-[#e7f6fb] text-[#0e7490]',
+  'bg-[#fdecef] text-[#c2415b]',
+  'bg-[#eef8e8] text-[#3d7a2a]',
+]
+
+function courseCodeTone(code?: string) {
+  if (!code) return COURSE_CODE_TONES[0]
+  const hash = Array.from(code).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return COURSE_CODE_TONES[hash % COURSE_CODE_TONES.length]
 }
+
 interface LiveOfficialExamSummary {
   ticketId: string
   shiftId: string
@@ -69,7 +77,25 @@ interface LiveOfficialExamSummary {
   studentAcknowledgementStatus: string
 }
 
-function liveHistoryValue<T>(payload: unknown): T {
+interface UnifiedHistoryRow {
+  uid: string
+  rawId: string
+  category: 'practice' | 'mock' | 'official'
+  badgeLabel: string
+  courseCode: string
+  courseName: string
+  title: string
+  subtitle: string
+  timestamp: string
+  statusRaw: string
+  statusLabel: string
+  statusTone: 'emerald' | 'blue' | 'amber' | 'slate'
+  score: number | null
+  canContinue: boolean
+  continueUrl: string | null
+}
+
+function unwrapDashboardPayload<T>(payload: unknown): T {
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>
     return (record.value ?? record.Value ?? record.data ?? record.Data ?? payload) as T
@@ -77,1055 +103,245 @@ function liveHistoryValue<T>(payload: unknown): T {
   return payload as T
 }
 
-function liveHistoryMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
+function extractErrorMessage(error: unknown, fallback = 'Không thể tải dữ liệu lịch sử.') {
+  if (typeof error === 'object' && error !== null) {
+    const rec = error as Record<string, unknown>
+    const detail = rec.detail ?? rec.Detail ?? rec.error ?? rec.message
+    if (typeof detail === 'string' && detail.trim()) return detail.trim()
   }
-  return error instanceof Error ? error.message : 'Không thể tải dữ liệu điểm thi.'
+  return error instanceof Error ? error.message : fallback
 }
 
-function liveHistoryDate(value: string) {
+function formatDateTime(value: string | null) {
+  if (!value) return 'Chưa ghi nhận'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-}
-
-function LiveExamHistoryPage() {
-  const { user } = useAuth()
-  const [items, setItems] = useState<LiveOfficialExamSummary[]>([])
-  const [grades, setGrades] = useState<Record<string, StudentOfficialExamGrade>>({})
-  const [appeals, setAppeals] = useState<Appeal[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [appealReason, setAppealReason] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-
-  const loadHistory = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await apiClient.get<unknown>('/student/dashboard')
-      const dashboard = liveHistoryValue<Record<string, unknown>>(response.data)
-      const raw = dashboard.officialExamTickets ?? dashboard.OfficialExamTickets
-      const list = Array.isArray(raw) ? raw : []
-      setItems(list.map((value) => {
-        const record = value as Record<string, unknown>
-        const read = (key: string) => record[key] ?? record[key.charAt(0).toUpperCase() + key.slice(1)]
-        return {
-          ticketId: String(read('ticketId') ?? ''), shiftId: String(read('shiftId') ?? ''), courseCode: String(read('courseCode') ?? ''), courseName: String(read('courseName') ?? ''), sessionTitle: String(read('sessionTitle') ?? ''), shiftName: String(read('shiftName') ?? ''), roomLab: String(read('roomLab') ?? ''), examDate: String(read('examDate') ?? ''), startTime: String(read('startTime') ?? ''), endTime: String(read('endTime') ?? ''), seatNumber: Number(read('seatNumber') ?? 0), status: String(read('status') ?? ''), finalScore: typeof read('finalScore') === 'number' ? Number(read('finalScore')) : null, isLocked: Boolean(read('isLocked')), studentAcknowledgementStatus: String(read('studentAcknowledgementStatus') ?? 'PENDING'),
-        }
-      }).filter((item) => item.ticketId))
-      try {
-        setAppeals(await appealsService.list())
-      } catch {
-        setAppeals([])
-      }
-    } catch (requestError) {
-      setError(liveHistoryMessage(requestError))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void loadHistory() }, 0)
-    return () => window.clearTimeout(timer)
-  }, [])
-
-  const loadGrade = async (ticketId: string) => {
-    setSelectedId(ticketId)
-    if (grades[ticketId]) return
-    setBusy(true)
-    setError(null)
-    try {
-      const grade = await officialExamService.getStudentGrade(ticketId, user?.id)
-      setGrades((current) => ({ ...current, [ticketId]: grade }))
-    } catch (requestError) {
-      setError(liveHistoryMessage(requestError))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const acknowledge = async (ticketId: string) => {
-    setBusy(true)
-    setError(null)
-    try {
-      await officialExamService.acknowledgeGrade(ticketId, user?.id)
-      setItems((current) => current.map((item) => item.ticketId === ticketId ? { ...item, studentAcknowledgementStatus: 'ACKNOWLEDGED' } : item))
-      setGrades((current) => current[ticketId] ? { ...current, [ticketId]: { ...current[ticketId], studentAcknowledgementStatus: 'ACKNOWLEDGED' } } : current)
-      setNotice('Đã xác nhận kết quả điểm thi.')
-    } catch (requestError) {
-      setError(liveHistoryMessage(requestError))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const createAppeal = async (ticketId: string) => {
-    if (appealReason.trim().length < 10) {
-      setError('Lý do phúc khảo cần có ít nhất 10 ký tự.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const created = await appealsService.create({ ticketId, reason: appealReason.trim() })
-      setAppeals((current) => [created, ...current])
-      setAppealReason('')
-      setNotice('Đã gửi đơn phúc khảo. Trưởng bộ môn sẽ tiếp nhận và phân công chấm lại.')
-    } catch (requestError) {
-      setError(liveHistoryMessage(requestError))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (loading) return <div className={cn(ds.page, 'flex min-h-[420px] items-center justify-center')}><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div>
-
-  return <div lang="vi" className={cn(ds.page, 'pb-8')}><section className={ds.banner}><div className="relative z-10 p-6 sm:p-8"><p className="text-xs font-bold tracking-[0.14em] text-[#BDE8F5] uppercase">Student Portal · MF-04</p><h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Kết quả thi chính thức</h1><p className="mt-2 max-w-2xl text-sm text-white/75">Điểm chỉ hiển thị sau khi giảng viên hậu kiểm và công bố. Dữ liệu được lấy trực tiếp từ Student Dashboard và Grade API.</p><button type="button" onClick={() => void loadHistory()} disabled={busy} className="mt-5 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#0F2854]">{busy ? 'Đang cập nhật...' : 'Cập nhật kết quả'}</button></div></section>{(error || notice) && <div className={cn('mt-4 rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}<section className="mt-4 space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-bold text-[#0F2854]">Lịch thi và điểm đã công bố</h2><span className="text-xs font-semibold text-[#60718a]">{items.length} vé thi</span></div>{items.length === 0 ? <div className="rounded-2xl border border-dashed border-[#cdd8e6] bg-white p-8 text-center text-sm text-[#60718a]">Chưa có vé thi chính thức.</div> : items.map((item) => { const grade = grades[item.ticketId]; const itemAppeal = appeals.find((appeal) => appeal.ticketId === item.ticketId); return <article key={item.ticketId} className="overflow-hidden rounded-2xl border border-[#dce4ee] bg-white shadow-sm"><button type="button" onClick={() => void loadGrade(item.ticketId)} className="grid w-full gap-3 p-4 text-left sm:grid-cols-[minmax(0,1fr)_140px_140px] sm:items-center"><div><p className="text-xs font-bold text-[#1C4D8D]">{item.courseCode} · {item.shiftName}</p><h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.courseName || item.sessionTitle}</h3><p className="mt-1 text-xs text-[#60718a]">{liveHistoryDate(item.startTime)} · {item.roomLab} · Ghế {item.seatNumber}</p></div><div><span className="text-xs font-bold text-[#60718a]">Điểm công bố</span><p className="mt-1 text-lg font-bold text-[#1C4D8D]">{item.finalScore === null ? '—' : `${item.finalScore.toFixed(1)} / 10`}</p></div><span className={cn('rounded-full px-2.5 py-1 text-center text-xs font-bold', item.isLocked ? 'bg-[#e6f8f1] text-[#1d6f5a]' : 'bg-[#fff1cf] text-[#7d540a]')}>{item.isLocked ? 'LOCKED' : item.status}</span></button>{selectedId === item.ticketId && <div className="border-t border-[#e6ebf2] bg-[#f7fbff] p-4">{!grade ? <p className="text-sm text-[#60718a]">{error ?? 'Chưa có scorecard hoặc điểm chưa được công bố.'}</p> : <><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs text-[#60718a]">Tổng điểm</p><p className="text-2xl font-bold text-[#0F2854]">{grade.totalScore === null ? '—' : `${grade.totalScore.toFixed(2)} / 10`}</p></div>{grade.studentAcknowledgementStatus !== 'ACKNOWLEDGED' && <button type="button" disabled={busy} onClick={() => void acknowledge(item.ticketId)} className="rounded-xl bg-[#1C4D8D] px-4 py-2.5 text-xs font-bold text-white">Xác nhận điểm</button>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2">{grade.detailedScorecard.map((score) => <article key={score.questionId} className="rounded-xl border border-[#e1e7ef] bg-white p-3"><p className="text-xs font-bold text-[#33465e]">{score.questionTitle || 'Câu hỏi'}</p>{score.questionImageUrl && <img src={score.questionImageUrl} alt={score.questionImageDescription || score.questionTitle || 'Hình ảnh câu hỏi'} className="mt-2 max-h-40 w-full rounded-lg object-contain" />}<p className="mt-2 text-sm font-bold text-[#1C4D8D]">{score.score.toFixed(2)} điểm</p>{score.criteriaScores.map((criterion) => <p key={criterion.criterionName} className="mt-1 text-xs text-[#60718a]">{criterion.criterionName}: {criterion.score.toFixed(1)}/{criterion.maxScore} · {criterion.comment || 'Không có nhận xét'}</p>)}</article>)}</div>{grade.internalAppeal.canAppeal && <div className="mt-4 rounded-xl border border-[#e5dfcf] bg-[#fffaf0] p-4"><p className="text-sm font-bold text-[#7d540a]">Phúc khảo nội bộ</p>{itemAppeal ? <p className="mt-2 text-xs text-[#60718a]">Đơn hiện tại: <strong>{itemAppeal.status}</strong> · {itemAppeal.reason}</p> : <><textarea value={appealReason} onChange={(event) => setAppealReason(event.target.value)} placeholder="Nhập lý do phúc khảo..." className="mt-3 min-h-20 w-full rounded-xl border border-[#e1d8c5] bg-white p-3 text-sm outline-none" /><button type="button" disabled={busy} onClick={() => void createAppeal(item.ticketId)} className="mt-2 rounded-xl bg-[#9d6a12] px-4 py-2 text-xs font-bold text-white">Gửi đơn phúc khảo</button></>}</div>}</>}</div>}</article> })}</section></div>
-}
-
-void LegacyExamHistoryPage
-export { LiveExamHistoryPage as ExamHistoryPage, LiveExamHistoryPage as StudentResultsPage }
-
-class ResultsSceneErrorBoundary extends Component<
-  ResultsSceneErrorBoundaryProps,
-  { hasError: boolean }
-> {
-  state = { hasError: false }
-
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-
-  render() {
-    return this.state.hasError ? this.props.fallback : this.props.children
-  }
-}
-
-type ResultCategory = 'official' | 'mock' | 'practice'
-type ResultFilter = 'all' | ResultCategory
-type ResultStatus = 'LOCKED' | 'PENDING_REVIEW' | 'COMPLETED'
-type ResultSort = 'recent' | 'score'
-
-interface RubricCriterion {
-  id: string
-  label: string
-  score: number
-  maxScore: number
-  feedback: string
-}
-
-interface StudentResultRecord {
-  id: string
-  category: ResultCategory
-  status: ResultStatus
-  subjectCode: string
-  subjectName: string
-  activityLabel: string
-  completedAt: Date
-  durationMinutes: number
-  aiScore?: number
-  finalScore?: number
-  isLocked: boolean
-  rubric: RubricCriterion[]
-  summary: string
-  lecturerNote?: string
-  lockedAt?: Date
-  expectedReviewAt?: Date
-}
-
-interface CategoryStyle {
-  label: string
-  icon: LucideIcon
-  iconClassName: string
-  badgeClassName: string
-}
-
-const CATEGORY_STYLES: Record<ResultCategory, CategoryStyle> = {
-  official: {
-    label: 'Thi chính thức',
-    icon: GraduationCap,
-    iconClassName: 'bg-[#0F2854] text-white',
-    badgeClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-  },
-  mock: {
-    label: 'Thi thử Mock Exam',
-    icon: TimerReset,
-    iconClassName: 'bg-[#edf1f7] text-[#51647e]',
-    badgeClassName: 'bg-[#f0f3f8] text-[#52647b]',
-  },
-  practice: {
-    label: 'Luyện tập',
-    icon: Sparkles,
-    iconClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-    badgeClassName: 'bg-[#4988C4]/16 text-[#1C4D8D]',
-  },
-}
-
-const FILTER_LABELS: Record<ResultFilter, string> = {
-  all: 'Tất cả',
-  official: 'Thi chính thức',
-  mock: 'Thi thử (Mock)',
-  practice: 'Luyện tập',
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * 86_400_000)
-}
-
-function buildRubric(
-  scores: [number, number, number, number],
-  feedback: [string, string, string, string],
-): RubricCriterion[] {
-  const labels = [
-    'Độ chính xác chuyên môn',
-    'Lập luận & cấu trúc',
-    'Diễn đạt & thuật ngữ',
-    'Phản hồi câu hỏi mở rộng',
-  ]
-
-  return labels.map((label, index) => ({
-    id: `criterion-${index + 1}`,
-    label,
-    score: scores[index],
-    maxScore: 10,
-    feedback: feedback[index],
-  }))
-}
-
-function buildPreviewResults(now: Date): StudentResultRecord[] {
-  return [
-    {
-      id: 'official-operating-systems',
-      category: 'official',
-      status: 'LOCKED',
-      subjectCode: 'IT3010',
-      subjectName: 'Kiến trúc Máy tính & Hệ điều hành',
-      activityLabel: 'Vấn đáp tại Lab B402',
-      completedAt: addDays(now, -3),
-      durationMinutes: 20,
-      aiScore: 8.8,
-      finalScore: 9.0,
-      isLocked: true,
-      rubric: buildRubric(
-        [9.2, 8.8, 9.0, 8.9],
-        [
-          'Nắm chắc cơ chế quản lý bộ nhớ và tiến trình.',
-          'Lập luận tuần tự, có ví dụ minh họa phù hợp.',
-          'Diễn đạt rõ ràng, dùng đúng thuật ngữ hệ điều hành.',
-          'Xử lý tốt câu hỏi follow-up về deadlock.',
-        ],
-      ),
-      summary:
-        'Bài trả lời thể hiện nền tảng hệ điều hành vững, liên hệ đúng giữa lập lịch CPU, bộ nhớ ảo và đồng bộ tiến trình.',
-      lecturerNote: 'Đồng ý với phần lớn đánh giá AI và điều chỉnh nhẹ tiêu chí lập luận.',
-      lockedAt: addDays(now, -2),
-    },
-    {
-      id: 'official-database',
-      category: 'official',
-      status: 'LOCKED',
-      subjectCode: 'IT2000',
-      subjectName: 'Cơ sở Dữ liệu',
-      activityLabel: 'Vấn đáp tại Lab A305',
-      completedAt: addDays(now, -8),
-      durationMinutes: 25,
-      aiScore: 8.5,
-      finalScore: 8.5,
-      isLocked: true,
-      rubric: buildRubric(
-        [8.8, 8.4, 8.5, 8.3],
-        [
-          'Phân biệt đúng các dạng chuẩn và phụ thuộc hàm.',
-          'Luồng phân tích rõ nhưng cần kết luận ngắn gọn hơn.',
-          'Thuật ngữ nhất quán và dễ theo dõi.',
-          'Trả lời đúng câu hỏi mở rộng về chỉ mục B+ Tree.',
-        ],
-      ),
-      summary:
-        'Hiểu tốt chuẩn hóa dữ liệu, giao dịch và chỉ mục; cần cô đọng hơn khi giải thích chiến lược tối ưu truy vấn.',
-      lecturerNote: 'Giữ nguyên điểm do AI đề xuất sau khi nghe lại toàn bộ bản ghi.',
-      lockedAt: addDays(now, -6),
-    },
-    {
-      id: 'official-software-architecture',
-      category: 'official',
-      status: 'LOCKED',
-      subjectCode: 'SWE3003',
-      subjectName: 'Kiến trúc & Thiết kế Phần mềm',
-      activityLabel: 'Vấn đáp tại Lab B401',
-      completedAt: addDays(now, -13),
-      durationMinutes: 22,
-      aiScore: 8.6,
-      finalScore: 8.7,
-      isLocked: true,
-      rubric: buildRubric(
-        [8.7, 8.9, 8.6, 8.5],
-        [
-          'Nhận diện đúng trade-off của kiến trúc phân lớp.',
-          'So sánh pattern có hệ thống và có phản biện.',
-          'Trình bày mạch lạc, thuật ngữ chính xác.',
-          'Giải quyết tốt tình huống thay đổi yêu cầu.',
-        ],
-      ),
-      summary:
-        'Phân tích kiến trúc có chiều sâu, cân bằng được khả năng bảo trì, hiệu năng và chi phí thay đổi.',
-      lecturerNote: 'Điều chỉnh +0.1 ở tiêu chí lập luận sau hậu kiểm.',
-      lockedAt: addDays(now, -11),
-    },
-    {
-      id: 'official-networking-pending',
-      category: 'official',
-      status: 'PENDING_REVIEW',
-      subjectCode: 'IT3080',
-      subjectName: 'Mạng Máy tính',
-      activityLabel: 'Vấn đáp tại Lab B402',
-      completedAt: addDays(now, -1),
-      durationMinutes: 20,
-      isLocked: false,
-      rubric: [],
-      summary: 'Bài thi đã được hệ thống tiếp nhận và chuyển vào hàng đợi hậu kiểm của Giảng viên.',
-      expectedReviewAt: addDays(now, 2),
-    },
-    {
-      id: 'mock-artificial-intelligence',
-      category: 'mock',
-      status: 'COMPLETED',
-      subjectCode: 'AI301',
-      subjectName: 'MOCK-AI-01 · Trí tuệ Nhân tạo',
-      activityLabel: 'Thi thử vấn đáp',
-      completedAt: addDays(now, -4),
-      durationMinutes: 20,
-      aiScore: 8.4,
-      isLocked: false,
-      rubric: buildRubric(
-        [8.5, 8.2, 8.6, 8.3],
-        [
-          'Nắm được nền tảng tìm kiếm và biểu diễn tri thức.',
-          'Cần làm rõ giả định trước khi chọn thuật toán.',
-          'Giọng nói ổn định và dùng thuật ngữ phù hợp.',
-          'Phản hồi đúng hướng với câu hỏi mở rộng.',
-        ],
-      ),
-      summary:
-        'Kết quả mô phỏng cho thấy kiến thức nền tốt; nên luyện thêm cách so sánh heuristic trong các trường hợp biên.',
-    },
-    {
-      id: 'practice-semaphore',
-      category: 'practice',
-      status: 'COMPLETED',
-      subjectCode: 'OS-PRACTICE-04',
-      subjectName: 'Luyện tập: Semaphore & Concurrency',
-      activityLabel: 'Luyện tập tương tác AI',
-      completedAt: addDays(now, -6),
-      durationMinutes: 12,
-      aiScore: 9.2,
-      isLocked: false,
-      rubric: buildRubric(
-        [9.3, 9.1, 9.2, 9.0],
-        [
-          'Giải thích chính xác semaphore đếm và semaphore nhị phân.',
-          'Lập luận tốt qua ví dụ producer-consumer.',
-          'Diễn đạt tự tin, nhịp độ phù hợp.',
-          'Xử lý tốt tình huống race condition bổ sung.',
-        ],
-      ),
-      summary:
-        'Phiên luyện tập đạt chuẩn cao; có thể chuyển sang các bài toán đồng bộ nhiều tài nguyên phức tạp hơn.',
-    },
-  ]
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatTime(date: Date) {
+  if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
     hour12: false,
+    timeZone: 'Asia/Ho_Chi_Minh',
   }).format(date)
 }
 
-function parseFilter(searchParams: URLSearchParams): ResultFilter {
-  const requestedFilter = searchParams.get('type')
-  if (
-    requestedFilter === 'official' ||
-    requestedFilter === 'mock' ||
-    requestedFilter === 'practice'
-  ) {
-    return requestedFilter
-  }
-  if (searchParams.get('source') === 'mock-exam') return 'mock'
-  return 'all'
+function averageScore(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sum = values.reduce((acc, v) => acc + v, 0)
+  return Math.round((sum / values.length) * 100) / 100
 }
 
-function isReleasedOfficialResult(result: StudentResultRecord) {
-  return (
-    result.category === 'official' &&
-    result.status === 'LOCKED' &&
-    result.isLocked &&
-    typeof result.finalScore === 'number'
-  )
-}
-
-function isPendingOfficialResult(result: StudentResultRecord) {
-  return result.category === 'official' && !isReleasedOfficialResult(result)
-}
-
-function getVisibleScore(result: StudentResultRecord) {
-  if (result.category === 'official') {
-    return isReleasedOfficialResult(result) ? result.finalScore : undefined
-  }
-  return result.aiScore
-}
-
-function getScoreLabel(result: StudentResultRecord) {
-  if (result.category === 'official') return 'Điểm công bố'
-  if (result.category === 'mock') return 'Điểm mô phỏng'
-  return 'Điểm luyện tập'
-}
-
-function ResultsSceneFallback({
-  averageScore,
-  pendingCount,
+function OfficialExamScorecardView({
+  ticket,
+  grade,
+  appeal,
+  appealReason,
+  onChangeAppealReason,
+  onAcknowledge,
+  onCreateAppeal,
+  busy,
 }: {
-  averageScore: number | null
-  pendingCount: number
+  ticket: LiveOfficialExamSummary
+  grade: StudentOfficialExamGrade
+  appeal: Appeal | undefined
+  appealReason: string
+  onChangeAppealReason: (next: string) => void
+  onAcknowledge: () => void
+  onCreateAppeal: () => void
+  busy: boolean
 }) {
-  return (
-    <div className="flex size-full items-center justify-center" aria-hidden="true">
-      <div className="w-[210px] rotate-[-3deg] rounded-2xl border border-[#9dc9de] bg-[linear-gradient(135deg,#0b315d,#14677b)] p-4 shadow-[0_18px_45px_rgba(20,83,112,0.2)] sm:w-[240px]">
-        <div className="h-1.5 w-14 rounded-full bg-[#55e0dc]" />
-        <p className="mt-3 text-xs font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">
-          Academic score
-        </p>
-        <p className="mt-1 text-3xl font-black text-white">
-          {averageScore === null ? '—' : averageScore.toFixed(1)}
-          <span className="ml-1 text-xs font-semibold text-[#b8e3ec]">/10</span>
-        </p>
-        <div className="mt-3 flex items-center justify-between text-xs font-bold text-[#d6f7f5]">
-          <span>LOCKED GRADES</span>
-          <span>{pendingCount} PENDING</span>
-        </div>
-      </div>
-    </div>
+  const [openQuestionId, setOpenQuestionId] = useState<string | null>(
+    () => grade.detailedScorecard[0]?.questionId ?? null,
   )
-}
-
-function LegacyExamHistoryPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const results = useMemo(() => buildPreviewResults(new Date()), [])
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(() => new Date())
-  const refreshTimerRef = useRef<number | null>(null)
-
-  const activeFilter = parseFilter(searchParams)
-  const activeSort: ResultSort = searchParams.get('sort') === 'score' ? 'score' : 'recent'
-  const selectedResultId = searchParams.get('result')
-  const selectedResult = results.find((result) => result.id === selectedResultId)
-  const releasedOfficialResults = results.filter(isReleasedOfficialResult)
-  const pendingOfficialResults = results.filter(isPendingOfficialResult)
-  const officialAverage = releasedOfficialResults.length
-    ? releasedOfficialResults.reduce((total, result) => total + (result.finalScore ?? 0), 0) /
-      releasedOfficialResults.length
-    : null
-
-  const filterCounts = useMemo<Record<ResultFilter, number>>(
-    () => ({
-      all: results.length,
-      official: results.filter((result) => result.category === 'official').length,
-      mock: results.filter((result) => result.category === 'mock').length,
-      practice: results.filter((result) => result.category === 'practice').length,
-    }),
-    [results],
-  )
-
-  const visibleResults = useMemo(() => {
-    const filtered =
-      activeFilter === 'all'
-        ? [...results]
-        : results.filter((result) => result.category === activeFilter)
-
-    return filtered.sort((left, right) => {
-      if (activeSort === 'score') {
-        return (getVisibleScore(right) ?? -1) - (getVisibleScore(left) ?? -1)
-      }
-      return right.completedAt.getTime() - left.completedAt.getTime()
-    })
-  }, [activeFilter, activeSort, results])
-
-  useEffect(() => {
-    if (!selectedResultId) return
-    const scrollTimer = window.setTimeout(() => {
-      document
-        .getElementById(`result-detail-${selectedResultId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 120)
-    return () => window.clearTimeout(scrollTimer)
-  }, [selectedResultId])
-
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current)
-    },
-    [],
-  )
-
-  const updateQuery = (updates: Record<string, string | null>) => {
-    const nextParams = new URLSearchParams(searchParams)
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === null) nextParams.delete(key)
-      else nextParams.set(key, value)
-    })
-    setSearchParams(nextParams)
-  }
-
-  const handleFilterChange = (filter: ResultFilter) => {
-    updateQuery({
-      type: filter === 'all' ? null : filter,
-      source: null,
-      result: null,
-    })
-  }
-
-  const handleResultToggle = (resultId: string) => {
-    updateQuery({ result: selectedResultId === resultId ? null : resultId })
-  }
-
-  const handleRefresh = () => {
-    if (isRefreshing) return
-    setIsRefreshing(true)
-    if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current)
-    refreshTimerRef.current = window.setTimeout(() => {
-      setLastUpdatedAt(new Date())
-      setIsRefreshing(false)
-      refreshTimerRef.current = null
-    }, 850)
-  }
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-5')}>
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 14mm; }
-          body * { visibility: hidden !important; }
-          #student-results-print,
-          #student-results-print * { visibility: visible !important; }
-          #student-results-print {
-            display: block !important;
-            position: fixed;
-            inset: 0;
-            width: 100%;
-            padding: 22px;
-            background: white;
-            color: #0F2854;
-          }
-        }
-      `}</style>
+    <div className="space-y-3">
+      <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
+        <div className="bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] px-5 py-5 text-white">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-xs font-bold tracking-[0.08em] text-[#BDE8F5] uppercase">
+                <Trophy className="size-3.5" />
+                Bảng điểm kỳ thi chính thức · Phòng Lab
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="inline-flex rounded-full bg-white/15 px-2.5 py-1 text-xs font-bold">
+                  {grade.courseCode || ticket.courseCode}
+                </span>
+                <span className="inline-flex rounded-full bg-[#BDE8F5]/20 px-2.5 py-1 text-xs font-semibold text-[#BDE8F5]">
+                  {ticket.shiftName} · Phòng {ticket.roomLab} · Máy {ticket.seatNumber}
+                </span>
+              </div>
+              <h2 className="mt-2 text-xl leading-snug font-bold">
+                {ticket.courseName || ticket.sessionTitle}
+              </h2>
+              <p className="mt-2 text-sm text-[#d5e2f7]">
+                Công bố lúc {formatDateTime(grade.publishedAt)} · Người công bố: {grade.publishedBy}
+              </p>
+            </div>
 
-      <section id="student-results-print" className="hidden">
-        <div className="rounded-2xl border-2 border-[#0F2854] p-8">
-          <div className="border-b border-[#4988C4]/45 pb-5">
-            <p className="text-sm font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
-              OralExam AI · University Tech
-            </p>
-            <p className="mt-4 inline-flex rounded-lg bg-[#fff1cf] px-3 py-2 text-xs font-bold text-[#7d540a]">
-              BẢN DỮ LIỆU MINH HỌA · KHÔNG CÓ GIÁ TRỊ HỌC VỤ
-            </p>
-            <h2 className="mt-3 text-3xl font-bold">Bảng điểm vấn đáp đã công bố</h2>
-            <p className="mt-2 text-sm text-[#52647b]">
-              Dữ liệu demo cục bộ · Học kỳ Fall 2026 · Không gắn với hồ sơ sinh viên
-            </p>
-          </div>
-          <table className="mt-6 w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b-2 border-[#0F2854]">
-                <th className="py-3">Mã học phần</th>
-                <th className="py-3">Tên học phần</th>
-                <th className="py-3">Ngày thi</th>
-                <th className="py-3 text-right">Điểm khóa</th>
-              </tr>
-            </thead>
-            <tbody>
-              {releasedOfficialResults.map((result) => (
-                <tr key={result.id} className="border-b border-[#4988C4]/45">
-                  <td className="py-3 font-semibold">{result.subjectCode}</td>
-                  <td className="py-3">{result.subjectName}</td>
-                  <td className="py-3">{formatDate(result.completedAt)}</td>
-                  <td className="py-3 text-right font-bold">
-                    {result.finalScore?.toFixed(1)} / 10
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-6 flex items-center justify-between rounded-xl bg-[#4988C4]/16 p-4 text-sm">
-            <span>Điểm trung bình chính thức</span>
-            <strong className="text-xl text-[#1C4D8D]">
-              {officialAverage === null ? '—' : `${officialAverage.toFixed(1)} / 10`}
-            </strong>
-          </div>
-          <p className="mt-5 text-xs leading-relaxed text-[#52647b]">
-            Chỉ bao gồm các học phần đã được Giảng viên hậu kiểm và khóa điểm một chiều. Dữ liệu
-            hiện tại là bản xem trước frontend, chưa phải chứng từ học vụ được ký số.
-          </p>
-        </div>
-      </section>
+            <div className="flex flex-col items-end gap-2 self-start">
+              <div className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3">
+                <div>
+                  <p className="text-xs font-semibold text-[#BDE8F5]">Điểm chính thức</p>
+                  <p className="text-4xl leading-none font-black tracking-[-0.04em]">
+                    {grade.totalScore === null ? '—' : grade.totalScore.toFixed(2)}
+                    <span className="ml-1 text-sm font-semibold text-[#BDE8F5]">/10</span>
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    'rounded-full px-3 py-1 text-xs font-bold',
+                    grade.studentAcknowledgementStatus === 'ACKNOWLEDGED'
+                      ? 'bg-[#edfbf6] text-[#0f8f6b]'
+                      : 'bg-[#fff8eb] text-[#9a6414]',
+                  )}
+                >
+                  {grade.studentAcknowledgementStatus === 'ACKNOWLEDGED'
+                    ? 'Đã xác nhận'
+                    : 'Chờ xác nhận'}
+                </span>
+              </div>
 
-      <section className={ds.banner}>
-        <div
-          className="pointer-events-none absolute inset-0 opacity-55"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(43,112,175,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(43,112,175,0.055) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            maskImage: 'linear-gradient(90deg, black 0%, transparent 78%)',
-          }}
-        />
-
-        <div className="relative z-10 p-5 sm:p-7 lg:min-h-[238px] lg:w-[61%] lg:p-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.04em] text-white uppercase">
-              <BarChart3 className="size-3.5" /> Báo cáo năng lực học kỳ
-            </span>
-            <span className="rounded-full bg-white/15 px-2 py-1 text-xs font-bold text-white">
-              Dữ liệu xem trước FE
-            </span>
-          </div>
-          <h1 className="mt-3 text-[27px] leading-[1.08] font-bold tracking-[-0.04em] text-white sm:text-[35px]">
-            Kết quả & Bảng điểm Vấn đáp
-          </h1>
-          <p className="mt-2 max-w-[650px] text-sm leading-relaxed text-white/80 sm:text-xs">
-            Tra cứu kết quả luyện tập, thi thử và các điểm thi chính thức đã được Giảng viên hậu
-            kiểm, khóa một chiều và công bố.
-          </p>
-
-          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-            >
-              <Download className="size-4 text-[#1C4D8D]" /> In bản xem trước
-            </button>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-70 motion-reduce:transform-none"
-            >
-              {isRefreshing ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
+              {grade.studentAcknowledgementStatus !== 'ACKNOWLEDGED' && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onAcknowledge}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-[#0F2854] shadow-sm transition hover:bg-[#F4FBFD] disabled:opacity-60"
+                >
+                  <CheckCircle2 className="size-3.5 text-[#15866a]" />
+                  Xác nhận đồng ý điểm thi
+                </button>
               )}
-              {isRefreshing ? 'Đang cập nhật...' : 'Cập nhật bản xem trước'}
-            </button>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-white/70">
-            Hiển thị cập nhật lúc {formatTime(lastUpdatedAt)} · Chưa kết nối Student Results API
-          </p>
-        </div>
-
-        <div className="relative h-[150px] sm:h-[175px] lg:absolute lg:inset-y-0 lg:right-0 lg:h-auto lg:w-[45%]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_52%,rgba(64,211,231,0.23),transparent_58%)]" />
-          <ResultsSceneErrorBoundary
-            fallback={
-              <ResultsSceneFallback
-                averageScore={officialAverage}
-                pendingCount={pendingOfficialResults.length}
-              />
-            }
-          >
-            <Suspense
-              fallback={
-                <ResultsSceneFallback
-                  averageScore={officialAverage}
-                  pendingCount={pendingOfficialResults.length}
-                />
-              }
-            >
-              <StudentResultsThreeScene
-                averageScore={officialAverage}
-                pendingCount={pendingOfficialResults.length}
-              />
-            </Suspense>
-          </ResultsSceneErrorBoundary>
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2">
-        <article className="relative overflow-hidden rounded-[20px] border border-[#dce9e4] bg-[linear-gradient(135deg,#ffffff,#f2fbf7)] p-5 shadow-[0_8px_26px_rgba(31,61,105,0.05)]">
-          <div className="absolute -top-10 -right-8 size-32 rounded-full bg-[#65d9b0]/10 blur-2xl" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#277662] uppercase">
-                <span className="size-2 rounded-full bg-[#32c695]" /> Điểm chính thức đã công bố
-              </p>
-              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#0F2854]">
-                {releasedOfficialResults.length.toString().padStart(2, '0')}
-                <span className="ml-2 text-sm font-semibold text-[#53667e]">Môn học</span>
-              </p>
-              <span className="mt-3 inline-flex rounded-full bg-[#dff7ee] px-2.5 py-1 text-xs font-bold text-[#1c6b57]">
-                Điểm trung bình chính thức:{' '}
-                {officialAverage === null ? 'Chưa có' : `${officialAverage.toFixed(1)} / 10`}
-              </span>
-            </div>
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#2aa67f] shadow-sm">
-              <Trophy className="size-5" />
-            </span>
-          </div>
-        </article>
-
-        <article className="relative overflow-hidden rounded-[20px] border border-[#eee5d2] bg-[linear-gradient(135deg,#ffffff,#fff9ec)] p-5 shadow-[0_8px_26px_rgba(31,61,105,0.05)]">
-          <div className="absolute -top-10 -right-8 size-32 rounded-full bg-[#f1b84a]/10 blur-2xl" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#86590d] uppercase">
-                <span className="size-2 rounded-full bg-[#efb63d]" /> Đang chờ Giảng viên hậu kiểm
-              </p>
-              <p className="mt-3 text-[30px] leading-none font-bold tracking-[-0.04em] text-[#0F2854]">
-                {pendingOfficialResults.length.toString().padStart(2, '0')}
-                <span className="ml-2 text-sm font-semibold text-[#53667e]">Bài thi</span>
-              </p>
-              <span className="mt-3 inline-flex rounded-full bg-[#fff0c8] px-2.5 py-1 text-xs font-bold text-[#7d540a]">
-                Không hiển thị điểm dự thảo trước khi khóa
-              </span>
-            </div>
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#d39627] shadow-sm">
-              <FileClock className="size-5" />
-            </span>
-          </div>
-        </article>
-      </section>
-
-      <section className={cn(ds.section, 'p-3 sm:p-4')}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="overflow-x-auto pb-1 sm:pb-0">
-            <div className="flex min-w-max gap-1.5" aria-label="Lọc kết quả theo loại">
-              {(Object.keys(FILTER_LABELS) as ResultFilter[]).map((filter) => {
-                const isActive = activeFilter === filter
-                return (
-                  <button
-                    key={filter}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => handleFilterChange(filter)}
-                    className={cn(
-                      'inline-flex min-h-10 items-center gap-2 rounded-xl px-3.5 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
-                      isActive
-                        ? 'bg-[#4988C4]/16 text-[#2858c4] shadow-sm'
-                        : 'text-[#52647b] hover:bg-[#4988C4]/18 hover:text-[#0F2854]',
-                    )}
-                  >
-                    {FILTER_LABELS[filter]}
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-xs',
-                        isActive ? 'bg-white text-[#1C4D8D]' : 'bg-[#4988C4]/16 text-[#52647b]',
-                      )}
-                    >
-                      {filterCounts[filter]}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[#dce4ee] bg-[#fafbfd] px-3 text-xs font-semibold text-[#52647b] focus-within:border-[#6688df] focus-within:ring-2 focus-within:ring-[#1C4D8D]/20">
-            Sắp xếp
-            <select
-              value={activeSort}
-              onChange={(event) =>
-                updateQuery({ sort: event.target.value === 'score' ? 'score' : null })
-              }
-              className="rounded-md bg-transparent text-xs font-bold text-[#30445e] outline-none"
-              aria-label="Sắp xếp kết quả"
-            >
-              <option value="recent">Mới nhất</option>
-              <option value="score">Điểm cao nhất</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section aria-labelledby="results-list-title" className="space-y-3">
-        <div className="flex items-center justify-between gap-4 px-1">
-          <div>
-            <h2 id="results-list-title" className="text-base font-bold text-[#0F2854] sm:text-lg">
-              {FILTER_LABELS[activeFilter]}
-            </h2>
-            <p className="mt-1 text-xs text-[#52647b]">
-              {visibleResults.length} kết quả · Chỉ điểm `LOCKED` được tính là điểm chính thức
-            </p>
-          </div>
-          <span className="hidden text-xs font-semibold text-[#52647b] sm:inline">
-            Trang 1 / 1
-          </span>
-        </div>
-
-        {visibleResults.length === 0 ? (
-          <div className="rounded-[20px] border border-dashed border-[#cdd8e6] bg-white px-6 py-12 text-center">
-            <BookOpenCheck className="mx-auto size-8 text-[#8da0b8]" />
-            <h3 className="mt-3 text-sm font-bold text-[#33465f]">Chưa có kết quả phù hợp</h3>
-            <p className="mt-1 text-xs text-[#52647b]">Hãy thử một bộ lọc khác.</p>
+      <div className="space-y-2">
+        {grade.detailedScorecard.length === 0 ? (
+          <div className="rounded-2xl border border-[#4988C4]/45 bg-white p-6 text-center text-sm text-[#5b6b84]">
+            Chưa có chi tiết từng câu hỏi cho ca thi này.
           </div>
         ) : (
-          visibleResults.map((result) => {
-            const categoryStyle = CATEGORY_STYLES[result.category]
-            const CategoryIcon = categoryStyle.icon
-            const isExpanded = selectedResult?.id === result.id
-            const visibleScore = getVisibleScore(result)
-            const isReleased = isReleasedOfficialResult(result)
-            const isPending = isPendingOfficialResult(result)
-
+          grade.detailedScorecard.map((question, idx) => {
+            const isOpen = openQuestionId === question.questionId
             return (
               <article
-                key={result.id}
-                className={cn(
-                  'overflow-hidden rounded-[18px] border bg-white shadow-[0_7px_24px_rgba(31,61,105,0.045)] transition duration-200',
-                  isExpanded
-                    ? 'border-[#9bb0e9] shadow-[0_12px_34px_rgba(43,84,160,0.1)]'
-                    : 'border-[#4988C4]/45 hover:-translate-y-0.5 hover:border-[#c6d3e3] hover:shadow-[0_11px_30px_rgba(31,61,105,0.08)] motion-reduce:transform-none',
-                  isPending && 'border-l-[3px] border-l-[#efb441]',
-                )}
+                key={`${question.questionId}-${idx}`}
+                className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white"
               >
-                <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_105px_125px_112px] lg:items-center">
-                  <div className="flex min-w-0 items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOpenQuestionId(isOpen ? null : question.questionId)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#4988C4]/14"
+                  aria-expanded={isOpen}
+                >
+                  <span className="min-w-0">
+                    <span className="text-xs font-bold text-[#1C4D8D]">
+                      Câu {idx + 1} · {question.questionTitle || 'Câu hỏi vấn đáp'}
+                    </span>
                     <span
                       className={cn(
-                        'flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm',
-                        categoryStyle.iconClassName,
+                        'mt-1 block text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]',
+                        !isOpen && 'line-clamp-2',
                       )}
                     >
-                      <CategoryIcon className="size-5" />
+                      {question.questionContent || question.questionTitle || `Câu hỏi #${idx + 1}`}
                     </span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={cn(
-                            'rounded-full px-2 py-1 text-xs font-bold',
-                            categoryStyle.badgeClassName,
-                          )}
-                        >
-                          {categoryStyle.label}
-                        </span>
-                        {isReleased && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e6f8f1] px-2 py-1 text-xs font-bold text-[#1d6f5a]">
-                            <LockKeyhole className="size-3" /> Đã công bố · Đã khóa điểm
-                          </span>
-                        )}
-                        {isPending && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#fff1cf] px-2 py-1 text-xs font-bold text-[#7d540a]">
-                            <FileClock className="size-3" /> Chờ hậu kiểm
-                          </span>
-                        )}
-                        {result.status === 'COMPLETED' && result.category !== 'official' && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-bold text-[#52647b]">
-                            <CheckCircle2 className="size-3" /> Đã hoàn thành
-                          </span>
-                        )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                      {question.score.toFixed(1)}/10
+                    </span>
+                    <ChevronDown
+                      className={cn('size-4 text-[#74839a] transition', isOpen && 'rotate-180')}
+                    />
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
+                    {question.questionImageUrl?.trim() ? (
+                      <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white p-3">
+                        <QuestionImage
+                          imageUrl={question.questionImageUrl}
+                          imageAlt={question.questionImageDescription}
+                          framed={false}
+                          showCaption={false}
+                          className="w-full overflow-hidden rounded-xl"
+                        />
                       </div>
-                      <h3 className="mt-2 truncate text-sm font-bold text-[#0F2854]">
-                        {result.subjectName}
-                      </h3>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#56677f]">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarDays className="size-3" /> {formatDate(result.completedAt)}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock3 className="size-3" /> {result.durationMinutes} phút vấn đáp
-                        </span>
-                        <span>Mã HP: {result.subjectCode}</span>
+                    ) : null}
+
+                    <div className="rounded-xl bg-[#4988C4]/16 p-3">
+                      <p className="text-xs font-bold text-[#1C4D8D]">
+                        Bản bóc băng câu trả lời của bạn
+                      </p>
+                      <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#0F2854]">
+                        {question.studentTranscript?.trim() ||
+                          'Không ghi nhận nội dung trả lời cho câu hỏi này.'}
                       </p>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#4988C4]/16 px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
-                    <span className="text-xs font-bold tracking-[0.04em] text-[#52647b] uppercase">
-                      {getScoreLabel(result)}
-                    </span>
-                    <p className="mt-0.5 text-sm font-bold text-[#20334e]">
-                      {visibleScore === undefined ? '—' : visibleScore.toFixed(1)}
-                      {visibleScore !== undefined && (
-                        <span className="ml-0.5 text-xs text-[#52647b]">/10</span>
+                    <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
+                      <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
+                        <MessageSquareText className="size-3.5" />
+                        Nhận xét đánh giá
+                      </p>
+                      <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#3f5c52]">
+                        {question.strengths?.trim() || 'Đã chấm điểm theo tiêu chí Rubric.'}
+                      </p>
+                      {question.lecturerOverrideReason?.trim() && (
+                        <p className="mt-2 rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D]">
+                          Ghi chú hậu kiểm của Giảng viên: {question.lecturerOverrideReason}
+                        </p>
                       )}
-                    </p>
-                  </div>
+                    </div>
 
-                  <div className="flex items-center justify-between rounded-xl bg-[#4988C4]/16 px-3 py-2 lg:block lg:bg-transparent lg:px-0 lg:py-0">
-                    <span className="text-xs font-bold tracking-[0.04em] text-[#52647b] uppercase">
-                      Trạng thái
-                    </span>
-                    <p
-                      className={cn(
-                        'mt-0.5 text-xs font-bold',
-                        isPending
-                          ? 'text-[#8a5d0d]'
-                          : isReleased
-                            ? 'text-[#1f725c]'
-                            : 'text-[#526582]',
-                      )}
-                    >
-                      {isPending
-                        ? 'Chưa công bố điểm'
-                        : isReleased
-                          ? 'LOCKED'
-                          : result.category === 'mock'
-                            ? 'Không tính học phần'
-                            : 'Phản hồi AI'}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleResultToggle(result.id)}
-                    aria-expanded={isExpanded}
-                    aria-controls={`result-detail-${result.id}`}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#f0f4fa] px-3 text-xs font-bold text-[#344a67] transition hover:bg-[#e7eef8] hover:text-[#2458c7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-                  >
-                    {isExpanded ? 'Ẩn chi tiết' : 'Xem chi tiết'}
-                    {isExpanded ? (
-                      <ChevronDown className="size-3.5 rotate-180" />
-                    ) : (
-                      <ChevronRight className="size-3.5" />
-                    )}
-                  </button>
-                </div>
-
-                {isExpanded && (
-                  <div
-                    id={`result-detail-${result.id}`}
-                    className="border-t border-[#e6ebf2] bg-[linear-gradient(135deg,#BDE8F5,#f4f8fc)] p-4 sm:p-5"
-                  >
-                    {isPending ? (
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-                        <div className="rounded-2xl border border-[#e6dfcf] bg-white p-4">
-                          <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
-                            <FileClock className="size-4 text-[#d59a2d]" /> Tiến trình hậu kiểm
-                          </h4>
-                          <ol className="mt-4 space-y-3">
-                            {[
-                              ['Bài thi đã được niêm phong', 'Hoàn tất'],
-                              ['AI xử lý nội bộ theo rubric', 'Hoàn tất'],
-                              ['Giảng viên nghe lại và kiểm duyệt', 'Đang thực hiện'],
-                              ['Khóa điểm một chiều & công bố', 'Chưa bắt đầu'],
-                            ].map(([label, state], index) => (
-                              <li key={label} className="flex items-center gap-3">
-                                <span
-                                  className={cn(
-                                    'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                                    index < 2
-                                      ? 'bg-[#e4f7ef] text-[#238066]'
-                                      : index === 2
-                                        ? 'bg-[#fff0cb] text-[#9d6a12]'
-                                        : 'bg-[#4988C4]/16 text-[#56677f]',
-                                  )}
-                                >
-                                  {index < 2 ? <CheckCircle2 className="size-3.5" /> : index + 1}
-                                </span>
-                                <div>
-                                  <p className="text-xs font-bold text-[#35475f]">{label}</p>
-                                  <p className="mt-0.5 text-xs text-[#56677f]">{state}</p>
-                                </div>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                        <div className="rounded-2xl border border-[#e6dfcf] bg-[#fffaf0] p-4">
-                          <ShieldCheck className="size-5 text-[#c88c24]" />
-                          <h4 className="mt-3 text-sm font-bold text-[#4b3e28]">
-                            Điểm đang được bảo vệ
-                          </h4>
-                          <p className="mt-2 text-xs leading-relaxed text-[#796b54]">
-                            Portal không hiển thị điểm AI dự thảo, rubric hoặc bản ghi trước khi
-                            Giảng viên hoàn tất hậu kiểm và khóa điểm.
-                          </p>
-                          <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#7d540a]">
-                            Dự kiến hoàn tất trước{' '}
-                            {formatDate(result.expectedReviewAt ?? new Date())}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]">
-                        <div className="rounded-2xl border border-[#e1e7ef] bg-white p-4">
-                          <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
-                            <Award className="size-4 text-[#4568cb]" /> Rubric đánh giá
-                          </h4>
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {result.rubric.map((criterion) => (
-                              <article
-                                key={criterion.id}
-                                className="rounded-xl border border-[#e7ecf2] bg-[#fafbfd] p-3"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <h5 className="text-xs font-bold text-[#3a4b62]">
-                                    {criterion.label}
-                                  </h5>
-                                  <span className="text-xs font-bold text-[#1C4D8D]">
-                                    {criterion.score.toFixed(1)}/{criterion.maxScore}
-                                  </span>
-                                </div>
-                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e3e9f1]">
-                                  <div
-                                    className="h-full rounded-full bg-[linear-gradient(90deg,#4988C4,#48cfe1)]"
-                                    style={{
-                                      width: `${(criterion.score / criterion.maxScore) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <p className="mt-2 text-xs leading-relaxed text-[#56677f]">
-                                  {criterion.feedback}
+                    {question.criteriaScores.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">
+                          Chi tiết theo tiêu chí Rubric
+                        </p>
+                        {question.criteriaScores.map((criterion, cIdx) => {
+                          const ratio =
+                            criterion.maxScore > 0
+                              ? Math.min(
+                                  100,
+                                  Math.max(0, (criterion.score / criterion.maxScore) * 100),
+                                )
+                              : 0
+                          return (
+                            <div
+                              key={`${criterion.criterionName}-${cIdx}`}
+                              className="rounded-xl border border-[#e6edf5] px-3 py-2.5"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm font-bold text-[#25364e]">
+                                  {criterion.criterionName}
                                 </p>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="rounded-2xl border border-[#e1e7ef] bg-white p-4">
-                            <h4 className="flex items-center gap-2 text-sm font-bold text-[#33465e]">
-                              <MessageSquareText className="size-4 text-[#1C4D8D]" /> Nhận xét tổng
-                              quan
-                            </h4>
-                            <p className="mt-3 text-xs leading-relaxed text-[#52647b]">
-                              {result.summary}
-                            </p>
-                          </div>
-
-                          {isReleased ? (
-                            <div className="rounded-2xl border border-[#cfe8df] bg-[#f0faf6] p-4">
-                              <p className="flex items-center gap-2 text-xs font-bold text-[#247c65]">
-                                <LockKeyhole className="size-4" /> Điểm đã khóa một chiều
-                              </p>
-                              <p className="mt-2 text-xs leading-relaxed text-[#46695e]">
-                                {result.lecturerNote}
-                              </p>
-                              <p className="mt-2 text-xs font-semibold text-[#526a62]">
-                                Khóa lúc {formatTime(result.lockedAt ?? new Date())} ·{' '}
-                                {formatDate(result.lockedAt ?? new Date())}
-                              </p>
+                                <p className="shrink-0 text-sm font-bold text-[#1C4D8D]">
+                                  {criterion.score.toFixed(1)}/{criterion.maxScore.toFixed(1)}
+                                </p>
+                              </div>
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]">
+                                <div
+                                  className="h-full rounded-full bg-[#4f7df0]"
+                                  style={{ width: `${ratio}%` }}
+                                />
+                              </div>
+                              {criterion.comment && (
+                                <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">
+                                  {criterion.comment}
+                                </p>
+                              )}
                             </div>
-                          ) : (
-                            <div className="rounded-2xl border border-[#dfe5ee] bg-[#f5f7fa] p-4 text-xs leading-relaxed text-[#52647b]">
-                              {result.category === 'mock'
-                                ? 'Điểm mô phỏng và phản hồi AI không được tính vào điểm học phần.'
-                                : 'Đây là phản hồi luyện tập nhằm cải thiện kỹ năng, không phải điểm chính thức.'}
-                            </div>
-                          )}
-                        </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -1134,22 +350,872 @@ function LegacyExamHistoryPage() {
             )
           })
         )}
-      </section>
-
-      <footer className="flex flex-col gap-2 rounded-2xl border border-[#dfe6ef] bg-white px-4 py-3 text-xs text-[#52647b] shadow-[0_6px_20px_rgba(31,61,105,0.035)] sm:flex-row sm:items-center sm:justify-between">
-        <p className="flex items-start gap-2 leading-relaxed sm:items-center">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D] sm:mt-0" />
-          Điểm thi chính thức chỉ được phát hành sau khi Giảng viên hậu kiểm và thực hiện khóa điểm
-          một chiều.
-        </p>
-        <span className="shrink-0 font-semibold">Trang 1 / 1</span>
-      </footer>
-
-      <div className="sr-only" aria-live="polite">
-        {isRefreshing
-          ? 'Đang cập nhật dữ liệu xem trước.'
-          : `Dữ liệu xem trước được cập nhật lúc ${formatTime(lastUpdatedAt)}.`}
       </div>
+
+      {grade.internalAppeal.canAppeal && (
+        <section className="rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] p-4">
+          <p className="text-sm font-bold text-[#0F2854]">
+            Phúc khảo nội bộ (Thời hạn {grade.internalAppeal.appealDeadlineDays} ngày)
+          </p>
+          <p className="mt-1 text-xs text-[#5b6b84]">{grade.internalAppeal.instruction}</p>
+          {appeal ? (
+            <div className="mt-3 rounded-xl border border-[#4988C4]/35 bg-white p-3 text-xs text-[#0F2854]">
+              Trạng thái đơn phúc khảo: <strong className="text-[#1C4D8D]">{appeal.status}</strong>{' '}
+              · Lý do: {appeal.reason}
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2.5">
+              <textarea
+                value={appealReason}
+                onChange={(event) => onChangeAppealReason(event.target.value)}
+                placeholder="Nhập lý do đề nghị phúc khảo chi tiết (tối thiểu 10 ký tự)..."
+                className="min-h-20 w-full rounded-xl border border-[#4988C4]/45 bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D]"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onCreateAppeal}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854] disabled:opacity-60"
+              >
+                Gửi đơn phúc khảo tới Trưởng Bộ môn
+              </button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }
+
+function LiveExamHistoryPage() {
+  const { user } = useAuth()
+  const userId = user?.id
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const [practiceItems, setPracticeItems] = useState<PracticeHistoryItem[]>([])
+  const [mockItems, setMockItems] = useState<MockExamHistoryItem[]>([])
+  const [officialItems, setOfficialItems] = useState<LiveOfficialExamSummary[]>([])
+  const [appeals, setAppeals] = useState<Appeal[]>([])
+
+  const [categoryFilter, setCategoryFilter] = useState<HistoryCategory>(() => {
+    const paramType = searchParams.get('type')
+    return paramType === 'practice' || paramType === 'mock' || paramType === 'official'
+      ? paramType
+      : 'all'
+  })
+  const [courseFilter, setCourseFilter] = useState<string>('ALL')
+  const [searchQuery, setSearchQuery] = useState<string>('')
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [activeModal, setActiveModal] = useState<{
+    category: 'practice' | 'mock' | 'official'
+    id: string
+  } | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
+  const [practiceDetails, setPracticeDetails] = useState<Record<string, PracticeSessionDetail>>({})
+  const [mockDetails, setMockDetails] = useState<Record<string, MockExamScorecardData>>({})
+  const [officialGrades, setOfficialGrades] = useState<Record<string, StudentOfficialExamGrade>>({})
+  const [appealReason, setAppealReason] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+
+  const loadAllHistories = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    const [practiceRes, mockRes, dashboardRes, appealsRes] = await Promise.allSettled([
+      practiceService.getStudentHistory(userId),
+      mockExamService.getHistory({ pageIndex: 1, pageSize: 50 }),
+      apiClient.get<unknown>('/student/dashboard'),
+      appealsService.list(),
+    ])
+
+    if (practiceRes.status === 'fulfilled') {
+      setPracticeItems(practiceRes.value)
+    } else {
+      setPracticeItems([])
+    }
+
+    if (mockRes.status === 'fulfilled') {
+      setMockItems(mockRes.value.items)
+    } else {
+      setMockItems([])
+    }
+
+    if (dashboardRes.status === 'fulfilled') {
+      const dashboard = unwrapDashboardPayload<Record<string, unknown>>(dashboardRes.value.data)
+      const raw = dashboard.officialExamTickets ?? dashboard.OfficialExamTickets
+      const list = Array.isArray(raw) ? raw : []
+      setOfficialItems(
+        list
+          .map((value) => {
+            const record = value as Record<string, unknown>
+            const read = (key: string) =>
+              record[key] ?? record[key.charAt(0).toUpperCase() + key.slice(1)]
+            return {
+              ticketId: String(read('ticketId') ?? ''),
+              shiftId: String(read('shiftId') ?? ''),
+              courseCode: String(read('courseCode') ?? ''),
+              courseName: String(read('courseName') ?? ''),
+              sessionTitle: String(read('sessionTitle') ?? ''),
+              shiftName: String(read('shiftName') ?? ''),
+              roomLab: String(read('roomLab') ?? ''),
+              examDate: String(read('examDate') ?? ''),
+              startTime: String(read('startTime') ?? ''),
+              endTime: String(read('endTime') ?? ''),
+              seatNumber: Number(read('seatNumber') ?? 0),
+              status: String(read('status') ?? ''),
+              finalScore:
+                typeof read('finalScore') === 'number' ? Number(read('finalScore')) : null,
+              isLocked: Boolean(read('isLocked')),
+              studentAcknowledgementStatus: String(
+                read('studentAcknowledgementStatus') ?? 'PENDING',
+              ),
+            }
+          })
+          .filter((item) => item.ticketId),
+      )
+    } else {
+      setOfficialItems([])
+    }
+
+    if (appealsRes.status === 'fulfilled') {
+      setAppeals(appealsRes.value)
+    } else {
+      setAppeals([])
+    }
+
+    if (
+      practiceRes.status === 'rejected' &&
+      mockRes.status === 'rejected' &&
+      dashboardRes.status === 'rejected'
+    ) {
+      setError(extractErrorMessage(practiceRes.reason))
+    }
+
+    setLoading(false)
+  }, [userId])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAllHistories()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadAllHistories])
+
+  const openDetailModal = useCallback(
+    async (category: 'practice' | 'mock' | 'official', id: string) => {
+      setActiveModal({ category, id })
+      setModalError(null)
+
+      if (category === 'practice') {
+        if (practiceDetails[id]) return
+        setModalLoading(true)
+        try {
+          const detail = await practiceService.getSession(id)
+          setPracticeDetails((prev) => ({ ...prev, [id]: detail }))
+        } catch (err) {
+          setModalError(
+            extractErrorMessage(err, 'Không thể tải chi tiết câu hỏi và nhận xét phiên luyện tập.'),
+          )
+        } finally {
+          setModalLoading(false)
+        }
+        return
+      }
+
+      if (category === 'mock') {
+        if (mockDetails[id]) return
+        setModalLoading(true)
+        try {
+          const detail = await mockExamService.getHistoryDetail(id)
+          setMockDetails((prev) => ({ ...prev, [id]: detail }))
+        } catch (err) {
+          setModalError(
+            extractErrorMessage(err, 'Không thể tải bảng điểm chi tiết ca thi thử này.'),
+          )
+        } finally {
+          setModalLoading(false)
+        }
+        return
+      }
+
+      if (category === 'official') {
+        if (officialGrades[id]) return
+        setModalLoading(true)
+        try {
+          const grade = await officialExamService.getStudentGrade(id, userId)
+          setOfficialGrades((prev) => ({ ...prev, [id]: grade }))
+        } catch (err) {
+          setModalError(
+            extractErrorMessage(
+              err,
+              'Điểm ca thi chính thức chưa được công bố hoặc chưa có dữ liệu hậu kiểm.',
+            ),
+          )
+        } finally {
+          setModalLoading(false)
+        }
+      }
+    },
+    [mockDetails, officialGrades, practiceDetails, userId],
+  )
+
+  useEffect(() => {
+    const paramType = searchParams.get('type')
+    const paramId = searchParams.get('id')
+    if (
+      (paramType === 'practice' || paramType === 'mock' || paramType === 'official') &&
+      paramId
+    ) {
+      const timer = window.setTimeout(() => {
+        setCategoryFilter(paramType)
+        void openDetailModal(paramType, paramId)
+      }, 0)
+      return () => window.clearTimeout(timer)
+    }
+  }, [openDetailModal, searchParams])
+
+  const closeDetailModal = () => {
+    setActiveModal(null)
+    setModalError(null)
+    if (searchParams.has('id') || searchParams.has('type')) {
+      setSearchParams({}, { replace: true })
+    }
+  }
+
+  const acknowledgeOfficialGrade = async (ticketId: string) => {
+    setActionBusy(true)
+    setModalError(null)
+    try {
+      await officialExamService.acknowledgeGrade(ticketId, user?.id)
+      setOfficialItems((current) =>
+        current.map((item) =>
+          item.ticketId === ticketId
+            ? { ...item, studentAcknowledgementStatus: 'ACKNOWLEDGED' }
+            : item,
+        ),
+      )
+      setOfficialGrades((current) =>
+        current[ticketId]
+          ? {
+              ...current,
+              [ticketId]: {
+                ...current[ticketId],
+                studentAcknowledgementStatus: 'ACKNOWLEDGED',
+              },
+            }
+          : current,
+      )
+      setNotice('Đã xác nhận đồng ý kết quả điểm thi chính thức.')
+    } catch (requestError) {
+      setModalError(extractErrorMessage(requestError))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const createOfficialAppeal = async (ticketId: string) => {
+    if (appealReason.trim().length < 10) {
+      setModalError('Lý do phúc khảo cần có ít nhất 10 ký tự.')
+      return
+    }
+    setActionBusy(true)
+    setModalError(null)
+    try {
+      const created = await appealsService.create({ ticketId, reason: appealReason.trim() })
+      setAppeals((current) => [created, ...current])
+      setAppealReason('')
+      setNotice('Đã gửi đơn phúc khảo. Trưởng Bộ môn sẽ tiếp nhận và phân công chấm lại.')
+    } catch (requestError) {
+      setModalError(extractErrorMessage(requestError))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const unifiedRows = useMemo<UnifiedHistoryRow[]>(() => {
+    const rows: UnifiedHistoryRow[] = []
+
+    practiceItems.forEach((item) => {
+      const isFull = item.practiceMode === 'full_session'
+      const inProgress = item.status === 'in_progress'
+      rows.push({
+        uid: `practice-${item.sessionId}`,
+        rawId: item.sessionId,
+        category: 'practice',
+        badgeLabel: isFull ? 'Luyện trọn gói' : 'Luyện từng câu',
+        courseCode: item.courseCode,
+        courseName: item.courseName,
+        title: item.courseName,
+        subtitle: `Đã trả lời ${item.answeredQuestions}/${item.totalQuestions} câu chính`,
+        timestamp: item.endedAt ?? item.startedAt,
+        statusRaw: item.status,
+        statusLabel:
+          item.status === 'completed'
+            ? 'Hoàn tất'
+            : item.status === 'in_progress'
+              ? 'Đang diễn ra'
+              : 'Đã kết thúc',
+        statusTone:
+          item.status === 'completed' ? 'emerald' : item.status === 'in_progress' ? 'amber' : 'slate',
+        score: item.averageScore,
+        canContinue: inProgress,
+        continueUrl: inProgress
+          ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
+          : null,
+      })
+    })
+
+    mockItems.forEach((item) => {
+      const normalizedStatus = item.status.toLowerCase()
+      const inProgress = normalizedStatus === 'in_progress'
+      rows.push({
+        uid: `mock-${item.sessionId}`,
+        rawId: item.sessionId,
+        category: 'mock',
+        badgeLabel: 'Thi thử tính giờ',
+        courseCode: item.courseCode,
+        courseName: item.courseName,
+        title: item.courseName,
+        subtitle: `Đã trả lời ${item.answeredQuestions}/${item.totalQuestions} câu · Thời lượng ${item.durationMinutes} phút`,
+        timestamp: item.startedAt,
+        statusRaw: item.status,
+        statusLabel: inProgress ? 'Đang làm bài' : 'Đã nộp & Chấm điểm',
+        statusTone: inProgress ? 'amber' : 'blue',
+        score: item.totalScore,
+        canContinue: inProgress,
+        continueUrl: inProgress ? `/mock-exam/session?session=${encodeURIComponent(item.sessionId)}` : null,
+      })
+    })
+
+    officialItems.forEach((item) => {
+      const canViewGrade =
+        item.isLocked || item.status === 'PUBLISHED' || item.status === 'LOCKED' || item.finalScore !== null
+      rows.push({
+        uid: `official-${item.ticketId}`,
+        rawId: item.ticketId,
+        category: 'official',
+        badgeLabel: 'Thi chính thức',
+        courseCode: item.courseCode,
+        courseName: item.courseName || item.sessionTitle,
+        title: item.courseName || item.sessionTitle,
+        subtitle: `${item.shiftName} · Phòng ${item.roomLab} · Máy số ${item.seatNumber}`,
+        timestamp: item.startTime || item.examDate,
+        statusRaw: item.status,
+        statusLabel: item.isLocked
+          ? 'Đã công bố & Khóa điểm'
+          : canViewGrade
+            ? 'Đã công bố điểm'
+            : item.status,
+        statusTone: canViewGrade ? 'emerald' : 'amber',
+        score: item.finalScore,
+        canContinue: false,
+        continueUrl: null,
+      })
+    })
+
+    return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  }, [mockItems, officialItems, practiceItems])
+
+  const courseOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    unifiedRows.forEach((row) => {
+      if (row.courseCode && !map.has(row.courseCode)) {
+        map.set(row.courseCode, row.courseName)
+      }
+    })
+    return Array.from(map.entries()).map(([code, name]) => ({ code, name }))
+  }, [unifiedRows])
+
+  const filteredRows = useMemo(() => {
+    return unifiedRows.filter((row) => {
+      if (categoryFilter !== 'all' && row.category !== categoryFilter) return false
+      if (courseFilter !== 'ALL' && row.courseCode !== courseFilter) return false
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase()
+        const hay = `${row.courseCode} ${row.courseName} ${row.title} ${row.subtitle} ${row.badgeLabel}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [categoryFilter, courseFilter, searchQuery, unifiedRows])
+
+  const stats = useMemo(() => {
+    const practiceScored = practiceItems
+      .map((i) => i.averageScore)
+      .filter((s): s is number => s !== null && Number.isFinite(s))
+    const mockScored = mockItems
+      .map((i) => i.totalScore)
+      .filter((s): s is number => s !== null && Number.isFinite(s))
+    const officialScored = officialItems
+      .map((i) => i.finalScore)
+      .filter((s): s is number => s !== null && Number.isFinite(s))
+
+    return {
+      practiceCount: practiceItems.length,
+      practiceAvg: averageScore(practiceScored),
+      mockCount: mockItems.length,
+      mockAvg: averageScore(mockScored),
+      officialCount: officialItems.length,
+      officialAvg: averageScore(officialScored),
+    }
+  }, [mockItems, officialItems, practiceItems])
+
+  return (
+    <div lang="vi" className={cn(ds.page, 'pb-8')}>
+      <section className={ds.banner}>
+        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.3)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-35" />
+        <div className="relative z-10 flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-end sm:p-8">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/14 px-3 py-1 text-xs font-bold tracking-[0.06em] text-[#BDE8F5] uppercase backdrop-blur-sm">
+              <BarChart3 className="size-3.5" />
+              Hồ sơ kết quả & bảng điểm
+            </div>
+            <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white sm:text-3xl">
+              Lịch sử Luyện tập, Thi thử & Kết quả Thi chính thức
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              Tra cứu toàn bộ các phiên luyện tập, ca thi thử tính giờ và kết quả thi chính thức
+              phòng Lab kèm nội dung từng câu hỏi, câu trả lời đã ghi nhận, điểm Rubric và nhận xét
+              đánh giá chi tiết.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void loadAllHistories()}
+            disabled={loading}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] disabled:opacity-60 sm:self-auto"
+          >
+            <RefreshCw className={cn('size-3.5 text-[#1C4D8D]', loading && 'animate-spin')} />
+            {loading ? 'Đang đồng bộ...' : 'Làm mới dữ liệu'}
+          </button>
+        </div>
+      </section>
+
+      {(error || notice) && (
+        <div
+          className={cn(
+            'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm',
+            error
+              ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]'
+              : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
+          )}
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <AlertCircle className="size-4 shrink-0" />
+            {error ?? notice}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null)
+              setNotice(null)
+            }}
+            className="rounded-lg p-1 hover:bg-black/5"
+            aria-label="Đóng thông báo"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      <section aria-label="Thống kê tổng hợp" className="grid gap-3 md:grid-cols-3">
+        <article className="rounded-2xl border border-[#b7e4cf] bg-[#f3fbf7] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#16836a] shadow-2xs">
+                Luyện tập tự do
+              </span>
+              <div className="mt-2.5 flex items-baseline gap-2">
+                <strong className="text-3xl font-black text-[#0F2854]">
+                  {stats.practiceCount}
+                </strong>
+                <span className="text-xs font-bold text-[#16836a]">phiên luyện tập</span>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-[#0F2854]/80">
+                Điểm trung bình:{' '}
+                <strong className="text-[#16836a]">
+                  {stats.practiceAvg === null ? 'Chưa chấm' : `${stats.practiceAvg.toFixed(2)}/10`}
+                </strong>
+              </p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#16836a] text-white shadow-xs">
+              <Mic2 className="size-5" />
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[#9ec4e8] bg-[#f3f9fd] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#1C4D8D] shadow-2xs">
+                Thi thử tính giờ
+              </span>
+              <div className="mt-2.5 flex items-baseline gap-2">
+                <strong className="text-3xl font-black text-[#0F2854]">{stats.mockCount}</strong>
+                <span className="text-xs font-bold text-[#1C4D8D]">ca thi thử</span>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-[#0F2854]/80">
+                Điểm trung bình:{' '}
+                <strong className="text-[#1C4D8D]">
+                  {stats.mockAvg === null ? 'Chưa chấm' : `${stats.mockAvg.toFixed(2)}/10`}
+                </strong>
+              </p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-xs">
+              <Clock3 className="size-5" />
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[#d4c4f5] bg-[#f7f3fd] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#6d4cc4] shadow-2xs">
+                Thi chính thức
+              </span>
+              <div className="mt-2.5 flex items-baseline gap-2">
+                <strong className="text-3xl font-black text-[#0F2854]">
+                  {stats.officialCount}
+                </strong>
+                <span className="text-xs font-bold text-[#6d4cc4]">vé thi phòng Lab</span>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-[#0F2854]/80">
+                Điểm công bố TB:{' '}
+                <strong className="text-[#6d4cc4]">
+                  {stats.officialAvg === null ? 'Chưa công bố' : `${stats.officialAvg.toFixed(2)}/10`}
+                </strong>
+              </p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#6d4cc4] text-white shadow-xs">
+              <ShieldCheck className="size-5" />
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className={cn(ds.section, 'overflow-hidden')}>
+        <div
+          className={cn(
+            ds.sectionHeader,
+            'flex flex-col justify-between gap-3 lg:flex-row lg:items-center',
+          )}
+        >
+          <div>
+            <div className={ds.sectionTitleRow}>
+              <span className={ds.sectionIconWrap}>
+                <History className="size-4 text-[#1C4D8D]" />
+              </span>
+              <h2 className={ds.sectionTitle}>Danh sách phiên làm bài</h2>
+              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D] shadow-2xs">
+                {filteredRows.length} bản ghi
+              </span>
+            </div>
+            <p className={ds.sectionHint}>
+              Bấm vào từng bản ghi để mở bảng điểm chi tiết, nội dung từng câu hỏi, bài trả lời và
+              nhận xét đánh giá
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Filter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#1C4D8D]" />
+              <select
+                value={courseFilter}
+                onChange={(event) => setCourseFilter(event.target.value)}
+                aria-label="Lọc theo môn học"
+                className="min-h-9 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-8 pl-8 text-xs font-bold text-[#0F2854] outline-none focus:border-[#1C4D8D]"
+              >
+                <option value="ALL">Tất cả học phần</option>
+                {courseOptions.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Tìm môn học, ca thi..."
+                className="min-h-9 w-48 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-3 pl-8 text-xs font-medium text-[#0F2854] outline-none focus:border-[#1C4D8D] sm:w-56"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="border-b border-[#4988C4]/35 bg-[#F4FBFD] px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                { id: 'all', label: 'Tất cả', count: unifiedRows.length },
+                { id: 'practice', label: 'Luyện tập', count: practiceItems.length },
+                { id: 'mock', label: 'Thi thử', count: mockItems.length },
+                { id: 'official', label: 'Thi chính thức', count: officialItems.length },
+              ] as const
+            ).map((tab) => {
+              const active = categoryFilter === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(tab.id)}
+                  className={cn(
+                    'inline-flex min-h-9 items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-bold transition',
+                    active
+                      ? 'bg-[#1C4D8D] text-white shadow-xs'
+                      : 'bg-white text-[#0F2854] hover:bg-[#4988C4]/18',
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[11px]',
+                      active ? 'bg-white/20 text-white' : 'bg-[#4988C4]/16 text-[#1C4D8D]',
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="divide-y divide-[#4988C4]/30">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2.5 py-16 text-sm font-semibold text-[#1C4D8D]">
+              <LoaderCircle className="size-5 animate-spin" />
+              Đang tải toàn bộ lịch sử luyện tập, thi thử và thi chính thức...
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="p-10 text-center">
+              <History className="mx-auto size-9 text-[#4988C4]" />
+              <p className="mt-3 text-sm font-bold text-[#0F2854]">
+                Chưa có bản ghi nào trong danh mục đã chọn
+              </p>
+              <p className="mt-1 text-xs text-[#5b6b84]">
+                Hãy bắt đầu một phiên Luyện tập hoặc Thi thử để xem kết quả và nhận xét chi tiết
+                tại đây.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <Link
+                  to="/practice"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+                >
+                  <Mic2 className="size-3.5" />
+                  Bắt đầu Luyện tập
+                </Link>
+                <Link
+                  to="/mock-exam"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-[#F4FBFD] px-4 py-2 text-xs font-bold text-[#0F2854] transition hover:bg-[#4988C4]/18"
+                >
+                  <BookOpenCheck className="size-3.5 text-[#1C4D8D]" />
+                  Vào phòng Thi thử
+                </Link>
+              </div>
+            </div>
+          ) : (
+            filteredRows.map((row) => (
+              <article
+                key={row.uid}
+                className="flex flex-col justify-between gap-4 p-4 transition hover:bg-[#F4FBFD] sm:flex-row sm:items-center sm:px-6"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                  <span
+                    className={cn(
+                      'mt-0.5 inline-flex h-10 min-w-[76px] shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-black tracking-[0.02em]',
+                      courseCodeTone(row.courseCode),
+                    )}
+                  >
+                    {row.courseCode || 'MÔN'}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-bold',
+                          row.category === 'practice' && 'bg-[#e8f8f3] text-[#16836a]',
+                          row.category === 'mock' && 'bg-[#0F2854] text-[#BDE8F5]',
+                          row.category === 'official' && 'bg-[#f3eefe] text-[#6d4cc4]',
+                        )}
+                      >
+                        {row.badgeLabel}
+                      </span>
+                      <span
+                        className={cn(
+                          'inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold',
+                          row.statusTone === 'emerald' && 'bg-[#edfbf6] text-[#0f8f6b]',
+                          row.statusTone === 'blue' && 'bg-[#4988C4]/16 text-[#1C4D8D]',
+                          row.statusTone === 'amber' && 'bg-[#fff8eb] text-[#9a6414]',
+                          row.statusTone === 'slate' && 'bg-[#f1f5f9] text-[#64748b]',
+                        )}
+                      >
+                        {row.statusLabel}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-[#5b6b84]">
+                        <CalendarDays className="size-3.5 text-[#4988C4]" />
+                        {formatDateTime(row.timestamp)}
+                      </span>
+                    </div>
+
+                    <h3 className="mt-1.5 text-sm font-bold text-[#0F2854] sm:text-base">
+                      {row.title}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-[#5b6b84]">{row.subtitle}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+                  <div
+                    className={cn(
+                      'rounded-xl px-3.5 py-2 text-right',
+                      row.score === null
+                        ? 'bg-[#fff8eb] text-[#9a6414]'
+                        : row.score >= 8
+                          ? 'bg-[#e8f8f3] text-[#16836a]'
+                          : row.score >= 5
+                            ? 'bg-[#4988C4]/14 text-[#0F2854]'
+                            : 'bg-[#fdecef] text-[#c2415b]',
+                    )}
+                  >
+                    <p className="text-[11px] font-bold tracking-[0.04em] uppercase opacity-75">
+                      Điểm tổng kết
+                    </p>
+                    <p className="mt-0.5 text-base font-black">
+                      {row.score === null ? '—' : `${row.score.toFixed(2)} / 10`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {row.canContinue && row.continueUrl && (
+                      <Link
+                        to={row.continueUrl}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/16"
+                      >
+                        Tiếp tục làm
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => void openDetailModal(row.category, row.rawId)}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0F2854]"
+                    >
+                      <FileCheck2 className="size-3.5" />
+                      Xem câu hỏi & nhận xét
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      {activeModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2854]/60 p-3 backdrop-blur-xs sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chi tiết bảng điểm và nhận xét"
+        >
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#4988C4]/45 bg-white px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <Award className="size-5 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854]">
+                  {activeModal.category === 'practice' &&
+                    'Chi tiết Phiên luyện tập · Câu hỏi, Trả lời & Nhận xét'}
+                  {activeModal.category === 'mock' &&
+                    'Chi tiết Ca thi thử · Bảng điểm & Nhận xét theo CLO'}
+                  {activeModal.category === 'official' &&
+                    'Chi tiết Kết quả Thi chính thức · Bảng điểm & Phúc khảo'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeDetailModal}
+                className="inline-flex size-8 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#4988C4]/16 hover:text-[#0F2854]"
+                aria-label="Đóng cửa sổ chi tiết"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              {modalLoading ? (
+                <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 text-sm font-semibold text-[#1C4D8D]">
+                  <LoaderCircle className="size-6 animate-spin" />
+                  Đang tải nội dung câu hỏi, câu trả lời và nhận xét...
+                </div>
+              ) : modalError ? (
+                <div className="rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-5 text-sm text-[#b33d52]">
+                  <p className="font-bold">Chưa thể hiển thị bảng điểm chi tiết</p>
+                  <p className="mt-1">{modalError}</p>
+                </div>
+              ) : activeModal.category === 'practice' && practiceDetails[activeModal.id] ? (
+                <PracticeSessionScorecard session={practiceDetails[activeModal.id]} />
+              ) : activeModal.category === 'mock' && mockDetails[activeModal.id] ? (
+                <MockExamScorecard scorecard={mockDetails[activeModal.id]} />
+              ) : activeModal.category === 'official' && officialGrades[activeModal.id] ? (
+                <OfficialExamScorecardView
+                  ticket={
+                    officialItems.find((item) => item.ticketId === activeModal.id) ?? {
+                      ticketId: activeModal.id,
+                      shiftId: '',
+                      courseCode: officialGrades[activeModal.id].courseCode,
+                      courseName: officialGrades[activeModal.id].courseCode,
+                      sessionTitle: '',
+                      shiftName: 'Ca thi chính thức',
+                      roomLab: 'Lab',
+                      examDate: officialGrades[activeModal.id].publishedAt,
+                      startTime: officialGrades[activeModal.id].publishedAt,
+                      endTime: officialGrades[activeModal.id].publishedAt,
+                      seatNumber: 1,
+                      status: officialGrades[activeModal.id].status,
+                      finalScore: officialGrades[activeModal.id].totalScore,
+                      isLocked: officialGrades[activeModal.id].isLocked,
+                      studentAcknowledgementStatus:
+                        officialGrades[activeModal.id].studentAcknowledgementStatus,
+                    }
+                  }
+                  grade={officialGrades[activeModal.id]}
+                  appeal={appeals.find((a) => a.ticketId === activeModal.id)}
+                  appealReason={appealReason}
+                  onChangeAppealReason={setAppealReason}
+                  onAcknowledge={() => void acknowledgeOfficialGrade(activeModal.id)}
+                  onCreateAppeal={() => void createOfficialAppeal(activeModal.id)}
+                  busy={actionBusy}
+                />
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-[#4988C4]/45 bg-white px-5 py-3">
+              <button
+                type="button"
+                onClick={closeDetailModal}
+                className="inline-flex min-h-9 items-center justify-center rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export { LiveExamHistoryPage as ExamHistoryPage, LiveExamHistoryPage as StudentResultsPage }

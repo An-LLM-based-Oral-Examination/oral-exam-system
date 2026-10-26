@@ -1160,5 +1160,265 @@ public class AdversarialMockExamTests
         examSets[0].StructureId.Should().NotBe(Guid.Empty);
         examSets[0].SetCode.Should().NotBe(examSets[1].SetCode, "Hai đề thi tạo cùng giây phải có SetCode khác nhau để không vi phạm UNIQUE index.");
     }
-}
 
+    [Fact(DisplayName = "ADV-21: StartMockExam với HasFollowUp=true không tạo sẵn câu hỏi phụ tĩnh và không nối vào Content")]
+    public async Task StartMockExam_WhenHasFollowUpIsTrue_DoesNotPreGenerateFollowUpPromptOrAppendToContent()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, q2) = SeedCourseAndQuestions(context);
+        course.IsActive = true;
+        course.MaxMockExamsPerDay = 5;
+        q1.IsActive = true;
+        q1.FollowUpPrompt = "Câu hỏi phụ tĩnh soạn sẵn trong DB không được phép dùng";
+        q2.IsActive = true;
+        q2.FollowUpPrompt = "Câu hỏi phụ tĩnh 2";
+        context.ExamStructures.Add(new ExamStructure
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Cấu trúc 2 câu",
+            TotalQuestions = 2,
+            DurationMinutes = 20,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var result = await handler.Handle(new StartMockExamCommand(course.Id, Guid.NewGuid(), HasFollowUp: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HasFollowUp.Should().BeTrue();
+        result.Value.Questions.Should().NotBeEmpty();
+        foreach (var qDto in result.Value.Questions)
+        {
+            qDto.FollowUpPrompt.Should().BeNull("Câu hỏi phụ chỉ được sinh sau khi sinh viên nộp câu trả lời.");
+            qDto.Content.Should().NotContain("[Câu hỏi phụ đào sâu]");
+            qDto.Content.Should().NotContain("[Follow-up Question]");
+            qDto.Content.Should().NotContain("Câu hỏi phụ tĩnh");
+        }
+    }
+
+    [Fact(DisplayName = "ADV-22: SubmitMockExamAnswer sinh câu hỏi phụ động từ ngữ cảnh câu trả lời của sinh viên (bỏ qua FollowUpPrompt tĩnh) và làm mới khi sửa transcript")]
+    public async Task SubmitMockExamAnswer_WhenHasFollowUpIsTrue_GeneratesContextualFollowUpAndRefreshesOnEdit()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, _) = SeedCourseAndQuestions(context);
+        course.MaxFollowUpQuestions = 2;
+        q1.FollowUpPrompt = "STATIC_PREWRITTEN_PROMPT_MUST_BE_IGNORED";
+        var studentId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            ExamSetId = Guid.NewGuid(),
+            HasFollowUp = true,
+            StartedAt = DateTime.UtcNow.AddMinutes(-2),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(28),
+            Status = "in_progress"
+        };
+
+        var mainAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            Status = "pending",
+            IsFollowUp = false
+        };
+        session.Answers.Add(mainAnswer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.NormalizeTranscript(It.IsAny<string>()))
+            .Returns((string s) => s);
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AiGradingRequest req, CancellationToken _) => new AiGradingResult
+            {
+                Score = 5.0m,
+                ConfidenceScore = 0.9m,
+                Feedback = "Thiếu phân tích trade-off",
+                FollowUpPrompt = $"Dựa trên ý '{req.Transcript}', em hãy phân tích rõ hơn Trade-off khi áp dụng trong dự án thực tế?"
+            });
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object, aiMock.Object);
+
+        // Lần 1: Sinh viên nộp câu trả lời chính kèm bản ghi âm giọng nói (Voice-First Gate)
+        using var initialVoiceStream = new MemoryStream(Encoding.UTF8.GetBytes("voice-answer-bytes"));
+        var firstSubmit = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: q1.Id,
+            AudioStream: initialVoiceStream,
+            FileName: "answer1.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 30,
+            DirectTranscript: "Clean Architecture gồm 4 tầng là Domain, Application, Infrastructure và API."
+        ), CancellationToken.None);
+
+        firstSubmit.IsSuccess.Should().BeTrue();
+        firstSubmit.Value.NeedsFollowUp.Should().BeTrue();
+        firstSubmit.Value.FollowUpIndex.Should().Be(1);
+        firstSubmit.Value.MaxFollowUps.Should().Be(2);
+        firstSubmit.Value.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
+        firstSubmit.Value.FollowUpPrompt.Should().NotContain("STATIC_PREWRITTEN_PROMPT_MUST_BE_IGNORED");
+        firstSubmit.Value.FollowUpPrompt.Should().Contain("Clean Architecture gồm 4 tầng");
+
+        // Lần 2a: Nếu cố tình gõ bàn phím thay mới toàn bộ câu trả lời (không có AudioStream) -> bị chặn bởi VOICE_FIRST_GATE
+        var wholesaleReplaceSubmit = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: q1.Id,
+            AudioStream: null,
+            FileName: null,
+            ContentType: null,
+            TimeTakenSeconds: 35,
+            DirectTranscript: "Em bổ sung thêm Dependency Rule chỉ hướng vào tầng Domain ở trung tâm.",
+            AnswerId: mainAnswer.Id
+        ), CancellationToken.None);
+        wholesaleReplaceSubmit.IsSuccess.Should().BeFalse();
+        wholesaleReplaceSubmit.Error.Should().Contain("VOICE_FIRST_GATE");
+
+        // Lần 2b: Sinh viên hiệu đính thuật ngữ hợp lệ trên transcript câu chính trước khi trả lời câu phụ -> câu phụ pending được cập nhật theo ngữ cảnh mới
+        var editedSubmit = await handler.Handle(new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: q1.Id,
+            AudioStream: null,
+            FileName: null,
+            ContentType: null,
+            TimeTakenSeconds: 35,
+            DirectTranscript: "Clean Architecture gồm 4 tầng là Domain, Application, Infrastructure và API theo Dependency Rule.",
+            AnswerId: mainAnswer.Id
+        ), CancellationToken.None);
+
+        editedSubmit.IsSuccess.Should().BeTrue();
+        editedSubmit.Value.NeedsFollowUp.Should().BeTrue();
+        editedSubmit.Value.FollowUpAnswerId.Should().Be(firstSubmit.Value.FollowUpAnswerId);
+        editedSubmit.Value.FollowUpPrompt.Should().Contain("Dependency Rule");
+    }
+
+    [Fact(DisplayName = "ADV-23: SubmitMockExamSession chấm câu hỏi phụ theo ngữ cảnh và tổng hợp điểm tiêu chí vào câu hỏi chính & điểm tổng phiên thi")]
+    public async Task SubmitMockExamSession_WhenFollowUpIsAnswered_GradesWithContextAndAccumulatesScoreIntoMainQuestion()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, _) = SeedCourseAndQuestions(context);
+        var studentId = Guid.NewGuid();
+        var criteria = await context.RubricCriteria.Where(c => c.RubricId == q1.RubricId).OrderBy(c => c.OrderIndex).ToListAsync();
+        var crit1Id = criteria[0].Id;
+        var crit2Id = criteria[1].Id;
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            ExamSetId = Guid.NewGuid(),
+            HasFollowUp = true,
+            StartedAt = DateTime.UtcNow.AddMinutes(-10),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(20),
+            Status = "in_progress"
+        };
+
+        var mainAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            AnswerText = "4 tầng gồm Domain, Application, Infrastructure, API.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-8),
+            IsFollowUp = false
+        };
+
+        var followUpAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            ParentAnswerId = mainAnswer.Id,
+            IsFollowUp = true,
+            PromptText = "Em hãy phân tích rõ hơn Trade-off về hiệu năng và độ phức tạp khi chia 4 tầng?",
+            AnswerText = "Trade-off là tăng số lượng mapping giữa các tầng nhưng đổi lại khả năng test độc lập và dễ bảo trì dài hạn.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-6)
+        };
+
+        session.Answers.Add(mainAnswer);
+        session.Answers.Add(followUpAnswer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        AiGradingRequest? capturedFollowUpRequest = null;
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AiGradingRequest req, CancellationToken _) =>
+            {
+                if (!req.IsFollowUp)
+                {
+                    return new AiGradingResult
+                    {
+                        Score = 5.5m,
+                        ConfidenceScore = 0.92m,
+                        Feedback = "Nêu đúng 4 tầng nhưng thiếu phân tích trade-off.",
+                        CotTrace = "Main CoT",
+                        Details = new List<GradingDetailDto>
+                        {
+                            new() { CriterionId = crit1Id.ToString(), Score = 4.5m, Comment = "Nêu đầy đủ 4 tầng." },
+                            new() { CriterionId = crit2Id.ToString(), Score = 1.0m, Comment = "Chưa phân tích trade-off." }
+                        }
+                    };
+                }
+
+                capturedFollowUpRequest = req;
+                return new AiGradingResult
+                {
+                    Score = 8.0m,
+                    ConfidenceScore = 0.95m,
+                    Feedback = "Giải thích rõ trade-off mapping vs maintainability.",
+                    CotTrace = "FollowUp CoT",
+                    Details = new List<GradingDetailDto>
+                    {
+                        new() { CriterionId = crit1Id.ToString(), Score = 4.0m, Comment = "Giữ vững kiến thức nền." },
+                        new() { CriterionId = crit2Id.ToString(), Score = 4.0m, Comment = "Phân tích tốt trade-off." }
+                    }
+                };
+            });
+
+        var submitHandler = new SubmitMockExamSessionCommandHandler(context, aiMock.Object);
+        var submitResult = await submitHandler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        submitResult.IsSuccess.Should().BeTrue();
+        capturedFollowUpRequest.Should().NotBeNull("Câu trả lời follow-up phải được gửi sang AI chấm kèm ngữ cảnh.");
+        capturedFollowUpRequest!.IsFollowUp.Should().BeTrue();
+        capturedFollowUpRequest.FollowUpIndex.Should().Be(1);
+        capturedFollowUpRequest.FollowUpPrompt.Should().Be(followUpAnswer.PromptText);
+        capturedFollowUpRequest.OriginalAnswerTranscript.Should().Be(mainAnswer.AnswerText);
+
+        var scorecard = submitResult.Value;
+        scorecard.TotalQuestions.Should().Be(1);
+        scorecard.AnsweredQuestions.Should().Be(1);
+        scorecard.TotalScore.Should().Be(8.50m);
+
+        var mainQuestionDto = scorecard.Questions.First(q => !q.IsFollowUp);
+        mainQuestionDto.Score.Should().Be(8.50m);
+        mainQuestionDto.CriteriaScores.First(c => c.CriterionId == crit2Id).Score.Should().Be(4.0m);
+        mainQuestionDto.CriteriaScores.First(c => c.CriterionId == crit2Id).Comment.Should().Contain("Bổ sung từ câu hỏi phụ");
+
+        var detailHandler = new GetMockExamSessionDetailQueryHandler(context);
+        var detailResult = await detailHandler.Handle(new GetMockExamSessionDetailQuery(session.Id, studentId), CancellationToken.None);
+        detailResult.IsSuccess.Should().BeTrue();
+        detailResult.Value.TotalQuestions.Should().Be(1);
+        detailResult.Value.AnsweredQuestions.Should().Be(1);
+        detailResult.Value.TotalScore.Should().Be(8.50m);
+        detailResult.Value.Questions.Should().HaveCount(2);
+        detailResult.Value.Questions.First(q => !q.IsFollowUp).Score.Should().Be(8.50m);
+    }
+}

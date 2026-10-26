@@ -23,9 +23,6 @@ public sealed class SubmitPracticeBatchCommandValidator : AbstractValidator<Subm
             {
                 answer.RuleFor(a => a.QuestionId)
                     .NotEmpty().WithMessage("QuestionId không được để trống.");
-
-                answer.RuleFor(a => a.AnswerText)
-                    .NotEmpty().WithMessage("Nội dung câu trả lời không được để trống.");
             })
             .When(v => v.Answers != null);
     }

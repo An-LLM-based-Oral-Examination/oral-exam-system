@@ -17,13 +17,13 @@ interface StudentHeaderProps {
 }
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
-  '/student/overview': { label: 'Tổng quan', icon: LayoutDashboard },
-  '/practice': { label: 'Luyện tập', icon: Mic2 },
+  '/student/overview': { label: 'Tổng quan học tập', icon: LayoutDashboard },
+  '/practice': { label: 'Luyện tập vấn đáp', icon: Mic2 },
   '/practice/session': { label: 'Phiên luyện tập', icon: Mic2 },
-  '/mock-exam': { label: 'Thi thử', icon: TimerReset },
+  '/mock-exam': { label: 'Thi thử tính giờ', icon: TimerReset },
   '/mock-exam/session': { label: 'Phiên thi thử', icon: TimerReset },
-  '/exam': { label: 'Làm bài thi', icon: ClipboardCheck },
-  '/results': { label: 'Kết quả', icon: BarChart3 },
+  '/exam': { label: 'Phòng thi chính thức', icon: ClipboardCheck },
+  '/results': { label: 'Lịch sử & Kết quả', icon: BarChart3 },
 }
 
 function getInitials(fullName: string) {
@@ -81,11 +81,6 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-1.5 rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-3 py-1.5 text-sm font-semibold text-[#16836a] lg:flex">
-            <span className="size-1.5 rounded-full bg-[#16836a]" />
-            AI sẵn sàng
-          </div>
-
           <button
             type="button"
             className="relative flex size-10 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"

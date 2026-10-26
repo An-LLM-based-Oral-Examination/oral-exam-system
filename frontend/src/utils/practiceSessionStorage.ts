@@ -40,6 +40,7 @@ export interface StoredPracticeRuntime {
   fullSessionSubmitted: boolean
   /** Bản nháp hiện tại để khôi phục an toàn sau khi reload trang. */
   draftAnswerText?: string
+  voiceBaselineTranscript?: string
   draftAnswerMode?: 'voice' | 'text'
   showBuffer?: boolean
   bufferDeadlineTimestamp?: number | null
@@ -118,6 +119,7 @@ export function loadPracticeRuntime(sessionId: string): StoredPracticeRuntime | 
       pendingSubmission: value.pendingSubmission ?? null,
       submittedAnswerIdsByQuestion: value.submittedAnswerIdsByQuestion ?? {},
       draftAnswerText: value.draftAnswerText ?? '',
+      voiceBaselineTranscript: value.voiceBaselineTranscript ?? value.draftAnswerText ?? '',
       draftAnswerMode: value.draftAnswerMode ?? 'voice',
       showBuffer: value.showBuffer ?? false,
       bufferDeadlineTimestamp: value.bufferDeadlineTimestamp ?? null,

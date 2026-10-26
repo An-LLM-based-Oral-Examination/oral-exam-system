@@ -150,6 +150,8 @@ export interface MockExamHistoryPage {
 export interface StoredMockExamAnswer {
   questionId: string
   transcript: string
+  /** Bản bóc băng giọng nói gốc từ microphone — làm mốc chuẩn bất biến cho VOICE_FIRST_GATE. */
+  initialTranscript?: string
   timeTakenSeconds: number
   answerId: string
   answeredAt: string

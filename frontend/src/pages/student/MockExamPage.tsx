@@ -836,8 +836,8 @@ export function MockExamPage() {
                     </p>
                     <p className="mt-0.5 text-xs text-[#5b6b84]">
                       {secondsLeft > 0
-                        ? `Còn ${formatClock(secondsLeft)} · Đã trả lời ${item.answers.length}/${item.questions.length}`
-                        : `Đã hết giờ · Đã trả lời ${item.answers.length}/${item.questions.length}`}
+                        ? `Còn ${formatClock(secondsLeft)} · Đã trả lời ${item.answers.filter((a) => !a.isFollowUp).length}/${item.questions.length}`
+                        : `Đã hết giờ · Đã trả lời ${item.answers.filter((a) => !a.isFollowUp).length}/${item.questions.length}`}
                     </p>
                   </div>
                   <button
@@ -1485,7 +1485,7 @@ export function MockExamPage() {
                 </div>
                 <p className="mt-3 rounded-2xl border border-[#4988C4]/45 bg-white px-4 py-3 text-sm leading-relaxed text-[#5b6b84] shadow-[0_8px_22px_rgba(23,48,96,0.06)]">
                   {hasFollowUp
-                    ? 'Lựa chọn này gửi cờ hasFollowUp và tăng thời gian làm bài lên 45 phút. Backend hiện chưa trả nội dung câu hỏi phụ.'
+                    ? 'Hệ thống AI sẽ tự động sinh câu hỏi phụ đào sâu theo ngữ cảnh câu trả lời của bạn và cộng thêm thời gian làm bài.'
                     : 'Chỉ làm các câu chính trong đề. Thời gian theo cấu hình môn, thường 30 phút.'}
                 </p>
               </fieldset>

@@ -49,89 +49,100 @@ public class GradingQueueWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var task in _queueChannel.ReadAllAsync(stoppingToken))
+        try
         {
-            try
+            await foreach (var task in _queueChannel.ReadAllAsync(stoppingToken))
             {
-                _logger.LogInformation("Processing GradingTask for Answer {AnswerId}", task.AnswerId);
-                
-                // Thực thi qua Polly Resilience Pipeline
-                await _resiliencePipeline.ExecuteAsync(async ct =>
-                {
-                    await ProcessGradingTaskAsync(task, ct);
-                }, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho Answer {AnswerId}. Đẩy vào Dead-Letter Queue (DLQ).", task.AnswerId);
-
-                // 1. Thực thi logic lưu DLQ và cập nhật answer.Status = "failed" TRƯỚC TIÊN (bảo đảm bền vững dữ liệu)
                 try
                 {
-                    using var errorScope = _serviceProvider.CreateScope();
-                    var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-                    var now = DateTime.UtcNow;
-
-                    var existingDlq = await errorDbContext.DeadLetterQueues
-                        .OrderByDescending(d => d.CreatedAt)
-                        .FirstOrDefaultAsync(d => d.TaskType == "PracticeGrading" && d.CorrelationId == task.AnswerId, CancellationToken.None);
-                    if (existingDlq != null)
+                    _logger.LogInformation("Processing GradingTask for Answer {AnswerId}", task.AnswerId);
+                    
+                    // Thực thi qua Polly Resilience Pipeline
+                    await _resiliencePipeline.ExecuteAsync(async ct =>
                     {
-                        existingDlq.RetryCount += 3;
-                        existingDlq.ErrorMessage = ex.Message;
-                        existingDlq.LastAttemptAt = now;
-                        existingDlq.ResolvedAt = null;
-                        if (existingDlq.RetryCount >= 9)
+                        await ProcessGradingTaskAsync(task, ct);
+                    }, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho Answer {AnswerId}. Đẩy vào Dead-Letter Queue (DLQ).", task.AnswerId);
+
+                    // 1. Thực thi logic lưu DLQ và cập nhật answer.Status = "failed" TRƯỚC TIÊN (bảo đảm bền vững dữ liệu)
+                    try
+                    {
+                        using var errorScope = _serviceProvider.CreateScope();
+                        var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                        var now = DateTime.UtcNow;
+
+                        var existingDlq = await errorDbContext.DeadLetterQueues
+                            .OrderByDescending(d => d.CreatedAt)
+                            .FirstOrDefaultAsync(d => d.TaskType == "PracticeGrading" && d.CorrelationId == task.AnswerId, CancellationToken.None);
+                        if (existingDlq != null)
                         {
-                            existingDlq.Status = "abandoned";
-                            existingDlq.NextRetryAt = null;
+                            existingDlq.RetryCount += 3;
+                            existingDlq.ErrorMessage = ex.Message;
+                            existingDlq.LastAttemptAt = now;
+                            existingDlq.ResolvedAt = null;
+                            if (existingDlq.RetryCount >= 9)
+                            {
+                                existingDlq.Status = "abandoned";
+                                existingDlq.NextRetryAt = null;
+                            }
+                            else
+                            {
+                                existingDlq.Status = "pending";
+                                existingDlq.NextRetryAt = now.AddMinutes(5);
+                            }
                         }
                         else
                         {
-                            existingDlq.Status = "pending";
-                            existingDlq.NextRetryAt = now.AddMinutes(5);
+                            var dlqEntry = new DeadLetterQueue
+                            {
+                                TaskType = "PracticeGrading",
+                                CorrelationId = task.AnswerId,
+                                PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                                ErrorMessage = ex.Message,
+                                RetryCount = 3,
+                                Status = "pending",
+                                NextRetryAt = now.AddMinutes(5),
+                                LastAttemptAt = now,
+                                CreatedAt = now
+                            };
+                            errorDbContext.DeadLetterQueues.Add(dlqEntry);
                         }
-                    }
-                    else
-                    {
-                        var dlqEntry = new DeadLetterQueue
+
+                        var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
+                        if (answer != null)
                         {
-                            TaskType = "PracticeGrading",
-                            CorrelationId = task.AnswerId,
-                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                            ErrorMessage = ex.Message,
-                            RetryCount = 3,
-                            Status = "pending",
-                            NextRetryAt = now.AddMinutes(5),
-                            LastAttemptAt = now,
-                            CreatedAt = now
-                        };
-                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
-                    }
+                            answer.Status = "failed";
+                        }
 
-                    var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
-                    if (answer != null)
+                        await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                    }
+                    catch (Exception dlqEx)
                     {
-                        answer.Status = "failed";
+                        _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho Answer {AnswerId}!", task.AnswerId);
                     }
 
-                    await errorDbContext.SaveChangesAsync(CancellationToken.None);
-                }
-                catch (Exception dlqEx)
-                {
-                    _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho Answer {AnswerId}!", task.AnswerId);
-                }
-
-                // 2. Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt
-                try
-                {
-                    await _hubContext.Clients.Group($"session_{task.SessionId}").ReceiveGradingError(task.AnswerId, "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.");
-                }
-                catch (Exception signalrEx)
-                {
-                    _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
+                    // 2. Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt
+                    try
+                    {
+                        await _hubContext.Clients.Group($"session_{task.SessionId}").ReceiveGradingError(task.AnswerId, "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.");
+                    }
+                    catch (Exception signalrEx)
+                    {
+                        _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Graceful shutdown khi Host dừng
         }
     }
 
@@ -178,13 +189,6 @@ public class GradingQueueWorker : BackgroundService
             ? string.Join(" ", priorTranscripts)
             : (!gradingTask.IsFollowUp ? gradingTask.AnswerText : null);
 
-        var priorMaxCriterionScores = priorQuestionAnswers
-            .SelectMany(a => a.AiEvaluations)
-            .Where(e => e.Details != null)
-            .SelectMany(e => e.Details)
-            .GroupBy(d => d.CriterionId)
-            .ToDictionary(g => g.Key, g => g.Max(d => d.Score));
-
         var previousFollowUpPrompts = priorQuestionAnswers
             .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
             .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
@@ -196,7 +200,9 @@ public class GradingQueueWorker : BackgroundService
         string? answeredFollowUpPrompt = null;
         if (gradingTask.IsFollowUp)
         {
-            if (gradingTask.ParentAnswerId.HasValue)
+            answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault();
+
+            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt) && gradingTask.ParentAnswerId.HasValue)
             {
                 var parentCot = await dbContext.AiEvaluations
                     .AsNoTracking()
@@ -206,11 +212,6 @@ public class GradingQueueWorker : BackgroundService
                     .FirstOrDefaultAsync(cancellationToken);
 
                 answeredFollowUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
-            }
-
-            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
-            {
-                answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault() ?? question.FollowUpPrompt;
             }
 
             if (!string.IsNullOrWhiteSpace(answeredFollowUpPrompt) &&
@@ -242,7 +243,8 @@ public class GradingQueueWorker : BackgroundService
             FollowUpPrompt = answeredFollowUpPrompt,
             FollowUpIndex = existingFollowUpsCount,
             OriginalAnswerTranscript = originalAnswerTranscript,
-            PreviousFollowUpPrompts = previousFollowUpPrompts
+            PreviousFollowUpPrompts = previousFollowUpPrompts,
+            ThrowOnTransientFailure = true
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
@@ -269,12 +271,6 @@ public class GradingQueueWorker : BackgroundService
                 ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
                 : 0.0m;
 
-            if (gradingTask.IsFollowUp &&
-                priorMaxCriterionScores.TryGetValue(criterion.Id, out var priorCritScore) &&
-                priorCritScore > clampedScore)
-            {
-                clampedScore = Math.Clamp(Math.Round(priorCritScore, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore);
-            }
             var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
                 ? matchedDetail!.Comment
                 : clampedScore > 0.0m
@@ -318,37 +314,64 @@ public class GradingQueueWorker : BackgroundService
 
             if (existingFollowUpsCount < maxAllowedFollowUps)
             {
-                needsFollowUp = true;
-
-                // Tìm tiêu chí có tỷ lệ điểm thấp nhất để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
-                RubricCriterion? weakestCriterion = null;
-                decimal lowestRatio = decimal.MaxValue;
-                for (int i = 0; i < orderedCriteria.Count; i++)
+                try
                 {
-                    var crit = orderedCriteria[i];
-                    var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
-                    var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
-                    if (ratio < lowestRatio)
+                    // Tìm tiêu chí có tỷ lệ điểm thấp nhất để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
+                    RubricCriterion? weakestCriterion = null;
+                    decimal lowestRatio = decimal.MaxValue;
+                    for (int i = 0; i < orderedCriteria.Count; i++)
                     {
-                        lowestRatio = ratio;
-                        weakestCriterion = crit;
+                        var crit = orderedCriteria[i];
+                        var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
+                        var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                        if (ratio < lowestRatio)
+                        {
+                            lowestRatio = ratio;
+                            weakestCriterion = crit;
+                        }
+                    }
+
+                    int nextFollowUpSequence = existingFollowUpsCount + 1;
+                    var candidateFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                        question.Course?.Code,
+                        null,
+                        gradingResult.FollowUpPrompt,
+                        nextFollowUpSequence,
+                        weakestCriterion?.CriterionName,
+                        weakestCriterion?.Description,
+                        orderedCriteria.Select(c => c.CriterionName),
+                        question.Content,
+                        null,
+                        gradingTask.AnswerText,
+                        originalAnswerTranscript,
+                        previousFollowUpPrompts);
+
+                    if (!string.IsNullOrWhiteSpace(candidateFollowUp))
+                    {
+                        needsFollowUp = true;
+                        resolvedFollowUpPrompt = candidateFollowUp;
+                    }
+                    else
+                    {
+                        needsFollowUp = false;
+                        resolvedFollowUpPrompt = null;
+                        gradingResult.Feedback = string.IsNullOrWhiteSpace(gradingResult.Feedback)
+                            ? "Không thể tạo câu hỏi đào sâu, hệ thống chuyển sang câu hỏi tiếp theo."
+                            : $"{gradingResult.Feedback.TrimEnd()} Không thể tạo câu hỏi đào sâu, hệ thống chuyển sang câu hỏi tiếp theo.";
                     }
                 }
-
-                int nextFollowUpSequence = existingFollowUpsCount + 1;
-                resolvedFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    question.Course?.Code,
-                    question.FollowUpPrompt,
-                    gradingResult.FollowUpPrompt,
-                    nextFollowUpSequence,
-                    weakestCriterion?.CriterionName,
-                    weakestCriterion?.Description,
-                    orderedCriteria.Select(c => c.CriterionName),
-                    question.Content,
-                    question.SampleAnswer,
-                    gradingTask.AnswerText,
-                    originalAnswerTranscript,
-                    previousFollowUpPrompts);
+                catch (Exception followUpEx)
+                {
+                    _logger.LogWarning(
+                        followUpEx,
+                        "Lỗi khi tạo câu hỏi follow-up cho Answer {AnswerId}. Bỏ qua follow-up và chuyển sang câu hỏi tiếp theo.",
+                        gradingTask.AnswerId);
+                    needsFollowUp = false;
+                    resolvedFollowUpPrompt = null;
+                    gradingResult.Feedback = string.IsNullOrWhiteSpace(gradingResult.Feedback)
+                        ? "Không thể tạo câu hỏi đào sâu, hệ thống chuyển sang câu hỏi tiếp theo."
+                        : $"{gradingResult.Feedback.TrimEnd()} Không thể tạo câu hỏi đào sâu, hệ thống chuyển sang câu hỏi tiếp theo.";
+                }
             }
         }
 

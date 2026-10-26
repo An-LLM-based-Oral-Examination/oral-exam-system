@@ -59,6 +59,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                         .ThenInclude(r => r.Criteria)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+                    .ThenInclude(e => e.Details)
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
@@ -72,9 +73,9 @@ public sealed class SubmitMockExamSessionCommandHandler(
         }
 
         var isRecoverableStuckSubmission = session.Status == "submitted"
-            && !session.TotalScore.HasValue
             && session.Answers.Count > 0
-            && session.Answers.All(a => a.Status != "graded" && (a.AiEvaluations == null || !a.AiEvaluations.Any()));
+            && (!session.TotalScore.HasValue
+                || session.Answers.Any(a => !string.IsNullOrWhiteSpace(a.AnswerText) && a.Status != "graded"));
 
         if (session.Status != "in_progress" && !isRecoverableStuckSubmission)
         {
@@ -82,11 +83,24 @@ public sealed class SubmitMockExamSessionCommandHandler(
         }
 
         // 2. Server Master Timer check (kèm 10s Network Grace Period)
-        var submittedAt = DateTime.UtcNow;
+        var submittedAt = session.SubmittedAt ?? DateTime.UtcNow;
         var isOverdue = submittedAt > session.ExpiresAt.AddSeconds(10);
         session.Status = "submitted";
         session.SubmittedAt = submittedAt;
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Dọn dẹp các slot câu hỏi phụ đang chờ (pending / chưa có câu trả lời) trước khi sắp xếp và chấm điểm
+        var unansweredFollowUps = session.Answers
+            .Where(a => a.IsFollowUp && (a.Status != "answered" || string.IsNullOrWhiteSpace(a.AnswerText)))
+            .ToList();
+        if (unansweredFollowUps.Count > 0)
+        {
+            _context.MockExamAnswers.RemoveRange(unansweredFollowUps);
+            foreach (var u in unansweredFollowUps)
+            {
+                session.Answers.Remove(u);
+            }
+        }
 
         // Giữ đúng thứ tự đề thi; follow-up đi sau câu chính cùng OrderIndex.
         var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
@@ -146,39 +160,121 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 return (a, emptyQuestionScore, (AiEvaluation?)null);
             }
 
-            // Câu hỏi đã có câu trả lời -> Gửi Gemini AI chấm CoT Rubric 10.0đ
-            var criteriaList = q.Rubric?.Criteria?.OrderBy(c => c.OrderIndex).Select(c => new AiGradingCriterion
+            var orderedCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
+            var existingEval = a.AiEvaluations?
+                .OrderByDescending(e => e.EvaluatedAt)
+                .FirstOrDefault();
+
+            if (existingEval != null)
+            {
+                var cachedCriterionScores = new List<MockExamCriterionScoreDto>();
+                var existingDetails = existingEval.Details?.ToList() ?? new List<AiEvaluationDetail>();
+
+                for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
+                {
+                    var c = orderedCriteria[critIndex];
+                    var matchedDetail = existingDetails.FirstOrDefault(d => d.CriterionId == c.Id)
+                        ?? (critIndex < existingDetails.Count ? existingDetails[critIndex] : null);
+
+                    var score = matchedDetail != null
+                        ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore)
+                        : 0.0m;
+                    var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
+                        ? matchedDetail!.Comment!
+                        : score > 0.0m
+                            ? $"Đạt {score:0.0}/{c.MaxScore:0.0}đ cho tiêu chí '{c.CriterionName}'."
+                            : $"Chưa đáp ứng tiêu chí '{c.CriterionName}' (0.0/{c.MaxScore:0.0}đ).";
+
+                    cachedCriterionScores.Add(new MockExamCriterionScoreDto(
+                        c.Id,
+                        c.CriterionName,
+                        c.BloomLevel,
+                        c.MaxScore,
+                        score,
+                        comment
+                    ));
+                }
+
+                var cachedScore = existingDetails.Count > 0 && cachedCriterionScores.Count > 0
+                    ? Math.Clamp(Math.Round(cachedCriterionScores.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                    : Math.Clamp(Math.Round(existingEval.TotalScore, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+
+                var cachedQuestionScoreDto = new MockExamQuestionScoreDto(
+                    q.Id,
+                    orderIndex,
+                    displayTitle,
+                    displayContent,
+                    q.BloomLevel ?? "Remember",
+                    q.Difficulty,
+                    a.AnswerText,
+                    cachedScore,
+                    existingEval.Feedback,
+                    existingEval.ConfidenceScore ?? 0.90m,
+                    cachedCriterionScores,
+                    a.IsFollowUp ? null : q.ImageUrl,
+                    a.IsFollowUp ? null : q.ImageDescription,
+                    a.IsFollowUp,
+                    a.Id,
+                    a.ParentAnswerId
+                );
+
+                return (a, cachedQuestionScoreDto, (AiEvaluation?)existingEval);
+            }
+
+            // Câu hỏi đã có câu trả lời và chưa có AiEvaluation -> Gửi Gemini AI chấm CoT Rubric 10.0đ
+            var criteriaList = orderedCriteria.Select(c => new AiGradingCriterion
             {
                 Id = c.Id.ToString(),
                 Name = c.CriterionName,
                 Description = c.Description ?? string.Empty,
                 MaxScore = c.MaxScore,
                 Weight = c.Weight
-            }).ToList() ?? new List<AiGradingCriterion>();
+            }).ToList();
 
-            var resolvedMockFollowUpPrompt = session.HasFollowUp
-                ? FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    session.Course?.Code,
-                    q.FollowUpPrompt,
-                    null,
-                    1,
-                    null,
-                    null,
-                    q.Rubric?.Criteria?.Select(c => c.CriterionName),
-                    q.Content,
-                    null)
-                : null;
+            MockExamAnswer? parentMainAnswer = null;
+            int followUpOrdinal = 0;
+            var previousFollowUpPrompts = new List<string>();
+
+            if (a.IsFollowUp)
+            {
+                parentMainAnswer = sessionAnswers.FirstOrDefault(x => !x.IsFollowUp && x.Id == a.ParentAnswerId)
+                    ?? sessionAnswers.FirstOrDefault(x => !x.IsFollowUp && x.QuestionId == a.QuestionId);
+
+                var siblingFollowUps = sessionAnswers
+                    .Where(x => x.IsFollowUp &&
+                                ((a.ParentAnswerId.HasValue && x.ParentAnswerId == a.ParentAnswerId) ||
+                                 (!a.ParentAnswerId.HasValue && x.QuestionId == a.QuestionId)))
+                    .ToList();
+
+                var currentFollowUpIdx = siblingFollowUps.FindIndex(x => x.Id == a.Id);
+                followUpOrdinal = currentFollowUpIdx >= 0 ? currentFollowUpIdx + 1 : 1;
+
+                if (currentFollowUpIdx > 0)
+                {
+                    previousFollowUpPrompts = siblingFollowUps
+                        .Take(currentFollowUpIdx)
+                        .Select(x => x.PromptText)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Select(p => p!.Trim())
+                        .ToList();
+                }
+            }
 
             var gradingReq = new AiGradingRequest
             {
                 Transcript = a.AnswerText!,
-                QuestionContent = displayContent,
-                SampleAnswer = a.IsFollowUp ? string.Empty : (q.SampleAnswer ?? string.Empty),
+                QuestionContent = q.Content,
+                SampleAnswer = q.SampleAnswer ?? string.Empty,
                 CourseCode = session.Course?.Code,
-                QuestionImageUrl = a.IsFollowUp ? null : q.ImageUrl,
-                QuestionImageDescription = a.IsFollowUp ? null : q.ImageDescription,
-                FollowUpPrompt = a.IsFollowUp ? a.PromptText : resolvedMockFollowUpPrompt,
-                Criteria = criteriaList
+                QuestionImageUrl = q.ImageUrl,
+                QuestionImageDescription = q.ImageDescription,
+                IsFollowUp = a.IsFollowUp,
+                FollowUpPrompt = a.IsFollowUp ? a.PromptText : null,
+                FollowUpIndex = followUpOrdinal,
+                OriginalAnswerTranscript = a.IsFollowUp ? parentMainAnswer?.AnswerText : null,
+                PreviousFollowUpPrompts = previousFollowUpPrompts,
+                Criteria = criteriaList,
+                ThrowOnTransientFailure = true
             };
 
             var gradingResult = await _aiGradingService.GradeAnswerAsync(gradingReq, cancellationToken);
@@ -186,7 +282,6 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var criterionScores = new List<MockExamCriterionScoreDto>();
             var evalDetails = new List<AiEvaluationDetail>();
             var evalId = Guid.NewGuid();
-            var orderedCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
             var rawDetails = gradingResult.Details ?? new List<GradingDetailDto>();
 
             for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
@@ -278,13 +373,142 @@ public sealed class SubmitMockExamSessionCommandHandler(
         }
         catch
         {
-            session.Status = "in_progress";
-            session.SubmittedAt = null;
+            // Persist First: Giữ nguyên trạng thái "submitted" và thời điểm SubmittedAt để bảo toàn bài làm của sinh viên,
+            // cho phép hệ thống chấm điểm bù tự động (Background Worker / Lazy Recovery) ngay khi AI phục hồi.
+            session.Status = "submitted";
+            session.SubmittedAt = submittedAt;
             await _context.SaveChangesAsync(CancellationToken.None);
             throw;
         }
 
-        // 4. Điểm tổng = trung bình các câu chính (follow-up không làm loãng điểm đề)
+        // 3b. Tổng hợp điểm tích lũy từ các câu trả lời phụ (Follow-up) vào câu trả lời chính tương ứng
+        for (int i = 0; i < results.Count; i++)
+        {
+            var mainResult = results[i];
+            if (mainResult.a.IsFollowUp)
+            {
+                continue;
+            }
+
+            var answeredFollowUps = results
+                .Where(r => r.a.IsFollowUp
+                            && ((r.a.ParentAnswerId.HasValue && r.a.ParentAnswerId == mainResult.a.Id)
+                                || (!r.a.ParentAnswerId.HasValue && r.a.QuestionId == mainResult.a.QuestionId))
+                            && !string.IsNullOrWhiteSpace(r.a.AnswerText))
+                .ToList();
+
+            if (answeredFollowUps.Count == 0)
+            {
+                continue;
+            }
+
+            var mainCriteria = mainResult.score.CriteriaScores ?? new List<MockExamCriterionScoreDto>();
+            decimal avgFollowUpScore = answeredFollowUps.Average(f => f.score.Score);
+            decimal weightedScore = Math.Round(
+                mainResult.score.Score * 0.7m + avgFollowUpScore * 0.3m,
+                2,
+                MidpointRounding.AwayFromZero);
+
+            decimal effectiveMainScore;
+            List<MockExamCriterionScoreDto> effectiveCriteria;
+
+            if (avgFollowUpScore >= mainResult.score.Score)
+            {
+                var mergedCriteria = new List<MockExamCriterionScoreDto>(mainCriteria.Count);
+
+                for (int critIdx = 0; critIdx < mainCriteria.Count; critIdx++)
+                {
+                    var mainCrit = mainCriteria[critIdx];
+                    decimal bestCritScore = mainCrit.Score;
+                    string? bestFollowUpComment = null;
+
+                    foreach (var fu in answeredFollowUps)
+                    {
+                        var fuCriteria = fu.score.CriteriaScores;
+                        if (fuCriteria == null || fuCriteria.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var matchedFuCrit = fuCriteria.FirstOrDefault(fc =>
+                                fc.CriterionId == mainCrit.CriterionId && mainCrit.CriterionId != Guid.Empty)
+                            ?? fuCriteria.FirstOrDefault(fc =>
+                                !string.IsNullOrWhiteSpace(mainCrit.CriterionName) &&
+                                string.Equals(fc.CriterionName, mainCrit.CriterionName, StringComparison.OrdinalIgnoreCase))
+                            ?? (critIdx < fuCriteria.Count ? fuCriteria[critIdx] : null);
+
+                        if (matchedFuCrit != null && matchedFuCrit.Score > bestCritScore)
+                        {
+                            bestCritScore = Math.Clamp(
+                                Math.Round(matchedFuCrit.Score, 2, MidpointRounding.AwayFromZero),
+                                0.0m,
+                                mainCrit.MaxScore);
+                            bestFollowUpComment = matchedFuCrit.Comment;
+                        }
+                    }
+
+                    var mergedComment = mainCrit.Comment;
+                    if (bestCritScore > mainCrit.Score && !string.IsNullOrWhiteSpace(bestFollowUpComment))
+                    {
+                        mergedComment = string.IsNullOrWhiteSpace(mergedComment)
+                            ? bestFollowUpComment
+                            : $"{mergedComment} (Bổ sung từ câu hỏi phụ: {bestFollowUpComment})";
+                    }
+
+                    mergedCriteria.Add(mainCrit with
+                    {
+                        Score = bestCritScore,
+                        Comment = mergedComment
+                    });
+
+                    if (mainResult.eval?.Details != null)
+                    {
+                        var evalDetail = mainResult.eval.Details.FirstOrDefault(d => d.CriterionId == mainCrit.CriterionId)
+                            ?? (critIdx < mainResult.eval.Details.Count ? mainResult.eval.Details.ElementAtOrDefault(critIdx) : null);
+                        if (evalDetail != null)
+                        {
+                            evalDetail.Score = bestCritScore;
+                            if (!string.IsNullOrWhiteSpace(mergedComment))
+                            {
+                                evalDetail.Comment = mergedComment;
+                            }
+                        }
+                    }
+                }
+
+                decimal mergedFromCriteria = mergedCriteria.Count > 0 && mergedCriteria.Sum(c => c.Score) > 0
+                    ? Math.Clamp(Math.Round(mergedCriteria.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                    : mainResult.score.Score;
+
+                effectiveMainScore = Math.Clamp(
+                    Math.Max(mainResult.score.Score, Math.Max(mergedFromCriteria, weightedScore)),
+                    0.0m,
+                    10.0m);
+                effectiveCriteria = mergedCriteria;
+            }
+            else
+            {
+                effectiveMainScore = Math.Clamp(weightedScore, 0.0m, 10.0m);
+                effectiveCriteria = mainCriteria;
+            }
+
+            if (mainResult.eval != null)
+            {
+                mainResult.eval.TotalScore = effectiveMainScore;
+            }
+
+            results[i] = (
+                mainResult.a,
+                mainResult.score with
+                {
+                    Score = effectiveMainScore,
+                    CriteriaScores = effectiveCriteria
+                },
+                mainResult.eval
+            );
+        }
+
+        // 4. Điểm tổng = trung bình các câu chính (đã bao gồm điểm tích lũy từ câu hỏi phụ)
         var mainResults = results.Where(r => !r.a.IsFollowUp).ToList();
         int totalQuestions = mainResults.Count;
         int answeredQuestions = mainResults.Count(r =>
@@ -313,10 +537,13 @@ public sealed class SubmitMockExamSessionCommandHandler(
 
         foreach (var r in results)
         {
-            r.a.Status = "graded";
             if (r.eval != null)
             {
-                _context.AiEvaluations.Add(r.eval);
+                r.a.Status = "graded";
+                if (r.a.AiEvaluations == null || !r.a.AiEvaluations.Any(e => e.Id == r.eval.Id))
+                {
+                    _context.AiEvaluations.Add(r.eval);
+                }
             }
         }
 

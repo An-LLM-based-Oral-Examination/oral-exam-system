@@ -4,6 +4,13 @@ export const DEFAULT_TTS_VOICE = 'vi-VN-HoaiMyNeural'
 export const DEFAULT_ENGLISH_TTS_VOICE = 'en-US-JennyNeural'
 const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024
 
+const VIETNAMESE_CHAR_REGEX =
+  /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i
+
+export function containsVietnameseCharacters(text?: string | null): boolean {
+  return Boolean(text && VIETNAMESE_CHAR_REGEX.test(text))
+}
+
 export function isEnglishCourse(courseCode?: string | null, courseName?: string | null): boolean {
   const code = courseCode?.trim().toUpperCase() ?? ''
   const name = courseName?.trim().toLowerCase() ?? ''
@@ -13,8 +20,30 @@ export function isEnglishCourse(courseCode?: string | null, courseName?: string 
 export function getTtsVoiceForCourse(
   courseCode?: string | null,
   courseName?: string | null,
+  text?: string | null,
 ): string {
+  const normalizedText = text?.trim() ?? ''
+  if (normalizedText) {
+    if (containsVietnameseCharacters(normalizedText)) {
+      return DEFAULT_TTS_VOICE
+    }
+    if (/[a-zA-Z]{2,}/.test(normalizedText)) {
+      return DEFAULT_ENGLISH_TTS_VOICE
+    }
+  }
   return isEnglishCourse(courseCode, courseName) ? DEFAULT_ENGLISH_TTS_VOICE : DEFAULT_TTS_VOICE
+}
+
+export function getSpeechRecognitionLangForCourse(
+  courseCode?: string | null,
+  courseName?: string | null,
+  promptText?: string | null,
+): string {
+  // Hỗ trợ nhận diện song ngữ Việt - Anh (Code-Switching) cho tất cả các môn học (kể cả ENT và SE)
+  void courseCode
+  void courseName
+  void promptText
+  return 'vi-VN'
 }
 
 export interface SpeechTranscriptionResponse {
@@ -23,6 +52,7 @@ export interface SpeechTranscriptionResponse {
   provider?: string | null
   usedFallback?: boolean
   confidenceScore?: number | null
+  timestampsJson?: string | null
 }
 
 interface ActivePlayback {
@@ -228,12 +258,22 @@ export async function transcribeSpeech(
       }
     }
 
+    const rawTimestamps =
+      payload.timestampsJson ?? payload.TimestampsJson ?? payload.timestamps_json
+    const timestampsJson =
+      typeof rawTimestamps === 'string' && rawTimestamps.trim()
+        ? rawTimestamps.trim()
+        : Array.isArray(rawTimestamps) || isRecord(rawTimestamps)
+          ? JSON.stringify(rawTimestamps)
+          : null
+
     return {
       transcript,
       rawText: readString(payload, 'rawText', 'RawText') ?? null,
       provider: readString(payload, 'provider', 'Provider') ?? null,
       usedFallback: readBoolean(payload, 'usedFallback', 'UsedFallback'),
       confidenceScore: readNumber(payload, 'confidenceScore', 'ConfidenceScore') ?? null,
+      timestampsJson,
     }
   } catch (error) {
     const candidate = error as Partial<{ status: number; title: string; detail: string }>

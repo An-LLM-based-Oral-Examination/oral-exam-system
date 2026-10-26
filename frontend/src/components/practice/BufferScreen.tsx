@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
+import { checkTranscriptRevision } from '@/lib/transcriptGuards'
 import { Clock, CheckCircle, Edit3 } from 'lucide-react'
 
 interface BufferScreenProps {
@@ -37,6 +38,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
   const [validationMessage, setValidationMessage] = useState('')
   const hasSubmittedRef = useRef(false)
   const hasReachedDeadlineRef = useRef(false)
+  const baselineTranscriptRef = useRef(initialTranscript)
   const transcriptRef = useRef(initialTranscript)
   const isSubmittingRef = useRef(isSubmitting)
   const onConfirmSubmitRef = useRef(onConfirmSubmit)
@@ -96,24 +98,56 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
     }
   }, [onCancel])
 
-  const handleConfirm = useCallback(() => {
-    const finalText = transcriptRef.current.trim()
-    if (finalText.length < 10) {
-      setValidationMessage('Câu trả lời cần ít nhất 10 ký tự trước khi nộp.')
-      return
-    }
-    if (hasSubmittedRef.current || isSubmittingRef.current) return
+  const handleConfirm = useCallback(
+    (fromDeadline = false) => {
+      if (hasSubmittedRef.current || isSubmittingRef.current) return
+      const finalText = transcriptRef.current.trim()
+      const baseline = baselineTranscriptRef.current.trim()
 
-    hasSubmittedRef.current = true
-    setValidationMessage('')
-    onConfirmSubmitRef.current(finalText)
-  }, [])
+      if (finalText.length < 10) {
+        if (fromDeadline) {
+          if (baseline.length >= 10) {
+            hasSubmittedRef.current = true
+            setValidationMessage('')
+            onConfirmSubmitRef.current(baseline)
+            return
+          }
+          onCancel?.(transcriptRef.current)
+          return
+        }
+        setValidationMessage('Câu trả lời cần ít nhất 10 ký tự trước khi nộp.')
+        return
+      }
+
+      if (baseline.length >= 10) {
+        const revision = checkTranscriptRevision(baseline, finalText)
+        if (!revision.isAllowed) {
+          if (fromDeadline) {
+            hasSubmittedRef.current = true
+            setValidationMessage('')
+            onConfirmSubmitRef.current(baseline)
+            return
+          }
+          setValidationMessage(
+            revision.reason ??
+              'VOICE_FIRST_GATE: Chỉ được hiệu đính thuật ngữ trên bản bóc băng giọng nói.',
+          )
+          return
+        }
+      }
+
+      hasSubmittedRef.current = true
+      setValidationMessage('')
+      onConfirmSubmitRef.current(finalText)
+    },
+    [onCancel],
+  )
 
   useEffect(() => {
     if (timeLeft <= 0) {
       if (!hasReachedDeadlineRef.current) {
         hasReachedDeadlineRef.current = true
-        handleConfirm()
+        handleConfirm(true)
       }
       return undefined
     }
@@ -297,7 +331,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
           <Button
             variant="primary"
             size="md"
-            onClick={handleConfirm}
+            onClick={() => handleConfirm(false)}
             isLoading={isSubmitting}
             disabled={transcript.trim().length < 10}
             className="min-h-11 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#0F2854] focus:ring-[#1C4D8D] disabled:shadow-none sm:w-auto"

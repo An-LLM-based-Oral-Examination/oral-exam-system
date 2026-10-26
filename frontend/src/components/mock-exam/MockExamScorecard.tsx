@@ -234,23 +234,14 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
               {isOpen && (
                 <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
                   {question.imageUrl?.trim() ? (
-                    <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white">
-                      <div className="grid grid-cols-1 md:grid-cols-2">
-                        <div className="flex items-center p-3">
-                          <p className="text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
-                            {question.content}
-                          </p>
-                        </div>
-                        <div className="relative min-h-[10rem] md:min-h-0">
-                          <QuestionImage
-                            imageUrl={question.imageUrl}
-                            fillHeight
-                            framed={false}
-                            showCaption={false}
-                            className="overflow-hidden rounded-xl max-md:min-h-[10rem] max-md:p-3 md:absolute md:inset-3 md:h-auto md:w-auto"
-                          />
-                        </div>
-                      </div>
+                    <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white p-3">
+                      <QuestionImage
+                        imageUrl={question.imageUrl}
+                        imageAlt={question.imageAlt}
+                        framed={false}
+                        showCaption={false}
+                        className="w-full overflow-hidden rounded-xl"
+                      />
                     </div>
                   ) : null}
                   <AnswerBlock label="Câu trả lời" transcript={question.transcript} />

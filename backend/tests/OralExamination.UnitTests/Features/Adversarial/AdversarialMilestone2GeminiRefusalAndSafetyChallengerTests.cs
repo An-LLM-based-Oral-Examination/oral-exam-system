@@ -377,18 +377,15 @@ public sealed class AdversarialMilestone2GeminiRefusalAndSafetyChallengerTests
         result.IsSuspicious.Should().BeTrue();
     }
 
-    [Theory(DisplayName = "ADV-VULN-01: Multi-space and tab variations in refusal phrases bypass lower.Contains() substring check when Gemini returns high score")]
+    [Theory(DisplayName = "ADV-VULN-01: Multi-space and tab variations in refusal phrases are reliably normalized and intercepted by EnforceRefusalGuard")]
     [InlineData("sKiP   tHiS   qUeStIoN???")]
     [InlineData("i   cAnNoT   aNsWeR.")]
     [InlineData("   PASS   THIS   QUESTION   ")]
     [InlineData("No   Idea!!!")]
     public async Task GradeAnswerAsync_MultiSpaceVariations_ExposesSubstringMatchingVulnerability(string multiSpaceRefusal)
     {
-        // This test empirically documents a confirmed vulnerability/finding in GeminiAiGradingService.cs:
-        // lower.Contains(phrase) uses exact substring search without prior whitespace normalization.
-        // Therefore, if a student or speech transcript contains multiple spaces between refusal words,
-        // hasRefusalPhrase evaluates to false. If the external AI returned a high score (e.g. 10.0m),
-        // EnforceRefusalGuard fails to intercept it and the high score is erroneously preserved.
+        // Verified: Whitespace normalization before RefusalPhrases check ensures multi-space variations
+        // are correctly intercepted by EnforceRefusalGuard and evaluated to 0.0m.
         var fakeHandler = new CaptureHttpMessageHandler(_ => CreateMockGeminiSuccessResponse(10.0m));
         var service = new GeminiAiGradingService(new HttpClient(fakeHandler), BuildConfig());
 
@@ -403,9 +400,8 @@ public sealed class AdversarialMilestone2GeminiRefusalAndSafetyChallengerTests
 
         var result = await service.GradeAnswerAsync(request, CancellationToken.None);
 
-        // Asserting the empirical reality: currently it evaluates to 10.0m instead of 0.0m due to unnormalized spaces!
-        result.Score.Should().Be(10.0m, "Due to missing whitespace normalization before RefusalPhrases check, multi-space refusal bypasses guard when AI outputs 10.0m");
-        result.IsSuspicious.Should().BeFalse();
+        result.Score.Should().Be(0.0m, "Whitespace normalization before RefusalPhrases check ensures multi-space refusal is intercepted and zeroed");
+        result.IsSuspicious.Should().BeTrue();
     }
 
     [Theory(DisplayName = "ADV-EDGE-03: Vietnamese refusal phrases in English exam are also caught and zeroed out")]

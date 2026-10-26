@@ -38,6 +38,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         int bufferSeconds = (bufferConfig != null && int.TryParse(bufferConfig.Value, out var parsedBuffer))
             ? parsedBuffer
             : (course.TranscriptBufferSeconds > 0 ? course.TranscriptBufferSeconds : 60);
+        bufferSeconds = Math.Clamp(bufferSeconds, 10, 300);
 
         // Chuẩn hóa danh sách độ khó
         List<string> normalizedDifficulties;

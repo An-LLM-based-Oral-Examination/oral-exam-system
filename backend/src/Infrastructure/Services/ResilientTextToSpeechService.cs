@@ -31,6 +31,8 @@ public class ResilientTextToSpeechService : ITextToSpeechService
 {
     public const string DefaultFemaleVoice = "vi-VN-HoaiMyNeural";
     public const string DefaultMaleVoice = "vi-VN-NamMinhNeural";
+    public const string DefaultEnglishFemaleVoice = "en-US-JennyNeural";
+    public const string DefaultEnglishMaleVoice = "en-US-GuyNeural";
 
     private const string EdgeTrustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
     private const int MaxCacheEntries = 250;
@@ -365,6 +367,24 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         }
     }
 
+    public static bool ContainsVietnameseDiacritics(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        foreach (var ch in text)
+        {
+            if ("ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵĂÂĐÊÔƠƯÁÀẢÃẠẤẦẨẪẬẮẰẲẴẶÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ".IndexOf(ch) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static string ResolveVoiceName(string? voiceName)
     {
         if (string.IsNullOrWhiteSpace(voiceName))
@@ -373,6 +393,19 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         }
 
         var normalized = voiceName.Trim();
+        if (normalized.Contains("Guy", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("en-male", StringComparison.OrdinalIgnoreCase))
+        {
+            return DefaultEnglishMaleVoice;
+        }
+
+        if (normalized.StartsWith("en-", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("Jenny", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("Aria", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("english", StringComparison.OrdinalIgnoreCase))
+        {
+            return DefaultEnglishFemaleVoice;
+        }
         if (normalized.Contains("NamMinh", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("male", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("nam", StringComparison.OrdinalIgnoreCase))
@@ -453,9 +486,17 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         var requestId = Guid.NewGuid().ToString("N");
         var escapedText = SecurityElement.Escape(cleanedText) ?? cleanedText;
 
+        var isEnglishVoice = !string.IsNullOrWhiteSpace(resolvedVoice) && resolvedVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase);
+        var effectiveEdgeVoice = isEnglishVoice && ContainsVietnameseDiacritics(cleanedText)
+            ? (resolvedVoice.Contains("Guy", StringComparison.OrdinalIgnoreCase) ? DefaultMaleVoice : DefaultFemaleVoice)
+            : resolvedVoice;
+        var xmlLang = !string.IsNullOrWhiteSpace(effectiveEdgeVoice) && effectiveEdgeVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase)
+            ? "en-US"
+            : "vi-VN";
+
         var ssml =
-            $"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{(!string.IsNullOrWhiteSpace(resolvedVoice) && resolvedVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase) ? "en-US" : "vi-VN")}'>" +
-            $"<voice name='{resolvedVoice}'>" +
+            $"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{xmlLang}'>" +
+            $"<voice name='{effectiveEdgeVoice}'>" +
             $"<prosody pitch='+0Hz' rate='{ratePercent}' volume='+0%'>{escapedText}</prosody>" +
             $"</voice></speak>";
 
@@ -585,7 +626,10 @@ public class ResilientTextToSpeechService : ITextToSpeechService
 
         foreach (var chunk in chunks)
         {
-            var url = $"https://translate.googleapis.com/translate_tts?ie=UTF-8&tl={tl}&client=tw-ob&ttsspeed={ttsSpeed}&q={Uri.EscapeDataString(chunk)}";
+            var chunkTl = ContainsVietnameseDiacritics(chunk)
+                ? "vi"
+                : (!string.IsNullOrWhiteSpace(resolvedVoice) && resolvedVoice.StartsWith("en-", StringComparison.OrdinalIgnoreCase) ? "en" : tl);
+            var url = $"https://translate.googleapis.com/translate_tts?ie=UTF-8&tl={chunkTl}&client=tw-ob&ttsspeed={ttsSpeed}&q={Uri.EscapeDataString(chunk)}";
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.TryAddWithoutValidation(
                 "User-Agent",
@@ -773,7 +817,8 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             }
         }
 
-        var geminiVoiceName = string.Equals(resolvedVoice, DefaultMaleVoice, StringComparison.OrdinalIgnoreCase)
+        var geminiVoiceName = string.Equals(resolvedVoice, DefaultMaleVoice, StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(resolvedVoice, DefaultEnglishMaleVoice, StringComparison.OrdinalIgnoreCase)
             ? "Puck"
             : "Kore";
 
@@ -793,7 +838,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             },
             speech_metadata = new
             {
-                style = "clear, calm, professional Vietnamese academic examiner"
+                style = "clear, calm, professional bilingual Vietnamese-English academic examiner"
             },
             generationConfig = new
             {

@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 
 namespace OralExamination.Application.Features.MockExams.Queries.ResumeMockExamSession;
@@ -46,12 +47,7 @@ public sealed class ResumeMockExamSessionQueryHandler(
             return Result<ResumeMockExamResponse>.Failure("Ca thi này đã kết thúc, không thể tiếp tục làm bài.");
         }
 
-        var orderedAnswers = session.Answers
-            .OrderBy(a => a.OrderIndex)
-            .ThenBy(a => a.IsFollowUp)
-            .ThenBy(a => a.AnsweredAt)
-            .ThenBy(a => a.Id)
-            .ToList();
+        var orderedAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
 
         var mainAnswers = orderedAnswers.Where(a => !a.IsFollowUp).ToList();
 
@@ -100,7 +96,10 @@ public sealed class ResumeMockExamSessionQueryHandler(
             ))
             .ToList();
 
-        var maxFollowUps = Math.Clamp(session.Course?.MaxFollowUpQuestions ?? 2, 1, 5);
+        var course = session.Course;
+        var maxFollowUps = session.HasFollowUp
+            ? (course is not null && course.MaxFollowUpQuestions > 0 ? Math.Clamp(course.MaxFollowUpQuestions, 1, 5) : 2)
+            : 0;
         MockExamActiveFollowUpDto? activeFollowUp = null;
         if (session.HasFollowUp)
         {
@@ -117,30 +116,83 @@ public sealed class ResumeMockExamSessionQueryHandler(
                         || (!string.IsNullOrWhiteSpace(a.AnswerText) && a.Status is "answered" or "graded")
                         || a.AnsweredAt <= pendingFollowUp.AnsweredAt));
 
+                var parentMain = orderedAnswers.FirstOrDefault(a => a.Id == parentId);
+                var criteriaNames = parentMain?.Question?.Rubric?.Criteria?
+                    .OrderBy(c => c.OrderIndex)
+                    .Select(c => c.CriterionName)
+                    .ToList();
+                var answeredFollowUps = orderedAnswers
+                    .Where(a => a.IsFollowUp
+                                && a.ParentAnswerId == parentId
+                                && a.Id != pendingFollowUp.Id
+                                && !string.IsNullOrWhiteSpace(a.AnswerText))
+                    .ToList();
+                var latestAnsweredInThread = answeredFollowUps.LastOrDefault(f => !string.IsNullOrWhiteSpace(f.AnswerText))?.AnswerText
+                    ?? parentMain?.AnswerText;
+                var previousPrompts = orderedAnswers
+                    .Where(a => a.IsFollowUp && a.ParentAnswerId == parentId && a.Id != pendingFollowUp.Id && !string.IsNullOrWhiteSpace(a.PromptText))
+                    .Select(a => a.PromptText!.Trim())
+                    .ToList();
+
+                var resolvedPrompt = !string.IsNullOrWhiteSpace(pendingFollowUp.PromptText)
+                    ? pendingFollowUp.PromptText!.Trim()
+                    : FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                        courseCode: course?.Code,
+                        questionFollowUpPrompt: null,
+                        aiGeneratedFollowUpPrompt: null,
+                        followUpSequence: Math.Max(1, followUpIndex),
+                        weakestCriterionName: null,
+                        weakestCriterionDescription: null,
+                        criterionNames: criteriaNames,
+                        questionContent: parentMain?.Question?.Content ?? parentMain?.Question?.Title ?? string.Empty,
+                        sampleAnswer: parentMain?.Question?.SampleAnswer,
+                        studentTranscript: latestAnsweredInThread,
+                        originalAnswerTranscript: parentMain?.AnswerText,
+                        previousFollowUpPrompts: previousPrompts);
+
+                if (string.IsNullOrWhiteSpace(resolvedPrompt))
+                {
+                    var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(course?.Code, criteriaNames);
+                    resolvedPrompt = isEnglishCourse
+                        ? "Could you elaborate further and provide a concrete real-life example to support your answer?"
+                        : "Hãy làm rõ hơn luận điểm kỹ thuật và ví dụ thực tế liên quan đến câu trả lời của bạn.";
+                }
+
                 activeFollowUp = new MockExamActiveFollowUpDto(
                     AnswerId: pendingFollowUp.Id,
                     QuestionId: pendingFollowUp.QuestionId,
                     ParentAnswerId: parentId,
-                    Prompt: pendingFollowUp.PromptText?.Trim().Length > 0
-                        ? pendingFollowUp.PromptText!.Trim()
-                        : "Hãy làm rõ hơn luận điểm kỹ thuật và ví dụ thực tế liên quan đến câu trả lời của bạn.",
+                    Prompt: resolvedPrompt,
                     FollowUpIndex: Math.Max(1, followUpIndex),
                     MaxFollowUps: maxFollowUps
                 );
             }
         }
 
-        var course = session.Course;
-        var maxDailyQuota = course is not null && course.MaxMockExamsPerDay > 0
-            ? course.MaxMockExamsPerDay
-            : 3;
-        var quotaDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        int maxDailyQuota;
+        if (course is not null && course.MaxMockExamsPerDay > 0)
+        {
+            maxDailyQuota = course.MaxMockExamsPerDay;
+        }
+        else
+        {
+            var sysQuotaStr = await context.SystemConfigs
+                .AsNoTracking()
+                .Where(c => c.Key == "max_mock_exams_per_day" || c.Key == "MaxMockExamsPerDay")
+                .Select(c => c.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+            maxDailyQuota = int.TryParse(sysQuotaStr, out var parsedSysQuota) && parsedSysQuota > 0
+                ? parsedSysQuota
+                : 3;
+        }
+
+        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var quota = await context.MockExamQuotas
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 q => q.StudentId == request.StudentId
                      && q.CourseId == session.CourseId
-                     && q.QuotaDate == quotaDate,
+                     && q.QuotaDate == todayVn,
                 cancellationToken);
 
         var usedQuota = quota?.UsedCount ?? 0;

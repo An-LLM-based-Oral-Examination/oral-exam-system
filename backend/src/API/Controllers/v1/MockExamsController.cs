@@ -369,6 +369,18 @@ public class MockExamsController : ControllerBase
 
         if (!result.IsSuccess)
         {
+            if (result.Error?.Contains("không có quyền", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
             if (result.Error?.Contains("Không tìm thấy") == true)
             {
                 return NotFound(new

@@ -26,6 +26,10 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  isLikelySilentOrInvalidTranscript,
+  looksLikeQuestionEcho,
+} from '@/lib/transcriptGuards'
 import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { BufferScreen } from '@/components/practice/BufferScreen'
@@ -33,10 +37,13 @@ import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
-import { getTtsVoiceForCourse, playNaturalSpeech, stopSpeechPlayback } from '@/services/speech.service'
+import {
+  getTtsVoiceForCourse,
+  playNaturalSpeech,
+  stopSpeechPlayback,
+} from '@/services/speech.service'
 import { storageService } from '@/services/storage.service'
 import type {
   PracticeAnswerDetail,
@@ -105,6 +112,8 @@ function getErrorInfo(error: unknown) {
     message,
   }
 }
+
+
 
 function toScorecard(result: PracticeAnswerDetail): ScorecardPayload {
   return {
@@ -244,14 +253,13 @@ export const PracticeSessionPage: React.FC = () => {
   const [answerInputMode, setAnswerInputMode] = useState<AnswerInputMode>(
     () => runtime?.draftAnswerMode ?? 'voice',
   )
-  const [transcript, setTranscript] = useState(() =>
-    runtime?.draftAnswerMode === 'voice' ? (runtime.draftAnswerText ?? '') : '',
+  const [transcript, setTranscript] = useState(() => runtime?.draftAnswerText ?? '')
+  const [voiceBaselineTranscript, setVoiceBaselineTranscript] = useState(
+    () => runtime?.voiceBaselineTranscript ?? runtime?.draftAnswerText ?? '',
   )
-  const [textAnswer, setTextAnswer] = useState(() =>
-    runtime?.draftAnswerMode === 'text' ? (runtime.draftAnswerText ?? '') : '',
-  )
+  const [textAnswer, setTextAnswer] = useState('')
   const [showBuffer, setShowBuffer] = useState(
-    () => runtime?.showBuffer === true && runtime?.draftAnswerMode !== 'text',
+    () => runtime?.showBuffer === true && Boolean(runtime?.draftAnswerText?.trim()),
   )
   const [bufferDeadlineTimestamp, setBufferDeadlineTimestamp] = useState<number | null>(
     () => runtime?.bufferDeadlineTimestamp ?? null,
@@ -279,6 +287,17 @@ export const PracticeSessionPage: React.FC = () => {
   const syncInFlightRef = useRef(false)
   const submissionRecoveryInFlightRef = useRef(false)
   const submissionRequestInFlightRef = useRef(false)
+  const segmentPromisesRef = useRef<Array<Promise<string>>>([])
+  const handleRecorderSegment = useCallback((segmentBlob: Blob) => {
+    const segmentPromise = storageService
+      .uploadPracticeAudio(segmentBlob, {
+        clientTranscript: undefined,
+        vocabularyHint: undefined,
+      })
+      .then((res) => res.transcript.trim())
+      .catch(() => '')
+    segmentPromisesRef.current.push(segmentPromise)
+  }, [])
   const {
     isRecording,
     error: recorderError,
@@ -286,13 +305,10 @@ export const PracticeSessionPage: React.FC = () => {
     stopRecording,
     cancelRecording,
     clearError: clearRecorderError,
-  } = useAudioRecorder()
-  const {
-    startListening: startClientTranscription,
-    stopListening: stopClientTranscription,
-    resetTranscript: resetClientTranscript,
-    getCurrentTranscript,
-  } = useSpeechRecognition()
+  } = useAudioRecorder({
+    segmentDurationMs: 20_000,
+    onSegment: handleRecorderSegment,
+  })
   const {
     status: hubStatus,
     isConnected: isHubConnected,
@@ -314,16 +330,23 @@ export const PracticeSessionPage: React.FC = () => {
   )
 
   const persistAnswerDraft = useCallback(
-    (text: string, inputMode: AnswerInputMode, bufferVisible = showBuffer, deadline = bufferDeadlineTimestamp) => {
+    (
+      text: string,
+      inputMode: AnswerInputMode,
+      bufferVisible = showBuffer,
+      deadline = bufferDeadlineTimestamp,
+      baseline = voiceBaselineTranscript,
+    ) => {
       updateRuntime((current) => ({
         ...current,
         draftAnswerText: text,
+        voiceBaselineTranscript: baseline,
         draftAnswerMode: inputMode,
         showBuffer: bufferVisible,
         bufferDeadlineTimestamp: deadline,
       }))
     },
-    [bufferDeadlineTimestamp, showBuffer, updateRuntime],
+    [bufferDeadlineTimestamp, showBuffer, updateRuntime, voiceBaselineTranscript],
   )
 
   const mode = runtime?.config.mode ?? null
@@ -373,7 +396,21 @@ export const PracticeSessionPage: React.FC = () => {
         }
       } catch (syncError) {
         const problem = getErrorInfo(syncError)
-        if (problem.status === 404 || problem.status === 410 || notifyUser) {
+        if (problem.status === 404 || problem.status === 410) {
+          updateRuntime((current) => ({
+            ...current,
+            pendingAnswerId: null,
+            pendingSubmission: null,
+            fullSessionSubmitted: false,
+          }))
+          setIsSubmitting(false)
+          setPageError(problem.message)
+          setSessionNotice(
+            problem.status === 404
+              ? 'Phiên luyện tập này không còn tồn tại trên máy chủ. Bạn có thể bấm Kết thúc phiên (X) hoặc Thoát phiên để tạo phiên mới.'
+              : 'Phiên luyện tập đã hết hạn không tương tác. Bạn có thể bấm Kết thúc phiên (X) hoặc Thoát phiên để tạo phiên mới.',
+          )
+        } else if (notifyUser) {
           setPageError(problem.message)
         }
       } finally {
@@ -381,7 +418,7 @@ export const PracticeSessionPage: React.FC = () => {
         if (notifyUser) setIsManualSyncing(false)
       }
     },
-    [runtime, sessionId, user],
+    [runtime, sessionId, updateRuntime, user],
   )
 
   useEffect(() => {
@@ -430,29 +467,27 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
 
-    const isBorderlineResult =
-      result.totalScore !== null && result.totalScore >= 4 && result.totalScore <= 8
-    if (!liveResult && isBorderlineResult && result.needsFollowUp && !result.followUpPrompt) {
-      const warningTimer = window.setTimeout(() => {
-        setIsSubmitting(false)
-        setPageError(
-          'Bài đã được chấm nhưng kết nối thời gian thực bị gián đoạn nên chưa nhận được câu hỏi đào sâu. Vui lòng giữ phiên này và thử kết nối lại; không nộp lại câu trả lời.',
-        )
-        setSessionNotice('Câu trả lời đã được lưu an toàn. Hệ thống đang đồng bộ câu hỏi đào sâu.')
-      }, 0)
-      return () => window.clearTimeout(warningTimer)
-    }
+    const followUpPromptMissing = Boolean(result.needsFollowUp && !result.followUpPrompt?.trim())
+    const normalizedResult: PracticeAnswerDetail = followUpPromptMissing
+      ? { ...result, needsFollowUp: false, followUpPrompt: null }
+      : result
 
     const resultTimer = window.setTimeout(() => {
-      if (processedAnswerIds.current.has(result.answerId)) return
-      processedAnswerIds.current.add(result.answerId)
-      setLatestResult(result)
-      setScorecard(toScorecard(result))
-      setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
+      if (processedAnswerIds.current.has(normalizedResult.answerId)) return
+      processedAnswerIds.current.add(normalizedResult.answerId)
+      setLatestResult(normalizedResult)
+      setScorecard(toScorecard(normalizedResult))
+      setScorecardTitle(
+        normalizedResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
+      )
       setIsSubmitting(false)
       setPageError('')
-      setSessionNotice('AI đã chấm xong câu trả lời.')
-      updateRuntime((current) => ({ ...current, resolvedAnswer: result }))
+      setSessionNotice(
+        followUpPromptMissing
+          ? 'AI đã chấm xong câu trả lời. Không thể tạo câu hỏi đào sâu nên hệ thống chuyển sang câu hỏi tiếp theo.'
+          : 'AI đã chấm xong câu trả lời.',
+      )
+      updateRuntime((current) => ({ ...current, resolvedAnswer: normalizedResult }))
     }, 0)
     return () => window.clearTimeout(resultTimer)
   }, [allResults, gradingResults, mode, runtime, updateRuntime])
@@ -464,12 +499,19 @@ export const PracticeSessionPage: React.FC = () => {
     )
     if (!gradingError) return
     const errorTimer = window.setTimeout(() => {
+      updateRuntime((current) => ({
+        ...current,
+        pendingAnswerId: null,
+        pendingSubmission: null,
+      }))
       setIsSubmitting(false)
       setPageError(gradingError.message)
-      setSessionNotice('Câu trả lời đã được lưu và đang chờ hệ thống xử lý lại.')
+      setSessionNotice(
+        'Câu trả lời đã được lưu để chấm bù. Bạn có thể bấm Bỏ qua để sang câu tiếp theo hoặc Kết thúc phiên.',
+      )
     }, 0)
     return () => window.clearTimeout(errorTimer)
-  }, [gradingErrors, runtime?.pendingAnswerId])
+  }, [gradingErrors, runtime?.pendingAnswerId, updateRuntime])
 
   useEffect(() => {
     if (!runtime?.pendingAnswerId || mode !== 'PER_QUESTION') return
@@ -479,14 +521,21 @@ export const PracticeSessionPage: React.FC = () => {
     if (!failedAnswer) return
 
     const failedTimer = window.setTimeout(() => {
+      updateRuntime((current) => ({
+        ...current,
+        pendingAnswerId: null,
+        pendingSubmission: null,
+      }))
       setIsSubmitting(false)
       setPageError(
         'Dịch vụ AI chưa chấm được câu trả lời. Bài làm đã được lưu và đang chờ xử lý lại.',
       )
-      setSessionNotice('Không nộp lại câu trả lời này để tránh tạo dữ liệu trùng lặp.')
+      setSessionNotice(
+        'Bạn có thể bấm Bỏ qua để chuyển sang câu tiếp theo hoặc Kết thúc phiên bất kỳ lúc nào.',
+      )
     }, 0)
     return () => window.clearTimeout(failedTimer)
-  }, [mode, runtime?.pendingAnswerId, syncedResults])
+  }, [mode, runtime?.pendingAnswerId, syncedResults, updateRuntime])
 
   useEffect(() => {
     if (!runtime?.fullSessionSubmitted || mode !== 'FULL_SESSION' || scorecard) return
@@ -547,11 +596,12 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }, [showStopConfirmation])
 
+  const recordingStartedAtRef = useRef<number>(0)
   const handleReadQuestion = () => {
     if (!activePrompt) return
     void playNaturalSpeech(
       activePrompt,
-      getTtsVoiceForCourse(runtime?.config.courseCode, runtime?.config.courseName),
+      getTtsVoiceForCourse(runtime?.config.courseCode, runtime?.config.courseName, activePrompt),
       0.95,
     ).catch((error: unknown) => {
       if (error instanceof Error && error.name === 'AbortError') return
@@ -567,14 +617,15 @@ export const PracticeSessionPage: React.FC = () => {
     if (!isRecording) {
       stopSpeechPlayback()
       setTranscript('')
-      resetClientTranscript()
+      setVoiceBaselineTranscript('')
       setBufferDeadlineTimestamp(null)
       setShowBuffer(false)
-      persistAnswerDraft('', 'voice', false, null)
+      persistAnswerDraft('', 'voice', false, null, '')
       clearRecorderError()
+      segmentPromisesRef.current = []
       try {
         await startRecording()
-        startClientTranscription()
+        recordingStartedAtRef.current = Date.now()
         setSessionNotice('Microphone đang ghi âm câu trả lời của bạn.')
       } catch (recordingError) {
         setPageError(getErrorInfo(recordingError).message)
@@ -586,17 +637,59 @@ export const PracticeSessionPage: React.FC = () => {
     setSessionNotice('Đang chuyển giọng nói thành văn bản…')
     try {
       const audio = await stopRecording()
-      stopClientTranscription()
       await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
-      const response = await storageService.uploadPracticeAudio(audio, {
-        clientTranscript: getCurrentTranscript(),
-        vocabularyHint: currentQuestion?.rubricCriteria.join(', '),
-      })
+      const recordedSeconds =
+        recordingStartedAtRef.current > 0
+          ? Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1_000))
+          : 0
+      recordingStartedAtRef.current = 0
+      const echoTarget = {
+        title: activePrompt || currentQuestion?.content || '',
+        content: currentQuestion?.content || activePrompt || '',
+      }
+      const preTranscribedPromises = [...segmentPromisesRef.current]
+      segmentPromisesRef.current = []
+
+      let finalTranscript = ''
+      if (preTranscribedPromises.length > 0) {
+        const tailPromise =
+          audio.size >= 2_048
+            ? storageService
+                .uploadPracticeAudio(audio, {
+                  clientTranscript: undefined,
+                  vocabularyHint: undefined,
+                })
+                .then((res) => res.transcript.trim())
+                .catch(() => '')
+            : Promise.resolve('')
+        const allParts = await Promise.all([...preTranscribedPromises, tailPromise])
+        finalTranscript = allParts.filter((part) => part.length > 0).join(' ').trim()
+      }
+
+      if (!finalTranscript && audio.size > 0) {
+        const response = await storageService.uploadPracticeAudio(audio, {
+          clientTranscript: undefined,
+          vocabularyHint: undefined,
+        })
+        finalTranscript = response.transcript.trim()
+      }
+
+      if (
+        isLikelySilentOrInvalidTranscript(finalTranscript, recordedSeconds) ||
+        looksLikeQuestionEcho(finalTranscript, echoTarget)
+      ) {
+        throw {
+          status: 422,
+          detail:
+            'Không nhận diện được giọng nói rõ ràng (hoặc micro thu ngược tiếng loa đọc đề). Vui lòng nói gần micro hơn và ghi âm lại.',
+        }
+      }
       const nextDeadline = Date.now() + runtime.transcriptBufferSeconds * 1_000
-      setTranscript(response.transcript)
+      setVoiceBaselineTranscript(finalTranscript)
+      setTranscript(finalTranscript)
       setBufferDeadlineTimestamp(nextDeadline)
       setShowBuffer(true)
-      persistAnswerDraft(response.transcript, 'voice', true, nextDeadline)
+      persistAnswerDraft(finalTranscript, 'voice', true, nextDeadline, finalTranscript)
       setSessionNotice('Đã bóc băng xong. Hãy rà soát thuật ngữ trước khi nộp.')
     } catch (uploadError) {
       setPageError(getErrorInfo(uploadError).message)
@@ -607,12 +700,6 @@ export const PracticeSessionPage: React.FC = () => {
   }
 
   const openStopConfirmation = () => {
-    if (runtime?.pendingSubmission) {
-      setSessionNotice(
-        'Câu trả lời đang được xác minh. Hãy hoàn tất xác minh trước khi kết thúc phiên.',
-      )
-      return
-    }
     setShowStopConfirmation(true)
   }
 
@@ -660,6 +747,7 @@ export const PracticeSessionPage: React.FC = () => {
           mainQuestionsCompleted: Math.max(current.mainQuestionsCompleted, questionIndex + 1),
           pendingSubmission: null,
           draftAnswerText: '',
+          voiceBaselineTranscript: '',
           showBuffer: false,
           bufferDeadlineTimestamp: null,
           submittedAnswerIdsByQuestion: {
@@ -671,6 +759,7 @@ export const PracticeSessionPage: React.FC = () => {
         setShowBuffer(false)
         setBufferDeadlineTimestamp(null)
         setTranscript('')
+        setVoiceBaselineTranscript('')
         setTextAnswer('')
 
         if (!isLastQuestion) {
@@ -717,12 +806,14 @@ export const PracticeSessionPage: React.FC = () => {
         pendingAnswerId: answerId,
         resolvedAnswer: null,
         draftAnswerText: '',
+        voiceBaselineTranscript: '',
         showBuffer: false,
         bufferDeadlineTimestamp: null,
       }))
       setShowBuffer(false)
       setBufferDeadlineTimestamp(null)
       setTranscript('')
+      setVoiceBaselineTranscript('')
       setTextAnswer('')
       setSessionNotice('Câu trả lời đã được lưu. Đang chờ AI chấm điểm…')
     },
@@ -833,12 +924,18 @@ export const PracticeSessionPage: React.FC = () => {
     return () => window.clearTimeout(recoveryTimer)
   }, [reconcilePendingSubmission, runtime])
 
+  useEffect(() => {
+    const onOnline = () => {
+      if (runtime?.pendingSubmission && !submissionRequestInFlightRef.current) {
+        void reconcilePendingSubmission(runtime)
+      }
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [reconcilePendingSubmission, runtime])
+
   const requestFullSessionSubmitConfirmation = (answerText = currentAnswerDraft) => {
-    if (
-      !runtime ||
-      mode !== 'FULL_SESSION' ||
-      runtime.currentQuestionIndex < runtime.questions.length - 1
-    ) {
+    if (!runtime || mode !== 'FULL_SESSION') {
       return
     }
 
@@ -941,6 +1038,12 @@ export const PracticeSessionPage: React.FC = () => {
       mode === 'FULL_SESSION' &&
       runtime.currentQuestionIndex >= runtime.questions.length - 1
     ) {
+      if (normalizedAnswer.length > 0 && normalizedAnswer.length < 10) {
+        const validationMessage = 'Câu trả lời cần tối thiểu 10 ký tự trước khi xác nhận nộp.'
+        setBufferError(validationMessage)
+        if (answerInputMode === 'text') setPageError(validationMessage)
+        return
+      }
       requestFullSessionSubmitConfirmation(normalizedAnswer)
       return
     }
@@ -979,68 +1082,27 @@ export const PracticeSessionPage: React.FC = () => {
         ...runtime.drafts.filter((answer) => answer.questionId !== currentQuestion.questionId),
         currentDraft,
       ]
-      const isLastQuestion = runtime.currentQuestionIndex >= runtime.questions.length - 1
       const nextIndex = Math.min(runtime.currentQuestionIndex + 1, runtime.questions.length - 1)
 
-      if (!isLastQuestion) {
-        updateRuntime((current) => ({
-          ...current,
-          drafts,
-          currentQuestionIndex: nextIndex,
-          mainQuestionsCompleted: Math.max(current.mainQuestionsCompleted, drafts.length),
-          draftAnswerText: '',
-          showBuffer: false,
-          bufferDeadlineTimestamp: null,
-        }))
-        setShowBuffer(false)
-        setBufferDeadlineTimestamp(null)
-        setTranscript('')
-        setTextAnswer('')
-        setIsSubmitting(false)
-        setSessionNotice(
-          `Đã lưu cục bộ câu ${drafts.length}/${runtime.questions.length}. Tiếp tục câu kế tiếp.`,
-        )
-        return
-      }
-
-      const batchRuntime: StoredPracticeRuntime = {
-        ...runtime,
+      updateRuntime((current) => ({
+        ...current,
         drafts,
-        mainQuestionsCompleted: runtime.questions.length,
-        pendingSubmission: null,
-        submittedAnswerIdsByQuestion: {},
-      }
-      savePracticeRuntime(batchRuntime)
-      setRuntime(batchRuntime)
-      try {
-        await practiceService.submitBatchAnswers(runtime.sessionId, {
-          studentId: user.id,
-          answers: drafts,
-        })
-        updateRuntime((current) => ({
-          ...current,
-          drafts,
-          mainQuestionsCompleted: current.questions.length,
-          pendingSubmission: null,
-          draftAnswerText: '',
-          showBuffer: false,
-          bufferDeadlineTimestamp: null,
-          fullSessionSubmitted: true,
-        }))
-        setShowBuffer(false)
-        setBufferDeadlineTimestamp(null)
-        setTranscript('')
-        setTextAnswer('')
-        setSessionNotice(
-          `Đã nhận ${drafts.length} câu trả lời. Đang chờ hoàn tất bảng điểm tổng kết…`,
-        )
-      } catch (batchError) {
-        const problem = getErrorInfo(batchError)
-        setBufferError(problem.message)
-        setPageError(problem.message)
-        setSessionNotice('Chưa gửi được trọn gói. Nội dung vẫn được giữ để bạn thử lại.')
-        setIsSubmitting(false)
-      }
+        currentQuestionIndex: nextIndex,
+        mainQuestionsCompleted: Math.max(current.mainQuestionsCompleted, drafts.length),
+        draftAnswerText: '',
+        voiceBaselineTranscript: '',
+        showBuffer: false,
+        bufferDeadlineTimestamp: null,
+      }))
+      setShowBuffer(false)
+      setBufferDeadlineTimestamp(null)
+      setTranscript('')
+      setVoiceBaselineTranscript('')
+      setTextAnswer('')
+      setIsSubmitting(false)
+      setSessionNotice(
+        `Đã lưu cục bộ câu ${drafts.length}/${runtime.questions.length}. Tiếp tục câu kế tiếp.`,
+      )
       return
     }
 
@@ -1097,11 +1159,7 @@ export const PracticeSessionPage: React.FC = () => {
   }
 
   const handleFinalFullSessionSubmit = () => {
-    if (
-      !runtime ||
-      mode !== 'FULL_SESSION' ||
-      runtime.currentQuestionIndex < runtime.questions.length - 1
-    ) {
+    if (!runtime || mode !== 'FULL_SESSION') {
       return
     }
 
@@ -1109,42 +1167,35 @@ export const PracticeSessionPage: React.FC = () => {
   }
 
   const completeAndExit = useCallback(async () => {
-    if (!runtime || !user || isCompleting) return
-    if (runtime.pendingSubmission) {
-      setSessionNotice(
-        'Câu trả lời đang được xác minh. Hãy hoàn tất xác minh trước khi kết thúc phiên.',
-      )
-      setShowStopConfirmation(false)
-      return
-    }
-    if (runtime.config.mode === 'FULL_SESSION' && runtime.fullSessionSubmitted) {
-      cancelRecording()
-      removePracticeRuntime(runtime.sessionId)
-      navigate('/practice')
-      return
-    }
+    if (!runtime || isCompleting) return
     setIsCompleting(true)
     setPageError('')
     try {
-      await practiceService.completeSession(runtime.sessionId, user.id)
-      cancelRecording()
-      removePracticeRuntime(runtime.sessionId)
-      navigate('/practice')
-    } catch (completeError) {
-      try {
-        const session = await practiceService.getSession(runtime.sessionId)
-        if (session.status === 'completed' || session.status === 'abandoned') {
-          cancelRecording()
-          removePracticeRuntime(runtime.sessionId)
-          navigate('/practice')
-          return
+      if (user && !(runtime.config.mode === 'FULL_SESSION' && runtime.fullSessionSubmitted)) {
+        if (
+          runtime.config.mode === 'FULL_SESSION' &&
+          runtime.drafts.some((answer) => answer.answerText.trim().length >= 10)
+        ) {
+          try {
+            await practiceService.submitBatchAnswers(runtime.sessionId, {
+              studentId: user.id,
+              answers: runtime.drafts,
+            })
+          } catch {
+            // Tiếp tục đóng phiên kể cả khi batch đã nộp hoặc phiên đã đóng.
+          }
         }
-      } catch {
-        // Hiển thị lỗi kết thúc ban đầu nếu không thể xác minh trạng thái phiên.
+        await practiceService.completeSession(runtime.sessionId, user.id)
       }
-      setPageError(getErrorInfo(completeError).message)
+    } catch {
+      // Cho phép thoát phiên dứt điểm ngay cả khi phiên trên máy chủ đã hết hạn (410), không tồn tại (404) hoặc dịch vụ tạm lỗi.
+    } finally {
+      cancelRecording()
+      stopSpeechPlayback()
+      removePracticeRuntime(runtime.sessionId)
       setIsCompleting(false)
       setShowStopConfirmation(false)
+      navigate('/practice', { replace: true })
     }
   }, [cancelRecording, isCompleting, navigate, runtime, user])
 
@@ -1156,7 +1207,8 @@ export const PracticeSessionPage: React.FC = () => {
 
     setPageError('')
 
-    if (latestResult.needsFollowUp && latestResult.followUpPrompt) {
+    const trimmedFollowUpPrompt = latestResult.followUpPrompt?.trim() ?? ''
+    if (latestResult.needsFollowUp && trimmedFollowUpPrompt) {
       const parentAnswerId = latestResult.isFollowUp
         ? (latestResult.parentAnswerId ?? latestResult.answerId)
         : latestResult.answerId
@@ -1164,14 +1216,17 @@ export const PracticeSessionPage: React.FC = () => {
         ...current,
         activeFollowUp: {
           questionId: latestResult.questionId,
-          prompt: latestResult.followUpPrompt as string,
+          prompt: trimmedFollowUpPrompt,
           parentAnswerId,
         },
         pendingAnswerId: null,
         resolvedAnswer: null,
+        draftAnswerText: '',
+        voiceBaselineTranscript: '',
       }))
       setScorecard(null)
       setTranscript('')
+      setVoiceBaselineTranscript('')
       setTextAnswer('')
       setLatestResult(null)
       setSessionNotice('AI yêu cầu một câu hỏi đào sâu trước khi chuyển sang câu chính tiếp theo.')
@@ -1179,6 +1234,7 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
 
+    const skippedFailedFollowUp = Boolean(latestResult.needsFollowUp && !trimmedFollowUpPrompt)
     const completedQuestions = runtime.mainQuestionsCompleted + 1
 
     setIsSubmitting(true)
@@ -1205,6 +1261,8 @@ export const PracticeSessionPage: React.FC = () => {
         activeFollowUp: null,
         pendingAnswerId: null,
         resolvedAnswer: null,
+        draftAnswerText: '',
+        voiceBaselineTranscript: '',
         questionDifficulties: {
           ...current.questionDifficulties,
           [nextQuestion.questionId]: response.question!.difficulty,
@@ -1212,9 +1270,14 @@ export const PracticeSessionPage: React.FC = () => {
       }))
       setScorecard(null)
       setTranscript('')
+      setVoiceBaselineTranscript('')
       setTextAnswer('')
       setLatestResult(null)
-      setSessionNotice('Đã bốc câu hỏi tiếp theo từ ngân hàng đề luyện tập.')
+      setSessionNotice(
+        skippedFailedFollowUp
+          ? 'Không thể tạo câu hỏi đào sâu, đã chuyển sang câu hỏi tiếp theo từ ngân hàng đề luyện tập.'
+          : 'Đã bốc câu hỏi tiếp theo từ ngân hàng đề luyện tập.',
+      )
     } catch (nextError) {
       const problem = getErrorInfo(nextError)
       setPageError(problem.message)
@@ -1283,6 +1346,7 @@ export const PracticeSessionPage: React.FC = () => {
       pendingAnswerId: null,
       resolvedAnswer: null,
       draftAnswerText: previousAnswerText,
+      voiceBaselineTranscript: answerInputMode === 'voice' ? previousAnswerText : '',
       draftAnswerMode: answerInputMode,
       showBuffer: false,
       bufferDeadlineTimestamp: null,
@@ -1294,6 +1358,7 @@ export const PracticeSessionPage: React.FC = () => {
     setShowBuffer(false)
     setBufferDeadlineTimestamp(null)
     setTranscript(answerInputMode === 'voice' ? previousAnswerText : '')
+    setVoiceBaselineTranscript(answerInputMode === 'voice' ? previousAnswerText : '')
     setTextAnswer(answerInputMode === 'text' ? previousAnswerText : '')
     setScorecard(null)
     setLatestResult(null)
@@ -1311,7 +1376,6 @@ export const PracticeSessionPage: React.FC = () => {
       isSubmitting ||
       showBuffer ||
       runtime.pendingSubmission ||
-      runtime.pendingAnswerId ||
       runtime.fullSessionSubmitted ||
       isTransitioningRef.current
     ) {
@@ -1326,7 +1390,7 @@ export const PracticeSessionPage: React.FC = () => {
       if (mode === 'FULL_SESSION') {
         const nextIndex = runtime.currentQuestionIndex + 1
         if (nextIndex >= runtime.questions.length) {
-          await completeAndExit()
+          requestFullSessionSubmitConfirmation('')
           return
         }
 
@@ -1354,6 +1418,7 @@ export const PracticeSessionPage: React.FC = () => {
             pendingAnswerId: null,
             resolvedAnswer: null,
             draftAnswerText: nextAnswerText,
+            voiceBaselineTranscript: answerInputMode === 'voice' ? nextAnswerText : '',
             draftAnswerMode: answerInputMode,
             showBuffer: false,
             bufferDeadlineTimestamp: null,
@@ -1361,6 +1426,7 @@ export const PracticeSessionPage: React.FC = () => {
           setShowBuffer(false)
           setBufferDeadlineTimestamp(null)
           setTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
+          setVoiceBaselineTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
           setTextAnswer(answerInputMode === 'text' ? nextAnswerText : '')
           setScorecard(null)
           setLatestResult(null)
@@ -1389,6 +1455,7 @@ export const PracticeSessionPage: React.FC = () => {
           pendingAnswerId: null,
           resolvedAnswer: null,
           draftAnswerText: '',
+          voiceBaselineTranscript: '',
           showBuffer: false,
           bufferDeadlineTimestamp: null,
           questionDifficulties: {
@@ -1400,6 +1467,7 @@ export const PracticeSessionPage: React.FC = () => {
 
       setScorecard(null)
       setTranscript('')
+      setVoiceBaselineTranscript('')
       setTextAnswer('')
       setLatestResult(null)
     } catch (skipError) {
@@ -1540,7 +1608,7 @@ export const PracticeSessionPage: React.FC = () => {
                 type="button"
                 aria-label="Kết thúc phiên luyện tập"
                 onClick={openStopConfirmation}
-                disabled={isTranscribing || isVerifyingSubmission}
+                disabled={isCompleting}
                 className="flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <X className="size-4" />
@@ -1612,30 +1680,40 @@ export const PracticeSessionPage: React.FC = () => {
       >
       {(pageError || recorderError) && (
         <div
-          className="flex items-start gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3.5 text-sm font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3 text-sm font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
           role="alert"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
-            <AlertCircle className="size-4" />
-          </span>
-          <span className="pt-1 leading-relaxed">{pageError || recorderError}</span>
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
+              <AlertCircle className="size-4" />
+            </span>
+            <span className="pt-1 leading-relaxed">{pageError || recorderError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void completeAndExit()}
+            disabled={isCompleting}
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#d94c63]/40 bg-white px-3 text-xs font-bold text-[#b6384e] shadow-sm transition hover:bg-[#ffe8ec] disabled:opacity-50"
+          >
+            <X className="size-3.5" /> Thoát phiên
+          </button>
         </div>
       )}
 
       {sessionNotice && (
         <div
-          className="sr-only"
+          className="flex items-start gap-2.5 rounded-2xl border border-[#bde0fe] bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
           role="status"
           aria-live="polite"
         >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-white text-[#1C4D8D] shadow-sm">
             {isSubmitting || isTranscribing || isAnswerLocked ? (
-              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+              <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
             ) : (
-              <CheckCircle2 className="size-4" />
+              <CheckCircle2 className="size-3.5" />
             )}
           </span>
-          <span className="pt-1 leading-relaxed">{sessionNotice}</span>
+          <span className="pt-0.5 leading-relaxed">{sessionNotice}</span>
         </div>
       )}
 
@@ -2079,37 +2157,31 @@ export const PracticeSessionPage: React.FC = () => {
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
             <button
               type="button"
-              aria-label={
-                answerInputMode === 'voice'
-                  ? 'Chuyển sang trả lời bằng text'
-                  : 'Chuyển sang trả lời bằng micro'
-              }
               onClick={() => {
+                if (isInputModeLocked) return
                 const nextMode: AnswerInputMode = answerInputMode === 'voice' ? 'text' : 'voice'
+                stopSpeechPlayback()
+                if (isRecording) cancelRecording()
                 setAnswerInputMode(nextMode)
-                const nextDraft = nextMode === 'voice' ? transcript : textAnswer
-                persistAnswerDraft(nextDraft, nextMode)
+                setShowBuffer(false)
+                setBufferDeadlineTimestamp(null)
                 setPageError('')
                 setBufferError('')
-                setSessionNotice(
-                  nextMode === 'voice'
-                    ? 'Đã chuyển sang trả lời bằng giọng nói.'
-                    : 'Đã chuyển sang nhập câu trả lời bằng văn bản.',
-                )
+                const nextDraft = nextMode === 'voice' ? transcript : textAnswer
+                persistAnswerDraft(nextDraft, nextMode, false, null)
               }}
               disabled={isInputModeLocked}
-              className={cn(
-                'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-[#f7fbff] px-2.5 text-xs font-bold text-[#1C4D8D] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#eaf4ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3',
-              )}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#1C4D8D] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {answerInputMode === 'voice' ? (
-                <Keyboard className="size-3.5 shrink-0" />
+                <>
+                  <Keyboard className="size-3.5 shrink-0" /> Chuyển sang trả lời bằng text
+                </>
               ) : (
-                <Mic className="size-3.5 shrink-0" />
+                <>
+                  <Mic className="size-3.5 shrink-0" /> Chuyển sang trả lời bằng giọng nói
+                </>
               )}
-              {answerInputMode === 'voice'
-                ? 'Chuyển sang trả lời bằng text'
-                : 'Chuyển sang trả lời bằng micro'}
             </button>
             <div className="ml-auto flex items-center gap-2">
               <button
@@ -2133,30 +2205,44 @@ export const PracticeSessionPage: React.FC = () => {
               >
                 <ArrowLeft className="size-3.5" /> Quay lại
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isFinalFullSessionQuestion) {
-                    handleFinalFullSessionSubmit()
-                  } else {
-                    void handleSkipQuestion()
+              {!isFinalFullSessionQuestion && (
+                <button
+                  type="button"
+                  onClick={() => void handleSkipQuestion()}
+                  disabled={
+                    isRecording ||
+                    isSubmitting ||
+                    isTranscribing ||
+                    isVerifyingSubmission ||
+                    showBuffer ||
+                    isCompleting
                   }
-                }}
-                disabled={
-                  isRecording ||
-                  isSubmitting ||
-                  isTranscribing ||
-                  isAnswerLocked ||
-                  showBuffer ||
-                  isCompleting
-                }
-                className={cn(
-                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
-                )}
-              >
-                {isFinalFullSessionQuestion ? 'Nộp bài' : 'Bỏ qua'}{' '}
-                <ArrowLeft className="size-3.5 rotate-180" />
-              </button>
+                  className={cn(
+                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
+                  )}
+                >
+                  Bỏ qua <ArrowLeft className="size-3.5 rotate-180" />
+                </button>
+              )}
+              {mode === 'FULL_SESSION' && !runtime.fullSessionSubmitted && (
+                <button
+                  type="button"
+                  onClick={handleFinalFullSessionSubmit}
+                  disabled={
+                    isRecording ||
+                    isSubmitting ||
+                    isTranscribing ||
+                    isVerifyingSubmission ||
+                    showBuffer ||
+                    isCompleting
+                  }
+                  className={cn(
+                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-[0_6px_14px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
+                  )}
+                >
+                  <Send className="size-3.5" /> Nộp bài
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2297,7 +2383,7 @@ export const PracticeSessionPage: React.FC = () => {
       {showBuffer && answerInputMode === 'voice' && (
         <BufferScreen
           key={`${answerInputMode}-${bufferDeadlineTimestamp ?? 'practice-buffer'}`}
-          initialTranscript={currentAnswerDraft}
+          initialTranscript={voiceBaselineTranscript || currentAnswerDraft}
           durationSeconds={runtime.transcriptBufferSeconds}
           deadlineTimestamp={bufferDeadlineTimestamp}
           onConfirmSubmit={(finalText) => void handleConfirmSubmit(finalText)}
@@ -2305,6 +2391,15 @@ export const PracticeSessionPage: React.FC = () => {
             if (answerInputMode === 'voice') setTranscript(text)
             else setTextAnswer(text)
             persistAnswerDraft(text, answerInputMode, true, bufferDeadlineTimestamp)
+          }}
+          onCancel={(currentTranscript) => {
+            setShowBuffer(false)
+            setBufferDeadlineTimestamp(null)
+            setBufferError('')
+            if (answerInputMode === 'voice') setTranscript(currentTranscript)
+            else setTextAnswer(currentTranscript)
+            persistAnswerDraft(currentTranscript, answerInputMode, false, null)
+            setSessionNotice('Đã quay lại câu hỏi. Bạn có thể ghi âm lại câu trả lời.')
           }}
           isSubmitting={isSubmitting}
           errorMessage={bufferError}
@@ -2324,7 +2419,7 @@ export const PracticeSessionPage: React.FC = () => {
           }}
           onNextQuestion={mode === 'PER_QUESTION' ? () => void moveAfterScorecard() : undefined}
           nextActionLabel={
-            latestResult?.needsFollowUp
+            latestResult?.needsFollowUp && latestResult?.followUpPrompt?.trim()
               ? 'Trả lời câu hỏi đào sâu'
               : mode === 'FULL_SESSION' &&
                   runtime.mainQuestionsCompleted + 1 >= (runtime.config.questionCount ?? 0)
@@ -2370,7 +2465,7 @@ export const PracticeSessionPage: React.FC = () => {
           }
           confirmLabel={isCompleting ? 'Đang kết thúc…' : 'Kết thúc phiên'}
           cancelLabel="Tiếp tục luyện"
-          pending={isCompleting || isVerifyingSubmission}
+          pending={isCompleting}
           onCancel={() => setShowStopConfirmation(false)}
           onConfirm={() => void completeAndExit()}
         />

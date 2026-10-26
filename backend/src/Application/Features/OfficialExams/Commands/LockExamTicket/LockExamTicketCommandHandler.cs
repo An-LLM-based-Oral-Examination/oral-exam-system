@@ -83,6 +83,11 @@ public sealed class LockExamTicketCommandHandler
                 "UNPROCESSABLE: Không thể khóa điểm khi bài thi chưa có điểm chấm.");
         }
 
+        foreach (var submission in ticket.Submissions)
+        {
+            submission.FinalScore ??= submission.AiScore;
+        }
+
         ticket.IsLocked = true;
 
         if (ticket.Status != ExamTicketStatus.Published)

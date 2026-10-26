@@ -126,18 +126,18 @@ function normalizeShift(value: unknown): ExamShift {
 }
 
 function normalizeExamStructure(value: unknown): ExamStructure {
-  const record = requireRecord(value, 'Cáº¥u trÃºc Ä‘á» thi khÃ´ng há»£p lá»‡.')
+  const record = requireRecord(value, 'Cấu trúc đề thi không hợp lệ.')
   return {
-    id: requiredString(record, 'id', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u mÃ£.'),
-    courseId: requiredString(record, 'courseId', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u mÃ£ mÃ´n.'),
-    courseCode: requiredString(record, 'courseCode', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u mÃ£ mÃ´n hiá»ƒn thá»‹.'),
-    createdBy: requiredString(record, 'createdBy', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u ngÆ°á»i táº¡o.'),
-    name: requiredString(record, 'name', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u tÃªn.'),
-    totalQuestions: requiredNumber(record, 'totalQuestions', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u sá»‘ cÃ¢u.'),
-    durationMinutes: requiredNumber(record, 'durationMinutes', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u thá»i lÆ°á»£ng.'),
-    bloomDistribution: requiredString(record, 'bloomDistribution', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u phÃ¢n bá»• Bloom.'),
-    isActive: requiredBoolean(record, 'isActive', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u tráº¡ng thÃ¡i.'),
-    createdAt: requiredDateString(record, 'createdAt', 'Cáº¥u trÃºc Ä‘á» thi thiáº¿u thá»i Ä‘iá»ƒm táº¡o.'),
+    id: requiredString(record, 'id', 'Cấu trúc đề thi thiếu mã.'),
+    courseId: requiredString(record, 'courseId', 'Cấu trúc đề thi thiếu mã môn.'),
+    courseCode: requiredString(record, 'courseCode', 'Cấu trúc đề thi thiếu mã môn hiển thị.'),
+    createdBy: requiredString(record, 'createdBy', 'Cấu trúc đề thi thiếu người tạo.'),
+    name: requiredString(record, 'name', 'Cấu trúc đề thi thiếu tên.'),
+    totalQuestions: requiredNumber(record, 'totalQuestions', 'Cấu trúc đề thi thiếu số câu.'),
+    durationMinutes: requiredNumber(record, 'durationMinutes', 'Cấu trúc đề thi thiếu thời lượng.'),
+    bloomDistribution: requiredString(record, 'bloomDistribution', 'Cấu trúc đề thi thiếu phân bổ Bloom.'),
+    isActive: requiredBoolean(record, 'isActive', 'Cấu trúc đề thi thiếu trạng thái.'),
+    createdAt: requiredDateString(record, 'createdAt', 'Cấu trúc đề thi thiếu thời điểm tạo.'),
   }
 }
 
@@ -297,6 +297,8 @@ function normalizeScorecard(value: unknown): StudentOfficialExamQuestionScorecar
     strengths: readNullableString(record, 'strengths'),
     weaknesses: readNullableString(record, 'weaknesses'),
     improvementSuggestions: readNullableString(record, 'improvementSuggestions'),
+    studentTranscript: readNullableString(record, 'studentTranscript'),
+    lecturerOverrideReason: readNullableString(record, 'lecturerOverrideReason'),
     questionTitle: readNullableString(record, 'questionTitle'),
     questionContent: readNullableString(record, 'questionContent'),
     questionImageUrl: readNullableString(record, 'questionImageUrl'),
@@ -356,7 +358,7 @@ function exportFile(response: AxiosResponse<Blob>, fallbackName: string): Offici
 export const officialExamService = {
   async getExamStructures(params: GetExamStructuresParams = {}): Promise<ExamStructure[]> {
     const response = await apiClient.get<unknown>('/exam-structures', { params })
-    return asArray(response.data, 'API cáº¥u trÃºc Ä‘á» thi khÃ´ng tráº£ vá» danh sÃ¡ch.').map(normalizeExamStructure)
+    return asArray(response.data, 'API cấu trúc đề thi không trả về danh sách.').map(normalizeExamStructure)
   },
 
   async getExamStructure(id: string): Promise<ExamStructure> {

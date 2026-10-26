@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -33,27 +34,10 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         }
 
         // 2. Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
-        var timeoutConfig = await _context.SystemConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
-        int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout))
-            ? parsedTimeout
-            : 5;
-
-        var elapsed = DateTime.UtcNow - session.LastActivityAt;
-        if (elapsed > TimeSpan.FromMinutes(timeoutMinutes))
+        int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
+        if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            if (session.Status == "in_progress")
-            {
-                session.Status = "completed";
-                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-
-            if (session.Status == "completed")
-            {
-                return Result<NextQuestionResponse>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
-            }
+            return Result<NextQuestionResponse>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
         }
 
         if (session.Status != "in_progress")

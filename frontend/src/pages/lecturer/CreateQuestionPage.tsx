@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import apiClient from '@/services/api.client'
 import { Link } from 'react-router-dom'
 import {
   AlertCircle,
@@ -29,6 +30,7 @@ import type {
   QuestionDifficulty,
   QuestionSource,
   RubricCriterionDraft,
+  UsageScope,
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
@@ -97,6 +99,42 @@ export function CreateQuestionPage() {
   const { user } = useAuth()
   const [mode, setMode] = useState<StudioMode>('manual')
   const [courseId, setCourseId] = useState('')
+  const [usageScope, setUsageScope] = useState<UsageScope>('exam')
+  const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; code: string; name: string }>>([])
+
+  useEffect(() => {
+    let active = true
+    void apiClient
+      .get<unknown>('/courses')
+      .then((res) => {
+        if (!active) return
+        const payload = res.data as Record<string, unknown> | unknown[]
+        const rawList = Array.isArray(payload)
+          ? payload
+          : Array.isArray((payload as Record<string, unknown>)?.items)
+            ? ((payload as Record<string, unknown>).items as unknown[])
+            : Array.isArray((payload as Record<string, unknown>)?.value)
+              ? ((payload as Record<string, unknown>).value as unknown[])
+              : []
+        const mapped = rawList
+          .map((item) => {
+            const rec = item as Record<string, unknown>
+            return {
+              id: String(rec.id ?? rec.Id ?? ''),
+              code: String(rec.code ?? rec.Code ?? ''),
+              name: String(rec.name ?? rec.Name ?? ''),
+            }
+          })
+          .filter((item) => item.id && item.code)
+        setAvailableCourses(mapped)
+      })
+      .catch(() => {
+        // Fallback cho phép nhập trực tiếp UUID nếu API môn học chưa trả về
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [sampleAnswer, setSampleAnswer] = useState('')
@@ -255,7 +293,7 @@ export function CreateQuestionPage() {
         difficulty,
         bloomLevel,
         source: manualSource,
-        usageScope: 'exam',
+        usageScope,
         hasFollowUp: false,
         followUpPrompt: null,
         lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
@@ -329,7 +367,7 @@ export function CreateQuestionPage() {
         selectedCloCodes: splitTerms(cloInput),
         topics: splitTerms(topicsInput),
         numberOfQuestions,
-        usageScope: 'exam',
+        usageScope,
         targetBloomLevels,
         difficultyDistribution: {
           easy: easyCount,
@@ -398,7 +436,7 @@ export function CreateQuestionPage() {
           difficulty: question.difficulty,
           bloomLevel: question.bloomLevel,
           source: 'flm_api',
-          usageScope: 'exam',
+          usageScope,
           hasFollowUp: false,
           followUpPrompt: null,
           lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
@@ -492,23 +530,45 @@ export function CreateQuestionPage() {
       </header>
 
       <section className="rounded-2xl border border-[#4988C4]/45 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4">
-        <label className="block max-w-2xl">
-          <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-            Course ID
-            <span className="tracking-normal text-[#b03a46] normal-case">Bắt buộc</span>
-          </span>
-          <input
-            value={courseId}
-            onChange={(event) => setCourseId(event.target.value)}
-            placeholder="UUID môn học được phân công"
-            autoComplete="off"
-            className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm text-[#0F2854] transition outline-none placeholder:font-sans placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-          />
-        </label>
+        <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
+          {availableCourses.length > 0 && (
+            <label className="block">
+              <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
+                Chọn môn học
+              </span>
+              <select
+                value={availableCourses.some((c) => c.id === courseId.trim()) ? courseId.trim() : ''}
+                onChange={(event) => {
+                  if (event.target.value) setCourseId(event.target.value)
+                }}
+                className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+              >
+                <option value="">-- Chọn môn học từ danh sách --</option>
+                {availableCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code} — {course.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="block">
+            <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
+              Course ID
+              <span className="tracking-normal text-[#b03a46] normal-case">Bắt buộc</span>
+            </span>
+            <input
+              value={courseId}
+              onChange={(event) => setCourseId(event.target.value)}
+              placeholder="UUID môn học được phân công"
+              autoComplete="off"
+              className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm text-[#0F2854] transition outline-none placeholder:font-sans placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+            />
+          </label>
+        </div>
         <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#5b6b84]">
-          <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />Ở
-          phiên bản hiện tại, nhập UUID môn học từ phân công học vụ. Hệ thống chỉ lưu câu hỏi khi
-          định danh môn học hợp lệ.
+          <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />
+          Chọn môn học từ danh sách hoặc nhập trực tiếp UUID môn học từ phân công học vụ.
         </p>
       </section>
 
@@ -539,12 +599,18 @@ export function CreateQuestionPage() {
                     className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
-                <div className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi</span>
-                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854]">
-                    Kho thi chính thức · phải qua phê duyệt
-                  </div>
-                </div>
+                <label className="block">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi kho đề</span>
+                  <select
+                    value={usageScope}
+                    onChange={(event) => setUsageScope(event.target.value as UsageScope)}
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  >
+                    <option value="exam">Kho thi chính thức (exam_questions)</option>
+                    <option value="practice">Kho luyện tập &amp; thi thử (practice_questions)</option>
+                    <option value="both">Cả 2 kho (practice_questions &amp; exam_questions)</option>
+                  </select>
+                </label>
               </div>
 
               <label className="mt-4 block">
@@ -936,12 +1002,18 @@ export function CreateQuestionPage() {
                     className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
-                <div className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi</span>
-                  <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854]">
-                    Kho thi chính thức · lưu DRAFT trước
-                  </div>
-                </div>
+                <label className="block">
+                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi kho đề</span>
+                  <select
+                    value={usageScope}
+                    onChange={(event) => setUsageScope(event.target.value as UsageScope)}
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
+                  >
+                    <option value="exam">Kho thi chính thức (exam_questions)</option>
+                    <option value="practice">Kho luyện tập &amp; thi thử (practice_questions)</option>
+                    <option value="both">Cả 2 kho (practice_questions &amp; exam_questions)</option>
+                  </select>
+                </label>
               </div>
 
               <div className="mt-4">

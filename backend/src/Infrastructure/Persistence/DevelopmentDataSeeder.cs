@@ -102,7 +102,6 @@ public static class DevelopmentDataSeeder
         await EnsurePracticeQuestionsAsync(context, cancellationToken);
         await EnsureExamQuestionsAsync(context, cancellationToken);
         await EnsureClassesAndEnrollmentsAsync(context, cancellationToken);
-        await EnsureStudentPracticeAndMockExamHistoryAsync(context, cancellationToken);
         await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
     }
 
@@ -3375,8 +3374,10 @@ public static class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureStudentPracticeAndMockExamHistoryAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    public static async Task SeedStudentPracticeAndMockExamHistoryAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
         var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);

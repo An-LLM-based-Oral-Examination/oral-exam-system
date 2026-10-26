@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.QuestionBank.DTOs;
-using OralExamination.Domain.Enums;
 using Polly;
 using Polly.Retry;
 
@@ -50,22 +51,44 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         CancellationToken cancellationToken = default)
     {
         var apiKey = _configuration["Gemini:ApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+            ?? _configuration["Gemini__ApiKey"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
+            ?? string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(apiKey))
+        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(apiKey)
+            && !apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase)
+            && !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase)
+            && !apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
+
+        string lastError = string.Empty;
+
+        if (hasUsableGeminiKey)
         {
             try
             {
-                return await CallGeminiApiAsync(apiKey, parameters, cancellationToken);
+                var geminiGenerated = await CallGeminiApiAsync(apiKey, parameters, cancellationToken);
+                if (geminiGenerated.Count > 0)
+                {
+                    return geminiGenerated;
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Gọi Gemini API trực tiếp thất bại, chuyển sang chế độ dự phòng nội bộ.");
+                lastError = ex.Message;
+                _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang Cloudflare Workers AI (Llama 3.1).");
             }
         }
 
-        // Chế độ Adapter cục bộ khi dev offline chưa cấu hình API Key bên thứ 3 (Tuân thủ AGENTS.md Mục 6)
-        return GenerateDeterministicQuestions(parameters);
+        var cloudflareGenerated = await TryCallCloudflareLlamaAsync(parameters, cancellationToken);
+        if (cloudflareGenerated.Count > 0)
+        {
+            return cloudflareGenerated;
+        }
+
+        throw new HttpRequestException(
+            $"Không thể sinh câu hỏi tự động từ AI (cả Gemini API và Cloudflare Workers AI đều không phản hồi hợp lệ). Chi tiết: {lastError}",
+            null,
+            HttpStatusCode.ServiceUnavailable);
     }
 
     private async Task<List<GeneratedQuestionDraftDto>> CallGeminiApiAsync(
@@ -78,7 +101,6 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             "gemini-3.8-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
-            "gemini-3.6-flash-lite",
             "gemini-flash-latest",
             "gemini-flash-lite-latest"
         };
@@ -101,6 +123,8 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                 response_mime_type = "application/json"
             }
         };
+
+        string lastHttpError = string.Empty;
 
         foreach (var modelName in candidateModels)
         {
@@ -130,26 +154,108 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
 
                     if (!string.IsNullOrWhiteSpace(candidateText))
                     {
-                        var parsed = ParseGeminiResponse(candidateText, parameters);
+                        var parsed = ParseAiResponse(candidateText, parameters);
                         if (parsed.Count > 0)
                         {
                             return parsed;
                         }
                     }
                 }
-                else if ((int)response.StatusCode == 404)
+                else
                 {
-                    // Model không tồn tại trên key, thử model tiếp theo
-                    continue;
+                    lastHttpError = $"HTTP {(int)response.StatusCode} ({modelName})";
+                    if ((int)response.StatusCode == 404)
+                    {
+                        continue;
+                    }
                 }
             }
             catch (Exception ex)
             {
+                lastHttpError = ex.Message;
                 _logger.LogWarning(ex, "Lỗi khi gọi model {ModelName}, thử model tiếp theo.", modelName);
             }
         }
 
-        return GenerateDeterministicQuestions(parameters);
+        if (!string.IsNullOrWhiteSpace(lastHttpError))
+        {
+            throw new HttpRequestException($"Gemini Question Generation failed: {lastHttpError}");
+        }
+
+        return new List<GeneratedQuestionDraftDto>();
+    }
+
+    private async Task<List<GeneratedQuestionDraftDto>> TryCallCloudflareLlamaAsync(
+        AiQuestionGenerationParams parameters,
+        CancellationToken cancellationToken)
+    {
+        var accountId = _configuration["Cloudflare:AccountId"]
+            ?? _configuration["Cloudflare__AccountId"]
+            ?? Environment.GetEnvironmentVariable("CLOUDFLARE_ACCOUNT_ID")
+            ?? string.Empty;
+        var apiToken = _configuration["Cloudflare:ApiToken"]
+            ?? _configuration["Cloudflare__ApiToken"]
+            ?? Environment.GetEnvironmentVariable("CLOUDFLARE_API_TOKEN")
+            ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(accountId) || string.IsNullOrWhiteSpace(apiToken))
+        {
+            return new List<GeneratedQuestionDraftDto>();
+        }
+
+        var url = $"https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct";
+        var prompt = BuildPrompt(parameters);
+
+        var payload = new
+        {
+            messages = new[]
+            {
+                new
+                {
+                    role = "system",
+                    content = "Bạn là chuyên gia khảo thí ĐH FPT. Chỉ trả về duy nhất một mảng JSON hợp lệ theo đúng cấu trúc được yêu cầu, không kèm lời dẫn hay markdown."
+                },
+                new
+                {
+                    role = "user",
+                    content = prompt
+                }
+            },
+            max_tokens = 2048,
+            temperature = 0.3
+        };
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken);
+
+            using var resp = await _httpClient.SendAsync(req, cancellationToken);
+            if (!resp.IsSuccessStatusCode)
+            {
+                return new List<GeneratedQuestionDraftDto>();
+            }
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(cancellationToken));
+            if (doc.RootElement.TryGetProperty("result", out var resultElem) &&
+                resultElem.TryGetProperty("response", out var responseProp))
+            {
+                var rawText = responseProp.GetString();
+                if (!string.IsNullOrWhiteSpace(rawText))
+                {
+                    return ParseAiResponse(rawText, parameters);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Gọi Cloudflare Workers AI sinh câu hỏi thất bại.");
+        }
+
+        return new List<GeneratedQuestionDraftDto>();
     }
 
     private static string BuildPrompt(AiQuestionGenerationParams p)
@@ -209,8 +315,9 @@ Trả về mảng JSON đúng cấu trúc:
 ]";
     }
 
-    private static List<GeneratedQuestionDraftDto> ParseGeminiResponse(string jsonText, AiQuestionGenerationParams parameters)
+    private static List<GeneratedQuestionDraftDto> ParseAiResponse(string jsonText, AiQuestionGenerationParams parameters)
     {
+        var cleanJson = ExtractJsonArray(jsonText);
         var options = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -218,12 +325,17 @@ Trả về mảng JSON đúng cấu trúc:
 
         try
         {
-            var rawList = JsonSerializer.Deserialize<List<GeminiQuestionItem>>(jsonText, options);
+            var rawList = JsonSerializer.Deserialize<List<GeminiQuestionItem>>(cleanJson, options);
             if (rawList == null) return new List<GeneratedQuestionDraftDto>();
 
             var result = new List<GeneratedQuestionDraftDto>();
             foreach (var item in rawList)
             {
+                if (string.IsNullOrWhiteSpace(item.Content))
+                {
+                    continue;
+                }
+
                 var criteria = new List<RubricCriterionDraftDto>();
                 if (item.Rubric?.Criteria != null && item.Rubric.Criteria.Count > 0)
                 {
@@ -256,17 +368,17 @@ Trả về mảng JSON đúng cấu trúc:
                     criteria[^1] = last with { MaxScore = last.MaxScore + diff };
                 }
 
-                var modelAnswer = item.ModelAnswer ?? string.Empty;
+                var modelAnswer = item.ModelAnswer?.Trim() ?? string.Empty;
                 if (modelAnswer.Length < 50)
                 {
-                    modelAnswer = $"{modelAnswer} Sinh viên cần nắm vững các nguyên lý cốt lõi, cơ chế vận hành thực tế và giải thích rõ ràng với các ví dụ cụ thể liên quan đến chủ đề bài học.";
+                    continue;
                 }
 
                 result.Add(new GeneratedQuestionDraftDto(
                     Guid.NewGuid().ToString(),
                     item.CloCode ?? parameters.SelectedCloCodes.FirstOrDefault() ?? "CLO1",
                     item.Title ?? $"Câu hỏi môn {parameters.CourseCode}",
-                    item.Content ?? "Vui lòng trình bày hiểu biết của bạn về chủ đề này.",
+                    item.Content.Trim(),
                     item.Difficulty ?? "medium",
                     item.BloomLevel ?? parameters.TargetBloomLevels.FirstOrDefault() ?? "Understand",
                     "flm_api",
@@ -292,62 +404,16 @@ Trả về mảng JSON đúng cấu trúc:
         }
     }
 
-    private static List<GeneratedQuestionDraftDto> GenerateDeterministicQuestions(AiQuestionGenerationParams p)
+    private static string ExtractJsonArray(string raw)
     {
-        var result = new List<GeneratedQuestionDraftDto>();
-        var difficulties = new List<string>();
-
-        for (int i = 0; i < p.EasyCount; i++) difficulties.Add(QuestionDifficulty.Easy);
-        for (int i = 0; i < p.MediumCount; i++) difficulties.Add(QuestionDifficulty.Medium);
-        for (int i = 0; i < p.HardCount; i++) difficulties.Add(QuestionDifficulty.Hard);
-
-        while (difficulties.Count < p.NumberOfQuestions)
+        var trimmed = raw.Trim();
+        var startIdx = trimmed.IndexOf('[');
+        var endIdx = trimmed.LastIndexOf(']');
+        if (startIdx >= 0 && endIdx > startIdx)
         {
-            difficulties.Add(QuestionDifficulty.Medium);
+            return trimmed.Substring(startIdx, endIdx - startIdx + 1);
         }
-
-        var cloList = p.SelectedCloCodes.Count > 0 ? p.SelectedCloCodes : new List<string> { "CLO1" };
-        var topicList = p.Topics.Count > 0 ? p.Topics : new List<string> { "Kiến trúc hệ thống" };
-        var bloomList = p.TargetBloomLevels.Count > 0 ? p.TargetBloomLevels : new List<string> { BloomLevel.Understand };
-
-        for (int i = 0; i < p.NumberOfQuestions; i++)
-        {
-            var diff = difficulties[i];
-            var clo = cloList[i % cloList.Count];
-            var topic = topicList[i % topicList.Count];
-            var bloom = bloomList[i % bloomList.Count];
-
-            var criteria = new List<RubricCriterionDraftDto>
-            {
-                new("Nắm vững khái niệm và nguyên lý", 5.00m, 50, bloom, "Trình bày chính xác định nghĩa, cơ chế hoạt động cốt lõi của chủ đề.", 1),
-                new("Khả năng phân tích và minh họa", 5.00m, 50, bloom, "Đưa ra ví dụ minh họa thực tiễn, phân tích được ưu nhược điểm giải pháp.", 2)
-            };
-
-            var modelAnswer = $"Câu trả lời mẫu cho chủ đề {topic} thuộc môn học {p.CourseCode}: Sinh viên cần định nghĩa rõ ràng nguyên lý hoạt động, phân tích trường hợp áp dụng trong thực tế dự án phần mềm và đưa ra các đánh giá kỹ thuật cụ thể.";
-
-            result.Add(new GeneratedQuestionDraftDto(
-                Guid.NewGuid().ToString(),
-                clo,
-                $"Câu hỏi vấn đáp về {topic} ({p.CourseCode})",
-                $"Anh/Chị hãy trình bày chi tiết về chủ đề '{topic}' trong môn học {p.CourseName}. Phân tích cách áp dụng nguyên lý này trong quy trình phát triển phần mềm thực tế.",
-                diff,
-                bloom,
-                "flm_api",
-                p.UsageScope,
-                modelAnswer,
-                new List<string> { $"Khái niệm {topic}", "Ưu nhược điểm", "Ứng dụng thực tế" },
-                false,
-                null,
-                new RubricDraftDto(
-                    $"Barem chấm điểm cho câu hỏi {topic}",
-                    $"Rubric đánh giá chuẩn hóa 10.0 điểm cho môn {p.CourseCode}",
-                    10.00m,
-                    criteria
-                )
-            ));
-        }
-
-        return result;
+        return trimmed;
     }
 
     private sealed class GeminiQuestionItem

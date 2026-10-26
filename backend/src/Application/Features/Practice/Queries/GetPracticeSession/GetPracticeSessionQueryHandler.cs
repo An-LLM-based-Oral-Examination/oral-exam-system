@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Practice.DTOs;
 
 namespace OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
@@ -43,19 +44,8 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
 
         if (string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
         {
-            var timeoutConfig = await _context.SystemConfigs
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Key == "SessionInactivityTimeoutMinutes", cancellationToken);
-            int timeoutMinutes = (timeoutConfig != null && int.TryParse(timeoutConfig.Value, out var parsedTimeout) && parsedTimeout > 0)
-                ? parsedTimeout
-                : 5;
-
-            if (DateTime.UtcNow - session.LastActivityAt > TimeSpan.FromMinutes(timeoutMinutes))
-            {
-                session.Status = "completed";
-                session.CompletedAt = session.LastActivityAt.AddMinutes(timeoutMinutes);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
+            int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
+            await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken);
         }
 
         // Lấy danh sách câu hỏi thuộc Course để tra cứu Rubric, Criteria và chủ đề câu hỏi
@@ -161,45 +151,63 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                 string? followUpPrompt = null;
                 if (needsFollowUp)
                 {
-                    var persistedFollowUp = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
-                    if (!string.IsNullOrWhiteSpace(persistedFollowUp))
+                    try
                     {
-                        followUpPrompt = persistedFollowUp;
-                    }
-                    else
-                    {
-                        questionById.TryGetValue(a.QuestionId, out var qEntity);
-                        var mainAnsText = sessionAnswers
-                            .Where(x => x.QuestionId == a.QuestionId && !x.IsFollowUp)
-                            .OrderBy(x => x.SubmittedAt)
-                            .Select(x => x.AnswerText)
-                            .FirstOrDefault();
-                        var prevPrompts = sessionAnswers
-                            .Where(x => x.QuestionId == a.QuestionId && x.SubmittedAt < a.SubmittedAt)
-                            .SelectMany(x => x.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
-                            .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
-                            .Where(p => !string.IsNullOrWhiteSpace(p))
-                            .Select(p => p!.Trim())
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
+                        var persistedFollowUp = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
+                        if (!string.IsNullOrWhiteSpace(persistedFollowUp))
+                        {
+                            followUpPrompt = persistedFollowUp;
+                        }
+                        else
+                        {
+                            questionById.TryGetValue(a.QuestionId, out var qEntity);
+                            var mainAnsText = sessionAnswers
+                                .Where(x => x.QuestionId == a.QuestionId && !x.IsFollowUp)
+                                .OrderBy(x => x.SubmittedAt)
+                                .Select(x => x.AnswerText)
+                                .FirstOrDefault();
+                            var prevPrompts = sessionAnswers
+                                .Where(x => x.QuestionId == a.QuestionId && x.SubmittedAt < a.SubmittedAt)
+                                .SelectMany(x => x.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                                .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+                                .Where(p => !string.IsNullOrWhiteSpace(p))
+                                .Select(p => p!.Trim())
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList();
 
-                        var weakestDetail = evaluation?.Details
-                            .OrderBy(d => d.Criterion != null && d.Criterion.MaxScore > 0m ? d.Score / d.Criterion.MaxScore : d.Score)
-                            .FirstOrDefault();
-                        int nextFollowUpSequence = followUpsCountForQuestion + 1;
-                        followUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                            session.Course?.Code,
-                            qEntity?.FollowUpPrompt,
-                            null,
-                            nextFollowUpSequence,
-                            weakestDetail?.Criterion?.CriterionName,
-                            weakestDetail?.Criterion?.Description,
-                            evaluation?.Details?.Select(d => d.Criterion?.CriterionName ?? string.Empty),
-                            qEntity?.Content,
-                            qEntity?.SampleAnswer,
-                            a.AnswerText,
-                            mainAnsText,
-                            prevPrompts);
+                            var weakestDetail = evaluation?.Details
+                                .OrderBy(d => d.Criterion != null && d.Criterion.MaxScore > 0m ? d.Score / d.Criterion.MaxScore : d.Score)
+                                .FirstOrDefault();
+                            int nextFollowUpSequence = followUpsCountForQuestion + 1;
+                            var candidatePrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                                session.Course?.Code,
+                                null,
+                                null,
+                                nextFollowUpSequence,
+                                weakestDetail?.Criterion?.CriterionName,
+                                weakestDetail?.Criterion?.Description,
+                                evaluation?.Details?.Select(d => d.Criterion?.CriterionName ?? string.Empty),
+                                qEntity?.Content,
+                                null,
+                                a.AnswerText,
+                                mainAnsText,
+                                prevPrompts);
+
+                            if (!string.IsNullOrWhiteSpace(candidatePrompt))
+                            {
+                                followUpPrompt = candidatePrompt;
+                            }
+                            else
+                            {
+                                needsFollowUp = false;
+                                followUpPrompt = null;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        needsFollowUp = false;
+                        followUpPrompt = null;
                     }
                 }
 
@@ -225,12 +233,21 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     FollowUpPrompt = followUpPrompt,
                     CriteriaScores = evaluation?.Details
                         .OrderBy(d => d.Criterion != null ? d.Criterion.OrderIndex : 0)
-                        .Select(d => new PracticeEvaluationDetailDto
+                        .Select(d =>
                         {
-                            CriterionId = d.CriterionId,
-                            CriterionName = d.Criterion != null ? d.Criterion.CriterionName : string.Empty,
-                            Score = d.Score,
-                            Comment = d.Comment
+                            var critName = d.Criterion?.CriterionName;
+                            if (string.IsNullOrWhiteSpace(critName) && questionById.TryGetValue(a.QuestionId, out var qRef))
+                            {
+                                critName = qRef.Rubric?.Criteria.FirstOrDefault(c => c.Id == d.CriterionId)?.CriterionName;
+                            }
+
+                            return new PracticeEvaluationDetailDto
+                            {
+                                CriterionId = d.CriterionId,
+                                CriterionName = critName ?? string.Empty,
+                                Score = d.Score,
+                                Comment = d.Comment
+                            };
                         }).ToList() ?? new()
                 };
             }).ToList();

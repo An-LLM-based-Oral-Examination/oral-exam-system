@@ -98,7 +98,17 @@ public class CloudflareWhisperService : ISpeechToTextService
         }
 
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken);
-        var (rawText, _, _) = ParseWhisperResponse(responseString);
+        var (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
+        if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence && audioBytes.Length >= 32_768)
+        {
+            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken, useVadFilter: false);
+            (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
+            if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence)
+            {
+                var binaryResponse = await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
+                (rawText, _, _, _) = ParseWhisperResponse(binaryResponse);
+            }
+        }
         var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
         return SeTerminologyNormalizer.NormalizeWithContext(sanitized, null);
     }
@@ -160,7 +170,17 @@ public class CloudflareWhisperService : ISpeechToTextService
         }
 
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken);
-        var (rawText, timestampsJson, confidenceScore) = ParseWhisperResponse(responseString);
+        var (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
+        if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence && audioBytes.Length >= 32_768)
+        {
+            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken, useVadFilter: false);
+            (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
+            if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence)
+            {
+                var binaryResponse = await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
+                (rawText, timestampsJson, confidenceScore, _) = ParseWhisperResponse(binaryResponse);
+            }
+        }
         var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
         var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, vocabularyHint);
 
@@ -175,25 +195,46 @@ public class CloudflareWhisperService : ISpeechToTextService
             ConfidenceScore: finalConfidence);
     }
 
+    private static bool IsEnglishCourseHint(string? vocabularyHint)
+    {
+        if (string.IsNullOrWhiteSpace(vocabularyHint))
+        {
+            return false;
+        }
+
+        var trimmed = vocabularyHint.Trim();
+        return trimmed.StartsWith("lang:en", StringComparison.OrdinalIgnoreCase)
+            || System.Text.RegularExpressions.Regex.IsMatch(
+                trimmed,
+                @"^(?:ENT\d{3}|ENG\d{3})\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+
     /// <summary>
-    /// Gọi mô hình @cf/openai/whisper-large-v3-turbo kèm bộ lọc tiếng ồn Silero VAD (vad_filter = true),
-    /// ngôn ngữ tiếng Việt kết hợp gợi ý thuật ngữ chuyên ngành SE song ngữ Anh - Việt (initial_prompt).
-    /// Tự động fallback về @cf/openai/whisper nếu endpoint turbo bị từ chối.
+    /// Gọi mô hình @cf/openai/whisper-large-v3-turbo hỗ trợ song ngữ Việt - Anh (Code-Switching) cho mọi môn học (cả ENT và SE).
+    /// Đặt language = "vi" và task = "transcribe" để Whisper Large-v3-Turbo nhận diện nguyên văn cả Tiếng Việt lẫn Tiếng Anh mà không tự dịch câu nói Tiếng Việt sang Tiếng Anh.
+    /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter để tránh Silero VAD trên Cloudflare treo 40s và trả chuỗi rỗng.
     /// </summary>
     private async Task<string> SendWhisperTurboWithVadAsync(
         byte[] audioBytes,
         string? vocabularyHint,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool useVadFilter = true)
     {
         var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
-        var prompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint);
+        var isEnglish = IsEnglishCourseHint(vocabularyHint);
+        var language = TranscriptionLanguage;
+        var prompt = !isEnglish && !string.IsNullOrWhiteSpace(vocabularyHint)
+            ? SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint)
+            : null;
+        var enableVadFilter = useVadFilter && audioBytes.Length <= 250_000;
 
         var jsonPayload = JsonSerializer.Serialize(new
         {
             audio = Convert.ToBase64String(audioBytes),
-            language = TranscriptionLanguage,
+            language,
             task = "transcribe",
-            vad_filter = true,
+            vad_filter = enableVadFilter,
             initial_prompt = prompt
         });
 
@@ -253,17 +294,18 @@ public class CloudflareWhisperService : ISpeechToTextService
         }, cancellationToken);
     }
 
-    private static (string RawText, string? TimestampsJson, double? ConfidenceScore) ParseWhisperResponse(string responseString)
+    private static (string RawText, string? TimestampsJson, double? ConfidenceScore, bool AllSegmentsConfirmedSilence) ParseWhisperResponse(string responseString)
     {
         if (string.IsNullOrWhiteSpace(responseString))
         {
-            return (string.Empty, null, null);
+            return (string.Empty, null, null, false);
         }
 
         using var document = JsonDocument.Parse(responseString);
         string rawText = string.Empty;
         string? timestampsJson = null;
         double? confidenceScore = null;
+        bool allSegmentsConfirmedSilence = false;
 
         if (document.RootElement.TryGetProperty("result", out var resultElement) &&
             resultElement.ValueKind == JsonValueKind.Object)
@@ -336,25 +378,36 @@ public class CloudflareWhisperService : ISpeechToTextService
                         segmentText = (segTextProp.GetString() ?? string.Empty).Trim();
                     }
 
+                    if (!string.IsNullOrWhiteSpace(segmentText) && SeTerminologyNormalizer.IsHallucinationOrNoise(segmentText))
+                    {
+                        continue;
+                    }
+
                     validSegments.Add((segmentText, segmentConfidence, duration, segment));
                 }
 
-                if (totalSegmentsCount > 0 && validSegments.Count == 0)
+                if ((totalSegmentsCount > 0 && validSegments.Count == 0) ||
+                    (totalSegmentsCount == 0 && string.IsNullOrWhiteSpace(rawText)))
                 {
-                    // Toàn bộ audio bị chi phối bởi im lặng hoặc ảo giác (no_speech_prob > 0.85)
+                    // Toàn bộ audio bị chi phối bởi im lặng hoặc ảo giác (no_speech_prob > 0.85 hoặc VAD trả về segments rỗng)
                     rawText = string.Empty;
                     confidenceScore = 0.0;
                     timestampsJson = null;
+                    allSegmentsConfirmedSilence = true;
                 }
                 else if (validSegments.Count > 0)
                 {
                     // Nếu có segment bị lọc bỏ, tái tạo rawText từ các segment hợp lệ để khử ảo giác tiếng ồn
                     if (validSegments.Count < totalSegmentsCount)
                     {
-                        rawText = string.Join(" ", validSegments
+                        var reconstructed = string.Join(" ", validSegments
                             .Select(s => s.Text)
                             .Where(t => !string.IsNullOrWhiteSpace(t)))
                             .Trim();
+                        if (!string.IsNullOrWhiteSpace(reconstructed))
+                        {
+                            rawText = reconstructed;
+                        }
                     }
 
                     // Tính điểm tin cậy tổng thể (ưu tiên trọng số theo thời lượng duration-weighted)
@@ -403,7 +456,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                 confidenceScore = 0.90;
             }
 
-            return (rawText, timestampsJson, confidenceScore);
+            return (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence);
         }
 
         if (document.RootElement.TryGetProperty("text", out var rootTextElement))
@@ -415,6 +468,6 @@ public class CloudflareWhisperService : ISpeechToTextService
             }
         }
 
-        return (rawText, timestampsJson, confidenceScore);
+        return (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence);
     }
 }

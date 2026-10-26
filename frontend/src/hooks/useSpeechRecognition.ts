@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { DEFAULT_TTS_VOICE, playNaturalSpeech } from '@/services/speech.service'
 
 interface SpeechRecognitionAlternativeLike {
@@ -55,11 +55,11 @@ export function useSpeechRecognition() {
 
   const speak = useCallback((text: string) => {
     void playNaturalSpeech(text, DEFAULT_TTS_VOICE, 1).catch((speechError) => {
-      console.warn('KhÃ´ng thá»ƒ phÃ¡t giá»ng Ä‘á»c tá»± nhiÃªn.', speechError)
+      console.warn('Không thể phát giọng đọc tự nhiên.', speechError)
     })
   }, [])
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((lang = 'vi-VN') => {
     const speechWindow = window as SpeechRecognitionWindow
     const SpeechRecognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
 
@@ -70,7 +70,7 @@ export function useSpeechRecognition() {
 
     try {
       const recognition = new SpeechRecognition()
-      recognition.lang = 'vi-VN'
+      recognition.lang = lang.trim() || 'vi-VN'
       recognition.continuous = true
       recognition.interimResults = true
 
@@ -121,6 +121,13 @@ export function useSpeechRecognition() {
   }, [])
 
   const getCurrentTranscript = useCallback(() => transcriptRef.current, [])
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop()
+      recognitionRef.current = null
+    }
+  }, [])
 
   return {
     isListening,

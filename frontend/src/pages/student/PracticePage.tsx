@@ -1,14 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   AlertCircle,
   AudioLines,
+  Award,
   BookOpenText,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
+  FileCheck2,
   Headphones,
   History,
   Lightbulb,
@@ -20,8 +22,8 @@ import {
   RefreshCw,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Volume2,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ds } from '@/design/system'
@@ -36,12 +38,14 @@ import {
   stopSpeechPlayback,
 } from '@/services/speech.service'
 import { savePracticeRuntime } from '@/utils/practiceSessionStorage'
+import { PracticeSessionScorecard } from '@/components/practice/PracticeSessionScorecard'
 import type {
   CourseDto,
   PracticeDifficulty,
   PracticeHistoryItem,
   PracticeMode,
   PracticeSessionConfig,
+  PracticeSessionDetail,
 } from '@/types/practice.types'
 
 const PracticeHeroThreeScene = lazy(() =>
@@ -55,6 +59,22 @@ type MicrophoneState = 'idle' | 'checking' | 'ready' | 'error' | 'unsupported'
 const FULL_SESSION_MIN_QUESTIONS = 3
 const FULL_SESSION_MAX_QUESTIONS = 10
 
+const COURSE_CODE_TONES = [
+  'bg-[#4988C4]/16 text-[#1C4D8D]',
+  'bg-[#e8f8f3] text-[#16836a]',
+  'bg-[#fff4e8] text-[#c26a12]',
+  'bg-[#f3eefe] text-[#6d4cc4]',
+  'bg-[#e7f6fb] text-[#0e7490]',
+  'bg-[#fdecef] text-[#c2415b]',
+  'bg-[#eef8e8] text-[#3d7a2a]',
+]
+
+function courseCodeTone(code?: string) {
+  if (!code) return COURSE_CODE_TONES[0]
+  const hash = Array.from(code).reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return COURSE_CODE_TONES[hash % COURSE_CODE_TONES.length]
+}
+
 const DIFFICULTY_OPTIONS: Array<{
   value: PracticeDifficulty
   label: string
@@ -66,29 +86,29 @@ const DIFFICULTY_OPTIONS: Array<{
     value: 'easy',
     label: 'Dễ',
     helper: 'Củng cố nền tảng',
-    selectedClassName: 'border-[#82d8bd] bg-[#f0fbf7] shadow-[0_0_0_2px_rgba(22,131,103,0.07)]',
-    badgeClassName: 'bg-[#dff7ee] text-[#14765c]',
+    selectedClassName: 'border-[#82d8bd] bg-[#f0fbf7] shadow-[0_0_0_2px_rgba(22,131,103,0.08)]',
+    badgeClassName: 'bg-[#16836a] text-white',
   },
   {
     value: 'medium',
     label: 'Trung bình',
     helper: 'Vận dụng kiến thức',
-    selectedClassName: 'border-[#e8c77f] bg-[#fffaf0] shadow-[0_0_0_2px_rgba(166,108,18,0.07)]',
-    badgeClassName: 'bg-[#fff0ca] text-[#8f6116]',
+    selectedClassName: 'border-[#e8c77f] bg-[#fffaf0] shadow-[0_0_0_2px_rgba(166,108,18,0.08)]',
+    badgeClassName: 'bg-[#c26a12] text-white',
   },
   {
     value: 'hard',
     label: 'Khó',
     helper: 'Phân tích chuyên sâu',
-    selectedClassName: 'border-[#e9a9b0] bg-[#fff5f6] shadow-[0_0_0_2px_rgba(184,64,75,0.07)]',
-    badgeClassName: 'bg-[#ffe3e6] text-[#a23945]',
+    selectedClassName: 'border-[#e9a9b0] bg-[#fff5f6] shadow-[0_0_0_2px_rgba(184,64,75,0.08)]',
+    badgeClassName: 'bg-[#c2415b] text-white',
   },
 ]
 
 const PRACTICE_TIPS = [
   'Hãy giữ tốc độ nói ổn định từ 110–130 từ/phút và trả lời theo cấu trúc: định nghĩa – cơ chế – ví dụ.',
-  'Dành 5 giây đầu để sắp xếp ý, sau đó nói câu kết luận trước khi đi vào phần giải thích.',
-  'Khi gặp thuật ngữ tiếng Anh, hãy phát âm rõ và nói thêm một câu giải thích ngắn bằng tiếng Việt.',
+  'Dành 5 giây đầu để sắp xếp ý, sau đó nêu luận điểm cốt lõi trước khi đi vào phần giải thích chi tiết.',
+  'Khi gặp thuật ngữ chuyên ngành tiếng Anh, hãy phát âm rõ và giải thích thêm ý nghĩa thực tế trong dự án.',
 ]
 
 function getMicrophoneStatus(state: MicrophoneState) {
@@ -140,7 +160,7 @@ function formatPracticeDate(value: string) {
 }
 
 function getPracticeModeLabel(mode: PracticeHistoryItem['practiceMode']) {
-  return mode === 'per_question' ? 'Luyện từng câu' : 'Full-Session'
+  return mode === 'per_question' ? 'Luyện từng câu' : 'Luyện trọn gói'
 }
 
 export function PracticePage() {
@@ -158,6 +178,11 @@ export function PracticePage() {
   const [voicePreviewMessage, setVoicePreviewMessage] = useState('')
   const speechRequestRef = useRef(0)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [showAllHistoryModal, setShowAllHistoryModal] = useState(false)
+  const [selectedScorecardId, setSelectedScorecardId] = useState<string | null>(null)
+  const [scorecardMap, setScorecardMap] = useState<Record<string, PracticeSessionDetail>>({})
+  const [isLoadingScorecard, setIsLoadingScorecard] = useState(false)
+  const [scorecardError, setScorecardError] = useState('')
   const [tipIndex, setTipIndex] = useState(0)
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [isStarting, setIsStarting] = useState(false)
@@ -170,6 +195,31 @@ export function PracticePage() {
   )
   const estimatedMinutes = questionCount * 3
   const microphoneStatus = getMicrophoneStatus(microphoneState)
+
+  const openPracticeScorecard = useCallback(
+    async (sessionId: string) => {
+      setSelectedScorecardId(sessionId)
+      setScorecardError('')
+      if (scorecardMap[sessionId]) return
+
+      setIsLoadingScorecard(true)
+      try {
+        const detail = await practiceService.getSession(sessionId)
+        setScorecardMap((prev) => ({ ...prev, [sessionId]: detail }))
+      } catch (err) {
+        const problem = err as Partial<{ detail: string; error: string; message: string }>
+        setScorecardError(
+          problem.detail ||
+            problem.error ||
+            problem.message ||
+            'Không thể tải chi tiết câu hỏi và nhận xét phiên luyện tập.',
+        )
+      } finally {
+        setIsLoadingScorecard(false)
+      }
+    },
+    [scorecardMap],
+  )
 
   const loadPracticeData = useCallback(async () => {
     if (!user) return
@@ -187,7 +237,7 @@ export function PracticePage() {
       const availableCourses = coursesResult.value
       setCourses(availableCourses)
       if (historyResult.status === 'fulfilled') {
-        setPracticeHistory(historyResult.value.slice(0, 3))
+        setPracticeHistory(historyResult.value)
       } else {
         setPracticeHistory([])
         const historyProblem = historyResult.reason as Partial<{
@@ -238,7 +288,7 @@ export function PracticePage() {
       speechRequestRef.current += 1
       stopSpeechPlayback()
       setIsVoicePreviewPlaying(false)
-      setVoicePreviewMessage('Đã dừng nghe thử giọng AI.')
+      setVoicePreviewMessage('Đã dừng nghe thử giọng đọc đề.')
       return
     }
 
@@ -246,7 +296,7 @@ export function PracticePage() {
     const isEnglish = isEnglishCourse(selectedCourse.code, selectedCourse.name)
     const previewText = `Xin chào. Phiên luyện tập ${selectedCourse.name} đã sẵn sàng. Hãy trả lời rõ ràng và tự tin.`
     setIsVoicePreviewPlaying(true)
-    setVoicePreviewMessage('AI đang tạo và phát giọng tự nhiên...')
+    setVoicePreviewMessage('Đang phát thử giọng đọc đề...')
 
     void playNaturalSpeech(
       isEnglish
@@ -260,7 +310,7 @@ export function PracticePage() {
       })
       .catch((error: unknown) => {
         if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
-        setVoicePreviewMessage('Không thể phát giọng AI. Vui lòng thử lại.')
+        setVoicePreviewMessage('Không thể phát giọng đọc đề. Vui lòng thử lại.')
       })
       .finally(() => {
         if (speechRequestRef.current === requestId) setIsVoicePreviewPlaying(false)
@@ -391,34 +441,34 @@ export function PracticePage() {
 
   return (
     <div className={ds.page}>
-      <section className={cn(ds.banner, 'min-h-[224px] sm:min-h-[210px]')}>
+      <section className={cn(ds.banner, 'min-h-[218px] sm:min-h-[206px]')}>
         <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-40" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-[78%] bg-[radial-gradient(circle_at_72%_50%,rgba(189,232,245,0.22),transparent_42%)] sm:w-[62%]" />
 
-        <div className="relative z-10 flex min-h-[224px] max-w-[720px] flex-col items-start justify-center px-5 py-6 sm:min-h-[210px] sm:px-7 lg:max-w-[62%] lg:px-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/12 px-3 py-1 text-xs font-bold tracking-[0.08em] text-white uppercase backdrop-blur-sm">
-            <Sparkles className="size-3" />
-            Phòng luyện tập tương tác 1-on-1
+        <div className="relative z-10 flex min-h-[218px] max-w-[720px] flex-col items-start justify-center px-5 py-6 sm:min-h-[206px] sm:px-7 lg:max-w-[62%] lg:px-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/14 px-3 py-1 text-xs font-bold tracking-[0.06em] text-white uppercase backdrop-blur-sm">
+            <Mic2 className="size-3.5 text-[#BDE8F5]" />
+            Luyện tập tương tác theo học phần
           </div>
-          <h1 className="mt-3 max-w-[620px] text-[clamp(1.55rem,3vw,2.2rem)] leading-[1.08] font-bold tracking-[-0.045em] text-white">
-            Phòng Luyện tập Vấn đáp AI
+          <h1 className="mt-3 max-w-[620px] text-[clamp(1.55rem,3vw,2.2rem)] leading-[1.08] font-bold tracking-[-0.04em] text-white">
+            Phòng Luyện tập Vấn đáp Chuyên ngành
           </h1>
-          <p className="mt-2 max-w-[590px] text-sm leading-relaxed text-white/80">
-            Tự rèn luyện kỹ năng trả lời phỏng vấn chuyên môn với trợ lý giọng nói AI theo thời gian
-            thực.
+          <p className="mt-2 max-w-[590px] text-sm leading-relaxed text-white/85">
+            Chủ động luyện phản xạ trả lời câu hỏi chuyên môn bằng giọng nói hoặc văn bản, nhận
+            chấm điểm theo tiêu chí Rubric và câu hỏi đào sâu ngay trong phiên.
           </p>
 
           <button
             type="button"
             onClick={handleVoicePreview}
-            className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-xl border border-white/30 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transform-none"
+            className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-xl border border-white/30 bg-white px-3.5 text-xs font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transform-none"
           >
             {isVoicePreviewPlaying ? (
               <AudioLines className="size-4 animate-pulse text-[#1C4D8D] motion-reduce:animate-none" />
             ) : (
               <Volume2 className="size-4 text-[#1C4D8D]" />
             )}
-            {isVoicePreviewPlaying ? 'Dừng nghe thử' : 'Thử giọng AI'}
+            {isVoicePreviewPlaying ? 'Dừng nghe thử' : 'Nghe thử giọng đọc đề'}
           </button>
         </div>
 
@@ -432,11 +482,6 @@ export function PracticePage() {
           >
             <PracticeHeroThreeScene active={isVoicePreviewPlaying} />
           </Suspense>
-        </div>
-
-        <div className="pointer-events-none absolute top-5 right-5 z-10 hidden items-center gap-2 rounded-xl border border-white/25 bg-white/12 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-md md:flex">
-          <AudioLines className="size-3.5 text-[#BDE8F5]" />
-          Độ trễ phản hồi &lt; 320ms · Neural TTS
         </div>
       </section>
 
@@ -462,40 +507,35 @@ export function PracticePage() {
       )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.78fr)]">
-        <section className={ds.section}>
-          <div className="flex items-center justify-between gap-4 border-b border-[#4988C4]/45 px-5 py-4 sm:px-6">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
-                <Settings2 className="size-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
-                  Cấu hình phiên luyện tập
-                </h2>
-                <p className="mt-0.5 text-xs text-[#8491a4]">Thiết lập trước khi bắt đầu</p>
-              </div>
+        <section className={cn(ds.section, 'overflow-hidden')}>
+          <div className={ds.sectionHeader}>
+            <div className={ds.sectionTitleRow}>
+              <span className={ds.sectionIconWrap}>
+                <Settings2 className="size-4 text-[#1C4D8D]" />
+              </span>
+              <h2 className={ds.sectionTitle}>Thiết lập phiên luyện tập</h2>
             </div>
-            <span className="rounded-full bg-[#f2f5fa] px-2.5 py-1 text-xs font-semibold text-[#63738a]">
-              Bước 1 / 1
-            </span>
+            <p className={ds.sectionHint}>
+              Chọn học phần, hình thức luyện tập và mức độ câu hỏi phù hợp với mục tiêu ôn tập của bạn
+            </p>
           </div>
 
           <div className="space-y-5 p-5 sm:p-6">
             <div>
               <label
                 htmlFor="practice-course"
-                className="text-xs font-bold tracking-[0.02em] text-[#34445b]"
+                className="text-xs font-bold tracking-[0.02em] text-[#0F2854]"
               >
                 Học phần & chuyên đề vấn đáp
               </label>
               <div className="relative mt-2">
-                <BookOpenText className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#5271a2]" />
+                <BookOpenText className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#1C4D8D]" />
                 <select
                   id="practice-course"
                   value={selectedCourseId}
                   onChange={(event) => setSelectedCourseId(event.target.value)}
                   disabled={isLoadingData || courses.length === 0}
-                  className="min-h-12 w-full appearance-none rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 py-2 pr-10 pl-10 text-sm font-semibold text-[#0F2854] transition hover:border-[#bdcce0] focus:border-[#4988C4] focus:ring-3 focus:ring-[#1C4D8D]/10 focus:outline-none"
+                  className="min-h-12 w-full appearance-none rounded-xl border border-[#4988C4] bg-[#F4FBFD] py-2 pr-10 pl-10 text-sm font-bold text-[#0F2854] transition hover:border-[#1C4D8D] focus:border-[#1C4D8D] focus:ring-3 focus:ring-[#1C4D8D]/10 focus:outline-none"
                 >
                   {courses.length === 0 && (
                     <option value="">
@@ -508,21 +548,47 @@ export function PracticePage() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-[#78879a]" />
+                <ChevronDown className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-[#1C4D8D]" />
               </div>
+
+              {courses.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {courses.map((course) => {
+                    const active = course.id === selectedCourseId
+                    return (
+                      <button
+                        key={course.id}
+                        type="button"
+                        onClick={() => setSelectedCourseId(course.id)}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition',
+                          active
+                            ? 'border-[#1C4D8D] bg-[#1C4D8D] text-white shadow-2xs'
+                            : cn(
+                                'border-transparent hover:opacity-90',
+                                courseCodeTone(course.code),
+                              ),
+                        )}
+                      >
+                        <span>{course.code}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             <fieldset>
-              <legend className="text-xs font-bold tracking-[0.02em] text-[#34445b]">
-                Chế độ phản hồi của AI
+              <legend className="text-xs font-bold tracking-[0.02em] text-[#0F2854]">
+                Chế độ luyện tập & chấm điểm
               </legend>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-2xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.08)] motion-reduce:transform-none',
                     feedbackMode === 'PER_QUESTION'
-                      ? 'border-[#4988C4]/45 bg-[#4988C4]/16 shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
-                      : 'border-[#e2e8f1] bg-[#fafbfd]',
+                      ? 'border-[#4988C4] bg-[#f3f9fd] shadow-[0_0_0_2px_rgba(28,77,141,0.1)]'
+                      : 'border-[#dce4ee] bg-white',
                   )}
                 >
                   <input
@@ -534,35 +600,35 @@ export function PracticePage() {
                     className="sr-only"
                   />
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-[#e9f0ff] text-[#1C4D8D]">
+                    <div className="flex size-9 items-center justify-center rounded-xl bg-[#1C4D8D] text-white">
                       <Radio className="size-4" />
                     </div>
                     <span
                       className={cn(
                         'flex size-5 items-center justify-center rounded-full border transition',
                         feedbackMode === 'PER_QUESTION'
-                          ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
+                          ? 'border-[#1C4D8D] bg-[#1C4D8D] text-white'
                           : 'border-[#cad4e2] bg-white text-transparent',
                       )}
                     >
                       <Check className="size-3" />
                     </span>
                   </div>
-                  <h3 className="mt-3 text-sm font-bold text-[#20314a]">Luyện từng câu</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-[#6f7e92] sm:text-xs">
-                    Chọn một hoặc nhiều mức độ và nhận phản hồi sau từng câu cho đến khi hết câu hỏi.
+                  <h3 className="mt-3 text-sm font-bold text-[#0F2854]">Luyện từng câu</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-[#5b6b84]">
+                    Chọn một hoặc nhiều mức độ và nhận nhận xét chi tiết ngay sau từng câu trả lời.
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#1C4D8D]">
-                    <Radio className="size-3" /> Không giới hạn số câu · Có follow-up theo điểm
+                  <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
+                    <Radio className="size-3" /> Không giới hạn câu · Có hỏi phụ đào sâu
                   </span>
                 </label>
 
                 <label
                   className={cn(
-                    'group relative cursor-pointer rounded-xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.07)] motion-reduce:transform-none',
+                    'group relative cursor-pointer rounded-2xl border p-4 transition duration-200 focus-within:ring-2 focus-within:ring-[#1C4D8D] focus-within:ring-offset-2 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(31,61,105,0.08)] motion-reduce:transform-none',
                     feedbackMode === 'FULL_SESSION'
-                      ? 'border-[#4988C4]/45 bg-[#4988C4]/16 shadow-[0_0_0_2px_rgba(36,94,234,0.08)]'
-                      : 'border-[#e2e8f1] bg-[#fafbfd]',
+                      ? 'border-[#b79df2] bg-[#f7f3fd] shadow-[0_0_0_2px_rgba(109,76,196,0.1)]'
+                      : 'border-[#dce4ee] bg-white',
                   )}
                 >
                   <input
@@ -574,49 +640,48 @@ export function PracticePage() {
                     className="sr-only"
                   />
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-[#edf0f7] text-[#536780]">
+                    <div className="flex size-9 items-center justify-center rounded-xl bg-[#6d4cc4] text-white">
                       <ShieldCheck className="size-4" />
                     </div>
                     <span
                       className={cn(
                         'flex size-5 items-center justify-center rounded-full border transition',
                         feedbackMode === 'FULL_SESSION'
-                          ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
+                          ? 'border-[#6d4cc4] bg-[#6d4cc4] text-white'
                           : 'border-[#cad4e2] bg-white text-transparent',
                       )}
                     >
                       <Check className="size-3" />
                     </span>
                   </div>
-                  <h3 className="mt-3 text-sm font-bold text-[#20314a]">Luyện trọn gói</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-[#6f7e92] sm:text-xs">
-                    Chọn số lượng câu trong giới hạn Admin cho phép và hoàn thành toàn bộ trước khi
-                    nhận Scorecard tổng kết.
+                  <h3 className="mt-3 text-sm font-bold text-[#0F2854]">Luyện trọn gói</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-[#5b6b84]">
+                    Chọn 3–10 câu theo lộ trình tăng dần độ khó và nhận bảng điểm tổng kết cuối phiên.
                   </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#68788e]">
-                    <Clock3 className="size-3" /> 3–10 câu · không có follow-up
+                  <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#6d4cc4]">
+                    <Clock3 className="size-3" /> 3–10 câu tăng dần · Không hỏi phụ
                   </span>
                 </label>
               </div>
             </fieldset>
 
             {feedbackMode === 'PER_QUESTION' ? (
-              <section className="space-y-3 rounded-xl border border-[#4988C4]/45 bg-white p-4">
+              <section className="space-y-3 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] p-4">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <h3 className="text-xs font-bold tracking-[0.02em] text-[#34445b]">
+                    <h3 className="text-xs font-bold tracking-[0.02em] text-[#0F2854]">
                       Chọn mức độ câu hỏi
                     </h3>
-                    <p className="mt-1 text-xs text-[#7b899c]">
-                      Chọn ít nhất một mức; có thể kết hợp nhiều mức trong cùng phiên.
+                    <p className="mt-0.5 text-xs text-[#5b6b84]">
+                      Chọn ít nhất một mức; có thể kết hợp nhiều mức trong cùng phiên luyện tập.
                     </p>
                   </div>
-                  <span className="text-xs font-bold text-[#1C4D8D]">
-                    Đã chọn {selectedDifficulties.length}/3
+                  <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D]">
+                    Đã chọn {selectedDifficulties.length}/3 mức
                   </span>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-3" aria-label="Các mức độ luyện tập">
+                <div className="grid gap-2.5 sm:grid-cols-3" aria-label="Các mức độ luyện tập">
                   {DIFFICULTY_OPTIONS.map((option) => {
                     const selected = selectedDifficulties.includes(option.value)
                     const isOnlySelection = selected && selectedDifficulties.length === 1
@@ -632,7 +697,7 @@ export function PracticePage() {
                           'flex min-h-16 items-center gap-3 rounded-xl border px-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none',
                           selected
                             ? option.selectedClassName
-                            : 'border-[#4988C4]/45 bg-white hover:border-[#c5d2e3]',
+                            : 'border-[#dce4ee] bg-white hover:border-[#4988C4]',
                         )}
                         title={
                           isOnlySelection ? 'Phiên luyện tập cần ít nhất một mức độ.' : undefined
@@ -647,7 +712,7 @@ export function PracticePage() {
                           {option.label.charAt(0)}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-bold text-[#283a54]">
+                          <span className="block text-xs font-bold text-[#0F2854]">
                             {option.label}
                           </span>
                           <span className="mt-0.5 block text-xs text-[#5b6b84]">
@@ -658,7 +723,7 @@ export function PracticePage() {
                           className={cn(
                             'flex size-4 shrink-0 items-center justify-center rounded-full border',
                             selected
-                              ? 'border-[#4988C4] bg-[#1C4D8D] text-white'
+                              ? 'border-[#1C4D8D] bg-[#1C4D8D] text-white'
                               : 'border-[#cbd5e2] text-transparent',
                           )}
                         >
@@ -668,54 +733,40 @@ export function PracticePage() {
                     )
                   })}
                 </div>
-
-                <div className="flex items-center gap-3 rounded-xl border border-[#cfe8df] bg-[#f0faf6] p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#168367] shadow-sm">
-                      <Radio className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-xs font-bold text-[#176f58]">Luyện không giới hạn số câu</p>
-                      <p className="mt-0.5 text-xs text-[#65847a]">
-                        Hệ thống tự lấy câu tiếp theo đến khi hết kho câu hỏi hoặc bạn chủ động kết thúc phiên.
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </section>
             ) : (
-              <section className="rounded-xl border border-[#4988C4]/45 bg-white p-4">
+              <section className="rounded-2xl border border-[#d4c4f5] bg-[#f7f3fd] p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#1C4D8D] shadow-sm">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#6d4cc4] text-white shadow-xs">
                       <Clock3 className="size-4" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold tracking-[0.06em] text-[#7a879a] uppercase">
-                        Progressive · Dễ → Trung bình → Khó
+                      <p className="text-xs font-bold tracking-[0.06em] text-[#6d4cc4] uppercase">
+                        Lộ trình tăng dần · Dễ → Trung bình → Khó
                       </p>
-                      <p className="mt-0.5 text-sm font-bold text-[#24344c]">
-                        {questionCount} câu · khoảng {estimatedMinutes} phút
+                      <p className="mt-0.5 text-sm font-bold text-[#0F2854]">
+                        {questionCount} câu hỏi · khoảng {estimatedMinutes} phút
                       </p>
-                      <p className="mt-1 text-xs text-[#8290a2]">
-                        Khoảng số câu backend hiện hỗ trợ: {FULL_SESSION_MIN_QUESTIONS}–
+                      <p className="mt-0.5 text-xs text-[#5b6b84]">
+                        Số lượng câu hỏi mỗi gói: {FULL_SESSION_MIN_QUESTIONS}–
                         {FULL_SESSION_MAX_QUESTIONS} câu.
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 rounded-xl border border-[#dce3ed] bg-white p-1.5">
+                  <div className="flex items-center gap-2 rounded-xl border border-[#d4c4f5] bg-white p-1.5">
                     <button
                       type="button"
                       onClick={() => updateFullSessionQuestionCount(questionCount - 1)}
                       disabled={questionCount <= FULL_SESSION_MIN_QUESTIONS}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#4988C4]/18 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#f3eefe] hover:text-[#6d4cc4] focus-visible:outline-2 focus-visible:outline-[#6d4cc4] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Giảm một câu"
                     >
                       <Minus className="size-3.5" />
                     </button>
                     <label className="flex min-w-16 items-baseline justify-center gap-1">
-                      <span className="sr-only">Số câu hỏi Full-Session</span>
+                      <span className="sr-only">Số câu hỏi luyện trọn gói</span>
                       <input
                         type="number"
                         min={FULL_SESSION_MIN_QUESTIONS}
@@ -724,15 +775,15 @@ export function PracticePage() {
                         onChange={(event) =>
                           updateFullSessionQuestionCount(Number(event.target.value))
                         }
-                        className="w-8 rounded bg-transparent text-center font-mono text-sm font-black text-[#1C4D8D] outline-none focus-visible:ring-2 focus-visible:ring-[#1C4D8D]"
+                        className="w-8 rounded bg-transparent text-center font-mono text-sm font-black text-[#6d4cc4] outline-none focus-visible:ring-2 focus-visible:ring-[#6d4cc4]"
                       />
-                      <span className="text-xs font-semibold text-[#7e8b9d]">câu</span>
+                      <span className="text-xs font-semibold text-[#5b6b84]">câu</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => updateFullSessionQuestionCount(questionCount + 1)}
                       disabled={questionCount >= FULL_SESSION_MAX_QUESTIONS}
-                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#4988C4]/18 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
+                      className="flex size-8 items-center justify-center rounded-lg text-[#5e7088] transition hover:bg-[#f3eefe] hover:text-[#6d4cc4] focus-visible:outline-2 focus-visible:outline-[#6d4cc4] disabled:cursor-not-allowed disabled:opacity-35"
                       aria-label="Tăng một câu"
                     >
                       <Plus className="size-3.5" />
@@ -746,19 +797,19 @@ export function PracticePage() {
                   max={FULL_SESSION_MAX_QUESTIONS}
                   value={questionCount}
                   onChange={(event) => updateFullSessionQuestionCount(Number(event.target.value))}
-                  className="mt-4 h-1.5 w-full cursor-pointer accent-[#4988C4]"
+                  className="mt-4 h-1.5 w-full cursor-pointer accent-[#6d4cc4]"
                   aria-label="Chọn số câu hỏi từ 3 đến 10"
                 />
-                <div className="mt-1.5 flex justify-between font-mono text-xs font-semibold text-[#8b98a9]">
-                  <span>{FULL_SESSION_MIN_QUESTIONS}</span>
-                  <span>{FULL_SESSION_MAX_QUESTIONS}</span>
+                <div className="mt-1.5 flex justify-between font-mono text-xs font-semibold text-[#6d4cc4]">
+                  <span>{FULL_SESSION_MIN_QUESTIONS} câu</span>
+                  <span>{FULL_SESSION_MAX_QUESTIONS} câu</span>
                 </div>
               </section>
             )}
 
-            <div className="flex flex-col gap-3 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-2xl border border-[#b7e4cf] bg-[#f3fbf7] p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#ebf7f4] text-[#19866d]">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#16836a] text-white">
                   <Mic2 className="size-4" />
                 </div>
                 <div className="min-w-0">
@@ -776,7 +827,7 @@ export function PracticePage() {
                     />
                     {microphoneStatus.label}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-[#7b899b]">
+                  <p className="mt-0.5 truncate text-xs text-[#4b675d]">
                     {microphoneName || microphoneStatus.helper}
                   </p>
                 </div>
@@ -785,7 +836,7 @@ export function PracticePage() {
                 type="button"
                 onClick={handleMicrophoneCheck}
                 disabled={microphoneState === 'checking'}
-                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#82d8bd] bg-white px-3.5 text-xs font-bold text-[#16836a] transition hover:bg-[#e8f8f3] focus-visible:outline-2 focus-visible:outline-[#16836a] disabled:cursor-wait disabled:opacity-60"
               >
                 {microphoneState === 'checking' ? (
                   <LoaderCircle className="size-3.5 animate-spin" />
@@ -808,28 +859,40 @@ export function PracticePage() {
                 <Mic2 className="size-4" />
               )}
               {isStarting
-                ? 'Đang tạo phiên luyện tập…'
+                ? 'Đang khởi tạo phiên luyện tập…'
                 : feedbackMode === 'PER_QUESTION'
-                  ? 'Bắt đầu luyện từng câu · Không giới hạn'
-                  : `Bắt đầu Full-Session · ${questionCount} câu`}
+                  ? 'Bắt đầu luyện từng câu'
+                  : `Bắt đầu gói ${questionCount} câu hỏi`}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
             </button>
           </div>
         </section>
 
         <aside className="space-y-4">
-          <section className={ds.section}>
-            <div className="flex items-center justify-between border-b border-[#4988C4]/45 px-4 py-3.5">
-              <div className="flex items-center gap-2">
-                <History className="size-4 text-[#1C4D8D]" />
-                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Lịch sử luyện tập</h2>
+          <section className={cn(ds.section, 'overflow-hidden')}>
+            <div className={cn(ds.sectionHeader, 'flex items-center justify-between gap-2')}>
+              <div className={ds.sectionTitleRow}>
+                <span className={ds.sectionIconWrap}>
+                  <History className="size-4 text-[#1C4D8D]" />
+                </span>
+                <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Lịch sử gần đây</h2>
               </div>
-              <span className="text-xs font-semibold text-[#8995a6]">
-                {practiceHistory.length} phiên gần nhất
+              <span className="text-xs font-semibold text-[#1C4D8D]">
+                {practiceHistory.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllHistoryModal(true)}
+                    className="rounded-lg border border-[#4988C4] bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD]"
+                  >
+                    Tất cả ({practiceHistory.length})
+                  </button>
+                ) : (
+                  '0 phiên'
+                )}
               </span>
             </div>
 
-            <div className="space-y-2.5 p-3">
+            <div className="space-y-2.5 p-3.5">
               {isLoadingData && (
                 <div className="flex items-center justify-center gap-2 py-8 text-xs font-semibold text-[#75859a]">
                   <LoaderCircle className="size-4 animate-spin" /> Đang tải lịch sử…
@@ -841,15 +904,17 @@ export function PracticePage() {
                 </p>
               )}
               {!isLoadingData &&
-                practiceHistory.map((item) => {
+                practiceHistory.slice(0, 4).map((item) => {
                   const isExpanded = expandedHistoryId === item.sessionId
 
                   return (
                     <article
                       key={item.sessionId}
                       className={cn(
-                        'rounded-xl border bg-[#4988C4]/16 transition',
-                        isExpanded ? 'border-[#b9cdf6] shadow-sm' : 'border-[#e8edf4]',
+                        'rounded-xl border transition',
+                        isExpanded
+                          ? 'border-[#4988C4] bg-[#f3f9fd] shadow-xs'
+                          : 'border-[#dce4ee] bg-white hover:border-[#4988C4]',
                       )}
                     >
                       <button
@@ -858,40 +923,75 @@ export function PracticePage() {
                         className="w-full p-3 text-left focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
                         aria-expanded={isExpanded}
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start justify-between gap-2.5">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-[#28384e]">
-                              {item.courseName} ({item.courseCode})
-                            </p>
-                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[#8190a3]">
-                              <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-[#60718a]">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  'rounded-md px-2 py-0.5 text-[11px] font-black',
+                                  courseCodeTone(item.courseCode),
+                                )}
+                              >
+                                {item.courseCode}
+                              </span>
+                              <span className="rounded-md bg-[#f1f5f9] px-2 py-0.5 text-[11px] font-bold text-[#475569]">
                                 {getPracticeModeLabel(item.practiceMode)}
                               </span>
-                              <span>{formatPracticeDate(item.startedAt)}</span>
                             </div>
+                            <p className="mt-1.5 truncate text-xs font-bold text-[#0F2854]">
+                              {item.courseName}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[#64748b]">
+                              {formatPracticeDate(item.startedAt)}
+                            </p>
                           </div>
-                          <strong className="shrink-0 text-sm text-[#159378]">
+                          <strong
+                            className={cn(
+                              'shrink-0 rounded-lg px-2 py-1 text-xs font-black',
+                              item.averageScore === null
+                                ? 'bg-[#fff8eb] text-[#9a6414]'
+                                : 'bg-[#e8f8f3] text-[#16836a]',
+                            )}
+                          >
                             {item.averageScore === null
                               ? 'Đang chấm'
                               : `${item.averageScore.toFixed(1)}/10`}
                           </strong>
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-xs font-semibold text-[#1C4D8D]">
-                          <span>{isExpanded ? 'Thu gọn chi tiết' : 'Xem chi tiết phiên'}</span>
+                        <div className="mt-2 flex items-center justify-between text-xs font-bold text-[#1C4D8D]">
+                          <span>{isExpanded ? 'Thu gọn' : 'Chi tiết & nhận xét'}</span>
                           <ChevronRight
-                            className={cn('size-3 transition-transform', isExpanded && 'rotate-90')}
+                            className={cn('size-3.5 transition-transform', isExpanded && 'rotate-90')}
                           />
                         </div>
                       </button>
                       {isExpanded && (
-                        <div className="border-t border-[#e2e9f3] px-3 py-2.5 text-xs leading-relaxed text-[#64748a]">
-                          Đã trả lời {item.answeredQuestions} lượt cho {item.totalQuestions} câu
-                          chính.{' '}
+                        <div className="border-t border-[#dce4ee] px-3 py-2.5 text-xs leading-relaxed text-[#5b6b84]">
+                          Đã trả lời {item.answeredQuestions}/{item.totalQuestions} câu chính.{' '}
                           {item.status === 'completed'
                             ? 'Phiên đã hoàn tất.'
                             : item.status === 'abandoned'
-                              ? 'Phiên đã bị hủy hoặc bỏ dở.'
-                              : 'Phiên vẫn đang được thực hiện.'}
+                              ? 'Phiên đã kết thúc.'
+                              : 'Phiên đang diễn ra.'}
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void openPracticeScorecard(item.sessionId)}
+                              className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[#1C4D8D] px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition hover:bg-[#0F2854]"
+                            >
+                              <FileCheck2 className="size-3.5" />
+                              Xem câu hỏi & nhận xét
+                            </button>
+                            {item.status === 'in_progress' && (
+                              <Link
+                                to={`/practice/session?session=${encodeURIComponent(item.sessionId)}`}
+                                className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#4988C4] bg-white px-2.5 py-1.5 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/16"
+                              >
+                                Tiếp tục
+                                <ArrowRight className="size-3" />
+                              </Link>
+                            )}
+                          </div>
                         </div>
                       )}
                     </article>
@@ -900,30 +1000,176 @@ export function PracticePage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#4988C4]/45 bg-[linear-gradient(145deg,#ffffff_0%,#f4f7fb_100%)] p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)]">
-            <div className="flex items-center gap-2 text-[#1C4D8D]">
+          <section className="rounded-2xl border border-[#f5d08a] bg-[#fffaf0] p-4 shadow-xs">
+            <div className="flex items-center gap-2 text-[#c26a12]">
               <Lightbulb className="size-4" />
-              <h2 className="text-base font-bold text-[#26364c] sm:text-lg">Mẹo đạt điểm cao</h2>
+              <h2 className="text-sm font-bold text-[#0F2854]">Kinh nghiệm trả lời vấn đáp</h2>
             </div>
-            <p className="mt-3 min-h-14 text-xs leading-relaxed text-[#65758b] sm:text-xs">
+            <p className="mt-2.5 min-h-14 text-xs leading-relaxed text-[#5c4826]">
               {PRACTICE_TIPS[tipIndex]}
             </p>
             <button
               type="button"
               onClick={() => setTipIndex((current) => (current + 1) % PRACTICE_TIPS.length)}
-              className="mt-3 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+              className="mt-2.5 inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-white px-2.5 text-xs font-bold text-[#c26a12] shadow-2xs transition hover:bg-[#fff3d6]"
             >
-              Mẹo tiếp theo
+              Xem gợi ý tiếp theo
               <ChevronRight className="size-3" />
             </button>
           </section>
 
-          <div className="flex items-center gap-3 rounded-xl border border-[#dce8f2] bg-[#f5fbfc] p-3 text-xs leading-relaxed text-[#5f7187]">
-            <Headphones className="size-4 shrink-0 text-[#2095a5]" />
-            Nên sử dụng tai nghe và luyện tập ở nơi yên tĩnh để AI nhận diện giọng nói tốt hơn.
+          <div className="flex items-center gap-3 rounded-2xl border border-[#b7e4cf] bg-[#f3fbf7] p-3.5 text-xs leading-relaxed text-[#2b5b4c]">
+            <Headphones className="size-4 shrink-0 text-[#16836a]" />
+            Nên sử dụng tai nghe có micro ở nơi yên tĩnh để bản thu âm rõ ràng và chính xác nhất.
           </div>
         </aside>
       </div>
+
+      {showAllHistoryModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2854]/60 p-3 backdrop-blur-xs sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Toàn bộ lịch sử luyện tập"
+        >
+          <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#4988C4]/45 bg-white px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <History className="size-5 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854]">
+                  Toàn bộ lịch sử luyện tập ({practiceHistory.length} phiên)
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAllHistoryModal(false)}
+                className="inline-flex size-8 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#4988C4]/16 hover:text-[#0F2854]"
+                aria-label="Đóng lịch sử luyện tập"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex-1 space-y-2.5 overflow-y-auto p-4 sm:p-5">
+              {practiceHistory.map((item) => (
+                <article
+                  key={item.sessionId}
+                  className="flex flex-col justify-between gap-3 rounded-2xl border border-[#4988C4]/45 bg-white p-4 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          'rounded-md px-2 py-0.5 text-xs font-black',
+                          courseCodeTone(item.courseCode),
+                        )}
+                      >
+                        {item.courseCode}
+                      </span>
+                      <span className="rounded-md bg-[#4988C4]/16 px-2 py-0.5 text-xs font-bold text-[#1C4D8D]">
+                        {getPracticeModeLabel(item.practiceMode)}
+                      </span>
+                      <span className="text-xs font-medium text-[#5b6b84]">
+                        {formatPracticeDate(item.startedAt)}
+                      </span>
+                    </div>
+                    <h3 className="mt-1.5 text-sm font-bold text-[#0F2854]">{item.courseName}</h3>
+                    <p className="mt-0.5 text-xs text-[#5b6b84]">
+                      Đã trả lời {item.answeredQuestions}/{item.totalQuestions} câu chính
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="rounded-xl bg-[#4988C4]/14 px-3 py-1.5 text-sm font-black text-[#0F2854]">
+                      {item.averageScore === null
+                        ? 'Đang chấm'
+                        : `${item.averageScore.toFixed(1)}/10`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllHistoryModal(false)
+                        void openPracticeScorecard(item.sessionId)
+                      }}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+                    >
+                      <FileCheck2 className="size-3.5" />
+                      Xem câu hỏi & nhận xét
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="flex items-center justify-between border-t border-[#4988C4]/45 bg-white px-5 py-3">
+              <Link
+                to="/results?type=practice"
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#1C4D8D] hover:underline"
+              >
+                Mở trang Lịch sử & Kết quả đầy đủ
+                <ArrowRight className="size-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowAllHistoryModal(false)}
+                className="rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedScorecardId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2854]/60 p-3 backdrop-blur-xs sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Bảng điểm và nhận xét phiên luyện tập"
+        >
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#4988C4]/45 bg-white px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <Award className="size-5 text-[#1C4D8D]" />
+                <h2 className="text-base font-bold text-[#0F2854]">
+                  Chi tiết Phiên luyện tập · Câu hỏi, Trả lời & Nhận xét
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedScorecardId(null)}
+                className="inline-flex size-8 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#4988C4]/16 hover:text-[#0F2854]"
+                aria-label="Đóng bảng điểm"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              {isLoadingScorecard ? (
+                <div className="flex min-h-[240px] flex-col items-center justify-center gap-2 text-sm font-semibold text-[#1C4D8D]">
+                  <LoaderCircle className="size-6 animate-spin" />
+                  Đang tải câu hỏi, câu trả lời và nhận xét...
+                </div>
+              ) : scorecardError ? (
+                <div className="rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]">
+                  {scorecardError}
+                </div>
+              ) : scorecardMap[selectedScorecardId] ? (
+                <PracticeSessionScorecard session={scorecardMap[selectedScorecardId]} />
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-[#4988C4]/45 bg-white px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setSelectedScorecardId(null)}
+                className="rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="sr-only" aria-live="polite">
         {voicePreviewMessage}

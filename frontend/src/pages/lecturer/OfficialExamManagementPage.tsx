@@ -174,7 +174,7 @@ export function OfficialExamManagementPage() {
         durationMinutes: Number(structureForm.durationMinutes),
       })
       setStructureForm(emptyStructure)
-      setNotice('ÄÃ£ táº¡o cáº¥u trÃºc Ä‘á» thi.')
+      setNotice('Đã tạo cấu trúc đề thi.')
       await loadData()
     } catch (submitError) { setError(getErrorMessage(submitError)) } finally { setBusy(false) }
   }
@@ -189,7 +189,7 @@ export function OfficialExamManagementPage() {
         bloomDistribution: structure.bloomDistribution,
         isActive: !structure.isActive,
       })
-      setNotice(`ÄÃ£ ${structure.isActive ? 'táº¯t' : 'báº­t'} cáº¥u trÃºc Ä‘á» thi ${structure.name}.`)
+      setNotice(`Đã ${structure.isActive ? 'tắt' : 'bật'} cấu trúc đề thi ${structure.name}.`)
       await loadData()
     } catch (updateError) { setError(getErrorMessage(updateError)) } finally { setBusy(false) }
   }
@@ -209,7 +209,7 @@ export function OfficialExamManagementPage() {
           <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><CalendarPlus className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Tạo kỳ thi</span></h2><p className={ds.sectionHint}>Cấu hình follow-up và buffer theo MF-04.</p></div>
           <div className="space-y-3 p-4">
             <input required className={ds.field} placeholder="Course ID" value={sessionForm.courseId} onChange={(e) => setSessionForm({ ...sessionForm, courseId: e.target.value })} />
-            {structures.length > 0 ? <select required className={ds.field} value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })}><option value="">Chá»n cáº¥u trÃºc Ä‘á» thi</option>{structures.filter((structure) => structure.isActive).map((structure) => <option key={structure.id} value={structure.id}>{structure.name} Â· {structure.courseCode}</option>)}</select> : <input required className={ds.field} placeholder="Exam Structure ID" value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })} />}
+            {structures.length > 0 ? <select required className={ds.field} value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })}><option value="">Chọn cấu trúc đề thi</option>{structures.filter((structure) => structure.isActive).map((structure) => <option key={structure.id} value={structure.id}>{structure.name} · {structure.courseCode}</option>)}</select> : <input required className={ds.field} placeholder="Exam Structure ID" value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })} />}
             <input required className={ds.field} placeholder="Tên kỳ thi" value={sessionForm.title} onChange={(e) => setSessionForm({ ...sessionForm, title: e.target.value })} />
             <input required type="date" className={ds.field} value={sessionForm.examDate} onChange={(e) => setSessionForm({ ...sessionForm, examDate: e.target.value })} />
             <div className="grid grid-cols-2 gap-2"><input required type="number" min="1" max="5" className={ds.field} placeholder="Follow-up" value={sessionForm.maxFollowUpQuestions} onChange={(e) => setSessionForm({ ...sessionForm, maxFollowUpQuestions: Number(e.target.value) })} /><input required type="number" min="10" max="300" className={ds.field} placeholder="Buffer (s)" value={sessionForm.transcriptBufferSeconds} onChange={(e) => setSessionForm({ ...sessionForm, transcriptBufferSeconds: Number(e.target.value) })} /></div>
@@ -245,18 +245,18 @@ export function OfficialExamManagementPage() {
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <form onSubmit={submitStructure} className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Cáº¥u trÃºc Ä‘á» thi</span></h2><p className={ds.sectionHint}>Cáº¥u hÃ¬nh Bloom vÃ  sá»‘ cÃ¢u cho MF-04.</p></div>
+          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Cấu trúc đề thi</span></h2><p className={ds.sectionHint}>Cấu hình Bloom và số câu cho MF-04.</p></div>
           <div className="space-y-3 p-4">
             <input required className={ds.field} placeholder="Course ID" value={structureForm.courseId} onChange={(e) => setStructureForm({ ...structureForm, courseId: e.target.value })} />
-            <input required className={ds.field} placeholder="TÃªn cáº¥u trÃºc" value={structureForm.name} onChange={(e) => setStructureForm({ ...structureForm, name: e.target.value })} />
-            <div className="grid grid-cols-2 gap-2"><input required type="number" min="1" className={ds.field} placeholder="Sá»‘ cÃ¢u" value={structureForm.totalQuestions} onChange={(e) => setStructureForm({ ...structureForm, totalQuestions: Number(e.target.value) })} /><input required type="number" min="1" className={ds.field} placeholder="PhÃºt" value={structureForm.durationMinutes} onChange={(e) => setStructureForm({ ...structureForm, durationMinutes: Number(e.target.value) })} /></div>
-            <input className={ds.field} placeholder='Bloom JSON, vÃ­ dá»¥ {"{Remember:2}"}' value={structureForm.bloomDistribution} onChange={(e) => setStructureForm({ ...structureForm, bloomDistribution: e.target.value })} />
-            <button disabled={busy} className={ds.primaryButton}><Plus className="size-4" /> Táº¡o cáº¥u trÃºc</button>
+            <input required className={ds.field} placeholder="Tên cấu trúc" value={structureForm.name} onChange={(e) => setStructureForm({ ...structureForm, name: e.target.value })} />
+            <div className="grid grid-cols-2 gap-2"><input required type="number" min="1" className={ds.field} placeholder="Số câu" value={structureForm.totalQuestions} onChange={(e) => setStructureForm({ ...structureForm, totalQuestions: Number(e.target.value) })} /><input required type="number" min="1" className={ds.field} placeholder="Phút" value={structureForm.durationMinutes} onChange={(e) => setStructureForm({ ...structureForm, durationMinutes: Number(e.target.value) })} /></div>
+            <input className={ds.field} placeholder='Bloom JSON, ví dụ {"Remember":2}' value={structureForm.bloomDistribution} onChange={(e) => setStructureForm({ ...structureForm, bloomDistribution: e.target.value })} />
+            <button disabled={busy} className={ds.primaryButton}><Plus className="size-4" /> Tạo cấu trúc</button>
           </div>
         </form>
         <section className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Danh sÃ¡ch cáº¥u trÃºc</span></h2><p className={ds.sectionHint}>Báº­t/táº¯t cáº¥u trÃºc Ä‘á» thi Ä‘ang cÃ³.</p></div>
-          <div className="grid gap-3 p-4 md:grid-cols-2">{structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#dce5ef] p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} Â· {structure.totalQuestions} cÃ¢u Â· {structure.durationMinutes} phÃºt</p></div><span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span></div><button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#cbd8e7] px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Táº¯t cáº¥u trÃºc' : 'Báº­t cáº¥u trÃºc'}</button></article>)}{structures.length === 0 && <p className="p-4 text-sm text-[#687a91]">ChÆ°a cÃ³ cáº¥u trÃºc Ä‘á» thi.</p>}</div>
+          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Danh sách cấu trúc</span></h2><p className={ds.sectionHint}>Bật/tắt cấu trúc đề thi đang có.</p></div>
+          <div className="grid gap-3 p-4 md:grid-cols-2">{structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#dce5ef] p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} · {structure.totalQuestions} câu · {structure.durationMinutes} phút</p></div><span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span></div><button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#cbd8e7] px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Tắt cấu trúc' : 'Bật cấu trúc'}</button></article>)}{structures.length === 0 && <p className="p-4 text-sm text-[#687a91]">Chưa có cấu trúc đề thi.</p>}</div>
         </section>
       </section>
 
@@ -267,4 +267,3 @@ export function OfficialExamManagementPage() {
     </div>
   )
 }
-
