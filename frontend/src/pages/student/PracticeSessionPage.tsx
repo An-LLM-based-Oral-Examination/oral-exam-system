@@ -67,6 +67,72 @@ const DIFFICULTY_META: Record<PracticeDifficulty, { label: string; className: st
 
 type AnswerInputMode = 'voice' | 'text'
 
+/**
+ * Keep numbered prompts readable in the practice flow.
+ * For prompts such as "...: 1. ... 2. ... 3. ...", each numbered item
+ * is rendered on its own line while leaving normal prose unchanged.
+ */
+function formatPracticePrompt(prompt: string): string {
+  const normalizedPrompt = prompt.replace(/\s+/g, ' ').trim()
+  if (!normalizedPrompt) return prompt
+
+  const markerPattern = /\b(\d{1,2})\.\s+/g
+  const markers: Array<{ number: number; start: number }> = []
+  let match: RegExpExecArray | null
+
+  while ((match = markerPattern.exec(normalizedPrompt)) !== null) {
+    markers.push({
+      number: Number(match[1]),
+      start: match.index,
+    })
+  }
+
+  let firstMarkerIndex = -1
+  for (let index = markers.length - 1; index >= 0; index -= 1) {
+    if (markers[index].number !== 1) continue
+    if (markers.slice(index + 1).some((marker) => marker.number === 2)) {
+      firstMarkerIndex = index
+      break
+    }
+  }
+  if (firstMarkerIndex < 0) return prompt
+
+  const numberedMarkers = [markers[firstMarkerIndex]]
+  let expectedNumber = 2
+  let searchFrom = firstMarkerIndex + 1
+
+  while (searchFrom < markers.length) {
+    const nextMarkerIndex = markers.findIndex(
+      (marker, index) => index >= searchFrom && marker.number === expectedNumber,
+    )
+    if (nextMarkerIndex < 0) break
+
+    numberedMarkers.push(markers[nextMarkerIndex])
+    expectedNumber += 1
+    searchFrom = nextMarkerIndex + 1
+  }
+
+  if (numberedMarkers.length < 2) return prompt
+
+  const lines: string[] = []
+  const introduction = normalizedPrompt.slice(0, numberedMarkers[0].start).trim()
+  if (introduction) lines.push(introduction)
+
+  numberedMarkers.forEach((marker, index) => {
+    const nextStart = numberedMarkers[index + 1]?.start ?? normalizedPrompt.length
+    const item = normalizedPrompt.slice(marker.start, nextStart).trim()
+    if (item) lines.push(item)
+  })
+
+  return lines.join('\n')
+}
+
+function formatRecordingDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
 function findStoredQuestionAnswer(
   runtime: StoredPracticeRuntime,
   questionId: string,
@@ -268,6 +334,8 @@ export const PracticeSessionPage: React.FC = () => {
   const [pageError, setPageError] = useState('')
   const [sessionNotice, setSessionNotice] = useState('')
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0)
+  const [hideRecognizedAnswerHeader, setHideRecognizedAnswerHeader] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
   const [isManualSyncing, setIsManualSyncing] = useState(false)
@@ -279,6 +347,8 @@ export const PracticeSessionPage: React.FC = () => {
   } | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null)
   const [scorecardTitle, setScorecardTitle] = useState('Bảng điểm câu trả lời')
+  const [showGradingComplete, setShowGradingComplete] = useState(false)
+  const [gradingElapsedSeconds, setGradingElapsedSeconds] = useState(0)
   const [latestResult, setLatestResult] = useState<PracticeAnswerDetail | null>(null)
   const [syncedResults, setSyncedResults] = useState<PracticeAnswerDetail[]>([])
   const processedAnswerIds = useRef(new Set<string>())
@@ -363,6 +433,18 @@ export const PracticeSessionPage: React.FC = () => {
     () => mergeResults(syncedResults, gradingResults),
     [gradingResults, syncedResults],
   )
+  const currentGradedResult = useMemo(() => {
+    if (mode !== 'PER_QUESTION' || !currentQuestion) return null
+
+    return (
+      allResults
+        .filter(
+          (result) =>
+            result.questionId === currentQuestion.questionId && result.status === 'graded',
+        )
+        .sort(compareSubmittedAtDescending)[0] ?? null
+    )
+  }, [allResults, currentQuestion?.questionId, mode])
   const runtimeIssue = !sessionId
     ? 'Đường dẫn phiên luyện tập thiếu mã phiên.'
     : !runtime
@@ -452,11 +534,31 @@ export const PracticeSessionPage: React.FC = () => {
       setLatestResult(result)
       setScorecard(toScorecard(result))
       setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
+      setShowGradingComplete(false)
       setIsSubmitting(false)
       setPageError('')
     }, 0)
     return () => window.clearTimeout(restoreTimer)
   }, [mode, runtime?.resolvedAnswer])
+
+  useEffect(() => {
+    if (mode !== 'PER_QUESTION' || !currentQuestion || showGradingComplete) return
+    if (runtime?.pendingAnswerId) return
+
+    const result = currentGradedResult
+    const timer = window.setTimeout(() => {
+      if (!result) {
+        if (!runtime?.resolvedAnswer) setScorecard(null)
+        return
+      }
+
+      setLatestResult(result)
+      setScorecard(toScorecard(result))
+      setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [currentGradedResult, currentQuestion, mode, runtime?.pendingAnswerId, runtime?.resolvedAnswer, showGradingComplete])
 
   useEffect(() => {
     if (!runtime || mode !== 'PER_QUESTION' || !runtime.pendingAnswerId) return
@@ -476,21 +578,20 @@ export const PracticeSessionPage: React.FC = () => {
       if (processedAnswerIds.current.has(normalizedResult.answerId)) return
       processedAnswerIds.current.add(normalizedResult.answerId)
       setLatestResult(normalizedResult)
-      setScorecard(toScorecard(normalizedResult))
-      setScorecardTitle(
-        normalizedResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
-      )
+      setShowGradingComplete(true)
       setIsSubmitting(false)
       setPageError('')
-      setSessionNotice(
-        followUpPromptMissing
-          ? 'AI đã chấm xong câu trả lời. Không thể tạo câu hỏi đào sâu nên hệ thống chuyển sang câu hỏi tiếp theo.'
-          : 'AI đã chấm xong câu trả lời.',
-      )
       updateRuntime((current) => ({ ...current, resolvedAnswer: normalizedResult }))
+      window.setTimeout(() => {
+        setScorecard(normalizedResult ? toScorecard(normalizedResult) : null)
+        setScorecardTitle(
+          normalizedResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
+        )
+        setShowGradingComplete(false)
+      }, 900)
     }, 0)
     return () => window.clearTimeout(resultTimer)
-  }, [allResults, gradingResults, mode, runtime, updateRuntime])
+  }, [allResults, gradingResults, mode, runtime?.pendingAnswerId, updateRuntime])
 
   useEffect(() => {
     if (!runtime?.pendingAnswerId) return
@@ -559,11 +660,14 @@ export const PracticeSessionPage: React.FC = () => {
     }
 
     const scorecardTimer = window.setTimeout(() => {
-      setScorecard(toFullSessionScorecard(runtime.sessionId, runtime.questions, gradedResults))
-      setScorecardTitle('Bảng điểm tổng kết phiên luyện trọn gói')
+      setShowGradingComplete(true)
       setIsSubmitting(false)
       setPageError('')
-      setSessionNotice('Đã chấm xong toàn bộ câu trả lời trong phiên.')
+      window.setTimeout(() => {
+        setScorecard(toFullSessionScorecard(runtime.sessionId, runtime.questions, gradedResults))
+        setScorecardTitle('Bảng điểm tổng kết phiên luyện trọn gói')
+        setShowGradingComplete(false)
+      }, 900)
     }, 0)
     return () => window.clearTimeout(scorecardTimer)
   }, [allResults, mode, runtime, scorecard])
@@ -596,7 +700,50 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }, [showStopConfirmation])
 
+  useEffect(() => {
+    const gradingIsActive = Boolean(
+      !showGradingComplete &&
+        (runtime?.pendingAnswerId || runtime?.fullSessionSubmitted || runtime?.pendingSubmission),
+    )
+    if (!gradingIsActive) {
+      setGradingElapsedSeconds(0)
+      return
+    }
+
+    const startedAt = Date.now()
+    const updateElapsedTime = () => {
+      setGradingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000))
+    }
+    updateElapsedTime()
+    const intervalId = window.setInterval(updateElapsedTime, 1_000)
+    return () => window.clearInterval(intervalId)
+  }, [
+    runtime?.fullSessionSubmitted,
+    runtime?.pendingAnswerId,
+    runtime?.pendingSubmission,
+    showGradingComplete,
+  ])
+
   const recordingStartedAtRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingElapsedSeconds(0)
+      return
+    }
+
+    const updateElapsedTime = () => {
+      if (recordingStartedAtRef.current <= 0) return
+      setRecordingElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - recordingStartedAtRef.current) / 1_000)),
+      )
+    }
+
+    updateElapsedTime()
+    const intervalId = window.setInterval(updateElapsedTime, 250)
+    return () => window.clearInterval(intervalId)
+  }, [isRecording])
+
   const handleReadQuestion = () => {
     if (!activePrompt) return
     void playNaturalSpeech(
@@ -620,13 +767,15 @@ export const PracticeSessionPage: React.FC = () => {
       setVoiceBaselineTranscript('')
       setBufferDeadlineTimestamp(null)
       setShowBuffer(false)
+      setRecordingElapsedSeconds(0)
+      setHideRecognizedAnswerHeader(false)
       persistAnswerDraft('', 'voice', false, null, '')
       clearRecorderError()
       segmentPromisesRef.current = []
       try {
         await startRecording()
         recordingStartedAtRef.current = Date.now()
-        setSessionNotice('Microphone đang ghi âm câu trả lời của bạn.')
+        setSessionNotice('')
       } catch (recordingError) {
         setPageError(getErrorInfo(recordingError).message)
       }
@@ -634,7 +783,7 @@ export const PracticeSessionPage: React.FC = () => {
     }
 
     setIsTranscribing(true)
-    setSessionNotice('Đang chuyển giọng nói thành văn bản…')
+    setSessionNotice('')
     try {
       const audio = await stopRecording()
       await new Promise<void>((resolve) => window.setTimeout(resolve, 50))
@@ -815,7 +964,7 @@ export const PracticeSessionPage: React.FC = () => {
       setTranscript('')
       setVoiceBaselineTranscript('')
       setTextAnswer('')
-      setSessionNotice('Câu trả lời đã được lưu. Đang chờ AI chấm điểm…')
+      setSessionNotice('')
     },
     [updateRuntime],
   )
@@ -959,6 +1108,7 @@ export const PracticeSessionPage: React.FC = () => {
     if (!runtime || !user || !fullSessionSubmitConfirmation || mode !== 'FULL_SESSION') return
 
     setIsSubmitting(true)
+    setShowGradingComplete(false)
     setBufferError('')
     setPageError('')
 
@@ -1011,9 +1161,7 @@ export const PracticeSessionPage: React.FC = () => {
       setBufferDeadlineTimestamp(null)
       setTranscript('')
       setTextAnswer('')
-      setSessionNotice(
-        'Đã nộp bài. Những câu chưa trả lời sẽ được tính 0 điểm; AI đang tiến hành chấm điểm.',
-      )
+      setSessionNotice('')
     } catch (batchError) {
       const problem = getErrorInfo(batchError)
       setBufferError(problem.message)
@@ -1068,6 +1216,7 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
     setIsSubmitting(true)
+    setShowGradingComplete(false)
     setBufferError('')
     setPageError('')
 
@@ -1234,7 +1383,6 @@ export const PracticeSessionPage: React.FC = () => {
       return
     }
 
-    const skippedFailedFollowUp = Boolean(latestResult.needsFollowUp && !trimmedFollowUpPrompt)
     const completedQuestions = runtime.mainQuestionsCompleted + 1
 
     setIsSubmitting(true)
@@ -1273,11 +1421,7 @@ export const PracticeSessionPage: React.FC = () => {
       setVoiceBaselineTranscript('')
       setTextAnswer('')
       setLatestResult(null)
-      setSessionNotice(
-        skippedFailedFollowUp
-          ? 'Không thể tạo câu hỏi đào sâu, đã chuyển sang câu hỏi tiếp theo từ ngân hàng đề luyện tập.'
-          : 'Đã bốc câu hỏi tiếp theo từ ngân hàng đề luyện tập.',
-      )
+      setSessionNotice('')
     } catch (nextError) {
       const problem = getErrorInfo(nextError)
       setPageError(problem.message)
@@ -1364,6 +1508,7 @@ export const PracticeSessionPage: React.FC = () => {
     setLatestResult(null)
     setPageError('')
     setBufferError('')
+    setHideRecognizedAnswerHeader(true)
     setSessionNotice(`Đã quay lại câu ${previousIndex + 1}.`)
     isTransitioningRef.current = false
   }
@@ -1509,14 +1654,21 @@ export const PracticeSessionPage: React.FC = () => {
   const isWaitingForGrade = Boolean(runtime.pendingAnswerId || runtime.fullSessionSubmitted)
   const isAnswerLocked = isVerifyingSubmission || isWaitingForGrade
   const currentAnswerDraft = answerInputMode === 'voice' ? transcript : textAnswer
+  const showGradingCard =
+    showGradingComplete ||
+    isWaitingForGrade ||
+    Boolean(isSubmitting && (runtime?.pendingSubmission || runtime?.fullSessionSubmitted))
+  const isGradingActive = showGradingCard && !showGradingComplete
+  const isLongGrading = isGradingActive && gradingElapsedSeconds >= 10
   const isFinalFullSessionQuestion =
     mode === 'FULL_SESSION' && runtime.currentQuestionIndex >= runtime.questions.length - 1
   const isInputModeLocked =
-    isRecording || isTranscribing || isSubmitting || isAnswerLocked || showBuffer
+    isRecording || isTranscribing || isSubmitting || isAnswerLocked || showBuffer || showGradingCard
   const canSubmitCurrentAnswer =
     currentAnswerDraft.trim().length >= 10 &&
     !isSubmitting &&
     !isAnswerLocked &&
+    !showGradingCard &&
     (mode !== 'PER_QUESTION' || isHubConnected)
   const totalMainQuestions = mode === 'FULL_SESSION' ? runtime.questions.length : null
   const completedMainQuestions = runtime.mainQuestionsCompleted
@@ -1674,7 +1826,7 @@ export const PracticeSessionPage: React.FC = () => {
 
       <main
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-white px-5 py-5 sm:px-8 sm:py-7',
+          'flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto bg-white px-5 py-5 sm:px-8 sm:py-7',
           hasQuestionImage && 'gap-1 px-3 py-3 sm:px-6 sm:py-4',
         )}
       >
@@ -1700,7 +1852,7 @@ export const PracticeSessionPage: React.FC = () => {
         </div>
       )}
 
-      {sessionNotice && (
+      {sessionNotice && !showGradingCard && (
         <div
           className="flex items-start gap-2.5 rounded-2xl border border-[#bde0fe] bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
           role="status"
@@ -1731,7 +1883,7 @@ export const PracticeSessionPage: React.FC = () => {
         </button>
       )}
 
-      {runtime.fullSessionSubmitted && !scorecard && (
+      {runtime.fullSessionSubmitted && !scorecard && !showGradingCard && (
         <button
           type="button"
           onClick={() => void synchronizeSession(true)}
@@ -1749,7 +1901,7 @@ export const PracticeSessionPage: React.FC = () => {
         <div
           className={cn(
             isTextLayout
-              ? 'grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-1'
+              ? 'grid min-h-0 flex-none grid-rows-[auto_auto_auto] gap-1'
               : 'flex min-h-0 flex-1 flex-col gap-1',
           )}
         >
@@ -1778,60 +1930,54 @@ export const PracticeSessionPage: React.FC = () => {
               <div className={cn(hasQuestionImage && 'min-w-0')}>
                 <div
                   className={cn(
-                    'flex flex-wrap items-center justify-between gap-3',
+                    'flex flex-wrap items-start justify-between gap-3',
                     isTextLayout && 'gap-2',
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5b6b84]">
                       <BookOpenText className="size-4 text-[#5276bc]" />
                       {runtime.activeFollowUp
                         ? `Câu hỏi đào sâu của câu ${currentQuestionNumber}`
                         : currentDifficulty
-                          ? `Luyện tập · ${DIFFICULTY_META[currentDifficulty].label}`
+                          ? 'Luyện tập'
                           : 'Câu hỏi luyện tập'}
                     </span>
+                    {currentDifficulty && (
+                      <span
+                        className={`rounded-full border px-2.5 py-1 text-sm font-semibold ${DIFFICULTY_META[currentDifficulty].className}`}
+                      >
+                        {DIFFICULTY_META[currentDifficulty].label}
+                      </span>
+                    )}
                     {runtime.activeFollowUp && (
                       <span className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-sm font-semibold text-violet-700">
                         Đào sâu theo câu trả lời
                       </span>
                     )}
                   </div>
-                  {currentDifficulty && (
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-sm font-semibold ${DIFFICULTY_META[currentDifficulty].className}`}
-                    >
-                      {DIFFICULTY_META[currentDifficulty].label}
-                    </span>
-                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleReadQuestion}
+                    disabled={isRecording}
+                    className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Volume2 className="size-4" /> Nghe đọc câu hỏi
+                  </button>
                 </div>
 
                 <h2
                   className={cn(
                     isTextLayout
-                      ? 'mt-2 text-[clamp(17px,1.4vw,20px)] leading-[1.15]'
-                      : hasQuestionImage
-                        ? 'mt-3 text-[clamp(19px,1.7vw,24px)] leading-[1.25]'
-                        : 'mt-3 text-[24px] leading-snug',
-                    'font-semibold text-[#0F2854]',
+                      ? 'mt-2 text-[18px] leading-snug'
+                      : 'mt-3 text-[18px] leading-snug',
+                    'font-semibold whitespace-pre-line text-[#0F2854]',
                   )}
                 >
-                  {activePrompt}
+                  {formatPracticePrompt(activePrompt)}
                 </h2>
 
-                <button
-                  type="button"
-                  onClick={handleReadQuestion}
-                  disabled={isRecording}
-                  className={cn(
-                    isTextLayout
-                      ? 'mt-2 min-h-9'
-                      : 'mt-3 min-h-10',
-                    'inline-flex items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50',
-                  )}
-                >
-                  <Volume2 className="size-4" /> Nghe đọc câu hỏi
-                </button>
               </div>
             </div>
 
@@ -1861,10 +2007,85 @@ export const PracticeSessionPage: React.FC = () => {
 
           <section
             className={cn(
-              'min-h-0 flex-1 overflow-hidden rounded-[22px] border-0 bg-white shadow-none',
-              isTextLayout && 'flex flex-col',
+              'min-h-0 flex-1 rounded-[22px] border-0 bg-white shadow-none',
+              showGradingCard ? 'overflow-visible' : 'overflow-hidden',
+              isTextLayout && 'flex flex-col overflow-visible',
             )}
           >
+            {showGradingCard && (
+              <div className="flex min-h-[260px] flex-1 items-center justify-center px-3 py-6 sm:px-6 sm:py-8">
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={cn(
+                    'w-full max-w-2xl rounded-3xl border px-5 py-6 shadow-[0_16px_36px_rgba(31,61,105,0.1)] transition-colors sm:px-7',
+                    showGradingComplete
+                      ? 'border-[#b9eadc] bg-[linear-gradient(135deg,#f5fffb_0%,#e9faf5_100%)]'
+                      : 'border-[#bde0fe] bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_100%)]',
+                  )}
+                >
+                  <div className="flex items-start gap-4">
+                    <span
+                      className={cn(
+                        'relative flex size-12 shrink-0 items-center justify-center rounded-2xl text-white shadow-[0_10px_24px_rgba(28,77,141,0.2)]',
+                        showGradingComplete ? 'bg-[#159a78]' : 'bg-[#1C4D8D]',
+                      )}
+                    >
+                      {!showGradingComplete && (
+                        <>
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute -inset-1 rounded-[1.15rem] border border-[#45b9df]/45 border-t-[#BDE8F5] animate-[spin_2.6s_linear_infinite] motion-reduce:animate-none"
+                          />
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute -inset-2 rounded-[1.35rem] bg-[#45b9df]/15 blur-md animate-pulse motion-reduce:animate-none"
+                          />
+                        </>
+                      )}
+                      {showGradingComplete ? (
+                        <CheckCircle2 className="relative z-10 size-6" />
+                      ) : (
+                        <Sparkles className="relative z-10 size-6 animate-pulse motion-reduce:animate-none" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          'text-xs font-black tracking-[0.12em] uppercase',
+                          showGradingComplete ? 'text-[#159a78]' : 'text-[#52709c]',
+                        )}
+                      >
+                        Phản hồi AI
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold text-[#12213b] sm:text-2xl">
+                        {showGradingComplete ? 'Đã chấm xong' : 'AI đang chấm điểm'}
+                      </h2>
+                      <p className="mt-1 text-sm leading-relaxed text-[#62738c]">
+                        {showGradingComplete
+                          ? 'Kết quả đã sẵn sàng. Bảng điểm sẽ được mở ngay sau đây.'
+                          : isLongGrading
+                            ? 'AI vẫn đang xử lý, vui lòng chờ thêm một chút…'
+                            : 'Đang phân tích câu trả lời theo các tiêu chí đánh giá.'}
+                        {!showGradingComplete && (
+                          <span className="ml-1 inline-flex gap-0.5 align-middle" aria-hidden="true">
+                            {[0, 1, 2].map((dot) => (
+                              <span
+                                key={dot}
+                                className="size-1 rounded-full bg-[#52709c] animate-bounce motion-reduce:animate-none"
+                                style={{ animationDelay: `${dot * 140}ms` }}
+                              />
+                            ))}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
             <div className="hidden flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-center gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
@@ -1893,7 +2114,8 @@ export const PracticeSessionPage: React.FC = () => {
               className={cn(
                 'space-y-2 p-2 sm:p-3',
                 hasQuestionImage && 'space-y-0 p-1 sm:p-2',
-                isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+                isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-visible',
+                showGradingCard && 'hidden',
               )}
             >
               {answerInputMode === 'voice' && (
@@ -1975,25 +2197,31 @@ export const PracticeSessionPage: React.FC = () => {
                     disabled={isTranscribing || isSubmitting || isAnswerLocked}
                     className={`mx-auto flex ${hasQuestionImage ? 'mt-2 size-[clamp(5.5rem,14vh,7rem)]' : 'mt-1 size-[clamp(6rem,16vh,8rem)]'} flex-col items-center justify-center gap-1 rounded-full border-2 px-3 text-center text-sm font-bold shadow-[0_14px_34px_rgba(31,61,105,0.16)] transition ${
                       isRecording
-                        ? 'border-[#df405b] bg-[#df405b] text-white shadow-[#df405b]/20 hover:bg-[#c9344d]'
+                        ? 'border-[#ff5b77] bg-[#ff5b77] text-white shadow-[#ff5b77]/25 hover:bg-[#f04463]'
                         : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] shadow-[#4988C4]/20 hover:-translate-y-0.5 hover:bg-[#BDE8F5] hover:shadow-xl'
                     } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
                   >
                     {isTranscribing ? (
                       <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
                     ) : isRecording ? (
-                      <Square className="size-3.5 fill-current" />
+                      <>
+                        <Mic className="size-7" />
+                        <span className="text-xs font-bold tabular-nums">
+                          {formatRecordingDuration(recordingElapsedSeconds)}
+                        </span>
+                      </>
                     ) : (
                       <Mic className="size-4" />
                     )}
-                    {isTranscribing
+                    {!isRecording && (isTranscribing
                       ? 'Đang nhận diện nội dung…'
-                      : isRecording
-                        ? 'Dừng ghi và tạo bản trả lời'
-                        : transcript.trim()
-                          ? 'Ghi lại câu trả lời'
-                          : 'Bắt đầu trả lời'}
+                      : transcript.trim()
+                        ? 'Ghi lại câu trả lời'
+                        : 'Bắt đầu trả lời')}
                   </button>
+                  {isRecording && (
+                    <p className="mt-3 text-sm font-bold text-[#21324a]">Nhấn để dừng ghi âm</p>
+                  )}
                 </div>
               )}
 
@@ -2004,15 +2232,17 @@ export const PracticeSessionPage: React.FC = () => {
                     ? 'border-[#4988C4]/65 bg-[#f8fbff] shadow-[0_8px_22px_rgba(31,61,105,0.06)]'
                     : 'border-[#4988C4]/45 bg-white',
                   answerInputMode === 'voice' && !currentAnswerDraft.trim() && 'hidden',
+                  answerInputMode === 'voice' && hideRecognizedAnswerHeader && 'hidden',
                   isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-hidden p-2.5 sm:p-3',
                 )}
               >
-                <div
-                  className={cn(
-                    'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
-                    isTextLayout && 'shrink-0 gap-1',
-                  )}
-                >
+                {!(answerInputMode === 'voice' && hideRecognizedAnswerHeader) && (
+                  <div
+                    className={cn(
+                      'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between',
+                      isTextLayout && 'shrink-0 gap-1',
+                    )}
+                  >
                   <div className="flex min-w-0 items-start gap-2.5">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#e8f2ff] text-[#1C4D8D]">
                       {answerInputMode === 'voice' ? (
@@ -2042,7 +2272,8 @@ export const PracticeSessionPage: React.FC = () => {
                         : `${textAnswer.trim().length} ký tự`}
                     </span>
                   )}
-                </div>
+                  </div>
+                )}
                 <textarea
                   aria-label={
                     answerInputMode === 'voice'
@@ -2052,7 +2283,7 @@ export const PracticeSessionPage: React.FC = () => {
                   className={cn(
                     'w-full rounded-xl border border-[#4988C4]/45 bg-white text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa]',
                     isTextLayout
-                      ? 'mt-2 min-h-0 flex-1 resize-none overflow-y-auto p-3 focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
+                      ? 'mt-2 h-[clamp(18rem,38vh,30rem)] min-h-[18rem] flex-none resize-none overflow-y-auto p-4 focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
                       : 'mt-3 min-h-28 max-h-32 p-3.5',
                     answerInputMode === 'text'
                       ? 'resize-none overflow-y-auto focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
@@ -2143,6 +2374,7 @@ export const PracticeSessionPage: React.FC = () => {
           {mode === 'PER_QUESTION' &&
             answerInputMode === 'text' &&
             !scorecard &&
+            !showGradingCard &&
             (isSubmitting || isWaitingForGrade) && (
               <div
                 className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#c9d9f2] bg-[#f2f7ff] px-3 py-2 text-xs font-semibold text-[#1C4D8D]"
@@ -2162,6 +2394,7 @@ export const PracticeSessionPage: React.FC = () => {
                 const nextMode: AnswerInputMode = answerInputMode === 'voice' ? 'text' : 'voice'
                 stopSpeechPlayback()
                 if (isRecording) cancelRecording()
+                setHideRecognizedAnswerHeader(false)
                 setAnswerInputMode(nextMode)
                 setShowBuffer(false)
                 setBufferDeadlineTimestamp(null)
@@ -2197,6 +2430,7 @@ export const PracticeSessionPage: React.FC = () => {
                   isTranscribing ||
                   isAnswerLocked ||
                   showBuffer ||
+                  showGradingCard ||
                   isCompleting
                 }
                 className={cn(
@@ -2215,6 +2449,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isTranscribing ||
                     isVerifyingSubmission ||
                     showBuffer ||
+                    showGradingCard ||
                     isCompleting
                   }
                   className={cn(
@@ -2234,6 +2469,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isTranscribing ||
                     isVerifyingSubmission ||
                     showBuffer ||
+                    showGradingCard ||
                     isCompleting
                   }
                   className={cn(
@@ -2396,10 +2632,16 @@ export const PracticeSessionPage: React.FC = () => {
             setShowBuffer(false)
             setBufferDeadlineTimestamp(null)
             setBufferError('')
-            if (answerInputMode === 'voice') setTranscript(currentTranscript)
-            else setTextAnswer(currentTranscript)
-            persistAnswerDraft(currentTranscript, answerInputMode, false, null)
-            setSessionNotice('Đã quay lại câu hỏi. Bạn có thể ghi âm lại câu trả lời.')
+            if (answerInputMode === 'voice') {
+              setTranscript('')
+              setVoiceBaselineTranscript('')
+              persistAnswerDraft('', 'voice', false, null, '')
+            } else {
+              setTextAnswer(currentTranscript)
+              persistAnswerDraft(currentTranscript, 'text', false, null)
+            }
+            setHideRecognizedAnswerHeader(true)
+            setSessionNotice('')
           }}
           isSubmitting={isSubmitting}
           errorMessage={bufferError}

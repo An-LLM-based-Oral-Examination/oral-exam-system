@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Button } from '@/components/common/Button'
 import { Badge } from '@/components/common/Badge'
 import type { ScorecardPayload } from '@/types/practice.types'
-import { Award, HelpCircle, Check, ArrowRight } from 'lucide-react'
+import { Award, HelpCircle, Check, ArrowRight, X } from 'lucide-react'
 
 interface ScorecardModalProps {
   scorecard: ScorecardPayload
@@ -91,7 +91,17 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
           <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(129,220,255,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(129,220,255,0.18)_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.13]" />
           <div className="pointer-events-none absolute -top-20 -right-12 size-56 rounded-full bg-[#5de0f2]/16 blur-3xl" />
 
-          <div className="relative flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <button
+            type="button"
+            aria-label="Đóng bảng điểm"
+            onClick={onClose}
+            disabled={isActionPending}
+            className="absolute top-3 right-3 z-10 flex size-9 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+
+          <div className="relative flex flex-col gap-4 px-4 py-5 pr-14 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pr-16">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-white/10 text-[#72e6f3] shadow-[0_10px_28px_rgba(2,15,38,0.2)] backdrop-blur-sm">
                 <Award className="size-5" aria-hidden="true" />
