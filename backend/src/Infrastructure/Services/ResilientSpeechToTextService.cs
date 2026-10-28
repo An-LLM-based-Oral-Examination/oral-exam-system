@@ -122,7 +122,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
             return false;
         }
 
-        return (_configuration is not null || !_primaryWhisperService.HasCredentials) && _fallbackGeminiService.HasCredentials;
+        return !_primaryWhisperService.HasCredentials && _fallbackGeminiService.HasCredentials;
     }
 
     private async Task<SpeechTranscriptionResult> ExecuteGeminiFirstThenWhisperAsync(
