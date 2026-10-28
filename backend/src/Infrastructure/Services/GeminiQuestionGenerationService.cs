@@ -296,7 +296,7 @@ Trả về mảng JSON đúng cấu trúc:
         {{
           ""criterionName"": ""Kiến thức cốt lõi"",
           ""maxScore"": 6.00,
-          ""weight"": 60,
+          ""weight"": 0.60,
           ""bloomLevel"": ""Understand"",
           ""description"": ""Trình bày chính xác và đầy đủ các khái niệm"",
           ""orderIndex"": 1
@@ -304,7 +304,7 @@ Trả về mảng JSON đúng cấu trúc:
         {{
           ""criterionName"": ""Ví dụ thực tế và giải thích"",
           ""maxScore"": 4.00,
-          ""weight"": 40,
+          ""weight"": 0.40,
           ""bloomLevel"": ""Apply"",
           ""description"": ""Đưa ra minh họa thực tế thuyết phục"",
           ""orderIndex"": 2
@@ -342,10 +342,13 @@ Trả về mảng JSON đúng cấu trúc:
                     int order = 1;
                     foreach (var c in item.Rubric.Criteria)
                     {
+                        var normalizedWeight = c.Weight > 0m && c.Weight <= 1.00m
+                            ? c.Weight
+                            : Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero);
                         criteria.Add(new RubricCriterionDraftDto(
                             c.CriterionName ?? "Tiêu chí đánh giá",
                             c.MaxScore,
-                            c.Weight > 0 ? c.Weight : c.MaxScore * 10,
+                            normalizedWeight,
                             c.BloomLevel ?? item.BloomLevel ?? "Understand",
                             c.Description ?? "Mô tả tiêu chí",
                             order++
@@ -355,18 +358,60 @@ Trả về mảng JSON đúng cấu trúc:
 
                 if (criteria.Count == 0)
                 {
-                    criteria.Add(new RubricCriterionDraftDto("Kiến thức nền tảng", 5.00m, 50, item.BloomLevel ?? "Understand", "Đánh giá mức độ nắm vững lý thuyết", 1));
-                    criteria.Add(new RubricCriterionDraftDto("Ứng dụng và phân tích", 5.00m, 50, item.BloomLevel ?? "Apply", "Đánh giá khả năng áp dụng thực tế", 2));
+                    criteria.Add(new RubricCriterionDraftDto("Kiến thức nền tảng", 5.00m, 0.50m, item.BloomLevel ?? "Understand", "Đánh giá mức độ nắm vững lý thuyết", 1));
+                    criteria.Add(new RubricCriterionDraftDto("Ứng dụng và phân tích", 5.00m, 0.50m, item.BloomLevel ?? "Apply", "Đánh giá khả năng áp dụng thực tế", 2));
+                }
+                else if (criteria.Count == 1)
+                {
+                    var first = criteria[0];
+                    criteria[0] = first with { MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 1 };
+                    criteria.Add(new RubricCriterionDraftDto("Ứng dụng và phân tích", 5.00m, 0.50m, item.BloomLevel ?? "Apply", "Đánh giá khả năng áp dụng và lập luận kỹ thuật", 2));
                 }
 
-                // Đảm bảo tổng điểm rubric bằng chính xác 10.00
-                var sum = criteria.Sum(c => c.MaxScore);
-                if (sum != 10.00m && criteria.Count > 0)
+                // Đảm bảo mỗi tiêu chí > 0 và tổng điểm rubric bằng chính xác 10.00 (kèm đồng bộ Weight thang 0..1.00)
+                var positiveCriteria = criteria
+                    .Select((c, idx) => c with { MaxScore = c.MaxScore > 0m ? c.MaxScore : 1.00m, OrderIndex = idx + 1 })
+                    .ToList();
+                var rawSum = positiveCriteria.Sum(c => c.MaxScore);
+                if (rawSum != 10.00m && rawSum > 0m)
                 {
-                    var diff = 10.00m - sum;
-                    var last = criteria[^1];
-                    criteria[^1] = last with { MaxScore = last.MaxScore + diff };
+                    decimal running = 0.00m;
+                    for (int idx = 0; idx < positiveCriteria.Count; idx++)
+                    {
+                        var curr = positiveCriteria[idx];
+                        decimal normalizedMax;
+                        if (idx == positiveCriteria.Count - 1)
+                        {
+                            normalizedMax = Math.Max(0.50m, Math.Round(10.00m - running, 2, MidpointRounding.AwayFromZero));
+                        }
+                        else
+                        {
+                            var maxAllowed = 10.00m - running - (0.50m * (positiveCriteria.Count - 1 - idx));
+                            var scaled = Math.Round(10.00m * (curr.MaxScore / rawSum), 2, MidpointRounding.AwayFromZero);
+                            normalizedMax = Math.Clamp(scaled, 0.50m, Math.Max(0.50m, maxAllowed));
+                            running += normalizedMax;
+                        }
+
+                        positiveCriteria[idx] = curr with
+                        {
+                            MaxScore = normalizedMax,
+                            Weight = Math.Round(normalizedMax / 10m, 4, MidpointRounding.AwayFromZero)
+                        };
+                    }
                 }
+                else
+                {
+                    for (int idx = 0; idx < positiveCriteria.Count; idx++)
+                    {
+                        var curr = positiveCriteria[idx];
+                        positiveCriteria[idx] = curr with
+                        {
+                            Weight = Math.Round(curr.MaxScore / 10m, 4, MidpointRounding.AwayFromZero)
+                        };
+                    }
+                }
+
+                criteria = positiveCriteria;
 
                 var modelAnswer = item.ModelAnswer?.Trim() ?? string.Empty;
                 if (modelAnswer.Length < 50)

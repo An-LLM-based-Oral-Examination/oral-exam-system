@@ -1,7 +1,7 @@
 # 📘 TÀI LIỆU TÍCH HỢP FRONTEND — PHÂN HỆ MF-02 (TIMED MOCK EXAM)
 ## DỰ ÁN: LLM ORAL EXAM SYSTEM (FA26SE166 — ĐẠI HỌC FPT TP.HCM)
 
-> **Dành cho:** Frontend Developers (Lê Vũ Hoàng & Nguyễn Đăng Hải)  
+> **Dành cho:** Frontend Developers (Lê Vũ Hoàng & Phạm Nguyễn Đăng Hải)  
 > **Tác giả:** Nguyễn Quang Thành (Team Leader & Lead Backend Architect) & worker_1  
 > **Phiên bản:** 1.0 (Production-Ready) — Cập nhật: 2026-10-13  
 > **Mục tiêu:** Hướng dẫn tích hợp toàn diện giao diện React 19 với Backend .NET 8 cho luồng Thi thử vấn đáp bấm giờ có hạn ngạch (MF-02), bao gồm RESTful APIs, Voice-First Audio Streaming Whisper STT, Server Master Timer chống gian lận, Fast-Path Instant AI Grading Scorecard (Gemini 1.5 Flash CoT Rubric 10.0đ CLO), và Student History Portal.

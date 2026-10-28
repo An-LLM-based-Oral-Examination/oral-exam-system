@@ -288,8 +288,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             var maleWavBytes = TrySynthesizeWindowsOneCoreMaleVoice(cleanedText, clampedRate);
             if (maleWavBytes is { Length: > 0 })
             {
-                var isFallback = primaryException is not null;
-                StoreInCache(cacheKey, maleWavBytes, "WindowsOneCoreMaleTts", usedFallback: isFallback, contentType: "audio/wav");
+                var isFallback = primaryException is not null || isEdgeInCooldown;
                 return new SpeechSynthesisResult(
                     AudioBytes: maleWavBytes,
                     ContentType: "audio/wav",

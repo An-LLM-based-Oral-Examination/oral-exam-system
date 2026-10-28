@@ -165,6 +165,8 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                 const showQuestionHeading =
                   item.questionNumber !== undefined &&
                   item.questionNumber !== previousItem?.questionNumber
+                const maxScore = item.maxScore && item.maxScore > 0 ? item.maxScore : 10
+                const ratio = Math.min(100, Math.max(0, (item.score / maxScore) * 100))
 
                 return (
                   <React.Fragment key={`${item.criterionId}-${idx}`}>
@@ -173,21 +175,27 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                         Câu {item.questionNumber}
                       </div>
                     )}
-                    <article className="flex flex-col gap-3 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)] sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
+                    <article className="flex flex-col gap-2.5 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
+                      <div className="flex items-start justify-between gap-3">
                         <p className="text-sm font-bold text-[#25364e] sm:text-xs">
                           {item.criterionName || `Tiêu chí: ${item.criterionId}`}
                         </p>
-                        <p className="mt-1.5 text-xs leading-relaxed text-[#65758b]">
-                          {item.comment}
-                        </p>
+                        <Badge
+                          variant="success"
+                          className="w-fit shrink-0 border border-[#cfe8df] bg-[#effaf6] px-2.5 py-1 font-mono text-xs font-bold text-[#168367]"
+                        >
+                          {item.score.toFixed(1)}/{maxScore.toFixed(1)} đ
+                        </Badge>
                       </div>
-                      <Badge
-                        variant="success"
-                        className="w-fit shrink-0 border border-[#cfe8df] bg-[#effaf6] px-2.5 py-1 font-mono text-xs font-bold text-[#168367]"
-                      >
-                        {item.score.toFixed(1)} đ
-                      </Badge>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-[#eef2f7]">
+                        <div
+                          className="h-full rounded-full bg-[#4f7df0]"
+                          style={{ width: `${ratio}%` }}
+                        />
+                      </div>
+                      <p className="text-xs leading-relaxed text-[#65758b]">
+                        {item.comment}
+                      </p>
                     </article>
                   </React.Fragment>
                 )

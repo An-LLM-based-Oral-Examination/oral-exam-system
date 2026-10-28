@@ -5,7 +5,7 @@
 > **Đội ngũ kỹ sư tác chiến (FA26SE166):**  
 > - **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect  
 > - **Nguyễn Trọng Tốt:** Backend Developer, AI Engineer & QA Lead  
-> - **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer  
+> - **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer  
 > - **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator  
 > **Repository:** `05_Source_Code` | **Git Branch:** `feature/be-core-infrastructure`  
 > **Tiêu chuẩn chất lượng:** Enterprise Level · Zero-Defect Delivery · Zero Trust Architecture · CIS Benchmark Non-Root Containers  
@@ -508,7 +508,7 @@ Kịch bản demo được thiết kế nhịp nhàng, liền mạch trong thờ
 | **Nguyễn Quang Thành** | Team Leader & Lead Backend Architect | **Chủ trì phần thi & Mở đầu:** Giới thiệu tổng quan hệ thống, triết lý Shift-Left DevOps bảo vệ tính toàn vẹn kỳ thi vấn đáp; demo luồng CD Deployment, Containerization và điều phối phần Q&A phản biện. |
 | **Nguyễn Trọng Tốt** | Backend Developer, AI Engineer & QA Lead | **Demo 2 (Phần Backend):** Trình diễn tab GitHub Actions với bộ 542 unit tests đỗ 100%, biên dịch 0 warning (`-warnaserror`), tích hợp kiểm tra an ninh packages và luồng chấm thi AI CoT. |
 | **Lê Vũ Hoàng** | Lead Frontend Architect & Fullstack Coordinator | **Demo 1 (Commit Linter) & Demo 2 (Phần Frontend):** Trình diễn cơ chế chặn commit sai quy cách tại PR; trình diễn tốc độ Oxlint (74ms), strict TypeScript composite typecheck (`tsc -b`) và đóng gói Vite. |
-| **Nguyễn Đăng Hải** | DB Specialist & Frontend Developer | **Demo 3 (Hạ Tầng & Reverse Proxy):** Trình diễn mô hình mạng nội bộ `oralexam-network` cô lập 30 bảng PostgreSQL 16 3NF; giải thích cơ chế Nginx Reverse Proxy xử lý mượt mà SignalR WebSocket `/hubs/`. |
+| **Phạm Nguyễn Đăng Hải** | DB Specialist & Frontend Developer | **Demo 3 (Hạ Tầng & Reverse Proxy):** Trình diễn mô hình mạng nội bộ `oralexam-network` cô lập 30 bảng PostgreSQL 16 3NF; giải thích cơ chế Nginx Reverse Proxy xử lý mượt mà SignalR WebSocket `/hubs/`. |
 
 ---
 
@@ -583,7 +583,7 @@ Hoàng chuyển sang kiểm tra Job `frontend-ci`:
 
 ## 4.5. Demo 3: CD Pipeline, Đóng Gói Multi-Stage & Mạng Cách Ly (4 phút)
 
-**Người thực hiện: Nguyễn Quang Thành & Nguyễn Đăng Hải**
+**Người thực hiện: Nguyễn Quang Thành & Phạm Nguyễn Đăng Hải**
 
 ### 1. Triển Khai CD Tự Động Qua GHCR & SSH VPS — Nguyễn Quang Thành
 Thành chuyển sang workflow `cd.yml`:
@@ -593,7 +593,7 @@ Thành chuyển sang workflow `cd.yml`:
 - Mở bước SSH Deploy qua `appleboy/ssh-action`:
   > *"Khi mã nguồn được merge vào `main`, GitHub Actions tự động đẩy image lên GitHub Container Registry (`ghcr.io`), sau đó kết nối SSH vào VPS, thực hiện lệnh `docker compose pull` và `up -d` để cập nhật dịch vụ ngầm mà không làm rớt các phiên thi đang diễn ra."*
 
-### 2. Kiến Trúc Mạng Biệt Lập & Nginx Reverse Proxy — Nguyễn Đăng Hải
+### 2. Kiến Trúc Mạng Biệt Lập & Nginx Reverse Proxy — Phạm Nguyễn Đăng Hải
 Hải mở giao diện dòng lệnh trên máy chủ hoặc mô hình topology:
 - **Cô lập Database PostgreSQL 16:**
   > *"Kính thưa Thầy Cô, cơ sở dữ liệu lưu trữ 30 bảng của đồ án hoàn toàn **không mở cổng 5432 ra Internet**. Cổng 5432 chỉ lắng nghe bên trong mạng bridge nội bộ `oralexam-network`. Hacker bên ngoài quét IP máy chủ sẽ hoàn toàn không thấy cổng cơ sở dữ liệu, loại bỏ 100% các cuộc tấn công brute-force mật khẩu từ Internet."*
@@ -617,7 +617,7 @@ Dưới đây là 5 câu hỏi kỹ thuật chuyên sâu mà các Thầy Cô tro
 ---
 
 ### ❓ Câu hỏi 2: "SignalR sử dụng kết nối WebSocket kéo dài. Nếu proxy qua Nginx, làm thế nào nhóm đảm bảo kết nối không bị đứt giữa chừng khi sinh viên đang trả lời bài thi?"
-> **Kỹ sư trả lời (Nguyễn Đăng Hải & Nguyễn Quang Thành):**  
+> **Kỹ sư trả lời (Phạm Nguyễn Đăng Hải & Nguyễn Quang Thành):**  
 > *"Dạ thưa Thầy Cô, Nginx mặc định có `proxy_read_timeout` là 60 giây. Nếu sinh viên im lặng suy nghĩ hoặc câu trả lời kéo dài quá 60 giây mà không có dữ liệu trao đổi, Nginx mặc định sẽ tự động ngắt kết nối TCP và làm hỏng bài thi!  
 > Để giải quyết triệt để vấn đề này, nhóm em đã cấu hình 3 tầng bảo vệ trong `nginx.conf`:  
 > 1. Thiết lập `proxy_read_timeout 300s;` và `proxy_send_timeout 300s;` cho riêng khối `location /hubs/`, cho phép kết nối duy trì liên tục trong tối đa 5 phút.  
@@ -635,7 +635,7 @@ Dưới đây là 5 câu hỏi kỹ thuật chuyên sâu mà các Thầy Cô tro
 ---
 
 ### ❓ Câu hỏi 4: "Cơ sở dữ liệu của nhóm lưu trữ câu hỏi thi và điểm số nhạy cảm. Nhóm bảo vệ PostgreSQL trong container như thế nào nếu máy chủ bị quét cổng?"
-> **Kỹ sư trả lời (Nguyễn Đăng Hải):**  
+> **Kỹ sư trả lời (Phạm Nguyễn Đăng Hải):**  
 > *"Dạ thưa Thầy Cô, trong tệp `docker-compose.prod.yml`, Thầy Cô có thể thấy service `postgres` hoàn toàn **không khai báo khối `ports:`** (không có cú pháp `5432:5432`).  
 > Thay vào đó, service `postgres` chỉ nằm trong mạng nội bộ `networks: - oralexam-network` với driver là `bridge`.  
 > Điều này có nghĩa là cổng 5432 chỉ lắng nghe trên giao diện mạng ảo của Docker. Kẻ tấn công quét IP public của máy chủ VPS từ Internet sẽ thấy cổng 5432 bị đóng hoàn toàn (Closed/Filtered). Chỉ có duy nhất container `backend` nằm chung trong mạng `oralexam-network` mới có thể phân giải DNS nội bộ `postgres` và kết nối vào CSDL thông qua mật khẩu entropy cao được cấp qua biến môi trường."*

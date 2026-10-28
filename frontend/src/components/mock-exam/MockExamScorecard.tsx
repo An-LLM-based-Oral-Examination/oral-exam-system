@@ -268,6 +268,7 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                       </div>
                       <AnswerBlock label="Câu trả lời phụ" transcript={followUp.transcript} />
                       <FeedbackBlock question={followUp} />
+                      <CriteriaBlock question={followUp} />
                     </div>
                   ))}
                 </div>

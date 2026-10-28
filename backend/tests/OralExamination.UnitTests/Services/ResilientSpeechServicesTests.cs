@@ -733,6 +733,7 @@ public class ResilientSpeechServicesTests
 
         result.Score.Should().Be(0.0m, "Câu trả lời từ chối hoặc không có kiến thức chuyên môn bắt buộc phải nhận 0.0 điểm");
         result.IsSuspicious.Should().BeTrue();
+        result.SuspiciousReason.Should().NotContain("Thiếu cấu hình Gemini API Key");
         result.Details.Should().HaveCount(2);
         result.Details.All(d => d.Score == 0.0m).Should().BeTrue();
     }
@@ -2047,6 +2048,48 @@ public class ResilientSpeechServicesTests
         {
             doc2.RootElement.GetProperty("vad_filter").GetBoolean().Should().BeFalse();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // TEST 50: Chuẩn hóa thuật ngữ OOP, Database, DevOps & Contextual VocabularyHint
+    // -------------------------------------------------------------------------
+    [Fact]
+    public void SeTerminologyNormalizer_NormalizesOopDatabaseDevOpsTerms_AndBuildsContextualPrompt()
+    {
+        var rawTranscript =
+            "Trong lập trình hướng đối tượng có 4 tính chất là en cáp su lây sần, in hê ri tần, pô li mo phi dầm và áp trắc sần. " +
+            "Khi thiết kế cơ sở dữ liệu pốt gờ re cần đánh in đếch xinh cho pờ rai mơ ri ki và pho rần ki để tránh đét lóc và rây con đi sần. " +
+            "Hệ thống triển khai bằng đốc cơ, ku bơ nê tít và xi ai xi đi kèm iu nít tét.";
+
+        var normalized = SeTerminologyNormalizer.NormalizeWithContext(
+            rawTranscript,
+            "PRO192 - Object-Oriented Programming - Encapsulation, Inheritance, Polymorphism, Abstraction");
+
+        normalized.Should().Contain("Encapsulation");
+        normalized.Should().Contain("Inheritance");
+        normalized.Should().Contain("Polymorphism");
+        normalized.Should().Contain("Abstraction");
+        normalized.Should().Contain("PostgreSQL");
+        normalized.Should().Contain("Indexing");
+        normalized.Should().Contain("Primary Key");
+        normalized.Should().Contain("Foreign Key");
+        normalized.Should().Contain("Deadlock");
+        normalized.Should().Contain("Race Condition");
+        normalized.Should().Contain("Docker");
+        normalized.Should().Contain("Kubernetes");
+        normalized.Should().Contain("CI/CD");
+        normalized.Should().Contain("Unit Test");
+
+        var whisperPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(
+            "SWD392 - Clean Architecture & CQRS Pattern");
+        whisperPrompt.Should().Contain("Clean Architecture");
+        whisperPrompt.Should().Contain("Câu hỏi hiện tại: SWD392 - Clean Architecture & CQRS Pattern");
+
+        var customVocab = SeTerminologyNormalizer.BuildCustomVocabularyList(
+            "SWD392 - CleanArchitecture & GradingQueueWorker");
+        customVocab.Should().Contain("SWD392");
+        customVocab.Should().Contain("CleanArchitecture");
+        customVocab.Should().Contain("GradingQueueWorker");
     }
 }
 

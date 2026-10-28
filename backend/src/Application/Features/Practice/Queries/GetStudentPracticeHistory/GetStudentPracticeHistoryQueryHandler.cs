@@ -87,7 +87,12 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                         return mainAnswerEval?.TotalScore ?? 0.0m;
                     }
 
-                    var mainScore = mainAnswerEval?.TotalScore ?? 0.0m;
+                    if (mainAnswerEval == null)
+                    {
+                        return Math.Round(followUpScores.Average(), 2, MidpointRounding.AwayFromZero);
+                    }
+
+                    var mainScore = mainAnswerEval.TotalScore;
                     var avgFollowUp = followUpScores.Average();
                     if (avgFollowUp >= mainScore)
                     {
@@ -100,7 +105,9 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 })
                 .ToList();
 
-            bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
+            bool hasPendingAnswers = answers.Any(a =>
+                string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase));
 
             decimal? avgScore = null;
             if (isFullSession && isCompleted && totalQuestions > 0)
@@ -118,7 +125,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                     avgScore = 0.0m;
                 }
             }
-            else
+            else if (!hasPendingAnswers)
             {
                 var fallbackScores = mainScores.Count > 0
                     ? mainScores

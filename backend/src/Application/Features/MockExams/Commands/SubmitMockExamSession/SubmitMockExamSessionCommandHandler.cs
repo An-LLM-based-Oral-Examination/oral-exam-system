@@ -283,20 +283,98 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var evalDetails = new List<AiEvaluationDetail>();
             var evalId = Guid.NewGuid();
             var rawDetails = gradingResult.Details ?? new List<GradingDetailDto>();
+            var matchedByCriterionIndex = new GradingDetailDto?[orderedCriteria.Count];
+            var usedRawIndices = new HashSet<int>();
 
             for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
             {
                 var c = orderedCriteria[critIndex];
-                var detailDto = rawDetails.FirstOrDefault(d =>
-                        string.Equals(d.CriterionId?.Trim(), c.Id.ToString(), StringComparison.OrdinalIgnoreCase))
-                    ?? rawDetails.FirstOrDefault(d =>
-                        !string.IsNullOrWhiteSpace(c.CriterionName) &&
-                        string.Equals(d.CriterionId?.Trim(), c.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
-                    ?? (critIndex < rawDetails.Count ? rawDetails[critIndex] : null);
+                int matchedIdx = -1;
 
-                var score = detailDto != null
-                    ? Math.Clamp(Math.Round(detailDto.Score, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore)
-                    : 0.0m;
+                for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                {
+                    if (usedRawIndices.Contains(rIdx))
+                    {
+                        continue;
+                    }
+
+                    var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                    if (string.Equals(candidateId, c.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedIdx = rIdx;
+                        break;
+                    }
+                }
+
+                if (matchedIdx < 0 && !string.IsNullOrWhiteSpace(c.CriterionName))
+                {
+                    for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                    {
+                        if (usedRawIndices.Contains(rIdx))
+                        {
+                            continue;
+                        }
+
+                        var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                        if (string.Equals(candidateId, c.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            matchedIdx = rIdx;
+                            break;
+                        }
+                    }
+                }
+
+                if (matchedIdx >= 0)
+                {
+                    usedRawIndices.Add(matchedIdx);
+                    matchedByCriterionIndex[critIndex] = rawDetails[matchedIdx];
+                }
+            }
+
+            var totalCriteriaMax = orderedCriteria.Sum(c => c.MaxScore);
+            var clampedAiScore = Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+            decimal runningAllocatedScore = 0.0m;
+
+            for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
+            {
+                var c = orderedCriteria[critIndex];
+                var detailDto = matchedByCriterionIndex[critIndex];
+                if (detailDto == null && critIndex < rawDetails.Count && !usedRawIndices.Contains(critIndex))
+                {
+                    usedRawIndices.Add(critIndex);
+                    detailDto = rawDetails[critIndex];
+                }
+
+                decimal score;
+                if (rawDetails.Count > 0)
+                {
+                    score = detailDto != null
+                        ? Math.Clamp(Math.Round(detailDto.Score, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore)
+                        : 0.0m;
+                }
+                else if (totalCriteriaMax > 0.0m && clampedAiScore > 0.0m)
+                {
+                    if (critIndex == orderedCriteria.Count - 1)
+                    {
+                        score = Math.Clamp(
+                            Math.Round(clampedAiScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                            0.0m,
+                            c.MaxScore);
+                    }
+                    else
+                    {
+                        score = Math.Clamp(
+                            Math.Round(clampedAiScore * (c.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                            0.0m,
+                            c.MaxScore);
+                        runningAllocatedScore += score;
+                    }
+                }
+                else
+                {
+                    score = 0.0m;
+                }
+
                 var comment = !string.IsNullOrWhiteSpace(detailDto?.Comment)
                     ? detailDto!.Comment
                     : score > 0.0m
@@ -322,9 +400,9 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 });
             }
 
-            var finalQuestionScore = rawDetails.Count > 0 && criterionScores.Count > 0
+            var finalQuestionScore = criterionScores.Count > 0
                 ? Math.Clamp(Math.Round(criterionScores.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
-                : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+                : clampedAiScore;
 
             var questionScoreDto = new MockExamQuestionScoreDto(
                 q.Id,
@@ -409,88 +487,130 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 2,
                 MidpointRounding.AwayFromZero);
 
-            decimal effectiveMainScore;
-            List<MockExamCriterionScoreDto> effectiveCriteria;
+            var mergedCriteria = new List<MockExamCriterionScoreDto>(mainCriteria.Count);
 
-            if (avgFollowUpScore >= mainResult.score.Score)
+            for (int critIdx = 0; critIdx < mainCriteria.Count; critIdx++)
             {
-                var mergedCriteria = new List<MockExamCriterionScoreDto>(mainCriteria.Count);
+                var mainCrit = mainCriteria[critIdx];
+                decimal bestCritScore = mainCrit.Score;
+                string? bestFollowUpComment = null;
 
-                for (int critIdx = 0; critIdx < mainCriteria.Count; critIdx++)
+                foreach (var fu in answeredFollowUps)
                 {
-                    var mainCrit = mainCriteria[critIdx];
-                    decimal bestCritScore = mainCrit.Score;
-                    string? bestFollowUpComment = null;
-
-                    foreach (var fu in answeredFollowUps)
+                    var fuCriteria = fu.score.CriteriaScores;
+                    if (fuCriteria == null || fuCriteria.Count == 0)
                     {
-                        var fuCriteria = fu.score.CriteriaScores;
-                        if (fuCriteria == null || fuCriteria.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var matchedFuCrit = fuCriteria.FirstOrDefault(fc =>
-                                fc.CriterionId == mainCrit.CriterionId && mainCrit.CriterionId != Guid.Empty)
-                            ?? fuCriteria.FirstOrDefault(fc =>
-                                !string.IsNullOrWhiteSpace(mainCrit.CriterionName) &&
-                                string.Equals(fc.CriterionName, mainCrit.CriterionName, StringComparison.OrdinalIgnoreCase))
-                            ?? (critIdx < fuCriteria.Count ? fuCriteria[critIdx] : null);
-
-                        if (matchedFuCrit != null && matchedFuCrit.Score > bestCritScore)
-                        {
-                            bestCritScore = Math.Clamp(
-                                Math.Round(matchedFuCrit.Score, 2, MidpointRounding.AwayFromZero),
-                                0.0m,
-                                mainCrit.MaxScore);
-                            bestFollowUpComment = matchedFuCrit.Comment;
-                        }
+                        continue;
                     }
 
-                    var mergedComment = mainCrit.Comment;
-                    if (bestCritScore > mainCrit.Score && !string.IsNullOrWhiteSpace(bestFollowUpComment))
-                    {
-                        mergedComment = string.IsNullOrWhiteSpace(mergedComment)
-                            ? bestFollowUpComment
-                            : $"{mergedComment} (Bổ sung từ câu hỏi phụ: {bestFollowUpComment})";
-                    }
+                    var matchedFuCrit = fuCriteria.FirstOrDefault(fc =>
+                            fc.CriterionId == mainCrit.CriterionId && mainCrit.CriterionId != Guid.Empty)
+                        ?? fuCriteria.FirstOrDefault(fc =>
+                            !string.IsNullOrWhiteSpace(mainCrit.CriterionName) &&
+                            string.Equals(fc.CriterionName, mainCrit.CriterionName, StringComparison.OrdinalIgnoreCase))
+                        ?? (critIdx < fuCriteria.Count ? fuCriteria[critIdx] : null);
 
-                    mergedCriteria.Add(mainCrit with
+                    if (matchedFuCrit != null && matchedFuCrit.Score > bestCritScore)
                     {
-                        Score = bestCritScore,
-                        Comment = mergedComment
-                    });
-
-                    if (mainResult.eval?.Details != null)
-                    {
-                        var evalDetail = mainResult.eval.Details.FirstOrDefault(d => d.CriterionId == mainCrit.CriterionId)
-                            ?? (critIdx < mainResult.eval.Details.Count ? mainResult.eval.Details.ElementAtOrDefault(critIdx) : null);
-                        if (evalDetail != null)
-                        {
-                            evalDetail.Score = bestCritScore;
-                            if (!string.IsNullOrWhiteSpace(mergedComment))
-                            {
-                                evalDetail.Comment = mergedComment;
-                            }
-                        }
+                        bestCritScore = Math.Clamp(
+                            Math.Round(matchedFuCrit.Score, 2, MidpointRounding.AwayFromZero),
+                            0.0m,
+                            mainCrit.MaxScore);
+                        bestFollowUpComment = matchedFuCrit.Comment;
                     }
                 }
 
-                decimal mergedFromCriteria = mergedCriteria.Count > 0 && mergedCriteria.Sum(c => c.Score) > 0
-                    ? Math.Clamp(Math.Round(mergedCriteria.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
-                    : mainResult.score.Score;
+                var mergedComment = mainCrit.Comment;
+                if (bestCritScore > mainCrit.Score && !string.IsNullOrWhiteSpace(bestFollowUpComment))
+                {
+                    mergedComment = string.IsNullOrWhiteSpace(mergedComment)
+                        ? bestFollowUpComment
+                        : $"{mergedComment} (Bổ sung từ câu hỏi phụ: {bestFollowUpComment})";
+                }
 
+                mergedCriteria.Add(mainCrit with
+                {
+                    Score = bestCritScore,
+                    Comment = mergedComment
+                });
+
+                if (mainResult.eval?.Details != null)
+                {
+                    var evalDetail = mainResult.eval.Details.FirstOrDefault(d => d.CriterionId == mainCrit.CriterionId)
+                        ?? (critIdx < mainResult.eval.Details.Count ? mainResult.eval.Details.ElementAtOrDefault(critIdx) : null);
+                    if (evalDetail != null)
+                    {
+                        evalDetail.Score = bestCritScore;
+                        if (!string.IsNullOrWhiteSpace(mergedComment))
+                        {
+                            evalDetail.Comment = mergedComment;
+                        }
+                    }
+                }
+            }
+
+            decimal originalMainScore = mainResult.score.Score;
+            decimal mergedSum = mergedCriteria.Count > 0
+                ? Math.Round(mergedCriteria.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero)
+                : 0.0m;
+            bool hasCriterionImprovement = mergedSum > originalMainScore;
+
+            decimal effectiveMainScore;
+            if (hasCriterionImprovement || avgFollowUpScore >= originalMainScore)
+            {
                 effectiveMainScore = Math.Clamp(
-                    Math.Max(mainResult.score.Score, Math.Max(mergedFromCriteria, weightedScore)),
+                    mergedSum > 0.0m
+                        ? Math.Max(mergedSum, weightedScore)
+                        : Math.Max(originalMainScore, weightedScore),
                     0.0m,
                     10.0m);
-                effectiveCriteria = mergedCriteria;
             }
             else
             {
                 effectiveMainScore = Math.Clamp(weightedScore, 0.0m, 10.0m);
-                effectiveCriteria = mainCriteria;
+                if (mergedCriteria.Count > 0 && mergedSum > 0.0m && effectiveMainScore != mergedSum)
+                {
+                    var scaledCriteria = new List<MockExamCriterionScoreDto>(mergedCriteria.Count);
+                    decimal runningScaled = 0.0m;
+
+                    for (int cIdx = 0; cIdx < mergedCriteria.Count; cIdx++)
+                    {
+                        var critDto = mergedCriteria[cIdx];
+                        decimal scaledScore;
+                        if (cIdx == mergedCriteria.Count - 1)
+                        {
+                            scaledScore = Math.Clamp(
+                                Math.Round(effectiveMainScore - runningScaled, 2, MidpointRounding.AwayFromZero),
+                                0.0m,
+                                critDto.MaxScore);
+                        }
+                        else
+                        {
+                            scaledScore = Math.Clamp(
+                                Math.Round(effectiveMainScore * (critDto.Score / mergedSum), 2, MidpointRounding.AwayFromZero),
+                                0.0m,
+                                critDto.MaxScore);
+                            runningScaled += scaledScore;
+                        }
+
+                        scaledCriteria.Add(critDto with { Score = scaledScore });
+
+                        if (mainResult.eval?.Details != null)
+                        {
+                            var evalDetail = mainResult.eval.Details.FirstOrDefault(d => d.CriterionId == critDto.CriterionId)
+                                ?? (cIdx < mainResult.eval.Details.Count ? mainResult.eval.Details.ElementAtOrDefault(cIdx) : null);
+                            if (evalDetail != null)
+                            {
+                                evalDetail.Score = scaledScore;
+                            }
+                        }
+                    }
+
+                    mergedCriteria = scaledCriteria;
+                }
             }
+
+            var effectiveCriteria = mergedCriteria;
 
             if (mainResult.eval != null)
             {
@@ -512,7 +632,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
         var mainResults = results.Where(r => !r.a.IsFollowUp).ToList();
         int totalQuestions = mainResults.Count;
         int answeredQuestions = mainResults.Count(r =>
-            !string.IsNullOrWhiteSpace(r.a.AnswerText) && r.a.Status == "answered");
+            !string.IsNullOrWhiteSpace(r.a.AnswerText) &&
+            (r.a.Status == "answered" || r.a.Status == "graded"));
 
         decimal totalScore = 0.0m;
         if (totalQuestions > 0)

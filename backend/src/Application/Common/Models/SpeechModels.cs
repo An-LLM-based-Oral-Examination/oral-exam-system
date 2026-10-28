@@ -74,6 +74,11 @@ public static class TranscriptHelper
         System.Text.RegularExpressions.RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(500));
 
+    private static readonly char[] WordSplitSeparators =
+    [
+        ' ', '\t', '\r', '\n', ',', '.', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '"', '\'', '/', '\\', '-', '_', '“', '”', '‘', '’', '…'
+    ];
+
     private static string CollapseRepetitions(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -81,8 +86,46 @@ public static class TranscriptHelper
             return string.Empty;
         }
 
-        var collapsed = RepeatedWordLoopRegex.Replace(text, "$1");
-        return RepeatedPhraseRegex.Replace(collapsed, "$1");
+        var collapsed = text;
+        try
+        {
+            collapsed = RepeatedWordLoopRegex.Replace(collapsed, "$1");
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // Giữ nguyên khi chuỗi quá dài vượt ngưỡng timeout của regex
+        }
+
+        try
+        {
+            if (collapsed.Length <= 2_500)
+            {
+                collapsed = RepeatedPhraseRegex.Replace(collapsed, "$1");
+            }
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // Giữ nguyên khi chuỗi quá dài vượt ngưỡng timeout của regex
+        }
+
+        return collapsed;
+    }
+
+    private static bool SafeIsNoiseMatch(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input) || input.Length > 600)
+        {
+            return false;
+        }
+
+        try
+        {
+            return NoiseRegex.IsMatch(input);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     public static bool IsNoiseHallucination(string? text)
@@ -100,13 +143,22 @@ public static class TranscriptHelper
         // 1. Kiểm tra nhanh khi cả văn bản sau khi khử lặp trùng khớp với mẫu ảo giác tiếng ồn
         var collapsedAll = CollapseRepetitions(trimmed);
         var coreAll = PunctuationTrimRegex.Replace(collapsedAll, string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(coreAll) || NoiseRegex.IsMatch(coreAll))
+        if (string.IsNullOrWhiteSpace(coreAll) || SafeIsNoiseMatch(coreAll))
         {
             return true;
         }
 
         // 2. Tách thành các câu đơn để kiểm tra từng câu
-        var sentences = SentenceSplitRegex.Split(trimmed);
+        string[] sentences;
+        try
+        {
+            sentences = SentenceSplitRegex.Split(trimmed);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            sentences = [trimmed];
+        }
+
         var hasValidSentence = false;
         foreach (var s in sentences)
         {
@@ -117,7 +169,7 @@ public static class TranscriptHelper
                 continue;
             }
 
-            if (!NoiseRegex.IsMatch(core))
+            if (!SafeIsNoiseMatch(core))
             {
                 hasValidSentence = true;
                 break;
@@ -125,6 +177,62 @@ public static class TranscriptHelper
         }
 
         return !hasValidSentence;
+    }
+
+    /// <summary>
+    /// Kiểm tra xem bản bóc băng của thí sinh có phải chỉ đọc nhại lại nguyên văn câu hỏi đề bài (Question Echo)
+    /// mà không đưa ra câu trả lời thực chất hay không.
+    /// </summary>
+    public static bool LooksLikeQuestionEcho(string? transcript, string? questionText)
+    {
+        if (string.IsNullOrWhiteSpace(transcript) || string.IsNullOrWhiteSpace(questionText))
+        {
+            return false;
+        }
+
+        var questionWords = questionText
+            .ToLowerInvariant()
+            .Split(WordSplitSeparators, StringSplitOptions.RemoveEmptyEntries);
+
+        if (questionWords.Length < 6)
+        {
+            return false;
+        }
+
+        var transcriptWords = transcript
+            .ToLowerInvariant()
+            .Split(WordSplitSeparators, StringSplitOptions.RemoveEmptyEntries);
+
+        if (transcriptWords.Length == 0)
+        {
+            return false;
+        }
+
+        var minWords = (int)Math.Floor(questionWords.Length * 0.60);
+        var maxWords = (int)Math.Ceiling(questionWords.Length * 1.35);
+        if (transcriptWords.Length < minWords || transcriptWords.Length > maxWords)
+        {
+            return false;
+        }
+
+        var questionWordCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in questionWords)
+        {
+            questionWordCounts[w] = questionWordCounts.TryGetValue(w, out var c) ? c + 1 : 1;
+        }
+
+        int matchedWords = 0;
+        foreach (var tw in transcriptWords)
+        {
+            if (questionWordCounts.TryGetValue(tw, out var remaining) && remaining > 0)
+            {
+                matchedWords++;
+                questionWordCounts[tw] = remaining - 1;
+            }
+        }
+
+        double overlapRatio = (double)matchedWords / transcriptWords.Length;
+        return overlapRatio >= 0.85;
     }
 
     public static string NormalizeOrFallback(string? rawText, string? normalized)

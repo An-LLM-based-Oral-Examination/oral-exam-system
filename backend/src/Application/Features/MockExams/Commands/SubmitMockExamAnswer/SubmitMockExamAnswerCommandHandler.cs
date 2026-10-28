@@ -670,20 +670,98 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     var rawDetails = aiResult.Details ?? new List<GradingDetailDto>();
                     var evalId = Guid.NewGuid();
                     var evalDetails = new List<AiEvaluationDetail>();
+                    var matchedByCriterionIndex = new GradingDetailDto?[orderedCriteria.Count];
+                    var usedRawIndices = new HashSet<int>();
 
                     for (int i = 0; i < orderedCriteria.Count; i++)
                     {
                         var crit = orderedCriteria[i];
-                        var matchedDetail = rawDetails.FirstOrDefault(d =>
-                                string.Equals(d.CriterionId?.Trim(), crit.Id.ToString(), StringComparison.OrdinalIgnoreCase))
-                            ?? rawDetails.FirstOrDefault(d =>
-                                !string.IsNullOrWhiteSpace(crit.CriterionName) &&
-                                string.Equals(d.CriterionId?.Trim(), crit.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
-                            ?? (i < rawDetails.Count ? rawDetails[i] : null);
+                        int matchedIdx = -1;
 
-                        var detailScore = matchedDetail != null
-                            ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, crit.MaxScore)
-                            : 0.0m;
+                        for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                        {
+                            if (usedRawIndices.Contains(rIdx))
+                            {
+                                continue;
+                            }
+
+                            var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                            if (string.Equals(candidateId, crit.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                            {
+                                matchedIdx = rIdx;
+                                break;
+                            }
+                        }
+
+                        if (matchedIdx < 0 && !string.IsNullOrWhiteSpace(crit.CriterionName))
+                        {
+                            for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                            {
+                                if (usedRawIndices.Contains(rIdx))
+                                {
+                                    continue;
+                                }
+
+                                var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                                if (string.Equals(candidateId, crit.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    matchedIdx = rIdx;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (matchedIdx >= 0)
+                        {
+                            usedRawIndices.Add(matchedIdx);
+                            matchedByCriterionIndex[i] = rawDetails[matchedIdx];
+                        }
+                    }
+
+                    var totalCriteriaMax = orderedCriteria.Sum(c => c.MaxScore);
+                    var clampedAiScore = Math.Clamp(Math.Round(aiResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+                    decimal runningAllocatedScore = 0.0m;
+
+                    for (int i = 0; i < orderedCriteria.Count; i++)
+                    {
+                        var crit = orderedCriteria[i];
+                        var matchedDetail = matchedByCriterionIndex[i];
+                        if (matchedDetail == null && i < rawDetails.Count && !usedRawIndices.Contains(i))
+                        {
+                            usedRawIndices.Add(i);
+                            matchedDetail = rawDetails[i];
+                        }
+
+                        decimal detailScore;
+                        if (rawDetails.Count > 0)
+                        {
+                            detailScore = matchedDetail != null
+                                ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, crit.MaxScore)
+                                : 0.0m;
+                        }
+                        else if (totalCriteriaMax > 0.0m && clampedAiScore > 0.0m)
+                        {
+                            if (i == orderedCriteria.Count - 1)
+                            {
+                                detailScore = Math.Clamp(
+                                    Math.Round(clampedAiScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                                    0.0m,
+                                    crit.MaxScore);
+                            }
+                            else
+                            {
+                                detailScore = Math.Clamp(
+                                    Math.Round(clampedAiScore * (crit.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                                    0.0m,
+                                    crit.MaxScore);
+                                runningAllocatedScore += detailScore;
+                            }
+                        }
+                        else
+                        {
+                            detailScore = 0.0m;
+                        }
+
                         var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
                             ? matchedDetail!.Comment
                             : detailScore > 0.0m
@@ -700,9 +778,9 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         });
                     }
 
-                    var finalCachedScore = rawDetails.Count > 0 && evalDetails.Count > 0
+                    var finalCachedScore = evalDetails.Count > 0
                         ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
-                        : Math.Clamp(Math.Round(aiResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+                        : clampedAiScore;
 
                     if (justAnswered.AiEvaluations is { Count: > 0 })
                     {

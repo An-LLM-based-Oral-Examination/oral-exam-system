@@ -101,15 +101,25 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 ? string.Join("\n\n---\n\n", transcripts)
                 : transcripts.FirstOrDefault();
 
-            // Scores
+            // Scores (Trung bình cộng toàn bộ câu hỏi của vé thi khi chưa có LecturerAudit)
             decimal? aiScore = ticket.LecturerAudit?.OriginalAiScore
+                ?? (ticket.Submissions.Any(s => s.AiScore.HasValue)
+                    ? (decimal?)Math.Round(ticket.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
+                    : null)
                 ?? latestSubmission?.AiScore
-                ?? (ticket.Submissions.Any(s => s.AiScore.HasValue) ? (decimal?)ticket.Submissions.Average(s => s.AiScore!.Value) : null)
                 ?? latestEval?.TotalScore;
 
             decimal? finalScore = ticket.LecturerAudit?.AuditedScore
+                ?? (ticket.Submissions.Any(s => s.FinalScore.HasValue)
+                    ? (decimal?)Math.Round(
+                        ticket.Submissions
+                            .Select(s => s.FinalScore ?? s.AiScore)
+                            .Where(v => v.HasValue)
+                            .Average(v => v!.Value),
+                        2,
+                        MidpointRounding.AwayFromZero)
+                    : null)
                 ?? latestSubmission?.FinalScore
-                ?? (ticket.Submissions.Any(s => s.FinalScore.HasValue) ? (decimal?)ticket.Submissions.Average(s => s.FinalScore!.Value) : null)
                 ?? aiScore;
 
 
@@ -139,10 +149,13 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 isSuspicious = true;
                 suspiciousReason = $"Độ tin cậy AI thấp ({(int)Math.Round(confidenceScore.Value * 100, MidpointRounding.AwayFromZero)}% < 70%). Cần đối soát lại phát âm hoặc chất lượng ghi âm.";
             }
-            else if (ticket.Submissions.Any(s => s.GradingStatus == "suspicious"))
+            else if (ticket.Submissions.Any(s => s.IsSuspicious || s.GradingStatus == "suspicious"))
             {
                 isSuspicious = true;
-                suspiciousReason = "Bài nộp bị đánh dấu nghi ngờ trong quá trình chấm.";
+                suspiciousReason = ticket.Submissions
+                    .Select(s => s.SuspiciousReason)
+                    .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r))
+                    ?? "Bài nộp bị đánh dấu nghi ngờ trong quá trình chấm.";
             }
             else if (ticket.LecturerAudit != null && Math.Abs(ticket.LecturerAudit.AuditedScore - ticket.LecturerAudit.OriginalAiScore) >= 2.0m)
             {

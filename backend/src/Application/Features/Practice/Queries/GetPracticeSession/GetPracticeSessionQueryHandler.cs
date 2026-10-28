@@ -236,9 +236,20 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                         .Select(d =>
                         {
                             var critName = d.Criterion?.CriterionName;
-                            if (string.IsNullOrWhiteSpace(critName) && questionById.TryGetValue(a.QuestionId, out var qRef))
+                            var critMaxScore = d.Criterion?.MaxScore ?? 0m;
+                            if ((string.IsNullOrWhiteSpace(critName) || critMaxScore <= 0m) &&
+                                questionById.TryGetValue(a.QuestionId, out var qRef))
                             {
-                                critName = qRef.Rubric?.Criteria.FirstOrDefault(c => c.Id == d.CriterionId)?.CriterionName;
+                                var matchedCrit = qRef.Rubric?.Criteria.FirstOrDefault(c => c.Id == d.CriterionId);
+                                if (string.IsNullOrWhiteSpace(critName))
+                                {
+                                    critName = matchedCrit?.CriterionName;
+                                }
+
+                                if (critMaxScore <= 0m && matchedCrit != null)
+                                {
+                                    critMaxScore = matchedCrit.MaxScore;
+                                }
                             }
 
                             return new PracticeEvaluationDetailDto
@@ -246,6 +257,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                                 CriterionId = d.CriterionId,
                                 CriterionName = critName ?? string.Empty,
                                 Score = d.Score,
+                                MaxScore = critMaxScore > 0m ? critMaxScore : 10.0m,
                                 Comment = d.Comment
                             };
                         }).ToList() ?? new()

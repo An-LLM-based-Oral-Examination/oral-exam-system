@@ -189,6 +189,7 @@ function toScorecard(result: PracticeAnswerDetail): ScorecardPayload {
       criterionId: criterion.criterionId,
       criterionName: criterion.criterionName,
       score: criterion.score,
+      maxScore: criterion.maxScore,
       comment: criterion.comment ?? 'Không có nhận xét bổ sung.',
     })),
     feedback: result.feedback ?? 'Hệ thống chưa trả về nhận xét tổng thể.',
@@ -211,15 +212,20 @@ function toFullSessionScorecard(
       (item): item is { questionNumber: number; result: PracticeAnswerDetail } =>
         Boolean(item.result && item.result.status === 'graded' && item.result.totalScore !== null),
     )
+  const totalMainQuestions = Math.max(1, questions.length)
   const totalScore =
-    gradedResults.reduce((sum, item) => sum + (item.result.totalScore ?? 0), 0) /
-    gradedResults.length
+    Math.round(
+      (gradedResults.reduce((sum, item) => sum + (item.result.totalScore ?? 0), 0) /
+        totalMainQuestions) *
+        100,
+    ) / 100
 
   const criteriaScores = gradedResults.flatMap(({ questionNumber, result }) =>
     result.criteriaScores.map((criterion, criterionIndex) => ({
       criterionId: `${result.questionId}-${criterion.criterionId}-${criterionIndex}`,
       criterionName: criterion.criterionName,
       score: criterion.score,
+      maxScore: criterion.maxScore,
       comment: criterion.comment ?? 'Không có nhận xét bổ sung.',
       questionNumber,
     })),
@@ -358,11 +364,12 @@ export const PracticeSessionPage: React.FC = () => {
   const submissionRecoveryInFlightRef = useRef(false)
   const submissionRequestInFlightRef = useRef(false)
   const segmentPromisesRef = useRef<Array<Promise<string>>>([])
+  const vocabularyHintRef = useRef<string | undefined>(undefined)
   const handleRecorderSegment = useCallback((segmentBlob: Blob) => {
     const segmentPromise = storageService
       .uploadPracticeAudio(segmentBlob, {
         clientTranscript: undefined,
-        vocabularyHint: undefined,
+        vocabularyHint: vocabularyHintRef.current,
       })
       .then((res) => res.transcript.trim())
       .catch(() => '')
@@ -425,6 +432,25 @@ export const PracticeSessionPage: React.FC = () => {
     ? runtime?.questionDifficulties[currentQuestion.questionId]
     : undefined
   const activePrompt = runtime?.activeFollowUp?.prompt ?? currentQuestion?.content ?? ''
+  const practiceVocabularyHint = useMemo(() => {
+    const parts = [
+      runtime?.config.courseCode?.trim(),
+      runtime?.config.courseName?.trim(),
+      activePrompt.trim(),
+      currentQuestion?.content?.trim(),
+      currentQuestion?.rubricCriteria?.join(', ').trim(),
+    ].filter((part): part is string => Boolean(part))
+    return parts.length > 0 ? parts.join(' - ').slice(0, 320) : undefined
+  }, [
+    activePrompt,
+    currentQuestion?.content,
+    currentQuestion?.rubricCriteria,
+    runtime?.config.courseCode,
+    runtime?.config.courseName,
+  ])
+  useEffect(() => {
+    vocabularyHintRef.current = practiceVocabularyHint
+  }, [practiceVocabularyHint])
   const hasQuestionImage = Boolean(currentQuestion?.imageUrl?.trim())
   const isTextLayout = answerInputMode === 'text'
   const isImageTextLayout = hasQuestionImage && isTextLayout
@@ -444,7 +470,7 @@ export const PracticeSessionPage: React.FC = () => {
         )
         .sort(compareSubmittedAtDescending)[0] ?? null
     )
-  }, [allResults, currentQuestion?.questionId, mode])
+  }, [allResults, currentQuestion, mode])
   const runtimeIssue = !sessionId
     ? 'Đường dẫn phiên luyện tập thiếu mã phiên.'
     : !runtime
@@ -591,7 +617,7 @@ export const PracticeSessionPage: React.FC = () => {
       }, 900)
     }, 0)
     return () => window.clearTimeout(resultTimer)
-  }, [allResults, gradingResults, mode, runtime?.pendingAnswerId, updateRuntime])
+  }, [allResults, gradingResults, mode, runtime, updateRuntime])
 
   useEffect(() => {
     if (!runtime?.pendingAnswerId) return
@@ -706,17 +732,20 @@ export const PracticeSessionPage: React.FC = () => {
         (runtime?.pendingAnswerId || runtime?.fullSessionSubmitted || runtime?.pendingSubmission),
     )
     if (!gradingIsActive) {
-      setGradingElapsedSeconds(0)
-      return
+      const resetTimer = window.setTimeout(() => setGradingElapsedSeconds(0), 0)
+      return () => window.clearTimeout(resetTimer)
     }
 
     const startedAt = Date.now()
     const updateElapsedTime = () => {
       setGradingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000))
     }
-    updateElapsedTime()
+    const initialTimer = window.setTimeout(updateElapsedTime, 0)
     const intervalId = window.setInterval(updateElapsedTime, 1_000)
-    return () => window.clearInterval(intervalId)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(intervalId)
+    }
   }, [
     runtime?.fullSessionSubmitted,
     runtime?.pendingAnswerId,
@@ -728,8 +757,8 @@ export const PracticeSessionPage: React.FC = () => {
 
   useEffect(() => {
     if (!isRecording) {
-      setRecordingElapsedSeconds(0)
-      return
+      const resetTimer = window.setTimeout(() => setRecordingElapsedSeconds(0), 0)
+      return () => window.clearTimeout(resetTimer)
     }
 
     const updateElapsedTime = () => {
@@ -739,9 +768,12 @@ export const PracticeSessionPage: React.FC = () => {
       )
     }
 
-    updateElapsedTime()
+    const initialTimer = window.setTimeout(updateElapsedTime, 0)
     const intervalId = window.setInterval(updateElapsedTime, 250)
-    return () => window.clearInterval(intervalId)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(intervalId)
+    }
   }, [isRecording])
 
   const handleReadQuestion = () => {
@@ -806,7 +838,7 @@ export const PracticeSessionPage: React.FC = () => {
             ? storageService
                 .uploadPracticeAudio(audio, {
                   clientTranscript: undefined,
-                  vocabularyHint: undefined,
+                  vocabularyHint: practiceVocabularyHint,
                 })
                 .then((res) => res.transcript.trim())
                 .catch(() => '')
@@ -818,7 +850,7 @@ export const PracticeSessionPage: React.FC = () => {
       if (!finalTranscript && audio.size > 0) {
         const response = await storageService.uploadPracticeAudio(audio, {
           clientTranscript: undefined,
-          vocabularyHint: undefined,
+          vocabularyHint: practiceVocabularyHint,
         })
         finalTranscript = response.transcript.trim()
       }
@@ -1918,6 +1950,7 @@ export const PracticeSessionPage: React.FC = () => {
               <QuestionImage
                 imageUrl={currentQuestion.imageUrl}
                 imageAlt={currentQuestion.imageAlt}
+                showCaption={false}
                 className={cn(
                   'mt-2 max-h-[14vh] [&>div]:min-h-0 [&>div]:p-1 [&_img]:max-h-[12vh]',
                   hasQuestionImage &&
@@ -1967,16 +2000,26 @@ export const PracticeSessionPage: React.FC = () => {
                   </button>
                 </div>
 
-                <h2
+                <div
                   className={cn(
-                    isTextLayout
-                      ? 'mt-2 text-[18px] leading-snug'
-                      : 'mt-3 text-[18px] leading-snug',
-                    'font-semibold whitespace-pre-line text-[#0F2854]',
+                    hasQuestionImage
+                      ? 'mt-2 max-h-[clamp(110px,19vh,190px)] overflow-y-auto pr-1.5'
+                      : 'mt-2.5 max-h-[clamp(120px,22vh,210px)] overflow-y-auto pr-1.5',
                   )}
                 >
-                  {formatPracticePrompt(activePrompt)}
-                </h2>
+                  <h2
+                    className={cn(
+                      isTextLayout
+                        ? 'text-[clamp(15px,1.25vw,18px)] leading-relaxed'
+                        : hasQuestionImage
+                          ? 'text-[clamp(16px,1.35vw,19px)] leading-relaxed'
+                          : 'text-[clamp(17px,1.5vw,21px)] leading-relaxed',
+                      'font-semibold whitespace-pre-line text-[#0F2854]',
+                    )}
+                  >
+                    {formatPracticePrompt(activePrompt)}
+                  </h2>
+                </div>
 
               </div>
             </div>

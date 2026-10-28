@@ -41,17 +41,23 @@ public static class ExamShiftCertificateHashGenerator
                 .FirstOrDefault();
 
             decimal? aiScore = ticket.LecturerAudit?.OriginalAiScore
-                ?? latestSubmission?.AiScore
                 ?? (submissions.Any(s => s.AiScore.HasValue)
                     ? (decimal?)Math.Round(submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
                     : null)
+                ?? latestSubmission?.AiScore
                 ?? latestEval?.TotalScore;
 
             decimal? finalScore = ticket.LecturerAudit?.AuditedScore
-                ?? latestSubmission?.FinalScore
                 ?? (submissions.Any(s => s.FinalScore.HasValue)
-                    ? (decimal?)Math.Round(submissions.Where(s => s.FinalScore.HasValue).Average(s => s.FinalScore!.Value), 2, MidpointRounding.AwayFromZero)
+                    ? (decimal?)Math.Round(
+                        submissions
+                            .Select(s => s.FinalScore ?? s.AiScore)
+                            .Where(v => v.HasValue)
+                            .Average(v => v!.Value),
+                        2,
+                        MidpointRounding.AwayFromZero)
                     : null)
+                ?? latestSubmission?.FinalScore
                 ?? aiScore;
 
             var audioHash = latestSubmission?.AudioHashSha256

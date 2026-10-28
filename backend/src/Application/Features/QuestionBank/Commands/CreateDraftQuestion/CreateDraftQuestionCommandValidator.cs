@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using FluentValidation;
 using OralExamination.Domain.Enums;
@@ -26,28 +27,32 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
             .WithMessage("Bậc Bloom không hợp lệ.");
 
         RuleFor(v => v.Rubric)
-            .NotNull().WithMessage("Barem Rubric không được để trống.");
+            .NotNull().WithMessage("Barem Rubric không được để trống.")
+            .When(v => !v.RubricId.HasValue || v.RubricId.Value == Guid.Empty);
 
-        RuleFor(v => v.Rubric.Name)
-            .NotEmpty().WithMessage("Tên Barem Rubric không được để trống.");
-
-        RuleFor(v => v.Rubric.Criteria)
-            .NotNull().Must(c => c != null && c.Count >= 2)
-            .WithMessage("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
-
-        // RÀNG BUỘC BẤT BIẾN: Tổng điểm các tiêu chí rubric con PHẢI BẰNG CHÍNH XÁC 10.00
-        RuleFor(v => v.Rubric.Criteria)
-            .Must(criteria => criteria != null && criteria.Sum(c => c.MaxScore) == 10.00m)
-            .WithMessage("Tổng điểm tối đa của các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
-
-        RuleForEach(v => v.Rubric.Criteria).ChildRules(criterion =>
+        When(v => v.Rubric != null, () =>
         {
-            criterion.RuleFor(c => c.CriterionName)
-                .NotEmpty().WithMessage("Tên tiêu chí con không được để trống.");
-            criterion.RuleFor(c => c.MaxScore)
-                .GreaterThan(0).WithMessage("Điểm tối đa của từng tiêu chí con phải lớn hơn 0.");
-            criterion.RuleFor(c => c.Weight)
-                .GreaterThan(0).WithMessage("Trọng số của từng tiêu chí con phải lớn hơn 0.");
+            RuleFor(v => v.Rubric.Name)
+                .NotEmpty().WithMessage("Tên Barem Rubric không được để trống.");
+
+            RuleFor(v => v.Rubric.Criteria)
+                .NotNull().Must(c => c != null && c.Count >= 2)
+                .WithMessage("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
+
+            // RÀNG BUỘC BẤT BIẾN: Tổng điểm các tiêu chí rubric con PHẢI BẰNG CHÍNH XÁC 10.00
+            RuleFor(v => v.Rubric.Criteria)
+                .Must(criteria => criteria != null && criteria.Sum(c => c.MaxScore) == 10.00m)
+                .WithMessage("Tổng điểm tối đa của các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+
+            RuleForEach(v => v.Rubric.Criteria).ChildRules(criterion =>
+            {
+                criterion.RuleFor(c => c.CriterionName)
+                    .NotEmpty().WithMessage("Tên tiêu chí con không được để trống.");
+                criterion.RuleFor(c => c.MaxScore)
+                    .GreaterThan(0).WithMessage("Điểm tối đa của từng tiêu chí con phải lớn hơn 0.");
+                criterion.RuleFor(c => c.Weight)
+                    .GreaterThan(0).WithMessage("Trọng số của từng tiêu chí con phải lớn hơn 0.");
+            });
         });
     }
 }

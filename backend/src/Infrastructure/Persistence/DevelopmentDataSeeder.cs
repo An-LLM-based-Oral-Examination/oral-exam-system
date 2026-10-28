@@ -2150,7 +2150,7 @@ public static class DevelopmentDataSeeder
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
                 HasFollowUp = true,
-                FollowUpPrompt = "How can understanding your own personality type help you collaborate better in software engineering teams?",
+                FollowUpPrompt = "How can understanding your own personality type help you collaborate better in academic or workplace teams?",
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
             },
@@ -2180,7 +2180,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 1 - Monologue: Achieving a Significant Goal",
                 Content = "Description Monologue: Describe a time when you successfully achieved an important personal or academic goal.\nYou should discuss:\n- What the goal was and why it mattered to you\n- The steps you took and obstacles you overcame to achieve it\n- How you felt when you accomplished it\n- What key lessons you learned from the entire experience.",
-                SampleAnswer = "A defining goal I accomplished was building and publishing an open-source technical project during my third semester of university. The goal was to prove to myself that I could create software that solves a real developer problem outside of classroom assignments. To achieve it, I spent two months studying Clean Architecture and modern API patterns, waking up early each morning to write code before classes. The biggest hurdle was managing burnout when complex bugs threatened my progress, which I overcame by breaking tasks into small daily commits. When the project received its first community stars and positive feedback, I felt an exhilarating sense of validation. The greatest lesson I took away is that consistent, disciplined incremental effort consistently outperforms erratic bursts of inspiration.",
+                SampleAnswer = "A defining goal I accomplished was organizing a charity book fair and English speaking workshop for two hundred students during my third semester of university. The goal mattered to me because I wanted to improve my public speaking confidence and contribute something meaningful to the student community. To achieve it, I spent two months coordinating with club members, preparing event materials, and practicing my presentation every morning before classes. The biggest obstacle was managing stress when several schedule changes happened at the last minute, which I overcame by dividing tasks clearly among our team. When the event succeeded and received warm feedback from participants, I felt a deep sense of pride. The greatest lesson I learned is that consistent daily preparation always outperforms last-minute effort.",
                 KeyPoints = "[\"Clearly define meaningful goal and motivation\",\"Detail specific actionable steps and obstacles overcome with grit\",\"Describe emotional impact of success\",\"Articulate enduring life lessons regarding discipline, resilience, and personal growth\"]",
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
@@ -2499,8 +2499,8 @@ public static class DevelopmentDataSeeder
                 CourseId = ent104Course.Id,
                 RubricId = RubricEnt104Id,
                 Title = "ENT104 Part 3 - In-Person Office Meetings vs Remote Online Meetings",
-                Content = "Extended Discussion: Compare traditional face-to-face meetings with online video meetings:\n1. What are the main benefits of meeting face-to-face in a conference room?\n2. When are online meetings on Zoom or Microsoft Teams more convenient?\n3. Which mode of collaboration do you think is better for software engineering teams?",
-                SampleAnswer = "Face-to-face meetings in a conference room build stronger interpersonal trust, allow natural reading of non-verbal cues, and make brainstorming on a physical whiteboard much faster. Conversely, online video meetings save commuting time, enable flexible remote work across different cities, and make screen-sharing code repositories effortless. For software engineering teams, a hybrid approach works best: holding in-person meetings for sprint planning and architecture design while using short online stand-ups for daily progress updates.",
+                Content = "Extended Discussion: Compare traditional face-to-face meetings with online video meetings:\n1. What are the main benefits of meeting face-to-face in a conference room?\n2. When are online meetings on Zoom or Microsoft Teams more convenient?\n3. Which mode of collaboration do you think is better for university and workplace teams?",
+                SampleAnswer = "Face-to-face meetings in a conference room build stronger interpersonal trust, allow natural reading of non-verbal cues, and make brainstorming on a physical whiteboard much faster. Conversely, online video meetings save commuting time, enable flexible remote collaboration across different cities, and make sharing documents effortless. For modern teams, a hybrid approach works best: holding in-person meetings for important planning and creative discussions while using short online calls for quick daily progress updates.",
                 KeyPoints = "[\"Compare non-verbal communication in face-to-face meetings vs convenience of remote calls\",\"Identify scenarios where each meeting mode excels\",\"Synthesize a practical hybrid collaboration model\"]",
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
@@ -2685,9 +2685,9 @@ public static class DevelopmentDataSeeder
                 CourseId = ent203Course.Id,
                 RubricId = RubricEnt203Id,
                 Title = "ENT203 Part 3 - Cross-Cultural Communication and Avoiding Misunderstandings",
-                Content = "Extended Discussion: When traveling abroad or working with international students, cultural differences are common. Please discuss:\n1. What non-verbal gestures or habits can cause misunderstandings between different cultures?\n2. How should you react if you accidentally offend someone from another culture?\n3. Why is cultural curiosity important for future software engineers?",
-                SampleAnswer = "Non-verbal gestures such as eye contact, personal space, hand signals, and punctuality norms vary widely across cultures and can easily cause unintended misunderstandings. If I accidentally offend someone from another culture, the best response is to apologize sincerely, ask politely about the custom, and show willingness to learn. For future software engineers, cultural curiosity is vital because we build products for diverse global users and collaborate daily with international clients.",
-                KeyPoints = "[\"Identify cross-cultural differences in non-verbal communication and norms\",\"Explain how to handle cultural missteps with humility and respect\",\"Connect cultural awareness to global software engineering work\"]",
+                Content = "Extended Discussion: When traveling abroad or studying with international students, cultural differences are common. Please discuss:\n1. What non-verbal gestures or habits can cause misunderstandings between different cultures?\n2. How should you react if you accidentally offend someone from another culture?\n3. Why is cultural curiosity important for university students in a globalized world?",
+                SampleAnswer = "Non-verbal gestures such as eye contact, personal space, hand signals, and punctuality norms vary widely across cultures and can easily cause unintended misunderstandings. If I accidentally offend someone from another culture, the best response is to apologize sincerely, ask politely about the custom, and show willingness to learn. For university students, cultural curiosity is vital because it broadens our worldview, builds mutual respect when traveling, and prepares us to work in multicultural environments.",
+                KeyPoints = "[\"Identify cross-cultural differences in non-verbal communication and norms\",\"Explain how to handle cultural missteps with humility and respect\",\"Connect cultural awareness to global communication and travel\"]",
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
                 HasFollowUp = true,
@@ -2767,13 +2767,13 @@ public static class DevelopmentDataSeeder
                 CourseId = ent303Course.Id,
                 RubricId = RubricEnt303Id,
                 Title = "ENT303 Part 1 - Role-Play: Advising an Intern on Workplace & Email Etiquette",
-                Content = "Role-Play Scenario: A friend is starting their first software engineering internship next week and asks for your advice on workplace manners. Explain:\n- How to dress and arrive on the first day\n- How to write polite, professional emails and chat messages to senior engineers\n- What habits to avoid during team meetings.",
-                SampleAnswer = "Congratulations on your internship! On your first day, you should dress in smart-casual attire and arrive at least fifteen minutes early to show reliability. When sending emails or chat messages to senior engineers, always include a clear subject line, a polite greeting, a concise summary of what you have already tried, and appreciation for their time. During team meetings, avoid checking your phone, interrupting speakers, or staying silent when you do not understand a task—always take notes and ask constructive questions.",
+                Content = "Role-Play Scenario: A friend is starting their first company internship next week and asks for your advice on workplace manners. Explain:\n- How to dress and arrive on the first day\n- How to write polite, professional emails and chat messages to senior colleagues\n- What habits to avoid during team meetings.",
+                SampleAnswer = "Congratulations on your internship! On your first day, you should dress in smart-casual attire and arrive at least fifteen minutes early to show reliability. When sending emails or chat messages to senior colleagues, always include a clear subject line, a polite greeting, a concise summary of what you have already prepared, and appreciation for their time. During team meetings, avoid checking your phone, interrupting speakers, or staying silent when you do not understand a task—always take notes and ask constructive questions.",
                 KeyPoints = "[\"Advise on punctuality and smart-casual dress code\",\"Detail professional email and technical chat etiquette\",\"Warn against distracting behaviors in team meetings\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
                 HasFollowUp = true,
-                FollowUpPrompt = "If an intern makes a mistake in their code during the first week, how should they report it to their mentor?",
+                FollowUpPrompt = "If an intern makes a mistake in their work during the first week, how should they report it to their supervisor?",
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
             },
@@ -2800,7 +2800,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt303Id,
                 Title = "ENT303 Part 2 - Storytelling: A Time When Good Manners Solved a Problem",
                 Content = "Narrative Task: Describe a real or memorable situation where being polite, patient, and respectful helped you resolve a misunderstanding or difficult situation:\n- What was the situation and who was involved?\n- What caused the problem?\n- How did you communicate politely to solve it?\n- What was the final outcome?",
-                SampleAnswer = "Last semester, during a busy group project, a teammate accidentally overwrote part of my frontend code right before our rehearsal. Instead of blaming him angrily in the group chat, I called him privately, calmly explained the version conflict, and asked if we could review the Git commit history together. Because I spoke respectfully, he immediately apologized and stayed up with me for an hour to merge both changes cleanly. In the end, our presentation succeeded and our friendship became even stronger.",
+                SampleAnswer = "Last semester, during a busy group presentation project, a teammate accidentally deleted two of my slides right before our rehearsal. Instead of blaming him angrily in the group chat, I called him privately, calmly explained what happened, and asked if we could restore the presentation file together from the version history. Because I spoke respectfully, he immediately apologized and stayed up with me for an hour to polish the slides cleanly. In the end, our presentation succeeded and our friendship became even stronger.",
                 KeyPoints = "[\"Narrate a structured past incident with clear context and conflict\",\"Demonstrate how calm, respectful communication de-escalated tension\",\"Highlight positive resolution and lesson learned\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -2914,7 +2914,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt403Id,
                 Title = "ENT403 Part 1 - Teamwork Preferences and Study Habits",
                 Content = "Topic: Learning Styles. Please answer the following questions:\n1. Do you prefer studying alone or studying in a group?\n2. What role do you usually take when working in a team project?\n3. How do you keep track of your homework and exam deadlines?\n4. What motivates you when a subject is very difficult?",
-                SampleAnswer = "I prefer studying alone when I need to understand new theoretical concepts, but I enjoy group study when reviewing for exams and debugging projects. In team projects, I usually take the role of backend developer or coordinator who tracks milestones. I use a digital calendar and a daily to-do list on Notion to keep track of all my deadlines. When a subject is difficult, breaking it into small topics and seeing my progress each day keeps me motivated.",
+                SampleAnswer = "I prefer studying alone when I need to understand new theoretical concepts, but I enjoy group study when reviewing for exams and practicing presentations. In team projects, I usually take the role of organizer or coordinator who tracks milestones and supports teammates. I use a digital calendar and a daily to-do list on my laptop to keep track of all my deadlines. When a subject is difficult, breaking it into small topics and seeing my progress each day keeps me motivated.",
                 KeyPoints = "[\"Compare solo study vs group study contexts\",\"Identify typical team role and deadline tracking tools\",\"Explain personal motivation strategy for hard subjects\"]",
                 Difficulty = QuestionDifficulty.Easy,
                 BloomLevel = BloomLevel.Understand,
@@ -2978,7 +2978,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt403Id,
                 Title = "ENT403 Part 1 - Monologue: A Friend or Colleague With an Inspiring Mindset",
                 Content = "Description Monologue: Describe a friend, classmate, or colleague whose positive mindset inspires you.\nYou should explain:\n- Who this person is and how you work or study together\n- How they react when facing setbacks or difficult tasks\n- What specific lesson you have adopted from their attitude.",
-                SampleAnswer = "My project teammate Minh has the most resilient and optimistic mindset of anyone I know. We have worked together on three software engineering courses over the past year. Whenever our code fails a test or requirements change at the last minute, he never complains or blames others; instead, he smiles, brews a cup of tea, and calmly breaks the bug down into testable hypotheses. Working with him taught me to view failures as diagnostic feedback rather than personal defeat.",
+                SampleAnswer = "My classmate Minh has the most resilient and optimistic mindset of anyone I know. We have worked together on three university group courses over the past year. Whenever our project encounters a difficult problem or requirements change at the last minute, he never complains or blames others; instead, he smiles, makes a cup of tea, and calmly breaks the problem down into clear, manageable steps. Working with him taught me to view challenges as opportunities to learn rather than personal defeat.",
                 KeyPoints = "[\"Introduce the peer and shared context clearly\",\"Illustrate their resilient attitude with concrete examples\",\"Articulate the mindset lesson learned\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -2993,9 +2993,9 @@ public static class DevelopmentDataSeeder
                 CourseId = ent403Course.Id,
                 RubricId = RubricEnt403Id,
                 Title = "ENT403 Part 2 - Discussion: Introverts vs Extroverts in Leadership and Teamwork",
-                Content = "Extended Discussion on Personality Psychology:\n1. Do you think extroverts naturally make better leaders than introverts, or can introverts be equally effective leaders?\n2. How can a team leader bring out the best contributions from both introverted and extroverted team members?\n3. Why is diversity of personality types valuable in an engineering team?",
+                Content = "Extended Discussion on Personality Psychology:\n1. Do you think extroverts naturally make better leaders than introverts, or can introverts be equally effective leaders?\n2. How can a team leader bring out the best contributions from both introverted and extroverted team members?\n3. Why is diversity of personality types valuable in an academic or professional team?",
                 SampleAnswer = "Introverts can be just as effective leaders as extroverts, and often excel when leading proactive, analytical teams because they listen deeply, think before speaking, and empower others without dominating the room. A wise leader brings out the best in everyone by combining open group brainstorming for extroverts with written pre-meeting agendas that give introverts time to formulate thoughtful insights. Personality diversity prevents groupthink and balances bold communication with careful risk analysis.",
-                KeyPoints = "[\"Compare leadership strengths of introverts and extroverts objectively\",\"Propose inclusive management techniques for diverse personalities\",\"Explain how personality balance strengthens engineering teams\"]",
+                KeyPoints = "[\"Compare leadership strengths of introverts and extroverts objectively\",\"Propose inclusive management techniques for diverse personalities\",\"Explain how personality balance strengthens academic and workplace teams\"]",
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
                 HasFollowUp = true,
@@ -3092,7 +3092,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 1 - Monologue: A Difficult Decision You Had to Make",
                 Content = "Description Monologue: Describe an important or difficult decision you had to make in your academic or personal life.\nYou should discuss:\n- What the options were and why the decision was difficult\n- Who you consulted or how you weighed the pros and cons\n- What final choice you made and why\n- How that decision shaped your current path.",
-                SampleAnswer = "A difficult decision I faced at the end of high school was choosing between studying Economics at a local university near home or pursuing Software Engineering at FPT University in a new city. The choice was tough because staying near home was comfortable, whereas moving away required financial discipline and independence. After discussing with my parents and hablar with alumni about industry prospects, I chose Software Engineering because of my passion for building technology. Looking back, that decision transformed my confidence and opened doors to exciting engineering projects.",
+                SampleAnswer = "A difficult decision I faced at the end of high school was choosing between studying at a local college near my hometown or moving to a major city to attend FPT University. The choice was tough because staying near home was comfortable, whereas moving away required financial discipline and living independently. After discussing with my parents and speaking with university alumni about learning opportunities, I chose to study at FPT University to challenge myself in a dynamic environment. Looking back, that decision transformed my confidence and helped me grow much more independent.",
                 KeyPoints = "[\"Present the dilemma and competing options clearly\",\"Explain analytical process of weighing trade-offs and seeking counsel\",\"Reflect on long-term impact of the decision\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -3108,7 +3108,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 1 - Monologue: Learning from a Setback or Failure",
                 Content = "Description Monologue: Describe a time when you did not achieve a goal on your first attempt and had to try again.\nYou should discuss:\n- What the goal or competition was\n- Why your first attempt did not succeed\n- What adjustments you made for the second attempt\n- How this setback made you stronger.",
-                SampleAnswer = "During my freshman year, I applied to join the core technical team of our campus programming club, but I failed the live coding interview on my first attempt. I realized my failure happened because I memorized solutions without truly understanding data structures and panicked under time pressure. Over the next semester, I practiced solving two algorithm problems every morning and did mock interviews with a friend. When I reapplied the following term, I passed with top marks and learned that failure is simply a stepping stone when paired with honest reflection.",
+                SampleAnswer = "During my freshman year, I applied to join the organizing committee of our campus English debate club, but I did not pass the speaking interview on my first attempt. I realized my failure happened because I memorized scripted answers without practicing spontaneous communication and felt nervous under time pressure. Over the next semester, I practiced speaking English for twenty minutes every morning and did mock interviews with a close friend. When I reapplied the following term, I passed with top marks and learned that failure is simply a stepping stone when paired with honest reflection.",
                 KeyPoints = "[\"Describe initial failure honestly and identify root cause\",\"Detail concrete corrective actions taken before retrying\",\"Connect perseverance to personal growth\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -3124,7 +3124,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 1 - Monologue: Your Five-Year Professional Career Plan",
                 Content = "Description Monologue: Describe your five-year career vision after graduating from university.\nYou should discuss:\n- What professional role or specialization you aim to achieve\n- What certifications, languages, or technical skills you need to build\n- What challenges you expect in the industry\n- Why this career path gives you a sense of purpose.",
-                SampleAnswer = "Over the next five years after graduation, my goal is to grow from a junior backend developer into a Lead Cloud & AI System Architect. To reach this milestone, I am focusing on mastering distributed systems in .NET, cloud infrastructure, and fluent professional English communication. I anticipate rapid changes in AI tooling and cybersecurity requirements, which will demand continuous lifelong learning. This career path gives me a deep sense of purpose because designing reliable software systems can positively impact thousands of users every day.",
+                SampleAnswer = "Over the next five years after graduation, my goal is to grow from an entry-level specialist into a Senior Project Coordinator in an international organization. To reach this milestone, I am focusing on mastering project management skills, cross-cultural teamwork, and fluent professional English communication. I anticipate rapid changes in digital tools and global market demands, which will require continuous lifelong learning. This career path gives me a deep sense of purpose because leading well-organized projects can create positive value for both clients and colleagues every day.",
                 KeyPoints = "[\"Articulate a coherent 5-year career progression roadmap\",\"Identify specific technical and language competencies required\",\"Connect career ambition to continuous learning and purpose\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -3140,7 +3140,7 @@ public static class DevelopmentDataSeeder
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 1 - Monologue: A Team Project Achievement You Are Proud Of",
                 Content = "Description Monologue: Describe a challenging team project at university that you and your teammates completed successfully.\nYou should discuss:\n- What the project was about and your specific responsibility\n- How your team coordinated tasks and resolved disagreements\n- What the final result was and why you are proud of it.",
-                SampleAnswer = "A team achievement I am deeply proud of is building our Capstone Oral Exam System with three fellow software engineering teammates. My responsibility was designing the backend architecture, real-time SignalR notification hubs, and automated grading workers. Whenever we had different views on API contracts, we held short design reviews grounded in objective test evidence rather than personal ego. Delivering a complete, verified system with over one thousand passing tests taught us the true power of disciplined engineering teamwork.",
+                SampleAnswer = "A team achievement I am deeply proud of is organizing our university's Annual Cultural Exchange & English Debate Day with three fellow classmates. My responsibility was planning the event schedule, coordinating with guest speakers, and hosting the final round. Whenever we had different views on the event format, we held short meetings grounded in student feedback rather than personal ego. Delivering a smooth, inspiring event with over two hundred student participants taught us the true power of disciplined teamwork and clear communication.",
                 KeyPoints = "[\"Explain project scope and individual technical ownership\",\"Describe collaborative conflict resolution and coordination\",\"Highlight measurable outcome and shared team pride\"]",
                 Difficulty = QuestionDifficulty.Medium,
                 BloomLevel = BloomLevel.Apply,
@@ -3155,8 +3155,8 @@ public static class DevelopmentDataSeeder
                 CourseId = ent503Course.Id,
                 RubricId = RubricEnt503Id,
                 Title = "ENT503 Part 2 - Discussion: Artificial Intelligence, Automation, and the Future of Work",
-                Content = "Extended Discussion on Technology and Careers:\n1. How is Artificial Intelligence transforming the skills required of newly graduated engineers and business professionals?\n2. Which human qualities—such as critical thinking, empathy, and ethical judgment—cannot be replaced by AI?\n3. How should university students use AI tools responsibly to accelerate learning rather than become dependent on them?",
-                SampleAnswer = "Artificial Intelligence is automating repetitive coding and routine drafting, shifting the value of young professionals toward system architecture, problem formulation, and rigorous verification. Human qualities such as genuine empathy, ethical accountability, cross-cultural negotiation, and first-principles critical thinking remain irreplaceable because AI lacks lived human responsibility. Students should treat AI as an interactive tutor and pair-programming partner to challenge their understanding, while always verifying every output independently.",
+                Content = "Extended Discussion on Technology and Careers:\n1. How is Artificial Intelligence transforming the skills required of newly graduated university students across different professions?\n2. Which human qualities—such as critical thinking, empathy, and ethical judgment—cannot be replaced by AI?\n3. How should university students use AI tools responsibly to accelerate learning rather than become dependent on them?",
+                SampleAnswer = "Artificial Intelligence is automating repetitive tasks and routine drafting, shifting the value of young professionals toward creative problem-solving, strategic thinking, and careful verification. Human qualities such as genuine empathy, ethical accountability, cross-cultural communication, and independent critical thinking remain irreplaceable because AI lacks lived human responsibility. Students should treat AI as an interactive study partner to explore ideas and practice skills, while always thinking and verifying every answer independently.",
                 KeyPoints = "[\"Analyze how AI shifts entry-level job expectations\",\"Defend uniquely human strengths: critical thinking, ethics, empathy\",\"Formulate responsible, verification-driven practices for student AI usage\"]",
                 Difficulty = QuestionDifficulty.Hard,
                 BloomLevel = BloomLevel.Analyze,
@@ -3192,6 +3192,20 @@ public static class DevelopmentDataSeeder
             if (!existingQuestionIds.Contains(q.Id))
             {
                 context.PracticeQuestions.Add(q);
+            }
+            else
+            {
+                var existingQ = await context.PracticeQuestions.FindAsync(new object[] { q.Id }, cancellationToken);
+                if (existingQ != null)
+                {
+                    existingQ.Title = q.Title;
+                    existingQ.Content = q.Content;
+                    existingQ.SampleAnswer = q.SampleAnswer;
+                    existingQ.KeyPoints = q.KeyPoints;
+                    existingQ.FollowUpPrompt = q.FollowUpPrompt;
+                    existingQ.ImageUrl = q.ImageUrl;
+                    existingQ.ImageDescription = q.ImageDescription;
+                }
             }
         }
 

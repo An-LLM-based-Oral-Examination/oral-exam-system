@@ -117,7 +117,9 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
                 })
                 .ToList();
 
-            bool hasPendingAnswers = answers.Any(a => string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase));
+            bool hasPendingAnswers = answers.Any(a =>
+                string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase));
 
             if (isFullSession && isCompleted && plannedCount > 0)
             {
@@ -133,7 +135,7 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
                     }
                 }
             }
-            else if (mainScores.Count > 0)
+            else if (!hasPendingAnswers && mainScores.Count > 0)
             {
                 practiceSessionScores.Add(mainScores.Average());
             }
@@ -146,6 +148,8 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         // 2. Thống kê Thi thử (MF-02) — Tự động đóng các phiên thi thử đã hết giờ
         var nowUtc = DateTime.UtcNow;
         var expiredMockSessions = await context.MockExamSessions
+            .Include(ms => ms.Answers)
+                .ThenInclude(a => a.AiEvaluations)
             .Where(ms => ms.StudentId == request.StudentId &&
                          ms.Status == "in_progress" &&
                          nowUtc > ms.ExpiresAt.AddSeconds(10))
@@ -155,9 +159,39 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         {
             foreach (var expired in expiredMockSessions)
             {
-                expired.Status = "graded";
                 expired.SubmittedAt ??= expired.ExpiresAt;
-                expired.TotalScore ??= 0.0m;
+                var mainAnswers = expired.Answers.Where(a => !a.IsFollowUp).ToList();
+                var answeredMains = mainAnswers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
+                var allAnswered = expired.Answers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
+                var hasAnsweredFollowUps = allAnswered.Any(a => a.IsFollowUp);
+
+                if (allAnswered.Count == 0)
+                {
+                    expired.Status = "graded";
+                    expired.TotalScore ??= 0.0m;
+                }
+                else if (answeredMains.Count > 0 && allAnswered.All(a =>
+                             a.AiEvaluations != null &&
+                             a.AiEvaluations.Any() &&
+                             (!hasAnsweredFollowUps || string.Equals(a.Status, "graded", StringComparison.OrdinalIgnoreCase))))
+                {
+                    int totalMainCount = Math.Max(1, mainAnswers.Count);
+                    decimal sumMainScores = answeredMains.Sum(a =>
+                        a.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).First().TotalScore);
+                    expired.TotalScore = Math.Clamp(
+                        Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
+                        0.0m,
+                        10.0m);
+                    foreach (var ans in allAnswered)
+                    {
+                        ans.Status = "graded";
+                    }
+                    expired.Status = "graded";
+                }
+                else
+                {
+                    expired.Status = "submitted";
+                }
             }
 
             await context.SaveChangesAsync(cancellationToken);
@@ -292,7 +326,13 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             {
                 visibleScore = t.LecturerAudit?.AuditedScore
                     ?? (t.Submissions.Any(s => s.FinalScore.HasValue)
-                        ? (decimal?)Math.Round(t.Submissions.Where(s => s.FinalScore.HasValue).Average(s => s.FinalScore!.Value), 2, MidpointRounding.AwayFromZero)
+                        ? (decimal?)Math.Round(
+                            t.Submissions
+                                .Select(s => s.FinalScore ?? s.AiScore)
+                                .Where(v => v.HasValue)
+                                .Average(v => v!.Value),
+                            2,
+                            MidpointRounding.AwayFromZero)
                         : (t.Submissions.Any(s => s.AiScore.HasValue)
                             ? (decimal?)Math.Round(t.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
                             : null));

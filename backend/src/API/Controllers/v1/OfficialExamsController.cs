@@ -173,7 +173,8 @@ public class OfficialExamsController : ControllerBase
             resolvedTicketId,
             request.AuditedScore,
             request.OverrideReason ?? string.Empty,
-            request.CriterionDetails ?? request.CriteriaScores);
+            request.CriterionDetails ?? request.CriteriaScores,
+            request.SubmissionId);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -563,6 +564,7 @@ public class OfficialExamsController : ControllerBase
 public sealed record OverrideExamScoreRequest
 {
     public Guid? TicketId { get; init; }
+    public Guid? SubmissionId { get; init; }
     public decimal AuditedScore { get; init; }
     public string OverrideReason { get; init; } = string.Empty;
     public IReadOnlyList<OverrideCriterionScoreDto>? CriterionDetails { get; init; }

@@ -1,6 +1,6 @@
 # 🔐 TÀI LIỆU HƯỚNG DẪN TÍCH HỢP AUTHENTICATION CHO FRONTEND
 > **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (FA26SE166)  
-> **Người nhận:** Lê Vũ Hoàng (Lead Frontend) & Nguyễn Đăng Hải (Frontend Developer)  
+> **Người nhận:** Lê Vũ Hoàng (Lead Frontend) & Phạm Nguyễn Đăng Hải (Frontend Developer)  
 > **Backend Version:** .NET 8 Clean Architecture — API Version `v1`  
 > **Base URL:** `http://localhost:5000/api/v1` (hoặc cấu hình qua biến môi trường `VITE_API_BASE_URL`)
 

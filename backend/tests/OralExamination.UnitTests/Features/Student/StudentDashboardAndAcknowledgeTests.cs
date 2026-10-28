@@ -408,4 +408,64 @@ public class StudentDashboardAndAcknowledgeTests
         result.Value.CourseQuotas[0].UsedMockExamsToday.Should().Be(2);
         result.Value.CourseQuotas[0].RemainingMockExamsToday.Should().Be(1);
     }
+
+    [Fact(DisplayName = "R4 GetStudentDashboard: Bảo toàn ca thi thử quá giờ đã có câu trả lời ở trạng thái submitted chờ AI chấm bù thay vì ép 0.0đ")]
+    public async Task GetStudentDashboard_WhenExpiredMockSessionHasUnscoredAnswers_ShouldMarkSubmittedForDeferredGrading()
+    {
+        using var context = CreateDbContext();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.deferred@fpt.edu.vn",
+            FullName = "Nguyễn Trọng Tốt",
+            StudentCode = "SE170777",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "ENT203",
+            Name = "English Speaking",
+            Credits = 3,
+            MaxMockExamsPerDay = 3,
+            IsActive = true
+        };
+        var expiredWithAnswers = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = student.Id,
+            CourseId = course.Id,
+            ExamSetId = Guid.NewGuid(),
+            Status = "in_progress",
+            StartedAt = DateTime.UtcNow.AddMinutes(-40),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-10),
+            TotalScore = null
+        };
+        expiredWithAnswers.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = expiredWithAnswers.Id,
+            QuestionId = Guid.NewGuid(),
+            OrderIndex = 1,
+            AnswerText = "I usually practice English speaking with my classmates every afternoon.",
+            Status = "answered",
+            IsFollowUp = false,
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-20)
+        });
+
+        context.Users.Add(student);
+        context.Courses.Add(course);
+        context.MockExamSessions.Add(expiredWithAnswers);
+        await context.SaveChangesAsync();
+
+        var handler = new GetStudentDashboardQueryHandler(context);
+        var result = await handler.Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var updatedSession = await context.MockExamSessions.FindAsync(expiredWithAnswers.Id);
+        updatedSession!.Status.Should().Be("submitted");
+        updatedSession.TotalScore.Should().BeNull();
+        result.Value.AverageMockExamScore.Should().BeNull();
+    }
 }

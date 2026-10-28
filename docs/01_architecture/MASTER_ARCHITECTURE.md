@@ -10,7 +10,7 @@
 > - **Nhóm kỹ sư thực hiện (Core Engineering Team - 4 thành viên):**
 >   - 🧑 **Nguyễn Quang Thành** — Team Leader, Lead Backend Engineer & System Architect
 >   - 🧑 **Nguyễn Trọng Tốt** — Backend Developer, AI Engineer & QA Lead
->   - 🧑 **Nguyễn Đăng Hải** — DB Specialist & Frontend Developer
+>   - 🧑 **Phạm Nguyễn Đăng Hải** — DB Specialist & Frontend Developer
 >   - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator
 > - **Kiến trúc công nghệ chuẩn:** .NET 8 Clean Architecture 4 tầng · React 19 (Vite) + Tailwind CSS v4 + shadcn/ui · PostgreSQL 16 (30 bảng chuẩn hóa 3NF trong 6 Bounded Contexts, phân tách Luyện tập & Thi cử) · Google Gemini 1.5 Flash / Gemini 1.5 Pro · Whisper Large-v3 STT · Cloudflare R2 (S3 API Zero-Egress) · SignalR Core
 > - **Vị thế tài liệu:** **Bản Kiến Trúc Tối Thượng — Nguồn Sự Thật Duy Nhất (Single Source of Truth)** hợp nhất toàn bộ đặc tả hệ thống, phục vụ Hội đồng chấm bảo vệ tốt nghiệp Capstone FPTU và kim chỉ nam kỹ thuật cho toàn bộ nhóm tác chiến.
@@ -761,121 +761,893 @@ flowchart TD
 
 ---
 
-### <a id="phan-64"></a>6.4. Sơ Đồ Chi Tiết Từng Luồng Nghiệp Vụ (Flowchart TD Độc Lập)
+### <a id="phan-64"></a>6.4. Sơ Đồ Chi Tiết Từng Luồng Nghiệp Vụ (Detailed Activity & Flowchart Diagrams)
 
-#### 6.4.1. MF-01: Luyện Tập Tự Do (Interactive Practice Flowchart TD)
+> Toàn bộ sơ đồ hoạt động liên làn (OMG UML 2.5 Swimlane Activity Diagrams) và lưu đồ thuật toán chuyên sâu (Backend Algorithmic Flowcharts) dưới đây được chuẩn hóa và đồng bộ 100% với bộ 5 tệp sơ đồ `.drawio` tại [`docs/05_diagrams/`](../05_diagrams/) (Master file: `CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`) và tài liệu đặc tả chi tiết [`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md). Mỗi luồng nghiệp vụ được phân tách rõ ràng thành 3 phần:
+> - **Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram):** Phân chia làn trách nhiệm chặt chẽ giữa Thí sinh, Giao diện Client, Backend API, Worker hàng đợi, Giám thị / Giảng viên và Trưởng Bộ Môn theo đúng chuẩn OMG UML 2.5.
+> - **Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart):** Bóc tách chi tiết từng bước thuật toán, rẽ nhánh điều kiện bảo vệ (guards), mã HTTP phản hồi và xử lý ngoại lệ Zero Data Loss.
+> - **Phần C — Vòng Đời Trạng Thái (State Machine Diagram):** Định nghĩa tường minh các trạng thái thực thể trong CSDL từ khi khởi tạo đến khi niêm phong kết thúc.
+
+#### <a id="phan-641"></a>6.4.1. MF-01: Luyện Tập Tương Tác Tự Do (Interactive Practice)
+
+##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-01)
+* **Chế độ Upfront:** Sinh viên chọn 1 trong 2 chế độ ngay từ đầu:
+  - `[Per-Question On-Demand]`: Chọn đơn hoặc bất kỳ tổ hợp mức độ (`easy`, `medium`, `hard`). Cấp câu 1 khi tạo phiên, sau đó gọi `POST /api/v1/practice/sessions/{id}/next-question` On-Demand để bốc câu tiếp theo (không ép chốt trước tổng số câu). Áp dụng **thuật toán Anti-3-Consecutive**: tối đa 2 câu cùng mức độ trong chuỗi 3 câu liên tiếp; loại trừ câu đã làm (`Id NOT IN (...)`). Kích hoạt câu hỏi chuyên sâu đào sâu (A2) khi $4.0 \le \text{Score} \le 8.0$ (tối đa 1–5 câu do Admin cấu hình qua `system_configs`, mặc định 2 câu).
+  - `[Full-Session Progressive]`: Nhập số lượng 3–10 câu (`MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10`), hệ thống tự động chia đều số câu cho 3 mức Dễ $\to$ Trung bình $\to$ Khó bốc trọn gói và phát vấn tăng dần (nếu thiếu câu trả `HTTP 400 Bad Request`). **TUYỆT ĐỐI KHÔNG có follow-up**. Nộp từng câu hoặc nộp trọn gói qua `POST /batch-answers`.
+* **Inactivity Timeout 5 phút:** Quản lý qua `SessionInactivityTimeoutMinutes = 5`, cập nhật `last_activity_at = NOW()`. Quá 5 phút không tương tác, tự động hoàn tất an toàn (`status = "completed"`), bảo toàn 100% điểm các câu đã làm (Full-Session tính các câu chưa làm 0đ). Thao tác tiếp theo trả **HTTP 410 Gone**.
+* **Đệm hiệu đính Code-Switching:** Màn hình đệm 10–300s (mặc định 60s do Admin cấu hình qua `TranscriptBufferSeconds`) để sửa thuật ngữ SE tiếng Anh. **KHÔNG lưu audio**, chỉ lưu transcript vào `practice_answers`.
+* **Phòng thủ 4 tầng Zero Data Loss:** Tầng 1 Persist-First ghi CSDL `PENDING` ($< 100$ms) $\to$ Tầng 2 BoundedChannel 1,000 slots RAM $\to$ Tầng 3 Gemini 1.5 Flash chấm Rubric 10.0đ (Polly Retry 2-4-8s) $\to$ Tầng 4 DLQ `dead_letter_queues` chấm bù sau 5 phút.
+
+##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 43 Đỉnh)
 
 ```mermaid
 flowchart TD
-    M1_Start["1. Sinh viên chọn Môn học & Chế Độ Làm Bài<br>• [Per-Question On-Demand]: Chọn đơn/tổ hợp mức độ (cấp câu 1, lấy tiếp on-demand)<br>• [Full-Session Progressive]: Nhập 3-10 câu chia đều Dễ -> TB -> Khó"]
-    M1_Audio["2. Web Speech Engine tương tác hai chiều<br>• TTS đọc to câu hỏi và nhận diện câu trả lời<br>• Thu âm giọng nói trực tiếp qua trình duyệt"]
-    M1_Buffer["3. Màn hình đệm hiệu đính Code-Switching (mặc định 60s)<br>• Bóc băng nháp tức thì dưới 0.5s<br>• Cho phép sinh viên sửa thuật ngữ tiếng Anh trước khi nộp"]
-    M1_Persist["4. Backend tiếp nhận & Phòng thủ 4 tầng Zero Data Loss<br>• Cập nhật last_activity_at = NOW()<br>• Persist-First: Ghi PENDING vào PostgreSQL dưới 100ms<br>• Đẩy task vào RAM Bounded Channel 1,000 slots"]
-    M1_AI["5. Gemini 1.5 Flash chấm Barem Rubric 10.0đ<br>• Chain-of-Thought 3 bước phân tích luận điểm<br>• Trả kết quả Structured JSON trong 1.8s - 2.5s"]
-    M1_FollowUp{"6. Kiểm tra Điều Kiện Follow-up:<br>Chế độ [Per-Question] VÀ 4.0 <= Score <= 8.0?<br>(Full-Session không có follow-up)"}
-    M1_A2["7. Kích hoạt Câu Hỏi Follow-up Đào Sâu<br>• AI đào sâu luận điểm yếu của sinh viên (1-5 câu do Admin cấu hình, mặc định 2 câu)"]
-    M1_Push["8. SignalR Hub /hubs/practice đẩy Scorecard<br>• Hiển thị điểm từng tiêu chí, nhận xét và Model Answer"]
-    M1_Next{"9. Hành động tiếp theo Per-Question:<br>Bấm 'Câu tiếp theo' hoặc Kết thúc?"}
-    M1_Timeout{"10. Kiểm tra Inactivity Timeout:<br>Thời gian chờ > 5 phút?"}
-    M1_Gone["11. Trả HTTP 410 Gone (Session Timed Out)<br>• Tự động hoàn tất phiên an toàn<br>• Bảo toàn 100% điểm các câu đã làm"]
-    M1_FetchNext["12. POST /next-question (Anti-3-Consecutive)<br>• Bốc câu tiếp theo loại trừ trùng mức 2 câu liền trước<br>• Cập nhật last_activity_at = NOW()"]
-    M1_End["13. Hoàn tất phiên luyện tập<br>• Bảng điểm tổng kết Scorecard"]
+    subgraph Lane1 ["Lane 1: Student"]
+        INIT((●))
+        A01(["Select Subject & Config Upfront\n(Per-Question vs Progressive 3-10)"])
+        D02{"Input Modality?"}
+        A06(["Speak Voice Answer\ninto Microphone"])
+        A09(["Review Transcript Buffer (10-300s)\n(Edit SE Code-Switching Terms)"])
+        M01{"◇"}
+        A10(["Confirm Submission of Answer"])
+        A26(["Submit Batch All Answers\n(POST /batch-answers, Update Activity)"])
+        D07{"Accept A2?"}
+        A20(["Review Rubric Feedback\n& Gap Analysis"])
+        D08{"Next Step?"}
+        A25(["Complete Practice Session\n(Update Status = COMPLETED)"])
+        F04(((◉)))
+        A29(["Review Full Progressive Session\n& Access Student Portal History"])
+        F05(((◉)))
+    end
 
-    M1_Start --> M1_Audio --> M1_Buffer --> M1_Persist --> M1_AI --> M1_FollowUp
-    M1_FollowUp -- Thỏa mãn cả 2 điều kiện --> M1_A2 --> M1_Push
-    M1_FollowUp -- Không thỏa mãn --> M1_Push
-    M1_Push --> M1_Next
-    M1_Next -- Bấm Kết thúc / Full-Session xong --> M1_End
-    M1_Next -- Bấm 'Câu tiếp theo' --> M1_Timeout
-    M1_Timeout -- Quá 5 phút --> M1_Gone --> M1_End
-    M1_Timeout -- Trong hạn 5 phút --> M1_FetchNext --> M1_Audio
+    subgraph Lane2 ["Lane 2: React 19 Client UI & Audio/STT"]
+        A02(["Initialize Practice Session\n(Connect SignalR /hubs/practice)"])
+        A05(["Display Question Card\n& Web Speech TTS Audio"])
+        A08(["Transcribe Stream Realtime\n(Web Speech STT < 0.5s, No Audio)"])
+        D03{"Session Mode?"}
+        A11(["Cache Answer Locally\n(Advance question index i = i + 1)"])
+        D04{"Questions Done?"}
+        D06{"Score in 4.0-8.0?"}
+        A18(["Prompt Deep-Dive Follow-up A2\n(Target Lowest Rubric Criterion)"])
+        A19(["Open Modal Scorecard\n& Web Speech TTS AI Feedback"])
+        A28(["Render Batch Summary\n& Full Rubric Analytics"])
+    end
+
+    subgraph Lane3 ["Lane 3: .NET 8 Backend API & PracticeHub"]
+        A03(["Query Question Pool\n(Set last_activity_at = NOW())"])
+        D01{"Pool Sufficient?"}
+        A04(["Return HTTP 400 Bad Request\n(Pool Insufficient for Progressive)"])
+        F01((⊗))
+        A12(["Persist-First PENDING (< 100ms)\n(HTTP 202 Accepted, Zero Audio)"])
+        OBJ_PENDING["[practice_answers: PENDING]"]
+        M02{"◇"}
+        A13(["Enqueue EvaluationTask\n(BoundedChannel 1,000 Slots RAM)"])
+        D05{"Polly Status?"}
+        A15(["Isolate to Dead-Letter Queue\n(dead_letter_queues, 5m Auto-Retry)"])
+        F02((⊗))
+        A17(["Save GRADED Status\n& Broadcast via /hubs/practice"])
+        D09{"Inactive > 5m?"}
+        A23(["Auto-Complete Session\n& Return HTTP 410 Gone"])
+        F03((⊗))
+        A24(["Fetch Next Anti-3-Consecutive\n(Max 2 same diff in 3, Id NOT IN)"])
+        A27(["Save Batch Results\n& Broadcast Complete SignalR"])
+    end
+
+    subgraph Lane4 ["Lane 4: Gemini AI Grading & Worker Queue"]
+        A16(["Gemini AI Grade CoT\n(Check Rubric 10.0, Extract CoT)"])
+    end
+
+    INIT --> A01
+    A01 --> A02
+    A02 --> A03
+    A03 --> D01
+    D01 -->|"[Insufficient Questions]"| A04
+    D01 -->|"[Questions Ready]"| A05
+    A04 --> F01
+    A05 --> D02
+    D02 -->|"[Speak Voice]"| A06
+    D02 -->|"[Type Text]"| M01
+    A06 --> A08
+    A08 --> A09
+    A09 --> M01
+    M01 --> A10
+    A10 --> D03
+    D03 -->|"[Per-Question On-Demand]"| A12
+    D03 -->|"[Full-Session Progressive]"| A11
+    A12 --> OBJ_PENDING
+    OBJ_PENDING --> M02
+    A11 --> D04
+    D04 -->|"[More Questions (i < N)]"| A05
+    D04 -->|"[All Answered (i == N)]"| A26
+    A26 --> M02
+    M02 --> A13
+    A13 --> D05
+    D05 -->|"[Retry Failed > 3]"| A15
+    D05 -->|"[Polly Success]"| A16
+    A15 --> F02
+    A16 --> A17
+    A17 --> D06
+    D06 -->|"[4.0 <= Score <= 8.0 & Count < Max]"| A18
+    D06 -->|"[Score < 4.0 or > 8.0 or Max Reached]"| A19
+    A18 --> D07
+    D07 -->|"[Accept Deep-Dive]"| A05
+    D07 -->|"[Skip Follow-up]"| A19
+    A19 --> A20
+    A20 --> D08
+    D08 -->|"[Next Question]"| D09
+    D08 -->|"[Finish Practice]"| A25
+    D09 -->|"[Timeout > 5m]"| A23
+    D09 -->|"[Active <= 5m]"| A24
+    A23 --> F03
+    A24 --> A05
+    A25 --> F04
+    A17 --> A27
+    A27 --> A28
+    A28 --> A29
+    A29 --> F05
 ```
 
-#### 6.4.2. MF-02: Thi Thử Bấm Giờ (Timed Mock Exam Flowchart TD)
+##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
 
 ```mermaid
 flowchart TD
-    M2_Start["1. Sinh viên bấm Bắt đầu thi thử môn học"]
-    M2_Quota{"2. PostgreSQL Quota Guard:<br>Kiểm tra số lượt thi trong ngày?"}
-    M2_Block["Bị chặn: Ném HTTP 429 Too Many Requests<br>• Chạm trần quota theo môn do Admin cấu hình (max_mock_exams_per_day)<br>• Hệ thống điều hướng sang MF-01 Luyện tập"]
-    M2_Gen["3. Sinh bộ đề N câu ngẫu nhiên<br>• Cấu trúc đề thi thử & phân bổ Bloom do Trưởng BM cấu hình"]
-    M2_Timer["4. Kích hoạt Đồng Hồ Kép Chống Gian Lận<br>• Server Master Timer lưu started_at và expected_end_time<br>• Client Countdown đếm ngược, Grace Period trễ mạng 10s"]
-    M2_Gate["5. Voice-First Gate: Bắt buộc trả lời bằng giọng nói<br>• Khóa cứng ô gõ phím, mở ô đệm sau khi phát biểu (cấu hình động bởi Admin transcript_buffer_seconds, 10–300s, mặc định 60s)<br>• Hết giờ tự động nộp bài (câu chưa làm tính là bỏ trống, không chấm)"]
-    M2_FollowUp["6. Follow-up trong Thi Thử (Mô phỏng Thi thật)<br>• Sinh viên tự chọn Có/Không Follow-up; Trưởng BM cấu hình 1-5 câu (mặc định 2)<br>• AI phân tích luận điểm ngữ cảnh để hỏi đào sâu (KHÔNG theo điểm)"]
-    M2_Result["7. Màn hình Kết Quả & Instant Feedback Scorecard<br>• Hiển thị chi tiết tiêu chí Rubric, Strengths, Weaknesses, Suggestions<br>• Scorecard chi tiết theo Rubric & Lưu vĩnh viễn vào Lịch sử thi"]
+    M1_Req(["Nhận HTTP Request tại PracticeController"]) --> M1_CheckSession{"Phiên đã tồn tại trong DB?"}
 
-    M2_Start --> M2_Quota
-    M2_Quota -- Lượt thứ 4 trở đi trong ngày --> M2_Block
-    M2_Quota -- Lượt 1 đến 3 hợp lệ --> M2_Gen --> M2_Timer --> M2_Gate --> M2_FollowUp --> M2_Result
+    M1_CheckSession -- "Tạo phiên mới (POST /sessions)" --> M1_CheckMode{"isFullSession == true?"}
+    M1_CheckMode -- "Đúng (Full-Session Progressive)" --> M1_ValidCount{"3 <= questionCount <= 10 (Min/MaxMixedPracticeQuestions)?"}
+    M1_ValidCount -- "Sai" --> M1_Err400(["Trả HTTP 400 Bad Request: Số câu phải từ 3 đến 10"])
+    M1_ValidCount -- "Đúng" --> M1_DrawProg["Chia đều số câu theo 3 bậc: Easy -> Medium -> Hard từ kho practice_questions (status = APPROVED)"]
+    M1_DrawProg --> M1_CheckEnough{"Kho đủ số lượng câu hỏi cho cả 3 bậc?"}
+    M1_CheckEnough -- "Thiếu câu hỏi" --> M1_Err400
+    M1_CheckEnough -- "Đủ câu hỏi" --> M1_CreateFull["INSERT practice_sessions (is_full_session = true, has_follow_up = false, last_activity_at = NOW())"]
+    M1_CreateFull --> M1_ReturnInit(["Trả HTTP 200 OK kèm danh sách 3-10 câu hỏi tăng dần"])
+
+    M1_CheckMode -- "Sai (Per-Question On-Demand)" --> M1_DrawFirst["Bốc ngẫu nhiên Câu 1 từ practice_questions theo tập độ khó SV chọn (easy / medium / hard)"]
+    M1_DrawFirst --> M1_CreatePerQ["INSERT practice_sessions (is_full_session = false, last_activity_at = NOW())"]
+    M1_CreatePerQ --> M1_ReturnInit
+
+    M1_CheckSession -- "Thao tác trên phiên đang mở" --> M1_CheckInactivity{"NOW() - session.last_activity_at > 5 phút (SessionInactivityTimeoutMinutes)?"}
+    M1_CheckInactivity -- "Đúng (Quá hạn 5 phút)" --> M1_CloseSession["UPDATE practice_sessions SET status = completed (Bảo toàn điểm câu đã làm; câu chưa làm Full-Session tính 0đ)"]
+    M1_CloseSession --> M1_Err410(["Trả HTTP 410 Gone (Session Timed Out)"])
+
+    M1_CheckInactivity -- "Sai (Trong hạn 5 phút)" --> M1_Touch["UPDATE practice_sessions SET last_activity_at = NOW()"]
+    M1_Touch --> M1_ActionType{"Phân loại Endpoint gọi vào?"}
+
+    M1_ActionType -- "POST /sessions/{id}/next-question" --> M1_GetLast2["Truy vấn 2 câu hỏi chính liền trước trong phiên (is_follow_up == false)"]
+    M1_GetLast2 --> M1_IsSameDiff{"Cả 2 câu liền trước cùng độ khó D và SV chọn > 1 độ khó?"}
+    M1_IsSameDiff -- "Đúng (Vi phạm ngưỡng 3 câu liên tiếp)" --> M1_ExcludeDiff["Loại trừ độ khó D khỏi candidate pool (Thuật toán Anti-3-Consecutive)"]
+    M1_IsSameDiff -- "Sai" --> M1_KeepDiff["Giữ nguyên tập độ khó đang chọn"]
+    M1_ExcludeDiff --> M1_QueryPool["SELECT từ practice_questions WHERE CourseId = @cid AND Id NOT IN (AnsweredIds) AND Difficulty IN (AllowedDiffs)"]
+    M1_KeepDiff --> M1_QueryPool
+    M1_QueryPool --> M1_PoolEmpty{"Tìm thấy câu hỏi ở mức độ ưu tiên?"}
+    M1_PoolEmpty -- "Cạn mức ưu tiên" --> M1_FallbackPool["Fallback: Tìm trong các mức độ khó còn lại chưa làm (WHERE Id NOT IN AnsweredIds)"]
+    M1_PoolEmpty -- "Tìm thấy" --> M1_RetNext(["Trả HTTP 200 OK (question, hasMoreQuestions = true)"])
+    M1_FallbackPool --> M1_StillEmpty{"Vẫn hết sạch câu hỏi trong kho?"}
+    M1_StillEmpty -- "Còn câu" --> M1_RetNext
+    M1_StillEmpty -- "Hết sạch kho" --> M1_RetNoMore(["Trả HTTP 200 OK (question = null, hasMoreQuestions = false)"])
+
+    M1_ActionType -- "POST /submit hoặc /batch-answers" --> M1_Tier1["Tầng 1 (Persist-First < 100ms): INSERT practice_answers (status = pending, chỉ lưu transcript, KHÔNG lưu audio)"]
+    M1_Tier1 --> M1_Tier2["Tầng 2 (RAM Queue): Enqueue vào BoundedChannel 1,000 slots (FullMode.Wait) & Trả HTTP 202 Accepted"]
+    M1_Tier2 --> M1_Tier3{"Tầng 3 (Polly Retry): Gọi Gemini 1.5 Flash chấm Rubric 10.0 (Retry 2s -> 4s -> 8s)"}
+    M1_Tier3 -- "Lỗi sau 3 lần thử" --> M1_Tier4["Tầng 4 (DLQ): INSERT dead_letter_queues (status = PENDING_RETRY, DlqReplayWorker quét lại sau 5 phút)"]
+    M1_Tier3 -- "Chấm thành công" --> M1_EvalFU{"!session.IsFullSession VÀ 4.0 <= TotalScore <= 8.0 VÀ FollowUpCount < MaxFollowUp?"}
+    M1_EvalFU -- "Thỏa mãn" --> M1_Weakest["Tìm RubricCriterion có tỷ lệ (EarnedScore / MaxScore) thấp nhất -> Sinh câu hỏi phụ A2 xoáy sâu"]
+    M1_Weakest --> M1_BroadcastFU(["Lưu ai_evaluations & Bắn SignalR Scorecard kèm Follow-up A2"])
+    M1_EvalFU -- "Không thỏa mãn" --> M1_BroadcastDone(["Lưu ai_evaluations & Bắn SignalR Scorecard hoàn chỉnh"])
 ```
 
-#### 6.4.3. MF-03: Ngân Hàng Đề, Barem Rubric 10.0 & Quy Trình Duyệt Bộ Môn (Question Studio Flowchart TD)
+##### 4. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
 
 ```mermaid
-flowchart TD
-    M3_Start["1. Khởi động Question Studio & Xác thực RBAC<br>(Role: department_head, lecturer, admin)"]
-    M3_Branch{"2. Lựa chọn Nhánh Tác Vụ?"}
-
-    %% Nhánh A: Sinh tự động từ FLM API
-    M3_FLM_Auth{"Quyền tác giả hợp lệ?<br>(lecturer / department_head)"}
-    M3_FLM_403["Từ chối HTTP 403 Forbidden"]
-    M3_FLM_Fetch["3A. Gọi FLM Adapter trích xuất Đề cương<br>Lấy Syllabus, danh sách CLOs và Topics môn học"]
-    M3_FLM_Select["4A. Tự động dùng CLOs trên Syllabus (hoặc chọn Topic rồi chọn CLO)<br>Cấu hình số câu, Bloom 1-6 & phân bổ độ khó"]
-    M3_FLM_AI["5A. Gemini 1.5 Flash tự động sinh bộ câu hỏi:<br>• Đề bài chuẩn đầu ra & Cấp độ Bloom 1-6<br>• Barem Rubric chuẩn hóa ∑ = 10.0đ bất biến<br>• Model Answer >= 50 ký tự kèm Key points"]
-    M3_FLM_Preview["6A. Preview Studio: Tùy chỉnh theo Barem riêng<br>• Tick chọn kho: practice_questions và/hoặc exam_questions"]
-    M3_Sim["7A. AI Simulator: Hiệu chuẩn Barem bằng AI<br>(Chấm thử câu trả lời giả định để kiểm tra độ nhạy Barem)"]
-    M3_ClientGuard{"8A. Real-time Client Guard:<br>Tổng điểm các tiêu chí == 10.0đ?"}
-    M3_Warn["Cảnh báo đỏ và Khóa nút Lưu / Gửi duyệt<br>(Tổng điểm != 10.0đ bị chặn)"]
-
-    %% Nhánh B: Soạn thủ công
-    M3_Manual["3B. Giảng viên soạn đề bài & Model Answer >= 50 ký tự"]
-    M3_Scope["4B. Phân định Phạm Vi (EXAM_ONLY, PRACTICE_ONLY, SHARED)"]
-    M3_Rubric["5B. Thiết lập Barem Rubric: Tiêu chí C1..Ck kèm trọng số điểm"]
-
-    %% Quy trình Gửi duyệt Bộ môn & Phê duyệt
-    M3_Submit_Review["9. Giảng viên bấm 'Gửi lên cho Bộ Môn'<br>(POST /api/v1/questions/batch-submit-review)<br>Trạng thái: SUBMITTED_FOR_REVIEW"]
-    M3_Dept_Review{"10. Trưởng Bộ Môn Thẩm Định<br>(POST /api/v1/questions/{id}/review-decision)"}
-    M3_Dept_Revision["Yêu cầu chỉnh sửa (decision='NEEDS_REVISION')<br>Lưu review_notes, trả về Giảng viên sửa tại 6A"]
-    M3_Dept_Reject["Từ chối loại hẳn (decision='REJECTED')<br>Lưu review_notes, loại hẳn khỏi ngân hàng đề"]
-    M3_Commit["11. Phê duyệt chính thức (decision='APPROVED')<br>Backend FluentValidation Gate HTTP 422<br>→ ACID Database Transaction Commit (status='APPROVED')"]
-
-    M3_Start --> M3_Branch
-    M3_Branch -- "[Generate from FLM API]" --> M3_FLM_Auth
-    M3_FLM_Auth -- Không đủ quyền --> M3_FLM_403 --> M3_Branch
-    M3_FLM_Auth -- Hợp lệ lecturer/dept_head --> M3_FLM_Fetch --> M3_FLM_Select --> M3_FLM_AI --> M3_FLM_Preview --> M3_Sim --> M3_ClientGuard
-
-    M3_Branch -- "[Soạn Thủ Công / Sửa]" --> M3_Manual --> M3_Scope --> M3_Rubric --> M3_ClientGuard
-
-    M3_ClientGuard -- Sai lệch tổng điểm --> M3_Warn --> M3_Rubric
-    M3_ClientGuard -- Tổng đúng 10.0đ --> M3_Submit_Review --> M3_Dept_Review
-    M3_Dept_Review -- "[Yêu cầu sửa]" --> M3_Dept_Revision --> M3_FLM_Preview
-    M3_Dept_Review -- "[Từ chối loại hẳn]" --> M3_Dept_Reject
-    M3_Dept_Review -- "[Phê duyệt]" --> M3_Commit
+stateDiagram-v2
+    [*] --> ACTIVE: Tạo phiên (Per-Question hoặc Full-Session 3..10 câu)
+    ACTIVE --> BUFFER_EDITING: SV dừng nói -> Đếm ngược TranscriptBufferSeconds (10-300s, mặc định 60s)
+    BUFFER_EDITING --> ANSWER_PENDING: Nộp transcript (Persist-First < 100ms vào practice_answers)
+    ANSWER_PENDING --> AI_GRADING: GradingQueueWorker rút task từ BoundedChannel 1,000 slots
+    AI_GRADING --> PENDING_RETRY_DLQ: Lỗi API sau 3 lần Polly Retry (2s, 4s, 8s)
+    PENDING_RETRY_DLQ --> AI_GRADING: DlqReplayWorker chấm bù sau 5 phút
+    AI_GRADING --> FOLLOW_UP_REQUIRED: Per-Question & 4.0 <= Score <= 8.0 (Sinh câu hỏi A2 theo weakestCriterion)
+    FOLLOW_UP_REQUIRED --> BUFFER_EDITING: SV trả lời câu hỏi phụ A2
+    AI_GRADING --> QUESTION_COMPLETED: Ngoài khoảng [4.0..8.0] hoặc đã hết lượt Follow-up hoặc chế độ Full-Session
+    QUESTION_COMPLETED --> ACTIVE: Bấm Câu tiếp theo (POST /next-question, kiểm tra Anti-3-Consecutive)
+    ACTIVE --> TIMED_OUT_410: Quá 5 phút không tương tác (last_activity_at) -> Trả HTTP 410 Gone
+    QUESTION_COMPLETED --> TIMED_OUT_410: Quá 5 phút mới bấm Câu tiếp theo -> Trả HTTP 410 Gone
+    TIMED_OUT_410 --> COMPLETED: Tự động đóng phiên & Bảo toàn điểm các câu đã làm
+    QUESTION_COMPLETED --> COMPLETED: SV bấm Kết thúc hoặc hết câu hỏi (hasMoreQuestions = false)
+    COMPLETED --> [*]
 ```
 
-#### 6.4.4. MF-04: Thi Thật Phòng Lab, Công Bố Điểm & Phúc Khảo Nội Bộ (Lab Exam Flowchart TD)
+---
+
+#### <a id="phan-642"></a>6.4.2. MF-02: Thi Thử Vấn Đáp Bấm Giờ (Timed Mock Exam)
+
+##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-02)
+* **Hạn ngạch thi thử (Daily Quota Guard):** Admin cấu hình số lượt thi tối đa theo môn trong ngày (`max_mock_exams_per_day`), không khóa cứng K=3. Khi `used_attempts >= max_mock_exams_per_day`, trả ngay **HTTP 429 Too Many Requests**, khóa nút thi thử và điều hướng sang MF-01.
+* **Cấu trúc đề & Phân bổ Bloom:** Trưởng Bộ Môn cấu hình cấu trúc đề thi thử (ExamStructure: thời lượng phút, tổng số câu, tỷ lệ Bloom) theo từng môn học. Nguồn đề rút từ kho `practice_questions` (cô lập 100% với kho `exam_questions` của MF-04).
+* **Chế độ Follow-up tự chọn:** Sinh viên chỉ chọn môn học và chủ động chọn `Có Follow-up` hoặc `Không Follow-up` (không chọn topic hay độ khó). Nếu chọn có follow-up, AI phân tích ngữ cảnh bài nói để đào sâu (`[Needs Follow-up]`), không phụ thuộc điểm số; thời lượng ca thi có follow-up dài hơn do Trưởng BM cấu hình.
+* **Voice-First Gate & Đồng hồ kép:** Bắt buộc micro, khóa cứng 100% ô gõ phím. Server Master Timer (chống sửa giờ máy trạm) chạy song song với Client Countdown Timer. Hết giờ (`00:00`) tự động nộp bài: **câu chưa làm tính là bỏ trống, không chấm**. **KHÔNG lưu audio**, chỉ lưu transcript vào `mock_exam_answers`.
+* **Dual-Path Grading & Instant Scorecard:** Fast-Path ($< 10$s) chấm tức thì qua Gemini 1.5 Flash hoặc Async Fallback qua BoundedChannel 1,000 slots. Trả Instant Feedback Scorecard chi tiết từng tiêu chí Rubric theo CLO tại màn hình kết quả và lưu vĩnh viễn vào `mock_exam_sessions` phục vụ tra cứu Lịch sử thi (FE-02).
+
+##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 45 Đỉnh)
 
 ```mermaid
 flowchart TD
-    M4_P1["Pha 1: Thiết Lập Ca Thi & Chuẩn Hóa Máy Trạm<br>• Ca thi ghi phòng Lab trực tiếp, gán Giám thị (GV hoặc proctor)<br>• Điểm danh đối chiếu CCCD/Thẻ SV; Sinh viên ngồi đúng STT máy<br>• Kích hoạt Kiosk Fullscreen Lockdown, chặn Alt+Tab, F12, onblur 3 cấp độ<br>• Bắt buộc Mic-Check 30s kiểm tra phần cứng âm thanh"]
-    M4_P2["Pha 2: Vấn Đáp theo ExamInputMode & Niêm Phong SHA-256<br>• Cấu hình ExamInputMode: VoiceOnly / VoiceWithTranscriptEdit<br>• TTS đọc đề thi, sinh viên trả lời vào mic (hỏi phụ 1-5 câu do Trưởng BM cấu hình, mặc định 2 câu)<br>• Đóng gói âm thanh STT_MSSV.webm, băm SHA-256, stream lên Cloudflare R2<br>• Gửi bài nộp lên Backend, Persist First lưu đĩa cứng < 100ms trạng thái SUBMITTED"]
-    M4_P3["Pha 3: Kiosk Khóa An Toàn, Hàng Đợi BoundedChannel & AI Chấm Ngầm<br>• Kiosk khóa an toàn < 100ms, thông báo bài đã lưu an toàn, chờ Giảng viên thẩm định & công bố<br>• Thí sinh ký biên bản nộp bài giấy và rời phòng thi (Kiosk 0% điểm liền, 0% khiếu nại tại chỗ)<br>• Đẩy task vào BoundedChannel 1,000 slots RAM (Polly Retry 2-4-8s & DLQ 5m khi quá tải)<br>• Gemini 1.5 Pro chấm ngầm theo Rubric 10.0 (chỉ nhận transcript input)"]
-    M4_Doubt{"Pha 4: Cổng Hậu Kiểm Giảng Viên & AI Doubt Guard<br>Phân loại 2 nhóm bài thi qua Evidence Panel?"}
-    M4_Suspicious["Nhóm 1 (Đáng nghi ngờ / Cần can thiệp):<br>is_suspicious == true HOẶC confidence_score < 0.70<br>• Giảng viên BẮT BUỘC đối soát Evidence Panel (Audio, Transcript, AI CoT)<br>• Chấm và điều chỉnh lại điểm (bắt buộc nhập override_reason)"]
-    M4_HighConf["Nhóm 2 (Độ tin cậy cao):<br>confidence_score >= 0.70 và is_suspicious == false<br>• Giảng viên rà soát nhanh tổng quan qua Evidence Panel"]
-    M4_AuditDone["Hoàn tất thẩm định ca thi (status: AUDITED)"]
-    M4_Publish["Pha 5: Giảng Viên Công Bố Điểm (Publish Grades)<br>• Kiểm tra 100% sinh viên ca thi đã có điểm hoàn chỉnh (HTTP 422 nếu thiếu)<br>• POST /api/v1/official-exams/shifts/{shiftId}/publish-grades<br>• Cập nhật PUBLISHED & One-Way Lock khóa DB (LOCKED, HTTP 403; chừa ngoại lệ phúc khảo)<br>• Xuất file bảng điểm khảo thí cả 2 định dạng Excel (.xlsx) và PDF"]
-    M4_StudentView["Sinh Viên Xem Bảng Điểm trên Student Portal<br>• Xem điểm chính thức, chi tiết từng tiêu chí & nhận xét"]
-    M4_Decision{"Sinh viên đồng ý với điểm thi?"}
-    M4_Accept["Chấp nhận điểm: Bấm 'Xác Nhận Nhận Điểm'<br>(student_acknowledgement_status = 'ACKNOWLEDGED')"]
-    M4_InternalAppeal["Không chấp nhận điểm (Phúc khảo):<br>Sinh viên nộp đơn phúc khảo nội bộ trực tiếp trên Student Portal<br>(POST /api/v1/appeals) kèm lý do → Trưởng Bộ Môn tiếp nhận & phân công GV chấm lại (PUT /api/v1/appeals/{id}/assign-lecturer)"]
+    subgraph Lane1 ["Lane 1: Student"]
+        M_INIT((●))
+        M01(["Select Subject & Follow-up Mode\n(No topic selection; Time longer if Follow-up)"])
+        M06(["Confirm Limit & Redirect\n(Go to Student Portal or MF-01)"])
+        MF01((⊗))
+        M11(["Speak Viva Voice Answer\ninto Headset Microphone"])
+        M14(["Fix Code-Switching SE Terms\n(Software Engineering Vocabulary)"])
+        M15(["Save Answer Transcript Record\n(into mock_exam_answers, Zero Audio)"])
+        M18(["Speak Follow-up Answer\ninto Microphone"])
+        M21(["Fix Follow-up Terms & Confirm"])
+        M22(["Active Submit Exam\n(Student Clicks Submit All)"])
+        M32(["Acknowledge Notice & Exit Exam"])
+        MF02_ASYNC((⊗))
+        M29(["Review Scorecard & Insights\n(Saved to Exam History FE-02)"])
+        MF02_FINAL(((◉)))
+    end
 
-    M4_P1 --> M4_P2 --> M4_P3 --> M4_Doubt
-    M4_Doubt -- "[Nghi vấn]" --> M4_Suspicious --> M4_AuditDone
-    M4_Doubt -- "[Tin cậy cao]" --> M4_HighConf --> M4_AuditDone
-    M4_AuditDone --> M4_Publish --> M4_StudentView --> M4_Decision
-    M4_Decision -- "[Đồng ý]" --> M4_Accept
-    M4_Decision -- "[Phúc khảo]" --> M4_InternalAppeal
+    subgraph Lane2 ["Lane 2: React 19 Client UI & Voice-First Gate"]
+        M02(["Request Quota Check\n(POST /api/v1/mock-exams/check-quota)"])
+        M04(["Return HTTP 429 Too Many Requests\n(Daily Quota Limit Reached Modal)"])
+        FORK_TIMERS["═════ FORK BAR (Khởi chạy đồng hồ kép song song) ═════"]
+        M09(["Start Client Countdown Timer"])
+        JOIN_TIMERS["═════ JOIN BAR (Đồng bộ đồng hồ đếm ngược) ═════"]
+        M10(["Voice-First Gate: Lock Keyboard 100%\n(Enforce Microphone Answer Only)"])
+        M12(["Transcribe Stream Realtime\n(Web Speech STT < 0.5s, No Audio R2)"])
+        M13(["Unlock Buffer Review (10-300s, def 60s)\n(Countdown & Enable Keyword Edit)"])
+        M17(["Web Speech TTS Plays\nContextual Follow-up Question"])
+        M19(["Transcribe Follow-up Stream\n(No Audio Recording)"])
+        M20(["Unlock Buffer for Follow-up\n(TranscriptBufferSeconds)"])
+        M_MERGE_DONE{"◇"}
+        MD05{"Exam Progress?"}
+        M23(["AutoSubmitGuard on 00:00\n(Unanswered questions left blank, unrated)"])
+        M_MERGE_SUB{"◇"}
+        M24(["Send Submission Package\n(POST /mock-exams/sessions/{id}/submit)"])
+        M31(["Display Submission Sealed Notice\n(Scorecard available in Exam History FE-02)"])
+        M28(["Open Modal Instant Scorecard\n(Rubric CLO Breakdown & Guidance)"])
+    end
+
+    subgraph Lane3 ["Lane 3: .NET 8 Backend API & Quota Handler"]
+        M03(["Query mock_exam_quotas\n(Check Course.MaxMockExamsPerDay)"])
+        MD01{"Quota Available?"}
+        M07(["Deduct Quota (K = K + 1)\n& Fetch Bloom from practice_questions"])
+        M08(["Start Server Master Timer\n(Anti-Tampering Record)"])
+        MD02{"Has Follow-up?"}
+        MD03{"AI Needs Follow-up?"}
+        MD04{"Follow-up < Max?"}
+        M25(["Persist-First PENDING < 100ms\n(HTTP 202 Accepted, Zero Audio)"])
+        MD06{"System Load?"}
+        M30(["Enqueue Async Background Task\n(GradingQueueWorker Channel)"])
+        M27(["Save GRADED Status & CLO Scorecard\n& Broadcast via SignalR"])
+    end
+
+    subgraph Lane4 ["Lane 4: Gemini AI Grading Engine"]
+        M16(["Gemini AI Contextual Probe\n(Evaluate Context, Not bound to 4.0-8.0)"])
+        M26(["Gemini AI Instant Grading CoT\n(Grade all answered Qs on Rubric 10.0)"])
+    end
+
+    M_INIT --> M01
+    M01 --> M02
+    M02 --> M03
+    M03 --> MD01
+    MD01 -->|"[Quota Exceeded (HTTP 429)]"| M04
+    MD01 -->|"[Quota Available (K < Limit)]"| M07
+    M04 --> M06
+    M06 --> MF01
+    M07 --> FORK_TIMERS
+    FORK_TIMERS --> M09
+    FORK_TIMERS --> M08
+    M09 --> JOIN_TIMERS
+    M08 --> JOIN_TIMERS
+    JOIN_TIMERS --> M10
+    M10 --> M11
+    M11 --> M12
+    M12 --> M13
+    M13 --> M14
+    M14 --> M15
+    M15 --> MD02
+    MD02 -->|"[HasFollowUp == true]"| M16
+    MD02 -->|"[HasFollowUp == false]"| M_MERGE_DONE
+    M16 --> MD03
+    MD03 -->|"[Needs Follow-up (Contextual Probe)]"| M17
+    MD03 -->|"[Good Answer - No Follow-up]"| M_MERGE_DONE
+    M17 --> M18
+    M18 --> M19
+    M19 --> M20
+    M20 --> M21
+    M21 --> MD04
+    MD04 -->|"[Count < Max]"| M_MERGE_DONE
+    MD04 -->|"[Count >= Max]"| M_MERGE_DONE
+    M_MERGE_DONE --> MD05
+    MD05 -->|"[More Questions]"| M10
+    MD05 -->|"[All Answered]"| M22
+    MD05 -->|"[Timer 00:00]"| M23
+    M22 --> M_MERGE_SUB
+    M23 --> M_MERGE_SUB
+    M_MERGE_SUB --> M24
+    M24 --> M25
+    M25 --> MD06
+    MD06 -->|"[Fast-Path: Low Load (< 10s)]"| M26
+    MD06 -->|"[Async Fallback: High Load]"| M30
+    M26 --> M27
+    M27 --> M28
+    M28 --> M29
+    M29 --> MF02_FINAL
+    M30 --> M31
+    M31 --> M32
+    M32 --> MF02_ASYNC
+```
+
+##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+
+```mermaid
+flowchart TD
+    M2_Start(["Sinh viên gửi POST /api/v1/mock-exams/sessions { courseId, hasFollowUp }"]) --> M2_ReadCfg["Truy vấn Course.MaxMockExamsPerDay (do Admin cấu hình theo môn) & bảng mock_exam_quotas (quota_date = TODAY)"]
+    M2_ReadCfg --> M2_QuotaCheck{"used_attempts >= Course.MaxMockExamsPerDay?"}
+
+    M2_QuotaCheck -- "Đúng (Vượt hạn ngạch ngày)" --> M2_Block429(["Trả HTTP 429 Too Many Requests -> Giao diện khóa nút thi thử & Điều hướng sang MF-01"])
+    M2_QuotaCheck -- "Sai (Còn lượt hợp lệ)" --> M2_LoadStruct["Đọc cấu hình đề thi thử của môn (ExamStructure: Thời lượng phút, tổng số câu, tỷ lệ Bloom do Trưởng BM thiết lập)"]
+    M2_LoadStruct --> M2_SamplePool["Rút ngẫu nhiên N câu từ kho practice_questions (status = APPROVED, cô lập 100% với kho exam_questions)"]
+    M2_SamplePool --> M2_InitSession["Tăng used_attempts + 1; INSERT mock_exam_sessions (status = in_progress, has_follow_up, started_at = NOW, expected_end_time = NOW + Duration)"]
+
+    M2_InitSession --> M2_QuestionLoop["Duyệt qua từng câu hỏi i (1 <= i <= N) trên giao diện phòng thi"]
+    M2_QuestionLoop --> M2_LockInput["VOICE-FIRST GATE: Khóa cứng ô nhập liệu Textarea (disabled = true)"]
+    M2_LockInput --> M2_HasAudio{"Trình duyệt phát hiện luồng thu âm Micro hợp lệ & STT trả transcript?"}
+    M2_HasAudio -- "Chưa thu âm" --> M2_CheckTimer1{"Đồng hồ chạm mốc expected_end_time?"}
+    M2_CheckTimer1 -- "Chưa hết giờ" --> M2_LockInput
+    M2_CheckTimer1 -- "Hết giờ làm bài" --> M2_AutoSubmit["Kích hoạt Auto-Submit: Thu bài tự động ngay lập tức"]
+
+    M2_HasAudio -- "Đã thu âm xong" --> M2_UnlockEdit["Mở khóa Textarea trong khoảng TranscriptBufferSeconds (10-300s, mặc định 60s do Admin cấu hình)"]
+    M2_UnlockEdit --> M2_CheckFUFlag{"session.has_follow_up == true?"}
+    M2_CheckFUFlag -- "Đúng (SV chọn Có Follow-up)" --> M2_ContextCheck{"AI đánh giá nhanh ngữ cảnh: Luận điểm cần đào sâu phản biện [Needs Follow-up]?"}
+    M2_ContextCheck -- "Cần phản biện (Tối đa 1-5 câu, mặc định 2)" --> M2_AskContextFU["Phát câu hỏi phụ qua TTS -> SV trả lời qua Micro (Voice-First) -> Lưu transcript phụ"]
+    M2_ContextCheck -- "Trả lời đã rõ ý" --> M2_SaveTemp["Ghi nhận câu trả lời i vào bộ nhớ phiên (KHÔNG lưu file audio R2)"]
+    M2_CheckFUFlag -- "Sai (SV chọn Không Follow-up)" --> M2_SaveTemp
+    M2_AskContextFU --> M2_SaveTemp
+
+    M2_SaveTemp --> M2_MoreQ{"Còn câu hỏi tiếp theo VÀ chưa hết giờ?"}
+    M2_MoreQ -- "Còn câu & Còn giờ" --> M2_QuestionLoop
+    M2_MoreQ -- "Đã làm xong hoặc Hết giờ" --> M2_AutoSubmit
+
+    M2_AutoSubmit --> M2_FilterAns["Persist-First (< 100ms): Lưu mock_exam_answers (Câu chưa trả lời đánh dấu bỏ trống, tuyệt đối KHÔNG đưa vào chấm AI)"]
+    M2_FilterAns --> M2_Dispatch{"Dual-Path Grading Dispatcher: Kiểm tra độ trễ AI (< 10s)?"}
+    M2_Dispatch -- "Fast-Path (Phản hồi trong 10s)" --> M2_SyncGrade["Gemini 1.5 Flash chấm toàn bộ câu đã làm theo Rubric 10.0 -> Tổng hợp Scorecard theo CLO"]
+    M2_SyncGrade --> M2_PushLive(["UPDATE mock_exam_sessions (status = completed) & Đẩy Instant Scorecard qua SignalR"])
+    M2_Dispatch -- "Async Fallback (Quá 10s / Hàng đợi bận)" --> M2_QueueGrade["Đẩy vào BoundedChannel 1,000 slots + Polly Retry (2-4-8s) + DLQ -> Chấm ngầm hoàn tất"]
+    M2_QueueGrade --> M2_SaveHistory(["UPDATE mock_exam_sessions (status = completed) & Lưu vĩnh viễn vào Lịch sử thi (GET /api/v1/mock-exams/history)"])
+```
+
+##### 4. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUOTA_CHECKING: SV bấm Bắt đầu thi thử (POST /sessions)
+    QUOTA_CHECKING --> QUOTA_BLOCKED_429: used_attempts >= Course.MaxMockExamsPerDay (Chặn HTTP 429)
+    QUOTA_BLOCKED_429 --> [*]: Điều hướng sang MF-01 hoặc Student Portal
+    QUOTA_CHECKING --> IN_PROGRESS: used_attempts < MaxMockExamsPerDay (Trừ quota, bật Dual Timer)
+    IN_PROGRESS --> VOICE_LOCKED: Hiển thị câu hỏi i, khóa phím 100%
+    VOICE_LOCKED --> BUFFER_EDITING: Phát biểu xong -> Mở đệm sửa Code-Switching (10-300s)
+    BUFFER_EDITING --> CONTEXT_FOLLOW_UP: has_follow_up == true & AI yêu cầu đào sâu
+    CONTEXT_FOLLOW_UP --> BUFFER_EDITING: Trả lời câu hỏi phụ
+    BUFFER_EDITING --> QUESTION_SAVED: Lưu transcript vào mock_exam_answers (Không lưu audio)
+    QUESTION_SAVED --> VOICE_LOCKED: Chuyển câu tiếp theo
+    QUESTION_SAVED --> SUBMITTED: Sinh viên bấm nộp bài hoặc Hết giờ 00:00 (Auto-Submit)
+    VOICE_LOCKED --> SUBMITTED: Hết giờ 00:00 (Câu chưa làm tính bỏ trống, không chấm)
+    SUBMITTED --> FAST_PATH_GRADING: Chấm nhanh AI (< 10s)
+    SUBMITTED --> ASYNC_FALLBACK_QUEUE: Hệ thống tải cao -> Đẩy BoundedChannel 1000 slots
+    FAST_PATH_GRADING --> COMPLETED: Đẩy Instant Scorecard qua SignalR
+    ASYNC_FALLBACK_QUEUE --> COMPLETED: Chấm ngầm xong -> Lưu vào Lịch sử thi FE-02
+    COMPLETED --> [*]
+```
+
+---
+
+#### <a id="phan-643"></a>6.4.3. MF-03: Quản Lý Ngân Hàng Câu Hỏi & Barem Rubric 10.0 (Question Studio)
+
+##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-03)
+* **Hai phương thức khởi tạo:**
+  1. *Sinh câu hỏi từ FLM theo CLO:* Giảng viên và Trưởng BM gọi FLM Adapter lấy Syllabus/CLOs, cấu hình Bloom 1-6 $\to$ Gemini 1.5 Flash tự động sinh Đề bài, Barem Rubric $\sum \equiv 10.0$đ và Model Answer $\ge 50$ ký tự $\to$ Giảng viên xem trước (Preview) và tùy chỉnh theo barem riêng.
+  2. *Soạn câu hỏi thủ công (`source == "manual"`):* Hỗ trợ đính kèm ảnh/sơ đồ kỹ thuật (PNG/JPG/WEBP $\le 5$MB). Kiểm tra nhị phân Magic Bytes (`HTTP 413 Payload Too Large` nếu $> 5$MB, `HTTP 415 Unsupported Media Type` nếu sai định dạng), stream lên Cloudflare R2, lưu `image_url` và bắt buộc nhập `image_description` để phục vụ chấm Gemini Multimodal CoT.
+* **Tick chọn 2 kho câu hỏi:** Giảng viên tick chọn lưu vào `practice_questions` (cho MF-01, MF-02) và/hoặc `exam_questions` (cô lập tuyệt đối cho MF-04).
+* **Barem Rubric chuẩn hóa:** $\sum \text{MaxScore}_j \equiv 10.0$đ và Model Answer $\ge 50$ ký tự. Client Guard cảnh báo đỏ và khóa nút; Backend FluentValidation chặn `HTTP 422 Unprocessable Entity` nếu vi phạm. Hỗ trợ chạy AI Calibration Simulator để hiệu chuẩn trọng số tiêu chí.
+* **Quy trình Duyệt đề Bộ Môn:** Giảng viên gửi duyệt (`POST /api/v1/questions/batch-submit-review`) $\to$ `SUBMITTED_FOR_REVIEW`. **Trưởng Bộ Môn (`department_head`) là người duy nhất có thẩm quyền phê duyệt**:
+  - `APPROVED`: Phê duyệt chính thức, ACID commit vào kho câu hỏi mục tiêu.
+  - `NEEDS_REVISION`: Yêu cầu sửa kèm `review_notes` $\ge 10$ ký tự, trả về Giảng viên chỉnh sửa.
+  - `REJECTED`: Từ chối kèm lý do, loại bỏ hẳn khỏi ngân hàng đề.
+
+##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, 60 Đỉnh)
+
+```mermaid
+flowchart TD
+    subgraph Lane1 ["Lane 1: Lecturer (Question Author)"]
+        Q01((●))
+        Q02(["Access Question Bank & Rubric Studio"])
+        Q_Browse_Filter(["Apply Filters (Course, Bloom 1-6, Difficulty, Approval Status)"])
+        Q_Edit_Select(["Select Question to Edit (DRAFT or NEEDS_REVISION)"])
+        Q_Man_Start(["Enter Question Content & Select Target Pools (practice/exam)"])
+        D_Man_Image{"Attach Technical Diagram?"}
+        M_Man_Img{"◇"}
+        Q_FLM_Req(["Select Course & Request Syllabus/CLOs from FLM"])
+        Q_FLM_Config(["Select Target CLOs, Bloom 1-6, Difficulty & Question Count"])
+        Q_FLM_Customize(["Customize Rubric, Refine Model Ans & Tick Target Pools"])
+        M_Author_Done{"◇"}
+        Q_Rubric_Adjust(["Adjust Criteria Points to exactly 10.0"])
+        D_Simulator{"Run AI Calibration Simulator?"}
+        Q_Sim_Input(["Input Test Student Answer (High / Medium / Low)"])
+        D_Sim_Check{"Criteria Weights Satisfactory?"}
+        M_Sim_Done{"◇"}
+        Q_Submit_Review(["Lecturer Submits Batch (POST /batch-submit-review)"])
+        Q_Lec_Revise(["Lecturer Re-opens Question Form to Revise"])
+        Q_Catalog_View(["View Updated Question Catalog (Ready for MF-01/02/04)"])
+        Q_End_Final(((◉)))
+    end
+
+    subgraph Lane2 ["Lane 2: Question & Rubric Studio UI"]
+        Q04(["Render Question Studio Workspace"])
+        M_Studio{"◇"}
+        D_AuthorMode{"Select Authoring Mode?"}
+        Q_Browse_Render(["Display Paginated Question Grid & Details Modal"])
+        Q_Edit_Form(["Populate Question Form & Revision Feedback"])
+        Q_Man_Attach(["Attach Image URL & Description for Gemini Multimodal CoT"])
+        Q_FLM_RenderTree(["Render Syllabus Tree & Target CLO Selector"])
+        Q_FLM_Preview(["Render Draft Preview Studio & Side-by-Side Comparison"])
+        Q_Rubric_Calc(["Calculate Real-time Total Points (∑ MaxScore_j)"])
+        D_Rubric_Sum{"∑ == 10.0?"}
+        Q_Rubric_Warn(["Show Red Invariant Warning & Disable Submit Actions"])
+        Q_Sim_Show(["Display Calibration Scorecard & Feedback Analysis"])
+        Q_Val_422(["Display 422 Validation Error Alert"])
+        Q_UI_Revise(["Notify Lecturer with Revision Feedback (review_notes)"])
+        Q_Sync_UI(["Display Approval Success Banner & Update Bank Catalog"])
+    end
+
+    subgraph Lane3 ["Lane 3: .NET 8 Backend API & R2"]
+        Q03(["Verify RBAC Claims (Role in [lecturer, department_head])"])
+        Q_Browse_Query(["Query Question Catalog & Rubrics (GET /api/v1/questions)"])
+        Q_Edit_Fetch(["Fetch Question, Rubric & Revision Notes from DB"])
+        Q_Man_Upload(["POST /upload-image: Check Magic Bytes (413/415) & Stream R2"])
+        Obj_R2_Image["[Diagram Sealed on Cloudflare R2: image_url + image_desc]"]
+        Q_FLM_Fetch(["GET /syllabus via FLM Adapter (Polly Retry 3x: 2s, 4s, 8s)"])
+        Q_FLM_Dispatch(["POST /generate-from-flm (Dispatch Generation Request)"])
+        Q_Sim_Dispatch(["POST /api/v1/questions/simulate-grading"])
+        Q_Val_Backend(["Backend FluentValidation: Validate ∑==10.0 & Ans>=50"])
+        D_Val_Backend{"Valid ∑==10.0 & Ans>=50?"}
+        Q_Persist_Review(["ACID Persist: Save DRAFT & Set Status = SUBMITTED_FOR_REVIEW"])
+        Obj_State_Review["[Question & Rubric: SUBMITTED_FOR_REVIEW]"]
+        Q_DB_Revise(["Update Status = NEEDS_REVISION & Record review_notes in DB"])
+        Q_DB_Reject(["Update Status = REJECTED, Save AuditLog & Discard Question"])
+        End_Reject((⊗))
+        Q_DB_Approve(["ACID: Status = APPROVED, Commit Target Pools & Invalidate Cache"])
+        Obj_State_Approved["[Question & Rubric: APPROVED in Target Banks]"]
+    end
+
+    subgraph Lane4 ["Lane 4: Gemini AI Generator & Simulator"]
+        Q_FLM_AIGen(["Gemini 1.5 Flash: Auto-Gen Questions, Model Ans & Rubric (∑=10.0)"])
+        Q_Sim_AI(["Gemini 1.5 Flash: Grade Test Answer against Rubric & Trace CoT"])
+    end
+
+    subgraph Lane5 ["Lane 5: Department Head (Approver)"]
+        Q_Dept_Open(["Open Approval Studio: View Pending (SUBMITTED_FOR_REVIEW)"])
+        Q_Dept_Inspect(["Inspect Question Content, Diagram, Model Ans & Rubric 10.0"])
+        D_Dept_Decision{"Dept Head Decision?"}
+        Q_Dept_Revise(["Enter Revision Notes (review_notes >= 10 chars) & Request"])
+        Q_Dept_Reject(["Enter Rejection Reason (>= 10 chars) & Reject Question"])
+        Q_Dept_Approve(["Approve Question Batch (POST /review-decision)"])
+    end
+
+    Q01 --> Q02
+    Q02 --> Q03
+    Q03 --> Q04
+    Q04 --> M_Studio
+    M_Studio --> D_AuthorMode
+    D_AuthorMode -->|"[Browse / Filter Catalog]"| Q_Browse_Filter
+    D_AuthorMode -->|"[Edit Existing Question]"| Q_Edit_Select
+    D_AuthorMode -->|"[Manual Authoring]"| Q_Man_Start
+    D_AuthorMode -->|"[Generate from FLM Syllabus]"| Q_FLM_Req
+    Q_Browse_Filter --> Q_Browse_Query
+    Q_Browse_Query --> Q_Browse_Render
+    Q_Browse_Render --> M_Studio
+    Q_Edit_Select --> Q_Edit_Fetch
+    Q_Edit_Fetch --> Q_Edit_Form
+    Q_Edit_Form --> M_Author_Done
+    Q_Man_Start --> D_Man_Image
+    D_Man_Image -->|"[Attach Diagram]"| Q_Man_Upload
+    D_Man_Image -->|"[No Diagram]"| M_Man_Img
+    Q_Man_Upload --> Obj_R2_Image
+    Obj_R2_Image --> Q_Man_Attach
+    Q_Man_Attach --> M_Man_Img
+    M_Man_Img --> M_Author_Done
+    Q_FLM_Req --> Q_FLM_Fetch
+    Q_FLM_Fetch --> Q_FLM_RenderTree
+    Q_FLM_RenderTree --> Q_FLM_Config
+    Q_FLM_Config --> Q_FLM_Dispatch
+    Q_FLM_Dispatch --> Q_FLM_AIGen
+    Q_FLM_AIGen --> Q_FLM_Preview
+    Q_FLM_Preview --> Q_FLM_Customize
+    Q_FLM_Customize --> M_Author_Done
+    M_Author_Done --> Q_Rubric_Calc
+    Q_Rubric_Calc --> D_Rubric_Sum
+    D_Rubric_Sum -->|"[Sum != 10.0 (Invalid)]"| Q_Rubric_Warn
+    D_Rubric_Sum -->|"[Sum == 10.0 (Valid)]"| D_Simulator
+    Q_Rubric_Warn --> Q_Rubric_Adjust
+    Q_Rubric_Adjust --> Q_Rubric_Calc
+    D_Simulator -->|"[Run AI Simulator]"| Q_Sim_Input
+    D_Simulator -->|"[Skip Simulator]"| M_Sim_Done
+    Q_Sim_Input --> Q_Sim_Dispatch
+    Q_Sim_Dispatch --> Q_Sim_AI
+    Q_Sim_AI --> Q_Sim_Show
+    Q_Sim_Show --> D_Sim_Check
+    D_Sim_Check -->|"[Need Weight Adjustment]"| M_Author_Done
+    D_Sim_Check -->|"[Weights Satisfactory]"| M_Sim_Done
+    M_Sim_Done --> Q_Submit_Review
+    Q_Submit_Review --> Q_Val_Backend
+    Q_Val_Backend --> D_Val_Backend
+    D_Val_Backend -->|"[Validation Failed (HTTP 422)]"| Q_Val_422
+    D_Val_Backend -->|"[Validation Passed]"| Q_Persist_Review
+    Q_Val_422 --> M_Author_Done
+    Q_Persist_Review --> Obj_State_Review
+    Obj_State_Review --> Q_Dept_Open
+    Q_Dept_Open --> Q_Dept_Inspect
+    Q_Dept_Inspect --> D_Dept_Decision
+    D_Dept_Decision -->|"[NEEDS_REVISION]"| Q_Dept_Revise
+    D_Dept_Decision -->|"[REJECTED]"| Q_Dept_Reject
+    D_Dept_Decision -->|"[APPROVED]"| Q_Dept_Approve
+    Q_Dept_Revise --> Q_DB_Revise
+    Q_DB_Revise --> Q_UI_Revise
+    Q_UI_Revise --> Q_Lec_Revise
+    Q_Lec_Revise --> M_Studio
+    Q_Dept_Reject --> Q_DB_Reject
+    Q_DB_Reject --> End_Reject
+    Q_Dept_Approve --> Q_DB_Approve
+    Q_DB_Approve --> Obj_State_Approved
+    Obj_State_Approved --> Q_Sync_UI
+    Q_Sync_UI --> Q_Catalog_View
+    Q_Catalog_View --> Q_End_Final
+```
+
+##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+
+```mermaid
+flowchart TD
+    M3_Init(["Khởi tạo tác vụ trong Question Studio (Role: lecturer hoặc department_head)"]) --> M3_Source{"Phương thức khởi tạo (source)?"}
+
+    M3_Source -- "1. source == 'ai_flm'" --> M3_ReadFLM["Gọi FLM Adapter lấy danh sách CLOs & Topics của Course (Chỉ đọc từ FLM)"]
+    M3_ReadFLM --> M3_CallGemini["Gọi Gemini 1.5 Flash sinh Draft Question + Rubric (Sum = 10.0) + SampleAnswer (>= 50 ký tự)"]
+    M3_CallGemini --> M3_SelectBanks
+
+    M3_Source -- "2. source == 'manual'" --> M3_InputManual["Giảng viên nhập nội dung câu hỏi, Bloom Level, CLO & SampleAnswer"]
+    M3_InputManual --> M3_HasImg{"Có đính kèm file ảnh/sơ đồ kỹ thuật?"}
+    M3_HasImg -- "Không đính kèm" --> M3_SelectBanks
+    M3_HasImg -- "Có đính kèm (POST /upload-image)" --> M3_CheckSize{"Kích thước file <= 5MB?"}
+    M3_CheckSize -- "Vượt quá 5MB" --> M3_Ret413(["Chặn & Trả HTTP 413 Payload Too Large"])
+    M3_CheckSize -- "Hợp lệ (<= 5MB)" --> M3_CheckMagic{"Kiểm tra Header Magic Bytes có đúng PNG / JPG / WEBP?"}
+    M3_CheckMagic -- "Sai chữ ký nhị phân (Giả mạo đuôi file)" --> M3_Ret415(["Chặn & Trả HTTP 415 Unsupported Media Type"])
+    M3_CheckMagic -- "Đúng Magic Bytes" --> M3_UploadR2["Lưu ảnh lên Cloudflare R2 -> Trả về image_url & Yêu cầu nhập image_description (phục vụ Gemini Multimodal CoT)"]
+    M3_UploadR2 --> M3_SelectBanks
+
+    M3_SelectBanks["Tick chọn kho lưu trữ đích: practice_questions và/hoặc exam_questions (PRACTICE_ONLY / EXAM_ONLY / SHARED)"] --> M3_CheckRubric{"Kiểm tra Barem & Đáp án mẫu: Sum(Criteria.MaxScore) == 10.00 VÀ SampleAnswer.Length >= 50?"}
+    M3_CheckRubric -- "Sai lệch (Sum != 10.0 hoặc Sample < 50 ký tự)" --> M3_Ret422(["Chặn lưu/gửi duyệt & Trả HTTP 422 Unprocessable Entity"])
+    M3_CheckRubric -- "Hợp lệ (Sum == 10.00)" --> M3_OptSim{"Chạy AI Calibration Simulator?"}
+    M3_OptSim -- "Có" --> M3_SimRun["POST /api/v1/questions/simulate-grading: Chấm thử câu trả lời mẫu & Tinh chỉnh lại trọng số tiêu chí"]
+    M3_SimRun --> M3_CheckRubric
+    M3_OptSim -- "Không (Sẵn sàng nộp)" --> M3_SaveDraft["Lưu bản nháp (approval_status = DRAFT)"]
+
+    M3_SaveDraft --> M3_BatchSubmit["Giảng viên bấm Gửi duyệt Bộ Môn: POST /api/v1/questions/batch-submit-review"]
+    M3_BatchSubmit --> M3_SetPending["Chuyển trạng thái sang SUBMITTED_FOR_REVIEW"]
+    M3_SetPending --> M3_HeadReview{"Trưởng Bộ Môn thẩm định (POST /api/v1/questions/{id}/review-decision)"}
+
+    M3_HeadReview -- "decision == 'NEEDS_REVISION'" --> M3_ToRev["Cập nhật status = NEEDS_REVISION kèm review_notes -> Trả về Giảng viên sửa"]
+    M3_ToRev --> M3_SelectBanks
+    M3_HeadReview -- "decision == 'REJECTED'" --> M3_ToRej(["Cập nhật status = REJECTED kèm review_notes -> Loại khỏi ngân hàng đề"])
+    M3_HeadReview -- "decision == 'APPROVED'" --> M3_ToApp(["Cập nhật status = APPROVED -> Kích hoạt chính thức trong kho practice_questions / exam_questions"])
+```
+
+##### 4. Phần C — Vòng Đời Trạng Thái Câu Hỏi Ngân Hàng Đề (Question State Machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT: Giảng viên hoặc Trưởng BM khởi tạo (AI FLM CLO hoặc Manual + Ảnh <= 5MB)
+    DRAFT --> DRAFT: Hiệu chỉnh Rubric (Sum == 10.0đ), SampleAnswer (>= 50 ký tự), chạy AI Simulator
+    DRAFT --> SUBMITTED_FOR_REVIEW: Gửi Trưởng Bộ Môn duyệt (POST /api/v1/questions/batch-submit-review)
+    SUBMITTED_FOR_REVIEW --> APPROVED: Trưởng BM phê duyệt (decision = APPROVED) -> Vào kho practice_questions / exam_questions
+    SUBMITTED_FOR_REVIEW --> NEEDS_REVISION: Trưởng BM yêu cầu sửa (decision = NEEDS_REVISION kèm review_notes)
+    SUBMITTED_FOR_REVIEW --> REJECTED: Trưởng BM từ chối loại bỏ (decision = REJECTED kèm review_notes)
+    NEEDS_REVISION --> DRAFT: Giảng viên chỉnh sửa lại nội dung câu hỏi / Barem 10.0 / Ảnh kỹ thuật
+    NEEDS_REVISION --> SUBMITTED_FOR_REVIEW: Giảng viên gửi duyệt lại sau khi hoàn tất chỉnh sửa
+    APPROVED --> [*]
+    REJECTED --> [*]
+```
+
+---
+
+#### <a id="phan-644"></a>6.4.4. MF-04: Thi Thật Phòng Lab Kiosk, Công Bố Điểm & Phúc Khảo Nội Bộ (Lab Exam & Audit)
+
+##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-04)
+* **Pha 0 - Quản trị kỳ thi của Trưởng Bộ Môn:** Khởi tạo Kỳ thi (`OfficialExamSession`), gán môn thi, cấu hình Ca thi (`RealExamSessionShift`: phòng lab ghi ngay trên ca, phân công Giám thị, danh sách thí sinh từ lớp đã có), cấu hình Follow-up môn thi trong kỳ thi (`has_follow_up`, `max_follow_up_questions` 1–5 câu, mặc định 2 câu) và `ExamInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`) kèm `TranscriptBufferSeconds` (10–300s).
+* **An ninh phòng thi Kiosk Lockdown:** Điểm danh thẻ SV/CCCD, gán SeatNumber 1-40 và kiểm tra chéo `ip_address` (theo quy chuẩn ip_address). Fullscreen Kiosk Lockdown: chặn Alt+Tab, Windows, F11, F12, DevTools; mất focus `window.onblur > 3` lần lập tức đình chỉ thi. Hardware Mic-Check 30s đạt $\ge 60$dB (nếu không đạt báo Giám thị đổi máy trạm dự phòng).
+* **Niêm phong Audio R2 & Persist-First < 100ms:** Đóng gói file âm thanh tên bất biến `STT_MSSV.webm` (vd: `01_SE170123.webm`), tính mã băm mật mã SHA-256 niêm phong tại Kiosk và stream lên Cloudflare R2. Persist-First ghi nhận bài nộp vào CSDL trạng thái `SUBMITTED` trong $< 100$ms.
+* **Kiosk khóa an toàn — Tuyệt đối 0% điểm liền, 0% khiếu nại tại chỗ:** Sau khi nộp bài, Kiosk khóa màn hình báo đã lưu an toàn, thí sinh ký biên bản giấy và ra về (về nhà). Đẩy task vào RAM BoundedChannel 1,000 slots (`FullMode.Wait`) để Gemini 1.5 Pro chấm ngầm Rubric 10.0 (chỉ nhận transcript input). Polly Retry 3 lần (2-4-8s) và DLQ 5m.
+* **Chốt chặn AI Doubt Guard & Hậu kiểm Giảng viên:** Tự động chia 2 nhóm:
+  - *Nhóm 1 (Đáng nghi ngờ / Fail):* `is_suspicious == true` HOẶC `confidence_score < 0.70` HOẶC điểm liệt. Giảng viên **BẮT BUỘC** đối soát Evidence Panel (AudioURL R2, Transcript Whisper gốc, AI CoT), nghe lại Waveform Player (1.0x–1.5x) và sửa điểm kèm lý do giải trình bắt buộc `override_reason` $\ge 10$ ký tự.
+  - *Nhóm 2 (Độ tin cậy cao):* Giảng viên rà soát nhanh.
+* **Công Bố Điểm (Publish Grades) & One-Way Lock:** Chỉ khi **100% sinh viên trong ca thi đã có điểm hoàn chỉnh**, Giảng viên mới bấm "Công Bố Điểm" 1 lần duy nhất (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`). Hệ thống cập nhật `PUBLISHED` $\to$ `LOCKED` (`is_locked = true`), `OneWayLockInterceptor` chặn 100% lệnh `UPDATE`/`DELETE` trái phép (**HTTP 403 Forbidden**). Đồng thời xuất file Bảng điểm Khảo thí FPT cả định dạng Excel (.xlsx) và PDF có chữ ký số.
+* **Xem điểm tại nhà & Phúc khảo nội bộ:** Sinh viên xem điểm trên Student Portal; đồng ý thì bấm Xác nhận nhận điểm (`ACKNOWLEDGED`); nếu phúc khảo thì nộp đơn `AppealRequest` trực tiếp trên hệ thống (`POST /api/v1/appeals`). Trưởng Bộ Môn tiếp nhận và **phân công một Giảng viên khác chấm lại** (`PUT /api/v1/appeals/{id}/assign-lecturer`). One-Way Lock mở đường hợp lệ cho Giảng viên được phân công cập nhật điểm phúc khảo kèm lý do `regrade_reason`.
+
+##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, 84 Đỉnh)
+
+```mermaid
+flowchart TD
+    subgraph Lane1 ["Lane 1: Student (Examinee)"]
+        E07(["Student Takes Assigned Seat (1-40) & Signs in with Student ID"])
+        E10(["Run 30s Microphone Hardware Test (Read Calibration Passage)"])
+        E_Student_Move(["Student Moves to Backup Station"])
+        E16(["Student Speaks Viva Answer into Headset Mic"])
+        E_Speak_Followup(["Student Speaks Follow-up Answer"])
+        E_Student_Confirm(["Student Confirms Final Submission"])
+        E24_Student_Leave(["Sign Paper Attendance Sheet & Leave Exam Room Safely"])
+        FlowEnd_Lab((⊗))
+        E35_Student_Portal(["Student at Home Views Official Grade & CLO Scorecard on Portal"])
+        D_Student_Appeal{"Student Grade Decision?"}
+        E_Ack_Grade(["Acknowledge Grade (POST /acknowledge-grade -> ACKNOWLEDGED)"])
+        E_Submit_Appeal(["Submit AppealRequest on Student Portal (POST /api/v1/appeals)"])
+        E_Student_ReAck(["Student Views Updated Grade on Portal & Acknowledges"])
+        E_End_Final(((◉)))
+    end
+
+    subgraph Lane2 ["Lane 2: Lab Workstation Kiosk"]
+        E08(["Kiosk Validates SeatNumber & Checks ip_address Binding"])
+        E09(["Enforce Fullscreen Lockdown (Block Alt+Tab/Win/DevTools; Blur>3 Suspend)"])
+        E11(["Measure Audio Input Level (Target Peak >= 60dB)"])
+        D_Mic_Check{"Hardware Mic >= 60dB?"}
+        E_Wait_Start(["Wait for Synchronized Shift Exam Start Signal"])
+        Fork_Timers["═════ FORK BAR (Khởi chạy đồng hồ chủ và Kiosk) ═════"]
+        E14_KioskTimer(["Start Kiosk Synchronized Countdown Timer"])
+        Join_Timers["═════ JOIN BAR (Hội tụ đồng bộ đồng hồ thi) ═════"]
+        D_InputMode{"ExamInputMode?"}
+        E_Mode_Voice(["Lock Keyboard 100% (Microphone Only)"])
+        E_Mode_Buffer(["Enable TranscriptBufferSeconds (10-300s, default 60s)"])
+        M_Mode{"◇"}
+        E15(["TTS Plays Question Audio (from isolated exam_questions pool)"])
+        E17(["Record Audio Stream (WebM/Opus) & Transcribe Stream"])
+        D_Shift_Followup{"Shift has_follow_up Enabled?"}
+        E_Play_Followup(["TTS Plays Follow-up Question Audio"])
+        E_Rec_Followup(["Record & Transcribe Follow-up"])
+        D_Followup_Limit{"Follow-up Count < Limit?"}
+        M_Followup_Done{"◇"}
+        E18(["Package Complete Audio: STT_MSSV.webm (e.g., 01_SE170123.webm)"])
+        E19(["Compute Cryptographic SHA-256 Hash Seal at Kiosk"])
+        E20(["Direct Upload STT_MSSV.webm to Cloudflare R2 via Presigned URL"])
+        D_Exam_Progress{"More Questions or Timeout?"}
+        E_Auto_Submit(["Auto-Submit Guard: Force Lock Micro & Auto-Submit"])
+        M_Submit{"◇"}
+        E21(["Dispatch Submission (R2 Audio URL + SHA-256 Seal + Transcripts)"])
+        Fork_Post_Submit["═════ FORK BAR (Tách nhánh: Khóa Kiosk vs Worker chấm ngầm) ═════"]
+        E23_Kiosk_Lock(["Lock Kiosk Safely: Submission Sealed (0% Instant Score, 0% Appeal)"])
+    end
+
+    subgraph Lane3 ["Lane 3: .NET 8 Backend API & Worker"]
+        E04(["Initialize Shift in DB (Tickets: SCHEDULED, Pre-bind IP & Roster)"])
+        Obj_Shift_Scheduled["[Shift & Tickets: SCHEDULED | IP Pre-bound]"]
+        E13(["SignalR Broadcasts Shift Start & Updates Tickets = IN_PROGRESS"])
+        E14_ServerTimer(["Start Server Master Timer (Anti-Tampering Absolute Clock)"])
+        E_AI_QuickEval(["AI Quick Context Evaluation on Answer Quality"])
+        D_Need_Followup{"Needs Follow-up?"}
+        E_Gen_Followup(["Generate Contextual Follow-up Question"])
+        E22(["Persist-First (< 100ms): Save Submissions & Ticket = SUBMITTED"])
+        Obj_Ticket_Submitted["[Ticket Status = SUBMITTED | SHA-256 Sealed]"]
+        E25_Enqueue(["Enqueue EvaluationTask into BoundedChannel (1,000 slots RAM)"])
+        E26_Polly_Worker(["Background Worker Rinses Task & Runs Polly Retry (3x: 2s, 4s, 8s)"])
+        D_Polly_Status{"AI Service Status?"}
+        E_DLQ_Isolate(["Isolate into Dead-Letter Queue with PENDING_RETRY"])
+        E_Gemini_Grading(["Gemini 1.5 Pro Grades Transcript via Rubric 10.0 & Computes CoT"])
+        E27_Save_AI_Graded(["Update DB: Save Criteria Scores, CoT & Ticket = AI_GRADED"])
+        Obj_Ticket_AiGraded["[Ticket Status = AI_GRADED]"]
+        E30_AI_Doubt(["AI Doubt Guard Classifies Shift Submissions into 2 Groups"])
+        E_Audit_Save(["Update DB Ticket Status = AUDITED & Save lecturer_audits"])
+        Obj_Shift_Audited["[All Tickets in Shift: AUDITED]"]
+        E32_Validate_100(["Backend Atomic Gate: Verify 100% Shift Tickets have FinalScore"])
+        E33_OneWayLock(["Enforce One-Way Lock: Status = PUBLISHED -> LOCKED (HTTP 403)"])
+        Obj_Shift_Locked["[Shift & Tickets: PUBLISHED & LOCKED | OneWayLock Active]"]
+        E34_Export_Reports(["Export Official Shift Reports (FPT Excel .xlsx & Signed PDF)"])
+        E_Appeal_DB(["OneWayLock Authorized Exception: Update DB & Write AuditLog"])
+    end
+
+    subgraph Lane4 ["Lane 4: Proctor & Lecturer (Audit)"]
+        E05(["Proctor Opens Proctor Console & Loads Shift Roster"])
+        E06(["Check Attendance: Match ID/CCCD, Assign Seat (1-40) & Bind IP"])
+        E_Backup_Station(["Proctor Reassigns Backup Station & Updates ip_address on Ticket"])
+        E12(["Proctor Clicks Start Shift Exam on Console"])
+        E28_Close_Shift(["Proctor Confirms Candidates Vacated & Closes Exam Shift"])
+        E29_Open_Audit(["Lecturer Opens Lecturer Audit Portal (Filter Shift & Seat 1-40)"])
+        D_Audit_Group{"AI Doubt Classification?"}
+        E_Audit_Group1(["Listen STT_MSSV.webm on Waveform Player with Citations & AI CoT"])
+        E_Audit_Override(["Override Score with Mandatory override_reason (>= 10 chars)"])
+        E_Audit_FastTrack(["Fast-Track Overview & Confirm AI Suggested Scores"])
+        M_Audit_Done{"◇"}
+        E31_Publish(["Lecturer Clicks Công Bố Điểm Once (POST /publish-grades)"])
+        E_Lec_Regrade(["Assigned Lecturer Regrades on Evidence Panel & Submits Reason"])
+    end
+
+    subgraph Lane5 ["Lane 5: Department Head (Config & Appeal)"]
+        E01((●))
+        E02(["Create OfficialExamSession & Assign Courses"])
+        E03(["Config RealExamSessionShift (Lab, Roster, Follow-up 1-5, Mode, Buffer)"])
+        E_DLQ_Replay(["DlqReplayWorker Auto-Retry 5m OR Dept Head Manual Replay"])
+        E_Dept_Assign(["Department Head Assigns Lecturer (PUT /assign-lecturer)"])
+    end
+
+    E01 --> E02
+    E02 --> E03
+    E03 --> E04
+    E04 --> Obj_Shift_Scheduled
+    Obj_Shift_Scheduled --> E05
+    E05 --> E06
+    E06 --> E07
+    E07 --> E08
+    E08 --> E09
+    E09 --> E10
+    E10 --> E11
+    E11 --> D_Mic_Check
+    D_Mic_Check -->|"[Mic Level < 60dB (Failed)]"| E_Backup_Station
+    D_Mic_Check -->|"[Mic Level >= 60dB (Passed)]"| E_Wait_Start
+    E_Backup_Station --> E_Student_Move
+    E_Student_Move --> E08
+    E_Wait_Start --> E12
+    E12 --> E13
+    E13 --> Fork_Timers
+    Fork_Timers --> E14_ServerTimer
+    Fork_Timers --> E14_KioskTimer
+    E14_KioskTimer --> Join_Timers
+    E14_ServerTimer --> Join_Timers
+    Join_Timers --> D_InputMode
+    D_InputMode -->|"[VoiceOnly Mode]"| E_Mode_Voice
+    D_InputMode -->|"[VoiceWithTranscriptEdit Mode]"| E_Mode_Buffer
+    E_Mode_Voice --> M_Mode
+    E_Mode_Buffer --> M_Mode
+    M_Mode --> E15
+    E15 --> E16
+    E16 --> E17
+    E17 --> D_Shift_Followup
+    D_Shift_Followup -->|"[Follow-up Enabled]"| E_AI_QuickEval
+    D_Shift_Followup -->|"[No Follow-up]"| M_Followup_Done
+    E_AI_QuickEval --> D_Need_Followup
+    D_Need_Followup -->|"[Needs Follow-up]"| E_Gen_Followup
+    D_Need_Followup -->|"[Good Answer - No Follow-up]"| M_Followup_Done
+    E_Gen_Followup --> E_Play_Followup
+    E_Play_Followup --> E_Speak_Followup
+    E_Speak_Followup --> E_Rec_Followup
+    E_Rec_Followup --> D_Followup_Limit
+    D_Followup_Limit -->|"[Count < Limit]"| M_Followup_Done
+    D_Followup_Limit -->|"[Count >= Limit]"| M_Followup_Done
+    M_Followup_Done --> E18
+    E18 --> E19
+    E19 --> E20
+    E20 --> D_Exam_Progress
+    D_Exam_Progress -->|"[More Questions]"| E15
+    D_Exam_Progress -->|"[All Questions Done]"| E_Student_Confirm
+    D_Exam_Progress -->|"[Timeout 00:00]"| E_Auto_Submit
+    E_Student_Confirm --> M_Submit
+    E_Auto_Submit --> M_Submit
+    M_Submit --> E21
+    E21 --> E22
+    E22 --> Obj_Ticket_Submitted
+    Obj_Ticket_Submitted --> Fork_Post_Submit
+    Fork_Post_Submit --> E23_Kiosk_Lock
+    Fork_Post_Submit --> E25_Enqueue
+    E23_Kiosk_Lock --> E24_Student_Leave
+    E24_Student_Leave --> FlowEnd_Lab
+    E25_Enqueue --> E26_Polly_Worker
+    E26_Polly_Worker --> D_Polly_Status
+    D_Polly_Status -->|"[Polly Retry Failed > 3]"| E_DLQ_Isolate
+    D_Polly_Status -->|"[Polly Success]"| E_Gemini_Grading
+    E_DLQ_Isolate --> E_DLQ_Replay
+    E_DLQ_Replay --> E25_Enqueue
+    E_Gemini_Grading --> E27_Save_AI_Graded
+    E27_Save_AI_Graded --> Obj_Ticket_AiGraded
+    Obj_Ticket_AiGraded --> E30_AI_Doubt
+    E28_Close_Shift --> E29_Open_Audit
+    E29_Open_Audit --> D_Audit_Group
+    E30_AI_Doubt --> D_Audit_Group
+    D_Audit_Group -->|"[Group 1: Suspicious / Fail / Conf < 0.70]"| E_Audit_Group1
+    D_Audit_Group -->|"[Group 2: High Confidence (Conf >= 0.70)]"| E_Audit_FastTrack
+    E_Audit_Group1 --> E_Audit_Override
+    E_Audit_Override --> E_Audit_Save
+    E_Audit_FastTrack --> E_Audit_Save
+    E_Audit_Save --> M_Audit_Done
+    M_Audit_Done --> Obj_Shift_Audited
+    Obj_Shift_Audited --> E31_Publish
+    E31_Publish --> E32_Validate_100
+    E32_Validate_100 --> E33_OneWayLock
+    E33_OneWayLock --> Obj_Shift_Locked
+    Obj_Shift_Locked --> E34_Export_Reports
+    Obj_Shift_Locked --> E35_Student_Portal
+    E35_Student_Portal --> D_Student_Appeal
+    D_Student_Appeal -->|"[Agree with Grade]"| E_Ack_Grade
+    D_Student_Appeal -->|"[Submit Appeal]"| E_Submit_Appeal
+    E_Submit_Appeal --> E_Dept_Assign
+    E_Dept_Assign --> E_Lec_Regrade
+    E_Lec_Regrade --> E_Appeal_DB
+    E_Appeal_DB --> E_Student_ReAck
+    E_Ack_Grade --> E_End_Final
+    E_Student_ReAck --> E_End_Final
+```
+
+##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+
+```mermaid
+flowchart TD
+    M4_Start(["Khởi chạy Ca thi thật phòng Lab (RealExamSessionShift)"]) --> M4_CheckIn["Proctor điểm danh Thẻ SV/CCCD, gán SeatNumber (1..40) & lưu cột ip_address (theo quy chuẩn ip_address) -> Vé thi SCHEDULED"]
+    M4_CheckIn --> M4_KioskGuard["Máy trạm bật Fullscreen Kiosk Lockdown: Chặn Alt+Tab, Win, Esc, F11, F12, DevTools"]
+    M4_KioskGuard --> M4_MicTest{"Kiểm tra phần cứng Mic-Check 30s: Cường độ âm thanh >= 60dB?"}
+    M4_MicTest -- "Không đạt (< 60dB)" --> M4_SwapSeat["Báo Giám thị đổi tai nghe hoặc chuyển vị trí SeatNumber dự phòng"]
+    M4_SwapSeat --> M4_MicTest
+    M4_MicTest -- "Đạt chuẩn (>= 60dB)" --> M4_InProg["Chuyển trạng thái vé thi -> IN_PROGRESS & Rút đề từ kho exam_questions"]
+
+    M4_InProg --> M4_BlurCheck{"Giám sát sự kiện window.onblur trong lúc làm bài: blur_count > 3 lần?"}
+    M4_BlurCheck -- "Vi phạm (> 3 lần thoát màn hình)" --> M4_Suspend(["Đình chỉ thi tự động, lập biên bản vi phạm quy chế & báo Proctor Console"])
+    M4_BlurCheck -- "An toàn (<= 3 lần)" --> M4_InputMode{"Kiểm tra cấu hình ExamInputMode của ca thi?"}
+
+    M4_InputMode -- "VoiceOnly" --> M4_VoiceOnly["SV chỉ trả lời bằng giọng nói (kèm 1-5 câu hỏi phụ ngữ cảnh nếu bật), khóa hoàn toàn chỉnh sửa văn bản"]
+    M4_InputMode -- "VoiceWithTranscriptEdit" --> M4_VoiceEdit["SV trả lời bằng giọng nói -> Mở đệm sửa thuật ngữ trong TranscriptBufferSeconds (10-300s)"]
+    M4_VoiceOnly --> M4_SealR2
+    M4_VoiceEdit --> M4_SealR2
+
+    M4_SealR2["Đóng gói file ghi âm tên bất biến STT_MSSV.webm (vd: 01_SE170123.webm), tính mã băm SHA-256 tại Kiosk & Stream lên Cloudflare R2"] --> M4_Persist["Persist-First (< 100ms): INSERT exam_question_submissions & UPDATE student_exam_tickets SET status = SUBMITTED"]
+    M4_Persist --> M4_LockKiosk["Khóa màn hình Kiosk tức thì: Báo đã lưu an toàn, TUYỆT ĐỐI KHÔNG hiện điểm liền, không khiếu nại tại chỗ; SV ký biên bản giấy ra về"]
+    M4_Persist --> M4_Queue["Đẩy task vào BoundedChannel 1,000 slots RAM (FullMode.Wait) -> OfficialExamGradingWorker rút xử lý"]
+
+    M4_Queue --> M4_Retry{"Gọi Whisper STT + Gemini 1.5 Pro chấm Rubric 10.0 (Polly Retry 2s -> 4s -> 8s)?"}
+    M4_Retry -- "Thất bại cả 3 lần" --> M4_DLQ["Cách ly vào bảng dead_letter_queues (Tự động chấm bù sau 5 phút hoặc Trưởng BM bấm Replay thủ công)"]
+    M4_DLQ --> M4_Retry
+    M4_Retry -- "Chấm thành công" --> M4_SetGraded["Cập nhật vé thi status = AI_GRADED (Lưu ai_score, confidence_score, is_suspicious)"]
+
+    M4_SetGraded --> M4_Doubt{"AI Doubt Guard: is_suspicious == true HOẶC confidence_score < 0.70 HOẶC điểm liệt?"}
+    M4_Doubt -- "Đúng (Nhóm 1: Cần hậu kiểm bắt buộc)" --> M4_Group1["Đẩy lên đầu danh sách ưu tiên: Giảng viên nghe Waveform Audio R2 (1.0x-1.5x), đối soát Transcript & AI CoT"]
+    M4_Doubt -- "Sai (Nhóm 2: Độ tin cậy cao >= 0.70)" --> M4_Group2["Giảng viên rà soát nhanh trên Evidence Panel"]
+    M4_Group1 --> M4_Override{"Giảng viên có điều chỉnh điểm so với AI?"}
+    M4_Override -- "Có sửa điểm" --> M4_ReqReason["BẮT BUỘC nhập lý do giải trình (override_reason) -> Lưu trạng thái AUDITED"]
+    M4_Override -- "Giữ nguyên điểm AI" --> M4_SetAudited["Lưu trạng thái vé thi = AUDITED"]
+    M4_Group2 --> M4_SetAudited
+    M4_ReqReason --> M4_SetAudited
+
+    M4_SetAudited --> M4_CheckAll{"Giảng viên bấm Công Bố Điểm: 100% SV trong ca thi đã có điểm hoàn chỉnh?"}
+    M4_CheckAll -- "Chưa đủ 100% (Còn bài chưa chấm/hậu kiểm)" --> M4_Err422Pub(["Chặn công bố điểm & Trả HTTP 422 Unprocessable Entity"])
+    M4_CheckAll -- "Đủ 100% SV" --> M4_Publish["POST /api/v1/official-exams/shifts/{shiftId}/publish-grades (1 lần duy nhất): Chuyển PUBLISHED -> LOCKED (is_locked = true)"]
+    M4_Publish --> M4_Export["Xuất báo cáo khảo thí kép: File Excel (.xlsx) & File PDF có chữ ký số"]
+    M4_Publish --> M4_OneWay{"Phát sinh lệnh UPDATE / DELETE trên vé thi đã khóa (is_locked == true)?"}
+    M4_OneWay -- "Can thiệp trực tiếp / Trái phép" --> M4_Block403(["OneWayLockInterceptor chặn cứng -> Trả HTTP 403 Forbidden"])
+
+    M4_Publish --> M4_PortalView{"Sinh viên xem điểm trên Student Portal: Đồng ý kết quả?"}
+    M4_PortalView -- "Đồng ý" --> M4_Ack(["POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade -> ACKNOWLEDGED"])
+    M4_PortalView -- "Không đồng ý (Phúc khảo)" --> M4_Step1Appeal["Bước 1: SV gửi POST /api/v1/appeals tạo AppealRequest (status = PENDING)"]
+    M4_Step1Appeal --> M4_Step2Assign["Bước 2: Trưởng BM gọi PUT /api/v1/appeals/{id}/assign-lecturer giao GV chấm lại (status = ASSIGNED)"]
+    M4_Step2Assign --> M4_Step3Regrade["Bước 3: GV được giao gọi PUT /api/v1/appeals/{id}/regrade trên Evidence Panel (OneWayLockInterceptor mở chốt hợp lệ)"]
+    M4_Step3Regrade --> M4_Step4Review["Bước 4: Trưởng BM gọi PUT /api/v1/appeals/{id}/review-decision (APPROVED / REJECTED) -> Cập nhật điểm chính thức & Khóa lại DB"]
+```
+
+##### 4. Phần C — Vòng Đời 7 Trạng Thái Vé Thi Viết HOA Bất Biến & Vòng Đời Phúc Khảo (Ticket State Machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> SCHEDULED: Trưởng BM tạo ca thi & Giám thị điểm danh gán SeatNumber (1..40) + ip_address
+    SCHEDULED --> IN_PROGRESS: Thí sinh vượt qua Kiosk Lockdown + Mic-Check 30s (>= 60dB) & Bắt đầu làm bài
+    IN_PROGRESS --> SUBMITTED: Persist-First (< 100ms) lưu DB kèm Audio R2 (STT_MSSV.webm + SHA-256) & Khóa màn hình Kiosk
+    SUBMITTED --> AI_GRADED: OfficialExamGradingWorker (Whisper STT + Gemini 1.5 Pro) chấm xong 100% câu hỏi
+    AI_GRADED --> AUDITED: Giảng viên hậu kiểm qua Evidence Panel & Waveform Audio Player (nhập override_reason nếu sửa điểm)
+    AUDITED --> PUBLISHED: Giảng viên bấm Công Bố Điểm 1 lần duy nhất (Khi 100% SV trong ca đã có điểm)
+    PUBLISHED --> LOCKED: Kích hoạt One-Way Lock (is_locked = true, OneWayLockInterceptor chặn mọi UPDATE/DELETE trái phép -> HTTP 403)
+
+    state LOCKED {
+        [*] --> GRADE_FINALIZED: Bảng điểm niêm phong & Xuất Excel (.xlsx) + PDF ký số
+        GRADE_FINALIZED --> ACKNOWLEDGED: Sinh viên bấm Xác nhận đồng ý điểm (POST /acknowledge-grade)
+        GRADE_FINALIZED --> APPEAL_PENDING: Sinh viên nộp đơn phúc khảo (POST /api/v1/appeals)
+        APPEAL_PENDING --> APPEAL_ASSIGNED: Trưởng BM phân công Giảng viên chấm lại (PUT /assign-lecturer)
+        APPEAL_ASSIGNED --> APPEAL_REGRADED: Giảng viên chấm lại qua Evidence Panel (PUT /regrade - Bypass hợp lệ OneWayLockInterceptor)
+        APPEAL_REGRADED --> APPEAL_RESOLVED: Trưởng BM phê duyệt kết quả phúc khảo (PUT /review-decision: APPROVED / REJECTED)
+        APPEAL_RESOLVED --> GRADE_FINALIZED: Cập nhật điểm phúc khảo chính thức & Khóa lại One-Way Lock
+    }
 ```
 
 ---
@@ -996,14 +1768,14 @@ sequenceDiagram
     Note over SV,Guard: GIAI ĐOẠN 1: CHỌN MÔN HỌC, CHỌN CHẾ ĐỘ FOLLOW-UP & KIỂM TRA HẠN NGẠCH NGÀY
     SV->>UI: Chọn "Thi thử vấn đáp", Chọn Môn học & Chủ động chọn chế độ: [Có Follow-up] hoặc [Không Follow-up]
     UI->>API: POST /api/v1/mock-exams/sessions (StudentId, CourseId, HasFollowUp)
-    API->>Guard: Kiểm tra số lượt thi thử trong ngày (COUNT mock_exam_quotas WHERE quota_date = TODAY)
+    API->>Guard: Kiểm tra hạn ngạch thi thử trong ngày theo môn (used_attempts vs courses.max_mock_exams_per_day do Admin cấu hình)
     
-    alt Số lượt thi thử trong ngày >= 3 lần (Vượt hạn ngạch)
-        Guard-->>API: Quota Exceeded (count >= 3)
-        API-->>UI: HTTP 429 Too Many Requests ("Bạn đã thi thử 3/3 lần hôm nay. Hãy chuyển sang Luyện tập tự do MF-01")
+    alt Đã chạm trần hạn ngạch ngày (used_attempts >= max_mock_exams_per_day)
+        Guard-->>API: Quota Exceeded (used_attempts >= max_mock_exams_per_day)
+        API-->>UI: HTTP 429 Too Many Requests ("Bạn đã hết lượt thi thử trong ngày cho môn học này (used_attempts/max_mock_exams_per_day). Hãy chuyển sang Luyện tập tự do MF-01")
         UI-->>SV: Khóa nút làm bài, hiển thị cảnh báo đỏ và nút chuyển hướng sang MF-01
-    else Số lượt thi thử < 3 lần (Hợp lệ)
-        Guard-->>API: Quota Available (count < 3)
+    else Còn lượt thi thử hợp lệ (used_attempts < max_mock_exams_per_day)
+        Guard-->>API: Quota Available (used_attempts < max_mock_exams_per_day)
         API->>DB: Bốc ngẫu nhiên N câu hỏi từ kho practice_questions (Môn học, Bloom, Barem 10.0)
         API->>DB: INSERT INTO mock_exam_sessions (has_follow_up=true/false, status='in_progress')
         DB-->>API: Khởi tạo phiên thi thử thành công
@@ -1283,7 +2055,7 @@ sequenceDiagram
             Note over DH,GV: TRƯỞNG BỘ MÔN PHÂN CÔNG GIẢNG VIÊN CHẤM LẠI
             DH->>API: PUT /api/v1/appeals/{id}/assign-lecturer (AssignedLecturerId)
             API->>DB: UPDATE appeal_requests SET assigned_to=assigned_lecturer_id, status='ASSIGNED'
-            GV->>Portal: Giảng viên được phân công rà soát Evidence Panel, chấm lại và nộp biên bản regrade
+            GV->>API: PUT /api/v1/appeals/{id}/regrade (Giảng viên được phân công chấm lại trên Evidence Panel, mở đường hợp lệ qua OneWayLockInterceptor)
             DH->>API: PUT /api/v1/appeals/{id}/review-decision (APPROVED | REJECTED)
         end
     end

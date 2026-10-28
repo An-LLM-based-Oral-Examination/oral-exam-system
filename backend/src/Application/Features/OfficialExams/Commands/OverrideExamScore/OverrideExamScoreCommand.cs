@@ -34,4 +34,5 @@ public sealed record OverrideExamScoreCommand(
     Guid TicketId,
     decimal AuditedScore,
     string OverrideReason,
-    IReadOnlyList<OverrideCriterionScoreDto>? CriterionDetails = null) : IRequest<Result<OverrideExamScoreResponseDto>>;
+    IReadOnlyList<OverrideCriterionScoreDto>? CriterionDetails = null,
+    Guid? SubmissionId = null) : IRequest<Result<OverrideExamScoreResponseDto>>;

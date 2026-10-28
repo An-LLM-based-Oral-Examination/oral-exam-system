@@ -123,6 +123,7 @@ export interface PracticeEvaluationDetail {
   criterionId: string
   criterionName: string
   score: number
+  maxScore?: number
   comment: string | null
 }
 
@@ -182,6 +183,7 @@ export interface CriterionScore {
   criterionId: string
   criterionName?: string
   score: number
+  maxScore?: number
   comment: string
   questionNumber?: number
 }

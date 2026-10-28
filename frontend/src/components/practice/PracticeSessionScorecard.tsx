@@ -106,7 +106,8 @@ function CriteriaBlock({ criteriaScores }: { criteriaScores: PracticeEvaluationD
         Chi tiết theo tiêu chí Rubric
       </p>
       {criteriaScores.map((criterion, idx) => {
-        const ratio = Math.min(100, Math.max(0, (criterion.score / 10) * 100))
+        const maxScore = criterion.maxScore && criterion.maxScore > 0 ? criterion.maxScore : 10
+        const ratio = Math.min(100, Math.max(0, (criterion.score / maxScore) * 100))
         return (
           <div
             key={`${criterion.criterionId}-${idx}`}
@@ -115,7 +116,7 @@ function CriteriaBlock({ criteriaScores }: { criteriaScores: PracticeEvaluationD
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-bold text-[#25364e]">{criterion.criterionName}</p>
               <p className="shrink-0 text-sm font-bold text-[#1C4D8D]">
-                {formatScore(criterion.score, 1)} điểm
+                {formatScore(criterion.score, 1)}/{formatScore(maxScore, 1)} điểm
               </p>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef2f7]">
@@ -144,6 +145,28 @@ interface CombinedQuestionItem {
     answer: PracticeAnswerDetail
     promptText: string
   }>
+}
+
+function computeEffectiveQuestionScore(
+  item: CombinedQuestionItem,
+  isCompleted: boolean,
+): number | null {
+  const mainScore = item.mainAnswer?.totalScore
+  if (mainScore === null || mainScore === undefined || !Number.isFinite(mainScore)) {
+    return isCompleted ? 0 : null
+  }
+  const fuScores = item.followUpAnswers
+    .map((fu) => fu.answer.totalScore)
+    .filter((s): s is number => s !== null && s !== undefined && Number.isFinite(s))
+  if (fuScores.length === 0) {
+    return mainScore
+  }
+  const avgFu = fuScores.reduce((acc, s) => acc + s, 0) / fuScores.length
+  if (avgFu >= mainScore) {
+    return Math.max(mainScore, ...fuScores)
+  }
+  const all = [mainScore, ...fuScores]
+  return Math.round((all.reduce((acc, s) => acc + s, 0) / all.length) * 100) / 100
 }
 
 export function PracticeSessionScorecard({ session }: { session: PracticeSessionDetail }) {
@@ -326,8 +349,10 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
       <div className="space-y-2">
         {combinedQuestions.map((item) => {
           const isOpen = openQuestionKey === item.key
-          const questionScore =
-            item.mainAnswer?.totalScore ?? (session.status === 'completed' ? 0 : null)
+          const questionScore = computeEffectiveQuestionScore(
+            item,
+            session.status === 'completed',
+          )
 
           return (
             <article
@@ -389,7 +414,13 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
                   ) : null}
 
                   <AnswerBlock
-                    label="Câu trả lời của bạn"
+                    label={
+                      item.followUpAnswers.length > 0 &&
+                      item.mainAnswer?.totalScore !== null &&
+                      item.mainAnswer?.totalScore !== undefined
+                        ? `Câu trả lời chính của bạn (${formatScore(item.mainAnswer.totalScore, 1)}/10)`
+                        : 'Câu trả lời của bạn'
+                    }
                     transcript={item.mainAnswer?.answerText}
                   />
                   <FeedbackBlock

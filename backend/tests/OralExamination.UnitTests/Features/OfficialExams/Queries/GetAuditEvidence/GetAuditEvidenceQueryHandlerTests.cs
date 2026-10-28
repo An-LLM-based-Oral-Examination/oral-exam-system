@@ -286,4 +286,78 @@ public class GetAuditEvidenceQueryHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be("Ca thi không tồn tại trong hệ thống.");
     }
+
+    [Fact(DisplayName = "5. Multi-Submission Ticket: Tính trung bình cộng AiScore và FinalScore toàn vé thi đồng bộ với Student Portal")]
+    public async Task Handle_Should_Average_Scores_Across_Multiple_Submissions_On_Ticket()
+    {
+        using var context = CreateDbContext();
+
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca 4",
+            RoomLab = "Lab 304",
+            StartTime = DateTime.UtcNow.AddHours(-2),
+            EndTime = DateTime.UtcNow.AddHours(-1),
+            Status = "in_progress"
+        };
+
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.multisub@fpt.edu.vn",
+            FullName = "Phạm Đa Câu Hỏi",
+            StudentCode = "SE170888",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            SeatNumber = 8,
+            Status = "AI_GRADED",
+            IsLocked = false
+        };
+
+        var sub1 = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 6.00m,
+            FinalScore = 6.00m,
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-20)
+        };
+        var sub2 = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 9.00m,
+            FinalScore = 9.00m,
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        ticket.Submissions.Add(sub1);
+        ticket.Submissions.Add(sub2);
+
+        context.RealExamSessionShifts.Add(shift);
+        context.Users.Add(student);
+        context.StudentExamTickets.Add(ticket);
+        context.ExamQuestionSubmissions.AddRange(sub1, sub2);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAuditEvidenceQueryHandler(context);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(1);
+        // Trung bình cộng (6.00 + 9.00) / 2 = 7.50 thay vì chỉ lấy câu cuối 9.00
+        result.Value[0].AiScore.Should().Be(7.50m);
+        result.Value[0].FinalScore.Should().Be(7.50m);
+    }
 }

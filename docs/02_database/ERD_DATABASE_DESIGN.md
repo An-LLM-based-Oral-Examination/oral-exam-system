@@ -9,7 +9,7 @@
 > **Nhóm tác giả & Kỹ sư thực hiện:**  
 > - 🧑 **Nguyễn Quang Thành** — Lead Backend Engineer & System Architect  
 > - 🧑 **Nguyễn Trọng Tốt** — Backend Developer, AI Engineer & QA Lead  
-> - 🧑 **Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
+> - 🧑 **Phạm Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
 > - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator  
 > **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (30 bảng 3NF: 27 bảng lõi + 1 bảng phúc khảo + 1 bảng cấu hình hệ thống + 1 bảng thông báo)  
 > **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](../05_diagrams/KIEN_TRUC_HE_THONG.drawio)  

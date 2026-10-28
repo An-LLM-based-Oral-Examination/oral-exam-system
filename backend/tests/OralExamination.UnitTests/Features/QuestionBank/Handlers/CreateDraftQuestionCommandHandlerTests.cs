@@ -263,4 +263,22 @@ public class CreateDraftQuestionCommandHandlerTests
         practiceQ.Should().NotBeNull();
         practiceQ!.HasFollowUp.Should().BeTrue();
     }
+
+    [Fact(DisplayName = "9. Trưởng bộ môn tạo câu hỏi tự động APPROVED bắt buộc phải có SampleAnswer >= 50 ký tự")]
+    public async Task Handle_Should_Reject_Empty_SampleAnswer_When_DepartmentHead_AutoApproves()
+    {
+        using var context = CreateDbContext();
+        var (deptHead, course) = await SeedUserAndCourseAsync(context, role: UserRole.DepartmentHead);
+        var handler = new CreateDraftQuestionCommandHandler(context);
+
+        var command = CreateCommand(course.Id, deptHead.Id, sampleAnswer: null) with
+        {
+            ApprovedBy = deptHead.Id
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("50 ký tự");
+    }
 }

@@ -256,20 +256,97 @@ public class GradingQueueWorker : BackgroundService
         var evalDetails = new System.Collections.Generic.List<AiEvaluationDetail>();
         var criteriaScoreDtos = new System.Collections.Generic.List<PracticeEvaluationDetailDto>();
         var rawDetails = gradingResult.Details ?? new System.Collections.Generic.List<GradingDetailDto>();
+        var matchedByCriterionIndex = new GradingDetailDto?[orderedCriteria.Count];
+        var usedRawIndices = new System.Collections.Generic.HashSet<int>();
 
         for (int i = 0; i < orderedCriteria.Count; i++)
         {
             var criterion = orderedCriteria[i];
-            var matchedDetail = rawDetails.FirstOrDefault(d =>
-                    string.Equals(d.CriterionId?.Trim(), criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
-                ?? rawDetails.FirstOrDefault(d =>
-                    !string.IsNullOrWhiteSpace(criterion.CriterionName) &&
-                    string.Equals(d.CriterionId?.Trim(), criterion.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
-                ?? (i < rawDetails.Count ? rawDetails[i] : null);
+            int matchedIdx = -1;
 
-            var clampedScore = matchedDetail != null
-                ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
-                : 0.0m;
+            for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+            {
+                if (usedRawIndices.Contains(rIdx))
+                {
+                    continue;
+                }
+
+                var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                if (string.Equals(candidateId, criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedIdx = rIdx;
+                    break;
+                }
+            }
+
+            if (matchedIdx < 0 && !string.IsNullOrWhiteSpace(criterion.CriterionName))
+            {
+                for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                {
+                    if (usedRawIndices.Contains(rIdx))
+                    {
+                        continue;
+                    }
+
+                    var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                    if (string.Equals(candidateId, criterion.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedIdx = rIdx;
+                        break;
+                    }
+                }
+            }
+
+            if (matchedIdx >= 0)
+            {
+                usedRawIndices.Add(matchedIdx);
+                matchedByCriterionIndex[i] = rawDetails[matchedIdx];
+            }
+        }
+
+        var totalCriteriaMax = orderedCriteria.Sum(c => c.MaxScore);
+        var clampedOverallScore = Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+        decimal runningAllocatedScore = 0.0m;
+
+        for (int i = 0; i < orderedCriteria.Count; i++)
+        {
+            var criterion = orderedCriteria[i];
+            var matchedDetail = matchedByCriterionIndex[i];
+            if (matchedDetail == null && i < rawDetails.Count && !usedRawIndices.Contains(i))
+            {
+                usedRawIndices.Add(i);
+                matchedDetail = rawDetails[i];
+            }
+
+            decimal clampedScore;
+            if (rawDetails.Count > 0)
+            {
+                clampedScore = matchedDetail != null
+                    ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
+                    : 0.0m;
+            }
+            else if (totalCriteriaMax > 0.0m && clampedOverallScore > 0.0m)
+            {
+                if (i == orderedCriteria.Count - 1)
+                {
+                    clampedScore = Math.Clamp(
+                        Math.Round(clampedOverallScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                        0.0m,
+                        criterion.MaxScore);
+                }
+                else
+                {
+                    clampedScore = Math.Clamp(
+                        Math.Round(clampedOverallScore * (criterion.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                        0.0m,
+                        criterion.MaxScore);
+                    runningAllocatedScore += clampedScore;
+                }
+            }
+            else
+            {
+                clampedScore = 0.0m;
+            }
 
             var comment = !string.IsNullOrWhiteSpace(matchedDetail?.Comment)
                 ? matchedDetail!.Comment
@@ -289,13 +366,14 @@ public class GradingQueueWorker : BackgroundService
                 CriterionId = criterion.Id,
                 CriterionName = criterion.CriterionName,
                 Score = clampedScore,
+                MaxScore = criterion.MaxScore > 0m ? criterion.MaxScore : 10.0m,
                 Comment = comment
             });
         }
 
-        var finalTotalScore = rawDetails.Count > 0 && evalDetails.Count > 0
+        var finalTotalScore = evalDetails.Count > 0
             ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
-            : Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
+            : clampedOverallScore;
 
         // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
         bool isBorderlineScore = finalTotalScore >= 4.0m && finalTotalScore <= 8.0m;
@@ -309,7 +387,7 @@ public class GradingQueueWorker : BackgroundService
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
             int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps))
-                ? parsedMaxFollowUps
+                ? Math.Clamp(parsedMaxFollowUps, 1, 5)
                 : 2;
 
             if (existingFollowUpsCount < maxAllowedFollowUps)

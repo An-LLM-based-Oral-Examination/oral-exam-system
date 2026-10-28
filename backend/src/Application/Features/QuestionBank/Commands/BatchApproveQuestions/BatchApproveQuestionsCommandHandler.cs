@@ -95,12 +95,20 @@ public sealed class BatchApproveQuestionsCommandHandler
             int order = 1;
             foreach (var c in item.Rubric.Criteria)
             {
+                var normalizedWeight = c.Weight > 1.00m
+                    ? Math.Round(c.Weight / 100m, 4, MidpointRounding.AwayFromZero)
+                    : c.Weight;
+                if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
+                {
+                    normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
+                }
+
                 rubric.Criteria.Add(new RubricCriterion
                 {
                     CriterionName = c.CriterionName,
                     Description = c.Description,
                     MaxScore = c.MaxScore,
-                    Weight = c.Weight,
+                    Weight = normalizedWeight,
                     BloomLevel = c.BloomLevel,
                     OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : order,
                     CreatedAt = now

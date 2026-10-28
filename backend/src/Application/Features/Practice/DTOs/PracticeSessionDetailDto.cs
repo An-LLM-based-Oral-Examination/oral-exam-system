@@ -46,5 +46,6 @@ public sealed class PracticeEvaluationDetailDto
     public Guid CriterionId { get; set; }
     public string CriterionName { get; set; } = string.Empty;
     public decimal Score { get; set; }
+    public decimal MaxScore { get; set; } = 10.0m;
     public string? Comment { get; set; }
 }

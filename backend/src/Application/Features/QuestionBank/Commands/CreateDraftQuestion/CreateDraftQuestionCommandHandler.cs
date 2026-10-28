@@ -86,12 +86,20 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             int order = 1;
             foreach (var c in request.Rubric.Criteria)
             {
+                var normalizedWeight = c.Weight > 1.00m
+                    ? Math.Round(c.Weight / 100m, 4, MidpointRounding.AwayFromZero)
+                    : c.Weight;
+                if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
+                {
+                    normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
+                }
+
                 rubric.Criteria.Add(new RubricCriterion
                 {
                     CriterionName = c.CriterionName,
                     Description = c.Description,
                     MaxScore = c.MaxScore,
-                    Weight = c.Weight,
+                    Weight = normalizedWeight,
                     BloomLevel = c.BloomLevel,
                     OrderIndex = order++,
                     CreatedAt = DateTime.UtcNow
@@ -112,6 +120,11 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         var isAutoApproved = request.ApprovedBy.HasValue &&
                              request.ApprovedBy.Value != Guid.Empty &&
                              (lecturer.Role == "department_head" || lecturer.Role == "admin");
+        if (isAutoApproved && (string.IsNullOrWhiteSpace(request.SampleAnswer) || request.SampleAnswer.Trim().Length < 50))
+        {
+            return Result<Guid>.Failure("Câu trả lời mẫu (Model Answer) bắt buộc phải từ 50 ký tự trở lên khi phê duyệt câu hỏi.");
+        }
+
         var approvalStatus = isAutoApproved ? ApprovalStatus.Approved : ApprovalStatus.Draft;
         Guid? approvedBy = isAutoApproved ? request.ApprovedBy!.Value : null;
 

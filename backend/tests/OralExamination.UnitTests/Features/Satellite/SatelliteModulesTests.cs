@@ -513,4 +513,72 @@ public class SatelliteModulesTests
         dashboard.Value.QuestionStats.ApprovalRatePercent.Should().Be(50.00m);
         dashboard.Value.QuestionsNeedingRevision.Should().ContainSingle(q => q.QuestionId == qNeedsRevision.Id);
     }
+
+    [Fact(DisplayName = "BE-4.4b: OverrideExamScore hỗ trợ sửa điểm riêng từng câu (SubmissionId) trên vé thi nhiều câu và tính lại điểm trung bình vé")]
+    public async Task OverrideExamScore_WithSpecificSubmissionId_ShouldUpdateOnlyTargetSubmissionAndRecalculateTicketAverage()
+    {
+        await using var context = CreateDbContext();
+        var lecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "lecturer.sub@fpt.edu.vn",
+            FullName = "ThS. Giảng Viên Chấm Lẻ",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = Guid.NewGuid(),
+            StudentId = Guid.NewGuid(),
+            SeatNumber = 3,
+            Status = ExamTicketStatus.AiGraded,
+            IsLocked = false
+        };
+        var sub1 = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 5.00m,
+            FinalScore = 5.00m,
+            GradingStatus = "graded"
+        };
+        var sub2 = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            AiScore = 8.00m,
+            FinalScore = 8.00m,
+            GradingStatus = "graded"
+        };
+
+        context.Users.Add(lecturer);
+        context.StudentExamTickets.Add(ticket);
+        context.ExamQuestionSubmissions.AddRange(sub1, sub2);
+        await context.SaveChangesAsync();
+
+        var handler = new OverrideExamScoreCommandHandler(context);
+        var result = await handler.Handle(
+            new OverrideExamScoreCommand(
+                lecturer.Id,
+                ticket.Id,
+                7.00m,
+                "Sinh viên bổ sung đúng ví dụ thực tế cho câu số 1 trong đoạn ghi âm.",
+                CriterionDetails: null,
+                SubmissionId: sub1.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.OriginalAiScore.Should().Be(6.50m);
+        result.Value.AuditedScore.Should().Be(7.50m);
+
+        var updatedSub1 = await context.ExamQuestionSubmissions.FirstAsync(s => s.Id == sub1.Id);
+        var updatedSub2 = await context.ExamQuestionSubmissions.FirstAsync(s => s.Id == sub2.Id);
+        updatedSub1.FinalScore.Should().Be(7.00m);
+        updatedSub1.GradingStatus.Should().Be("audited");
+        updatedSub2.FinalScore.Should().Be(8.00m);
+        updatedSub2.GradingStatus.Should().Be("graded");
+    }
 }

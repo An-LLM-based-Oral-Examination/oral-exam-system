@@ -61,9 +61,11 @@ function getDisplayedScore(candidate: AuditEvidenceItem) {
 }
 
 function needsLecturerAttention(candidate: AuditEvidenceItem) {
+  const effectiveScore = candidate.finalScore ?? candidate.aiScore
   return (
     candidate.isSuspicious ||
-    (candidate.confidenceScore !== null && candidate.confidenceScore < 0.7)
+    (candidate.confidenceScore !== null && candidate.confidenceScore < 0.7) ||
+    (effectiveScore !== null && effectiveScore < 5.0)
   )
 }
 
@@ -330,8 +332,8 @@ export function AuditEvidencePage() {
               Hậu kiểm & công bố điểm ca thi
             </h1>
             <p className={ds.bannerText}>
-              Ưu tiên bài được hệ thống đánh dấu nghi ngờ hoặc có confidence dưới 0.70; đối chiếu
-              bằng chứng trước khi công bố điểm một lần cho toàn ca.
+              Ưu tiên bài được hệ thống đánh dấu nghi ngờ, điểm liệt/rớt (&lt; 5.0) hoặc có confidence
+              dưới 0.70; đối chiếu bằng chứng trước khi công bố điểm một lần cho toàn ca.
             </p>
           </div>
 
@@ -534,7 +536,7 @@ export function AuditEvidencePage() {
                   ? 'Chưa thể công bố: vẫn còn thí sinh chưa có điểm hoàn chỉnh.'
                   : pendingCount > 0
                     ? 'Chưa thể công bố: vẫn còn bài chưa hoàn tất phân loại độ tin cậy.'
-                    : 'Chưa thể công bố: các bài bị đánh dấu nghi ngờ hoặc confidence thấp chưa được hậu kiểm đầy đủ.'}
+                    : 'Chưa thể công bố: các bài bị đánh dấu nghi ngờ, điểm rớt (< 5.0) hoặc confidence thấp chưa được hậu kiểm đầy đủ.'}
               </div>
             )}
 
@@ -731,7 +733,10 @@ export function AuditEvidencePage() {
                         <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#efc8cc] bg-[#fff5f6] p-3 text-xs leading-relaxed text-[#953943]">
                           <ShieldAlert className="mt-0.5 size-3.5 shrink-0" />
                           {activeCandidate.suspiciousReason ||
-                            'Bài nộp bị đánh dấu cần can thiệp; giảng viên phải đối chiếu toàn bộ bằng chứng.'}
+                            (getDisplayedScore(activeCandidate) !== null &&
+                            (getDisplayedScore(activeCandidate) ?? 0) < 5.0
+                              ? 'Bài thi có điểm dưới mức đạt (< 5.0); giảng viên bắt buộc hậu kiểm bằng chứng trước khi công bố.'
+                              : 'Bài nộp bị đánh dấu cần can thiệp; giảng viên phải đối chiếu toàn bộ bằng chứng.')}
                         </div>
                       )}
                       {isPendingEvaluation(activeCandidate) &&

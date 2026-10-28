@@ -158,6 +158,18 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                 }
             }
 
+            if (string.IsNullOrWhiteSpace(geminiResult.Text) &&
+                geminiResult.ConfidenceScore == 0.0 &&
+                !_primaryWhisperService.HasCredentials)
+            {
+                return geminiResult with
+                {
+                    Text = string.Empty,
+                    Provider = "GeminiMultimodalStt",
+                    UsedFallback = false
+                };
+            }
+
             _logger?.LogWarning(
                 "Phương án 1 STT-A (GeminiMultimodalStt) trả về kết quả rỗng cho tệp '{FileName}' ({ByteLength} bytes). Chuyển sang Phương án 2 (CloudflareWhisper).",
                 fileName,
@@ -247,6 +259,18 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                         UsedFallback = false
                     };
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(primaryResult.Text) &&
+                primaryResult.ConfidenceScore == 0.0 &&
+                !_fallbackGeminiService.HasCredentials)
+            {
+                return primaryResult with
+                {
+                    Text = string.Empty,
+                    Provider = "CloudflareWhisper",
+                    UsedFallback = false
+                };
             }
 
             _logger?.LogWarning(

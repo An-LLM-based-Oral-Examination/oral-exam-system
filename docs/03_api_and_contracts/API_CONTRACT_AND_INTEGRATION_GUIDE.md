@@ -3,7 +3,7 @@
 **Tài liệu này quy định bắt buộc (Mandatory) các chuẩn mực kết nối giữa Frontend (React 19 / Vite) và Backend (.NET 8 Clean Architecture) cho 4 thành viên:**  
 - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead BE Architect (MediatR CQRS, System.Threading.Channels, One-Way Lock, System Integration).  
 - 🧑 **Nguyễn Trọng Tốt:** BE Developer, AI Integration & QA Lead (Gemini 1.5 Flash/Pro CoT, Whisper STT, Barem Rubric 10.0, Unit & Architecture Tests).  
-- 🧑 **Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
+- 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
 - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator (React 19 Vite, Tailwind CSS v4, Web Speech API STT/TTS, Buffer Screen, Kiosk Lockdown, Waveform Player, Contract-First API Sync).  
 
 **Quy chuẩn cốt lõi:**  
@@ -1931,7 +1931,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "totalImported": 40,
   "assignedTickets": [
     { "ticketId": "cccccccc-0000-0000-0000-000000000001", "studentCode": "SE170001", "fullName": "Lê Vũ Hoàng", "seatNumber": 1 },
-    { "ticketId": "cccccccc-0000-0000-0000-000000000002", "studentCode": "SE170002", "fullName": "Nguyễn Đăng Hải", "seatNumber": 2 }
+    { "ticketId": "cccccccc-0000-0000-0000-000000000002", "studentCode": "SE170002", "fullName": "Phạm Nguyễn Đăng Hải", "seatNumber": 2 }
   ]
 }
 ```
@@ -2096,7 +2096,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   {
     "ticketId": "cccccccc-0000-0000-0000-000000000002",
     "studentCode": "SE170002",
-    "fullName": "Nguyễn Đăng Hải",
+    "fullName": "Phạm Nguyễn Đăng Hải",
     "seatNumber": 2,
     "status": "AI_GRADED",
     "audioR2Url": "https://r2.oralexam.edu.vn/exams/FA26/PRN231/02_SE170002.webm",

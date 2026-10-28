@@ -108,6 +108,12 @@ public class SpeechController : ControllerBase
             }
         }
 
+        var resolvedVocabularyHint = vocabularyHint;
+        if (string.IsNullOrWhiteSpace(resolvedVocabularyHint) && HttpContext?.Request?.HasFormContentType == true)
+        {
+            resolvedVocabularyHint = HttpContext.Request.Form["vocabularyHint"].ToString();
+        }
+
         if (resolvedFile is null || resolvedFile.Length == 0)
         {
             return BadRequest(new { error = "File ghi âm không hợp lệ hoặc rỗng." });
@@ -126,7 +132,7 @@ public class SpeechController : ControllerBase
         var command = new TranscribeSpeechCommand(
             memoryStream,
             fileName,
-            vocabularyHint,
+            string.IsNullOrWhiteSpace(resolvedVocabularyHint) ? null : resolvedVocabularyHint,
             string.IsNullOrWhiteSpace(resolvedClientTranscript) ? null : resolvedClientTranscript);
 
         var result = await _sender.Send(command, ct);

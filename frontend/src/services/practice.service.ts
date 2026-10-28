@@ -262,6 +262,8 @@ function normalizeEvaluationDetail(payload: unknown): PracticeEvaluationDetail {
     criterionId: requireGuid(candidate, 'criterionId', 'Chi tiết điểm thiếu criterionId hợp lệ.'),
     criterionName: requireString(candidate, 'criterionName', 'Chi tiết điểm thiếu tên tiêu chí.'),
     score: requireNumber(candidate, 'score', 'Chi tiết điểm thiếu số điểm hợp lệ.'),
+    maxScore:
+      nullableNumber(candidate, 'maxScore', 'Điểm tối đa của tiêu chí không hợp lệ.') ?? undefined,
     comment: nullableString(candidate, 'comment', 'Nhận xét tiêu chí không hợp lệ.'),
   }
 }

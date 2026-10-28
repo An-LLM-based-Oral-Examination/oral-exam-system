@@ -371,4 +371,51 @@ public class ReviewAppealDecisionCommandHandlerTests
         var updatedSubmission = await activeContext.ExamQuestionSubmissions.FindAsync(submissionId);
         updatedSubmission!.FinalScore.Should().Be(8.75m);
     }
+
+    [Fact(DisplayName = "R3: Chấm lại đơn phúc khảo 1 câu đơn lẻ trên vé thi nhiều câu sẽ tính lại trung bình cộng cho LecturerAudit.AuditedScore")]
+    public async Task Regrade_SingleSubmissionAppeal_On_MultiQuestionTicket_Should_Recalculate_Average_AuditedScore()
+    {
+        using var context = CreateDbContext();
+        var (_, deptHead, lecturer, ticket, sub1, appeal) = await SeedDataAsync(context);
+
+        var sub2 = new ExamQuestionSubmission
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            ExamQuestionId = Guid.NewGuid(),
+            TranscriptWhisper = "Câu trả lời số 2 đạt điểm 8.0",
+            AiScore = 8.0m,
+            FinalScore = 8.0m,
+            GradingStatus = "audited"
+        };
+        var audit = new LecturerAudit
+        {
+            Id = Guid.NewGuid(),
+            TicketId = ticket.Id,
+            LecturerId = lecturer.Id,
+            OriginalAiScore = 6.50m,
+            AuditedScore = 6.50m,
+            OverrideReason = "Điểm trung bình ban đầu (5.0 + 8.0) / 2 = 6.50",
+            IsLocked = true,
+            AuditedAt = DateTime.UtcNow.AddHours(-2)
+        };
+        context.ExamQuestionSubmissions.Add(sub2);
+        context.LecturerAudits.Add(audit);
+
+        appeal.Status = AppealStatus.InReview;
+        appeal.AssignedTo = lecturer.Id;
+        appeal.ReviewedBy = deptHead.Id;
+        await context.SaveChangesAsync();
+
+        var handler = new RegradeAppealCommandHandler(context);
+        // Phúc khảo câu 1 từ 5.0 lên 7.0 -> trung bình vé thi phải là (7.0 + 8.0) / 2 = 7.50
+        var result = await handler.Handle(
+            new RegradeAppealCommand(appeal.Id, lecturer.Id, 7.0m, "Đã nghe lại câu 1 và nâng điểm câu 1 lên 7.0."),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sub1.FinalScore.Should().Be(7.0m);
+        sub2.FinalScore.Should().Be(8.0m);
+        audit.AuditedScore.Should().Be(7.50m);
+    }
 }

@@ -89,6 +89,8 @@ public class GeminiAiGradingService : IAiGradingService
         "làm dùm",
         "em chịu",
         "bỏ qua câu này",
+        "bỏ qua câu hỏi",
+        "xin phép bỏ qua",
         "em xin bỏ qua",
         "không trả lời được",
         "em chưa học",
@@ -149,6 +151,32 @@ public class GeminiAiGradingService : IAiGradingService
             .Replace("</student_transcript>", "")
             .Replace("<student_transcript>", "");
 
+        if (string.IsNullOrWhiteSpace(sanitizedTranscript))
+        {
+            return TryBuildZeroScoreRefusalOrOffTopicResult(
+                request,
+                isEnglishCourse ? "Thí sinh không có nội dung bài nói." : "Thí sinh không có nội dung câu trả lời.")!;
+        }
+
+        if (IsRefusalOrZeroKnowledgeTranscript(request, sanitizedTranscript))
+        {
+            var refusalReason = isEnglishCourse
+                ? "Thí sinh báo không biết, bỏ qua hoặc không thể hiện năng lực Tiếng Anh theo yêu cầu."
+                : "Thí sinh báo không biết hoặc câu trả lời không chứa kiến thức chuyên môn liên quan.";
+            return BuildZeroScoreRefusalResult(request, refusalReason);
+        }
+
+        if (TranscriptHelper.LooksLikeQuestionEcho(
+                sanitizedTranscript,
+                request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt)
+                    ? request.FollowUpPrompt
+                    : request.QuestionContent))
+        {
+            return BuildZeroScoreRefusalResult(
+                request,
+                "Thí sinh chỉ đọc nhại lại nguyên văn câu hỏi đề bài mà không đưa ra câu trả lời.");
+        }
+
         var hasImageContext = !string.IsNullOrWhiteSpace(request.QuestionImageUrl)
             || !string.IsNullOrWhiteSpace(request.QuestionImageDescription)
             || !string.IsNullOrWhiteSpace(request.QuestionImageBase64);
@@ -190,7 +218,13 @@ Nhiệm vụ: Đánh giá bài thi nói Tiếng Anh của sinh viên cho môn h�
 TỔNG ĐIỂM TỐI ĐA LUÔN LÀ 10.0 ĐIỂM.
 LƯU Ý QUAN TRỌNG VỀ BỐI CẢNH MÔN HỌC (LOẠI BỎ HOÀN TOÀN THIÊN KIẾN CHUYÊN NGÀNH SE):
 - Đây là bài thi vấn đáp Tiếng Anh giao tiếp / học thuật, KHÔNG PHẢI môn Kỹ thuật Phần mềm (Software Engineering).
-- QUY TẮC HỖ TRỢ SONG NGỮ VIỆT - ANH (BILINGUAL VIETNAMESE-ENGLISH SUPPORT): Cho phép thí sinh trả lời bằng Tiếng Anh, Tiếng Việt hoặc kết hợp Việt - Anh (Code-Switching).
+- QUY TẮC HỖ TRỢ SONG NGỮ VIỆT - ANH (BILINGUAL VIETNAMESE-ENGLISH SUPPORT): Cho phép thí sinh trả lời bằng Tiếng Anh, Tiếng Việt hoặc kết hợp Việt - Anh (Code-Switching). Tuy nhiên, để đạt điểm tối đa ở các tiêu chí Ngôn ngữ Tiếng Anh (Pronunciation, Grammar & Accuracy, Vocabulary & Lexical Resource, Fluency & Cohesion), thí sinh cần diễn đạt các ý chính bằng Tiếng Anh chuẩn xác; nếu chỉ dùng Tiếng Việt thì ghi nhận điểm ở tiêu chí Ideas & Content Development (nếu đúng ý) và chấm giảm tương ứng ở các tiêu chí ngôn ngữ Tiếng Anh theo tỷ lệ câu/từ Tiếng Anh thực tế thí sinh đã nói.
+- HƯỚNG DẪN CHẤM CHI TIẾT 5 TIÊU CHÍ SPEAKING ĐH FPT (MỖI TIÊU CHÍ TỐI ĐA 2.0 ĐIỂM, TỔNG 10.0 ĐIỂM):
+  1. Ideas & Content Development (0.0 - 2.0đ): Đánh giá mức độ trả lời đúng và đủ các câu hỏi nhỏ trong đề bài / mô tả đúng các chi tiết thực tế trong tranh (nếu có ảnh), có ví dụ hoặc giải thích mở rộng hợp lý.
+  2. Pronunciation (0.0 - 2.0đ): Đánh giá độ rõ ràng khi phát âm thông qua độ chuẩn xác của từ vựng Tiếng Anh được STT nhận diện trong transcript (không bị phát âm sai dẫn đến biến dạng từ hoặc nhầm từ đồng âm), cách ngắt cụm từ tự nhiên.
+  3. Grammar & Accuracy (0.0 - 2.0đ): Đánh giá việc sử dụng đúng thì (hiện tại đơn, hiện tại tiếp diễn khi tả tranh, quá khứ đơn khi kể chuyện), sự hòa hợp chủ ngữ - động từ, và độ đa dạng của cấu trúc câu đơn/câu ghép/câu phức.
+  4. Vocabulary & Lexical Resource (0.0 - 2.0đ): Đánh giá độ phong phú và chính xác của từ vựng theo đúng chủ đề câu hỏi (gia đình, du lịch, công sở, văn hóa, học thuật), sử dụng đúng collocations.
+  5. Fluency & Cohesion (0.0 - 2.0đ): Đánh giá độ mạch lạc, trôi chảy, độ dài câu trả lời tương xứng với yêu cầu đề bài và việc sử dụng hiệu quả các từ nối (firstly, in addition, however, for example, therefore).
 - QUY TẮC CHỐNG TRẢ LỜI LẠC ĐỀ / TỪ CHỐI TRẢ LỜI (ZERO SCORE FOR OFF-TOPIC OR REFUSAL): Nếu sinh viên nói 'không biết', 'I don't know', 'pass', 'skip', bỏ cuộc, HOẶC trả lời lạc đề không giải quyết nội dung câu hỏi đang hỏi (ví dụ: chỉ tự giới thiệu bản thân 'Hello everyone, my name is..., I'm a software student' khi đề bài hỏi về chủ đề khác), BẮT BUỘC chấm Score = 0.0, toàn bộ các tiêu chí trong Details có Score = 0.0, đặt IsSuspicious = true và FollowUpPrompt = null.
 Dưới đây là thông tin đề bài và ngữ cảnh:
 {primaryQuestionLine}{imageContextBlock}{followUpContextBlock}
@@ -794,15 +828,67 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         if (rawDetails.Count > 0)
         {
+            var matchedByCriterionIndex = new GradingDetailDto?[request.Criteria.Count];
+            var usedRawIndices = new HashSet<int>();
+
+            // Bước 1: Khớp chính xác theo CriterionId hoặc CriterionName trước để tránh bị fallback theo index chiếm chỗ
             for (int i = 0; i < request.Criteria.Count; i++)
             {
                 var criterion = request.Criteria[i];
-                var matched = rawDetails.FirstOrDefault(d =>
-                        string.Equals(d.CriterionId?.Trim(), criterion.Id?.Trim(), StringComparison.OrdinalIgnoreCase))
-                    ?? rawDetails.FirstOrDefault(d =>
-                        !string.IsNullOrWhiteSpace(criterion.Name) &&
-                        string.Equals(d.CriterionId?.Trim(), criterion.Name.Trim(), StringComparison.OrdinalIgnoreCase))
-                    ?? (i < rawDetails.Count ? rawDetails[i] : null);
+                int matchedIdx = -1;
+
+                for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                {
+                    if (usedRawIndices.Contains(rIdx))
+                    {
+                        continue;
+                    }
+
+                    var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                    if (!string.IsNullOrWhiteSpace(criterion.Id) &&
+                        string.Equals(candidateId, criterion.Id.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedIdx = rIdx;
+                        break;
+                    }
+                }
+
+                if (matchedIdx < 0 && !string.IsNullOrWhiteSpace(criterion.Name))
+                {
+                    for (int rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                    {
+                        if (usedRawIndices.Contains(rIdx))
+                        {
+                            continue;
+                        }
+
+                        var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                        if (string.Equals(candidateId, criterion.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            matchedIdx = rIdx;
+                            break;
+                        }
+                    }
+                }
+
+                if (matchedIdx >= 0)
+                {
+                    usedRawIndices.Add(matchedIdx);
+                    matchedByCriterionIndex[i] = rawDetails[matchedIdx];
+                }
+            }
+
+            // Bước 2: Fallback theo vị trí cho các tiêu chí chưa khớp, chỉ lấy phần tử chưa được sử dụng
+            for (int i = 0; i < request.Criteria.Count; i++)
+            {
+                var criterion = request.Criteria[i];
+                var matched = matchedByCriterionIndex[i];
+
+                if (matched == null && i < rawDetails.Count && !usedRawIndices.Contains(i))
+                {
+                    usedRawIndices.Add(i);
+                    matched = rawDetails[i];
+                }
 
                 var clampedScore = matched != null
                     ? Math.Clamp(Math.Round(matched.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
@@ -1052,42 +1138,22 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             return BuildZeroScoreRefusalResult(request, reason);
         }
 
-        var cumulativeTranscript = sanitizedTranscript;
-        var words = cumulativeTranscript
-            .Split(TokenSeparators, StringSplitOptions.RemoveEmptyEntries);
-        var wordCount = words.Length;
-        var transcriptKeywords = ExtractKeywords(cumulativeTranscript);
-        var sampleKeywords = ExtractKeywords(request.SampleAnswer);
-        var questionKeywords = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt)
-            ? ExtractKeywords($"{request.FollowUpPrompt} {request.QuestionContent}")
-            : ExtractKeywords(request.QuestionContent);
-        var imageDescriptionKeywords = ExtractKeywords(request.QuestionImageDescription);
-
-        var allReferenceKeywords = new HashSet<string>(sampleKeywords, StringComparer.OrdinalIgnoreCase);
-        foreach (var qKw in questionKeywords)
+        var activeQuestionPrompt = request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt)
+            ? request.FollowUpPrompt
+            : request.QuestionContent;
+        if (TranscriptHelper.LooksLikeQuestionEcho(sanitizedTranscript, activeQuestionPrompt))
         {
-            allReferenceKeywords.Add(qKw);
+            return BuildZeroScoreRefusalResult(
+                request,
+                "Thí sinh chỉ đọc nhại lại nguyên văn câu hỏi đề bài mà không đưa ra câu trả lời.");
         }
-        foreach (var imgKw in imageDescriptionKeywords)
-        {
-            allReferenceKeywords.Add(imgKw);
-        }
-
-        var globalMatchedCount = allReferenceKeywords.Count > 0
-            ? transcriptKeywords.Count(kw => allReferenceKeywords.Contains(kw))
-            : 0;
 
         if (request.IsFollowUp && !string.IsNullOrWhiteSpace(request.FollowUpPrompt))
         {
-            var followUpPromptKeywords = ExtractKeywords(request.FollowUpPrompt);
-            var followUpMatchedCount = followUpPromptKeywords.Count > 0
-                ? transcriptKeywords.Count(kw => followUpPromptKeywords.Contains(kw))
-                : globalMatchedCount;
-
             var isExactRepeatOfMain = !string.IsNullOrWhiteSpace(request.OriginalAnswerTranscript) &&
                 string.Equals(sanitizedTranscript.Trim(), request.OriginalAnswerTranscript.Trim(), StringComparison.OrdinalIgnoreCase);
 
-            if (isExactRepeatOfMain || (followUpPromptKeywords.Count > 0 && followUpMatchedCount == 0 && globalMatchedCount <= 1))
+            if (isExactRepeatOfMain)
             {
                 var zeroFollowUpReason = isEnglishCourse
                     ? "Bài nói ở lượt hỏi phụ không giải quyết câu hỏi phụ đang hỏi hoặc chỉ lặp lại câu trả lời trước."
@@ -1096,16 +1162,29 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
         }
 
-        if (allReferenceKeywords.Count > 0 &&
-            (globalMatchedCount == 0 || (globalMatchedCount == 1 && allReferenceKeywords.Count >= 6 && wordCount < 15)))
+        if (IsPurePromptInjectionAttempt(sanitizedTranscript))
         {
-            var zeroReason = isEnglishCourse
-                ? "Bài nói hoàn toàn lạc đề, không chứa từ vựng hoặc nội dung liên quan đến câu hỏi đang hỏi."
-                : "Câu trả lời hoàn toàn lạc đề, không khớp từ khóa chuyên môn nào của câu hỏi.";
-            return BuildZeroScoreRefusalResult(request, zeroReason);
+            return BuildZeroScoreRefusalResult(
+                request,
+                "Phát hiện nội dung can thiệp chỉ thị hệ thống (Prompt Injection) thay vì câu trả lời học thuật.");
         }
 
         return null;
+    }
+
+    private static bool IsPurePromptInjectionAttempt(string transcript)
+    {
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return false;
+        }
+
+        var lower = transcript.ToLowerInvariant();
+        return lower.Contains("ignore all instructions", StringComparison.Ordinal) ||
+               lower.Contains("ignore previous instructions", StringComparison.Ordinal) ||
+               lower.Contains("ignore all previous instructions", StringComparison.Ordinal) ||
+               lower.Contains("system instruction override", StringComparison.Ordinal) ||
+               lower.Contains("system override:", StringComparison.Ordinal);
     }
 
     private static HashSet<string> ExtractKeywords(string? text)

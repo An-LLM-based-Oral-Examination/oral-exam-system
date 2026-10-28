@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -58,20 +59,24 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
 
         if (request.Decision == AppealStatus.Approved && request.ProposedScore.HasValue)
         {
+            var ticketSubmissions = await _context.ExamQuestionSubmissions
+                .Where(s => s.TicketId == appeal.TicketId)
+                .ToListAsync(cancellationToken);
+
             if (appeal.SubmissionId.HasValue)
             {
-                var submission = await _context.ExamQuestionSubmissions
-                    .FirstOrDefaultAsync(s => s.Id == appeal.SubmissionId.Value, cancellationToken);
+                var submission = ticketSubmissions.FirstOrDefault(s => s.Id == appeal.SubmissionId.Value);
                 if (submission != null)
                 {
                     submission.FinalScore = request.ProposedScore.Value;
+                    foreach (var sibling in ticketSubmissions.Where(s => s.Id != submission.Id))
+                    {
+                        sibling.FinalScore ??= sibling.AiScore;
+                    }
                 }
             }
             else
             {
-                var ticketSubmissions = await _context.ExamQuestionSubmissions
-                    .Where(s => s.TicketId == appeal.TicketId)
-                    .ToListAsync(cancellationToken);
                 foreach (var sub in ticketSubmissions)
                 {
                     sub.FinalScore = request.ProposedScore.Value;
@@ -82,7 +87,22 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 .FirstOrDefaultAsync(a => a.TicketId == appeal.TicketId, cancellationToken);
             if (audit != null)
             {
-                audit.AuditedScore = request.ProposedScore.Value;
+                if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
+                {
+                    var scoredValues = ticketSubmissions
+                        .Select(s => s.FinalScore ?? s.AiScore)
+                        .Where(v => v.HasValue)
+                        .Select(v => v!.Value)
+                        .ToList();
+
+                    audit.AuditedScore = scoredValues.Count > 0
+                        ? Math.Round(scoredValues.Average(), 2, MidpointRounding.AwayFromZero)
+                        : request.ProposedScore.Value;
+                }
+                else
+                {
+                    audit.AuditedScore = request.ProposedScore.Value;
+                }
             }
         }
 

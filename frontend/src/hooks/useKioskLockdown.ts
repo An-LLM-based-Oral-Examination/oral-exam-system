@@ -7,8 +7,15 @@ export function useKioskLockdown(maxViolations = 3, onLockdown?: () => void, ena
   const [violations, setViolations] = useState(0)
   const [isLocked, setIsLocked] = useState(false)
   const enteredFullscreenRef = useRef(false)
+  const lastViolationAtRef = useRef<number>(0)
 
   const recordViolation = useCallback(() => {
+    const now = Date.now()
+    if (now - lastViolationAtRef.current < 800) {
+      return
+    }
+    lastViolationAtRef.current = now
+
     setViolations((prev) => {
       const next = prev + 1
       if (next >= maxViolations) {
@@ -83,6 +90,7 @@ export function useKioskLockdown(maxViolations = 3, onLockdown?: () => void, ena
     isLocked,
     remainingStrikes: Math.max(0, maxViolations - violations),
     resetViolations: () => {
+      lastViolationAtRef.current = 0
       setViolations(0)
       setIsLocked(false)
     },

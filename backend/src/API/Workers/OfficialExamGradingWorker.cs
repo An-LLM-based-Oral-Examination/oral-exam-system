@@ -39,25 +39,24 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         try
         {
             await foreach (var task in _queue.ReadAllAsync(stoppingToken))
-        {
-            try
             {
-                await ProcessAsync(task, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception,
-                    "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
-                    task.SubmissionId);
-                await MarkFailedAsync(task, exception, CancellationToken.None);
+                try
+                {
+                    await ProcessAsync(task, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception,
+                        "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
+                        task.SubmissionId);
+                    await MarkFailedAsync(task, exception, CancellationToken.None);
+                }
             }
         }
-    }
-
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Graceful shutdown khi Host dừng
@@ -103,8 +102,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             throw new InvalidOperationException("The submission has no transcript to grade.");
         }
 
-        var rubric = submission.ExamQuestion.Rubric;
-        var orderedCriteria = rubric.Criteria.OrderBy(item => item.OrderIndex).ToList();
+        var rubric = submission.ExamQuestion?.Rubric;
+        var orderedCriteria = rubric?.Criteria?.OrderBy(item => item.OrderIndex).ToList() ?? [];
         if (orderedCriteria.Count == 0)
         {
             throw new InvalidOperationException("The exam question has no rubric criteria.");
@@ -116,7 +115,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
         var request = new AiGradingRequest
         {
-            QuestionContent = submission.ExamQuestion.Content,
+            QuestionContent = submission.ExamQuestion!.Content,
             SampleAnswer = submission.ExamQuestion.SampleAnswer ?? string.Empty,
             CourseCode = submission.ExamQuestion.Course?.Code,
             Transcript = submission.TranscriptWhisper,
@@ -135,10 +134,11 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
         var result = await GradeWithTransientRetryAsync(gradingService, request, cancellationToken);
         var rawDetails = result.Details ?? [];
-        var details = BuildDetails(orderedCriteria, rawDetails);
-        var score = rawDetails.Count > 0
+        var clampedOverallScore = Math.Clamp(Math.Round(result.Score, 2, MidpointRounding.AwayFromZero), 0m, 10m);
+        var details = BuildDetails(orderedCriteria, rawDetails, clampedOverallScore);
+        var score = details.Count > 0
             ? Math.Clamp(Math.Round(details.Sum(item => item.Score), 2, MidpointRounding.AwayFromZero), 0m, 10m)
-            : Math.Clamp(Math.Round(result.Score, 2, MidpointRounding.AwayFromZero), 0m, 10m);
+            : clampedOverallScore;
         var isSystemFallback = result.CotTrace?.StartsWith("[SYSTEM_FALLBACK]", StringComparison.OrdinalIgnoreCase) == true;
         var suspicious = result.IsSuspicious || isSystemFallback || result.ConfidenceScore < SuspiciousConfidenceThreshold;
         var now = DateTime.UtcNow;
@@ -274,20 +274,101 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
     private static List<AiEvaluationDetail> BuildDetails(
         IReadOnlyList<RubricCriterion> criteria,
-        IReadOnlyList<GradingDetailDto> rawDetails)
+        IReadOnlyList<GradingDetailDto> rawDetails,
+        decimal fallbackOverallScore = 0m)
     {
         var details = new List<AiEvaluationDetail>(criteria.Count);
+        var matchedByCriterionIndex = new GradingDetailDto?[criteria.Count];
+        var usedRawIndices = new HashSet<int>();
+
         for (var index = 0; index < criteria.Count; index++)
         {
             var criterion = criteria[index];
-            var raw = rawDetails.FirstOrDefault(item =>
-                    string.Equals(item.CriterionId?.Trim(), criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
-                ?? rawDetails.FirstOrDefault(item =>
-                    string.Equals(item.CriterionId?.Trim(), criterion.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
-                ?? (index < rawDetails.Count ? rawDetails[index] : null);
-            var score = raw is null
-                ? 0m
-                : Math.Clamp(Math.Round(raw.Score, 2, MidpointRounding.AwayFromZero), 0m, criterion.MaxScore);
+            var matchedIdx = -1;
+
+            for (var rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+            {
+                if (usedRawIndices.Contains(rIdx))
+                {
+                    continue;
+                }
+
+                var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                if (string.Equals(candidateId, criterion.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matchedIdx = rIdx;
+                    break;
+                }
+            }
+
+            if (matchedIdx < 0 && !string.IsNullOrWhiteSpace(criterion.CriterionName))
+            {
+                for (var rIdx = 0; rIdx < rawDetails.Count; rIdx++)
+                {
+                    if (usedRawIndices.Contains(rIdx))
+                    {
+                        continue;
+                    }
+
+                    var candidateId = rawDetails[rIdx].CriterionId?.Trim();
+                    if (string.Equals(candidateId, criterion.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedIdx = rIdx;
+                        break;
+                    }
+                }
+            }
+
+            if (matchedIdx >= 0)
+            {
+                usedRawIndices.Add(matchedIdx);
+                matchedByCriterionIndex[index] = rawDetails[matchedIdx];
+            }
+        }
+
+        var totalCriteriaMax = criteria.Sum(c => c.MaxScore);
+        decimal runningAllocatedScore = 0m;
+
+        for (var index = 0; index < criteria.Count; index++)
+        {
+            var criterion = criteria[index];
+            var raw = matchedByCriterionIndex[index];
+            if (raw is null && index < rawDetails.Count && !usedRawIndices.Contains(index))
+            {
+                usedRawIndices.Add(index);
+                raw = rawDetails[index];
+            }
+
+            decimal score;
+            if (rawDetails.Count > 0)
+            {
+                score = raw is null
+                    ? 0m
+                    : Math.Clamp(Math.Round(raw.Score, 2, MidpointRounding.AwayFromZero), 0m, criterion.MaxScore);
+            }
+            else if (totalCriteriaMax > 0m && fallbackOverallScore > 0m)
+            {
+                if (index == criteria.Count - 1)
+                {
+                    score = Math.Clamp(
+                        Math.Round(fallbackOverallScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                        0m,
+                        criterion.MaxScore);
+                }
+                else
+                {
+                    score = Math.Clamp(
+                        Math.Round(fallbackOverallScore * (criterion.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                        0m,
+                        criterion.MaxScore);
+                    runningAllocatedScore += score;
+                }
+            }
+            else
+            {
+                score = 0m;
+            }
+
             details.Add(new AiEvaluationDetail
             {
                 CriterionId = criterion.Id,

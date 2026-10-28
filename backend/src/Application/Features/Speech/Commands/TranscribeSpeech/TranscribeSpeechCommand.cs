@@ -45,6 +45,18 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
             return Result<SpeechTranscriptionResult>.Failure("File ghi âm không hợp lệ hoặc rỗng.");
         }
 
+        long streamLength = request.AudioStream.CanSeek ? request.AudioStream.Length : 0;
+        bool hasRealAudioHeader = true;
+        if (request.AudioStream.CanSeek && streamLength >= 256)
+        {
+            var headerBuffer = new byte[256];
+            request.AudioStream.Position = 0;
+            int bytesRead = request.AudioStream.Read(headerBuffer, 0, 256);
+            request.AudioStream.Position = 0;
+            hasRealAudioHeader = TranscriptHelper.HasRealAudioContainerHeader(headerBuffer.AsSpan(0, bytesRead));
+        }
+        bool isUnverifiedSpoofedStream = streamLength >= 256 && !hasRealAudioHeader;
+
         SpeechTranscriptionResult? detailedResult = null;
         Exception? sttException = null;
         try
@@ -79,7 +91,8 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
             var normalized = speechToTextService.NormalizeTranscript(request.ClientTranscript);
             var finalText = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
-            if (!string.IsNullOrWhiteSpace(finalText))
+            if (!string.IsNullOrWhiteSpace(finalText) &&
+                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalText)))
             {
                 return Result<SpeechTranscriptionResult>.Success(new SpeechTranscriptionResult(
                     Text: finalText,

@@ -99,6 +99,47 @@ public sealed class OverrideExamScoreCommandHandler
                 : roundedAuditedScore;
         }
 
+        if (request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty)
+        {
+            var targetSubmission = ticket.Submissions.FirstOrDefault(s => s.Id == request.SubmissionId.Value);
+            if (targetSubmission is null)
+            {
+                return Result<OverrideExamScoreResponseDto>.Failure(
+                    "NOT_FOUND: Bài nộp câu hỏi (SubmissionId) không tồn tại hoặc không thuộc vé thi này.");
+            }
+
+            targetSubmission.FinalScore = roundedAuditedScore;
+            targetSubmission.GradingStatus = "audited";
+
+            foreach (var sibling in ticket.Submissions.Where(s => s.Id != targetSubmission.Id))
+            {
+                sibling.FinalScore ??= sibling.AiScore;
+            }
+        }
+        else
+        {
+            foreach (var submission in ticket.Submissions)
+            {
+                submission.FinalScore = roundedAuditedScore;
+                submission.GradingStatus = "audited";
+            }
+        }
+
+        var effectiveTicketAuditedScore = roundedAuditedScore;
+        if (request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty && ticket.Submissions.Count > 1)
+        {
+            var scoredValues = ticket.Submissions
+                .Select(s => s.FinalScore ?? s.AiScore)
+                .Where(v => v.HasValue)
+                .Select(v => v!.Value)
+                .ToList();
+
+            if (scoredValues.Count > 0)
+            {
+                effectiveTicketAuditedScore = Math.Round(scoredValues.Average(), 2, MidpointRounding.AwayFromZero);
+            }
+        }
+
         var now = DateTime.UtcNow;
         var audit = ticket.LecturerAudit;
 
@@ -110,7 +151,7 @@ public sealed class OverrideExamScoreCommandHandler
                 TicketId = ticket.Id,
                 LecturerId = actor.Id,
                 OriginalAiScore = originalAiScore,
-                AuditedScore = roundedAuditedScore,
+                AuditedScore = effectiveTicketAuditedScore,
                 OverrideReason = trimmedReason,
                 IsLocked = false,
                 AuditedAt = now
@@ -120,7 +161,7 @@ public sealed class OverrideExamScoreCommandHandler
         else
         {
             audit.LecturerId = actor.Id;
-            audit.AuditedScore = roundedAuditedScore;
+            audit.AuditedScore = effectiveTicketAuditedScore;
             audit.OverrideReason = trimmedReason;
             audit.AuditedAt = now;
         }
@@ -153,12 +194,6 @@ public sealed class OverrideExamScoreCommandHandler
             }
         }
 
-        foreach (var submission in ticket.Submissions)
-        {
-            submission.FinalScore = roundedAuditedScore;
-            submission.GradingStatus = "audited";
-        }
-
         ticket.Status = ExamTicketStatus.Audited;
 
         _context.AuditLogs.Add(new AuditLog
@@ -169,7 +204,7 @@ public sealed class OverrideExamScoreCommandHandler
             EntityName = "student_exam_tickets",
             EntityId = ticket.Id,
             OldValues = originalAiScore.ToString("F2"),
-            NewValues = $"{roundedAuditedScore:F2} | {trimmedReason}",
+            NewValues = $"{effectiveTicketAuditedScore:F2} | {trimmedReason}",
             CreatedAt = now
         });
 

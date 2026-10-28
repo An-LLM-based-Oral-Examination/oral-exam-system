@@ -30,6 +30,7 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
 
         Stream streamToTranscribe = request.FileStream;
         MemoryStream? bufferStream = null;
+        bool isUnverifiedSpoofedStream = false;
 
         try
         {
@@ -48,6 +49,18 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             {
                 request.FileStream.Position = 0;
             }
+
+            long streamLength = streamToTranscribe.CanSeek ? streamToTranscribe.Length : 0;
+            bool hasRealAudioHeader = true;
+            if (streamToTranscribe.CanSeek && streamLength >= 256)
+            {
+                var headerBuffer = new byte[256];
+                streamToTranscribe.Position = 0;
+                int bytesRead = streamToTranscribe.Read(headerBuffer, 0, 256);
+                streamToTranscribe.Position = 0;
+                hasRealAudioHeader = TranscriptHelper.HasRealAudioContainerHeader(System.MemoryExtensions.AsSpan(headerBuffer, 0, bytesRead));
+            }
+            isUnverifiedSpoofedStream = streamLength >= 256 && !hasRealAudioHeader;
 
             // Bóc băng Whisper STT trực tiếp dạng stream (không lưu R2, không hash SHA-256 cho MF-01/02)
             System.Exception? sttException = null;
@@ -95,7 +108,9 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                     new UploadAudioPracticeResponse(Transcript: normalizedServer));
             }
 
-            if (!string.IsNullOrWhiteSpace(normalizedClient) && !TranscriptHelper.IsServerConfirmedSilence(detailed, sttException))
+            if (!string.IsNullOrWhiteSpace(normalizedClient) &&
+                !TranscriptHelper.IsServerConfirmedSilence(detailed, sttException) &&
+                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(normalizedClient)))
             {
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedClient));
@@ -115,7 +130,8 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                 var normalized = _speechToTextService.NormalizeTranscript(request.ClientTranscript);
                 var finalTranscript = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
-                if (!string.IsNullOrWhiteSpace(finalTranscript))
+                if (!string.IsNullOrWhiteSpace(finalTranscript) &&
+                    (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalTranscript)))
                 {
                     return Result<UploadAudioPracticeResponse>.Success(
                         new UploadAudioPracticeResponse(Transcript: finalTranscript));

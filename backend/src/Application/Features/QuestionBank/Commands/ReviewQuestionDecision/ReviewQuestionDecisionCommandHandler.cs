@@ -80,6 +80,18 @@ public sealed class ReviewQuestionDecisionCommandHandler
                         "Chỉ câu hỏi tạo thủ công (manual) mới được phép đính kèm hình ảnh, không thể phê duyệt câu hỏi AI có hình ảnh.");
                 }
 
+                foreach (var criterion in question.Rubric.Criteria)
+                {
+                    if (criterion.Weight > 1.00m)
+                    {
+                        criterion.Weight = Math.Round(criterion.Weight / 100m, 4, MidpointRounding.AwayFromZero);
+                    }
+                    if (criterion.Weight <= 0m || criterion.Weight > 1.00m)
+                    {
+                        criterion.Weight = Math.Clamp(Math.Round(criterion.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
+                    }
+                }
+
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
                 question.ReviewNotes = request.ReviewNotes;

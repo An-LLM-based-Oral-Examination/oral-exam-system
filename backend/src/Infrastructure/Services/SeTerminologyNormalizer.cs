@@ -69,6 +69,23 @@ public static class SeTerminologyNormalizer
         "In-Memory",
         "ORM",
         "async/await",
+        "Encapsulation",
+        "Inheritance",
+        "Polymorphism",
+        "Abstraction",
+        "Deadlock",
+        "Race Condition",
+        "Indexing",
+        "Primary Key",
+        "Foreign Key",
+        "RESTful API",
+        "GraphQL",
+        "gRPC",
+        "Docker",
+        "Kubernetes",
+        "CI/CD",
+        "Unit Test",
+        "Integration Test",
         ".NET",
         "C#"
     ];
@@ -173,6 +190,23 @@ public static class SeTerminologyNormalizer
         (CreatePhraseRegex(@"két\s*sinh|caching"), "Caching"),
         (CreatePhraseRegex(@"pốt\s*gờ\s*re(\s*ét\s*quy\s*eo)?|postgres(\s*ql)?|postgresql"), "PostgreSQL"),
         (CreatePhraseRegex(@"cờ\s*lao\s*phờ\s*le|cloudflare"), "Cloudflare"),
+        (CreatePhraseRegex(@"in\s*cáp\s*su\s*lây\s*sần|en\s*cáp\s*su\s*lây\s*sần|encapsulation"), "Encapsulation"),
+        (CreatePhraseRegex(@"in\s*he\s*ri\s*tần|in\s*hê\s*ri\s*tần|inheritance"), "Inheritance"),
+        (CreatePhraseRegex(@"pô\s*li\s*mo\s*phi\s*dầm|po\s*ly\s*mor\s*phism|polymorphism"), "Polymorphism"),
+        (CreatePhraseRegex(@"áp\s*trắc\s*sần|ab\s*strac\s*tion|abstraction"), "Abstraction"),
+        (CreatePhraseRegex(@"đét\s*lóc|dead\s+lock|deadlock"), "Deadlock"),
+        (CreatePhraseRegex(@"rây\s*con\s*đi\s*sần|race\s+condition"), "Race Condition"),
+        (CreatePhraseRegex(@"in\s*đếch\s*xinh|indexing"), "Indexing"),
+        (CreatePhraseRegex(@"pờ\s*rai\s*mơ\s*ri\s*ki|primary\s+key"), "Primary Key"),
+        (CreatePhraseRegex(@"pho\s*rần\s*ki|foreign\s+key"), "Foreign Key"),
+        (CreatePhraseRegex(@"rét\s*phun\s*ây\s*pi\s*ai|restful\s+api"), "RESTful API"),
+        (CreatePhraseRegex(@"gờ\s*ráp\s*quy\s*eo|graph\s*ql|graphql"), "GraphQL"),
+        (CreatePhraseRegex(@"gi\s*a\s*pi\s*xi|g\s*r\s*p\s*c|grpc"), "gRPC"),
+        (CreatePhraseRegex(@"đốc\s*cơ|docker"), "Docker"),
+        (CreatePhraseRegex(@"ku\s*bơ\s*nê\s*tít|k8s|kubernetes"), "Kubernetes"),
+        (CreatePhraseRegex(@"xi\s*ai\s*xi\s*đi|ci\s+cd|ci/cd"), "CI/CD"),
+        (CreatePhraseRegex(@"iu\s*nít\s*tét|unit\s+test"), "Unit Test"),
+        (CreatePhraseRegex(@"in\s*tơ\s*gờ\s*rây\s*sần\s*tét|integration\s+test"), "Integration Test"),
         (CreatePhraseRegex(@"kiến\s+chúc"), "kiến trúc"),
         (CreatePhraseRegex(@"chấm\s+thị\s+vấn\s+đáp|chấm\s+thi\s+v\?n\s+dạp"), "chấm thi vấn đáp")
     ];
@@ -210,7 +244,7 @@ public static class SeTerminologyNormalizer
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(500));
     private static readonly Regex TechnicalContextTokenRegex = new(
-        @"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[A-Z]{2,}(?:-\d+)?|\.[A-Za-z0-9]+)\b",
+        @"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[A-Z]{2,}[0-9]*(?:-[A-Za-z0-9]+)?|\.[A-Za-z0-9]+)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(500));
 

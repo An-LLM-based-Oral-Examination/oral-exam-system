@@ -243,6 +243,7 @@ export interface OverrideCriterionScore {
 
 export interface OverrideExamScoreRequest {
   ticketId?: string
+  submissionId?: string | null
   auditedScore: number
   overrideReason: string
   criterionDetails?: OverrideCriterionScore[] | null

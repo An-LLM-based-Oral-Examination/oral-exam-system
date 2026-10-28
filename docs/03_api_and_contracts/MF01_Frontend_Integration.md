@@ -1,7 +1,7 @@
 # 📘 TÀI LIỆU TÍCH HỢP FRONTEND — LUỒNG MF-01 (INTERACTIVE PRACTICE)
 ## DỰ ÁN: LLM ORAL EXAM SYSTEM (FA26SE166 — ĐẠI HỌC FPT TP.HCM)
 
-> **Dành cho:** Frontend Developers (Lê Vũ Hoàng & Nguyễn Đăng Hải)  
+> **Dành cho:** Frontend Developers (Lê Vũ Hoàng & Phạm Nguyễn Đăng Hải)  
 > **Tác giả:** Senior Backend Engineer & Integration Specialist  
 > **Phiên bản:** 1.0 (Production-Ready) — Cập nhật: 2026-10-07  
 > **Mục tiêu:** Hướng dẫn tích hợp toàn diện giao diện React 19 với Backend .NET 8 cho luồng Luyện tập tương tác tự do (MF-01), bao gồm RESTful APIs, Realtime WebSocket SignalR, Buffer Screen và Follow-up Engine.

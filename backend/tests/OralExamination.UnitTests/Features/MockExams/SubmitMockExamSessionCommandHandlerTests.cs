@@ -334,4 +334,93 @@ public class SubmitMockExamSessionCommandHandlerTests
         res.Errors.Should().Contain(e => e.PropertyName == nameof(SubmitMockExamSessionCommand.SessionId));
         res.Errors.Should().Contain(e => e.PropertyName == nameof(SubmitMockExamSessionCommand.StudentId));
     }
+
+    [Fact(DisplayName = "6. Follow-up trả lời yếu hơn câu gốc: áp dụng trọng số 70% câu gốc + 30% follow-up và đồng bộ tổng tiêu chí con")]
+    public async Task Handle_Should_Apply_Weighted_Score_When_FollowUp_Is_Lower_And_Does_Not_Improve_Criteria()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, _) = SeedCourseAndQuestions(context);
+        var studentId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            Status = "in_progress"
+        };
+
+        var mainAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            IsFollowUp = false,
+            AnswerText = "Câu trả lời chính đạt 8.0 điểm.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        var followUpAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            ParentAnswerId = mainAnswer.Id,
+            OrderIndex = 1,
+            IsFollowUp = true,
+            PromptText = "Giải thích sâu hơn về Dependency Rule?",
+            AnswerText = "Câu trả lời phụ lúng túng chỉ đạt 3.0 điểm.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        session.Answers.Add(mainAnswer);
+        session.Answers.Add(followUpAnswer);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var crit1Id = q1.Rubric.Criteria.First().Id.ToString();
+        var crit2Id = q1.Rubric.Criteria.Last().Id.ToString();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.SetupSequence(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 8.0m,
+                ConfidenceScore = 0.90m,
+                Feedback = "Câu gốc trả lời tốt (4.0 + 4.0).",
+                Details = new List<GradingDetailDto>
+                {
+                    new() { CriterionId = crit1Id, Score = 4.0m, Comment = "Tốt" },
+                    new() { CriterionId = crit2Id, Score = 4.0m, Comment = "Tốt" }
+                }
+            })
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 3.0m,
+                ConfidenceScore = 0.85m,
+                Feedback = "Câu hỏi phụ trả lời yếu (1.5 + 1.5).",
+                Details = new List<GradingDetailDto>
+                {
+                    new() { CriterionId = crit1Id, Score = 1.5m, Comment = "Yếu" },
+                    new() { CriterionId = crit2Id, Score = 1.5m, Comment = "Yếu" }
+                }
+            });
+
+        var handler = new SubmitMockExamSessionCommandHandler(context, aiMock.Object);
+        var result = await handler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var scorecard = result.Value;
+        // 70% * 8.0 + 30% * 3.0 = 5.6 + 0.9 = 6.50m
+        scorecard.TotalScore.Should().Be(6.50m);
+        var mainQuestionDto = scorecard.Questions.First(q => !q.IsFollowUp);
+        mainQuestionDto.Score.Should().Be(6.50m);
+        mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(6.50m);
+    }
 }

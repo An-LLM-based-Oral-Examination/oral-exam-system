@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
@@ -44,20 +48,18 @@ public sealed class RegradeAppealCommandHandler
             return Result<AppealResponseDto>.Failure("Giảng viên hiện tại không phải người được phân công chấm lại đơn này.");
         }
 
+        var ticketSubmissions = await _context.ExamQuestionSubmissions
+            .Where(s => s.TicketId == appeal.TicketId)
+            .ToListAsync(cancellationToken);
+
         var submission = appeal.SubmissionId.HasValue
-            ? await _context.ExamQuestionSubmissions.FirstOrDefaultAsync(
-                s => s.Id == appeal.SubmissionId.Value && s.TicketId == appeal.TicketId,
-                cancellationToken)
+            ? ticketSubmissions.FirstOrDefault(s => s.Id == appeal.SubmissionId.Value)
             : null;
-        var ticketSubmissions = !appeal.SubmissionId.HasValue
-            ? await _context.ExamQuestionSubmissions
-                .Where(s => s.TicketId == appeal.TicketId)
-                .ToListAsync(cancellationToken)
-            : [];
+
         var audit = await _context.LecturerAudits
             .FirstOrDefaultAsync(a => a.TicketId == appeal.TicketId, cancellationToken);
 
-        if (submission is null && audit is null && ticketSubmissions.Count == 0)
+        if (submission is null && audit is null && (appeal.SubmissionId.HasValue || ticketSubmissions.Count == 0))
         {
             return Result<AppealResponseDto>.Failure("Không tìm thấy dữ liệu điểm thuộc vé thi để cập nhật phúc khảo.");
         }
@@ -72,8 +74,12 @@ public sealed class RegradeAppealCommandHandler
         if (submission is not null)
         {
             submission.FinalScore = request.NewScore;
+            foreach (var sibling in ticketSubmissions.Where(s => s.Id != submission.Id))
+            {
+                sibling.FinalScore ??= sibling.AiScore;
+            }
         }
-        else if (ticketSubmissions.Count > 0)
+        else if (!appeal.SubmissionId.HasValue && ticketSubmissions.Count > 0)
         {
             foreach (var sub in ticketSubmissions)
             {
@@ -83,7 +89,23 @@ public sealed class RegradeAppealCommandHandler
 
         if (audit is not null)
         {
-            audit.AuditedScore = request.NewScore;
+            if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
+            {
+                var scoredValues = ticketSubmissions
+                    .Select(s => s.FinalScore ?? s.AiScore)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+
+                audit.AuditedScore = scoredValues.Count > 0
+                    ? Math.Round(scoredValues.Average(), 2, MidpointRounding.AwayFromZero)
+                    : request.NewScore;
+            }
+            else
+            {
+                audit.AuditedScore = request.NewScore;
+            }
+
             audit.OverrideReason = request.ReviewNotes.Trim();
         }
 
