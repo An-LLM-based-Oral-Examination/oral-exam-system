@@ -22,12 +22,12 @@ public class GeminiAiGradingService : IAiGradingService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent";
 
     private static readonly string[] FallbackApiUrls =
     [
         DefaultGeminiApiUrl,
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
@@ -98,7 +98,7 @@ public class GeminiAiGradingService : IAiGradingService
     ];
 
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey;
+    private readonly string _apiKey; private readonly IReadOnlyList<string> _candidateApiKeys;
     private readonly string _apiUrl;
     private readonly string _cloudflareAccountId;
     private readonly string _cloudflareApiToken;
@@ -110,7 +110,7 @@ public class GeminiAiGradingService : IAiGradingService
             ?? configuration["Gemini__ApiKey"]
             ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
             ?? string.Empty;
-        _apiUrl = configuration["Gemini:ApiUrl"]
+        var fallbackKey = configuration["Gemini:FallbackApiKey"] ?? configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; _candidateApiKeys = new[] { _apiKey.Trim(), fallbackKey.Trim() }.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToList(); _apiUrl = configuration["Gemini:ApiUrl"]
             ?? configuration["Gemini__ApiUrl"]
             ?? Environment.GetEnvironmentVariable("GEMINI_API_URL")
             ?? DefaultGeminiApiUrl;
@@ -308,7 +308,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
   ]
 }}";
 
-        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(_apiKey) && !_apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !_apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase) && !_apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
+        var hasUsableGeminiKey = _candidateApiKeys.Count > 0;
 
         if (!hasUsableGeminiKey)
         {
@@ -379,9 +379,9 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         string lastError = string.Empty;
         System.Net.HttpStatusCode? lastTransientStatusCode = null;
 
-        foreach (var targetUrl in candidateUrls)
+        foreach (var activeApiKey in _candidateApiKeys) foreach (var targetUrl in candidateUrls)
         {
-            try
+            if (response is { IsSuccessStatusCode: true }) break; try
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
@@ -390,7 +390,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 {
                     Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
                 };
-                requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", _apiKey);
+                requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
                 response = await _httpClient.SendAsync(requestMessage, timeoutCts.Token);
 
                 if (response.IsSuccessStatusCode)
@@ -407,7 +407,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                     lastTransientStatusCode = response.StatusCode;
                 }
 
-                if (response.StatusCode is System.Net.HttpStatusCode.BadRequest
+                if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.BadRequest
                     or System.Net.HttpStatusCode.Unauthorized
                     or System.Net.HttpStatusCode.Forbidden)
                 {

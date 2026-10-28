@@ -99,17 +99,19 @@ public class CloudflareWhisperService : ISpeechToTextService
 
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken);
         var (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
-        if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence && audioBytes.Length >= 32_768)
+        var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
+        if (string.IsNullOrWhiteSpace(sanitized) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
         {
             var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken, useVadFilter: false);
             (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
-            if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence)
+            sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
+            if (string.IsNullOrWhiteSpace(sanitized) && !allSegmentsConfirmedSilence)
             {
                 var binaryResponse = await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
                 (rawText, _, _, _) = ParseWhisperResponse(binaryResponse);
+                sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             }
         }
-        var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
         return SeTerminologyNormalizer.NormalizeWithContext(sanitized, null);
     }
 
@@ -171,17 +173,19 @@ public class CloudflareWhisperService : ISpeechToTextService
 
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken);
         var (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
-        if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence && audioBytes.Length >= 32_768)
+        var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
+        if (string.IsNullOrWhiteSpace(sanitizedRaw) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
         {
             var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken, useVadFilter: false);
             (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
-            if (string.IsNullOrWhiteSpace(rawText) && !allSegmentsConfirmedSilence)
+            sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
+            if (string.IsNullOrWhiteSpace(sanitizedRaw) && !allSegmentsConfirmedSilence)
             {
                 var binaryResponse = await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
                 (rawText, timestampsJson, confidenceScore, _) = ParseWhisperResponse(binaryResponse);
+                sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             }
         }
-        var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
         var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, vocabularyHint);
 
         var finalConfidence = string.IsNullOrWhiteSpace(sanitizedRaw) ? 0.0 : confidenceScore;
@@ -195,25 +199,11 @@ public class CloudflareWhisperService : ISpeechToTextService
             ConfidenceScore: finalConfidence);
     }
 
-    private static bool IsEnglishCourseHint(string? vocabularyHint)
-    {
-        if (string.IsNullOrWhiteSpace(vocabularyHint))
-        {
-            return false;
-        }
-
-        var trimmed = vocabularyHint.Trim();
-        return trimmed.StartsWith("lang:en", StringComparison.OrdinalIgnoreCase)
-            || System.Text.RegularExpressions.Regex.IsMatch(
-                trimmed,
-                @"^(?:ENT\d{3}|ENG\d{3})\b",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-    }
-
     /// <summary>
     /// Gọi mô hình @cf/openai/whisper-large-v3-turbo hỗ trợ song ngữ Việt - Anh (Code-Switching) cho mọi môn học (cả ENT và SE).
-    /// Đặt language = "vi" và task = "transcribe" để Whisper Large-v3-Turbo nhận diện nguyên văn cả Tiếng Việt lẫn Tiếng Anh mà không tự dịch câu nói Tiếng Việt sang Tiếng Anh.
-    /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter để tránh Silero VAD trên Cloudflare treo 40s và trả chuỗi rỗng.
+    /// Đặt language = "vi", task = "transcribe" và luôn truyền chuỗi initial_prompt song ngữ khác null (tránh lỗi HTTP 400 code 5006
+    /// Type mismatch of '/initial_prompt' trên Cloudflare và chống ảo giác phụ đề khi sinh viên trả lời bằng tiếng Anh ở môn ENT).
+    /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter.
     /// </summary>
     private async Task<string> SendWhisperTurboWithVadAsync(
         byte[] audioBytes,
@@ -222,11 +212,11 @@ public class CloudflareWhisperService : ISpeechToTextService
         bool useVadFilter = true)
     {
         var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
-        var isEnglish = IsEnglishCourseHint(vocabularyHint);
         var language = TranscriptionLanguage;
-        var prompt = !isEnglish && !string.IsNullOrWhiteSpace(vocabularyHint)
-            ? SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint)
-            : null;
+        var contextualPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint);
+        var prompt = !string.IsNullOrWhiteSpace(contextualPrompt)
+            ? contextualPrompt
+            : SeTerminologyNormalizer.DefaultSeWhisperPrompt;
         var enableVadFilter = useVadFilter && audioBytes.Length <= 250_000;
 
         var jsonPayload = JsonSerializer.Serialize(new
@@ -393,7 +383,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                     rawText = string.Empty;
                     confidenceScore = 0.0;
                     timestampsJson = null;
-                    allSegmentsConfirmedSilence = true;
+                    allSegmentsConfirmedSilence = totalSegmentsCount > 0;
                 }
                 else if (validSegments.Count > 0)
                 {

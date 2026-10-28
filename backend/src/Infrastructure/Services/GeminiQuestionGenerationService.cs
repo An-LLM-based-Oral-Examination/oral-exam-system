@@ -58,15 +58,15 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(apiKey)
             && !apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase)
             && !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase)
-            && !apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
+            && !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
 
         string lastError = string.Empty;
 
-        if (hasUsableGeminiKey)
+        _ = hasUsableGeminiKey; var fallbackApiKey = _configuration["Gemini:FallbackApiKey"] ?? _configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; var candidateKeys = new[] { apiKey.Trim(), fallbackApiKey.Trim() }.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToList(); foreach (var activeKey in candidateKeys)
         {
             try
             {
-                var geminiGenerated = await CallGeminiApiAsync(apiKey, parameters, cancellationToken);
+                var geminiGenerated = await CallGeminiApiAsync(activeKey, parameters, cancellationToken);
                 if (geminiGenerated.Count > 0)
                 {
                     return geminiGenerated;
@@ -98,7 +98,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
     {
         string[] candidateModels =
         {
-            "gemini-3.8-flash",
+            "gemini-3.6-flash", "gemini-3.8-flash",
             "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
             "gemini-flash-latest",
@@ -164,7 +164,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                 else
                 {
                     lastHttpError = $"HTTP {(int)response.StatusCode} ({modelName})";
-                    if ((int)response.StatusCode == 404)
+                    if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.BadRequest) break; if ((int)response.StatusCode == 404 || (int)response.StatusCode == 503)
                     {
                         continue;
                     }

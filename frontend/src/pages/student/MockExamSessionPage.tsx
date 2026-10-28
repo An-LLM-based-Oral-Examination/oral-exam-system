@@ -110,16 +110,19 @@ function shouldIgnoreSpace(target: EventTarget | null) {
   return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
-/** Không ép lang:en để Whisper Large-v3-Turbo nhận diện song ngữ Việt - Anh cho mọi môn học (kể cả ENT và SE). */
+/** Không ép lang:en để Gemini 3.5 Transcribe & Whisper nhận diện song ngữ Việt - Anh cho mọi môn học (kể cả ENT và SE). */
 function buildVocabularyHint(
-  question: { title: string },
+  question: { title: string; content?: string },
   courseCode?: string | null,
   courseName?: string | null,
 ): string | undefined {
-  void question
-  void courseCode
-  void courseName
-  return undefined
+  const parts = [
+    courseCode?.trim(),
+    courseName?.trim(),
+    question.title?.trim(),
+    question.content?.trim(),
+  ].filter((part): part is string => Boolean(part))
+  return parts.length > 0 ? parts.join(' - ').slice(0, 320) : undefined
 }
 
 
@@ -246,10 +249,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const navigate = useNavigate()
   const segmentPromisesRef = useRef<Array<Promise<SpeechTranscriptionResponse | null>>>([])
   const lastSegmentBlobRef = useRef<Blob | null>(null)
+  const vocabularyHintRef = useRef<string | undefined>(undefined)
   const handleRecorderSegment = useCallback((segmentBlob: Blob, segmentIndex: number) => {
     lastSegmentBlobRef.current = segmentBlob
     const promise = transcribeSpeech(segmentBlob, {
-      vocabularyHint: undefined,
+      vocabularyHint: vocabularyHintRef.current,
       fileName: `mock-answer-seg-${segmentIndex}.webm`,
     }).catch(() => null)
     segmentPromisesRef.current.push(promise)
@@ -576,6 +580,15 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   )
 
   const displayPrompt = activeFollowUp?.prompt ?? question?.content ?? ''
+  useEffect(() => {
+    vocabularyHintRef.current = question
+      ? buildVocabularyHint(
+          { title: question.title, content: displayPrompt || question.content },
+          session.courseCode,
+          session.courseName,
+        )
+      : undefined
+  }, [displayPrompt, question, session.courseCode, session.courseName])
 
   const toggleReadQuestion = useCallback(() => {
     if (!displayPrompt.trim()) return

@@ -502,7 +502,7 @@ public class ResilientSpeechServicesTests
         var config = BuildConfig(new Dictionary<string, string?>
         {
             ["Speech:PrimarySttProvider"] = "Gemini",
-            ["Gemini:ApiKey"] = "gemini-key-primary",
+            ["Gemini:ApiKey"] = "AQ.Ab8RN6L_PrimaryKey",
             ["Cloudflare:AccountId"] = "cf-acc-fallback",
             ["Cloudflare:ApiToken"] = "cf-token-fallback"
         });
@@ -518,7 +518,7 @@ public class ResilientSpeechServicesTests
             capturedGeminiHeader = req.Headers.TryGetValues("x-goog-api-key", out var values) ? string.Join(",", values) : null;
             capturedGeminiPayload = await req.Content!.ReadAsStringAsync(ct);
 
-            var responseJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Em triển khai OneWayLockInterceptor và bao đựt chan nồ trong đốt nét 8\"}]}}]}";
+            var responseJson = "{\"candidates\":[{\"content\":{\"parts\":[{\"audioTranscription\":{\"text\":\"Em triển khai OneWayLockInterceptor và bao đựt chan nồ trong đốt nét 8\"}}]}}]}";
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
@@ -548,7 +548,7 @@ public class ResilientSpeechServicesTests
         whisperCalled.Should().BeFalse();
         capturedGeminiUrl.Should().Contain("gemini-3.5-transcribe:generateContent");
         capturedGeminiUrl.Should().NotContain("key=", "API Key bắt buộc chỉ gửi qua header x-goog-api-key");
-        capturedGeminiHeader.Should().Be("gemini-key-primary");
+        capturedGeminiHeader.Should().Be("AQ.Ab8RN6L_PrimaryKey");
         capturedGeminiPayload.Should().Contain("audioTranscriptionConfig");
         capturedGeminiPayload.Should().Contain("customVocabulary");
         capturedGeminiPayload.Should().Contain("OneWayLockInterceptor");
@@ -743,7 +743,7 @@ public class ResilientSpeechServicesTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Gemini__ApiKey"] = "AIzaSy_MockUnitTestKey_123456"
+            ["Gemini__ApiKey"] = "AQ.Ab8RN6L_MockUnitTestKey_123456"
         });
 
         var crit1Id = Guid.NewGuid().ToString();
@@ -789,7 +789,7 @@ public class ResilientSpeechServicesTests
 
         var result = await gradingService.GradeAnswerAsync(request);
 
-        sentHeaderKey.Should().Be("AIzaSy_MockUnitTestKey_123456", "Khóa API của Google AI Studio phải được gửi trực tiếp qua header x-goog-api-key");
+        sentHeaderKey.Should().Be("AQ.Ab8RN6L_MockUnitTestKey_123456", "Khóa API của Google AI Studio phải được gửi trực tiếp qua header x-goog-api-key");
         result.Details.Should().HaveCount(2);
         result.Details[0].CriterionId.Should().Be(crit1Id);
         result.Details[0].Score.Should().Be(5.0m, "Điểm tiêu chí 1 (6.0) phải được clamp về đúng MaxScore (5.0)");
@@ -1834,7 +1834,7 @@ public class ResilientSpeechServicesTests
 
         var successHandler = new MockHttpMessageHandler((req, ct) =>
         {
-            req.RequestUri!.ToString().Should().Contain("@cf/meta/llama-3.1-8b-instruct");
+            if (req.RequestUri!.Host.Contains("generativelanguage.googleapis.com")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)); req.RequestUri!.ToString().Should().Contain("@cf/meta/llama-3.1-8b-instruct");
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(cfLlamaJson, Encoding.UTF8, "application/json")

@@ -236,9 +236,9 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             }
         }
 
-        var geminiApiKey = _configuration["Gemini:ApiKey"] ?? _configuration["Gemini__ApiKey"];
+        var geminiApiKey = _configuration["Gemini:ApiKey"] ?? _configuration["Gemini__ApiKey"]; if (string.IsNullOrWhiteSpace(geminiApiKey) || geminiApiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) || geminiApiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase)) { geminiApiKey = _configuration["Gemini:FallbackApiKey"] ?? _configuration["Gemini__FallbackApiKey"]; }
         var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(geminiApiKey) &&
-            !geminiApiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
+            !geminiApiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !geminiApiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
         var preferGeminiFallback = string.Equals(
             _configuration["Speech:PreferGeminiTtsFallback"],
             "true",

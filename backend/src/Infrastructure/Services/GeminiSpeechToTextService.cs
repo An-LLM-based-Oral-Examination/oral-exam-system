@@ -26,7 +26,7 @@ public class GeminiSpeechToTextService
     private static readonly string[] FallbackSttUrls =
     [
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
@@ -43,7 +43,12 @@ public class GeminiSpeechToTextService
     private readonly IReadOnlyList<string> _candidateSttUrls;
     private readonly ILogger<GeminiSpeechToTextService>? _logger;
 
-    public bool HasCredentials => !string.IsNullOrWhiteSpace(_apiKey) && !_apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase);
+    private readonly IReadOnlyList<string> _candidateApiKeys; public bool HasCredentials => _candidateApiKeys.Count > 0;
+
+    private static bool IsUsableGeminiApiKey(string? apiKey) =>
+        !string.IsNullOrWhiteSpace(apiKey) &&
+        !apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) &&
+        !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
 
     public GeminiSpeechToTextService(
         HttpClient httpClient,
@@ -90,7 +95,7 @@ public class GeminiSpeechToTextService
             }
         }
 
-        _candidateSttUrls = urls;
+        _candidateSttUrls = urls; var fallbackKey = configuration["Gemini:FallbackApiKey"] ?? configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; _candidateApiKeys = new[] { _apiKey.Trim(), fallbackKey.Trim() }.Where(IsUsableGeminiApiKey).Distinct(StringComparer.Ordinal).ToList();
         _logger = logger;
     }
 
@@ -109,7 +114,7 @@ public class GeminiSpeechToTextService
         string? vocabularyHint = null,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_apiKey) || _apiKey.StartsWith("AQ.", StringComparison.OrdinalIgnoreCase))
+        if (_candidateApiKeys.Count == 0)
         {
             throw new InvalidOperationException("Gemini API Key for fallback STT is missing.");
         }
@@ -238,7 +243,7 @@ public class GeminiSpeechToTextService
         var serializedMultimodalPayload = JsonSerializer.Serialize(multimodalPayload, JsonOptions);
         HttpRequestException? lastHttpException = null;
 
-        foreach (var candidateUrl in _candidateSttUrls)
+        foreach (var activeApiKey in _candidateApiKeys) foreach (var candidateUrl in _candidateSttUrls)
         {
             var isDedicatedTranscribeModel = candidateUrl.Contains("gemini-3.5-transcribe", StringComparison.OrdinalIgnoreCase);
             var payloadJson = isDedicatedTranscribeModel ? serializedTranscribePayload : serializedMultimodalPayload;
@@ -247,9 +252,9 @@ public class GeminiSpeechToTextService
             {
                 Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
             };
-            request.Headers.TryAddWithoutValidation("x-goog-api-key", _apiKey);
+            request.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
 
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeoutCts.CancelAfter(TimeSpan.FromSeconds(15)); HttpResponseMessage response; try { response = await _httpClient.SendAsync(request, timeoutCts.Token); } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { lastHttpException = new HttpRequestException($"Gemini Multimodal STT timed out after 15s ({candidateUrl}).", null, System.Net.HttpStatusCode.RequestTimeout); continue; }
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -263,7 +268,7 @@ public class GeminiSpeechToTextService
                     $"Gemini Multimodal STT failed: {response.StatusCode} - {responseBody}",
                     null,
                     response.StatusCode);
-                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase))) break; continue;
+                if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase))) break; continue;
             }
 
             var rawText = ExtractCandidateText(responseBody);
@@ -333,9 +338,9 @@ public class GeminiSpeechToTextService
             return string.Empty;
         }
 
-        var candidateText = (partsElement[0].TryGetProperty("text", out var textProp)
+        var candidateText = (partsElement[0].TryGetProperty("audioTranscription", out var audioTransProp) && audioTransProp.ValueKind == JsonValueKind.Object && audioTransProp.TryGetProperty("text", out var transTextProp) ? transTextProp.GetString() : (partsElement[0].TryGetProperty("text", out var textProp)
             ? textProp.GetString()
-            : string.Empty)?.Trim() ?? string.Empty;
+            : string.Empty))?.Trim() ?? string.Empty;
 
         if (candidateText.StartsWith('{') && candidateText.EndsWith('}'))
         {
