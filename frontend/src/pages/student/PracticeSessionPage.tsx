@@ -13,7 +13,6 @@ import {
   LoaderCircle,
   LockKeyhole,
   Mic,
-  MicOff,
   RefreshCw,
   Settings,
   Send,
@@ -21,6 +20,7 @@ import {
   Sparkles,
   Square,
   Volume2,
+  VolumeX,
   Wifi,
   WifiOff,
   X,
@@ -41,6 +41,7 @@ import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
 import {
   getTtsVoiceForCourse,
+  isSpeechPlaybackCancellation,
   playNaturalSpeech,
   stopSpeechPlayback,
 } from '@/services/speech.service'
@@ -343,6 +344,7 @@ export const PracticeSessionPage: React.FC = () => {
   const [bufferError, setBufferError] = useState('')
   const [pageError, setPageError] = useState('')
   const [sessionNotice, setSessionNotice] = useState('')
+  const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0)
   const [hideRecognizedAnswerHeader, setHideRecognizedAnswerHeader] = useState(false)
@@ -369,6 +371,7 @@ export const PracticeSessionPage: React.FC = () => {
   const submissionRequestInFlightRef = useRef(false)
   const segmentPromisesRef = useRef<Array<Promise<string>>>([])
   const vocabularyHintRef = useRef<string | undefined>(undefined)
+  const speechRequestRef = useRef(0)
   const handleRecorderSegment = useCallback((segmentBlob: Blob) => {
     const segmentPromise = storageService
       .uploadPracticeAudio(segmentBlob, {
@@ -956,6 +959,7 @@ export const PracticeSessionPage: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      speechRequestRef.current += 1
       stopSpeechPlayback()
     }
   }, [])
@@ -1034,13 +1038,24 @@ export const PracticeSessionPage: React.FC = () => {
 
   const handleReadQuestion = () => {
     if (!activePrompt) return
+    if (isReadingQuestion) {
+      speechRequestRef.current += 1
+      stopSpeechPlayback()
+      setIsReadingQuestion(false)
+      return
+    }
+
+    const requestId = ++speechRequestRef.current
+    setIsReadingQuestion(true)
     void playNaturalSpeech(
       activePrompt,
       getTtsVoiceForCourse(runtime?.config.courseCode, runtime?.config.courseName, activePrompt),
       0.95,
     ).catch((error: unknown) => {
-      if (error instanceof Error && error.name === 'AbortError') return
+      if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
       setPageError('Không thể phát câu hỏi bằng giọng AI. Vui lòng thử lại.')
+    }).finally(() => {
+      if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
     })
   }
 
@@ -1050,7 +1065,9 @@ export const PracticeSessionPage: React.FC = () => {
     setBufferError('')
 
     if (!isRecording) {
+      speechRequestRef.current += 1
       stopSpeechPlayback()
+      setIsReadingQuestion(false)
       setTranscript('')
       setVoiceBaselineTranscript('')
       setBufferDeadlineTimestamp(null)
@@ -1135,6 +1152,48 @@ export const PracticeSessionPage: React.FC = () => {
       setIsTranscribing(false)
     }
   }
+
+  useEffect(() => {
+    if (answerInputMode !== 'voice') return
+
+    const handleSpaceShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || (event.code !== 'Space' && event.key !== ' ')) return
+
+      const target = event.target as HTMLElement | null
+      if (
+        target?.isContentEditable ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLButtonElement ||
+        target instanceof HTMLAnchorElement
+      ) {
+        return
+      }
+
+      const answerIsLocked = Boolean(
+        runtime?.pendingSubmission || runtime?.pendingAnswerId || runtime?.fullSessionSubmitted,
+      )
+      const gradingIsVisible = showGradingComplete || answerIsLocked
+      if (isTranscribing || isSubmitting || answerIsLocked || showBuffer || gradingIsVisible) return
+
+      event.preventDefault()
+      void handleRecording()
+    }
+
+    window.addEventListener('keydown', handleSpaceShortcut)
+    return () => window.removeEventListener('keydown', handleSpaceShortcut)
+  }, [
+    answerInputMode,
+    handleRecording,
+    isSubmitting,
+    isTranscribing,
+    runtime?.fullSessionSubmitted,
+    runtime?.pendingAnswerId,
+    runtime?.pendingSubmission,
+    showBuffer,
+    showGradingComplete,
+  ])
 
   const openStopConfirmation = () => {
     setShowStopConfirmation(true)
@@ -1636,7 +1695,7 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }, [cancelRecording, isCompleting, navigate, runtime, user])
 
-  const moveAfterScorecard = async () => {
+  const moveAfterScorecard = async (skipFollowUp = false) => {
     if (!runtime || !latestResult || mode !== 'PER_QUESTION' || isTransitioningRef.current) {
       return
     }
@@ -1645,7 +1704,7 @@ export const PracticeSessionPage: React.FC = () => {
     setPageError('')
 
     const trimmedFollowUpPrompt = latestResult.followUpPrompt?.trim() ?? ''
-    if (latestResult.needsFollowUp && trimmedFollowUpPrompt) {
+    if (!skipFollowUp && latestResult.needsFollowUp && trimmedFollowUpPrompt) {
       const parentAnswerId = latestResult.answerId
       updateRuntime((current) => ({
         ...current,
@@ -1968,6 +2027,7 @@ export const PracticeSessionPage: React.FC = () => {
     mode === 'FULL_SESSION' && runtime.currentQuestionIndex >= runtime.questions.length - 1
   const isInputModeLocked =
     isRecording || isTranscribing || isSubmitting || isAnswerLocked || showBuffer || showGradingCard
+
   const canSubmitCurrentAnswer =
     currentAnswerDraft.trim().length >= 10 &&
     !isSubmitting &&
@@ -1980,19 +2040,6 @@ export const PracticeSessionPage: React.FC = () => {
     ? Math.round((completedMainQuestions / totalMainQuestions) * 100)
     : 0
   const modeLabel = mode === 'PER_QUESTION' ? 'Luyện từng câu' : 'Luyện trọn gói · Tăng dần độ khó'
-  const answerState = isVerifyingSubmission
-    ? 'Đang xác minh lần nộp câu trả lời'
-    : isRecording
-      ? 'Đang ghi câu trả lời'
-      : isTranscribing
-        ? 'Đang chuyển giọng nói thành văn bản'
-        : isWaitingForGrade
-          ? 'Câu trả lời đã được lưu · Đang chấm điểm'
-          : currentAnswerDraft.trim().length >= 10
-            ? 'Bản trả lời đã sẵn sàng để rà soát'
-            : answerInputMode === 'voice'
-              ? 'Sẵn sàng ghi câu trả lời'
-              : 'Sẵn sàng nhập câu trả lời'
   const reviewHint = isVerifyingSubmission
     ? 'Chưa xác định được máy chủ đã nhận câu trả lời hay chưa. Không nộp lại để tránh trùng dữ liệu.'
     : isWaitingForGrade
@@ -2156,7 +2203,7 @@ export const PracticeSessionPage: React.FC = () => {
         </div>
       )}
 
-      {sessionNotice && !showGradingCard && (
+      {sessionNotice && !showGradingCard && !runtime.activeFollowUp && (
         <div
           className="flex items-start gap-2.5 rounded-2xl border border-[#bde0fe] bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
           role="status"
@@ -2266,17 +2313,22 @@ export const PracticeSessionPage: React.FC = () => {
                     type="button"
                     onClick={handleReadQuestion}
                     disabled={isRecording}
-                    className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-pressed={isReadingQuestion}
+                    className={cn(
+                      'inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                      isReadingQuestion
+                        ? 'border-[#ff8fa0] bg-[#fff1f3] text-[#c43b52] hover:bg-[#ffe4e9] focus-visible:outline-[#c43b52]'
+                        : 'border-[#4988C4] bg-white text-[#1C4D8D] hover:bg-[#F4FBFD] focus-visible:outline-[#1C4D8D]',
+                    )}
                   >
-                    <Volume2 className="size-4" /> Nghe đọc câu hỏi
+                    {isReadingQuestion ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                    {isReadingQuestion ? 'Tắt đọc' : 'Đọc câu hỏi'}
                   </button>
                 </div>
 
                 <div
                   className={cn(
-                    hasQuestionImage
-                      ? 'mt-2 max-h-[clamp(110px,19vh,190px)] overflow-y-auto pr-1.5'
-                      : 'mt-2.5 max-h-[clamp(120px,22vh,210px)] overflow-y-auto pr-1.5',
+                    hasQuestionImage ? 'mt-2 pr-1.5' : 'mt-2.5 pr-1.5',
                   )}
                 >
                   <h2
@@ -2436,107 +2488,46 @@ export const PracticeSessionPage: React.FC = () => {
               {answerInputMode === 'voice' && (
                   <div
                     className={cn(
-                      'relative overflow-hidden border-0 bg-transparent p-0 text-center',
-                      hasQuestionImage &&
-                        'flex flex-col items-center justify-center gap-0 text-center',
+                      'relative flex flex-col items-center gap-2 overflow-hidden border-0 bg-transparent p-0 text-center',
+                      hasQuestionImage && 'justify-center',
                     )}
                   >
-                  <div className="hidden" />
-                  <div
-                    className={`hidden mx-auto size-16 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(31,61,105,0.12)] transition ${
-                      isRecording
-                        ? 'bg-[#e94f68] text-white shadow-[0_12px_34px_rgba(233,79,104,0.28)]'
-                        : 'bg-white text-[#1C4D8D]'
-                    }`}
-                  >
-                    {isTranscribing || isAnswerLocked ? (
-                      <LoaderCircle className="size-7 animate-spin motion-reduce:animate-none" />
-                    ) : isRecording ? (
-                      <MicOff className="size-7" />
-                    ) : (
-                      <Mic className="size-7" />
-                    )}
-                  </div>
-
-                  <p
-                    className={cn(
-                      'mt-1 text-sm font-bold text-[#21324a]',
-                      hasQuestionImage &&
-                        'mt-0 text-center',
-                    )}
-                    aria-live="polite"
-                  >
-                    {answerState}
-                  </p>
-                  <p
-                    className={cn(
-                      'mx-auto mt-0.5 max-w-md text-xs leading-relaxed text-[#728197]',
-                      hasQuestionImage &&
-                        'mt-0 max-w-none text-center',
-                    )}
-                  >
-                    {isVerifyingSubmission
-                      ? 'Không nộp lại hoặc kết thúc phiên cho tới khi trạng thái được xác minh.'
-                      : isRecording
-                        ? 'Hãy giữ khoảng cách ổn định với micro và nói rõ từng ý.'
-                        : isTranscribing
-                          ? 'Hệ thống đang nhận diện nội dung. Vui lòng không tải lại trang.'
-                          : isWaitingForGrade
-                            ? 'Câu trả lời đã được khóa để tránh gửi trùng trong lúc chấm.'
-                            : 'Kiểm tra môi trường yên tĩnh trước khi bắt đầu.'}
-                  </p>
-
-                  <div
-                    className="hidden mt-4 h-7 items-center justify-center gap-1"
-                    aria-hidden="true"
-                  >
-                    {[12, 20, 28, 17, 25, 14, 30, 21, 12].map((height, index) => (
-                      <span
-                        key={`${height}-${index}`}
-                        className={`w-1 rounded-full transition-all ${
-                          isRecording
-                            ? 'animate-pulse bg-[#e94f68] motion-reduce:animate-none'
-                            : 'bg-[#b9c9df]'
-                        }`}
-                        style={{
-                          height: `${isRecording ? height : Math.max(5, Math.round(height / 3))}px`,
-                          animationDelay: `${index * 90}ms`,
-                        }}
-                      />
-                    ))}
-                  </div>
-
                   <button
                     type="button"
+                    aria-pressed={isRecording}
+                    aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu ghi âm'}
                     onClick={() => void handleRecording()}
                     disabled={isTranscribing || isSubmitting || isAnswerLocked}
-                    className={`mx-auto flex ${hasQuestionImage ? 'mt-2 size-[clamp(5.5rem,14vh,7rem)]' : 'mt-1 size-[clamp(6rem,16vh,8rem)]'} flex-col items-center justify-center gap-1 rounded-full border-2 px-3 text-center text-sm font-bold shadow-[0_14px_34px_rgba(31,61,105,0.16)] transition ${
+                    className={cn(
+                      'mx-auto flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:cursor-not-allowed disabled:opacity-60',
                       isRecording
-                        ? 'border-[#ff5b77] bg-[#ff5b77] text-white shadow-[#ff5b77]/25 hover:bg-[#f04463]'
-                        : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] shadow-[#4988C4]/20 hover:-translate-y-0.5 hover:bg-[#BDE8F5] hover:shadow-xl'
-                    } focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-55 motion-reduce:transform-none`}
+                        ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
+                        : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                    )}
                   >
                     {isTranscribing ? (
-                      <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                    ) : isRecording ? (
-                      <>
-                        <Mic className="size-7" />
-                        <span className="text-xs font-bold tabular-nums">
-                          {formatRecordingDuration(recordingElapsedSeconds)}
-                        </span>
-                      </>
+                      <LoaderCircle className="size-7 animate-spin motion-reduce:animate-none" />
                     ) : (
-                      <Mic className="size-4" />
+                      <Mic className={cn('size-7', isRecording && 'animate-pulse motion-reduce:animate-none')} />
                     )}
-                    {!isRecording && (isTranscribing
-                      ? 'Đang nhận diện nội dung…'
-                      : transcript.trim()
-                        ? 'Ghi lại câu trả lời'
-                        : 'Bắt đầu trả lời')}
+                    <span className="text-xs font-bold">
+                      {isRecording ? formatRecordingDuration(recordingElapsedSeconds) : 'Ghi âm'}
+                    </span>
                   </button>
-                  {isRecording && (
-                    <p className="mt-3 text-sm font-bold text-[#21324a]">Nhấn để dừng ghi âm</p>
-                  )}
+                  <p className="text-center text-sm font-bold text-[#0F2854]" aria-live="polite">
+                    {isRecording
+                      ? 'Nhấn để dừng ghi âm'
+                      : isTranscribing
+                        ? 'Đang nhận diện nội dung…'
+                        : 'Nhấn để bắt đầu ghi âm'}
+                  </p>
+                  <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
+                    Nhấn nút hoặc phím{' '}
+                    <kbd className="rounded bg-[#F4FBFD] px-1.5 py-0.5 font-bold text-[#0F2854]">
+                      Space
+                    </kbd>{' '}
+                    để bật/tắt. Dừng để xem transcript.
+                  </p>
                 </div>
               )}
 
@@ -2611,6 +2602,18 @@ export const PracticeSessionPage: React.FC = () => {
                     persistAnswerDraft(event.target.value, 'text')
                     setPageError('')
                     setBufferError('')
+                  }}
+                  onPaste={(event) => {
+                    if (answerInputMode === 'text') event.preventDefault()
+                  }}
+                  onCopy={(event) => {
+                    if (answerInputMode === 'text') event.preventDefault()
+                  }}
+                  onCut={(event) => {
+                    if (answerInputMode === 'text') event.preventDefault()
+                  }}
+                  onDrop={(event) => {
+                    if (answerInputMode === 'text') event.preventDefault()
                   }}
                   readOnly={answerInputMode === 'voice'}
                   disabled={answerInputMode === 'text' && isInputModeLocked}
@@ -2975,6 +2978,11 @@ export const PracticeSessionPage: React.FC = () => {
             }
           }}
           onNextQuestion={mode === 'PER_QUESTION' ? () => void moveAfterScorecard() : undefined}
+          onSkipFollowUp={
+            mode === 'PER_QUESTION' && latestResult?.needsFollowUp && latestResult?.followUpPrompt?.trim()
+              ? () => void moveAfterScorecard(true)
+              : undefined
+          }
           nextActionLabel={
             latestResult?.needsFollowUp && latestResult?.followUpPrompt?.trim()
               ? 'Trả lời câu hỏi đào sâu'

@@ -3,12 +3,13 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Button } from '@/components/common/Button'
 import { Badge } from '@/components/common/Badge'
 import type { ScorecardPayload } from '@/types/practice.types'
-import { Award, HelpCircle, Check, ArrowRight, X } from 'lucide-react'
+import { Award, HelpCircle, Check, ArrowRight, SkipForward, X } from 'lucide-react'
 
 interface ScorecardModalProps {
   scorecard: ScorecardPayload
   onClose: () => void
   onNextQuestion?: () => void
+  onSkipFollowUp?: () => void
   nextActionLabel?: string
   title?: string
   errorMessage?: string
@@ -19,6 +20,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
   scorecard,
   onClose,
   onNextQuestion,
+  onSkipFollowUp,
   nextActionLabel,
   title = 'Bảng điểm đánh giá',
   errorMessage,
@@ -245,6 +247,18 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
         </CardContent>
 
         <CardFooter className="mt-0 shrink-0 flex-col-reverse justify-end gap-2 border-t border-[#e8edf4] bg-white p-4 sm:flex-row sm:px-5">
+          {onSkipFollowUp && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={onSkipFollowUp}
+              isLoading={isActionPending}
+              className="min-h-11 w-full rounded-xl border-[#4988C4]/55 bg-white px-5 text-sm font-bold text-[#1C4D8D] hover:bg-[#edf5ff] focus:ring-[#1C4D8D] sm:w-auto"
+            >
+              <SkipForward className="size-4" aria-hidden="true" />
+              Bỏ qua câu hỏi đào sâu
+            </Button>
+          )}
           {onNextQuestion ? (
             <Button
               variant="primary"

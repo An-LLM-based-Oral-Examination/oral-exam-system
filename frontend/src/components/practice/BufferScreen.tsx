@@ -287,6 +287,10 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                 setValidationMessage('')
                 hasSubmittedRef.current = false
               }}
+              onPaste={(event) => event.preventDefault()}
+              onCopy={(event) => event.preventDefault()}
+              onCut={(event) => event.preventDefault()}
+              onDrop={(event) => event.preventDefault()}
               placeholder="Nội dung câu trả lời…"
               disabled={isSubmitting}
             />
