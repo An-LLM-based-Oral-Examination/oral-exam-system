@@ -296,6 +296,7 @@ export function normalizePracticeAnswerDetail(payload: unknown): PracticeAnswerD
     answerText: requireString(candidate, 'answerText', 'Kết quả chấm thiếu nội dung trả lời.'),
     isFollowUp: requireBoolean(candidate, 'isFollowUp', 'Cờ câu hỏi phụ không hợp lệ.'),
     parentAnswerId: nullableGuid(candidate, 'parentAnswerId', 'Mã câu trả lời cha không hợp lệ.'),
+    promptText: nullableString(candidate, 'promptText', 'Nội dung câu hỏi phụ không hợp lệ.'),
     status: status as PracticeAnswerStatus,
     submittedAt: requireDateString(candidate, 'submittedAt', 'Thời gian nộp bài không hợp lệ.'),
     totalScore: nullableNumber(candidate, 'totalScore', 'Tổng điểm không hợp lệ.'),

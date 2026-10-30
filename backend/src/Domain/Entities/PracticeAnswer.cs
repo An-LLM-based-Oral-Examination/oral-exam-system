@@ -12,6 +12,12 @@ public partial class PracticeAnswer
     public string AnswerText { get; set; } = null!;
     public bool IsFollowUp { get; set; } = false;
     public Guid? ParentAnswerId { get; set; }
+
+    /// <summary>
+    /// Nội dung câu hỏi phụ (Follow-up) hiển thị cho sinh viên (null với câu hỏi chính).
+    /// </summary>
+    public string? PromptText { get; set; }
+
     public string Status { get; set; } = "pending";
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 

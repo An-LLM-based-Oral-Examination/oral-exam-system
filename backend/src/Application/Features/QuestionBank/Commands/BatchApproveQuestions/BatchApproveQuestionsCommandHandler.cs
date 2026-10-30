@@ -123,12 +123,14 @@ public sealed class BatchApproveQuestionsCommandHandler
             var normalizedSource = string.IsNullOrWhiteSpace(item.Source) ? "flm_api" : item.Source.Trim();
             var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? null : item.ImageUrl.Trim();
             var imageDescription = string.IsNullOrWhiteSpace(item.ImageDescription) ? null : item.ImageDescription.Trim();
-            Guid primaryQuestionId;
+            var sharedQuestionId = Guid.NewGuid();
+            Guid primaryQuestionId = sharedQuestionId;
 
             if (normalizedScope == "practice")
             {
                 var pq = new PracticeQuestion
                 {
+                    Id = sharedQuestionId,
                     CourseId = request.CourseId,
                     RubricId = rubric.Id,
                     Rubric = rubric,
@@ -146,12 +148,12 @@ public sealed class BatchApproveQuestionsCommandHandler
                     CreatedAt = now
                 };
                 _context.PracticeQuestions.Add(pq);
-                primaryQuestionId = pq.Id;
             }
             else
             {
                 var eq = new ExamQuestion
                 {
+                    Id = sharedQuestionId,
                     CourseId = request.CourseId,
                     RubricId = rubric.Id,
                     Rubric = rubric,
@@ -171,12 +173,12 @@ public sealed class BatchApproveQuestionsCommandHandler
                     CreatedAt = now
                 };
                 _context.ExamQuestions.Add(eq);
-                primaryQuestionId = eq.Id;
 
                 if (normalizedScope is "shared" or "both" or "all")
                 {
                     var pq = new PracticeQuestion
                     {
+                        Id = sharedQuestionId,
                         CourseId = request.CourseId,
                         RubricId = rubric.Id,
                         Rubric = rubric,

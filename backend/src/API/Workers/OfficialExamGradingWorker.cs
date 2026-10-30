@@ -84,6 +84,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             .Include(item => item.ExamQuestion)
                 .ThenInclude(question => question.Rubric)
                     .ThenInclude(rubric => rubric.Criteria)
+            .AsSingleQuery()
             .FirstOrDefaultAsync(item => item.Id == task.SubmissionId, cancellationToken)
             ?? throw new InvalidOperationException("The official exam submission no longer exists.");
 
@@ -233,6 +234,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         job.UpdatedAt = now;
 
         var submission = await context.ExamQuestionSubmissions
+            .AsSingleQuery()
             .FirstOrDefaultAsync(item => item.Id == task.SubmissionId, cancellationToken);
         if (submission is not null)
         {

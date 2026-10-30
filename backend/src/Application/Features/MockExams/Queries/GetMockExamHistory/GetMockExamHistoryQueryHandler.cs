@@ -96,6 +96,7 @@ public sealed class GetMockExamHistoryQueryHandler(
 
         var sessions = await query
             .OrderByDescending(s => s.StartedAt)
+            .ThenByDescending(s => s.Id)
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
             .Include(s => s.Course)

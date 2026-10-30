@@ -30,6 +30,7 @@ public sealed class PracticeAnswerDetailDto
     public string AnswerText { get; set; } = null!;
     public bool IsFollowUp { get; set; }
     public Guid? ParentAnswerId { get; set; }
+    public string? PromptText { get; set; }
     public string Status { get; set; } = "pending"; // "pending" | "graded" | "failed"
     public DateTime SubmittedAt { get; set; }
     public decimal? TotalScore { get; set; }

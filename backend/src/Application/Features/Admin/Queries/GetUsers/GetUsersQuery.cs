@@ -48,7 +48,7 @@ public sealed class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
             var normalizedRole = request.Role.Trim().ToLowerInvariant();
-            query = query.Where(u => u.Role.ToLower() == normalizedRole);
+            query = query.Where(u => u.Role == normalizedRole);
         }
 
         if (request.IsActive.HasValue)

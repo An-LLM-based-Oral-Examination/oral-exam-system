@@ -322,6 +322,10 @@ export const PracticeSessionPage: React.FC = () => {
   const [runtime, setRuntime] = useState<StoredPracticeRuntime | null>(() =>
     sessionId ? loadPracticeRuntime(sessionId) : null,
   )
+  const [isHydratingRuntime, setIsHydratingRuntime] = useState<boolean>(() =>
+    Boolean(sessionId && !loadPracticeRuntime(sessionId)),
+  )
+  const hydratedSessionIdRef = useRef<string | null>(null)
   const [answerInputMode, setAnswerInputMode] = useState<AnswerInputMode>(
     () => runtime?.draftAnswerMode ?? 'voice',
   )
@@ -530,6 +534,250 @@ export const PracticeSessionPage: React.FC = () => {
   )
 
   useEffect(() => {
+    if (!sessionId || !user) return
+    if (runtime && runtime.sessionId === sessionId && runtime.studentId === user.id) {
+      return
+    }
+    if (hydratedSessionIdRef.current === sessionId) {
+      return
+    }
+
+    let cancelled = false
+
+    const hydrateRuntimeFromServer = async () => {
+      await Promise.resolve()
+      if (cancelled) return
+
+      const stored = loadPracticeRuntime(sessionId)
+      if (stored && stored.studentId === user.id) {
+        hydratedSessionIdRef.current = sessionId
+        setRuntime(stored)
+        setIsHydratingRuntime(false)
+        return
+      }
+
+      setIsHydratingRuntime(true)
+      setPageError('')
+
+      try {
+        const serverSession = await practiceService.getSession(sessionId)
+        if (cancelled) return
+
+        if (serverSession.studentId && serverSession.studentId !== user.id) {
+          setPageError('Phiên luyện tập này thuộc về một tài khoản sinh viên khác.')
+          setIsHydratingRuntime(false)
+          return
+        }
+
+        if (serverSession.status !== 'in_progress') {
+          setPageError(
+            'Phiên luyện tập này đã kết thúc hoặc tự động đóng do quá thời gian không tương tác. Vui lòng xem kết quả tại Lịch sử luyện tập.',
+          )
+          setIsHydratingRuntime(false)
+          return
+        }
+
+        setSyncedResults(serverSession.answers)
+
+        const hydratedMode =
+          serverSession.practiceMode === 'full_session' ? 'FULL_SESSION' : 'PER_QUESTION'
+        const sortedAnswers = [...serverSession.answers].sort(
+          (left, right) => Date.parse(left.submittedAt) - Date.parse(right.submittedAt),
+        )
+        const mainAnswers = sortedAnswers.filter((answer) => !answer.isFollowUp)
+        const answeredMainQuestionIds = new Set(mainAnswers.map((answer) => answer.questionId))
+
+        const submittedAnswerIdsByQuestion: Record<string, string> = {}
+        for (const answer of mainAnswers) {
+          submittedAnswerIdsByQuestion[answer.questionId] = answer.answerId
+        }
+
+        const drafts = mainAnswers.map((answer) => ({
+          questionId: answer.questionId,
+          answerText: answer.answerText,
+          isFollowUp: false,
+          parentAnswerId: null,
+        }))
+
+        const questions: PracticeQuestion[] = [...serverSession.questions]
+        const questionDifficulties: Record<string, PracticeDifficulty> = {}
+        let currentQuestionIndex = 0
+        let mainQuestionsCompleted = answeredMainQuestionIds.size
+        let activeFollowUp: StoredPracticeRuntime['activeFollowUp'] = null
+        let pendingAnswerId: string | null = null
+        let resolvedAnswer: PracticeAnswerDetail | null = null
+        let fullSessionSubmitted = false
+
+        if (hydratedMode === 'FULL_SESSION') {
+          const firstUnansweredIndex = questions.findIndex(
+            (q) => !answeredMainQuestionIds.has(q.questionId),
+          )
+          const hasPendingGrading = sortedAnswers.some(
+            (a) => a.status === 'pending' || a.status === 'grading',
+          )
+          if (questions.length > 0 && (firstUnansweredIndex < 0 || hasPendingGrading)) {
+            currentQuestionIndex = Math.max(0, questions.length - 1)
+            mainQuestionsCompleted = questions.length
+            fullSessionSubmitted = true
+          } else {
+            currentQuestionIndex = firstUnansweredIndex >= 0 ? firstUnansweredIndex : 0
+            mainQuestionsCompleted = answeredMainQuestionIds.size
+          }
+        } else {
+          const latestPendingAnswer =
+            [...sortedAnswers]
+              .reverse()
+              .find((a) => a.status === 'pending' || a.status === 'grading') ?? null
+          const firstUnansweredIndex = questions.findIndex(
+            (q) => !answeredMainQuestionIds.has(q.questionId),
+          )
+          const lastAnswer = sortedAnswers[sortedAnswers.length - 1] ?? null
+          const lastAnswerHasFollowUpChild = lastAnswer
+            ? sortedAnswers.some((a) => a.parentAnswerId === lastAnswer.answerId)
+            : false
+
+          if (latestPendingAnswer) {
+            const pendingIdx = questions.findIndex(
+              (q) => q.questionId === latestPendingAnswer.questionId,
+            )
+            currentQuestionIndex =
+              pendingIdx >= 0 ? pendingIdx : Math.max(0, questions.length - 1)
+            pendingAnswerId = latestPendingAnswer.answerId
+            mainQuestionsCompleted = Math.max(0, answeredMainQuestionIds.size - 1)
+            if (latestPendingAnswer.isFollowUp && latestPendingAnswer.parentAnswerId) {
+              const parentAnswer = sortedAnswers.find(
+                (a) => a.answerId === latestPendingAnswer.parentAnswerId,
+              )
+              if (parentAnswer?.followUpPrompt?.trim()) {
+                activeFollowUp = {
+                  questionId: latestPendingAnswer.questionId,
+                  prompt: parentAnswer.followUpPrompt.trim(),
+                  parentAnswerId: latestPendingAnswer.parentAnswerId,
+                }
+              }
+            }
+          } else if (firstUnansweredIndex >= 0) {
+            currentQuestionIndex = firstUnansweredIndex
+            mainQuestionsCompleted = answeredMainQuestionIds.size
+          } else if (
+            lastAnswer &&
+            lastAnswer.status === 'graded' &&
+            lastAnswer.needsFollowUp &&
+            lastAnswer.followUpPrompt?.trim() &&
+            !lastAnswerHasFollowUpChild
+          ) {
+            const followUpIdx = questions.findIndex(
+              (q) => q.questionId === lastAnswer.questionId,
+            )
+            currentQuestionIndex =
+              followUpIdx >= 0 ? followUpIdx : Math.max(0, questions.length - 1)
+            mainQuestionsCompleted = Math.max(0, answeredMainQuestionIds.size - 1)
+            activeFollowUp = {
+              questionId: lastAnswer.questionId,
+              prompt: lastAnswer.followUpPrompt.trim(),
+              parentAnswerId: lastAnswer.answerId,
+            }
+          } else {
+            try {
+              const nextResponse = await practiceService.getNextQuestion(sessionId, user.id)
+              if (cancelled) return
+              if (nextResponse.hasMoreQuestions && nextResponse.question) {
+                const nextQuestion: PracticeQuestion = {
+                  questionId: nextResponse.question.id,
+                  content: nextResponse.question.content,
+                  imageUrl: nextResponse.question.imageUrl,
+                  imageAlt: nextResponse.question.imageAlt,
+                  rubricCriteria: nextResponse.question.rubricCriteria,
+                }
+                if (!questions.some((q) => q.questionId === nextQuestion.questionId)) {
+                  questions.push(nextQuestion)
+                }
+                questionDifficulties[nextQuestion.questionId] = nextResponse.question.difficulty
+                currentQuestionIndex = questions.findIndex(
+                  (q) => q.questionId === nextQuestion.questionId,
+                )
+                mainQuestionsCompleted = answeredMainQuestionIds.size
+              } else if (questions.length > 0) {
+                currentQuestionIndex = questions.length - 1
+                mainQuestionsCompleted = answeredMainQuestionIds.size
+                resolvedAnswer = lastAnswer?.status === 'graded' ? lastAnswer : null
+              }
+            } catch {
+              if (questions.length > 0) {
+                currentQuestionIndex = questions.length - 1
+                mainQuestionsCompleted = answeredMainQuestionIds.size
+                resolvedAnswer = lastAnswer?.status === 'graded' ? lastAnswer : null
+              }
+            }
+          }
+        }
+
+        if (questions.length === 0) {
+          setPageError('Không tìm thấy câu hỏi nào trong phiên luyện tập này.')
+          setIsHydratingRuntime(false)
+          return
+        }
+
+        const hydratedRuntime: StoredPracticeRuntime = {
+          version: 1,
+          sessionId: serverSession.sessionId,
+          studentId: serverSession.studentId || user.id,
+          transcriptBufferSeconds:
+            serverSession.transcriptBufferSeconds > 0
+              ? serverSession.transcriptBufferSeconds
+              : 60,
+          config: {
+            courseId: serverSession.courseId,
+            courseCode: serverSession.courseCode,
+            courseName: serverSession.courseName,
+            mode: hydratedMode,
+            selectedDifficulties: [],
+            questionCount: hydratedMode === 'FULL_SESSION' ? questions.length : null,
+            microphoneName: 'Micro mặc định',
+          },
+          questions,
+          drafts,
+          currentQuestionIndex: Math.min(
+            Math.max(currentQuestionIndex, 0),
+            questions.length - 1,
+          ),
+          mainQuestionsCompleted,
+          questionDifficulties,
+          activeFollowUp,
+          pendingSubmission: null,
+          pendingAnswerId,
+          resolvedAnswer,
+          submittedAnswerIdsByQuestion,
+          fullSessionSubmitted,
+          draftAnswerText: '',
+          voiceBaselineTranscript: '',
+          draftAnswerMode: 'voice',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+        }
+
+        savePracticeRuntime(hydratedRuntime)
+        setRuntime(hydratedRuntime)
+        setSessionNotice('Đã khôi phục phiên luyện tập đang làm dở từ máy chủ.')
+      } catch (hydrateError) {
+        if (cancelled) return
+        const problem = getErrorInfo(hydrateError)
+        setPageError(problem.message)
+      } finally {
+        if (!cancelled) {
+          hydratedSessionIdRef.current = sessionId
+          setIsHydratingRuntime(false)
+        }
+      }
+    }
+
+    void hydrateRuntimeFromServer()
+    return () => {
+      cancelled = true
+    }
+  }, [runtime, sessionId, user])
+
+  useEffect(() => {
     if (!runtime?.pendingAnswerId && !runtime?.fullSessionSubmitted) return
     let cancelled = false
     let pollTimer: number | undefined
@@ -569,7 +817,7 @@ export const PracticeSessionPage: React.FC = () => {
 
   useEffect(() => {
     if (mode !== 'PER_QUESTION' || !currentQuestion || showGradingComplete) return
-    if (runtime?.pendingAnswerId) return
+    if (runtime?.pendingAnswerId || (runtime?.activeFollowUp && !runtime?.resolvedAnswer)) return
 
     const result = currentGradedResult
     const timer = window.setTimeout(() => {
@@ -584,7 +832,15 @@ export const PracticeSessionPage: React.FC = () => {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [currentGradedResult, currentQuestion, mode, runtime?.pendingAnswerId, runtime?.resolvedAnswer, showGradingComplete])
+  }, [
+    currentGradedResult,
+    currentQuestion,
+    mode,
+    runtime?.activeFollowUp,
+    runtime?.pendingAnswerId,
+    runtime?.resolvedAnswer,
+    showGradingComplete,
+  ])
 
   useEffect(() => {
     if (!runtime || mode !== 'PER_QUESTION' || !runtime.pendingAnswerId) return
@@ -1390,9 +1646,7 @@ export const PracticeSessionPage: React.FC = () => {
 
     const trimmedFollowUpPrompt = latestResult.followUpPrompt?.trim() ?? ''
     if (latestResult.needsFollowUp && trimmedFollowUpPrompt) {
-      const parentAnswerId = latestResult.isFollowUp
-        ? (latestResult.parentAnswerId ?? latestResult.answerId)
-        : latestResult.answerId
+      const parentAnswerId = latestResult.answerId
       updateRuntime((current) => ({
         ...current,
         activeFollowUp: {
@@ -1653,6 +1907,24 @@ export const PracticeSessionPage: React.FC = () => {
       setIsSubmitting(false)
       isTransitioningRef.current = false
     }
+  }
+
+  if (isHydratingRuntime && sessionId && user) {
+    return (
+      <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
+        <div className="bg-[linear-gradient(135deg,#f4fbfd,#BDE8F5)] px-6 py-8">
+          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-[#1C4D8D] shadow-[0_10px_28px_rgba(28,77,141,0.12)]">
+            <LoaderCircle className="size-7 animate-spin motion-reduce:animate-none" />
+          </span>
+          <div className="mt-4">
+            <h1 className="text-xl font-bold text-[#0F2854]">Đang khôi phục phiên luyện tập…</h1>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#5b6b84]">
+              Hệ thống đang đồng bộ danh sách câu hỏi và tiến độ làm bài từ máy chủ.
+            </p>
+          </div>
+        </div>
+      </section>
+    )
   }
 
   if (!runtime || !sessionId || !currentQuestion || !user || runtime.studentId !== user.id) {

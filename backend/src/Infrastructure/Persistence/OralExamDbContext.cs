@@ -1,4 +1,7 @@
 using System;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Domain.Entities;
@@ -45,6 +48,67 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
     public virtual DbSet<SystemConfig> SystemConfigs { get; set; } = null!;
 
+    private static readonly JsonSerializerOptions JsonbSerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private static readonly ValueConverter<string?, string?> JsonbStringConverter = new(
+        v => NormalizeToJsonb(v),
+        v => RestoreFromJsonb(v));
+
+    private static string? NormalizeToJsonb(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if ((trimmed.StartsWith('{') && trimmed.EndsWith('}')) ||
+            (trimmed.StartsWith('[') && trimmed.EndsWith(']')) ||
+            (trimmed.StartsWith('"') && trimmed.EndsWith('"')))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.String)
+                {
+                    return trimmed;
+                }
+            }
+            catch (JsonException)
+            {
+                // Chuỗi bắt đầu bằng ký tự giống JSON (ví dụ "[SUSPENDED] ...") nhưng là plain text -> đóng gói thành JSON string bên dưới
+            }
+        }
+
+        return JsonSerializer.Serialize(value, JsonbSerializerOptions);
+    }
+
+    private static string? RestoreFromJsonb(string? dbValue)
+    {
+        if (string.IsNullOrWhiteSpace(dbValue))
+        {
+            return dbValue;
+        }
+
+        var trimmed = dbValue.Trim();
+        if (trimmed.StartsWith('"') && trimmed.EndsWith('"'))
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<string>(trimmed) ?? dbValue;
+            }
+            catch (JsonException)
+            {
+                return dbValue;
+            }
+        }
+
+        return dbValue;
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -68,7 +132,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(20).HasDefaultValue("student").IsRequired();
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(256);
             entity.Property(e => e.MustChangePassword).HasColumnName("must_change_password").HasDefaultValue(false);
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -204,7 +268,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
             entity.Property(e => e.StartDate).HasColumnName("start_date").IsRequired();
             entity.Property(e => e.EndDate).HasColumnName("end_date").IsRequired();
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasData(new Semester
@@ -247,7 +311,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasMaxLength(30)
                 .HasDefaultValue("VoiceWithTranscriptEdit")
                 .IsRequired();
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasOne(d => d.Semester)
@@ -306,7 +370,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
             entity.Property(e => e.LecturerId).HasColumnName("lecturer_id");
             entity.Property(e => e.MaxStudents).HasColumnName("max_students").HasDefaultValue(35);
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasOne(d => d.Course)
@@ -395,7 +459,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.TotalMaxScore).HasColumnName("total_max_score").HasPrecision(4, 2).HasDefaultValue(10.00m);
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_rubrics_course");
 
@@ -502,7 +566,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FollowUpPrompt).HasColumnName("follow_up_prompt");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
             entity.Property(e => e.ImageDescription).HasColumnName("image_description");
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_practice_questions_course");
             entity.HasIndex(e => e.RubricId).HasDatabaseName("ix_practice_questions_rubric");
@@ -641,7 +705,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
             entity.Property(e => e.ImageDescription).HasColumnName("image_description");
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_exam_questions_course");
             entity.HasIndex(e => e.RubricId).HasDatabaseName("ix_exam_questions_rubric");
@@ -706,6 +770,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("in_progress");
             entity.Property(e => e.LastActivityAt).HasColumnName("last_activity_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.SelectedDifficulties).HasColumnName("selected_difficulties").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
+            entity.Property(e => e.SelectedQuestionIdsJson).HasColumnName("selected_question_ids").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
             entity.HasIndex(e => new { e.StudentId, e.StartedAt }).HasDatabaseName("ix_practice_sessions_student");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_practice_sessions_course");
             entity.HasIndex(e => new { e.Status, e.LastActivityAt }).HasDatabaseName("ix_practice_sessions_last_activity");
@@ -736,12 +801,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AnswerText).HasColumnName("answer_text").IsRequired();
             entity.Property(e => e.IsFollowUp).HasColumnName("is_follow_up").HasDefaultValue(false);
             entity.Property(e => e.ParentAnswerId).HasColumnName("parent_answer_id");
+            entity.Property(e => e.PromptText).HasColumnName("prompt_text");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.SessionId).HasDatabaseName("ix_practice_answers_session");
             entity.HasIndex(e => e.QuestionId).HasDatabaseName("ix_practice_answers_question");
             entity.HasIndex(e => e.StudentId).HasDatabaseName("ix_practice_answers_student");
             entity.HasIndex(e => e.ParentAnswerId).HasDatabaseName("ix_practice_answers_parent");
+            entity.HasIndex(e => new { e.Status, e.SubmittedAt }).HasDatabaseName("ix_practice_answers_status_submitted");
 
             entity.HasOne(d => d.Session)
                 .WithMany(p => p.Answers)
@@ -769,7 +836,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("ai_evaluations", t =>
             {
-                t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'exam')");
+                t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam')");
                 t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
             });
             entity.HasKey(e => e.Id);
@@ -849,7 +916,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.TotalQuestions).HasColumnName("total_questions").HasDefaultValue(5);
             entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes").HasDefaultValue(30);
             entity.Property(e => e.BloomDistribution).HasColumnName("bloom_distribution").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_exam_structures_course");
             entity.HasIndex(e => e.CreatedBy).HasDatabaseName("ix_exam_structures_created_by");
@@ -888,7 +955,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
             entity.Property(e => e.SetCode).HasColumnName("set_code").HasMaxLength(50).IsRequired();
             entity.Property(e => e.GeneratedAt).HasColumnName("generated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.HasIndex(e => e.StructureId).HasDatabaseName("ix_exam_sets_structure");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_exam_sets_course");
 
@@ -993,6 +1060,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => new { e.StudentId, e.StartedAt }).HasDatabaseName("ix_mock_exam_sessions_student");
             entity.HasIndex(e => e.ExamSetId).HasDatabaseName("ix_mock_exam_sessions_set");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_mock_exam_sessions_course");
+            entity.HasIndex(e => new { e.Status, e.ExpiresAt }).HasDatabaseName("ix_mock_exam_sessions_status_expires");
 
             entity.HasOne(d => d.Student)
                 .WithMany(p => p.MockExamSessions)
@@ -1023,6 +1091,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
             entity.Property(e => e.OrderIndex).HasColumnName("order_index").HasDefaultValue(1);
             entity.Property(e => e.AnswerText).HasColumnName("answer_text");
+            entity.Property(e => e.InitialVoiceTranscript).HasColumnName("initial_voice_transcript");
             entity.Property(e => e.TimeTakenSeconds).HasColumnName("time_taken_seconds").HasDefaultValue(0);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("answered");
             entity.Property(e => e.AnsweredAt).HasColumnName("answered_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -1332,11 +1401,13 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.AuditId).HasColumnName("audit_id").IsRequired();
             entity.Property(e => e.CriterionId).HasColumnName("criterion_id").IsRequired();
+            entity.Property(e => e.SubmissionId).HasColumnName("submission_id");
             entity.Property(e => e.AiScore).HasColumnName("ai_score").HasPrecision(4, 2).IsRequired();
             entity.Property(e => e.AuditedScore).HasColumnName("audited_score").HasPrecision(4, 2).IsRequired();
             entity.Property(e => e.LecturerComment).HasColumnName("lecturer_comment");
             entity.HasIndex(e => e.AuditId).HasDatabaseName("ix_lecturer_audit_details_audit");
             entity.HasIndex(e => e.CriterionId).HasDatabaseName("ix_lecturer_audit_details_criterion");
+            entity.HasIndex(e => e.SubmissionId).HasDatabaseName("ix_lecturer_audit_details_submission");
 
             entity.HasOne(d => d.Audit)
                 .WithMany(p => p.Details)
@@ -1347,6 +1418,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.LecturerAuditDetails)
                 .HasForeignKey(d => d.CriterionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Submission)
+                .WithMany()
+                .HasForeignKey(d => d.SubmissionId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // 26. dead_letter_queues
@@ -1383,13 +1459,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Action).HasColumnName("action").HasMaxLength(50).IsRequired();
             entity.Property(e => e.EntityName).HasColumnName("entity_name").HasMaxLength(100).IsRequired();
             entity.Property(e => e.EntityId).HasColumnName("entity_id");
-            entity.Property(e => e.OldValues).HasColumnName("old_values").HasColumnType("jsonb");
-            entity.Property(e => e.NewValues).HasColumnName("new_values").HasColumnType("jsonb");
+            entity.Property(e => e.OldValues).HasColumnName("old_values").HasColumnType("jsonb").HasConversion(JsonbStringConverter);
+            entity.Property(e => e.NewValues).HasColumnName("new_values").HasColumnType("jsonb").HasConversion(JsonbStringConverter);
             entity.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.UserId).HasDatabaseName("ix_audit_logs_user");
             entity.HasIndex(e => new { e.EntityName, e.EntityId }).HasDatabaseName("ix_audit_logs_entity");
             entity.HasIndex(e => e.CreatedAt).HasDatabaseName("ix_audit_logs_created");
+            entity.HasIndex(e => new { e.UserId, e.Action, e.EntityId }).HasDatabaseName("ix_audit_logs_user_action_entity");
 
             entity.HasOne(d => d.User)
                 .WithMany(p => p.AuditLogs)

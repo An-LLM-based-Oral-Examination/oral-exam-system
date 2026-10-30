@@ -65,6 +65,21 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             .AsNoTracking()
             .AnyAsync(q => q.CourseId == session.CourseId && q.IsActive, cancellationToken);
 
+        var requestedQuestionIds = request.Answers
+            .Where(a => a.QuestionId != Guid.Empty)
+            .Select(a => a.QuestionId)
+            .Distinct()
+            .ToList();
+
+        var validQuestionIds = courseHasQuestions && requestedQuestionIds.Count > 0
+            ? (await _context.PracticeQuestions
+                .AsNoTracking()
+                .Where(q => q.CourseId == session.CourseId && q.IsActive && requestedQuestionIds.Contains(q.Id))
+                .Select(q => q.Id)
+                .ToListAsync(cancellationToken))
+                .ToHashSet()
+            : new HashSet<Guid>();
+
         foreach (var answerDto in request.Answers)
         {
             if (answerDto.QuestionId == Guid.Empty)
@@ -77,15 +92,9 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
                 return Result<Unit>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
             }
 
-            if (courseHasQuestions)
+            if (courseHasQuestions && !validQuestionIds.Contains(answerDto.QuestionId))
             {
-                var isValidCourseQuestion = await _context.PracticeQuestions
-                    .AsNoTracking()
-                    .AnyAsync(q => q.Id == answerDto.QuestionId && q.CourseId == session.CourseId && q.IsActive, cancellationToken);
-                if (!isValidCourseQuestion)
-                {
-                    return Result<Unit>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
-                }
+                return Result<Unit>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
             }
         }
 

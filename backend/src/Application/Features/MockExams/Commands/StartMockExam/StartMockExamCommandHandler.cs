@@ -121,8 +121,8 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // 5. Lấy danh sách câu hỏi từ kho practice_questions (CÔ LẬP TUYỆT ĐỐI VỚI exam_questions)
         var allAvailableQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Include(q => q.Rubric)
-                .ThenInclude(r => r.Criteria)
+            // Pha 1: Tải danh sách câu hỏi ứng viên (chưa nạp sâu Rubric.Criteria của toàn bộ kho)
+            // Pha 2 bên dưới sẽ nạp Rubric.Criteria cho đúng các câu được chọn
             .Where(q => q.CourseId == request.CourseId && q.IsActive)
             .ToListAsync(cancellationToken);
 
@@ -180,7 +180,17 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         }
 
         // Xáo ngẫu nhiên thứ tự các câu hỏi đã chọn trong đề thi
-        selectedQuestions = selectedQuestions.OrderBy(_ => Guid.NewGuid()).ToList();
+        var selectedIds = selectedQuestions.Select(q => q.Id).OrderBy(_ => Guid.NewGuid()).ToList();
+        var selectedEntitiesMap = await _context.PracticeQuestions
+            .AsNoTracking()
+            .Include(q => q.Rubric)
+                .ThenInclude(r => r.Criteria)
+            .Where(q => selectedIds.Contains(q.Id))
+            .ToDictionaryAsync(q => q.Id, cancellationToken);
+        selectedQuestions = selectedIds
+            .Where(selectedEntitiesMap.ContainsKey)
+            .Select(id => selectedEntitiesMap[id])
+            .ToList();
 
         // 7. Cập nhật lượt thi trong ngày (Daily Quota)
         if (quota == null)
@@ -241,7 +251,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             var q = selectedQuestions[i];
             session.Answers.Add(new MockExamAnswer
             {
-                Id = MockExamAnswerOrdering.CreateOrderedAnswerId(i + 1),
+                Id = Guid.NewGuid(),
                 SessionId = session.Id,
                 QuestionId = q.Id,
                 OrderIndex = i + 1,

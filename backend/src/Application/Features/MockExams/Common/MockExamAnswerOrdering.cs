@@ -48,10 +48,24 @@ public static class MockExamAnswerOrdering
 
     public static List<MockExamAnswer> OrderAnswers(IEnumerable<MockExamAnswer> answers)
     {
-        return (answers ?? Enumerable.Empty<MockExamAnswer>())
-            .OrderBy(a => TryGetEmbeddedOrderIndex(a.Id, out var idx)
-                ? idx
-                : (a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue))
+        var list = (answers ?? Enumerable.Empty<MockExamAnswer>()).ToList();
+        var mainAnswers = list.Where(a => !a.IsFollowUp).ToList();
+        var hasDistinctExplicitOrderIndex = mainAnswers.Count >= 2
+            && mainAnswers.All(a => a.OrderIndex > 0)
+            && mainAnswers.Select(a => a.OrderIndex).Distinct().Count() == mainAnswers.Count;
+
+        return list
+            .OrderBy(a =>
+            {
+                if (hasDistinctExplicitOrderIndex && a.OrderIndex > 0)
+                {
+                    return a.OrderIndex;
+                }
+
+                return TryGetEmbeddedOrderIndex(a.Id, out var idx)
+                    ? idx
+                    : (a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue);
+            })
             .ThenBy(a => a.IsFollowUp)
             .ThenBy(a => a.AnsweredAt)
             .ThenBy(a => a.Id)

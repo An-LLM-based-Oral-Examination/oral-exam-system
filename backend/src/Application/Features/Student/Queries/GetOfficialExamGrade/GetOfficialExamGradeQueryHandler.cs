@@ -24,29 +24,6 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
         GetOfficialExamGradeQuery request,
         CancellationToken cancellationToken)
     {
-        var ticketBase = await _context.StudentExamTickets
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
-
-        if (ticketBase is null)
-        {
-            return Result<StudentOfficialExamGradeDto>.Failure("NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
-        }
-
-        if (ticketBase.StudentId != request.StudentId)
-        {
-            return Result<StudentOfficialExamGradeDto>.Failure("FORBIDDEN: Bạn không có quyền xem điểm vé thi của sinh viên khác.");
-        }
-
-        bool isPublishedOrLocked = ticketBase.IsLocked
-            || string.Equals(ticketBase.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(ticketBase.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
-
-        if (!isPublishedOrLocked)
-        {
-            return Result<StudentOfficialExamGradeDto>.Failure("UNPROCESSABLE: Điểm ca thi này chưa được giảng viên công bố.");
-        }
-
         var ticket = await _context.StudentExamTickets
             .AsNoTracking()
             .Include(t => t.Student)
@@ -60,7 +37,28 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
                     .ThenInclude(ev => ev.Details)
                         .ThenInclude(d => d.Criterion)
             .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken)
-            ?? ticketBase;
+            ?? await _context.StudentExamTickets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
+
+        if (ticket is null)
+        {
+            return Result<StudentOfficialExamGradeDto>.Failure("NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
+        }
+
+        if (ticket.StudentId != request.StudentId)
+        {
+            return Result<StudentOfficialExamGradeDto>.Failure("FORBIDDEN: Bạn không có quyền xem điểm vé thi của sinh viên khác.");
+        }
+
+        bool isPublishedOrLocked = ticket.IsLocked
+            || string.Equals(ticket.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+
+        if (!isPublishedOrLocked)
+        {
+            return Result<StudentOfficialExamGradeDto>.Failure("UNPROCESSABLE: Điểm ca thi này chưa được giảng viên công bố.");
+        }
 
         var questionIds = ticket.Submissions
             .Select(s => s.ExamQuestionId)
@@ -104,7 +102,11 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
                     .ToList() ?? new List<StudentOfficialExamCriterionScoreDto>();
 
                 var questionScore = sub.FinalScore ?? sub.AiScore ?? latestEval?.TotalScore ?? 0m;
-                questionMap.TryGetValue(sub.ExamQuestionId, out var examQuestion);
+                var examQuestion = sub.ExamQuestion;
+                if (examQuestion is null)
+                {
+                    questionMap.TryGetValue(sub.ExamQuestionId, out examQuestion);
+                }
 
                 return new StudentOfficialExamQuestionScorecardDto(
                     sub.ExamQuestionId,

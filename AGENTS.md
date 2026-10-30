@@ -13,6 +13,7 @@
    - **Agreement Gate:** Chờ User xác nhận đồng ý trước khi sửa code (Mức M/L). Mức S ($\le 3$ files) chạy Fast-Path SOLO.
 2. **12 Cam Kết Bất Biến Cốt Lõi:**
    - **Zero Placeholder, Anti-Mocking & Zero-Bypass (Chống Gian Lận Tuyệt Đối):** Cấm `// TODO`, cấm dummy/fake data trong production, cấm bypass logic nghiệp vụ/Voice-First Gate/duyệt đề/AI/STT/DB thật và cấm mọi hình thức gian lận để làm cho xong dự án.
+   - **Holistic DB-Code 3NF & Anti-Column-Stuffing (Đồng Bộ Tối Ưu DB & Code):** Luôn đánh giá đồng bộ cả DB Schema và Code. Cấm nhồi cột (nối chuỗi vào `cot_trace`, trộn `"qid:"` vào mảng độ khó, giấu `OrderIndex` vào `Guid`) hoặc dùng `[NotMapped]` + static RAM để né tạo cột DB; truy xuất trực diện bằng khóa $O(1)$ (`Id`/`ParentId`) và đồng bộ 100% `Entity` $\leftrightarrow$ `DbContext` $\leftrightarrow$ `Migration`.
    - **Ports:** FE `3000`, BE `5000`, PostgreSQL `5432` (nội bộ).
    - **MF-01 (Practice):** Admin cấu hình (`TranscriptBufferSeconds` 10–300s mặc định 60s, follow-up 1–5 mặc định 2, progressive 3–10, timeout `SessionInactivityTimeoutMinutes = 5` phút trả `HTTP 410 Gone`). Không lưu audio R2.
    - **MF-02 (Mock Exam):** Quota do Admin cấu hình theo môn (`max_mock_exams_per_day`), vượt trả `HTTP 429`. Trưởng BM cấu hình cấu trúc đề & Bloom. Kho `practice_questions`. Không lưu audio R2.

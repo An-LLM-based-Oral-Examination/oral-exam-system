@@ -89,7 +89,7 @@ namespace OralExamination.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
 
-                            t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'exam')");
+                            t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam')");
                         });
                 });
 
@@ -314,6 +314,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("EntityName", "EntityId")
                         .HasDatabaseName("ix_audit_logs_entity");
 
+                    b.HasIndex("UserId", "Action", "EntityId")
+                        .HasDatabaseName("ix_audit_logs_user_action_entity");
+
                     b.ToTable("audit_logs", (string)null);
                 });
 
@@ -342,7 +345,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -499,7 +501,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("has_follow_up");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -725,7 +726,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("image_url");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -925,7 +925,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -1044,7 +1043,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("duration_minutes");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -1250,6 +1248,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("lecturer_comment");
 
+                    b.Property<Guid?>("SubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submission_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AuditId")
@@ -1257,6 +1259,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("CriterionId")
                         .HasDatabaseName("ix_lecturer_audit_details_criterion");
+
+                    b.HasIndex("SubmissionId")
+                        .HasDatabaseName("ix_lecturer_audit_details_submission");
 
                     b.ToTable("lecturer_audit_details", null, t =>
                         {
@@ -1281,6 +1286,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("answered_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("InitialVoiceTranscript")
+                        .HasColumnType("text")
+                        .HasColumnName("initial_voice_transcript");
 
                     b.Property<bool>("IsFollowUp")
                         .ValueGeneratedOnAdd()
@@ -1448,6 +1457,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("ExamSetId")
                         .HasDatabaseName("ix_mock_exam_sessions_set");
 
+                    b.HasIndex("Status", "ExpiresAt")
+                        .HasDatabaseName("ix_mock_exam_sessions_status_expires");
+
                     b.HasIndex("StudentId", "StartedAt")
                         .HasDatabaseName("ix_mock_exam_sessions_student");
 
@@ -1589,6 +1601,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("parent_answer_id");
 
+                    b.Property<string>("PromptText")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_text");
+
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid")
                         .HasColumnName("question_id");
@@ -1628,6 +1644,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("StudentId")
                         .HasDatabaseName("ix_practice_answers_student");
+
+                    b.HasIndex("Status", "SubmittedAt")
+                        .HasDatabaseName("ix_practice_answers_status_submitted");
 
                     b.ToTable("practice_answers", null, t =>
                         {
@@ -1694,7 +1713,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("image_url");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -1869,6 +1887,13 @@ namespace OralExamination.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasColumnName("selected_difficulties")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("SelectedQuestionIdsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("selected_question_ids")
                         .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<DateTime>("StartedAt")
@@ -2060,7 +2085,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("description");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -2226,7 +2250,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("end_date");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -2518,7 +2541,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("full_name");
 
                     b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
@@ -2985,9 +3007,16 @@ namespace OralExamination.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestionSubmission", "Submission")
+                        .WithMany()
+                        .HasForeignKey("SubmissionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Audit");
 
                     b.Navigation("Criterion");
+
+                    b.Navigation("Submission");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.MockExamAnswer", b =>

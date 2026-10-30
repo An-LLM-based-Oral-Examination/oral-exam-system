@@ -62,21 +62,27 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
 
         foreach (var ticket in tickets)
         {
-            var latestSubmission = ticket.Submissions
-                .OrderByDescending(s => s.SubmittedAt)
-                .FirstOrDefault();
-
-            var allEvals = ticket.Submissions
-                .SelectMany(s => s.AiEvaluations)
+            var orderedSubmissions = ticket.Submissions
+                .OrderBy(s => s.SubmittedAt)
                 .ToList();
 
-            var latestEval = allEvals
+            var latestSubmission = orderedSubmissions.LastOrDefault();
+
+            var latestEvalPerSubmission = orderedSubmissions
+                .Select(s => s.AiEvaluations
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .FirstOrDefault())
+                .Where(e => e is not null)
+                .Select(e => e!)
+                .ToList();
+
+            var latestEval = latestEvalPerSubmission
                 .OrderByDescending(e => e.EvaluatedAt)
                 .FirstOrDefault();
 
             // Audio & Transcript
             var audioR2Url = latestSubmission?.AudioR2Url
-                ?? ticket.Submissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioR2Url))?.AudioR2Url;
+                ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioR2Url))?.AudioR2Url;
 
             if (_storageService is not null
                 && !string.IsNullOrWhiteSpace(audioR2Url)
@@ -90,11 +96,23 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
             }
 
             var audioHashSha256 = latestSubmission?.AudioHashSha256
-                ?? ticket.Submissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioHashSha256))?.AudioHashSha256;
+                ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioHashSha256))?.AudioHashSha256;
 
-            var transcripts = ticket.Submissions
+            var transcripts = orderedSubmissions
                 .Where(s => !string.IsNullOrWhiteSpace(s.TranscriptWhisper))
-                .Select(s => s.TranscriptWhisper!)
+                .Select((s, index) =>
+                {
+                    if (orderedSubmissions.Count <= 1)
+                    {
+                        return s.TranscriptWhisper!;
+                    }
+
+                    questionMap.TryGetValue(s.ExamQuestionId, out var q);
+                    var header = !string.IsNullOrWhiteSpace(q?.Title)
+                        ? $"[Câu {index + 1}: {q.Title}]"
+                        : $"[Câu {index + 1}]";
+                    return $"{header}\n{s.TranscriptWhisper!}";
+                })
                 .ToList();
 
             var transcriptWhisper = transcripts.Count > 1
@@ -103,16 +121,16 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
 
             // Scores (Trung bình cộng toàn bộ câu hỏi của vé thi khi chưa có LecturerAudit)
             decimal? aiScore = ticket.LecturerAudit?.OriginalAiScore
-                ?? (ticket.Submissions.Any(s => s.AiScore.HasValue)
-                    ? (decimal?)Math.Round(ticket.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
+                ?? (orderedSubmissions.Any(s => s.AiScore.HasValue)
+                    ? (decimal?)Math.Round(orderedSubmissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
                     : null)
                 ?? latestSubmission?.AiScore
                 ?? latestEval?.TotalScore;
 
             decimal? finalScore = ticket.LecturerAudit?.AuditedScore
-                ?? (ticket.Submissions.Any(s => s.FinalScore.HasValue)
+                ?? (orderedSubmissions.Any(s => s.FinalScore.HasValue)
                     ? (decimal?)Math.Round(
-                        ticket.Submissions
+                        orderedSubmissions
                             .Select(s => s.FinalScore ?? s.AiScore)
                             .Where(v => v.HasValue)
                             .Average(v => v!.Value),
@@ -122,16 +140,15 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 ?? latestSubmission?.FinalScore
                 ?? aiScore;
 
-
             // Confidence & CoT
-            var confidences = allEvals
+            var confidences = latestEvalPerSubmission
                 .Where(e => e.ConfidenceScore.HasValue)
                 .Select(e => e.ConfidenceScore!.Value)
                 .ToList();
 
             decimal? confidenceScore = confidences.Any() ? confidences.Min() : null;
 
-            var cotTraces = allEvals
+            var cotTraces = latestEvalPerSubmission
                 .Where(e => !string.IsNullOrWhiteSpace(e.CotTrace))
                 .Select(e => e.CotTrace!)
                 .ToList();
@@ -149,10 +166,10 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 isSuspicious = true;
                 suspiciousReason = $"Độ tin cậy AI thấp ({(int)Math.Round(confidenceScore.Value * 100, MidpointRounding.AwayFromZero)}% < 70%). Cần đối soát lại phát âm hoặc chất lượng ghi âm.";
             }
-            else if (ticket.Submissions.Any(s => s.IsSuspicious || s.GradingStatus == "suspicious"))
+            else if (orderedSubmissions.Any(s => s.IsSuspicious))
             {
                 isSuspicious = true;
-                suspiciousReason = ticket.Submissions
+                suspiciousReason = orderedSubmissions
                     .Select(s => s.SuspiciousReason)
                     .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r))
                     ?? "Bài nộp bị đánh dấu nghi ngờ trong quá trình chấm.";

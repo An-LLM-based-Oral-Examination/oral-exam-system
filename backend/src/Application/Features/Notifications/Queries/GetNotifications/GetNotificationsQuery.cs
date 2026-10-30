@@ -42,22 +42,29 @@ public sealed class GetNotificationsQueryHandler
             return Result<NotificationsSummaryResponseDto>.Failure("NOT_FOUND: Không tìm thấy thông tin người dùng.");
         }
 
-        var readLogs = await _context.AuditLogs
-            .AsNoTracking()
-            .Where(a => a.UserId == user.Id && a.Action == "NOTIFICATION_READ" && a.EntityId.HasValue)
-            .Select(a => new { EntityId = a.EntityId!.Value, a.CreatedAt })
-            .ToListAsync(cancellationToken);
-
-        var readLookup = readLogs
-            .GroupBy(x => x.EntityId)
-            .ToDictionary(g => g.Key, g => g.Max(x => x.CreatedAt));
-
         var markAllReadLog = await _context.AuditLogs
             .AsNoTracking()
             .Where(a => a.UserId == user.Id && a.Action == "NOTIFICATION_READ_ALL")
             .OrderByDescending(a => a.CreatedAt)
             .Select(a => (DateTime?)a.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+        var readLogsQuery = _context.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.UserId == user.Id && a.Action == "NOTIFICATION_READ" && a.EntityId.HasValue);
+
+        if (markAllReadLog.HasValue)
+        {
+            readLogsQuery = readLogsQuery.Where(a => a.CreatedAt > markAllReadLog.Value);
+        }
+
+        var readLogs = await readLogsQuery
+            .Select(a => new { EntityId = a.EntityId!.Value, a.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        var readLookup = readLogs
+            .GroupBy(x => x.EntityId)
+            .ToDictionary(g => g.Key, g => g.Max(x => x.CreatedAt));
 
         var notifications = new List<NotificationItemDto>();
 
@@ -114,59 +121,62 @@ public sealed class GetNotificationsQueryHandler
             });
         }
 
-        // 1. Vé thi của sinh viên (Lịch thi & Công bố điểm)
-        var studentTickets = await _context.StudentExamTickets
-            .AsNoTracking()
-            .Include(t => t.Shift)
-            .Where(t => t.StudentId == user.Id)
-            .OrderByDescending(t => t.CheckedInAt)
-            .Take(30)
-            .ToListAsync(cancellationToken);
-
-        foreach (var ticket in studentTickets)
+        if (user.Role == UserRole.Student)
         {
-            var shiftName = ticket.Shift?.ShiftName ?? "Ca thi chính thức";
-            var roomLab = ticket.Shift?.RoomLab ?? "Phòng Lab";
+            // 1. Vé thi của sinh viên (Lịch thi & Công bố điểm)
+            var studentTickets = await _context.StudentExamTickets
+                .AsNoTracking()
+                .Include(t => t.Shift)
+                .Where(t => t.StudentId == user.Id)
+                .OrderByDescending(t => t.CheckedInAt)
+                .Take(30)
+                .ToListAsync(cancellationToken);
 
-            AddNotification(
-                "EXAM_SCHEDULE_PUBLISHED",
-                "Lịch thi vấn đáp chính thức",
-                $"Bạn đã được phân ghế số {ticket.SeatNumber} tại {roomLab} ({shiftName}).",
-                "student_exam_tickets",
-                ticket.Id,
-                ticket.Shift?.CreatedAt ?? ticket.CheckedInAt);
-
-            if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+            foreach (var ticket in studentTickets)
             {
+                var shiftName = ticket.Shift?.ShiftName ?? "Ca thi chính thức";
+                var roomLab = ticket.Shift?.RoomLab ?? "Phòng Lab";
+
                 AddNotification(
-                    "EXAM_GRADE_PUBLISHED",
-                    "Đã công bố điểm thi vấn đáp",
-                    $"Kết quả điểm thi của bạn tại {shiftName} ({roomLab}) đã được công bố chính thức.",
+                    "EXAM_SCHEDULE_PUBLISHED",
+                    "Lịch thi vấn đáp chính thức",
+                    $"Bạn đã được phân ghế số {ticket.SeatNumber} tại {roomLab} ({shiftName}).",
                     "student_exam_tickets",
                     ticket.Id,
-                    ticket.SubmittedAt ?? ticket.CheckedInAt);
+                    ticket.Shift?.CreatedAt ?? ticket.CheckedInAt);
+
+                if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+                {
+                    AddNotification(
+                        "EXAM_GRADE_PUBLISHED",
+                        "Đã công bố điểm thi vấn đáp",
+                        $"Kết quả điểm thi của bạn tại {shiftName} ({roomLab}) đã được công bố chính thức.",
+                        "student_exam_tickets",
+                        ticket.Id,
+                        ticket.SubmittedAt ?? ticket.CheckedInAt);
+                }
             }
-        }
 
-        // 2. Đơn phúc khảo của sinh viên
-        var studentAppeals = await _context.AppealRequests
-            .AsNoTracking()
-            .Where(a => a.StudentId == user.Id)
-            .OrderByDescending(a => a.UpdatedAt)
-            .Take(20)
-            .ToListAsync(cancellationToken);
+            // 2. Đơn phúc khảo của sinh viên
+            var studentAppeals = await _context.AppealRequests
+                .AsNoTracking()
+                .Where(a => a.StudentId == user.Id)
+                .OrderByDescending(a => a.UpdatedAt)
+                .Take(20)
+                .ToListAsync(cancellationToken);
 
-        foreach (var appeal in studentAppeals)
-        {
-            if (appeal.Status is AppealStatus.Approved or AppealStatus.Rejected)
+            foreach (var appeal in studentAppeals)
             {
-                AddNotification(
-                    "APPEAL_RESOLVED",
-                    "Kết quả giải quyết đơn phúc khảo",
-                    $"Đơn phúc khảo của bạn đã được xử lý với quyết định: {appeal.Status}.",
-                    "appeal_requests",
-                    appeal.Id,
-                    appeal.ResolvedAt ?? appeal.UpdatedAt);
+                if (appeal.Status is AppealStatus.Approved or AppealStatus.Rejected)
+                {
+                    AddNotification(
+                        "APPEAL_RESOLVED",
+                        "Kết quả giải quyết đơn phúc khảo",
+                        $"Đơn phúc khảo của bạn đã được xử lý với quyết định: {appeal.Status}.",
+                        "appeal_requests",
+                        appeal.Id,
+                        appeal.ResolvedAt ?? appeal.UpdatedAt);
+                }
             }
         }
 

@@ -155,7 +155,7 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             : null;
 
         int expectedTotalQuestions = examSet?.Structure?.TotalQuestions ?? 0;
-        if (expectedTotalQuestions > mainAnswers.Count || mainAnswers.Count == 0)
+        if (mainAnswers.Count == 0 && expectedTotalQuestions > 0)
         {
             var existingQuestionIds = mainAnswers.Select(a => a.QuestionId).ToHashSet();
             var missingCandidates = await _context.PracticeQuestions

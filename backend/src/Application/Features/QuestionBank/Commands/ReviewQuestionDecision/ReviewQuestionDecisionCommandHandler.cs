@@ -160,7 +160,9 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ReviewNotes = request.ReviewNotes;
                 question.IsActive = false; // Loại hẳn khỏi kho thi
                 var rejectedPracticeQ = await _context.PracticeQuestions
-                    .FirstOrDefaultAsync(p => p.CourseId == question.CourseId && p.Title == question.Title, cancellationToken);
+                    .FirstOrDefaultAsync(
+                        p => p.Id == question.Id || (p.CourseId == question.CourseId && p.Title == question.Title),
+                        cancellationToken);
                 if (rejectedPracticeQ != null)
                 {
                     rejectedPracticeQ.IsActive = false;

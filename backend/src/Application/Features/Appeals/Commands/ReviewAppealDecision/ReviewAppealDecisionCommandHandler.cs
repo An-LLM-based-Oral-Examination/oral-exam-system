@@ -87,6 +87,7 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 .FirstOrDefaultAsync(a => a.TicketId == appeal.TicketId, cancellationToken);
             if (audit != null)
             {
+                audit.OverrideReason = request.ReviewNotes.Trim();
                 if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
                 {
                     var scoredValues = ticketSubmissions

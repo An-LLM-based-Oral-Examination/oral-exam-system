@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace OralExamination.Domain.Entities;
 
@@ -16,7 +15,6 @@ public partial class MockExamAnswer
     /// Bản bóc băng giọng nói gốc (STT) lần đầu từ file ghi âm để khóa mốc đối chiếu VOICE_FIRST_GATE,
     /// chống lỗ hổng sửa văn bản cộng dồn nhiều lần (Compound Baseline Drift) qua API.
     /// </summary>
-    [NotMapped]
     public string? InitialVoiceTranscript { get; set; }
 
     public int TimeTakenSeconds { get; set; } = 0;

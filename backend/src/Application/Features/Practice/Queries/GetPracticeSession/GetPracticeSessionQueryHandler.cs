@@ -48,14 +48,6 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
             await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken);
         }
 
-        // Lấy danh sách câu hỏi thuộc Course để tra cứu Rubric, Criteria và chủ đề câu hỏi
-        var courseQuestions = await _context.PracticeQuestions
-            .AsNoTracking()
-            .Include(q => q.Rubric)
-                .ThenInclude(r => r.Criteria)
-            .Where(q => q.CourseId == session.CourseId && q.IsActive)
-            .ToListAsync(cancellationToken);
-
         var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
 
         var sessionAnswers = session.Answers ?? Array.Empty<Domain.Entities.PracticeAnswer>();
@@ -68,6 +60,21 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                 orderedQuestionIds.Add(answeredQid);
             }
         }
+
+        // Lấy danh sách câu hỏi thuộc phiên (nếu đã có danh sách ID) hoặc fallback theo Course để tra cứu Rubric, Criteria và chủ đề câu hỏi
+        var courseQuestions = orderedQuestionIds.Count > 0
+            ? await _context.PracticeQuestions
+                .AsNoTracking()
+                .Include(q => q.Rubric)
+                    .ThenInclude(r => r.Criteria)
+                .Where(q => orderedQuestionIds.Contains(q.Id))
+                .ToListAsync(cancellationToken)
+            : await _context.PracticeQuestions
+                .AsNoTracking()
+                .Include(q => q.Rubric)
+                    .ThenInclude(r => r.Criteria)
+                .Where(q => q.CourseId == session.CourseId && q.IsActive)
+                .ToListAsync(cancellationToken);
 
         var questionById = courseQuestions.ToDictionary(q => q.Id);
 
@@ -148,12 +155,12 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                      (x.QuestionId == a.QuestionId && x.SubmittedAt > a.SubmittedAt)));
                 bool needsFollowUp = isBorderline && !hasChildFollowUp && followUpsCountForQuestion < maxAllowedFollowUps;
 
-                string? followUpPrompt = null;
+                string? followUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
                 if (needsFollowUp)
                 {
                     try
                     {
-                        var persistedFollowUp = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
+                        var persistedFollowUp = followUpPrompt;
                         if (!string.IsNullOrWhiteSpace(persistedFollowUp))
                         {
                             followUpPrompt = persistedFollowUp;
@@ -218,6 +225,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     AnswerText = a.AnswerText,
                     IsFollowUp = a.IsFollowUp,
                     ParentAnswerId = a.ParentAnswerId,
+                    PromptText = a.PromptText,
                     Status = a.Status,
                     SubmittedAt = a.SubmittedAt,
                     TotalScore = evaluation?.TotalScore,

@@ -170,9 +170,30 @@ public sealed class OverrideExamScoreCommandHandler
         {
             if (audit.Details.Count > 0)
             {
-                _context.LecturerAuditDetails.RemoveRange(audit.Details);
-                audit.Details.Clear();
+                if (request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty && ticket.Submissions.Count > 1)
+                {
+                    var staleDetails = audit.Details
+                        .Where(d => d.SubmissionId == request.SubmissionId.Value || d.SubmissionId is null)
+                        .ToList();
+                    if (staleDetails.Count > 0)
+                    {
+                        _context.LecturerAuditDetails.RemoveRange(staleDetails);
+                        foreach (var stale in staleDetails)
+                        {
+                            audit.Details.Remove(stale);
+                        }
+                    }
+                }
+                else
+                {
+                    _context.LecturerAuditDetails.RemoveRange(audit.Details);
+                    audit.Details.Clear();
+                }
             }
+
+            var fallbackSubmissionId = request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty
+                ? request.SubmissionId.Value
+                : (ticket.Submissions.Count == 1 ? ticket.Submissions.First().Id : (Guid?)null);
 
             foreach (var detail in request.CriterionDetails)
             {
@@ -185,6 +206,7 @@ public sealed class OverrideExamScoreCommandHandler
                     Id = Guid.NewGuid(),
                     AuditId = audit.Id,
                     CriterionId = detail.CriterionId,
+                    SubmissionId = detail.SubmissionId ?? fallbackSubmissionId,
                     AiScore = detail.AiScore ?? 0m,
                     AuditedScore = Math.Round(detail.AuditedScore, 2, MidpointRounding.AwayFromZero),
                     LecturerComment = resolvedComment

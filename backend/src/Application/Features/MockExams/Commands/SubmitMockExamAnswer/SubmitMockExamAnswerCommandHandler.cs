@@ -313,6 +313,22 @@ public sealed class SubmitMockExamAnswerCommandHandler
         return Result<string>.Failure("File âm thanh không hợp lệ hoặc không có dữ liệu.");
     }
 
+    public static void ClearVoiceBaselines(IEnumerable<Guid> answerIds)
+    {
+        if (answerIds == null)
+        {
+            return;
+        }
+
+        foreach (var id in answerIds)
+        {
+            if (id != Guid.Empty)
+            {
+                VoiceTranscriptBaselines.TryRemove(id, out _);
+            }
+        }
+    }
+
     private static void LockVoiceBaseline(MockExamAnswer targetAnswer, string voiceTranscript)
     {
         var cleanBaseline = voiceTranscript.Trim();
@@ -791,7 +807,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     var cachedEval = new AiEvaluation
                     {
                         Id = evalId,
-                        AnswerType = "practice",
+                        AnswerType = "mock_exam",
                         PracticeAnswerId = null,
                         ExamSubmissionId = null,
                         MockExamAnswerId = justAnswered.Id,

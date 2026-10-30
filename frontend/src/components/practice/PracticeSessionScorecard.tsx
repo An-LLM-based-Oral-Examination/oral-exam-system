@@ -152,12 +152,15 @@ function computeEffectiveQuestionScore(
   isCompleted: boolean,
 ): number | null {
   const mainScore = item.mainAnswer?.totalScore
-  if (mainScore === null || mainScore === undefined || !Number.isFinite(mainScore)) {
-    return isCompleted ? 0 : null
-  }
   const fuScores = item.followUpAnswers
     .map((fu) => fu.answer.totalScore)
     .filter((s): s is number => s !== null && s !== undefined && Number.isFinite(s))
+  if (mainScore === null || mainScore === undefined || !Number.isFinite(mainScore)) {
+    if (fuScores.length > 0) {
+      return Math.round((fuScores.reduce((acc, s) => acc + s, 0) / fuScores.length) * 100) / 100
+    }
+    return isCompleted ? 0 : null
+  }
   if (fuScores.length === 0) {
     return mainScore
   }
@@ -202,10 +205,20 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
 
       const followUpsWithPrompts = relatedFollowUps.map((fu, fuIdx) => {
         let promptText = 'Câu hỏi phụ đào sâu theo ngữ cảnh câu trả lời'
-        if (fuIdx === 0 && mainAnswer?.followUpPrompt?.trim()) {
-          promptText = mainAnswer.followUpPrompt.trim()
-        } else if (fuIdx > 0 && relatedFollowUps[fuIdx - 1]?.followUpPrompt?.trim()) {
-          promptText = relatedFollowUps[fuIdx - 1].followUpPrompt!.trim()
+        if (fu.promptText?.trim()) {
+          promptText = fu.promptText.trim()
+        } else {
+          const directParent =
+            fu.parentAnswerId && (fuIdx === 0 || fu.parentAnswerId !== mainAnswer?.answerId)
+              ? session.answers.find((a) => a.answerId === fu.parentAnswerId)
+              : null
+          if (directParent?.followUpPrompt?.trim()) {
+            promptText = directParent.followUpPrompt.trim()
+          } else if (fuIdx === 0 && mainAnswer?.followUpPrompt?.trim()) {
+            promptText = mainAnswer.followUpPrompt.trim()
+          } else if (fuIdx > 0 && relatedFollowUps[fuIdx - 1]?.followUpPrompt?.trim()) {
+            promptText = relatedFollowUps[fuIdx - 1].followUpPrompt!.trim()
+          }
         }
         return {
           answer: fu,
@@ -245,37 +258,19 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
 
     let averageScore: number | null = null
     if (!hasPendingAnswers) {
-      if (session.practiceMode === 'full_session' && session.status === 'completed') {
-        const totalMain = Math.max(1, combinedQuestions.length)
-        const sumMain = combinedQuestions.reduce(
-          (acc, q) => acc + (q.mainAnswer?.totalScore ?? 0),
-          0,
-        )
-        averageScore = Math.round((sumMain / totalMain) * 100) / 100
-      } else {
-        const mainEffectiveScores: number[] = []
-        combinedQuestions.forEach((q) => {
-          const mainScore = q.mainAnswer?.totalScore
-          if (mainScore === null || mainScore === undefined || !Number.isFinite(mainScore)) return
-          const fuScores = q.followUpAnswers
-            .map((fu) => fu.answer.totalScore)
-            .filter((s): s is number => s !== null && s !== undefined && Number.isFinite(s))
-          if (fuScores.length === 0) {
-            mainEffectiveScores.push(mainScore)
-          } else {
-            const avgFu = fuScores.reduce((acc, s) => acc + s, 0) / fuScores.length
-            if (avgFu >= mainScore) {
-              mainEffectiveScores.push(Math.max(mainScore, ...fuScores))
-            } else {
-              const all = [mainScore, ...fuScores]
-              mainEffectiveScores.push(all.reduce((acc, s) => acc + s, 0) / all.length)
-            }
-          }
-        })
-        if (mainEffectiveScores.length > 0) {
-          const sum = mainEffectiveScores.reduce((acc, s) => acc + s, 0)
-          averageScore = Math.round((sum / mainEffectiveScores.length) * 100) / 100
+      const isCompletedFullSession =
+        session.practiceMode === 'full_session' && session.status === 'completed'
+      let totalScore = 0
+      let scoredCount = 0
+      combinedQuestions.forEach((item) => {
+        const effectiveScore = computeEffectiveQuestionScore(item, isCompletedFullSession)
+        if (effectiveScore !== null) {
+          totalScore += effectiveScore
+          scoredCount += 1
         }
+      })
+      if (scoredCount > 0) {
+        averageScore = Math.round((totalScore / scoredCount) * 100) / 100
       }
     }
 

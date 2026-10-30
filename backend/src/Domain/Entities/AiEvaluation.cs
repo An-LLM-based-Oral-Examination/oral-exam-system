@@ -6,7 +6,7 @@ namespace OralExamination.Domain.Entities;
 public partial class AiEvaluation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string AnswerType { get; set; } = null!; // "practice" | "exam"
+    public string AnswerType { get; set; } = null!; // "practice" | "mock_exam" | "exam"
     public Guid? PracticeAnswerId { get; set; }
     public Guid? ExamSubmissionId { get; set; }
     public Guid? MockExamAnswerId { get; set; }

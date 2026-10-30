@@ -109,7 +109,6 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var examQuestionsQuery = _context.ExamQuestions
             .AsNoTracking()
-            .Include(q => q.Course)
             .AsQueryable();
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
@@ -122,7 +121,16 @@ public sealed class GetLecturerDashboardQueryHandler
             examQuestionsQuery = examQuestionsQuery.Where(q => q.SubmittedBy == user.Id || q.SubmittedBy == null);
         }
 
-        var examQuestions = await examQuestionsQuery.ToListAsync(cancellationToken);
+        var statusCounts = await examQuestionsQuery
+            .GroupBy(q => q.ApprovalStatus)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var statusCountMap = statusCounts
+            .Where(x => x.Status != null)
+            .ToDictionary(x => x.Status, x => x.Count, StringComparer.OrdinalIgnoreCase);
+
+        var totalExamQuestionsCount = statusCounts.Sum(x => x.Count);
 
         var practiceQuestionsQuery = _context.PracticeQuestions.AsNoTracking().AsQueryable();
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
@@ -132,28 +140,32 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var totalPracticeCount = await practiceQuestionsQuery.CountAsync(cancellationToken);
 
-        var draftCount = examQuestions.Count(q => q.ApprovalStatus == ApprovalStatus.Draft);
-        var submittedCount = examQuestions.Count(q => q.ApprovalStatus == ApprovalStatus.SubmittedForReview);
-        var approvedCount = examQuestions.Count(q => q.ApprovalStatus == ApprovalStatus.Approved);
-        var needsRevisionCount = examQuestions.Count(q => q.ApprovalStatus == ApprovalStatus.NeedsRevision);
-        var rejectedCount = examQuestions.Count(q => q.ApprovalStatus == ApprovalStatus.Rejected);
+        var draftCount = statusCountMap.GetValueOrDefault(ApprovalStatus.Draft);
+        var submittedCount = statusCountMap.GetValueOrDefault(ApprovalStatus.SubmittedForReview);
+        var approvedCount = statusCountMap.GetValueOrDefault(ApprovalStatus.Approved);
+        var needsRevisionCount = statusCountMap.GetValueOrDefault(ApprovalStatus.NeedsRevision);
+        var rejectedCount = statusCountMap.GetValueOrDefault(ApprovalStatus.Rejected);
 
         var reviewedTotal = approvedCount + needsRevisionCount + rejectedCount;
         var approvalRate = reviewedTotal > 0
             ? Math.Round(approvedCount * 100.0m / reviewedTotal, 2, MidpointRounding.AwayFromZero)
             : 0.0m;
 
-        var questionsNeedingRevision = examQuestions
-            .Where(q => isDeptHeadOrAdmin
-                ? q.ApprovalStatus is ApprovalStatus.SubmittedForReview or ApprovalStatus.NeedsRevision
-                : q.ApprovalStatus == ApprovalStatus.NeedsRevision)
+        var revisionQuery = isDeptHeadOrAdmin
+            ? examQuestionsQuery.Where(q =>
+                q.ApprovalStatus == ApprovalStatus.SubmittedForReview ||
+                q.ApprovalStatus == ApprovalStatus.NeedsRevision)
+            : examQuestionsQuery.Where(q => q.ApprovalStatus == ApprovalStatus.NeedsRevision);
+
+        var questionsNeedingRevision = await revisionQuery
             .OrderByDescending(q => q.CreatedAt)
+            .ThenByDescending(q => q.Id)
             .Take(20)
             .Select(q => new QuestionRevisionItemDto
             {
                 QuestionId = q.Id,
                 CourseId = q.CourseId,
-                CourseCode = q.Course?.Code ?? string.Empty,
+                CourseCode = q.Course != null ? q.Course.Code : string.Empty,
                 Title = q.Title,
                 Difficulty = q.Difficulty,
                 BloomLevel = q.BloomLevel,
@@ -161,44 +173,53 @@ public sealed class GetLecturerDashboardQueryHandler
                 ReviewNotes = q.ReviewNotes,
                 CreatedAt = q.CreatedAt
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
 
-        // Ca thi cần hậu kiểm
-        var shiftsQuery = _context.RealExamSessionShifts
+        // Ca thi cần hậu kiểm — dùng Projection nhẹ thay vì Include 4 tầng kéo TranscriptWhisper/CotTrace/TimestampsWhisper
+        var shiftsBaseQuery = _context.RealExamSessionShifts
             .AsNoTracking()
-            .Include(s => s.Session)
-                .ThenInclude(sess => sess.Course)
-            .Include(s => s.StudentExamTickets)
-                .ThenInclude(t => t.LecturerAudit)
-            .Include(s => s.StudentExamTickets)
-                .ThenInclude(t => t.Submissions)
-                    .ThenInclude(sub => sub.AiEvaluations)
             .AsQueryable();
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
-            shiftsQuery = shiftsQuery.Where(s => s.Session.CourseId == request.CourseId.Value);
+            shiftsBaseQuery = shiftsBaseQuery.Where(s => s.Session.CourseId == request.CourseId.Value);
         }
 
-        var shifts = await shiftsQuery
+        var shifts = await shiftsBaseQuery
             .OrderByDescending(s => s.StartTime)
+            .ThenByDescending(s => s.Id)
             .Take(20)
+            .Select(s => new
+            {
+                s.Id,
+                s.SessionId,
+                SessionTitle = s.Session != null ? s.Session.Title : string.Empty,
+                CourseCode = s.Session != null && s.Session.Course != null ? s.Session.Course.Code : string.Empty,
+                s.ShiftName,
+                s.RoomLab,
+                s.StartTime,
+                s.EndTime,
+                Tickets = s.StudentExamTickets.Select(t => new
+                {
+                    t.IsLocked,
+                    t.Status,
+                    HasAudit = t.LecturerAudit != null,
+                    HasScoredSubmission = t.Submissions.Any(sub => sub.FinalScore.HasValue || sub.AiScore.HasValue),
+                    IsSuspiciousTicket = t.Submissions.Any(sub => sub.IsSuspicious) ||
+                                         t.Submissions.SelectMany(sub => sub.AiEvaluations).Any(e => e.ConfidenceScore.HasValue && e.ConfidenceScore.Value < 0.70m)
+                }).ToList()
+            })
             .ToListAsync(cancellationToken);
 
-        var shiftSummaries = new List<ShiftAuditSummaryDto>();
+        var shiftSummaries = new List<ShiftAuditSummaryDto>(shifts.Count);
         int totalSuspicious = 0;
 
         foreach (var shift in shifts)
         {
-            var tickets = shift.StudentExamTickets.ToList();
+            var tickets = shift.Tickets;
             var isPublished = tickets.Count > 0 && tickets.All(t => t.IsLocked || t.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked);
-            var scoredTickets = tickets.Count(t =>
-                t.LecturerAudit != null ||
-                t.Submissions.Any(sub => sub.FinalScore.HasValue || sub.AiScore.HasValue));
-
-            var suspiciousInShift = tickets.Count(t =>
-                t.Submissions.Any(sub => sub.IsSuspicious || sub.GradingStatus == "suspicious") ||
-                t.Submissions.SelectMany(sub => sub.AiEvaluations).Any(e => e.ConfidenceScore.HasValue && e.ConfidenceScore.Value < 0.70m));
+            var scoredTickets = tickets.Count(t => t.HasAudit || t.HasScoredSubmission);
+            var suspiciousInShift = tickets.Count(t => t.IsSuspiciousTicket);
 
             totalSuspicious += suspiciousInShift;
 
@@ -206,8 +227,8 @@ public sealed class GetLecturerDashboardQueryHandler
             {
                 ShiftId = shift.Id,
                 SessionId = shift.SessionId,
-                SessionTitle = shift.Session?.Title ?? string.Empty,
-                CourseCode = shift.Session?.Course?.Code ?? string.Empty,
+                SessionTitle = shift.SessionTitle ?? string.Empty,
+                CourseCode = shift.CourseCode ?? string.Empty,
                 ShiftName = shift.ShiftName,
                 RoomLab = shift.RoomLab,
                 StartTime = shift.StartTime,
@@ -228,6 +249,7 @@ public sealed class GetLecturerDashboardQueryHandler
                 ? (a.Status == AppealStatus.Pending || a.Status == AppealStatus.InReview)
                 : (a.AssignedTo == user.Id && a.Status == AppealStatus.InReview))
             .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id)
             .Take(20)
             .ToListAsync(cancellationToken);
 
@@ -260,7 +282,7 @@ public sealed class GetLecturerDashboardQueryHandler
             Role = user.Role,
             QuestionStats = new LecturerQuestionBankStatsDto
             {
-                TotalExamQuestions = examQuestions.Count,
+                TotalExamQuestions = totalExamQuestionsCount,
                 TotalPracticeQuestions = totalPracticeCount,
                 DraftCount = draftCount,
                 SubmittedForReviewCount = submittedCount,

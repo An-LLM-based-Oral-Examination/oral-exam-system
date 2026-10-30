@@ -313,6 +313,7 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             .Include(t => t.Submissions)
             .Where(t => t.StudentId == request.StudentId)
             .OrderByDescending(t => t.Shift.StartTime)
+            .ThenByDescending(t => t.Id)
             .ToListAsync(cancellationToken);
 
         var officialExamDtos = examTickets.Select(t =>

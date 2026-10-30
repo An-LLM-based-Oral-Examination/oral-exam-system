@@ -45,6 +45,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 .ThenInclude(a => a.AiEvaluations)
             .Where(s => s.StudentId == request.StudentId)
             .OrderByDescending(s => s.StartedAt)
+            .ThenByDescending(s => s.Id)
             .ToListAsync(cancellationToken);
 
         var result = sessions.Select(s =>

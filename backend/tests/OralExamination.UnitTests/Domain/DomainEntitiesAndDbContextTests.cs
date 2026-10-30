@@ -590,6 +590,92 @@ public class DomainEntitiesAndDbContextTests
         resultType.GetProperty(nameof(OralExamination.Application.Common.Interfaces.AiGradingResult.SuspiciousReason)).Should().NotBeNull();
         resultType.GetProperty(nameof(OralExamination.Application.Common.Interfaces.AiGradingResult.CotTrace)).Should().NotBeNull();
     }
+
+    [Fact(DisplayName = "17. Đồng bộ EF Core <-> PostgreSQL 16 & 6 hạng mục tối ưu 3NF (Anti-Column-Stuffing & DB Persistence)")]
+    public void DbContext_Must_Enforce_Postgres16_Conventions_And_Six_3nf_Schema_Optimizations()
+    {
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
+
+        var entitiesWithIsActive = new[]
+        {
+            typeof(User),
+            typeof(Semester),
+            typeof(Course),
+            typeof(Class),
+            typeof(Rubric),
+            typeof(PracticeQuestion),
+            typeof(ExamQuestion),
+            typeof(ExamStructure),
+            typeof(ExamSet)
+        };
+
+        foreach (var type in entitiesWithIsActive)
+        {
+            var entityType = model.FindEntityType(type)!;
+            var isActiveProp = entityType.FindProperty("IsActive")!;
+            isActiveProp.ValueGenerated.Should().Be(
+                ValueGenerated.Never,
+                $"{type.Name}.IsActive phải cấu hình ValueGeneratedNever để không bị bẫy CLR sentinel false biến thành true khi INSERT trên PostgreSQL 16");
+        }
+
+        var auditLogType = model.FindEntityType(typeof(AuditLog))!;
+        var oldValuesConverter = auditLogType.FindProperty(nameof(AuditLog.OldValues))!.GetValueConverter();
+        var newValuesConverter = auditLogType.FindProperty(nameof(AuditLog.NewValues))!.GetValueConverter();
+        oldValuesConverter.Should().NotBeNull();
+        newValuesConverter.Should().NotBeNull();
+
+        var convertedPlain = (string?)newValuesConverter!.ConvertToProvider("[SUSPENDED] Vi phạm quy chế");
+        convertedPlain.Should().Be("\"[SUSPENDED] Vi phạm quy chế\"");
+        var restoredPlain = (string?)newValuesConverter.ConvertFromProvider(convertedPlain);
+        restoredPlain.Should().Be("[SUSPENDED] Vi phạm quy chế");
+
+        var validJsonObj = "{\"status\":\"IN_PROGRESS\"}";
+        var convertedJson = (string?)oldValuesConverter!.ConvertToProvider(validJsonObj);
+        convertedJson.Should().Be(validJsonObj);
+        var restoredJson = (string?)oldValuesConverter.ConvertFromProvider(convertedJson);
+        restoredJson.Should().Be(validJsonObj);
+
+        // 1. practice_answers.prompt_text & composite index
+        var paEntity = context.Model.FindEntityType(typeof(PracticeAnswer))!;
+        paEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_practice_answers_status_submitted").Should().NotBeNull();
+        var paPromptProp = paEntity.FindProperty(nameof(PracticeAnswer.PromptText));
+        paPromptProp.Should().NotBeNull("PracticeAnswer phải có cột PromptText lưu nội dung câu hỏi phụ");
+        paPromptProp!.GetColumnName().Should().Be("prompt_text");
+
+        // 2. practice_sessions.selected_question_ids (jsonb) tách biệt với selected_difficulties
+        var psEntity = model.FindEntityType(typeof(PracticeSession))!;
+        var psQuestionIdsProp = psEntity.FindProperty(nameof(PracticeSession.SelectedQuestionIdsJson));
+        psQuestionIdsProp.Should().NotBeNull("PracticeSession phải có cột SelectedQuestionIdsJson độc lập với SelectedDifficulties");
+        psQuestionIdsProp!.GetColumnName().Should().Be("selected_question_ids");
+        psQuestionIdsProp!.FindAnnotation("Relational:ColumnType")!.Value.Should().Be("jsonb");
+
+        // 3. mock_exam_answers.initial_voice_transcript lưu xuống DB (không còn [NotMapped])
+        var mockAnswerEntity = context.Model.FindEntityType(typeof(MockExamAnswer))!;
+        var initialVoiceProp = mockAnswerEntity.FindProperty(nameof(MockExamAnswer.InitialVoiceTranscript));
+        initialVoiceProp.Should().NotBeNull("MockExamAnswer.InitialVoiceTranscript phải được lưu xuống DB thay vì [NotMapped]");
+        initialVoiceProp!.GetColumnName().Should().Be("initial_voice_transcript");
+
+        // 4. ai_evaluations check constraint bổ sung 'mock_exam'
+        var aiEvalType = model.FindEntityType(typeof(AiEvaluation))!;
+        var typeCheck = aiEvalType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_ai_evaluations_type");
+        typeCheck.Should().NotBeNull();
+        typeCheck!.Sql.Should().Be("answer_type IN ('practice', 'mock_exam', 'exam')");
+
+        // 5. lecturer_audit_details.submission_id + FK + Index
+        var auditDetailEntity = context.Model.FindEntityType(typeof(LecturerAuditDetail))!;
+        var submissionIdProp = auditDetailEntity.FindProperty(nameof(LecturerAuditDetail.SubmissionId));
+        submissionIdProp.Should().NotBeNull("LecturerAuditDetail phải có cột SubmissionId để phân biệt các câu hỏi trong cùng 1 vé thi");
+        submissionIdProp!.GetColumnName().Should().Be("submission_id");
+        auditDetailEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_lecturer_audit_details_submission").Should().NotBeNull();
+
+        // 6. Composite indexes cho MockExamSession và AuditLog
+        var msEntity = context.Model.FindEntityType(typeof(MockExamSession))!;
+        msEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_mock_exam_sessions_status_expires").Should().NotBeNull();
+
+        var alEntity = context.Model.FindEntityType(typeof(AuditLog))!;
+        alEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_audit_logs_user_action_entity").Should().NotBeNull();
+    }
 }
 
 

@@ -68,7 +68,34 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             }
         }
 
-        // 2. Add Answer
+        // 2. Add Answer (Nếu là câu hỏi phụ, lưu trực tiếp nội dung câu hỏi phụ vào cột prompt_text chuẩn 3NF)
+        string? resolvedPromptText = null;
+        if (request.IsFollowUp)
+        {
+            if (request.ParentAnswerId.HasValue && request.ParentAnswerId.Value != Guid.Empty)
+            {
+                var parentCot = await _context.AiEvaluations
+                    .AsNoTracking()
+                    .Where(e => e.PracticeAnswerId == request.ParentAnswerId.Value)
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .Select(e => e.CotTrace)
+                    .FirstOrDefaultAsync(cancellationToken);
+                resolvedPromptText = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+            }
+
+            if (string.IsNullOrWhiteSpace(resolvedPromptText))
+            {
+                var latestPriorCot = await _context.PracticeAnswers
+                    .AsNoTracking()
+                    .Where(a => a.SessionId == request.SessionId && a.QuestionId == request.QuestionId)
+                    .OrderByDescending(a => a.SubmittedAt)
+                    .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                    .Select(e => e.CotTrace)
+                    .FirstOrDefaultAsync(cancellationToken);
+                resolvedPromptText = FollowUpPromptBuilder.TryExtractFollowUpFromCot(latestPriorCot);
+            }
+        }
+
         var answer = new PracticeAnswer
         {
             SessionId = request.SessionId,
@@ -77,6 +104,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             AnswerText = request.AnswerText,
             IsFollowUp = request.IsFollowUp,
             ParentAnswerId = request.ParentAnswerId,
+            PromptText = resolvedPromptText,
             Status = "pending", // Waiting for AI Evaluation
             SubmittedAt = DateTime.UtcNow
         };

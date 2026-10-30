@@ -72,11 +72,13 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
                 .Entries<AppealRequest>()
                 .Any(a => a.State == EntityState.Modified
                           && a.Entity.TicketId == lockedAudit.TicketId
-                          && a.Property(nameof(AppealRequest.Status)).OriginalValue is AppealStatus.Pending or AppealStatus.InReview
+                          && a.Property(nameof(AppealRequest.Status)).OriginalValue is string origStatus
+                          && (string.Equals(origStatus, AppealStatus.Pending, StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(origStatus, AppealStatus.InReview, StringComparison.OrdinalIgnoreCase))
                           && string.Equals(a.Entity.Decision, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
                           && string.Equals(a.Entity.Status, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
                           && a.Entity.ProposedScore.HasValue
-                          && a.Entity.ProposedScore.Value == lockedAudit.AuditedScore);
+                          && (a.Entity.SubmissionId.HasValue || a.Entity.ProposedScore.Value == lockedAudit.AuditedScore));
 
             if (hasApprovedAppealInTransaction)
             {
@@ -85,7 +87,11 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
                     .Select(p => p.Metadata.Name)
                     .ToList();
 
-                return modifiedProps.All(name => name == nameof(LecturerAudit.AuditedScore) || name == nameof(LecturerAudit.OverrideReason));
+                return modifiedProps.All(name =>
+                    name == nameof(LecturerAudit.AuditedScore) ||
+                    name == nameof(LecturerAudit.OverrideReason) ||
+                    name == nameof(LecturerAudit.AuditedAt) ||
+                    name == nameof(LecturerAudit.LecturerId));
             }
         }
 
@@ -100,8 +106,8 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
             var originalAcknowledgement = entry.Property(nameof(StudentExamTicket.StudentAcknowledgementStatus)).OriginalValue as string;
             if (modifiedProps.Count == 1
                 && modifiedProps[0] == nameof(StudentExamTicket.StudentAcknowledgementStatus)
-                && string.Equals(originalAcknowledgement, "PENDING", StringComparison.Ordinal)
-                && string.Equals(ticket.StudentAcknowledgementStatus, "ACKNOWLEDGED", StringComparison.Ordinal))
+                && string.Equals(originalAcknowledgement, "PENDING", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ticket.StudentAcknowledgementStatus, "ACKNOWLEDGED", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -112,38 +118,80 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
 
     private static void EnforceLockedAggregateChildren(DbContext context)
     {
-        var ticketIds = context.ChangeTracker.Entries<ExamQuestionSubmission>()
+        var candidateTicketIds = new System.Collections.Generic.HashSet<Guid>();
+
+        var unauthorizedSubmissionTicketIds = context.ChangeTracker.Entries<ExamQuestionSubmission>()
             .Where(entry => IsModifiedOrDeleted(entry) && !IsAuthorizedAppealSubmissionUpdate(context, entry))
-            .Select(entry => entry.Entity.TicketId)
-            .Concat(
-                from entry in context.ChangeTracker.Entries<LecturerAuditDetail>()
-                where IsModifiedOrDeleted(entry)
-                join audit in context.Set<LecturerAudit>().AsNoTracking()
-                    on entry.Entity.AuditId equals audit.Id
-                select audit.TicketId)
-            .Concat(
-                from entry in context.ChangeTracker.Entries<AiEvaluation>()
-                where IsModifiedOrDeleted(entry) && entry.Entity.ExamSubmissionId.HasValue
-                join submission in context.Set<ExamQuestionSubmission>().AsNoTracking()
-                    on entry.Entity.ExamSubmissionId!.Value equals submission.Id
-                select submission.TicketId)
-            .Concat(
-                from entry in context.ChangeTracker.Entries<AiEvaluationDetail>()
-                where IsModifiedOrDeleted(entry)
-                join evaluation in context.Set<AiEvaluation>().AsNoTracking()
-                    on entry.Entity.EvaluationId equals evaluation.Id
-                where evaluation.ExamSubmissionId.HasValue
-                join submission in context.Set<ExamQuestionSubmission>().AsNoTracking()
-                    on evaluation.ExamSubmissionId!.Value equals submission.Id
-                select submission.TicketId)
+            .Select(entry => entry.Entity.TicketId);
+        foreach (var id in unauthorizedSubmissionTicketIds)
+        {
+            candidateTicketIds.Add(id);
+        }
+
+        var modifiedAuditIds = context.ChangeTracker.Entries<LecturerAuditDetail>()
+            .Where(IsModifiedOrDeleted)
+            .Select(entry => entry.Entity.AuditId)
+            .Distinct()
+            .ToList();
+        if (modifiedAuditIds.Count > 0)
+        {
+            var auditTicketIds = context.Set<LecturerAudit>()
+                .AsNoTracking()
+                .Where(audit => modifiedAuditIds.Contains(audit.Id))
+                .Select(audit => audit.TicketId)
+                .ToList();
+            foreach (var id in auditTicketIds)
+            {
+                candidateTicketIds.Add(id);
+            }
+        }
+
+        var modifiedSubmissionIds = context.ChangeTracker.Entries<AiEvaluation>()
+            .Where(entry => IsModifiedOrDeleted(entry) && entry.Entity.ExamSubmissionId.HasValue)
+            .Select(entry => entry.Entity.ExamSubmissionId!.Value)
             .Distinct()
             .ToList();
 
-        if (ticketIds.Count == 0)
+        var modifiedEvalIds = context.ChangeTracker.Entries<AiEvaluationDetail>()
+            .Where(IsModifiedOrDeleted)
+            .Select(entry => entry.Entity.EvaluationId)
+            .Distinct()
+            .ToList();
+        if (modifiedEvalIds.Count > 0)
+        {
+            var evalSubmissionIds = context.Set<AiEvaluation>()
+                .AsNoTracking()
+                .Where(eval => modifiedEvalIds.Contains(eval.Id) && eval.ExamSubmissionId.HasValue)
+                .Select(eval => eval.ExamSubmissionId!.Value)
+                .ToList();
+            foreach (var subId in evalSubmissionIds)
+            {
+                if (!modifiedSubmissionIds.Contains(subId))
+                {
+                    modifiedSubmissionIds.Add(subId);
+                }
+            }
+        }
+
+        if (modifiedSubmissionIds.Count > 0)
+        {
+            var submissionTicketIds = context.Set<ExamQuestionSubmission>()
+                .AsNoTracking()
+                .Where(sub => modifiedSubmissionIds.Contains(sub.Id))
+                .Select(sub => sub.TicketId)
+                .ToList();
+            foreach (var id in submissionTicketIds)
+            {
+                candidateTicketIds.Add(id);
+            }
+        }
+
+        if (candidateTicketIds.Count == 0)
         {
             return;
         }
 
+        var ticketIds = candidateTicketIds.ToList();
         var hasLockedTicket = context.Set<StudentExamTicket>()
             .AsNoTracking()
             .Any(ticket => ticketIds.Contains(ticket.Id) && ticket.IsLocked);
@@ -180,12 +228,18 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
 
         return context.ChangeTracker.Entries<AppealRequest>().Any(appealEntry =>
             appealEntry.State == EntityState.Modified
-            && (appealEntry.Entity.SubmissionId == submissionEntry.Entity.Id
-                || (appealEntry.Entity.SubmissionId == null && appealEntry.Entity.TicketId == submissionEntry.Entity.TicketId))
-            && appealEntry.Property(nameof(AppealRequest.Status)).OriginalValue is AppealStatus.Pending or AppealStatus.InReview
-            && string.Equals(appealEntry.Entity.Status, AppealStatus.Approved, StringComparison.Ordinal)
-            && string.Equals(appealEntry.Entity.Decision, AppealStatus.Approved, StringComparison.Ordinal)
-            && appealEntry.Entity.ProposedScore == submissionEntry.Entity.FinalScore);
+            && appealEntry.Entity.TicketId == submissionEntry.Entity.TicketId
+            && appealEntry.Property(nameof(AppealRequest.Status)).OriginalValue is string origStatus
+            && (string.Equals(origStatus, AppealStatus.Pending, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(origStatus, AppealStatus.InReview, StringComparison.OrdinalIgnoreCase))
+            && string.Equals(appealEntry.Entity.Status, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(appealEntry.Entity.Decision, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
+            && ((!appealEntry.Entity.SubmissionId.HasValue && appealEntry.Entity.ProposedScore == submissionEntry.Entity.FinalScore)
+                || (appealEntry.Entity.SubmissionId == submissionEntry.Entity.Id && appealEntry.Entity.ProposedScore == submissionEntry.Entity.FinalScore)
+                || (appealEntry.Entity.SubmissionId.HasValue
+                    && appealEntry.Entity.SubmissionId != submissionEntry.Entity.Id
+                    && submissionEntry.Property(nameof(ExamQuestionSubmission.FinalScore)).OriginalValue == null
+                    && submissionEntry.Entity.FinalScore == submissionEntry.Entity.AiScore)));
     }
 
     private static OneWayLockException CreateLockException(string entityName) =>

@@ -133,6 +133,7 @@ export interface PracticeAnswerDetail {
   answerText: string
   isFollowUp: boolean
   parentAnswerId: string | null
+  promptText?: string | null
   status: PracticeAnswerStatus
   submittedAt: string
   totalScore: number | null

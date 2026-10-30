@@ -31,11 +31,20 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             return Result<StartPracticeSessionResponse>.Failure("Môn học không tồn tại.");
         }
 
-        // Đọc cấu hình thời gian đệm hiệu đính transcript do Admin cấu hình trong SystemConfigs (fallback cấu hình môn học hoặc 60s)
-        var bufferConfig = await _context.SystemConfigs
+        // Đọc gộp toàn bộ cấu hình SystemConfigs cần thiết cho phiên luyện tập trong 1 lượt truy vấn duy nhất
+        var configKeys = new[]
+        {
+            "TranscriptBufferSeconds",
+            "MinMixedPracticeQuestions",
+            "MaxMixedPracticeQuestions",
+            "MaxPracticeQuestionsPerSession"
+        };
+        var systemConfigs = await _context.SystemConfigs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "TranscriptBufferSeconds", cancellationToken);
-        int bufferSeconds = (bufferConfig != null && int.TryParse(bufferConfig.Value, out var parsedBuffer))
+            .Where(c => configKeys.Contains(c.Key))
+            .ToDictionaryAsync(c => c.Key, c => c.Value, cancellationToken);
+
+        int bufferSeconds = (systemConfigs.TryGetValue("TranscriptBufferSeconds", out var bufferVal) && int.TryParse(bufferVal, out var parsedBuffer))
             ? parsedBuffer
             : (course.TranscriptBufferSeconds > 0 ? course.TranscriptBufferSeconds : 60);
         bufferSeconds = Math.Clamp(bufferSeconds, 10, 300);
@@ -70,10 +79,10 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             // Trường hợp đặc biệt: chọn đơn mức độ và count == 1 (legacy test)
             if (request.Difficulties == null && normalizedDifficulty != "progressive" && !string.IsNullOrWhiteSpace(normalizedDifficulty) && request.QuestionCount == 1)
             {
-                return await HandleSingleDifficultyPracticeAsync(course, bufferSeconds, normalizedDifficulty, request, cancellationToken);
+                return await HandleSingleDifficultyPracticeAsync(course, bufferSeconds, normalizedDifficulty, systemConfigs, request, cancellationToken);
             }
 
-            return await HandleProgressivePracticeAsync(course, bufferSeconds, request, cancellationToken);
+            return await HandleProgressivePracticeAsync(course, bufferSeconds, systemConfigs, request, cancellationToken);
         }
 
         // 3. Chế độ Per-Question
@@ -86,13 +95,13 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         {
             if (request.QuestionCount.HasValue && request.QuestionCount.Value > 1)
             {
-                return await HandleProgressivePracticeAsync(course, bufferSeconds, request, cancellationToken);
+                return await HandleProgressivePracticeAsync(course, bufferSeconds, systemConfigs, request, cancellationToken);
             }
 
             return await HandleOnDemandPerQuestionAsync(course, bufferSeconds, normalizedDifficulties, request, cancellationToken);
         }
 
-        return await HandleSingleDifficultyPracticeAsync(course, bufferSeconds, normalizedDifficulty, request, cancellationToken);
+        return await HandleSingleDifficultyPracticeAsync(course, bufferSeconds, normalizedDifficulty, systemConfigs, request, cancellationToken);
     }
 
     private async Task<Result<StartPracticeSessionResponse>> HandleOnDemandPerQuestionAsync(
@@ -102,26 +111,36 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         StartPracticeSessionCommand request,
         CancellationToken cancellationToken)
     {
-        var availableQuestions = await _context.PracticeQuestions
+        // Pha 1: Chỉ chiếu (Project) Id và Difficulty nhẹ trên Index, không kéo toàn bộ Content/Rubric/Criteria của cả kho đề lên RAM
+        var diffSet = normalizedDifficulties.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var lightweightCandidates = await _context.PracticeQuestions
             .AsNoTracking()
-            .Include(q => q.Rubric)
-            .ThenInclude(r => r.Criteria)
-            .Where(q => q.CourseId == request.CourseId &&
-                        q.IsActive &&
-                        normalizedDifficulties.Contains(q.Difficulty.ToLower()))
+            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
-        if (!availableQuestions.Any())
+        var matchingCandidates = lightweightCandidates
+            .Where(q => !string.IsNullOrWhiteSpace(q.Difficulty) && diffSet.Contains(q.Difficulty.Trim()))
+            .ToList();
+
+        if (matchingCandidates.Count == 0)
         {
             return Result<StartPracticeSessionResponse>.Failure(
                 "Kho đề hiện tại không có câu hỏi khả dụng cho các mức độ đã chọn. Vui lòng liên hệ giảng viên bổ sung câu hỏi.");
         }
 
         // Bốc 1 câu hỏi ngẫu nhiên công bằng giữa các độ khó
-        var candidateDiffs = availableQuestions.Select(q => q.Difficulty.Trim().ToLowerInvariant()).Distinct().ToList();
+        var candidateDiffs = matchingCandidates.Select(q => q.Difficulty.Trim().ToLowerInvariant()).Distinct().ToList();
         var chosenDiff = candidateDiffs[Random.Shared.Next(candidateDiffs.Count)];
-        var diffPool = availableQuestions.Where(q => q.Difficulty.Trim().ToLowerInvariant() == chosenDiff).ToList();
-        var selectedQuestion = diffPool[Random.Shared.Next(diffPool.Count)];
+        var diffPool = matchingCandidates.Where(q => q.Difficulty.Trim().ToLowerInvariant() == chosenDiff).ToList();
+        var chosenId = diffPool[Random.Shared.Next(diffPool.Count)].Id;
+
+        // Pha 2: Chỉ tải đầy đủ nội dung câu hỏi và Rubric Criteria cho đúng 1 câu hỏi đã được chọn
+        var selectedQuestion = await _context.PracticeQuestions
+            .AsNoTracking()
+            .Include(q => q.Rubric)
+                .ThenInclude(r => r.Criteria)
+            .FirstAsync(q => q.Id == chosenId, cancellationToken);
 
         var selectedQuestions = new List<PracticeQuestionDto>
         {
@@ -141,9 +160,8 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
-                normalizedDifficulties,
-                selectedQuestions.Select(q => q.QuestionId)),
+            SelectedDifficulties = PracticeSession.SerializeDifficulties(normalizedDifficulties),
+            SelectedQuestionIdsJson = PracticeSession.SerializeQuestionIds(selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 
@@ -162,19 +180,13 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
     private async Task<Result<StartPracticeSessionResponse>> HandleProgressivePracticeAsync(
         Course course,
         int bufferSeconds,
+        IReadOnlyDictionary<string, string> systemConfigs,
         StartPracticeSessionCommand request,
         CancellationToken cancellationToken)
     {
-        // Đọc cấu hình MinMixedPracticeQuestions và MaxMixedPracticeQuestions từ DB qua SystemConfigs (fallback 3 và 10)
-        var minConfig = await _context.SystemConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "MinMixedPracticeQuestions", cancellationToken);
-        int minAllowed = (minConfig != null && int.TryParse(minConfig.Value, out var parsedMin)) ? parsedMin : 3;
-
-        var maxMixedConfig = await _context.SystemConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "MaxMixedPracticeQuestions", cancellationToken);
-        int maxAllowed = (maxMixedConfig != null && int.TryParse(maxMixedConfig.Value, out var parsedMaxMixed)) ? parsedMaxMixed : 10;
+        // Đọc cấu hình MinMixedPracticeQuestions và MaxMixedPracticeQuestions đã lấy gộp từ SystemConfigs (fallback 3 và 10)
+        int minAllowed = (systemConfigs.TryGetValue("MinMixedPracticeQuestions", out var minVal) && int.TryParse(minVal, out var parsedMin)) ? parsedMin : 3;
+        int maxAllowed = (systemConfigs.TryGetValue("MaxMixedPracticeQuestions", out var maxVal) && int.TryParse(maxVal, out var parsedMaxMixed)) ? parsedMaxMixed : 10;
 
         int questionCount = request.QuestionCount ?? minAllowed;
         if (questionCount < minAllowed || questionCount > maxAllowed)
@@ -194,22 +206,24 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         int neededMedium = baseCount + (remainder >= 1 ? 1 : 0);
         int neededHard = baseCount;
 
-        // Truy vấn toàn bộ câu hỏi active của môn học
-        var allQuestions = await _context.PracticeQuestions
+        // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
+        var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Include(q => q.Rubric)
-            .ThenInclude(r => r.Criteria)
             .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
-        var easyPool = allQuestions
-            .Where(q => string.Equals(q.Difficulty, "easy", StringComparison.OrdinalIgnoreCase))
+        var easyPool = lightweightQuestions
+            .Where(q => string.Equals(q.Difficulty?.Trim(), "easy", StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Id)
             .ToList();
-        var mediumPool = allQuestions
-            .Where(q => string.Equals(q.Difficulty, "medium", StringComparison.OrdinalIgnoreCase))
+        var mediumPool = lightweightQuestions
+            .Where(q => string.Equals(q.Difficulty?.Trim(), "medium", StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Id)
             .ToList();
-        var hardPool = allQuestions
-            .Where(q => string.Equals(q.Difficulty, "hard", StringComparison.OrdinalIgnoreCase))
+        var hardPool = lightweightQuestions
+            .Where(q => string.Equals(q.Difficulty?.Trim(), "hard", StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Id)
             .ToList();
 
         // Kiểm tra số lượng trong kho đề
@@ -220,13 +234,22 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         }
 
         // Bốc ngẫu nhiên theo từng mức và sắp xếp tăng dần: Dễ -> Trung bình -> Khó
-        var selectedEasy = easyPool.OrderBy(_ => Guid.NewGuid()).Take(neededEasy);
-        var selectedMedium = mediumPool.OrderBy(_ => Guid.NewGuid()).Take(neededMedium);
-        var selectedHard = hardPool.OrderBy(_ => Guid.NewGuid()).Take(neededHard);
+        var orderedSelectedIds = easyPool.OrderBy(_ => Guid.NewGuid()).Take(neededEasy)
+            .Concat(mediumPool.OrderBy(_ => Guid.NewGuid()).Take(neededMedium))
+            .Concat(hardPool.OrderBy(_ => Guid.NewGuid()).Take(neededHard))
+            .ToList();
 
-        var selectedQuestions = selectedEasy
-            .Concat(selectedMedium)
-            .Concat(selectedHard)
+        // Pha 2: Chỉ tải chi tiết câu hỏi kèm Rubric Criteria cho đúng các câu đã bốc trúng
+        var selectedEntitiesMap = await _context.PracticeQuestions
+            .AsNoTracking()
+            .Include(q => q.Rubric)
+                .ThenInclude(r => r.Criteria)
+            .Where(q => orderedSelectedIds.Contains(q.Id))
+            .ToDictionaryAsync(q => q.Id, cancellationToken);
+
+        var selectedQuestions = orderedSelectedIds
+            .Where(selectedEntitiesMap.ContainsKey)
+            .Select(id => selectedEntitiesMap[id])
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
@@ -244,9 +267,8 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = request.IsFullSession ? "full_session" : "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
-                new List<string> { "easy", "medium", "hard" },
-                selectedQuestions.Select(q => q.QuestionId)),
+            SelectedDifficulties = PracticeSession.SerializeDifficulties(new List<string> { "easy", "medium", "hard" }),
+            SelectedQuestionIdsJson = PracticeSession.SerializeQuestionIds(selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 
@@ -266,14 +288,12 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         Course course,
         int bufferSeconds,
         string normalizedDifficulty,
+        IReadOnlyDictionary<string, string> systemConfigs,
         StartPracticeSessionCommand request,
         CancellationToken cancellationToken)
     {
-        // Đọc cấu hình MaxPracticeQuestionsPerSession từ DB qua SystemConfigs (fallback 10)
-        var maxConfig = await _context.SystemConfigs
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Key == "MaxPracticeQuestionsPerSession", cancellationToken);
-        int maxAllowed = (maxConfig != null && int.TryParse(maxConfig.Value, out var parsedMax)) ? parsedMax : 10;
+        // Đọc cấu hình MaxPracticeQuestionsPerSession đã lấy gộp từ SystemConfigs (fallback 10)
+        int maxAllowed = (systemConfigs.TryGetValue("MaxPracticeQuestionsPerSession", out var maxVal) && int.TryParse(maxVal, out var parsedMax)) ? parsedMax : 10;
 
         int count = (request.QuestionCount.HasValue && request.QuestionCount.Value > 0)
             ? request.QuestionCount.Value
@@ -292,27 +312,41 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             _ => "Trung bình"
         };
 
-        // Lọc danh sách câu hỏi theo CourseId, IsActive và Difficulty
-        var availableQuestions = await _context.PracticeQuestions
+        // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
+        var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Include(q => q.Rubric)
-            .ThenInclude(r => r.Criteria)
-            .Where(q => q.CourseId == request.CourseId &&
-                        q.Difficulty.ToLower() == normalizedDifficulty &&
-                        q.IsActive)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
+        var availableIds = lightweightQuestions
+            .Where(q => string.Equals(q.Difficulty?.Trim(), normalizedDifficulty, StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Id)
+            .ToList();
+
         // Kiểm tra nếu số lượng câu hỏi có trong kho < count
-        if (availableQuestions.Count < count)
+        if (availableIds.Count < count)
         {
             return Result<StartPracticeSessionResponse>.Failure(
-                $"Kho đề hiện tại chỉ có {availableQuestions.Count} câu hỏi {difficultyLabel}, vui lòng chọn số lượng ít hơn.");
+                $"Kho đề hiện tại chỉ có {availableIds.Count} câu hỏi {difficultyLabel}, vui lòng chọn số lượng ít hơn.");
         }
 
-        // Lấy ngẫu nhiên đúng count câu hỏi
-        var selectedQuestions = availableQuestions
+        // Lấy ngẫu nhiên đúng count câu hỏi và chỉ tải Rubric Criteria cho các câu được chọn
+        var chosenIds = availableIds
             .OrderBy(_ => Guid.NewGuid())
             .Take(count)
+            .ToList();
+
+        var selectedEntitiesMap = await _context.PracticeQuestions
+            .AsNoTracking()
+            .Include(q => q.Rubric)
+                .ThenInclude(r => r.Criteria)
+            .Where(q => chosenIds.Contains(q.Id))
+            .ToDictionaryAsync(q => q.Id, cancellationToken);
+
+        var selectedQuestions = chosenIds
+            .Where(selectedEntitiesMap.ContainsKey)
+            .Select(id => selectedEntitiesMap[id])
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
@@ -330,9 +364,8 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             PracticeMode = request.IsFullSession ? "full_session" : "per_question",
             StartedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
-            SelectedDifficulties = PracticeSession.SerializeDifficultiesAndQuestions(
-                new[] { normalizedDifficulty },
-                selectedQuestions.Select(q => q.QuestionId)),
+            SelectedDifficulties = PracticeSession.SerializeDifficulties(new[] { normalizedDifficulty }),
+            SelectedQuestionIdsJson = PracticeSession.SerializeQuestionIds(selectedQuestions.Select(q => q.QuestionId)),
             Status = "in_progress"
         };
 

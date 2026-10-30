@@ -156,6 +156,7 @@ public class GradingQueueWorker : BackgroundService
             .Include(q => q.Course)
             .Include(q => q.Rubric)
             .ThenInclude(r => r.Criteria)
+            .AsSingleQuery()
             .FirstOrDefaultAsync(q => q.Id == gradingTask.QuestionId, cancellationToken);
 
         if (question == null || question.Rubric == null || !question.Rubric.Criteria.Any())
@@ -200,9 +201,17 @@ public class GradingQueueWorker : BackgroundService
         string? answeredFollowUpPrompt = null;
         if (gradingTask.IsFollowUp)
         {
-            answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault();
+            var currentAnswerPrompt = await dbContext.PracticeAnswers
+                .AsNoTracking()
+                .Where(a => a.Id == gradingTask.AnswerId)
+                .Select(a => a.PromptText)
+                .FirstOrDefaultAsync(cancellationToken);
 
-            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt) && gradingTask.ParentAnswerId.HasValue)
+            if (!string.IsNullOrWhiteSpace(currentAnswerPrompt))
+            {
+                answeredFollowUpPrompt = currentAnswerPrompt.Trim();
+            }
+            else if (gradingTask.ParentAnswerId.HasValue)
             {
                 var parentCot = await dbContext.AiEvaluations
                     .AsNoTracking()
@@ -212,6 +221,11 @@ public class GradingQueueWorker : BackgroundService
                     .FirstOrDefaultAsync(cancellationToken);
 
                 answeredFollowUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+            }
+
+            if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+            {
+                answeredFollowUpPrompt = previousFollowUpPrompts.LastOrDefault();
             }
 
             if (!string.IsNullOrWhiteSpace(answeredFollowUpPrompt) &&
@@ -475,6 +489,10 @@ public class GradingQueueWorker : BackgroundService
         if (answer != null)
         {
             answer.Status = "graded";
+            if (gradingTask.IsFollowUp && string.IsNullOrWhiteSpace(answer.PromptText) && !string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+            {
+                answer.PromptText = answeredFollowUpPrompt;
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -486,6 +504,7 @@ public class GradingQueueWorker : BackgroundService
             AnswerText = gradingTask.AnswerText,
             IsFollowUp = gradingTask.IsFollowUp,
             ParentAnswerId = gradingTask.ParentAnswerId,
+            PromptText = answer?.PromptText ?? (gradingTask.IsFollowUp ? answeredFollowUpPrompt : null),
             Status = "graded",
             SubmittedAt = answer?.SubmittedAt ?? DateTime.UtcNow,
             TotalScore = evaluation.TotalScore,

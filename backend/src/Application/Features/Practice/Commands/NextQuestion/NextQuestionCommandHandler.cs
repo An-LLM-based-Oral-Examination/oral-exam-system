@@ -50,12 +50,16 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
             return Result<NextQuestionResponse>.Failure("Tính năng bốc câu hỏi theo yêu cầu chỉ áp dụng cho chế độ [Per-Question].");
         }
 
-        // 3. Lấy danh sách câu trả lời chính đã làm trong session này (loại trừ follow-up)
+        // 3. Lấy danh sách câu trả lời chính đã làm trong session này (loại trừ follow-up) bằng Projection nhẹ
         var answeredAnswers = await _context.PracticeAnswers
             .AsNoTracking()
-            .Include(a => a.Question)
             .Where(a => a.SessionId == session.Id && !a.IsFollowUp)
             .OrderBy(a => a.SubmittedAt)
+            .Select(a => new
+            {
+                a.QuestionId,
+                QuestionDifficulty = a.Question != null ? a.Question.Difficulty : null
+            })
             .ToListAsync(cancellationToken);
 
         var priorMainQuestionIds = new List<Guid>(session.SelectedQuestionIds);
@@ -68,11 +72,6 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         }
 
         var excludedQuestionIds = priorMainQuestionIds.ToHashSet();
-
-        var questionDifficulties = await _context.PracticeQuestions
-            .AsNoTracking()
-            .Where(q => priorMainQuestionIds.Contains(q.Id))
-            .ToDictionaryAsync(q => q.Id, q => q.Difficulty.Trim().ToLowerInvariant(), cancellationToken);
 
         // 4. Xác định danh sách độ khó đã chọn của session
         var selectedDifficulties = session.DifficultiesList
@@ -87,15 +86,24 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
             selectedDifficulties = new List<string> { "easy", "medium", "hard" };
         }
 
-        // 5. Truy vấn kho câu hỏi active của môn học chưa được trả lời trong session này
-        var availableQuestions = await _context.PracticeQuestions
+        var selectedDiffSet = selectedDifficulties.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // 5. Pha 1: Truy vấn danh sách (Id, Difficulty) nhẹ của môn học trên Index, không kéo toàn bộ Content/Rubric/Criteria lên RAM
+        var allCourseQuestionMeta = await _context.PracticeQuestions
             .AsNoTracking()
-            .Include(q => q.Rubric).ThenInclude(r => r.Criteria)
-            .Where(q => q.CourseId == session.CourseId &&
-                        q.IsActive &&
-                        !excludedQuestionIds.Contains(q.Id) &&
-                        selectedDifficulties.Contains(q.Difficulty.ToLower()))
+            .Where(q => q.CourseId == session.CourseId && q.IsActive)
+            .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
+
+        var questionDifficulties = allCourseQuestionMeta
+            .Where(q => excludedQuestionIds.Contains(q.Id))
+            .ToDictionary(q => q.Id, q => (q.Difficulty ?? string.Empty).Trim().ToLowerInvariant());
+
+        var availableQuestions = allCourseQuestionMeta
+            .Where(q => !excludedQuestionIds.Contains(q.Id) &&
+                        !string.IsNullOrWhiteSpace(q.Difficulty) &&
+                        selectedDiffSet.Contains(q.Difficulty.Trim()))
+            .ToList();
 
         // Nếu kho đề cạn kiệt toàn bộ câu hỏi theo các mức đã chọn
         if (!availableQuestions.Any())
@@ -125,11 +133,11 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
 
             if (string.IsNullOrEmpty(last1))
             {
-                last1 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId1)?.Question?.Difficulty?.Trim().ToLowerInvariant();
+                last1 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId1)?.QuestionDifficulty?.Trim().ToLowerInvariant();
             }
             if (string.IsNullOrEmpty(last2))
             {
-                last2 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId2)?.Question?.Difficulty?.Trim().ToLowerInvariant();
+                last2 = answeredAnswers.LastOrDefault(a => a.QuestionId == qId2)?.QuestionDifficulty?.Trim().ToLowerInvariant();
             }
 
             if (!string.IsNullOrEmpty(last1) && last1 == last2)
@@ -138,28 +146,18 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
             }
         }
 
-        List<PracticeQuestion> candidatePool;
+        var candidatePool = availableQuestions;
         if (excludeDifficulty != null)
         {
             var nonExcludedPool = availableQuestions
                 .Where(q => !string.Equals(q.Difficulty.Trim(), excludeDifficulty, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            if (nonExcludedPool.Any())
-            {
-                candidatePool = nonExcludedPool;
-            }
-            else
-            {
-                // Fallback to D if D has unattempted questions
-                candidatePool = availableQuestions
+            candidatePool = nonExcludedPool.Any()
+                ? nonExcludedPool
+                : availableQuestions
                     .Where(q => string.Equals(q.Difficulty.Trim(), excludeDifficulty, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-            }
-        }
-        else
-        {
-            candidatePool = availableQuestions;
         }
 
         if (!candidatePool.Any())
@@ -176,7 +174,13 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         var candidateDiffs = candidatePool.Select(q => q.Difficulty.Trim().ToLowerInvariant()).Distinct().ToList();
         var chosenDiff = candidateDiffs[Random.Shared.Next(candidateDiffs.Count)];
         var diffPool = candidatePool.Where(q => q.Difficulty.Trim().ToLowerInvariant() == chosenDiff).ToList();
-        var selectedQuestion = diffPool[Random.Shared.Next(diffPool.Count)];
+        var selectedQuestionId = diffPool[Random.Shared.Next(diffPool.Count)].Id;
+
+        // Pha 2: Chỉ tải đầy đủ nội dung câu hỏi và Rubric Criteria cho đúng 1 câu hỏi đã được chọn
+        var selectedQuestion = await _context.PracticeQuestions
+            .AsNoTracking()
+            .Include(q => q.Rubric).ThenInclude(r => r.Criteria)
+            .FirstAsync(q => q.Id == selectedQuestionId, cancellationToken);
 
         // 8. Cập nhật danh sách câu hỏi đã bốc và LastActivityAt
         var currentSelectedIds = session.SelectedQuestionIds;
