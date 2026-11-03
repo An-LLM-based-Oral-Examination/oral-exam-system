@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchApproveQuestions;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 using OralExamination.Application.Features.QuestionBank.Commands.CreateDraftQuestion;
+using OralExamination.Application.Features.QuestionBank.Commands.GenerateQuestionsFromClo;
 using OralExamination.Application.Features.QuestionBank.Commands.GenerateQuestionsFromFlm;
 using OralExamination.Application.Features.QuestionBank.Commands.ReviewQuestionDecision;
 using OralExamination.Application.Features.QuestionBank.Commands.UploadQuestionImage;
@@ -113,15 +114,18 @@ public class QuestionsController : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên hoặc Trưởng Bộ Môn kích hoạt AI sinh câu hỏi từ đề cương FLM theo Barem riêng
+    /// Giảng viên hoặc Trưởng Bộ Môn kích hoạt AI sinh câu hỏi từ Chuẩn đầu ra môn học (course_clos 3NF) (MF-03).
+    /// Quét phát hiện cờ trùng lặp isFlagged tự động và chuẩn hóa Barem Rubric 10.0đ.
     /// </summary>
-    [HttpPost("generate-from-flm")]
-    public async Task<IActionResult> GenerateFromFlm([FromBody] GenerateQuestionsFromFlmRequestDto request)
+    [HttpPost("generate-from-clo")]
+    [HttpPost("generate-from-flm")] // Route tương thích ngược cho client cũ
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> GenerateFromClo([FromBody] GenerateQuestionsFromCloRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
         var requesterId = currentUserId != Guid.Empty ? currentUserId : (request.RequesterUserId ?? Guid.Empty);
 
-        var command = new GenerateQuestionsFromFlmCommand(
+        var command = new GenerateQuestionsFromCloCommand(
             request.CourseId,
             requesterId,
             request.SelectedCloCodes,

@@ -423,4 +423,123 @@ public class SubmitMockExamSessionCommandHandlerTests
         mainQuestionDto.Score.Should().Be(6.50m);
         mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(6.50m);
     }
+
+    [Fact(DisplayName = "7. Hai câu hỏi Follow-up liên tiếp nhắm vào 2 tiêu chí yếu khác nhau và cộng dồn cập nhật điểm toàn câu chính xác")]
+    public async Task Handle_Should_Target_Distinct_Weak_Criteria_Across_Multiple_FollowUps_And_Merge_Question_Score()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, _) = SeedCourseAndQuestions(context);
+        var studentId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            Status = "in_progress"
+        };
+
+        var mainAnswer = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            IsFollowUp = false,
+            AnswerText = "Câu trả lời chính đạt 4.0 điểm (1.5 + 2.5).",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        var followUp1 = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            ParentAnswerId = mainAnswer.Id,
+            OrderIndex = 1,
+            IsFollowUp = true,
+            PromptText = "Câu hỏi phụ #1 xoáy vào tiêu chí 1?",
+            AnswerText = "Trả lời câu hỏi phụ #1 tốt đạt 4.0/5.0.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-8)
+        };
+
+        var followUp2 = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            ParentAnswerId = followUp1.Id,
+            OrderIndex = 1,
+            IsFollowUp = true,
+            PromptText = "Câu hỏi phụ #2 xoáy vào tiêu chí 2?",
+            AnswerText = "Trả lời câu hỏi phụ #2 tốt đạt 4.5/5.0.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        session.Answers.Add(mainAnswer);
+        session.Answers.Add(followUp1);
+        session.Answers.Add(followUp2);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var crit1 = q1.Rubric.Criteria.OrderBy(c => c.OrderIndex).First();
+        var crit2 = q1.Rubric.Criteria.OrderBy(c => c.OrderIndex).Last();
+        var capturedRequests = new List<AiGradingRequest>();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AiGradingRequest, CancellationToken>((req, _) => capturedRequests.Add(req))
+            .ReturnsAsync((AiGradingRequest req, CancellationToken _) =>
+            {
+                if (!req.IsFollowUp)
+                {
+                    return new AiGradingResult
+                    {
+                        Score = 4.0m,
+                        ConfidenceScore = 0.90m,
+                        Feedback = "Câu gốc đạt 4.0 (1.5 + 2.5).",
+                        Details = new List<GradingDetailDto>
+                        {
+                            new() { CriterionId = crit1.Id.ToString(), Score = 1.5m, Comment = "Cần bổ sung" },
+                            new() { CriterionId = crit2.Id.ToString(), Score = 2.5m, Comment = "Trung bình" }
+                        }
+                    };
+                }
+
+                var targetId = req.Criteria.Single().Id;
+                var achievedScore = targetId == crit1.Id.ToString() ? 4.0m : 4.5m;
+                return new AiGradingResult
+                {
+                    Score = achievedScore * 2.0m,
+                    ConfidenceScore = 0.92m,
+                    Feedback = "Cải thiện tốt tiêu chí yếu.",
+                    Details = new List<GradingDetailDto>
+                    {
+                        new() { CriterionId = targetId, Score = achievedScore, Comment = "Đã làm rõ" }
+                    }
+                };
+            });
+
+        var handler = new SubmitMockExamSessionCommandHandler(context, aiMock.Object);
+        var result = await handler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedRequests.Should().HaveCount(3);
+        // Follow-up #1 nhắm vào crit1 (1.5/5.0 = 0.30 < 2.5/5.0 = 0.50)
+        capturedRequests[1].Criteria.Should().ContainSingle(c => c.Id == crit1.Id.ToString());
+        // Follow-up #2 phải nhắm vào crit2 (tiêu chí yếu kế tiếp chưa hỏi phụ)
+        capturedRequests[2].Criteria.Should().ContainSingle(c => c.Id == crit2.Id.ToString());
+
+        // Điểm câu chính sau khi gộp cả 2 tiêu chí: 4.0 + 4.5 = 8.50m
+        result.Value!.TotalScore.Should().Be(8.50m);
+        var mainQuestionDto = result.Value.Questions.First(q => !q.IsFollowUp);
+        mainQuestionDto.Score.Should().Be(8.50m);
+        mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(8.50m);
+    }
 }

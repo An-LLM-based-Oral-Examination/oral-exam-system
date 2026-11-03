@@ -182,7 +182,93 @@ function getErrorInfo(error: unknown) {
 
 
 
-function toScorecard(result: PracticeAnswerDetail): ScorecardPayload {
+function toScorecard(
+  result: PracticeAnswerDetail,
+  allAnswers: PracticeAnswerDetail[] = [],
+): ScorecardPayload {
+  if (result.isFollowUp && allAnswers.length > 0) {
+    const questionAnswers = [...allAnswers, result].filter(
+      (a) => a.questionId === result.questionId && a.status === 'graded',
+    )
+    const mainCandidates = questionAnswers.filter((a) => !a.isFollowUp)
+    const mainAnswer = mainCandidates[mainCandidates.length - 1] ?? null
+
+    if (mainAnswer && mainAnswer.totalScore !== null && mainAnswer.totalScore !== undefined) {
+      const followUpMap = new Map<string, PracticeAnswerDetail>()
+      for (const a of questionAnswers) {
+        if (a.isFollowUp) followUpMap.set(a.answerId, a)
+      }
+      const followUps = [...followUpMap.values()]
+      const mergedCriteria = mainAnswer.criteriaScores.map((c) => ({
+        criterionId: c.criterionId,
+        criterionName: c.criterionName,
+        score: c.score,
+        maxScore: c.maxScore,
+        comment: c.comment ?? 'Không có nhận xét bổ sung.',
+      }))
+
+      let hasCriterionImprovement = false
+      for (const fu of followUps) {
+        for (const fuCrit of fu.criteriaScores ?? []) {
+          const target = mergedCriteria.find(
+            (m) =>
+              m.criterionId === fuCrit.criterionId ||
+              (m.criterionName &&
+                fuCrit.criterionName &&
+                m.criterionName.toLowerCase() === fuCrit.criterionName.toLowerCase()),
+          )
+          if (target && fuCrit.score > target.score) {
+            const maxAllowed = target.maxScore && target.maxScore > 0 ? target.maxScore : 10
+            target.score = Math.min(fuCrit.score, maxAllowed)
+            if (fuCrit.comment?.trim()) {
+              target.comment = `${fuCrit.comment.trim()} (Đã cập nhật từ câu hỏi phụ)`
+            }
+            hasCriterionImprovement = true
+          }
+        }
+      }
+
+      const fuScores = followUps
+        .map((fu) => fu.totalScore)
+        .filter((s): s is number => s !== null && s !== undefined && Number.isFinite(s))
+      let effectiveScore = mainAnswer.totalScore
+      if (hasCriterionImprovement && mergedCriteria.length > 1) {
+        const mergedSum = mergedCriteria.reduce((acc, c) => acc + c.score, 0)
+        effectiveScore = Math.min(10, Math.max(0, Math.round(mergedSum * 100) / 100))
+      } else if (fuScores.length > 0) {
+        const avgFu = fuScores.reduce((acc, s) => acc + s, 0) / fuScores.length
+        effectiveScore =
+          avgFu >= mainAnswer.totalScore
+            ? Math.max(mainAnswer.totalScore, ...fuScores)
+            : Math.min(
+                10,
+                Math.max(0, Math.round((mainAnswer.totalScore * 0.7 + avgFu * 0.3) * 100) / 100),
+              )
+      }
+
+      const firstFuCrit = result.criteriaScores[0]
+      return {
+        submissionId: result.answerId,
+        totalScore: effectiveScore,
+        previousTotalScore: mainAnswer.totalScore,
+        followUpTurnScore: result.totalScore ?? 0,
+        followUpCriterionName: firstFuCrit?.criterionName ?? null,
+        followUpCriterionScore: firstFuCrit?.score ?? null,
+        followUpCriterionMaxScore: firstFuCrit?.maxScore ?? null,
+        criteriaScores: mergedCriteria.length > 0 ? mergedCriteria : result.criteriaScores.map((criterion) => ({
+          criterionId: criterion.criterionId,
+          criterionName: criterion.criterionName,
+          score: criterion.score,
+          maxScore: criterion.maxScore,
+          comment: criterion.comment ?? 'Không có nhận xét bổ sung.',
+        })),
+        feedback: result.feedback ?? 'Hệ thống chưa trả về nhận xét tổng thể.',
+        needsFollowUp: result.needsFollowUp,
+        followUpPrompt: result.followUpPrompt,
+      }
+    }
+  }
+
   return {
     submissionId: result.answerId,
     totalScore: result.totalScore ?? 0,
@@ -809,14 +895,14 @@ export const PracticeSessionPage: React.FC = () => {
     processedAnswerIds.current.add(result.answerId)
     const restoreTimer = window.setTimeout(() => {
       setLatestResult(result)
-      setScorecard(toScorecard(result))
+      setScorecard(toScorecard(result, allResults))
       setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
       setShowGradingComplete(false)
       setIsSubmitting(false)
       setPageError('')
     }, 0)
     return () => window.clearTimeout(restoreTimer)
-  }, [mode, runtime?.resolvedAnswer])
+  }, [allResults, mode, runtime?.resolvedAnswer])
 
   useEffect(() => {
     if (mode !== 'PER_QUESTION' || !currentQuestion || showGradingComplete) return
@@ -830,12 +916,13 @@ export const PracticeSessionPage: React.FC = () => {
       }
 
       setLatestResult(result)
-      setScorecard(toScorecard(result))
+      setScorecard(toScorecard(result, allResults))
       setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
     }, 0)
 
     return () => window.clearTimeout(timer)
   }, [
+    allResults,
     currentGradedResult,
     currentQuestion,
     mode,
@@ -868,7 +955,7 @@ export const PracticeSessionPage: React.FC = () => {
       setPageError('')
       updateRuntime((current) => ({ ...current, resolvedAnswer: normalizedResult }))
       window.setTimeout(() => {
-        setScorecard(normalizedResult ? toScorecard(normalizedResult) : null)
+        setScorecard(normalizedResult ? toScorecard(normalizedResult, allResults) : null)
         setScorecardTitle(
           normalizedResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
         )
@@ -1153,6 +1240,11 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }
 
+  const handleRecordingRef = useRef(handleRecording)
+  useEffect(() => {
+    handleRecordingRef.current = handleRecording
+  })
+
   useEffect(() => {
     if (answerInputMode !== 'voice') return
 
@@ -1178,14 +1270,13 @@ export const PracticeSessionPage: React.FC = () => {
       if (isTranscribing || isSubmitting || answerIsLocked || showBuffer || gradingIsVisible) return
 
       event.preventDefault()
-      void handleRecording()
+      void handleRecordingRef.current()
     }
 
     window.addEventListener('keydown', handleSpaceShortcut)
     return () => window.removeEventListener('keydown', handleSpaceShortcut)
   }, [
     answerInputMode,
-    handleRecording,
     isSubmitting,
     isTranscribing,
     runtime?.fullSessionSubmitted,

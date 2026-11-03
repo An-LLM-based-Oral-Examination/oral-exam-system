@@ -105,8 +105,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
         // Giữ đúng thứ tự đề thi; follow-up đi sau câu chính cùng OrderIndex.
         var sessionAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
 
-        // 3. Chấm điểm đồng thời tất cả các câu hỏi qua Task.WhenAll
-        var gradingTasks = sessionAnswers.Select(async (a, index) =>
+        // 3. Chấm điểm: Chấm các câu trả lời chính trước để xác định tiêu chí yếu nhất, sau đó chấm các câu hỏi phụ theo thứ tự
+        async Task<(MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval)> EvaluateSingleAnswerAsync(MockExamAnswer a, int index)
         {
             var q = a.Question;
             int orderIndex = a.OrderIndex > 0 ? a.OrderIndex : index + 1;
@@ -169,10 +169,17 @@ public sealed class SubmitMockExamSessionCommandHandler(
             {
                 var cachedCriterionScores = new List<MockExamCriterionScoreDto>();
                 var existingDetails = existingEval.Details?.ToList() ?? new List<AiEvaluationDetail>();
-
-                for (int critIndex = 0; critIndex < orderedCriteria.Count; critIndex++)
+                var effectiveCachedCriteria = (a.IsFollowUp && existingDetails.Count > 0 && existingDetails.Count < orderedCriteria.Count)
+                    ? orderedCriteria.Where(c => existingDetails.Any(d => d.CriterionId == c.Id)).ToList()
+                    : orderedCriteria;
+                if (effectiveCachedCriteria.Count == 0)
                 {
-                    var c = orderedCriteria[critIndex];
+                    effectiveCachedCriteria = orderedCriteria;
+                }
+
+                for (int critIndex = 0; critIndex < effectiveCachedCriteria.Count; critIndex++)
+                {
+                    var c = effectiveCachedCriteria[critIndex];
                     var matchedDetail = existingDetails.FirstOrDefault(d => d.CriterionId == c.Id)
                         ?? (critIndex < existingDetails.Count ? existingDetails[critIndex] : null);
 
@@ -195,8 +202,12 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     ));
                 }
 
+                var cachedMaxSum = cachedCriterionScores.Sum(c => c.MaxScore);
+                var cachedRawSum = cachedCriterionScores.Sum(c => c.Score);
                 var cachedScore = existingDetails.Count > 0 && cachedCriterionScores.Count > 0
-                    ? Math.Clamp(Math.Round(cachedCriterionScores.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                    ? (cachedMaxSum > 0.0m && cachedMaxSum < 10.0m
+                        ? Math.Clamp(Math.Round((cachedRawSum / cachedMaxSum) * 10.0m, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                        : Math.Clamp(Math.Round(cachedRawSum, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m))
                     : Math.Clamp(Math.Round(existingEval.TotalScore, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
 
                 var cachedQuestionScoreDto = new MockExamQuestionScoreDto(
@@ -222,15 +233,6 @@ public sealed class SubmitMockExamSessionCommandHandler(
             }
 
             // Câu hỏi đã có câu trả lời và chưa có AiEvaluation -> Gửi Gemini AI chấm CoT Rubric 10.0đ
-            var criteriaList = orderedCriteria.Select(c => new AiGradingCriterion
-            {
-                Id = c.Id.ToString(),
-                Name = c.CriterionName,
-                Description = c.Description ?? string.Empty,
-                MaxScore = c.MaxScore,
-                Weight = c.Weight
-            }).ToList();
-
             MockExamAnswer? parentMainAnswer = null;
             int followUpOrdinal = 0;
             var previousFollowUpPrompts = new List<string>();
@@ -242,7 +244,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
 
                 var siblingFollowUps = sessionAnswers
                     .Where(x => x.IsFollowUp &&
-                                ((a.ParentAnswerId.HasValue && x.ParentAnswerId == a.ParentAnswerId) ||
+                                ((a.ParentAnswerId.HasValue && x.ParentAnswerId == a.ParentAnswerId) || x.QuestionId == a.QuestionId ||
                                  (!a.ParentAnswerId.HasValue && x.QuestionId == a.QuestionId)))
                     .ToList();
 
@@ -258,7 +260,65 @@ public sealed class SubmitMockExamSessionCommandHandler(
                         .Select(p => p!.Trim())
                         .ToList();
                 }
+
+                var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(
+                    session.Course?.Code,
+                    orderedCriteria.Select(c => c.CriterionName),
+                    q.Content);
+
+                if (!isEnglishCourse && orderedCriteria.Count > 1)
+                {
+                    var rootEvalDetails = parentMainAnswer?.AiEvaluations?
+                        .OrderByDescending(e => e.EvaluatedAt)
+                        .FirstOrDefault()?.Details;
+                    var alreadyTargetedFollowUpCriteria = siblingFollowUps
+                        .Take(Math.Max(0, currentFollowUpIdx))
+                        .SelectMany(x => (x.AiEvaluations ?? Enumerable.Empty<AiEvaluation>())
+                            .OrderByDescending(e => e.EvaluatedAt)
+                            .Take(1))
+                        .Where(e => e.Details != null && e.Details.Count == 1)
+                        .Select(e => e.Details.First().CriterionId)
+                        .ToHashSet();
+
+                    var candidateCriteria = orderedCriteria
+                        .Where(c => !alreadyTargetedFollowUpCriteria.Contains(c.Id))
+                        .ToList();
+                    if (candidateCriteria.Count == 0)
+                    {
+                        candidateCriteria = orderedCriteria;
+                    }
+
+                    RubricCriterion? targetCriterion = null;
+                    decimal lowestRatio = decimal.MaxValue;
+
+                    if (rootEvalDetails != null && rootEvalDetails.Count > 0)
+                    {
+                        foreach (var crit in candidateCriteria)
+                        {
+                            var detail = rootEvalDetails.FirstOrDefault(d => d.CriterionId == crit.Id);
+                            var score = detail?.Score ?? 0m;
+                            var ratio = crit.MaxScore > 0m ? score / crit.MaxScore : 0m;
+                            if (ratio < lowestRatio)
+                            {
+                                lowestRatio = ratio;
+                                targetCriterion = crit;
+                            }
+                        }
+                    }
+
+                    targetCriterion ??= candidateCriteria[0];
+                    orderedCriteria = new List<RubricCriterion> { targetCriterion };
+                }
             }
+
+            var criteriaList = orderedCriteria.Select(c => new AiGradingCriterion
+            {
+                Id = c.Id.ToString(),
+                Name = c.CriterionName,
+                Description = c.Description ?? string.Empty,
+                MaxScore = c.MaxScore,
+                Weight = c.Weight
+            }).ToList();
 
             var gradingReq = new AiGradingRequest
             {
@@ -348,23 +408,39 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 decimal score;
                 if (rawDetails.Count > 0)
                 {
-                    score = detailDto != null
-                        ? Math.Clamp(Math.Round(detailDto.Score, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore)
-                        : 0.0m;
+                    if (detailDto != null)
+                    {
+                        var rawScore = detailDto.Score;
+                        if (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m && orderedCriteria.Count == 1 &&
+                            rawScore > c.MaxScore && rawScore <= 10.0m)
+                        {
+                            rawScore = rawScore * (c.MaxScore / 10.0m);
+                        }
+
+                        score = Math.Clamp(Math.Round(rawScore, 2, MidpointRounding.AwayFromZero), 0.0m, c.MaxScore);
+                    }
+                    else
+                    {
+                        score = 0.0m;
+                    }
                 }
                 else if (totalCriteriaMax > 0.0m && clampedAiScore > 0.0m)
                 {
+                    var targetScaleSum = (totalCriteriaMax < 10.0m && clampedAiScore > totalCriteriaMax)
+                        ? clampedAiScore * (totalCriteriaMax / 10.0m)
+                        : clampedAiScore;
+
                     if (critIndex == orderedCriteria.Count - 1)
                     {
                         score = Math.Clamp(
-                            Math.Round(clampedAiScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                            Math.Round(targetScaleSum - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
                             0.0m,
                             c.MaxScore);
                     }
                     else
                     {
                         score = Math.Clamp(
-                            Math.Round(clampedAiScore * (c.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                            Math.Round(targetScaleSum * (c.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
                             0.0m,
                             c.MaxScore);
                         runningAllocatedScore += score;
@@ -400,8 +476,11 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 });
             }
 
+            var sumCriterionScores = criterionScores.Sum(c => c.Score);
             var finalQuestionScore = criterionScores.Count > 0
-                ? Math.Clamp(Math.Round(criterionScores.Sum(c => c.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                ? (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m
+                    ? Math.Clamp(Math.Round((sumCriterionScores / totalCriteriaMax) * 10.0m, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                    : Math.Clamp(Math.Round(sumCriterionScores, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m))
                 : clampedAiScore;
 
             var questionScoreDto = new MockExamQuestionScoreDto(
@@ -434,19 +513,63 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 Feedback = gradingResult.Feedback,
                 ConfidenceScore = gradingResult.ConfidenceScore,
                 CotTrace = gradingResult.CotTrace,
+                FollowUpPrompt = !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt)
+                    ? gradingResult.FollowUpPrompt.Trim()
+                    : FollowUpPromptBuilder.TryExtractFollowUpFromCot(gradingResult.CotTrace),
                 EvaluatedAt = DateTime.UtcNow,
                 Details = evalDetails
             };
 
             return (a, questionScoreDto, (AiEvaluation?)aiEvaluation);
-        });
+        }
 
         List<(MockExamAnswer a, MockExamQuestionScoreDto score, AiEvaluation? eval)> results;
+        var newEvaluationIds = new HashSet<Guid>();
         try
         {
-            results = (await Task.WhenAll(gradingTasks))
-                .Where(r => r.Item2 is not null)
-                .Select(r => (a: r.a, score: r.Item2!, eval: r.Item3))
+            var rawResults = new (MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval)[sessionAnswers.Count];
+
+            // Pha 1: Chấm song song tất cả các câu trả lời chính trước để có điểm từng tiêu chí (xác định tiêu chí yếu nhất)
+            var mainIndexed = sessionAnswers
+                .Select((a, idx) => (a, idx))
+                .Where(x => !x.a.IsFollowUp)
+                .ToList();
+
+            var mainEvaluated = await Task.WhenAll(mainIndexed.Select(x => EvaluateSingleAnswerAsync(x.a, x.idx)));
+            for (int m = 0; m < mainIndexed.Count; m++)
+            {
+                var idx = mainIndexed[m].idx;
+                var res = mainEvaluated[m];
+                rawResults[idx] = res;
+                if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                {
+                    res.a.AiEvaluations ??= new List<AiEvaluation>();
+                    res.a.AiEvaluations.Add(res.eval);
+                    newEvaluationIds.Add(res.eval.Id);
+                }
+            }
+
+            // Pha 2: Chấm các câu trả lời phụ theo thứ tự để bám sát tiêu chí yếu nhất của câu chính và không trùng lặp giữa các lượt follow-up
+            var followUpIndexed = sessionAnswers
+                .Select((a, idx) => (a, idx))
+                .Where(x => x.a.IsFollowUp)
+                .ToList();
+
+            foreach (var fuItem in followUpIndexed)
+            {
+                var res = await EvaluateSingleAnswerAsync(fuItem.a, fuItem.idx);
+                rawResults[fuItem.idx] = res;
+                if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                {
+                    res.a.AiEvaluations ??= new List<AiEvaluation>();
+                    res.a.AiEvaluations.Add(res.eval);
+                    newEvaluationIds.Add(res.eval.Id);
+                }
+            }
+
+            results = rawResults
+                .Where(r => r.score is not null)
+                .Select(r => (a: r.a, score: r.score!, eval: r.eval))
                 .ToList();
         }
         catch
@@ -471,7 +594,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
             var answeredFollowUps = results
                 .Where(r => r.a.IsFollowUp
                             && ((r.a.ParentAnswerId.HasValue && r.a.ParentAnswerId == mainResult.a.Id)
-                                || (!r.a.ParentAnswerId.HasValue && r.a.QuestionId == mainResult.a.QuestionId))
+                                || r.a.QuestionId == mainResult.a.QuestionId)
                             && !string.IsNullOrWhiteSpace(r.a.AnswerText))
                 .ToList();
 
@@ -508,7 +631,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
                         ?? fuCriteria.FirstOrDefault(fc =>
                             !string.IsNullOrWhiteSpace(mainCrit.CriterionName) &&
                             string.Equals(fc.CriterionName, mainCrit.CriterionName, StringComparison.OrdinalIgnoreCase))
-                        ?? (critIdx < fuCriteria.Count ? fuCriteria[critIdx] : null);
+                        ?? (fuCriteria.Count == mainCriteria.Count && critIdx < fuCriteria.Count ? fuCriteria[critIdx] : null);
 
                     if (matchedFuCrit != null && matchedFuCrit.Score > bestCritScore)
                     {
@@ -556,11 +679,15 @@ public sealed class SubmitMockExamSessionCommandHandler(
             bool hasCriterionImprovement = mergedSum > originalMainScore;
 
             decimal effectiveMainScore;
-            if (hasCriterionImprovement || avgFollowUpScore >= originalMainScore)
+            if (hasCriterionImprovement)
+            {
+                effectiveMainScore = Math.Clamp(mergedSum, 0.0m, 10.0m);
+            }
+            else if (avgFollowUpScore >= originalMainScore)
             {
                 effectiveMainScore = Math.Clamp(
                     mergedSum > 0.0m
-                        ? Math.Max(mergedSum, weightedScore)
+                        ? mergedSum
                         : Math.Max(originalMainScore, weightedScore),
                     0.0m,
                     10.0m);
@@ -661,7 +788,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
             if (r.eval != null)
             {
                 r.a.Status = "graded";
-                if (r.a.AiEvaluations == null || !r.a.AiEvaluations.Any(e => e.Id == r.eval.Id))
+                if (newEvaluationIds.Contains(r.eval.Id) || r.a.AiEvaluations == null || !r.a.AiEvaluations.Any(e => e.Id == r.eval.Id))
                 {
                     _context.AiEvaluations.Add(r.eval);
                 }

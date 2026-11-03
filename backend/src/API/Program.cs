@@ -62,6 +62,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 builder.Services.AddControllers();
+builder.Services.AddScoped<OralExamination.Application.Common.Interfaces.IAntiCheatNotifier, OralExamination.API.Services.AntiCheatSignalRNotifier>();
 
 var app = builder.Build();
 
@@ -79,6 +80,7 @@ app.UseMiddleware<MustChangePasswordMiddleware>();
 
 app.MapControllers();
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
+app.MapHub<OralExamination.API.Hubs.AntiCheatHub>("/hubs/anti-cheat");
 
 app.MapGet("/health", () => Results.Ok(new
 {
@@ -121,6 +123,8 @@ static async Task ApplyMigrationsAsync(WebApplication app)
                     maxAttempts);
 
                 await context.Database.MigrateAsync();
+                await context.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS follow_up_prompt text;");
             }
             else
             {

@@ -30,4 +30,5 @@ public partial class User
     public virtual ICollection<LecturerAudit> LecturerAudits { get; set; } = new List<LecturerAudit>();
     public virtual ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public virtual ICollection<ExamAntiCheatLog> AntiCheatLogs { get; set; } = new List<ExamAntiCheatLog>();
 }

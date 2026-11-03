@@ -1,23 +1,24 @@
 # Backend — Oral Examination API
 
-API của hệ thống luyện thi và đánh giá vấn đáp. Solution .NET 8 theo Clean Architecture, PostgreSQL 16 (30 bảng 3NF) qua EF Core Code First, xác thực kép (Google OAuth 2.0 và tài khoản do Nhà trường cấp phát) kèm JWT.
+API của hệ thống luyện thi và đánh giá vấn đáp. Solution .NET 8 theo Clean Architecture 4 tầng, PostgreSQL 16 (38 bảng 3NF trong 7 Bounded Contexts) qua EF Core Code First, phân quyền 6 vai trò RBAC (`admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`), xác thực kép (Google OAuth 2.0 và tài khoản do Nhà trường cấp phát) kèm JWT.
 
 ## Chức năng
 
 | Nhóm | Việc API làm |
 | --- | --- |
-| Auth | Đăng nhập Google OAuth 2.0 hoặc tài khoản trường cấp (`username`/`password`), đổi mật khẩu, cấp và thu hồi refresh token |
-| Practice | Phiên luyện tập (`Per-Question On-Demand` / `Full-Session Progressive` 3–10 câu), timeout 5 phút (`HTTP 410`), nộp câu trả lời, câu tiếp theo, SignalR báo kết quả chấm |
-| Mock exams | Thi thử có hạn ngạch ngày theo môn do Admin cấu hình (`max_mock_exams_per_day`, vượt trả `HTTP 429`) |
-| Question bank | Ngân hàng câu hỏi, AI sinh đề từ FLM/CLO, soạn đề thủ công đính kèm ảnh/sơ đồ kỹ thuật (`PNG/JPG/WEBP <= 5MB`, chấm Multimodal AI), Barem 10.0đ (`HTTP 422`), gửi Trưởng BM duyệt |
-| Official exams | Kỳ thi, ca thi, Kiosk check-in (`ip_address`), bài nộp Persist First `< 100ms`, hậu kiểm và công bố điểm (`OneWayLockInterceptor`) |
-| Appeals | Phúc khảo nội bộ trên Student Portal, Trưởng BM giao Giảng viên khác chấm lại |
-| DeadLetterQueue | Trưởng Bộ Môn giám sát và kích hoạt chấm bù thủ công các tác vụ lỗi trong `dead_letter_queues` |
-| Admin & Courses | Quản trị người dùng, học kỳ, cấu hình động `system_configs`, cấu hình môn học và nhật ký kiểm toán (`audit_logs`) |
-| Storage | Nhận audio bóc băng Whisper STT, tải ảnh minh họa câu hỏi (`upload-question-image`) và lưu trữ audio phòng thi thật lên Cloudflare R2 (`STT_MSSV.webm` + SHA-256) |
+| Auth | Đăng nhập Google OAuth 2.0 hoặc tài khoản trường cấp (`username`/`password`), đổi mật khẩu, cấp và thu hồi refresh token cho 6 roles |
+| Academic & Classes (R5) | Chuỗi học thuật 4 cấp: Admin tạo Học kỳ & Môn học, gán Trưởng BM (`department_head_user_id`) $\to$ Trưởng BM phân công nhiều Giảng viên vào môn (`course_lecturers`) $\to$ Giảng viên tạo Lớp học phần & mật khẩu lớp (`classes.join_password_hash`) $\to$ Sinh viên nhập mật khẩu tự tham gia lớp (`classes/join`) |
+| Practice (MF-01) | Phiên luyện tập (`Per-Question On-Demand` / `Full-Session Progressive` 3–10 câu), timeout 5 phút (`HTTP 410`), nộp câu trả lời, câu tiếp theo, SignalR báo kết quả chấm |
+| Mock exams (MF-02) | Thi thử có hạn ngạch ngày theo môn do Admin cấu hình (`max_mock_exams_per_day`, vượt trả `HTTP 429`), cấu trúc đề do Trưởng BM cấu hình |
+| Question bank (MF-03 / R8) | Phân tách độc lập 2 luồng tạo câu hỏi: Luồng luyện tập/thi thử tạo độc lập từ CLO 3NF (`course_clos`) vào `practice_questions`; Luồng thi thật tạo bám sát Đề thi mẫu / Ma trận cấu trúc đề (`exam_structures`, `slot_definitions`) của Trưởng BM vào `exam_questions`. Barem 10.0đ (`HTTP 422`), đính kèm ảnh/sơ đồ kỹ thuật (`PNG/JPG/WEBP <= 5MB`, chấm Multimodal AI), gửi Trưởng BM duyệt |
+| Official exams (MF-04 / R3, R4) | Khảo thí (`examination_officer`) tạo kỳ thi, ca thi, xuất bản đề (`is_exam_published`), phân bổ đề không trùng (`uq_tickets_shift_exam_set`); Trưởng BM (`department_head`) độc quyền cấu hình Follow-up thi thật (1–5 câu, mặc định 2); Giám thị (`proctor`) CHỈ điểm danh ghế 1–40 và báo cáo vi phạm phòng thi (`exam_anti_cheat_logs`); bài nộp Persist First `< 100ms`, hậu kiểm và công bố điểm (`OneWayLockInterceptor`) |
+| In-Class Shifts (MF-05 / R6) | Giảng viên tạo Ca thi trong lớp lấy điểm thành phần (`in_class_exam_shifts`), mật khẩu 6 ký tự tự động xoay vòng mỗi 5 phút kèm Grace Period 60s (`in_class_shift_passwords`), chấm AI ngầm qua `BoundedChannel`, hậu kiểm/sửa điểm thành phần và chốt điểm (`One-Way Lock`) |
+| Appeals (R7) | Quy trình phúc khảo 5 bước: Sinh viên nộp đơn $\to$ Cán bộ Khảo thí tiếp nhận, thẩm tra hợp lệ & chuyển giao $\to$ Trưởng BM phân công Giảng viên độc lập chấm lại $\to$ Giảng viên chấm lại trên Evidence Panel $\to$ Trưởng BM phê duyệt quyết định cuối |
+| DeadLetterQueue (R2) | Phân định rõ theo luồng: Admin giám sát & kích hoạt replay DLQ cho luồng Luyện tập (MF-01) và Thi thử (MF-02); Cán bộ Khảo thí giám sát & kích hoạt replay DLQ cho luồng Thi thật (MF-04) |
+| Storage | Nhận audio bóc băng Whisper STT, tải ảnh minh họa câu hỏi (`upload-image`) và lưu trữ audio phòng thi thật lên Cloudflare R2 (`STT_MSSV.webm` + SHA-256) |
 
 
-Prefix REST là `/api/v1`. Hub SignalR luyện tập là `/hubs/practice`.
+Prefix REST là `/api/v1`. Hub SignalR gồm `/hubs/practice` và `/hubs/anti-cheat`.
 
 ## Cấu trúc
 
@@ -26,13 +27,13 @@ backend/
 ├── OralExamination.sln
 ├── Dockerfile
 └── src/
-    ├── Domain/            # Entity, enum
-    ├── Application/       # Use case (CQRS), DTO, validator
-    ├── Infrastructure/    # EF Core, Postgres, JWT, Gemini, Whisper, R2
-    └── API/               # Controllers, middleware, Program.cs
+    ├── Domain/            # 38 Entities 3NF, enums, interfaces
+    ├── Application/       # Use cases (CQRS MediatR), DTOs, FluentValidation
+    ├── Infrastructure/    # EF Core, Postgres, JWT, Gemini, Whisper, R2, Interceptors
+    └── API/               # Controllers, SignalR Hubs, Workers, Middleware, Program.cs
 ```
 
-Schema nằm ở entity trong `Domain` và Fluent API trong `Infrastructure/Persistence/OralExamDbContext.cs`. Thay đổi database đi qua file trong `Infrastructure/Persistence/Migrations/`.
+Schema nằm ở entity trong `Domain` và Fluent API trong `Infrastructure/Persistence/OralExamDbContext.cs`. Thay đổi database đi qua file trong `Infrastructure/Migrations/`.
 
 ## Chạy server
 
@@ -80,6 +81,7 @@ Log cần có dòng `EF Core migrations applied`.
 | Swagger | http://localhost:5000/swagger |
 | Health | http://localhost:5000/health |
 | SignalR practice | http://localhost:5000/hubs/practice |
+| SignalR anti-cheat | http://localhost:5000/hubs/anti-cheat |
 | Postgres từ máy host | `localhost:5432` |
 
 Dừng server, giữ dữ liệu:

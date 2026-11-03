@@ -76,6 +76,10 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
     ),
   )
   const hasQuestionBreakdown = questionNumbers.length > 0
+  const hasFollowUpUpdate =
+    scorecard.previousTotalScore !== null &&
+    scorecard.previousTotalScore !== undefined &&
+    Number.isFinite(scorecard.previousTotalScore)
 
   return (
     <div
@@ -122,7 +126,9 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                   id="scorecard-modal-description"
                   className="mt-1.5 text-xs leading-relaxed text-[#c7d9ee]"
                 >
-                  Đối chiếu điểm theo từng tiêu chí và nhận xét để cải thiện câu trả lời tiếp theo.
+                  {hasFollowUpUpdate
+                    ? 'Điểm toàn câu đã được cập nhật dựa trên kết quả trả lời câu hỏi phụ đào sâu vào tiêu chí yếu.'
+                    : 'Đối chiếu điểm theo từng tiêu chí và nhận xét để cải thiện câu trả lời tiếp theo.'}
                 </p>
               </div>
             </div>
@@ -132,7 +138,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
               aria-label={`Điểm tổng ${scorecard.totalScore.toFixed(1)} trên 10`}
             >
               <span className="text-xs font-semibold tracking-[0.06em] text-[#b9cee7] uppercase">
-                Điểm
+                {hasFollowUpUpdate ? 'Điểm câu' : 'Điểm'}
               </span>
               <span className="ml-1 text-3xl leading-none font-black tracking-[-0.05em] text-white">
                 {scorecard.totalScore.toFixed(1)}
@@ -143,6 +149,40 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#4988C4]/16 p-4 sm:p-5">
+          {hasFollowUpUpdate && (
+            <section className="rounded-xl border border-[#bde0fe] bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
+                  Tổng hợp điểm câu hỏi sau câu phụ
+                </p>
+                <span className="rounded-full bg-[#eefbf4] px-2.5 py-0.5 text-xs font-bold text-[#16886c]">
+                  Trước hỏi phụ: {scorecard.previousTotalScore!.toFixed(1)}/10 → Sau cập nhật:{' '}
+                  {scorecard.totalScore.toFixed(1)}/10
+                </span>
+              </div>
+              {scorecard.followUpCriterionName &&
+                scorecard.followUpCriterionScore !== null &&
+                scorecard.followUpCriterionScore !== undefined && (
+                  <p className="mt-2 text-xs leading-relaxed text-[#4e617a]">
+                    Tiêu chí đào sâu{' '}
+                    <span className="font-bold text-[#0F2854]">
+                      {scorecard.followUpCriterionName}
+                    </span>{' '}
+                    đạt{' '}
+                    <span className="font-bold text-[#168367]">
+                      {scorecard.followUpCriterionScore.toFixed(1)}/
+                      {(scorecard.followUpCriterionMaxScore ?? 10).toFixed(1)} đ
+                    </span>
+                    {scorecard.followUpTurnScore !== null &&
+                    scorecard.followUpTurnScore !== undefined
+                      ? ` (quy đổi ${scorecard.followUpTurnScore.toFixed(1)}/10)`
+                      : ''}
+                    .
+                  </p>
+                )}
+            </section>
+          )}
+
           <section aria-labelledby="scorecard-rubric-title">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -150,7 +190,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                   id="scorecard-rubric-title"
                   className="text-xs font-bold tracking-[0.08em] text-[#52647d] uppercase"
                 >
-                  Chi tiết tiêu chí chấm
+                  {hasFollowUpUpdate ? 'Chi tiết tiêu chí toàn câu (đã cập nhật)' : 'Chi tiết tiêu chí chấm'}
                 </h4>
                 <p className="mt-1 text-xs text-[#8592a5]">
                   Điểm và nhận xét được phân tích theo từng tiêu chí đánh giá.

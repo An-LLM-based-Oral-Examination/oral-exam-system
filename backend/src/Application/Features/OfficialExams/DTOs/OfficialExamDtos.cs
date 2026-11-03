@@ -52,7 +52,7 @@ public sealed class PublishGradesResponseDto
 public sealed class CreateOfficialExamSessionRequest
 {
     public Guid CourseId { get; set; }
-    public Guid ExamStructureId { get; set; }
+    public Guid? ExamStructureId { get; set; }
     public string? Title { get; set; }
     public DateOnly ExamDate { get; set; }
     public bool HasFollowUp { get; set; }
@@ -64,7 +64,7 @@ public sealed class CreateOfficialExamSessionRequest
 public sealed record OfficialExamSessionResponse(
     Guid Id,
     Guid CourseId,
-    Guid ExamStructureId,
+    Guid? ExamStructureId,
     string Title,
     DateOnly ExamDate,
     bool HasFollowUp,

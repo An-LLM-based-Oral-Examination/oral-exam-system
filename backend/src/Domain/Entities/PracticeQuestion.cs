@@ -18,11 +18,18 @@ public partial class PracticeQuestion
     public string? FollowUpPrompt { get; set; }
     public string? ImageUrl { get; set; }
     public string? ImageDescription { get; set; }
+    public string ApprovalStatus { get; set; } = OralExamination.Domain.Enums.ApprovalStatus.Approved;
+    public string Source { get; set; } = OralExamination.Domain.Enums.QuestionSource.Manual;
+    public Guid? ApprovedBy { get; set; }
+    public Guid? SubmittedBy { get; set; }
+    public string? ReviewNotes { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual Course Course { get; set; } = null!;
     public virtual Rubric Rubric { get; set; } = null!;
+    public virtual User? ApprovedByUser { get; set; }
+    public virtual User? SubmittedByUser { get; set; }
     public virtual ICollection<PracticeAnswer> PracticeAnswers { get; set; } = new List<PracticeAnswer>();
     public virtual ICollection<MockExamAnswer> MockExamAnswers { get; set; } = new List<MockExamAnswer>();
 }

@@ -47,7 +47,17 @@ public sealed record GeneratedQuestionDraftDto(
     List<string> KeyPoints,
     bool HasFollowUp,
     string? FollowUpPrompt,
-    RubricDraftDto Rubric
+    RubricDraftDto Rubric,
+    bool IsFlagged = false,
+    string? FlagReason = null
+);
+
+public sealed record GenerateQuestionsFromCloResponseDto(
+    Guid CourseId,
+    string CourseCode,
+    int GeneratedCount,
+    string Source,
+    List<GeneratedQuestionDraftDto> Questions
 );
 
 public sealed record GenerateQuestionsFromFlmResponseDto(
@@ -142,6 +152,17 @@ public sealed record PagedResult<T>(
     int PageNumber,
     int PageSize,
     int TotalPages
+);
+
+public sealed record GenerateQuestionsFromCloRequestDto(
+    Guid CourseId,
+    List<string> SelectedCloCodes,
+    List<string> Topics,
+    int NumberOfQuestions,
+    string UsageScope,
+    List<string> TargetBloomLevels,
+    DifficultyDistributionDto DifficultyDistribution,
+    Guid? RequesterUserId = null
 );
 
 public sealed record GenerateQuestionsFromFlmRequestDto(

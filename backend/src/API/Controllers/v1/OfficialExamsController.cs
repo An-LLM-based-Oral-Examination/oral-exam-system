@@ -14,10 +14,18 @@ using OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.OverrideExamScore;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
+using OralExamination.Application.Features.OfficialExams.Commands.PublishExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.LogAntiCheatEvent;
+using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
+using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
+using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
+using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
+using OralExamination.Application.Features.OfficialExams.Queries.GetAntiCheatLogs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
+using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamSessions;
 
@@ -30,7 +38,7 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Route("api/v1/official-exams")]
-[Authorize(Roles = "lecturer,department_head,proctor,admin")]
+[Authorize(Roles = "lecturer,department_head,proctor,admin,examination_officer")]
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -70,7 +78,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("sessions")]
     [HttpGet("seasons")]
-    [Authorize(Roles = "lecturer,department_head,proctor,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor,admin")]
     public async Task<IActionResult> GetSessions(
         [FromQuery] Guid? courseId = null,
         [FromQuery] string? status = null,
@@ -85,7 +93,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts")]
     [HttpGet("seasons/{sessionId:guid}/shifts")]
-    [Authorize(Roles = "lecturer,department_head,proctor,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor,admin")]
     public async Task<IActionResult> GetShifts(
         [FromRoute] Guid? sessionId = null,
         [FromQuery(Name = "sessionId")] Guid? querySessionId = null,
@@ -262,7 +270,7 @@ public class OfficialExamsController : ControllerBase
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
     /// </summary>
     [HttpPost("shifts/{shiftId:guid}/publish-grades")]
-    [Authorize(Roles = "lecturer,department_head")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> PublishGrades(Guid shiftId, CancellationToken cancellationToken = default)
     {
         var lecturerId = GetAuthenticatedUserId();
@@ -304,10 +312,12 @@ public class OfficialExamsController : ControllerBase
 
     /// <summary>
     /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã niêm phong SHA-256 (BE-V01).
+    /// <summary>
+    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã niêm phong SHA-256 (BE-V01).
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-excel")]
     [HttpGet("/api/v1/audit/export-excel")]
-    [Authorize(Roles = "lecturer,department_head")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> ExportShiftExcel([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -346,7 +356,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-pdf")]
     [HttpGet("/api/v1/audit/export-pdf")]
-    [Authorize(Roles = "lecturer,department_head")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> ExportShiftPdf([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -381,11 +391,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn tạo kỳ thi thật. Role lấy từ tài khoản trong database.
+    /// Trưởng bộ môn hoặc Khảo thí tạo kỳ thi thật. Role lấy từ tài khoản trong database.
     /// </summary>
     [HttpPost("sessions")]
     [HttpPost("seasons")]
-    [Authorize(Roles = "department_head")]
+    [Authorize(Roles = "department_head,examination_officer,admin")]
     public async Task<IActionResult> CreateSession([FromBody] CreateOfficialExamSessionRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -409,11 +419,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
+    /// Trưởng bộ môn hoặc Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
     /// </summary>
     [HttpPost("shifts")]
     [HttpPost("seasons/{sessionId:guid}/shifts")]
-    [Authorize(Roles = "department_head")]
+    [Authorize(Roles = "department_head,examination_officer,admin")]
     public async Task<IActionResult> OpenShift(
         [FromBody] OpenExamShiftRequest request,
         CancellationToken cancellationToken = default,
@@ -442,10 +452,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
+    /// Trưởng bộ môn hoặc Khảo thí gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
     /// </summary>
     [HttpPost("tickets")]
-    [Authorize(Roles = "department_head")]
+    [Authorize(Roles = "department_head,examination_officer,admin")]
     public async Task<IActionResult> AssignTicket([FromBody] AssignExamTicketRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -510,6 +520,183 @@ public class OfficialExamsController : ControllerBase
             DateTime.UtcNow), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Cán bộ khảo thí hoặc Trưởng bộ môn công bố đề thi cho ca thi phòng Lab (is_exam_published = true).
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/publish")]
+    [Authorize(Roles = "examination_officer,department_head,admin")]
+    public async Task<IActionResult> PublishShift(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var actorRole = GetActorRole();
+        var command = new PublishExamShiftCommand(id, actorId.Value, actorRole);
+        var result = await _sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok(new { success = true, shiftId = id, message = "Ca thi đã được công bố đề thi thành công." }) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Ghi nhận sự kiện vi phạm an ninh phòng thi từ Kiosk Desktop App.
+    /// </summary>
+    [HttpPost("anti-cheat/log")]
+    [Authorize(Roles = "student,proctor,examination_officer,department_head,admin")]
+    public async Task<IActionResult> LogAntiCheat([FromBody] LogAntiCheatEventRequest request, CancellationToken cancellationToken = default)
+    {
+        var command = new LogAntiCheatEventCommand(
+            request.TicketId,
+            request.ShiftId,
+            request.StudentId,
+            request.EventType,
+            request.Severity,
+            request.Details);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Không thể ghi nhận vi phạm.",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Lấy danh sách sự kiện vi phạm an ninh của ca thi (hoặc theo vé thi).
+    /// </summary>
+    [HttpGet("shifts/{shiftId:guid}/anti-cheat/logs")]
+    [HttpGet("shifts/{shiftId:guid}/anti-cheat-logs")]
+    [Authorize(Roles = "proctor,examination_officer,department_head,admin")]
+    public async Task<IActionResult> GetAntiCheatLogs(Guid shiftId, [FromQuery] Guid? ticketId, CancellationToken cancellationToken = default)
+    {
+        var query = new GetAntiCheatLogsQuery(shiftId, ticketId);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Lấy danh sách bộ đề thi thật theo môn học.
+    /// </summary>
+    [HttpGet("exam-sets")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    public async Task<IActionResult> GetExamSets([FromQuery] Guid courseId, [FromQuery] Guid? sessionId, [FromQuery] string? status, CancellationToken cancellationToken = default)
+    {
+        var query = new GetExamSetsQuery(courseId, sessionId, status);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Giảng viên hoặc Trưởng bộ môn tạo mới bộ đề thi.
+    /// </summary>
+    [HttpPost("exam-sets")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    public async Task<IActionResult> CreateExamSet([FromBody] CreateExamSetRequest request, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId() ?? Guid.Empty;
+        var actorRole = GetActorRole();
+        var command = new CreateExamSetCommand(
+            request.StructureId,
+            request.CourseId,
+            request.SessionId,
+            request.SetCode,
+            request.QuestionIds,
+            actorId,
+            actorRole);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Không thể tạo bộ đề.",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên gửi bộ đề lên Trưởng bộ môn phê duyệt (SUBMITTED_FOR_REVIEW).
+    /// </summary>
+    [HttpPost("exam-sets/{id:guid}/submit-review")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    public async Task<IActionResult> SubmitExamSetReview(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId() ?? Guid.Empty;
+        var actorRole = GetActorRole();
+        var command = new SubmitExamSetForReviewCommand(id, actorId, actorRole);
+        var result = await _sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok(new { success = true, examSetId = id }) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn phê duyệt bộ đề thành chính thức (OFFICIAL), cascade duyệt toàn bộ câu hỏi và cắm cờ cảnh báo câu hỏi trùng.
+    /// </summary>
+    [HttpPost("exam-sets/{id:guid}/approve")]
+    [Authorize(Roles = "department_head,examination_officer,admin")]
+    public async Task<IActionResult> ApproveExamSet(Guid id, [FromBody] ApproveExamSetRequest? request, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId() ?? Guid.Empty;
+        var actorRole = GetActorRole();
+        var command = new ApproveExamSetCommand(id, request?.ReviewNotes, actorId, actorRole);
+        var result = await _sender.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Không thể phê duyệt bộ đề.",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn hoặc Khảo thí bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER).
+    /// </summary>
+    [HttpPost("exam-sets/{id:guid}/hand-over")]
+    [Authorize(Roles = "department_head,examination_officer,admin")]
+    public async Task<IActionResult> HandOverExamSet(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId() ?? Guid.Empty;
+        var actorRole = GetActorRole();
+        var command = new HandOverExamSetCommand(id, actorId, actorRole);
+        var result = await _sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok(new { success = true, examSetId = id, status = "HANDED_OVER" }) : OfficialExamProblem(result.Error);
+    }
+
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
     }
 
     private string? ResolveRemoteIpAddress()

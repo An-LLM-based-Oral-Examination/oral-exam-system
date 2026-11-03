@@ -32,7 +32,7 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || actor.Role != UserRole.DepartmentHead)
+        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.DepartmentHead or UserRole.ExaminationOfficer))
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -45,14 +45,17 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.CourseNotFound);
         }
 
-        var structureMatchesCourse = await _context.ExamStructures.AnyAsync(
-            structure => structure.Id == request.ExamStructureId
-                && structure.CourseId == request.CourseId
-                && structure.IsActive,
-            cancellationToken);
-        if (!structureMatchesCourse)
+        if (request.ExamStructureId.HasValue && request.ExamStructureId.Value != Guid.Empty)
         {
-            return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.StructureNotFound);
+            var structureMatchesCourse = await _context.ExamStructures.AnyAsync(
+                structure => structure.Id == request.ExamStructureId.Value
+                    && structure.CourseId == request.CourseId
+                    && structure.IsActive,
+                cancellationToken);
+            if (!structureMatchesCourse)
+            {
+                return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.StructureNotFound);
+            }
         }
 
         var session = new OfficialExamSession

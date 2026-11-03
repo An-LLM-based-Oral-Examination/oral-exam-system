@@ -12,6 +12,8 @@ public partial class ExamStructure
     public int TotalQuestions { get; set; } = 5;
     public int DurationMinutes { get; set; } = 30;
     public string BloomDistribution { get; set; } = "{}";
+    public string SlotDefinitions { get; set; } = "[]";
+    public int RequiredSetCount { get; set; } = 1;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -38,7 +38,16 @@ public sealed class GetFlmSyllabusQueryHandler
         int pageNumber = Math.Max(1, request.PageNumber);
         int pageSize = Math.Clamp(request.PageSize <= 0 ? 20 : request.PageSize, 1, 100);
 
-        var clos = BuildCourseClos(course.Code, course.Name);
+        var dbClos = await _context.CourseClos
+            .AsNoTracking()
+            .Where(c => c.CourseId == course.Id && c.IsActive)
+            .OrderBy(c => c.OrderIndex)
+            .ToListAsync(cancellationToken);
+
+        var clos = dbClos.Count > 0
+            ? dbClos.Select(c => new FlmCloDto(c.CloCode, c.Description, c.BloomLevel)).ToList()
+            : new List<FlmCloDto> { new("CLO1", $"Chuẩn đầu ra học phần {course.Code}", "Understand") };
+
         var baseTopics = BuildStandardTopics(course.Code);
 
         var questionTitles = await _context.ExamQuestions
@@ -113,16 +122,6 @@ public sealed class GetFlmSyllabusQueryHandler
         return Result<FlmSyllabusResponseDto>.Success(response);
     }
 
-    private static List<FlmCloDto> BuildCourseClos(string courseCode, string courseName)
-    {
-        return new List<FlmCloDto>
-        {
-            new("CLO1", $"Hiểu và giải thích được các nguyên lý kiến trúc cốt lõi của học phần {courseCode} ({courseName}).", "Understand"),
-            new("CLO2", $"Vận dụng các mẫu thiết kế, công cụ và chuẩn kỹ thuật trong {courseCode} để giải quyết bài toán thực tế.", "Apply"),
-            new("CLO3", $"Phân tích hiệu năng, bảo mật, luồng dữ liệu và xử lý ngoại lệ trong hệ thống {courseCode}.", "Analyze"),
-            new("CLO4", $"Đánh giá, so sánh các giải pháp kiến trúc (trade-offs) và bảo vệ quyết định kỹ thuật cho {courseCode}.", "Evaluate")
-        };
-    }
 
     private static List<FlmTopicDto> BuildStandardTopics(string courseCode)
     {

@@ -654,6 +654,55 @@ public sealed class SubmitMockExamAnswerCommandHandler
         {
             try
             {
+                var allOrderedCriteria = orderedCriteria;
+                var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(
+                    session.Course?.Code,
+                    allOrderedCriteria.Select(c => c.CriterionName),
+                    question.Content);
+
+                if (justAnswered.IsFollowUp && !isEnglishCourse && allOrderedCriteria.Count > 1)
+                {
+                    var rootEvalDetails = parentMain.AiEvaluations?
+                        .OrderByDescending(e => e.EvaluatedAt)
+                        .FirstOrDefault()?.Details;
+
+                    var alreadyTargetedFollowUpCriteria = priorFollowUps
+                        .Where(f => f.Id != justAnswered.Id)
+                        .SelectMany(f => (f.AiEvaluations ?? System.Linq.Enumerable.Empty<AiEvaluation>()).OrderByDescending(e => e.EvaluatedAt).Take(1))
+                        .Where(e => e.Details != null && e.Details.Count == 1)
+                        .Select(e => e.Details.First().CriterionId)
+                        .ToHashSet();
+
+                    RubricCriterion? targetCriterion = null;
+                    decimal lowestRatio = decimal.MaxValue;
+
+                    if (rootEvalDetails != null && rootEvalDetails.Count > 0)
+                    {
+                        var candidates = allOrderedCriteria
+                            .Where(c => !alreadyTargetedFollowUpCriteria.Contains(c.Id))
+                            .ToList();
+                        if (candidates.Count == 0)
+                        {
+                            candidates = allOrderedCriteria;
+                        }
+
+                        foreach (var crit in candidates)
+                        {
+                            var detail = rootEvalDetails.FirstOrDefault(d => d.CriterionId == crit.Id);
+                            var score = detail?.Score ?? 0m;
+                            var ratio = crit.MaxScore > 0m ? score / crit.MaxScore : 0m;
+                            if (ratio < lowestRatio)
+                            {
+                                lowestRatio = ratio;
+                                targetCriterion = crit;
+                            }
+                        }
+                    }
+
+                    targetCriterion ??= allOrderedCriteria[0];
+                    orderedCriteria = new List<RubricCriterion> { targetCriterion };
+                }
+
                 var aiRequest = new AiGradingRequest
                 {
                     QuestionContent = question.Content,
@@ -751,23 +800,39 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         decimal detailScore;
                         if (rawDetails.Count > 0)
                         {
-                            detailScore = matchedDetail != null
-                                ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, crit.MaxScore)
-                                : 0.0m;
+                            if (matchedDetail != null)
+                            {
+                                var rawScore = matchedDetail.Score;
+                                if (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m && orderedCriteria.Count == 1 &&
+                                    rawScore > crit.MaxScore && rawScore <= 10.0m)
+                                {
+                                    rawScore = rawScore * (crit.MaxScore / 10.0m);
+                                }
+
+                                detailScore = Math.Clamp(Math.Round(rawScore, 2, MidpointRounding.AwayFromZero), 0.0m, crit.MaxScore);
+                            }
+                            else
+                            {
+                                detailScore = 0.0m;
+                            }
                         }
                         else if (totalCriteriaMax > 0.0m && clampedAiScore > 0.0m)
                         {
+                            var targetScaleSum = (totalCriteriaMax < 10.0m && clampedAiScore > totalCriteriaMax)
+                                ? clampedAiScore * (totalCriteriaMax / 10.0m)
+                                : clampedAiScore;
+
                             if (i == orderedCriteria.Count - 1)
                             {
                                 detailScore = Math.Clamp(
-                                    Math.Round(clampedAiScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                                    Math.Round(targetScaleSum - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
                                     0.0m,
                                     crit.MaxScore);
                             }
                             else
                             {
                                 detailScore = Math.Clamp(
-                                    Math.Round(clampedAiScore * (crit.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                                    Math.Round(targetScaleSum * (crit.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
                                     0.0m,
                                     crit.MaxScore);
                                 runningAllocatedScore += detailScore;
@@ -794,8 +859,11 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         });
                     }
 
+                    var sumEvalDetails = evalDetails.Sum(d => d.Score);
                     var finalCachedScore = evalDetails.Count > 0
-                        ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                        ? (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m
+                            ? Math.Clamp(Math.Round((sumEvalDetails / totalCriteriaMax) * 10.0m, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                            : Math.Clamp(Math.Round(sumEvalDetails, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m))
                         : clampedAiScore;
 
                     if (justAnswered.AiEvaluations is { Count: > 0 })
@@ -803,6 +871,10 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         _context.AiEvaluations.RemoveRange(justAnswered.AiEvaluations);
                         justAnswered.AiEvaluations.Clear();
                     }
+
+                    var resolvedAiFollowUp = !string.IsNullOrWhiteSpace(aiResult.FollowUpPrompt)
+                        ? aiResult.FollowUpPrompt.Trim()
+                        : FollowUpPromptBuilder.TryExtractFollowUpFromCot(aiResult.CotTrace);
 
                     var cachedEval = new AiEvaluation
                     {
@@ -815,6 +887,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         Feedback = aiResult.Feedback,
                         ConfidenceScore = aiResult.ConfidenceScore,
                         CotTrace = aiResult.CotTrace,
+                        FollowUpPrompt = resolvedAiFollowUp,
                         EvaluatedAt = DateTime.UtcNow,
                         Details = evalDetails
                     };
@@ -830,11 +903,49 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         return string.Empty;
                     }
 
-                    aiGeneratedFollowUpPrompt = !string.IsNullOrWhiteSpace(aiResult.FollowUpPrompt)
-                        ? aiResult.FollowUpPrompt
-                        : FollowUpPromptBuilder.TryExtractFollowUpFromCot(aiResult.CotTrace);
+                    aiGeneratedFollowUpPrompt = resolvedAiFollowUp;
 
-                    if (orderedCriteria.Count > 0 && rawDetails.Count > 0)
+                    if (justAnswered.IsFollowUp && allOrderedCriteria.Count > 1)
+                    {
+                        var rootEvalDetails = parentMain.AiEvaluations?
+                            .OrderByDescending(e => e.EvaluatedAt)
+                            .FirstOrDefault()?.Details;
+                        var usedFollowUpCriteria = priorFollowUps
+                            .SelectMany(f => (f.AiEvaluations ?? System.Linq.Enumerable.Empty<AiEvaluation>()).OrderByDescending(e => e.EvaluatedAt).Take(1))
+                            .Where(e => e.Details != null && e.Details.Count == 1)
+                            .Select(e => e.Details.First().CriterionId)
+                            .Concat(evalDetails.Select(d => d.CriterionId))
+                            .ToHashSet();
+
+                        var nextCandidates = allOrderedCriteria
+                            .Where(c => !usedFollowUpCriteria.Contains(c.Id))
+                            .ToList();
+                        if (nextCandidates.Count == 0)
+                        {
+                            nextCandidates = allOrderedCriteria;
+                        }
+
+                        RubricCriterion? weakestCriterion = null;
+                        decimal lowestRatio = decimal.MaxValue;
+                        foreach (var crit in nextCandidates)
+                        {
+                            var detail = rootEvalDetails?.FirstOrDefault(d => d.CriterionId == crit.Id);
+                            var detailScore = detail?.Score ?? 0m;
+                            var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                            if (ratio < lowestRatio)
+                            {
+                                lowestRatio = ratio;
+                                weakestCriterion = crit;
+                            }
+                        }
+
+                        if (weakestCriterion != null)
+                        {
+                            weakestCriterionName = weakestCriterion.CriterionName;
+                            weakestCriterionDescription = weakestCriterion.Description;
+                        }
+                    }
+                    else if (orderedCriteria.Count > 0 && evalDetails.Count > 0)
                     {
                         RubricCriterion? weakestCriterion = null;
                         decimal lowestRatio = decimal.MaxValue;
@@ -842,12 +953,8 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         for (int i = 0; i < orderedCriteria.Count; i++)
                         {
                             var crit = orderedCriteria[i];
-                            var matchedDetail = rawDetails.FirstOrDefault(d =>
-                                    string.Equals(d.CriterionId?.Trim(), crit.Id.ToString(), StringComparison.OrdinalIgnoreCase))
-                                ?? rawDetails.FirstOrDefault(d =>
-                                    !string.IsNullOrWhiteSpace(crit.CriterionName) &&
-                                    string.Equals(d.CriterionId?.Trim(), crit.CriterionName.Trim(), StringComparison.OrdinalIgnoreCase))
-                                ?? (i < rawDetails.Count ? rawDetails[i] : null);
+                            var matchedDetail = evalDetails.FirstOrDefault(d => d.CriterionId == crit.Id)
+                                ?? (i < evalDetails.Count ? evalDetails[i] : null);
 
                             var detailScore = matchedDetail != null
                                 ? Math.Clamp(matchedDetail.Score, 0.0m, crit.MaxScore)
@@ -876,7 +983,8 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
         if (string.IsNullOrWhiteSpace(weakestCriterionName) && orderedCriteria.Count > 0)
         {
-            var fallbackCriterion = orderedCriteria[Math.Max(0, followUpOrdinal - 1) % orderedCriteria.Count];
+            var fallbackPool = question?.Rubric?.Criteria?.OrderBy(c => c.OrderIndex).ToList() ?? orderedCriteria;
+            var fallbackCriterion = fallbackPool[Math.Max(0, followUpOrdinal - 1) % fallbackPool.Count];
             weakestCriterionName = fallbackCriterion.CriterionName;
             weakestCriterionDescription = fallbackCriterion.Description;
         }
@@ -888,7 +996,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
             followUpSequence: followUpOrdinal,
             weakestCriterionName: weakestCriterionName,
             weakestCriterionDescription: weakestCriterionDescription,
-            criterionNames: orderedCriteria.Select(c => c.CriterionName),
+            criterionNames: (question?.Rubric?.Criteria?.OrderBy(c => c.OrderIndex).ToList() ?? orderedCriteria).Select(c => c.CriterionName),
             questionContent: question?.Content,
             sampleAnswer: null,
             studentTranscript: justAnswered.AnswerText,

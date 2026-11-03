@@ -5,7 +5,7 @@ namespace OralExamination.Application.Common.Interfaces;
 
 /// <summary>
 /// Abstraction interface cho DbContext phục vụ nguyên lý Dependency Inversion trong Clean Architecture.
-/// Định nghĩa đủ 30 DbSets và SaveChangesAsync cho tầng Application.
+/// Định nghĩa đủ 33 DbSets và SaveChangesAsync cho tầng Application.
 /// </summary>
 public interface IApplicationDbContext
 {
@@ -13,6 +13,7 @@ public interface IApplicationDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Semester> Semesters { get; }
     DbSet<Course> Courses { get; }
+    DbSet<CourseClo> CourseClos { get; }
     DbSet<Class> Classes { get; }
     DbSet<ClassEnrollment> ClassEnrollments { get; }
     DbSet<Rubric> Rubrics { get; }
@@ -33,6 +34,7 @@ public interface IApplicationDbContext
     DbSet<RealExamSessionShift> RealExamSessionShifts { get; }
     DbSet<StudentExamTicket> StudentExamTickets { get; }
     DbSet<ExamQuestionSubmission> ExamQuestionSubmissions { get; }
+    DbSet<ExamAntiCheatLog> ExamAntiCheatLogs { get; }
     DbSet<LecturerAudit> LecturerAudits { get; }
     DbSet<LecturerAuditDetail> LecturerAuditDetails { get; }
     DbSet<AppealRequest> AppealRequests { get; }

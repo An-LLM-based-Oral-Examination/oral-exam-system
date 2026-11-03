@@ -3,7 +3,7 @@
 **Tài liệu này quy định bắt buộc (Mandatory) các chuẩn mực kết nối giữa Frontend (React 19 / Vite) và Backend (.NET 8 Clean Architecture) cho 4 thành viên:**  
 - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead BE Architect (MediatR CQRS, System.Threading.Channels, One-Way Lock, System Integration).  
 - 🧑 **Nguyễn Trọng Tốt:** BE Developer, AI Integration & QA Lead (Gemini 1.5 Flash/Pro CoT, Whisper STT, Barem Rubric 10.0, Unit & Architecture Tests).  
-- 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
+- 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 38 bảng 3NF trong 7 Bounded Contexts PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend).  
 - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator (React 19 Vite, Tailwind CSS v4, Web Speech API STT/TTS, Buffer Screen, Kiosk Lockdown, Waveform Player, Contract-First API Sync).  
 
 **Quy chuẩn cốt lõi:**  
@@ -21,7 +21,7 @@
 - **Quy tắc Naming Convention:**
   - URL luôn dùng chữ thường và dấu gạch ngang (kebab-case). Ví dụ: `/api/v1/official-exams/shifts` (KHÔNG DÙNG: `/api/v1/OfficialExams` hay `/api/v1/exam_sessions`).
   - Response JSON từ Backend trả về bắt buộc định dạng **camelCase** (ví dụ: `studentId`, `totalScore`, `roomLab`, `seatNumber`) để Frontend ánh xạ thẳng vào TypeScript Interface.
-  - Phân quyền theo 5 vai trò (User Roles): `student`, `lecturer`, `department_head`, `proctor`, `admin`.
+  - Phân quyền theo 6 vai trò (User Roles): `admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`.
 
 ---
 
@@ -55,7 +55,7 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - `202 Accepted`: Dùng riêng cho tiếp nhận bài nộp MF-01. Backend đã đưa bài làm vào hàng đợi bộ nhớ Bounded Channel (< 100ms), Frontend không cần chờ mà sẽ nhận điểm qua SignalR.
 - `400 Bad Request`: Payload gửi lên sai cấu trúc cú pháp JSON.
 - `401 Unauthorized`: Chưa đăng nhập hoặc Token JWT hết hạn / không hợp lệ.
-- `403 Forbidden`: Bị từ chối quyền truy cập (ví dụ: Sinh viên cố truy cập route quản trị, người dùng không có quyền gọi API sinh câu hỏi FLM [yêu cầu `lecturer` hoặc `department_head`], hoặc gửi request sửa bài thi khi đã bị Khóa điểm một chiều `is_locked = true`).
+- `403 Forbidden`: Bị từ chối quyền truy cập (ví dụ: Sinh viên cố truy cập route quản trị, người dùng không có quyền gọi API sinh câu hỏi [yêu cầu `lecturer` hoặc `department_head`], hoặc gửi request sửa bài thi khi đã bị Khóa điểm một chiều `is_locked = true`).
 - `404 Not Found`: Không tìm thấy tài nguyên theo ID.
 - `410 Gone`: Phiên luyện tập đã kết thúc tự động do quá thời gian không tương tác (`SessionInactivityTimeoutMinutes = 5` phút). Toàn bộ dữ liệu điểm số và câu trả lời đã làm trước đó được bảo toàn nguyên vẹn, sinh viên không thể tương tác thêm trong phiên này.
 - `413 Payload Too Large`: Dung lượng tệp ảnh sơ đồ đính kèm câu hỏi thủ công (`POST /api/v1/questions/upload-image` hoặc `POST /api/v1/storage/upload-question-image`) vượt quá giới hạn tối đa **5MB** (`5,242,880 bytes`).
@@ -63,8 +63,8 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - `422 Unprocessable Entity`: Dữ liệu đúng cú pháp nhưng vi phạm quy tắc nghiệp vụ (ví dụ: Tổng điểm Rubric != 10.0, Model Answer < 50 ký tự, hoặc cập nhật điểm thẩm định mà để trống lý do giải trình).
 - `429 Too Many Requests`: Vi phạm Quota Guard thi thử vượt quá hạn ngạch ngày theo môn học (`max_mock_exams_per_day` do Admin cấu hình, kiểm soát bởi PostgreSQL).
 - `500 Internal Server Error`: Lỗi máy chủ chưa được xử lý.
-- `502 Bad Gateway`: Lỗi kết nối hoặc phản hồi không hợp lệ từ dịch vụ upstream bên thứ 3 (FLM Adapter API, Cloudflare Whisper STT, Google Gemini AI) sau khi đã thực thi chính sách thử lại Polly Retry Policy.
-- `504 Gateway Timeout`: Quá thời gian chờ phản hồi từ dịch vụ ngoại vi sau khi cạn kiệt chu trình Polly Retry (3 lần: 2s, 4s, 8s). Phân định rõ hai tầng timeout: Thời gian chờ mỗi lần gọi đơn lẻ (Attempt Timeout: 10s cho FLM API, 30s cho Gemini AI Generation) và Tổng thời gian chờ tối đa của toàn bộ Resilience Pipeline (Total Request Timeout: 60s cho FLM API, 90s cho Gemini AI Generation).
+- `502 Bad Gateway`: Lỗi kết nối hoặc phản hồi không hợp lệ từ dịch vụ upstream bên thứ 3 (Cloudflare Whisper STT, Google Gemini AI) sau khi đã thực thi chính sách thử lại Polly Retry Policy.
+- `504 Gateway Timeout`: Quá thời gian chờ phản hồi từ dịch vụ ngoại vi sau khi cạn kiệt chu trình Polly Retry (3 lần: 2s, 4s, 8s). Phân định rõ hai tầng timeout: Thời gian chờ mỗi lần gọi đơn lẻ (Attempt Timeout: 15s cho Whisper STT, 30s cho Gemini AI Generation) và Tổng thời gian chờ tối đa của toàn bộ Resilience Pipeline (Total Request Timeout: 45s cho Whisper STT, 90s cho Gemini AI Generation).
 
 ---
 
@@ -113,7 +113,7 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 
 #### 4.1.3. Đổi mật khẩu tài khoản Nhà trường cấp
 - **Endpoint:** `POST /api/v1/auth/change-password`
-- **Quyền truy cập:** Authenticated (`student`, `lecturer`, `department_head`, `proctor`, `admin`)
+- **Quyền truy cập:** Authenticated (`student`, `lecturer`, `department_head`, `examination_officer`, `proctor`, `admin`)
 - **Request Body:**
 ```json
 {
@@ -125,7 +125,7 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - **Response 200 OK:** `{ "message": "Đổi mật khẩu thành công." }` (Cập nhật `password_hash` BCrypt và `password_changed_at`).
 
 #### Cơ chế Xác thực Kép Toàn Hệ Thống (Dual Authentication)
-- Hệ thống hỗ trợ xác thực kép (**Google OAuth 2.0 PKCE** hoặc **Tài khoản `username`/`password` do Nhà trường cấp**) cho toàn bộ 5 vai trò (`student`, `lecturer`, `department_head`, `proctor`, `admin`).
+- Hệ thống hỗ trợ xác thực kép (**Google OAuth 2.0 PKCE** hoặc **Tài khoản `username`/`password` do Nhà trường cấp**) cho toàn bộ 6 vai trò (`student`, `lecturer`, `department_head`, `examination_officer`, `proctor`, `admin`).
 - **Không mở form tự đăng ký công khai bằng mật khẩu**: Tài khoản mật khẩu do Nhà trường/Admin cấp phát sẵn (lưu `password_hash` chuẩn BCrypt).
 - Mọi phiên làm việc sau khi xác thực thành công đều nhận cặp `accessToken` (JWT 15 phút) và `refreshToken` (7 ngày, hỗ trợ Token Rotation).
 
@@ -173,29 +173,44 @@ Backend tuyệt đối KHÔNG trả về chuỗi text thô. Mọi lỗi nghiệp
 - Khi gặp lỗi `401 Unauthorized`, Axios Interceptor tự động kích hoạt luồng Silent Refresh token để lấy token mới.
 
 ### 4.3. Ma trận Phân quyền (RBAC Matrix) & JWT Claims
-Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa claim `role`. Bảng ma trận phân quyền chi tiết cho 5 vai trò:
+Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa claim `role`. Bảng ma trận phân quyền chi tiết cho 6 vai trò:
 
-| Phân hệ / Endpoint API | `student` | `lecturer` | `department_head` | `proctor` | `admin` |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| Quản lý Học thuật & Đề cương (`/api/v1/academic/*`) | ✅ (xem) | ✅ | ✅ | ✅ (xem) | ✅ |
-| Luyện tập tự do MF-01 (`/api/v1/practice/*`) | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Thi thử bấm giờ MF-02 (`/api/v1/mock-exams/*`) | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Soạn câu hỏi & Barem thủ công (`/api/v1/rubrics`, `/api/v1/practice/questions`) | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Phê duyệt câu hỏi thi chính thức (`approved_by`) | ❌ | ❌ | ✅ | ❌ | ✅ |
-| **Lấy đề cương FLM (`GET /api/v1/flm/courses/{id}/syllabus`)** | ❌ | **✅** | **✅** | ❌ | **✅** |
-| **Giảng viên sử dụng AI sinh câu hỏi theo barem của mình (`POST /api/v1/questions/generate-from-flm`)** | ❌ | **✅** | **✅** | ❌ | **✅** |
-| **Giảng viên gửi câu hỏi duyệt Bộ môn (`POST /api/v1/questions/batch-submit-review`)** | ❌ | **✅** | ❌ | ❌ | **✅** |
-| **Trưởng Bộ Môn thẩm định & duyệt đề (`POST /api/v1/questions/{id}/review-decision`)** | ❌ | ❌ | **✅** | ❌ | **✅** |
-| Giám sát phòng thi Lab MF-04 (`/api/v1/official-exams/shifts/*`) | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Thẩm định điểm & Công bố điểm (Publish Grades) MF-04 | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Sinh viên nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Tra cứu danh sách đơn phúc khảo (`GET /api/v1/appeals`) | ✅ (của mình) | ✅ (được giao) | ✅ | ❌ | ✅ |
-| Trưởng Bộ Môn giao Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`) | ❌ | ❌ | ✅ | ❌ | ✅ |
-| Giảng viên chấm lại / Thẩm định phúc khảo (`PUT /api/v1/appeals/{id}/review`) | ❌ | ✅ | ✅ | ❌ | ✅ |
-| Quản trị hệ thống & Audit Logs (`/api/v1/admin/*`) | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Theo dõi & Kích hoạt Replay Dead-Letter Queue (`/api/v1/dlq/*`) | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Phân hệ / Endpoint API | `student` | `lecturer` | `department_head` | `examination_officer` | `proctor` | `admin` |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Quản lý Học thuật (`/api/v1/academic/*`) | ✅ (xem) | ✅ | ✅ | ✅ (xem) | ✅ (xem) | ✅ |
+| Chuỗi học thuật 4 cấp (R5): Admin gán Trưởng BM vào môn (`PUT /api/v1/admin/courses/{id}/assign-department-head`) | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Chuỗi học thuật 4 cấp (R5): Trưởng BM phân công nhiều GV vào môn (`POST /api/v1/department-head/courses/{id}/lecturers`) | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
+| Chuỗi học thuật 4 cấp (R5): GV tạo lớp & mật khẩu lớp (`POST /api/v1/lecturer/classes`, `POST /api/v1/lecturer/classes/{id}/reset-join-password`) | ❌ | **✅** | ❌ | ❌ | ❌ | **✅** |
+| Chuỗi học thuật 4 cấp (R5): SV nhập mật khẩu tự tham gia lớp (`POST /api/v1/student/classes/join`) | **✅** | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Luyện tập tự do MF-01 (`/api/v1/practice/*`) | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Thi thử bấm giờ MF-02 (`/api/v1/mock-exams/*`) | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Quản lý Chuẩn đầu ra CLOs (`/api/v1/courses/{id}/clos`) | ❌ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Phân tách 2 luồng tạo câu hỏi (R8): Luồng luyện tập/thi thử tạo độc lập vào `practice_questions` (`/api/v1/practice/questions`) | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
+| Phân tách 2 luồng tạo câu hỏi (R8): Luồng thi thật tạo bám sát đề thi mẫu / ma trận cấu trúc (`exam_structures`, `slot_definitions`) của Trưởng BM vào `exam_questions` (`/api/v1/official-exams/questions`) | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
+| Soạn câu hỏi & Barem thủ công (`/api/v1/questions`, `/api/v1/rubrics`) | ❌ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Kích hoạt AI sinh câu hỏi từ CLO (`POST /api/v1/questions/generate-from-clo`) | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
+| Giảng viên gửi câu hỏi duyệt Bộ môn (`POST /api/v1/questions/batch-submit-review`) | ❌ | **✅** | ❌ | ❌ | ❌ | **✅** |
+| Trưởng Bộ Môn thẩm định câu hỏi (`POST /api/v1/questions/{id}/review-decision`) | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
+| Đóng gói & Duyệt bộ đề ExamSets (`/api/v1/exam-sets/*`) | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
+| Quản lý Kỳ thi & Ca thi Phòng Lab MF-04 (`/api/v1/official-exams/*`): Khảo thí tạo kỳ thi, ca thi, xuất bản đề, công bố điểm; Trưởng BM chỉ cấu hình Follow-up thi thật (`1–5` câu, mặc định `2`) | ❌ | ❌ | **✅** (Follow-up) | **✅** (Kỳ/Ca thi) | ❌ | **✅** |
+| Phân bổ đề thi không trùng lặp (`uq_tickets_shift_exam_set`) | ❌ | ❌ | ❌ | **✅** | ❌ | **✅** |
+| Giám thị Phòng Lab (`/api/v1/proctor/*`): điểm danh ghế 1–40 (`POST /api/v1/proctor/shifts/{id}/attendance`) & báo cáo vi phạm phòng thi (`POST /api/v1/proctor/shifts/{id}/violations`) | ❌ | ❌ | ❌ | ❌ | **✅** | **✅** |
+| Ghi nhật ký chống gian lận thời gian thực (`POST /api/v1/official-exams/anti-cheat/log`) | **✅** | ❌ | ❌ | **✅** | **✅** | **✅** |
+| Thẩm định điểm (Evidence Panel), sửa điểm có lý do MF-04 | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
+| Công bố điểm ca thi (Publish Grades) kích hoạt One-Way Lock | ❌ | **✅** | ❌ | **✅** | ❌ | **✅** |
+| Sinh viên xem điểm Student Portal & Xác nhận điểm | **✅** | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Phúc khảo nội bộ MF-04 (Bước 1/5): SV nộp đơn (`POST /api/v1/student/appeals`) | **✅** | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Phúc khảo nội bộ MF-04 (Bước 2/5): Cán bộ Khảo thí tiếp nhận & thẩm tra chuyển giao (`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`) | ❌ | ❌ | ❌ | **✅** | ❌ | **✅** |
+| Phúc khảo nội bộ MF-04 (Bước 3/5): Trưởng BM phân công GV (`POST /api/v1/department-head/appeals/{id}/assign-lecturer`) | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
+| Phúc khảo nội bộ MF-04 (Bước 4/5): GV chấm lại (`PUT /api/v1/lecturer/appeals/{id}/regrade`) | ❌ | **✅** | ❌ | ❌ | ❌ | **✅** |
+| Phúc khảo nội bộ MF-04 (Bước 5/5): Trưởng BM phê duyệt quyết định (`POST /api/v1/department-head/appeals/{id}/decision`) | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
+| Ca thi trong lớp & TOTP 5m (R6 - MF-05): GV tạo ca thi, lấy mật khẩu TOTP 6 ký tự xoay vòng 5 phút + grace period 60s, hậu kiểm & sửa điểm thành phần, chốt điểm One-Way Lock (`POST /api/v1/lecturer/in-class-shifts`, `GET .../active-password`, `PUT .../submissions/{subId}/grade`, `POST .../finalize-grades`) | ❌ | **✅** | ❌ | ❌ | ❌ | **✅** |
+| Ca thi trong lớp & TOTP 5m (R6 - MF-05): SV nhập mã vào thi (`POST /api/v1/student/in-class-shifts/{id}/join`) | **✅** | ❌ | ❌ | ❌ | ❌ | **✅** |
+| Quản trị hệ thống, người dùng, cấu hình & Audit Logs (`/api/v1/admin/*`) | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
+| DLQ Replay (MF-01/02): Giám sát & kích hoạt replay luồng Luyện tập & Thi thử (`/api/v1/admin/dlq/*`) | ❌ | ❌ | **❌** | ❌ | ❌ | **✅** |
+| DLQ Replay (MF-04): Giám sát & kích hoạt replay luồng Thi thật phòng Lab (`/api/v1/examination-officer/dlq/*`) | ❌ | ❌ | **❌** | **✅** | ❌ | **✅** |
 
-*Ghi chú quan trọng:* Tính năng AI sinh câu hỏi từ FLM/Syllabus mở quyền sử dụng cho cả **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)**. Giảng viên được tự thiết kế Barem Rubric riêng 10.0đ, tinh chỉnh câu hỏi và sau đó ấn **"Gửi lên cho Bộ Môn"** (`SUBMITTED_FOR_REVIEW`) để Trưởng Bộ Môn thẩm định và phê duyệt chính thức vào ngân hàng đề. Tại MF-04, sau khi kết thúc ca thi, AI chấm điểm ngầm chuyển Giảng viên thẩm định các bài nghi ngờ qua Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT); khi 100% sinh viên có điểm, Giảng viên ấn **"Công Bố Điểm"** (`Publish Grades`); Sinh viên xem điểm trên Student Portal, nếu không đồng ý thì nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`) trực tiếp trên Student Portal để chuyển Trưởng Bộ Môn tiếp nhận và giao cho một Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
+*Ghi chú quan trọng:* Tính năng AI sinh câu hỏi từ CLO môn học (`POST /api/v1/questions/generate-from-clo`) mở quyền sử dụng cho cả **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)**. Luồng luyện tập/thi thử tạo độc lập vào `practice_questions`; luồng thi thật tạo bám sát đề thi mẫu / ma trận cấu trúc (`exam_structures`, `slot_definitions`) của Trưởng Bộ Môn vào `exam_questions` (R8). Giảng viên tự thiết kế Barem Rubric riêng 10.0đ, tinh chỉnh câu hỏi và ấn **"Gửi lên cho Bộ Môn"** (`SUBMITTED_FOR_REVIEW`) để Trưởng Bộ Môn thẩm định (`APPROVED`, `NEEDS_REVISION`, `REJECTED`). Trưởng Bộ Môn nắm 100% quyền cấu hình Follow-up thi thật (`1–5` câu, mặc định `2`), định nghĩa khung `exam_structures` với `slot_definitions` (JSONB) và đóng gói các bộ đề `exam_sets` (`DRAFT` $\to$ `OFFICIAL` $\to$ `HANDED_OVER`) bàn giao cho Cán bộ Khảo thí (`examination_officer`) (R3). Cán bộ Khảo thí tạo kỳ thi, ca thi, phân bổ đề không trùng lặp (`uq_tickets_shift_exam_set`), xuất bản đề ca thi và công bố điểm. Giám thị (`proctor`) chỉ điểm danh ghế 1–40 (`POST /api/v1/proctor/shifts/{id}/attendance`) và báo cáo vi phạm phòng thi (`POST /api/v1/proctor/shifts/{id}/violations`), bị loại bỏ khỏi quản lý ca thi (R4). Về DLQ Replay (R2): `/api/v1/admin/dlq/*` (MF-01/02) thuộc `admin` và `/api/v1/examination-officer/dlq/*` (MF-04) thuộc `examination_officer`; cắt bỏ hoàn toàn quyền DLQ khỏi `department_head`. Về Phúc khảo nội bộ 5 bước (R7): Sinh viên nộp đơn (`POST /api/v1/student/appeals`) $\to$ Cán bộ Khảo thí tiếp nhận & thẩm tra chuyển giao (`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`) $\to$ Trưởng Bộ Môn phân công Giảng viên chấm lại (`POST /api/v1/department-head/appeals/{id}/assign-lecturer`) $\to$ Giảng viên chấm lại (`PUT /api/v1/lecturer/appeals/{id}/regrade`) $\to$ Trưởng Bộ Môn phê duyệt quyết định (`POST /api/v1/department-head/appeals/{id}/decision`).
 
 ---
 
@@ -206,16 +221,19 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 |:---:|:---|:---|:---|
 | 5.1 | Quản lý Học thuật | `/api/v1/academic/*` | Admin, Lecturer, Student |
 | 5.2 | Quản lý Barem Rubric | `/api/v1/rubrics/*` | Lecturer, Department Head |
-| 5.3 | Ngân hàng Câu hỏi | `/api/v1/questions/*` | Lecturer, Department Head |
-| 5.4 | Tích hợp FLM & AI Gen | `/api/v1/flm/*` | Lecturer, Department Head |
+| 5.3 | Ngân hàng Câu hỏi & Đóng gói Bộ đề | `/api/v1/questions/*`, `/api/v1/exam-sets/*` | Lecturer, Department Head |
+| 5.4 | Chuẩn đầu ra CLO & AI Gen | `/api/v1/courses/*/clos`, `/api/v1/questions/generate-from-clo` | Lecturer, Department Head |
 | 5.5 | Luyện tập tự do MF-01 | `/api/v1/practice/*` | Student |
 | 5.6 | Thi thử bấm giờ MF-02 | `/api/v1/mock-exams/*` | Student |
-| 5.7 | Thi thật phòng Lab MF-04 | `/api/v1/official-exams/*` | Student, Proctor |
-| 5.8 | Hậu kiểm & Công bố điểm | `/api/v1/official-exams/shifts/*` | Lecturer |
-| 5.9 | Quản trị DLQ & Audit | `/api/v1/dlq/*`, `/api/v1/admin/*` | Department Head (DLQ), Admin (Audit) |
-| 5.10 | Phúc khảo nội bộ MF-04 | `/api/v1/appeals` | Student, Department Head |
+| 5.7 | Quản lý Kỳ thi & Ca thi Phòng Lab MF-04 | `/api/v1/official-exams/*` | Examination Officer (tạo kỳ thi, ca thi, xuất bản đề, công bố điểm), Department Head (chỉ cấu hình Follow-up thi thật `1–5` câu mặc định `2`) |
+| 5.8 | Hậu kiểm & Công bố điểm | `/api/v1/official-exams/shifts/*` | Lecturer, Examination Officer |
+| 5.9 | Quản trị DLQ & Audit | `/api/v1/admin/dlq/*` (MF-01/02), `/api/v1/examination-officer/dlq/*` (MF-04), `/api/v1/admin/*` | Admin (DLQ MF-01/02 & Audit), Examination Officer (DLQ MF-04) |
+| 5.10 | Phúc khảo nội bộ 5 bước MF-04 | `/api/v1/student/appeals`, `/api/v1/examination-officer/appeals/*`, `/api/v1/department-head/appeals/*`, `/api/v1/lecturer/appeals/*` | Student, Examination Officer, Department Head, Lecturer |
 | 5.11 | Thông báo trong ứng dụng FE-11 | `/api/v1/notifications` | All Roles |
-| 5.12 | Giám thị Phòng Lab 40 ghế & Dashboard GV | `/api/v1/proctor/*`, `/api/v1/lecturer/dashboard` | Proctor, Lecturer, Department Head |
+| 5.12 | Giám thị Phòng Lab (`/api/v1/proctor/*`) & Dashboard GV | `/api/v1/proctor/shifts/{id}/attendance`, `/api/v1/proctor/shifts/{id}/violations`, `/api/v1/lecturer/dashboard` | Proctor (chỉ điểm danh ghế 1–40 & báo cáo vi phạm phòng thi), Lecturer, Department Head |
+| 5.13 | Chuỗi phân cấp học thuật 4 cấp (R5) | `/api/v1/admin/courses/{id}/assign-department-head`, `/api/v1/department-head/courses/{id}/lecturers`, `/api/v1/lecturer/classes`, `/api/v1/student/classes/join` | Admin, Department Head, Lecturer, Student |
+| 5.14 | Ca thi trong lớp & mật khẩu tự động xoay vòng 5 phút (R6 - MF-05) | `/api/v1/lecturer/in-class-shifts/*`, `/api/v1/student/in-class-shifts/{id}/join` | Lecturer, Student |
+| 5.15 | Phân tách 2 luồng tạo câu hỏi (R8) & Dịch vụ Giọng nói STT/TTS | `/api/v1/practice/questions`, `/api/v1/official-exams/questions`, `/api/v1/speech/*` | Lecturer, Department Head, Public |
 
 ### 5.1. Quản lý Học thuật: Học kỳ, Môn học, Lớp học & Danh sách Sinh viên
 *(Phân hệ CSDL: `semesters`, `courses`, `classes`, `class_enrollments`)*
@@ -418,7 +436,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - **Ràng buộc nghiệp vụ (Invariants):**
   1. `sampleAnswer` (Đáp án mẫu): **Bắt buộc $\ge 50$ ký tự**. Vi phạm bị chặn bởi FluentValidation với mã `HTTP 422 Unprocessable Entity`.
   2. `rubricId`: Phải trỏ tới Barem Rubric hợp lệ có $\sum \text{maxScore} \equiv 10.00$đ.
-  3. `source`: Cố định `'manual'` khi tạo thủ công (hoặc `'flm_api'` khi sinh từ FLM).
+  3. `source`: Cố định `'manual'` khi tạo thủ công (hoặc `'ai_generated'` khi sinh từ AI).
 
 ##### Bảng đặc tả DTO Yêu cầu (`CreatePracticeQuestionRequestDto`)
 | Thuộc tính | Kiểu dữ liệu | Bắt buộc / Nullable | Ràng buộc / Validation | Mô tả nghiệp vụ |
@@ -546,49 +564,38 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 ---
 
-### 5.4. Tích hợp FLM Adapter & Sinh Câu Hỏi Tự Động Bằng AI (FLM AI Generator) — MF-03
-*(Phân hệ CSDL: `courses`, `rubrics`, `rubric_criteria`, `practice_questions`, `exam_questions`)*
+### 5.4. Quản lý Chuẩn đầu ra (Course CLOs 3NF) & Sinh Câu Hỏi Tự Động Bằng AI (AI Generator) — MF-03
+*(Phân hệ CSDL: `courses`, `course_clos`, `rubrics`, `rubric_criteria`, `practice_questions`, `exam_questions`, `exam_structures`, `exam_sets`)*
 
-#### 1. Lấy cấu trúc Đề cương & CLOs từ FLM Adapter
-- **Endpoint:** `GET /api/v1/flm/courses/{courseId}/syllabus`
-- **Quyền truy cập:** `lecturer`, `department_head`, `admin`
-- **Mô tả:** Trích xuất thông tin Đề cương môn học (Syllabus), danh sách chuẩn đầu ra CLOs (Course Learning Outcomes), danh mục chủ đề kiến thức và bài học từ API hệ thống FPT Learning Material (FLM). Hỗ trợ cơ chế phân trang và lọc từ khóa cho các môn học quy mô lớn (> 50 bài học/chủ đề như PRN211, SWP391, PRN231).
+#### 1. Lấy danh sách Chuẩn đầu ra CLOs của môn học từ CSDL 3NF
+- **Endpoint:** `GET /api/v1/courses/{courseId}/clos`
+- **Quyền truy cập:** `lecturer`, `department_head`, `examination_officer`, `admin`
+- **Mô tả:** Trích xuất toàn bộ danh sách Chuẩn đầu ra CLOs (Course Learning Outcomes) được lưu trữ chuẩn hóa 3NF trong bảng `course_clos` của môn học. Hỗ trợ tìm kiếm, lọc theo mức độ nhận thức Bloom và phân trang.
 - **Path Parameters:**
   - `courseId` (`uuid`, bắt buộc): Định danh duy nhất của môn học trong hệ thống.
-- **Query Parameters (Phân trang & Lọc đề cương):**
-  - `pageNumber` (`int`, tuỳ chọn, mặc định: `1`, ràng buộc: $\ge 1$): Số thứ tự trang danh mục chủ đề cần lấy.
-  - `pageSize` (`int`, tuỳ chọn, mặc định: `20`, ràng buộc: $1 \le \text{pageSize} \le 100$): Số lượng chủ đề / bài học trên mỗi trang.
-  - `searchTopic` (`string`, tuỳ chọn): Chuỗi từ khóa lọc tên chủ đề / bài học.
-  - `cloCode` (`string`, tuỳ chọn): Mã CLO cụ thể để lọc các chủ đề đảm nhiệm chuẩn đầu ra đó (vd: `CLO1`, `CLO2`).
+- **Query Parameters (Phân trang & Lọc CLOs):**
+  - `pageNumber` (`int`, tuỳ chọn, mặc định: `1`, ràng buộc: $\ge 1$): Số thứ tự trang danh mục CLO.
+  - `pageSize` (`int`, tuỳ chọn, mặc định: `20`, ràng buộc: $1 \le \text{pageSize} \le 100$): Số lượng CLO trên mỗi trang.
+  - `search` (`string`, tuỳ chọn): Chuỗi từ khóa tìm kiếm theo mã hoặc mô tả CLO.
+  - `bloomLevel` (`string`, tuỳ chọn): Mức nhận thức Bloom mục tiêu (`Remember`, `Understand`, `Apply`, `Analyze`, `Evaluate`, `Create`).
 
-##### Bảng đặc tả DTO Phản hồi (`FlmSyllabusResponseDto`)
+##### Bảng đặc tả DTO Phản hồi (`CourseClosResponseDto`)
 | Thuộc tính | Kiểu dữ liệu | Bắt buộc / Nullable | Ràng buộc / Enum | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|:---|
 | `courseId` | `uuid` | Bắt buộc (Non-null) | UUID hợp lệ | Định danh môn học |
 | `courseCode` | `string` | Bắt buộc (Non-null) | Mã môn chuẩn (vd: `PRN231`, `PRN211`, `SWP391`) | Mã môn học chuẩn FPTU |
 | `courseName` | `string` | Bắt buộc (Non-null) | Tối đa 200 ký tự | Tên đầy đủ của môn học |
-| `syllabusCode` | `string` | Bắt buộc (Non-null) | Khóa phiên bản FLM | Mã phiên bản đề cương môn học |
-| `totalCredits` | `int` | Bắt buộc (Non-null) | $1 \le \text{credits} \le 10$ | Số tín chỉ của môn học |
-| `clos` | `List<CloDto>` | Bắt buộc (Non-null) | Tối thiểu 1 CLO | Danh sách chuẩn đầu ra toàn diện của môn học |
-| `topics` | `List<TopicDto>` | Bắt buộc (Non-null) | Tối thiểu 1 chủ đề | Danh mục chủ đề kiến thức / bài học theo trang hiện tại |
-| `pagination` | `FlmPaginationMetadataDto` | Bắt buộc (Non-null) | Metadata phân trang | Thông tin chỉ số phân trang danh mục chủ đề |
+| `totalClos` | `int` | Bắt buộc (Non-null) | $\ge 0$ | Tổng số CLOs của môn học |
+| `clos` | `List<CourseCloDto>` | Bắt buộc (Non-null) | Danh sách CLOs | Danh sách chuẩn đầu ra chi tiết |
 
-*Chi tiết `CloDto`:*
+*Chi tiết `CourseCloDto`:*
+- `id` (`uuid`, Non-null): Khóa chính chuẩn đầu ra trong bảng `course_clos`.
+- `courseId` (`uuid`, Non-null): Khóa ngoại liên kết môn học.
 - `cloCode` (`string`, Non-null): Mã chuẩn đầu ra (vd: `CLO1`, `CLO2`, `CLO3`, `CLO4`).
-- `description` (`string`, Non-null): Nội dung diễn giải chuẩn đầu ra kiến thức/kỹ năng.
+- `description` (`string`, Non-null): Nội dung diễn giải chi tiết chuẩn đầu ra kiến thức/kỹ năng.
 - `targetBloomLevel` (`string`, Non-null): Mức nhận thức Bloom mục tiêu (`Remember`, `Understand`, `Apply`, `Analyze`, `Evaluate`, `Create`).
-
-*Chi tiết `TopicDto`:*
-- `topicId` (`string`, Non-null): Mã định danh chủ đề kiến thức (vd: `topic-01`, `topic-02`).
-- `sessionNumber` (`int`, Non-null): Số thứ tự buổi học / slot trong khung chương trình đào tạo FPT (từ slot $1$ đến $30$).
-- `topicName` (`string`, Non-null): Tên chủ đề / bài học trong đề cương môn học.
-- `mappedClos` (`List<string>`, Non-null): Danh sách mã CLO tương ứng mà chủ đề này phụ trách đáp ứng.
-
-*Chi tiết `FlmPaginationMetadataDto`:*
-- `pageNumber` (`int`, Non-null): Số trang hiện tại ($\ge 1$).
-- `pageSize` (`int`, Non-null): Kích thước số bản ghi trên trang ($1 \le \text{pageSize} \le 100$).
-- `totalTopics` (`int`, Non-null): Tổng số chủ đề / bài học trong toàn bộ đề cương môn học.
-- `totalPages` (`int`, Non-null): Tổng số trang phân danh mục ($\lceil \text{totalTopics} / \text{pageSize} \rceil$).
+- `isActive` (`bool`, Non-null): Trạng thái hoạt động của chuẩn đầu ra.
+- `createdAt` (`DateTime`, Non-null): Thời điểm tạo UTC.
 
 - **Response 200 OK:**
 ```json
@@ -596,68 +603,57 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "courseId": "22222222-0000-0000-0000-000000000001",
   "courseCode": "PRN231",
   "courseName": "Building Cross-Platform Back-End Applications with .NET",
-  "syllabusCode": "PRN231_FA26_v1.0",
-  "totalCredits": 3,
+  "totalClos": 4,
   "clos": [
     {
+      "id": "33333333-0000-0000-0000-000000000001",
+      "courseId": "22222222-0000-0000-0000-000000000001",
       "cloCode": "CLO1",
       "description": "Hiểu và giải thích các nguyên lý Clean Architecture, SOLID và Design Patterns trong .NET",
-      "targetBloomLevel": "Understand"
+      "targetBloomLevel": "Understand",
+      "isActive": true,
+      "createdAt": "2026-10-01T08:00:00Z"
     },
     {
+      "id": "33333333-0000-0000-0000-000000000002",
+      "courseId": "22222222-0000-0000-0000-000000000001",
       "cloCode": "CLO2",
       "description": "Áp dụng Entity Framework Core và Dapper để xây dựng tầng Data Access Layer tối ưu",
-      "targetBloomLevel": "Apply"
+      "targetBloomLevel": "Apply",
+      "isActive": true,
+      "createdAt": "2026-10-01T08:00:00Z"
     },
     {
+      "id": "33333333-0000-0000-0000-000000000003",
+      "courseId": "22222222-0000-0000-0000-000000000001",
       "cloCode": "CLO3",
       "description": "Phân tích và thiết kế Web API chuẩn RESTful, tích hợp Authentication JWT và RBAC",
-      "targetBloomLevel": "Analyze"
+      "targetBloomLevel": "Analyze",
+      "isActive": true,
+      "createdAt": "2026-10-01T08:00:00Z"
     },
     {
+      "id": "33333333-0000-0000-0000-000000000004",
+      "courseId": "22222222-0000-0000-0000-000000000001",
       "cloCode": "CLO4",
       "description": "Đánh giá và tối ưu hiệu năng ứng dụng, xử lý Concurrency và Resilient Messaging",
-      "targetBloomLevel": "Evaluate"
+      "targetBloomLevel": "Evaluate",
+      "isActive": true,
+      "createdAt": "2026-10-01T08:00:00Z"
     }
-  ],
-  "topics": [
-    {
-      "topicId": "topic-01",
-      "sessionNumber": 1,
-      "topicName": "Clean Architecture Overview & Dependency Injection Container",
-      "mappedClos": ["CLO1"]
-    },
-    {
-      "topicId": "topic-02",
-      "sessionNumber": 4,
-      "topicName": "EF Core Resilient Transactions, Migration & AsNoTracking Optimization",
-      "mappedClos": ["CLO2", "CLO4"]
-    },
-    {
-      "topicId": "topic-03",
-      "sessionNumber": 7,
-      "topicName": "Web API Security, JWT Bearer Tokens & RBAC Authorization Pipeline",
-      "mappedClos": ["CLO3"]
-    }
-  ],
-  "pagination": {
-    "pageNumber": 1,
-    "pageSize": 20,
-    "totalTopics": 24,
-    "totalPages": 2
-  }
+  ]
 }
 ```
 
-##### Phản hồi lỗi chuẩn hóa RFC 7807 (`GET /api/v1/flm/courses/{courseId}/syllabus`)
+##### Phản hồi lỗi chuẩn hóa RFC 7807 (`GET /api/v1/courses/{courseId}/clos`)
 - **401 Unauthorized:**
 ```json
 {
   "type": "https://oralexam.fpt.edu.vn/errors/unauthorized",
   "title": "Unauthorized",
   "status": 401,
-  "detail": "Yêu cầu xác thực Bearer Token hợp lệ để truy cập tài nguyên đề cương FLM.",
-  "instance": "/api/v1/flm/courses/22222222-0000-0000-0000-000000000001/syllabus"
+  "detail": "Yêu cầu xác thực Bearer Token hợp lệ để truy cập danh sách CLO môn học.",
+  "instance": "/api/v1/courses/22222222-0000-0000-0000-000000000001/clos"
 }
 ```
 - **403 Forbidden:**
@@ -666,63 +662,63 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "type": "https://oralexam.fpt.edu.vn/errors/forbidden",
   "title": "Forbidden",
   "status": 403,
-  "detail": "Bạn không có quyền truy cập đề cương FLM. Yêu cầu vai trò 'lecturer', 'department_head' hoặc 'admin'.",
-  "instance": "/api/v1/flm/courses/22222222-0000-0000-0000-000000000001/syllabus"
+  "detail": "Bạn không có quyền truy cập chuẩn đầu ra môn học. Yêu cầu vai trò 'lecturer', 'department_head', 'examination_officer' hoặc 'admin'.",
+  "instance": "/api/v1/courses/22222222-0000-0000-0000-000000000001/clos"
 }
 ```
 - **404 Not Found:**
 ```json
 {
   "type": "https://oralexam.fpt.edu.vn/errors/course-not-found",
-  "title": "Course or Syllabus Not Found",
+  "title": "Course Not Found",
   "status": 404,
-  "detail": "Không tìm thấy môn học hoặc môn học chưa được liên kết cấu trúc đề cương trên FLM.",
-  "instance": "/api/v1/flm/courses/22222222-0000-0000-0000-000000000001/syllabus"
+  "detail": "Không tìm thấy môn học tương ứng với courseId đã cung cấp.",
+  "instance": "/api/v1/courses/22222222-0000-0000-0000-000000000001/clos"
 }
 ```
-- **502 Bad Gateway (FLM Service Connection Refused / Invalid Upstream Response):**
-```json
-{
-  "type": "https://oralexam.fpt.edu.vn/errors/flm-bad-gateway",
-  "title": "FLM External Service Bad Gateway",
-  "status": 502,
-  "detail": "Không thể thiết lập kết nối tới cổng dịch vụ FPT Learning Material (FLM API) hoặc dịch vụ trả về dữ liệu không hợp lệ sau 3 lần thử lại tự động (Polly Backoff 2s, 4s, 8s). Vui lòng liên hệ quản trị viên FLM hoặc thử lại sau.",
-  "instance": "/api/v1/flm/courses/22222222-0000-0000-0000-000000000001/syllabus"
-}
-```
-- **504 Gateway Timeout (FLM Adapter Timeout sau 3 lần Polly Retry):**
-```json
-{
-  "type": "https://oralexam.fpt.edu.vn/errors/flm-gateway-timeout",
-  "title": "FLM External Service Gateway Timeout",
-  "status": 504,
-  "detail": "Cổng kết nối FPT Learning Material (FLM API) không phản hồi trong giới hạn thời gian quy định (Attempt Timeout 10s / Total Request Timeout 60s) sau 3 lần thử lại tự động (Polly 2s, 4s, 8s). Vui lòng thử lại sau.",
-  "instance": "/api/v1/flm/courses/22222222-0000-0000-0000-000000000001/syllabus"
-}
-```
-
-> [!WARNING]
-> **Quy Chuẩn Kiến Trúc Cấu Hình HttpClient & Polly v8 Resilience Handler Trong Backend .NET 8:**  
-> - **CẤM TUYỆT ĐỐI** gán cứng `HttpClient.Timeout = TimeSpan.FromSeconds(10)` ở cấp độ client toàn cục. Tổng thời gian giãn cách nghỉ của 3 lần retry Polly ($2\text{s} + 4\text{s} + 8\text{s} = 14\text{s}$) đã vượt quá 10s. Nếu đặt timeout 10s ở cấp độ `HttpClient`, runtime sẽ ném `TaskCanceledException` ngay tại giây thứ 10, triệt tiêu hoàn toàn cơ chế thử lại của Polly!  
-> - **Chuẩn cấu hình khuyến nghị:** Sử dụng `builder.Services.AddHttpClient(...).AddResilienceHandler(...)` phân tách rõ ràng 2 tầng:  
->   1. `AttemptTimeout = TimeSpan.FromSeconds(10)` (chờ tối đa 10s cho mỗi HTTP call đơn lẻ tới FLM API).  
->   2. `RetryStrategyOptions: MaxRetryAttempts = 3, Delay = 2s, BackoffType = Exponential`.  
->   3. `TotalRequestTimeout = TimeSpan.FromSeconds(60)` (bao trọn thời gian thực thi của cả 4 lần thử và 14s dãn cách backoff).
-
-
 
 ---
 
-#### 2. Kích hoạt AI sinh câu hỏi từ dữ liệu đề cương FLM
-- **Endpoint:** `POST /api/v1/questions/generate-from-flm`
-- **Quyền:** `lecturer`, `department_head`, `admin`. **Giảng viên sử dụng AI sinh câu hỏi theo barem của mình**, kích hoạt Gemini AI Engine phân tích chuẩn đầu ra FLM để sinh bộ câu hỏi vấn đáp kèm Barem Rubric riêng 10.0đ và Model Answer $\ge 50$ ký tự, tự do chỉnh sửa trước khi gửi lên Bộ Môn thẩm định (`SUBMITTED_FOR_REVIEW`). Trưởng bộ môn (`department_head`) và Quản trị viên (`admin`) cũng có quyền thực hiện. Nếu người dùng mang vai trò khác (`proctor`, `student`), hệ thống chặn ngay lập tức và trả về `HTTP 403 Forbidden`.
-- **Mô tả:** Giảng viên hoặc Trưởng bộ môn chọn môn học, chọn CLOs/chủ đề cần tạo câu hỏi. Hệ thống gửi đề cương sang Gemini AI Engine để sinh bộ câu hỏi vấn đáp kèm Barem Rubric $\sum = 10.0$đ và Đáp án mẫu chuẩn (Model Answer $\ge 50$ ký tự).
+#### 1b. Thêm mới Chuẩn đầu ra CLO vào CSDL 3NF
+- **Endpoint:** `POST /api/v1/courses/{courseId}/clos`
+- **Quyền truy cập:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn hoặc Quản trị viên nhập liệu chuẩn đầu ra mới cho môn học, lưu trữ trực tiếp vào bảng `course_clos`.
+- **Path Parameters:**
+  - `courseId` (`uuid`, bắt buộc): Định danh môn học.
+- **Request Body (`CreateCourseCloRequestDto`):**
+```json
+{
+  "cloCode": "CLO5",
+  "description": "Vận dụng kiểm thử tự động xUnit, Moq và NetArchTest để khóa ranh giới kiến trúc Clean Architecture",
+  "targetBloomLevel": "Apply"
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "id": "33333333-0000-0000-0000-000000000005",
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "cloCode": "CLO5",
+  "description": "Vận dụng kiểm thử tự động xUnit, Moq và NetArchTest để khóa ranh giới kiến trúc Clean Architecture",
+  "targetBloomLevel": "Apply",
+  "isActive": true,
+  "createdAt": "2026-10-01T08:30:00Z"
+}
+```
+- **Response 409 Conflict:** Khi mã CLO (`cloCode`) đã tồn tại trong môn học.
 
-##### Bảng đặc tả DTO Yêu cầu (`GenerateQuestionsFromFlmRequestDto`)
+---
+
+#### 2. Kích hoạt AI sinh câu hỏi từ dữ liệu CLOs (Kèm kiểm tra cờ trùng lặp isFlagged)
+- **Endpoint:** `POST /api/v1/questions/generate-from-clo`
+- **Quyền:** `department_head`, `admin`. **Giảng viên sử dụng AI sinh câu hỏi theo barem của mình**, kích hoạt Gemini AI Engine phân tích chuẩn đầu ra `course_clos` để sinh bộ câu hỏi vấn đáp kèm Barem Rubric riêng 10.0đ và Model Answer $\ge 50$ ký tự, tự do chỉnh sửa trước khi gửi lên Bộ Môn thẩm định (`SUBMITTED_FOR_REVIEW`). Hệ thống tự động so khớp độ tương đồng ngữ nghĩa với ngân hàng câu hỏi hiện có; nếu phát hiện câu hỏi tương đồng cao, hệ thống tự động gắn cờ cảnh báo trùng lặp `isFlagged: true` kèm lý do `flagReason`. Trưởng bộ môn (`department_head`) và Quản trị viên (`admin`) cũng có quyền thực hiện. Nếu người dùng mang vai trò khác (`proctor`, `student`, `examination_officer`), hệ thống chặn ngay lập tức và trả về `HTTP 403 Forbidden`.
+- **Mô tả:** Giảng viên hoặc Trưởng bộ môn chọn môn học, chọn CLOs/chủ đề cần tạo câu hỏi. Hệ thống gửi thông tin sang Gemini AI Engine để sinh bộ câu hỏi vấn đáp kèm Barem Rubric $\sum = 10.0$đ và Đáp án mẫu chuẩn (Model Answer $\ge 50$ ký tự).
+
+##### Bảng đặc tả DTO Yêu cầu (`GenerateQuestionsFromCloRequestDto`)
 | Thuộc tính | Kiểu dữ liệu | Bắt buộc / Nullable | Ràng buộc / Validation | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|:---|
 | `courseId` | `uuid` | Bắt buộc (Non-null) | Khóa ngoại tồn tại trong `courses` | Môn học cần sinh câu hỏi |
-| `selectedCloCodes` | `List<string>` | Bắt buộc (Non-null) | Ít nhất 1 CLO hợp lệ trong syllabus | Danh sách CLOs cần bao phủ |
+| `selectedCloCodes` | `List<string>` | Bắt buộc (Non-null) | Ít nhất 1 CLO hợp lệ trong `course_clos` | Danh sách CLOs cần bao phủ |
 | `topics` | `List<string>` | Bắt buộc (Non-null) | Ít nhất 1 chủ đề kiến thức | Danh sách chủ đề bài học |
 | `numberOfQuestions` | `int` | Bắt buộc (Non-null) | $1 \le \text{count} \le 10$ | Số lượng câu hỏi cần sinh trong 1 mẻ |
 | `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` \| `shared` | Phạm vi sử dụng dự kiến |
@@ -755,36 +751,38 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-##### Bảng đặc tả DTO Phản hồi (`GenerateQuestionsFromFlmResponseDto`)
+##### Bảng đặc tả DTO Phản hồi (`GenerateQuestionsFromCloResponseDto`)
 | Thuộc tính | Kiểu dữ liệu | Bắt buộc / Nullable | Ràng buộc / Enum | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|:---|
 | `courseId` | `uuid` | Bắt buộc (Non-null) | UUID | Môn học |
 | `courseCode` | `string` | Bắt buộc (Non-null) | Mã môn | Mã môn học |
 | `generatedCount` | `int` | Bắt buộc (Non-null) | Bằng số câu yêu cầu | Số câu hỏi thực tế AI đã sinh thành công |
-| `source` | `string` | Bắt buộc (Non-null) | Cố định `'flm_api'` | Nguồn gốc câu hỏi |
-| `questions` | `List<GeneratedQuestionDraftDto>` | Bắt buộc (Non-null) | Danh sách câu hỏi dự thảo | Danh sách câu hỏi kèm barem và đáp án |
+| `source` | `string` | Bắt buộc (Non-null) | Cố định `'ai_generated'` | Nguồn gốc câu hỏi |
+| `questions` | `List<GeneratedQuestionDraftDto>` | Bắt buộc (Non-null) | Danh sách câu hỏi dự thảo | Danh sách câu hỏi kèm barem, đáp án và cờ trùng lặp |
 
 *Chi tiết `GeneratedQuestionDraftDto`:*
-- `tempId` (`string`, Non-null): Định danh tạm thời trong phiên preview (vd: `draft-flm-001`).
+- `tempId` (`string`, Non-null): Định danh tạm thời trong phiên preview (vd: `draft-clo-001`).
 - `cloCode` (`string`, Non-null): Mã CLO mà câu hỏi đáp ứng.
 - `title` (`string`, Non-null): Tiêu đề tóm tắt nội dung câu hỏi.
 - `content` (`string`, Non-null): Nội dung đề bài câu hỏi vấn đáp chi tiết.
 - `difficulty` (`string`, Non-null): Độ khó (`easy`, `medium`, `hard`).
 - `bloomLevel` (`string`, Non-null): Mức Bloom (`Remember` đến `Create`).
-- `source` (`string`, Non-null): Cố định `'flm_api'`.
+- `source` (`string`, Non-null): Cố định `'ai_generated'`.
 - `usageScope` (`string`, Non-null): `'practice'`, `'exam'`, hoặc `'shared'`.
 - `modelAnswer` (`string`, Non-null): Câu trả lời mẫu chuẩn mực, **bắt buộc $\ge 50$ ký tự**.
 - `keyPoints` (`List<string>`, Non-null): Danh sách các ý chính bắt buộc phải có trong câu trả lời.
 - `hasFollowUp` (`bool`, Non-null): Cờ cho phép hỏi câu phụ chuyên sâu.
 - `followUpPrompt` (`string`, Nullable): Nội dung gợi mở câu hỏi xoáy phản biện (nếu có).
-- `rubric` (`FlmRubricDraftDto`, Non-null): Barem đánh giá tương ứng.
+- `isFlagged` (`bool`, Non-null): Cờ đánh dấu câu hỏi có dấu hiệu trùng lặp ngữ nghĩa với câu hỏi đã có.
+- `flagReason` (`string`, Nullable): Diễn giải lý do gắn cờ trùng lặp (ví dụ: *"Trùng lặp 88% nội dung với câu hỏi ID 55555555-0000-0000-0000-000000000001"*).
+- `rubric` (`RubricDraftDto`, Non-null): Barem đánh giá tương ứng.
 
-*Chi tiết `FlmRubricDraftDto`:*
+*Chi tiết `RubricDraftDto`:*
 - `name` (`string`, Non-null): Tên Barem đánh giá.
 - `totalMaxScore` (`decimal`, Non-null): **Khóa cứng bất biến $10.00$**.
-- `criteria` (`List<FlmRubricCriterionDraftDto>`, Non-null): Tối thiểu 2 tiêu chí con, **$\sum \text{maxScore} \equiv 10.00$**.
+- `criteria` (`List<RubricCriterionDraftDto>`, Non-null): Tối thiểu 2 tiêu chí con, **$\sum \text{maxScore} \equiv 10.00$**.
 
-*Chi tiết `FlmRubricCriterionDraftDto`:*
+*Chi tiết `RubricCriterionDraftDto`:*
 - `criterionName` (`string`, Non-null): Tên tiêu chí đánh giá con.
 - `maxScore` (`decimal`, Non-null): Điểm tối đa của tiêu chí ($> 0$).
 - `weight` (`decimal`, Non-null): Trọng số tiêu chí ($0 < \text{weight} < 1$, $\sum \text{weight} \equiv 1.0$).
@@ -797,16 +795,16 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "courseId": "22222222-0000-0000-0000-000000000001",
   "courseCode": "PRN231",
   "generatedCount": 2,
-  "source": "flm_api",
+  "source": "ai_generated",
   "questions": [
     {
-      "tempId": "draft-flm-001",
+      "tempId": "draft-clo-001",
       "cloCode": "CLO1",
       "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
       "content": "Hãy giải thích nguyên lý Dependency Inversion (DIP) và minh họa cách tổ chức các tầng trong Clean Architecture .NET để tuân thủ nguyên lý này.",
       "difficulty": "medium",
       "bloomLevel": "Understand",
-      "source": "flm_api",
+      "source": "ai_generated",
       "usageScope": "shared",
       "modelAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. Nguyên lý phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp, cả hai nên phụ thuộc vào abstractions (Interface). Trong Clean Architecture, Domain và Application đóng vai trò module cấp cao khai báo các interfaces (như IApplicationDbContext, IUserRepository), trong khi tầng Infrastructure đóng vai trò module cấp thấp hiện thực hóa các interfaces đó. Nhờ cơ chế Dependency Injection trong Program.cs, luồng điều khiển phụ thuộc từ ngoài vào trong, đảm bảo tính độc lập và khả năng unit test.",
       "keyPoints": [
@@ -817,6 +815,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       ],
       "hasFollowUp": true,
       "followUpPrompt": "Nếu cần thay đổi cơ chế ORM từ EF Core sang Dapper thì tầng Application có cần sửa đổi code không? Vì sao?",
+      "isFlagged": false,
+      "flagReason": null,
       "rubric": {
         "name": "Barem Rubric CLO1 - Clean Architecture & DIP",
         "totalMaxScore": 10.00,
@@ -846,13 +846,13 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       }
     },
     {
-      "tempId": "draft-flm-002",
+      "tempId": "draft-clo-002",
       "cloCode": "CLO3",
       "title": "Thiết kế cơ chế xác thực JWT và phân quyền RBAC trong ASP.NET Core Web API",
       "content": "Hãy phân tích quy trình xác thực người dùng bằng JWT Bearer Token kết hợp phân quyền Role-based Access Control (RBAC) trong Clean Architecture ASP.NET Core 8.",
       "difficulty": "hard",
       "bloomLevel": "Analyze",
-      "source": "flm_api",
+      "source": "ai_generated",
       "usageScope": "shared",
       "modelAnswer": "Quy trình xác thực JWT Bearer trong ASP.NET Core 8 gồm 3 bước chính: Đầu tiên, Client gửi thông tin đăng nhập lên AuthController; Server xác thực qua IdP và ký phát sinh Access Token (chứa các Claims: sub, email, role) kèm hạn sử dụng ngắn (15 phút) cùng Refresh Token. Thứ hai, Middleware JwtBearerHandler giải mã, xác minh chữ ký HMAC SHA-256 hoặc RSA của token trên mỗi request và nạp ClaimsPrincipal vào HttpContext.User. Thứ ba, tầng API áp dụng AuthorizeAttribute kết hợp Roles hoặc Policies (ví dụ: department_head, lecturer) để kiểm soát quyền truy cập chi tiết tại từng Controller/Action.",
       "keyPoints": [
@@ -863,6 +863,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       ],
       "hasFollowUp": true,
       "followUpPrompt": "Làm thế nào để thu hồi ngay lập tức một Access Token chưa hết hạn khi tài khoản người dùng bị khóa khẩn cấp?",
+      "isFlagged": false,
+      "flagReason": null,
       "rubric": {
         "name": "Barem Rubric CLO3 - Web API JWT & RBAC",
         "totalMaxScore": 10.00,
@@ -895,7 +897,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-##### Phản hồi lỗi chuẩn hóa RFC 7807 (`POST /api/v1/questions/generate-from-flm`)
+##### Phản hồi lỗi chuẩn hóa RFC 7807 (`POST /api/v1/questions/generate-from-clo`)
 - **400 Bad Request (Tham số đầu vào không hợp lệ):**
 ```json
 {
@@ -903,7 +905,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "title": "Invalid Generation Parameters",
   "status": 400,
   "detail": "Tổng phân bổ độ khó (easy: 0 + medium: 1 + hard: 2 = 3) không khớp với số câu yêu cầu (numberOfQuestions: 2).",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **401 Unauthorized:**
@@ -913,7 +915,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "title": "Unauthorized",
   "status": 401,
   "detail": "Thiếu hoặc token JWT đã hết hạn.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **403 Forbidden (Yêu cầu vai trò Giảng viên hoặc Trưởng Bộ Môn):**
@@ -922,8 +924,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "type": "https://oralexam.fpt.edu.vn/errors/forbidden",
   "title": "Forbidden - Lecturer Or Department Head Required",
   "status": 403,
-  "detail": "Tính năng kích hoạt AI sinh câu hỏi từ FLM yêu cầu vai trò Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head'). Vai trò của bạn (Sinh viên/Giám thị) không được phép truy cập.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "detail": "Tính năng kích hoạt AI sinh câu hỏi từ CLO yêu cầu vai trò Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head'). Vai trò của bạn không được phép truy cập.",
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **404 Not Found:**
@@ -933,17 +935,17 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "title": "Course Not Found",
   "status": 404,
   "detail": "Không tìm thấy môn học tương ứng với courseId đã cung cấp.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **422 Unprocessable Entity:**
 ```json
 {
-  "type": "https://oralexam.fpt.edu.vn/errors/clo-not-found-in-syllabus",
-  "title": "CLO Not In Syllabus",
+  "type": "https://oralexam.fpt.edu.vn/errors/clo-not-found-in-course",
+  "title": "CLO Not In Course",
   "status": 422,
-  "detail": "Mã chuẩn đầu ra 'CLO99' không tồn tại trong cấu trúc đề cương hiện hành của môn học.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "detail": "Mã chuẩn đầu ra 'CLO99' không tồn tại trong danh mục course_clos của môn học.",
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **502 Bad Gateway (Gemini AI Service Error / Malformed JSON Output sau 3 lần Polly Retry):**
@@ -953,7 +955,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "title": "AI Generator Bad Gateway",
   "status": 502,
   "detail": "Dịch vụ Google Gemini AI gặp sự cố kết nối hoặc trả về cấu trúc dữ liệu không hợp lệ (sai JSON Schema chuẩn câu hỏi/rubric) sau 3 lần thử lại tự động theo cấp số nhân (Polly 2s, 4s, 8s). Vui lòng thử lại sau.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 - **504 Gateway Timeout (Gemini AI Timeout sau 3 lần Polly Retry):**
@@ -963,7 +965,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "title": "AI Generator Service Timeout",
   "status": 504,
   "detail": "Dịch vụ Google Gemini AI không hoàn tất sinh câu hỏi trong thời hạn quy định (Attempt Timeout 30s / Total Request Timeout 90s) sau 3 lần thử lại tự động theo cấp số nhân (Polly 2s, 4s, 8s). Vui lòng thử lại với số lượng câu hỏi ít hơn.",
-  "instance": "/api/v1/questions/generate-from-flm"
+  "instance": "/api/v1/questions/generate-from-clo"
 }
 ```
 
@@ -1171,12 +1173,12 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | `difficulty` | `string` | Bắt buộc (Non-null) | `easy` \| `medium` \| `hard` | Độ khó câu hỏi |
 | `bloomLevel` | `string` | Bắt buộc (Non-null) | 6 mức Bloom | Bậc nhận thức |
 | `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` \| `shared` | Phạm vi lưu kho |
-| `source` | `string` | Bắt buộc (Non-null) | `manual` \| `flm_api` | Nguồn gốc câu hỏi |
+| `source` | `string` | Bắt buộc (Non-null) | `manual` \| `ai_generated` | Nguồn gốc câu hỏi |
 | `modelAnswer` | `string` | Bắt buộc (Non-null) | **Độ dài $\ge 50$ ký tự** | Đáp án mẫu chuẩn |
 | `keyPoints` | `List<string>` | Bắt buộc (Non-null) | Tối thiểu 1 ý chính | Các luận điểm then chốt |
 | `hasFollowUp` | `bool` | Bắt buộc (Non-null) | `true` \| `false` | Cờ hỏi xoáy |
 | `followUpPrompt`| `string` | Nullable | Tuỳ chọn | Gợi ý câu phụ |
-| `rubric` | `FlmRubricDraftDto` | Bắt buộc (Non-null) | **$\sum \text{maxScore} \equiv 10.00$** | Barem Rubric 10.0 |
+| `rubric` | `RubricDraftDto` | Bắt buộc (Non-null) | **$\sum \text{maxScore} \equiv 10.00$** | Barem Rubric 10.0 |
 
 - **Request Body:**
 ```json
@@ -1189,7 +1191,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "difficulty": "medium",
       "bloomLevel": "Understand",
       "usageScope": "shared",
-      "source": "flm_api",
+      "source": "ai_generated",
       "modelAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. Nguyên lý phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp, cả hai nên phụ thuộc vào abstractions (Interface)...",
       "keyPoints": [
         "Module cấp cao không phụ thuộc module cấp thấp",
@@ -1242,7 +1244,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - `rubricId` (`uuid`, Non-null): Khóa chính Barem Rubric tương ứng.
 - `title` (`string`, Non-null): Tiêu đề câu hỏi.
 - `usageScope` (`string`, Non-null): `'practice'`, `'exam'`, hoặc `'shared'`.
-- `source` (`string`, Non-null): `'flm_api'` hoặc `'manual'`.
+- `source` (`string`, Non-null): `'ai_generated'` hoặc `'manual'`.
 - `status` (`string`, Non-null): Cố định `'active'`.
 - `approvedBy` (`uuid`, Non-null): User ID của cán bộ phê duyệt.
 - `createdAt` (`DateTime`, Non-null): Thời điểm lưu trữ UTC.
@@ -1258,7 +1260,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "rubricId": "44444444-0000-0000-0000-000000000002",
       "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
       "usageScope": "shared",
-      "source": "flm_api",
+      "source": "ai_generated",
       "status": "active",
       "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
       "createdAt": "2026-10-02T10:00:00Z"
@@ -1318,6 +1320,96 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "instance": "/api/v1/questions/batch-approve"
 }
 ```
+
+---
+
+#### 6. Giảng viên gửi bộ đề thi lên Trưởng Bộ Môn thẩm định
+- **Endpoint:** `POST /api/v1/exam-sets/{id}/submit-review`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên sau khi tạo và chọn lọc các câu hỏi vào bộ đề thi `exam_sets` (tuân thủ cấu trúc khung `exam_structures`), gửi bộ đề lên Trưởng Bộ Môn để thẩm định. Hệ thống kiểm tra số lượng câu hỏi, cơ cấu mức Bloom/CLO theo khung và chuyển trạng thái từ `DRAFT` thành `SUBMITTED_FOR_REVIEW`.
+- **Path Parameters:**
+  - `id` (`uuid`, bắt buộc): Định danh duy nhất của bộ đề thi.
+- **Request Body (`SubmitExamSetReviewRequestDto`):**
+```json
+{
+  "notes": "Kính gửi Trưởng Bộ Môn thẩm định bộ đề thi số 01 cho môn PRN231 kỳ FA26."
+}
+```
+- **Response 200 OK (`SubmitExamSetReviewResponseDto`):**
+```json
+{
+  "examSetId": "66666666-0000-0000-0000-000000000001",
+  "status": "SUBMITTED_FOR_REVIEW",
+  "submittedAt": "2026-10-05T09:00:00Z",
+  "message": "Bộ đề thi đã được gửi lên Trưởng Bộ Môn để thẩm định thành công."
+}
+```
+- **Phản hồi lỗi chuẩn hóa RFC 7807 (`POST /api/v1/exam-sets/{id}/submit-review`):**
+  - `400 Bad Request`: Bộ đề thi không có câu hỏi nào hoặc thiếu số lượng câu hỏi theo `exam_structures`.
+  - `403 Forbidden`: Người dùng không có vai trò Giảng viên hoặc Quản trị viên.
+  - `404 Not Found`: Không tìm thấy bộ đề thi với ID cung cấp.
+
+---
+
+#### 7. Trưởng Bộ Môn thẩm định & Phê duyệt / Từ chối bộ đề thi
+- **Endpoint:** `PUT /api/v1/exam-sets/{id}/review-decision`
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn rà soát toàn bộ câu hỏi và cấu trúc của bộ đề thi `exam_sets`. Ra quyết định:
+  - Phê duyệt chính thức (`OFFICIAL`): Bộ đề thi đạt chuẩn, sẵn sàng để bàn giao cho Khảo thí.
+  - Từ chối (`REJECTED`): Trả lại bộ đề kèm lý do nhận xét chi tiết (`reviewNotes`).
+- **Path Parameters:**
+  - `id` (`uuid`, bắt buộc): Định danh duy nhất của bộ đề thi.
+- **Request Body (`ExamSetReviewDecisionRequestDto`):**
+```json
+{
+  "decision": "OFFICIAL",
+  "reviewNotes": "Bộ đề thi đảm bảo ma trận Bloom, đủ chuẩn đầu ra CLO1-CLO4 và phân bố thời gian hợp lý."
+}
+```
+- **Response 200 OK (`ExamSetReviewDecisionResponseDto`):**
+```json
+{
+  "examSetId": "66666666-0000-0000-0000-000000000001",
+  "status": "OFFICIAL",
+  "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
+  "reviewedAt": "2026-10-05T10:00:00Z",
+  "message": "Bộ đề thi đã được phê duyệt chính thức (OFFICIAL)."
+}
+```
+- **Phản hồi lỗi chuẩn hóa RFC 7807 (`PUT /api/v1/exam-sets/{id}/review-decision`):**
+  - `400 Bad Request`: Quyết định phê duyệt không hợp lệ (chỉ chấp nhận `OFFICIAL` hoặc `REJECTED`).
+  - `403 Forbidden`: Người dùng không có vai trò Trưởng Bộ Môn hoặc Quản trị viên.
+  - `404 Not Found`: Không tìm thấy bộ đề thi tương ứng.
+
+---
+
+#### 8. Trưởng Bộ Môn bàn giao bộ đề thi chính thức cho Cán bộ Khảo thí
+- **Endpoint:** `POST /api/v1/exam-sets/{id}/hand-over`
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn bàn giao bộ đề thi đã được phê duyệt `OFFICIAL` sang cho Cán bộ Khảo thí (`examination_officer`). Chuyển trạng thái bộ đề từ `OFFICIAL` sang `HANDED_OVER`. Bộ đề ở trạng thái `HANDED_OVER` là điều kiện tiên quyết để Khảo thí có thể phân bổ vào các ca thi phòng Lab (`distribute-tickets` với ràng buộc `uq_tickets_shift_exam_set`).
+- **Path Parameters:**
+  - `id` (`uuid`, bắt buộc): Định danh duy nhất của bộ đề thi.
+- **Request Body (`HandOverExamSetRequestDto`):**
+```json
+{
+  "targetSessionId": "77777777-0000-0000-0000-000000000001",
+  "notes": "Bàn giao bộ đề chính thức cho kỳ thi vấn đáp kết thúc môn FA26."
+}
+```
+- **Response 200 OK (`HandOverExamSetResponseDto`):**
+```json
+{
+  "examSetId": "66666666-0000-0000-0000-000000000001",
+  "sessionId": "77777777-0000-0000-0000-000000000001",
+  "status": "HANDED_OVER",
+  "handedOverAt": "2026-10-06T08:00:00Z",
+  "message": "Bộ đề thi đã được bàn giao thành công cho Cán bộ Khảo thí."
+}
+```
+- **Phản hồi lỗi chuẩn hóa RFC 7807 (`POST /api/v1/exam-sets/{id}/hand-over`):**
+  - `400 Bad Request`: Bộ đề thi chưa được phê duyệt `OFFICIAL` (không thể bàn giao đề ở trạng thái `DRAFT` hoặc `REJECTED`).
+  - `403 Forbidden`: Chỉ Trưởng Bộ Môn hoặc Quản trị viên mới có quyền bàn giao đề.
+  - `404 Not Found`: Không tìm thấy bộ đề thi hoặc kỳ thi tương ứng.
 
 ---
 
@@ -1879,10 +1971,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ### 5.7. Thi Thật Phòng Lab & An Ninh Kiosk (MF-04)
 *(Phân hệ CSDL: `official_exam_sessions`, `real_exam_session_shifts`, `student_exam_tickets`, `exam_question_submissions`)*
 
-#### 0. Khởi tạo kỳ thi & Cấu hình môn thi (Trưởng Bộ Môn)
+#### 0. Khởi tạo kỳ thi & Cấu hình môn thi (Cán bộ Khảo thí)
 - **Endpoint:** `POST /api/v1/official-exams/sessions`
-- **Quyền:** `department_head`, `admin`
-- **Mô tả:** Trưởng Bộ Môn khởi tạo kỳ thi (`OfficialExamSession` / Exam Season), gán môn thi vào kỳ thi, cấu hình Follow-up môn thi trong kỳ thi (`hasFollowUp: boolean`, `maxFollowUpQuestions: 1..2`) và `examInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`) cùng `transcriptBufferSeconds` (10..300s).
+- **Quyền:** `examination_officer`, `admin`
+- **Mô tả:** Cán bộ Khảo thí (`examination_officer`) khởi tạo kỳ thi (`OfficialExamSession` / Exam Season), gán môn thi vào kỳ thi, thiết lập `examInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`) cùng `transcriptBufferSeconds` (10..300s). Riêng cấu hình Follow-up thi thật (`hasFollowUp: boolean`, `maxFollowUpQuestions` từ `1–5` câu, mặc định `2`) thuộc 100% thẩm quyền của Trưởng Bộ Môn (`department_head`) (R3).
 - **Request Body:**
 ```json
 {
@@ -1916,8 +2008,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 #### 1. Tạo ca thi phòng Lab & Gán danh sách thí sinh (Từ lớp học hoặc Import Excel FPT)
 - **Tạo ca thi:** `POST /api/v1/official-exams/shifts`
-- **Gán danh sách thí sinh:** Danh sách thí sinh của ca thi được hệ thống tự động trích xuất và gán trực tiếp từ lớp học đã có trong hệ thống (`classes`, `class_enrollments`), hoặc Giám thị / Giảng viên có thể import danh sách dự phòng từ file Excel (EPPlus) qua endpoint: `POST /api/v1/official-exams/shifts/{id}/import-roster`.
-- **Quyền:** `lecturer`, `department_head`, `proctor`, `admin`
+- **Gán danh sách thí sinh:** Danh sách thí sinh của ca thi được hệ thống tự động trích xuất và gán trực tiếp từ lớp học đã có trong hệ thống (`classes`, `class_enrollments`), hoặc Cán bộ Khảo thí (`examination_officer`) có thể import danh sách dự phòng từ file Excel (EPPlus) qua endpoint: `POST /api/v1/official-exams/shifts/{id}/import-roster` (Giám thị `proctor` không có quyền quản lý ca thi hay import danh sách).
+- **Quyền:** `examination_officer`, `admin`
 - **Content-Type:** `multipart/form-data` (khi import Excel) hoặc `application/json` (khi gán từ lớp)
 - **Cấu hình hình thức thi:** `allowTranscriptEdit: boolean`, `examInputMode: "VoiceOnly" | "VoiceWithTranscriptEdit"` (Nếu `VoiceOnly`: Khóa cứng 100% phím máy Kiosk, chỉ trả lời qua mic).
 - **Response 200 OK:**
@@ -1936,21 +2028,126 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 2. Lấy Presigned URL tải lên âm thanh Cloudflare R2
-- **Endpoint:** `POST /api/v1/official-exams/tickets/{id}/presigned-url`
+#### 1b. Phân bổ đề thi không trùng lặp cho ca thi (Ràng buộc uq_tickets_shift_exam_set)
+- **Endpoint:** `POST /api/v1/official-exams/shifts/{id}/distribute-tickets`
+- **Quyền:** `examination_officer`, `admin`
+- **Mô tả:** Cán bộ Khảo thí kích hoạt phân bổ các bộ đề thi đã bàn giao (`HANDED_OVER`) cho từng thí sinh trong ca thi. Ràng buộc toàn vẹn CSDL `uq_tickets_shift_exam_set` đảm bảo không có hai thí sinh nào trong cùng một ca thi nhận cùng một bộ đề (`exam_set_id`).
+- **Path Parameters:**
+  - `id` (`uuid`, bắt buộc): Định danh duy nhất của ca thi (`shiftId`).
+- **Request Body:**
+```json
+{
+  "allowRandomShuffle": true
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "shiftId": "bbbbbbbb-0000-0000-0000-000000000001",
+  "totalDistributed": 40,
+  "message": "Đã phân bổ thành công bộ đề thi cho 40 thí sinh, đảm bảo không trùng lặp đề trong ca thi.",
+  "distributedTickets": [
+    {
+      "ticketId": "cccccccc-0000-0000-0000-000000000001",
+      "studentCode": "SE170001",
+      "seatNumber": 1,
+      "examSetId": "66666666-0000-0000-0000-000000000001"
+    },
+    {
+      "ticketId": "cccccccc-0000-0000-0000-000000000002",
+      "studentCode": "SE170002",
+      "seatNumber": 2,
+      "examSetId": "66666666-0000-0000-0000-000000000002"
+    }
+  ]
+}
+```
+
+#### 1c. Xuất bản đề thi ca thi phòng Lab
+- **Endpoint:** `POST /api/v1/official-exams/shifts/{id}/publish-exam`
+- **Quyền:** `examination_officer`, `admin`
+- **Mô tả:** Cán bộ Khảo thí mở xuất bản đề thi cho ca thi (`is_exam_published = true`). Các máy trạm Kiosk trong phòng thi chỉ được phép tải nội dung câu hỏi về máy sau khi đề thi ca thi đã được xuất bản chính thức.
+- **Path Parameters:**
+  - `id` (`uuid`, bắt buộc): Định danh ca thi (`shiftId`).
+- **Response 200 OK:**
+```json
+{
+  "shiftId": "bbbbbbbb-0000-0000-0000-000000000001",
+  "isExamPublished": true,
+  "publishedAt": "2026-11-15T07:30:00Z",
+  "message": "Đề thi ca thi đã được xuất bản thành công. Các máy trạm Kiosk có thể tải đề thi."
+}
+```
+
+#### 1d. Ghi nhật ký chống gian lận thời gian thực (Realtime Anti-Cheat Logging)
+- **Endpoint:** `POST /api/v1/official-exams/anti-cheat/log`
+- **Quyền:** `student` (từ Kiosk máy thi), `proctor`, `examination_officer`, `admin`
+- **Mô tả:** Máy trạm Kiosk hoặc Giám thị gửi log vi phạm an ninh phòng thi theo thời gian thực để lưu vết vào bảng `exam_anti_cheat_logs`. Hệ thống tự động đếm số lần mất tiêu điểm (`WINDOW_BLUR > 3` lần $\to$ đình chỉ thi).
+- **Request Body (`LogAntiCheatEventRequestDto`):**
+```json
+{
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "eventType": "WINDOW_BLUR",
+  "severity": "HIGH",
+  "details": "Thí sinh chuyển đổi cửa sổ ứng dụng (Alt+Tab hoặc click chuột ra ngoài cửa sổ Kiosk) lần 2/3.",
+  "ipAddress": "192.168.1.101"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "logId": "aaaa1111-0000-0000-0000-000000000001",
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "eventType": "WINDOW_BLUR",
+  "severity": "HIGH",
+  "recordedAt": "2026-11-15T08:15:30Z",
+  "blurCount": 2,
+  "isSuspended": false,
+  "message": "Nhật ký an ninh đã được ghi nhận."
+}
+```
+
+#### 2. Quy trình 2 bước tải âm thanh bài thi lên Cloudflare R2
+
+##### Bước 1: Yêu cầu ủy quyền tải lên âm thanh (Presigned Upload Authorization)
+- **Endpoint:** `POST /api/v1/official-exams/tickets/{ticketId}/questions/{questionId}/audio-upload-authorizations`
 - **Quyền:** `student`, `proctor`
 - **Request Body:**
 ```json
 {
   "fileName": "01_SE170001.webm",
-  "contentType": "audio/webm"
+  "contentType": "audio/webm",
+  "expectedSizeBytes": 1548290
 }
 ```
 - **Response 200 OK:**
 ```json
 {
   "uploadUrl": "https://r2.oralexam.edu.vn/exams/FA26/PRN231/01_SE170001.webm?X-Amz-Signature=...",
-  "storageKey": "exams/FA26/PRN231/01_SE170001.webm"
+  "storageKey": "exams/FA26/PRN231/01_SE170001.webm",
+  "expiresIn": 900
+}
+```
+
+##### Bước 2: Xác nhận và niêm phong âm thanh bài thi
+- **Endpoint:** `PUT /api/v1/official-exams/tickets/{ticketId}/questions/{questionId}/audio`
+- **Quyền:** `student`, `proctor`
+- **Request Body:**
+```json
+{
+  "audioR2Url": "https://r2.oralexam.edu.vn/exams/FA26/PRN231/01_SE170001.webm",
+  "audioHashSha256": "3a7acb4f9e1d84f85e8a71917f85897f26792617f6946028a36809cf525ee821",
+  "durationSeconds": 240
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "questionId": "99999999-0000-0000-0000-000000000001",
+  "status": "AUDIO_ATTACHED",
+  "audioHashSha256": "3a7acb4f9e1d84f85e8a71917f85897f26792617f6946028a36809cf525ee821",
+  "message": "File âm thanh đã được niêm phong và liên kết với bài nộp câu hỏi thành công."
 }
 ```
 
@@ -2162,12 +2359,12 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - **Response 200 OK:** Cập nhật điểm thẩm định thành công, chuyển trạng thái vé thi sang `AUDITED` và tự động ghi log vào `audit_logs`.
 - **Response 422 Unprocessable Entity:** Nếu để trống hoặc lý do giải trình $< 10$ ký tự.
 
-#### 3. Giảng viên bấm "Công Bố Điểm" & Kích hoạt Khóa điểm một chiều (One-Way Lock)
+#### 3. Công Bố Điểm ca thi & Kích hoạt Khóa điểm một chiều (One-Way Lock)
 - **Endpoint:** `POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`
-- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Quyền:** `examination_officer`, `lecturer`, `admin`
 - **Cơ chế:** 
   1. **Điều kiện tiên quyết bất biến:** Kiểm tra **100% sinh viên trong ca thi đã có điểm hoàn chỉnh** (tất cả các vé thi đều có `final_score` hoặc `ai_score` hợp lệ, không có vé nào còn ở trạng thái chưa chấm). Nếu phát hiện bất kỳ bài thi nào chưa có điểm, hệ thống từ chối và trả về `HTTP 422 Unprocessable Entity`.
-  2. Giảng viên sau khi rà soát toàn bộ ca thi trên Cổng Hậu kiểm, bấm nút **"Công Bố Điểm"**.
+  2. Cán bộ Khảo thí hoặc Giảng viên sau khi rà soát toàn bộ ca thi trên Cổng Hậu kiểm, bấm nút **"Công Bố Điểm"**.
   3. Hệ thống chuyển trạng thái toàn bộ vé thi trong ca từ `AUDITED` (hoặc `AI_GRADED`) sang `PUBLISHED`.
   4. Kích hoạt vĩnh viễn cơ chế **Khóa một chiều (One-Way Lock)**: thiết lập `is_locked = true` trên toàn bộ vé thi của ca, kích hoạt `OneWayLockInterceptor`. Sau thời điểm này, mọi thao tác sửa điểm đều bị chặn và trả về `HTTP 403 Forbidden` (ngoại trừ duy nhất đường hợp lệ khi Giảng viên được Trưởng Bộ Môn phân công chấm lại đơn phúc khảo nội bộ cập nhật điểm thông qua luồng thẩm định phúc khảo có kiểm soát và ghi log kiểm toán).
   5. Mở quyền cho sinh viên tra cứu điểm trên Student Portal.
@@ -2237,8 +2434,8 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 *(Phân hệ CSDL: `dead_letter_queues`, `audit_logs`)*
 
 #### Tra cứu danh sách task lỗi trong Dead-Letter Queue
-- **Endpoint:** `GET /api/v1/dlq/tasks?status=pending`
-- **Quyền:** `department_head`
+- **Endpoint:** `GET /api/v1/admin/dlq/tasks?status=pending` (cho luồng Luyện tập MF-01 & Thi thử MF-02) và `GET /api/v1/examination-officer/dlq/tasks?status=pending` (cho luồng Thi thật phòng Lab MF-04) (Alias tương thích: `GET /api/v1/dlq/tasks?status=pending`)
+- **Quyền (Phân định R2):** `/api/v1/admin/dlq/*` thuộc `admin` (giám sát & replay DLQ luồng MF-01/02); `/api/v1/examination-officer/dlq/*` thuộc `examination_officer` (giám sát & replay DLQ luồng MF-04). **Cắt bỏ hoàn toàn quyền DLQ khỏi `department_head` (`❌`)**.
 - **Response 200 OK:**
 ```json
 [
@@ -2253,9 +2450,9 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ]
 ```
 
-#### Trưởng Bộ Môn kích hoạt cứu hộ chấm bù bài thi (DLQ Replay)
-- **Endpoint:** `POST /api/v1/dlq/tasks/{id}/replay`
-- **Quyền:** `department_head`
+#### Kích hoạt cứu hộ chấm bù bài thi (DLQ Replay)
+- **Endpoint:** `POST /api/v1/admin/dlq/tasks/{id}/replay` (luồng MF-01/02) và `POST /api/v1/examination-officer/dlq/tasks/{id}/replay` (luồng MF-04) (Alias tương thích: `POST /api/v1/dlq/tasks/{id}/replay`)
+- **Quyền (Phân định R2):** `admin` (độc quyền replay DLQ cho luồng Luyện tập MF-01 & Thi thử MF-02 qua `/api/v1/admin/dlq/*`), `examination_officer` (độc quyền replay DLQ cho luồng Thi thật phòng Lab MF-04 qua `/api/v1/examination-officer/dlq/*`). **Cắt bỏ hoàn toàn quyền DLQ khỏi `department_head` (`❌`)**.
 - **Response 200 OK:**
 ```json
 {
@@ -2288,10 +2485,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ### 5.10. Phân Hệ Phúc Khảo Nội Bộ (Internal Appeal Requests) — MF-04
 *(Phân hệ CSDL: `appeal_requests`)*
 
-#### 1. Sinh viên nộp đơn phúc khảo bài thi chính thức
-- **Endpoint:** `POST /api/v1/appeals`
+#### 1. Bước 1/5 — Sinh viên nộp đơn phúc khảo bài thi chính thức (`POST /api/v1/student/appeals`)
+- **Endpoint:** `POST /api/v1/student/appeals` (Alias tương thích: `POST /api/v1/appeals`)
 - **Quyền:** `student` (chính chủ sở hữu vé thi đã công bố điểm)
-- **Mô tả:** Sau khi bài thi được công bố điểm (`PUBLISHED`), nếu sinh viên không đồng ý với kết quả đánh giá, sinh viên nộp đơn phúc khảo trực tiếp trên Student Portal kèm lý do cụ thể. Hệ thống tạo bản ghi `appeal_requests` ở trạng thái `PENDING` và chuyển đến Trưởng Bộ Môn (`department_head`) của môn học tương ứng để tiếp nhận và giao cho một Giảng viên chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`).
+- **Mô tả:** Sau khi bài thi được công bố điểm (`PUBLISHED`), nếu sinh viên không đồng ý với kết quả đánh giá, sinh viên nộp đơn phúc khảo trực tiếp trên Student Portal kèm lý do cụ thể. Hệ thống tạo bản ghi `appeal_requests` ở trạng thái `SUBMITTED_TO_EXAM_OFFICE` gửi lên **Cán bộ Khảo thí (`examination_officer`)** để tiếp nhận & thẩm tra hợp lệ (`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`) trước khi chuyển giao cho **Trưởng Bộ Môn (`department_head`)** phân công Giảng viên chấm lại (`POST /api/v1/department-head/appeals/{id}/assign-lecturer`).
 - **Request Body:**
 ```json
 {
@@ -2305,10 +2502,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "appealId": "dddddddd-0000-0000-0000-000000000001",
   "ticketId": "cccccccc-0000-0000-0000-000000000001",
   "studentId": "aaaaaaa1-0000-0000-0000-000000000001",
-  "status": "PENDING",
+  "status": "SUBMITTED_TO_EXAM_OFFICE",
   "assignedTo": "e4c5b2a1-0001-4000-8000-000000000003",
   "createdAt": "2026-10-26T08:30:00Z",
-  "message": "Đã tiếp nhận đơn phúc khảo thành công. Đơn đã được chuyển đến Trưởng Bộ Môn để tiếp nhận và phân công Giảng viên chấm lại bài thi."
+  "message": "Đã tiếp nhận đơn phúc khảo thành công. Đơn đã được chuyển đến Cán bộ Khảo thí để thẩm tra tính hợp lệ và chuyển giao cho Trưởng Bộ Môn phân công Giảng viên chấm lại bài thi."
 }
 ```
 - **Response 422 Unprocessable Entity:** Nếu vé thi chưa ở trạng thái `PUBLISHED` hoặc lý do phúc khảo để trống / dưới 10 ký tự.
@@ -2316,9 +2513,9 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 #### 2. Tra cứu danh sách đơn phúc khảo
 - **Endpoint:** `GET /api/v1/appeals`
-- **Quyền:** `department_head`, `admin`, `lecturer` (giảng viên xem đơn được phân công), `student` (sinh viên chỉ xem đơn của chính mình)
+- **Quyền:** `examination_officer`, `department_head`, `admin`, `lecturer` (giảng viên xem đơn được phân công), `student` (sinh viên chỉ xem đơn của chính mình)
 - **Query Params:**
-  - `status`: `"PENDING"` | `"IN_REVIEW"` | `"APPROVED"` | `"REJECTED"` (optional)
+  - `status`: `"SUBMITTED_TO_EXAM_OFFICE"` | `"FORWARDED_TO_DEPT_HEAD"` | `"ASSIGNED_TO_LECTURER"` | `"REGRADED_BY_LECTURER"` | `"APPROVED"` | `"REJECTED"` (optional)
   - `courseId`: UUID môn học (optional)
   - `page`: default 1
   - `pageSize`: default 10
@@ -2337,7 +2534,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "courseCode": "PRN231",
       "currentScore": 8.50,
       "reason": "Em xin phúc khảo câu 2 phần Dependency Injection...",
-      "status": "PENDING",
+      "status": "SUBMITTED_TO_EXAM_OFFICE",
       "assignedToName": "Trần Thị C (Trưởng Bộ Môn SE)",
       "createdAt": "2026-10-26T08:30:00Z",
       "reviewedAt": null,
@@ -2348,10 +2545,60 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 
-#### 3. Giảng viên được phân công hoặc Trưởng Bộ Môn ra quyết định thẩm định phúc khảo
-- **Endpoint:** `PUT /api/v1/appeals/{id}/review`
-- **Quyền:** `lecturer`, `department_head`, `admin`
-- **Mô tả:** Giảng viên được phân công chấm lại (hoặc Trưởng Bộ Môn) trực tiếp nghe lại file ghi âm và đối soát Evidence Panel để đưa ra phán quyết:
+#### 2b. Bước 2/5 — Cán bộ Khảo thí tiếp nhận, thẩm tra hợp lệ & chuyển giao Trưởng Bộ Môn (`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`)
+- **Endpoint:** `POST /api/v1/examination-officer/appeals/{id}/forward-to-head`
+- **Quyền:** `examination_officer`, `admin`
+- **Mô tả:** Cán bộ Khảo thí tiếp nhận đơn phúc khảo (`SUBMITTED_TO_EXAM_OFFICE`), thẩm tra tính hợp lệ (thời hạn nộp đơn, trạng thái vé thi đã công bố điểm), nhập ghi chú thẩm tra (`verificationNotes`) và chuyển giao hồ sơ sang cho Trưởng Bộ Môn của môn học (`status = "FORWARDED_TO_DEPT_HEAD"`).
+- **Request Body:**
+```json
+{
+  "isValid": true,
+  "verificationNotes": "Đơn nộp đúng hạn quy định 3 ngày kể từ khi công bố điểm, hồ sơ vé thi và file ghi âm R2 đầy đủ."
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "appealId": "dddddddd-0000-0000-0000-000000000001",
+  "status": "FORWARDED_TO_DEPT_HEAD",
+  "verifiedBy": "11111111-0000-0000-0000-000000000004",
+  "forwardedAt": "2026-10-26T09:15:00Z",
+  "message": "Đã thẩm tra hợp lệ và chuyển giao đơn phúc khảo cho Trưởng Bộ Môn thành công."
+}
+```
+
+#### 3. Bước 3/5 — Trưởng Bộ Môn phân công Giảng viên chấm lại (`POST /api/v1/department-head/appeals/{id}/assign-lecturer`)
+- **Endpoint:** `POST /api/v1/department-head/appeals/{id}/assign-lecturer` (Alias tương thích: `PUT /api/v1/appeals/{id}/assign-lecturer`)
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn tiếp nhận đơn đã qua thẩm tra của Khảo thí (`FORWARDED_TO_DEPT_HEAD`) và phân công một Giảng viên chuyên môn độc lập chấm lại bài thi (`status = "ASSIGNED_TO_LECTURER"`).
+
+#### 4. Bước 4/5 — Giảng viên được phân công chấm lại độc lập trên Evidence Panel (`PUT /api/v1/lecturer/appeals/{id}/regrade`)
+- **Endpoint:** `PUT /api/v1/lecturer/appeals/{id}/regrade` (Alias tương thích: `PUT /api/v1/appeals/{id}/regrade`)
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên được phân công truy cập Evidence Panel, nghe lại file ghi âm `STT_MSSV.webm` trên Waveform Player, đối soát Transcript Whisper và nhập biên bản giải trình (`regradeNotes` $\ge 10$ ký tự) kèm điểm đề xuất mới (`proposedScore`), chuyển trạng thái đơn sang `REGRADED_BY_LECTURER`.
+- **Request Body:**
+```json
+{
+  "proposedScore": 9.00,
+  "regradeNotes": "Sau khi nghe lại đoạn âm thanh 01:25-02:10 trên Waveform Player, sinh viên đã giải thích chính xác cơ chế Scoped Service Provider. Đề xuất tăng 0.5 điểm cho tiêu chí 2."
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "appealId": "dddddddd-0000-0000-0000-000000000001",
+  "status": "REGRADED_BY_LECTURER",
+  "proposedScore": 9.00,
+  "regradedBy": "33333333-0000-0000-0000-000000000001",
+  "regradedAt": "2026-10-26T15:30:00Z",
+  "message": "Giảng viên đã hoàn tất chấm lại và gửi đề xuất điểm lên Trưởng Bộ Môn phê duyệt."
+}
+```
+
+#### 5. Bước 5/5 — Trưởng Bộ Môn thẩm định & phê duyệt quyết định phúc khảo cuối cùng (`POST /api/v1/department-head/appeals/{id}/decision`)
+- **Endpoint:** `POST /api/v1/department-head/appeals/{id}/decision` (Alias tương thích: `PUT /api/v1/appeals/{id}/review`)
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn (`department_head`) xem xét biên bản chấm lại và đề xuất điểm của Giảng viên (`REGRADED_BY_LECTURER`), đối soát Evidence Panel để đưa ra quyết định phê duyệt cuối cùng:
   - Nếu `decision = "APPROVED"`: Chấp thuận phúc khảo, cập nhật điểm số mới (`proposedScore`), ghi nhận lý do điều chỉnh (`reviewNotes`), mở khóa một chiều có kiểm soát để cập nhật điểm chính thức vào vé thi và ghi log kiểm toán.
   - Nếu `decision = "REJECTED"`: Bác bỏ yêu cầu phúc khảo, giữ nguyên điểm thi, ghi rõ lý do giải trình vào `reviewNotes`.
 - **Request Body:**
@@ -2376,10 +2623,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 ```
 - **Response 422 Unprocessable Entity:** Nếu thiếu trường `decision`, `reviewNotes` dưới 10 ký tự hoặc `proposedScore` nằm ngoài khoảng 0.0–10.0.
 
-#### 4. Trưởng Bộ Môn giao giảng viên chấm lại đơn phúc khảo
+#### 5b. Chi tiết Payload Phân công Giảng viên chấm lại (Bước 3/5 — `POST /api/v1/department-head/appeals/{id}/assign-lecturer`)
 - **Endpoint:** `PUT /api/v1/appeals/{id}/assign-lecturer`
 - **Quyền:** `department_head`, `admin`
-- **Mô tả:** Trưởng Bộ Môn ủy quyền / giao đơn phúc khảo cho Giảng viên chuyên môn thẩm định bài thi trên Evidence Panel và chấm lại. Hệ thống cập nhật `assigned_to = assignedLecturerId`, chuyển trạng thái đơn sang `IN_REVIEW`, và tự động gửi thông báo in-app (FE-11) tới Giảng viên được giao.
+- **Mô tả:** Trưởng Bộ Môn ủy quyền / giao đơn phúc khảo đã được Cán bộ Khảo thí thẩm tra (`FORWARDED_TO_DEPT_HEAD`) cho Giảng viên chuyên môn thẩm định bài thi trên Evidence Panel và chấm lại. Hệ thống cập nhật `assigned_to = assignedLecturerId`, chuyển trạng thái đơn sang `ASSIGNED_TO_LECTURER`, và tự động gửi thông báo in-app (FE-11) tới Giảng viên được giao.
 - **Request Body:**
 ```json
 {
@@ -2392,7 +2639,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 {
   "appealId": "dddddddd-0000-0000-0000-000000000001",
   "ticketId": "cccccccc-0000-0000-0000-000000000001",
-  "status": "IN_REVIEW",
+  "status": "ASSIGNED_TO_LECTURER",
   "assignedTo": "33333333-0000-0000-0000-000000000001",
   "assignedLecturerName": "Nguyen Trong Tot",
   "assignedAt": "2026-10-26T10:00:00Z",
@@ -2401,14 +2648,14 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 }
 ```
 - **Response 404 Not Found:** Nếu không tìm thấy đơn phúc khảo.
-- **Response 422 Unprocessable Entity:** Nếu `assignedLecturerId` rỗng, người được gán không có vai trò `lecturer`, hoặc đơn không ở trạng thái `PENDING`.
+- **Response 422 Unprocessable Entity:** Nếu `assignedLecturerId` rỗng, người được gán không có vai trò `lecturer`, hoặc đơn không ở trạng thái `FORWARDED_TO_DEPT_HEAD`.
 
 ---
 
 ### 5.11. Hộp thư Thông báo trong Ứng dụng (In-App Notifications) — FE-11
 *(Phân hệ CSDL: `notifications`)*
 
-Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thông báo (Bell Icon) cho 5 vai trò người dùng, hỗ trợ 5 nhóm sự kiện chính:
+Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thông báo (Bell Icon) cho 6 vai trò người dùng (`student`, `lecturer`, `department_head`, `examination_officer`, `proctor`, `admin`), hỗ trợ 5 nhóm sự kiện chính:
 1. `EXAM_SCHEDULE_PUBLISHED`: Lịch thi và danh sách ca thi được công bố.
 2. `EXAM_GRADE_PUBLISHED`: Điểm thi chính thức của môn thi được Giảng viên công bố.
 3. `APPEAL_LECTURER_ASSIGNED`: Giảng viên được Trưởng Bộ Môn giao chấm lại đơn phúc khảo.
@@ -2487,7 +2734,283 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
 
 ---
 
-### 5.12. Dịch vụ Giọng nói AI Đa tầng (Speech STT / TTS) & Bảng Tra Cứu Nhanh Endpoints Thực Tế (Cập nhật mới nhất cho Frontend)
+### 5.12. Giám thị Phòng Lab 40 Ghế (`/api/v1/proctor/*` — R4) & Dashboard Giảng viên
+*(Phân hệ CSDL: `student_exam_tickets`, `exam_anti_cheat_logs`)*
+
+#### 1. Điểm danh ghế ngồi 1–40 phòng Lab (`POST /api/v1/proctor/shifts/{id}/attendance`)
+- **Endpoint:** `POST /api/v1/proctor/shifts/{id}/attendance` (Kèm tra cứu danh sách ghế: `GET /api/v1/proctor/shifts/{id}/attendance`)
+- **Quyền:** `proctor`, `admin`
+- **Mô tả (R4):** Giám thị phòng Lab (`proctor`) CHỈ có quyền điểm danh số thứ tự ghế (`SeatNumber` 1–40) đối chiếu thẻ Sinh viên / CCCD thực tế tại phòng thi. **Cắt bỏ hoàn toàn các quyền lạm quyền của Giám thị:** CẤM mở/đóng ca thi, CẤM xuất bản đề, CẤM đình chỉ/reset máy trạm, CẤM import danh sách sinh viên, CẤM xem điểm AI hay sửa điểm.
+- **Request Body:**
+```json
+{
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "seatNumber": 1,
+  "isPresent": true,
+  "identityVerified": true,
+  "notes": "Đã đối chiếu thẻ SV và CCCD khớp thông tin tại ghế số 01."
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "shiftId": "bbbbbbbb-0000-0000-0000-000000000001",
+  "ticketId": "cccccccc-0000-0000-0000-000000000001",
+  "seatNumber": 1,
+  "isPresent": true,
+  "checkedInByProctorAt": "2026-11-15T07:45:00Z",
+  "message": "Đã xác nhận điểm danh thí sinh tại ghế số 1 thành công."
+}
+```
+
+#### 2. Báo cáo vi phạm an ninh phòng thi (`POST /api/v1/proctor/shifts/{id}/violations`)
+- **Endpoint:** `POST /api/v1/proctor/shifts/{id}/violations`
+- **Quyền:** `proctor`, `admin`
+- **Mô tả (R4):** Giám thị ghi nhận trực tiếp hành vi vi phạm quy chế phòng thi vào bảng `exam_anti_cheat_logs`.
+- **Request Body:**
+```json
+{
+  "ticketId": "cccccccc-0000-0000-0000-000000000002",
+  "seatNumber": 2,
+  "violationType": "UNAUTHORIZED_MATERIAL",
+  "severity": "HIGH",
+  "description": "Thí sinh sử dụng tài liệu giấy không được phép trong phòng thi vấn đáp."
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "violationLogId": "aaaa2222-0000-0000-0000-000000000002",
+  "shiftId": "bbbbbbbb-0000-0000-0000-000000000001",
+  "ticketId": "cccccccc-0000-0000-0000-000000000002",
+  "recordedAt": "2026-11-15T08:20:00Z",
+  "message": "Đã ghi nhận biên bản vi phạm phòng thi vào exam_anti_cheat_logs thành công."
+}
+```
+
+---
+
+### 5.13. Chuỗi Phân Cấp Học Thuật 4 Cấp & Tự Tham Gia Lớp Học Phần (R5)
+*(Phân hệ CSDL: `semesters`, `courses`, `course_lecturers`, `classes`, `class_enrollments`)*
+
+#### 1. Cấp 1 — Admin gán Trưởng Bộ Môn vào quản lý môn học (`PUT /api/v1/admin/courses/{id}/assign-department-head`)
+- **Endpoint:** `PUT /api/v1/admin/courses/{id}/assign-department-head`
+- **Quyền:** `admin`
+- **Mô tả:** Sau khi tạo Học kỳ (`semesters`) và Môn học (`courses`), Admin gán một Trưởng Bộ Môn (`department_head`) phụ trách chuyên môn cho môn học (`courses.department_head_user_id`).
+- **Request Body:**
+```json
+{
+  "departmentHeadUserId": "e4c5b2a1-0001-4000-8000-000000000005"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "courseCode": "PRN231",
+  "departmentHeadUserId": "e4c5b2a1-0001-4000-8000-000000000005",
+  "updatedAt": "2026-10-01T08:00:00Z",
+  "message": "Đã gán Trưởng Bộ Môn phụ trách môn học thành công."
+}
+```
+
+#### 2. Cấp 2 — Trưởng Bộ Môn phân công nhiều Giảng viên vào môn học (`POST /api/v1/department-head/courses/{id}/lecturers`)
+- **Endpoint:** `POST /api/v1/department-head/courses/{id}/lecturers`
+- **Quyền:** `department_head`, `admin`
+- **Mô tả:** Trưởng Bộ Môn phân công một hoặc nhiều Giảng viên (`lecturer`) vào giảng dạy và biên soạn câu hỏi cho môn học thông qua bảng liên kết chuẩn 3NF `course_lecturers`.
+- **Request Body:**
+```json
+{
+  "lecturerUserIds": [
+    "e4c5b2a1-0001-4000-8000-000000000002",
+    "e4c5b2a1-0001-4000-8000-000000000003"
+  ]
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "assignedCount": 2,
+  "lecturerUserIds": [
+    "e4c5b2a1-0001-4000-8000-000000000002",
+    "e4c5b2a1-0001-4000-8000-000000000003"
+  ],
+  "message": "Đã phân công danh sách Giảng viên vào môn học (bảng course_lecturers) thành công."
+}
+```
+
+#### 3. Cấp 3 — Giảng viên tạo Lớp học phần & sinh/reset mật khẩu lớp (`POST /api/v1/lecturer/classes`, `POST /api/v1/lecturer/classes/{id}/reset-join-password`)
+- **Endpoint tạo lớp:** `POST /api/v1/lecturer/classes`
+- **Endpoint reset mật khẩu lớp:** `POST /api/v1/lecturer/classes/{id}/reset-join-password`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên được phân công trong `course_lecturers` tạo Lớp học phần thuộc môn học, hệ thống sinh mã lớp (`join_code`) và mật khẩu tham gia lớp (`join_password_hash`). Giảng viên có thể reset mật khẩu lớp bất kỳ lúc nào.
+- **Request Body (`POST /api/v1/lecturer/classes`):**
+```json
+{
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "semesterId": "11111111-0000-0000-0000-000000000001",
+  "classCode": "SE1801-PRN231",
+  "maxStudents": 35,
+  "joinPassword": "ClassSecret2026"
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "classId": "33333333-0000-0000-0000-000000000001",
+  "classCode": "SE1801-PRN231",
+  "joinCode": "PRN231-SE1801",
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "lecturerId": "e4c5b2a1-0001-4000-8000-000000000002",
+  "maxStudents": 35,
+  "createdAt": "2026-10-02T08:00:00Z"
+}
+```
+
+#### 4. Cấp 4 — Sinh viên nhập mật khẩu tự tham gia Lớp học phần (`POST /api/v1/student/classes/join`)
+- **Endpoint:** `POST /api/v1/student/classes/join`
+- **Quyền:** `student`, `admin`
+- **Mô tả:** Sinh viên nhập mã lớp (`classCode` / `joinCode`) và mật khẩu lớp (`joinPassword`) do Giảng viên cung cấp để tự ghi danh vào bảng `class_enrollments`.
+- **Request Body:**
+```json
+{
+  "classCode": "SE1801-PRN231",
+  "joinPassword": "ClassSecret2026"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "enrollmentId": "99991111-0000-0000-0000-000000000001",
+  "classId": "33333333-0000-0000-0000-000000000001",
+  "classCode": "SE1801-PRN231",
+  "studentId": "e4c5b2a1-0001-4000-8000-000000000004",
+  "enrolledAt": "2026-10-02T09:00:00Z",
+  "message": "Tham gia lớp học phần thành công."
+}
+```
+
+---
+
+### 5.14. Ca Thi Trong Lớp & Mật Khẩu Tự Động Xoay Vòng 5 Phút (In-Class Formative Exam Shifts — R6 / MF-05)
+*(Phân hệ CSDL: `in_class_exam_shifts`, `in_class_shift_passwords`, `in_class_exam_submissions`)*
+
+#### 1. Giảng viên tạo Ca thi trong lớp (`POST /api/v1/lecturer/in-class-shifts`)
+- **Endpoint:** `POST /api/v1/lecturer/in-class-shifts`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên tổ chức kiểm tra vấn đáp lấy điểm thành phần (Progress Test / Quiz) trực tiếp trên lớp học phần được phân công (`classes`).
+- **Request Body:**
+```json
+{
+  "classId": "33333333-0000-0000-0000-000000000001",
+  "title": "Progress Test 1 - Clean Architecture & SOLID",
+  "durationMinutes": 20,
+  "questionCount": 3,
+  "hasFollowUp": true,
+  "passwordRotationSeconds": 300,
+  "gracePeriodSeconds": 60
+}
+```
+- **Response 201 Created:**
+```json
+{
+  "shiftId": "77778888-0000-0000-0000-000000000001",
+  "classId": "33333333-0000-0000-0000-000000000001",
+  "title": "Progress Test 1 - Clean Architecture & SOLID",
+  "status": "ACTIVE",
+  "passwordRotationSeconds": 300,
+  "gracePeriodSeconds": 60,
+  "createdAt": "2026-10-15T08:00:00Z"
+}
+```
+
+#### 2. Lấy mật khẩu TOTP 6 ký tự xoay vòng 5 phút + Grace Period 60s (`GET /api/v1/lecturer/in-class-shifts/{id}/active-password`)
+- **Endpoint:** `GET /api/v1/lecturer/in-class-shifts/{id}/active-password`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Hệ thống tự động sinh mật khẩu ca thi gồm 6 ký tự và xoay vòng định kỳ sau mỗi 5 phút (`300` giây) để Giảng viên chiếu lên màn hình lớp học, hỗ trợ khoảng gia hạn an toàn (`gracePeriodSeconds = 60` giây) cho mật khẩu liền kề trước đó nhằm chống trễ mạng và lệch đồng hồ client-server.
+- **Response 200 OK:**
+```json
+{
+  "shiftId": "77778888-0000-0000-0000-000000000001",
+  "currentOtpCode": "A8F3K9",
+  "generatedAt": "2026-10-15T08:05:00Z",
+  "expiresAt": "2026-10-15T08:10:00Z",
+  "gracePeriodSeconds": 60,
+  "remainingSeconds": 245
+}
+```
+
+#### 3. Sinh viên nhập mã OTP xoay vòng vào thi trong lớp (`POST /api/v1/student/in-class-shifts/{id}/join`)
+- **Endpoint:** `POST /api/v1/student/in-class-shifts/{id}/join`
+- **Quyền:** `student`, `admin`
+- **Mô tả:** Sinh viên thuộc lớp học phần hiện diện tại lớp nhập mã OTP 6 ký tự hiện hành (hoặc mã liền trước còn trong 60s grace period) để vào làm bài vấn đáp. Không lưu audio lên R2, chỉ lưu transcript và đẩy vào `BoundedChannel` chấm tự động theo Rubric.
+- **Request Body:**
+```json
+{
+  "otpCode": "A8F3K9"
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "submissionId": "88889999-0000-0000-0000-000000000001",
+  "shiftId": "77778888-0000-0000-0000-000000000001",
+  "status": "IN_PROGRESS",
+  "joinedAt": "2026-10-15T08:06:12Z",
+  "questions": [
+    {
+      "questionId": "55555555-0000-0000-0000-000000000001",
+      "title": "Phân tích nguyên lý DIP trong Clean Architecture",
+      "content": "Hãy giải thích nguyên lý Dependency Inversion và cách áp dụng trong .NET 8."
+    }
+  ]
+}
+```
+
+#### 4. Giảng viên hậu kiểm & điều chỉnh điểm thành phần (`PUT /api/v1/lecturer/in-class-shifts/{id}/submissions/{subId}/grade`)
+- **Endpoint:** `PUT /api/v1/lecturer/in-class-shifts/{id}/submissions/{subId}/grade`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên xem lại bài làm, transcript và điểm AI gợi ý của sinh viên trong lớp, điều chỉnh điểm thành phần kèm lý do giải trình trước khi chốt bảng điểm.
+- **Request Body:**
+```json
+{
+  "adjustedScore": 8.50,
+  "overrideReason": "Sinh viên trả lời đúng ý chính về IoC Container trên lớp, cộng thêm 0.5 điểm."
+}
+```
+- **Response 200 OK:**
+```json
+{
+  "submissionId": "88889999-0000-0000-0000-000000000001",
+  "finalScore": 8.50,
+  "updatedAt": "2026-10-15T09:00:00Z",
+  "message": "Đã cập nhật điểm thành phần thành công."
+}
+```
+
+#### 5. Giảng viên chốt điểm thành phần One-Way Lock (`POST /api/v1/lecturer/in-class-shifts/{id}/finalize-grades`)
+- **Endpoint:** `POST /api/v1/lecturer/in-class-shifts/{id}/finalize-grades`
+- **Quyền:** `lecturer`, `admin`
+- **Mô tả:** Giảng viên chốt bảng điểm thành phần của ca thi trong lớp, kích hoạt One-Way Lock (`is_locked = true`) bảo toàn điểm quá trình.
+- **Response 200 OK:**
+```json
+{
+  "shiftId": "77778888-0000-0000-0000-000000000001",
+  "status": "FINALIZED",
+  "isLocked": true,
+  "finalizedAt": "2026-10-15T09:15:00Z",
+  "message": "Đã chốt bảng điểm ca thi trong lớp và kích hoạt One-Way Lock thành công."
+}
+```
+
+---
+
+### 5.15. Phân Tách 2 Luồng Tạo Câu Hỏi (R8) & Dịch Vụ Giọng Nói AI Đa Tầng (Speech STT / TTS)
+
+#### 0. Quy tắc Phân tách Độc lập 2 Luồng Tạo Câu hỏi (R8)
+- **Luồng 1 — Luyện tập & Thi thử (MF-01 / MF-02):** Tạo độc lập từ Chuẩn đầu ra CLO (`course_clos` 3NF) hoặc Giảng viên soạn tay, lưu trực tiếp vào bảng `practice_questions` (`POST /api/v1/practice/questions` hoặc `POST /api/v1/questions/draft` với `usageScope: "practice"`). Phục vụ sinh viên tự do ôn luyện và thi thử, không đòi hỏi bám ma trận cấu trúc đề thi phòng Lab.
+- **Luồng 2 — Thi thật Phòng Lab (MF-04):** Bắt buộc bám sát Đề thi mẫu / Ma trận Cấu trúc Đề (`exam_structures`, `slot_definitions`, tỷ lệ Bloom) do Trưởng Bộ Môn ban hành, lưu vào bảng bảo mật `exam_questions` (`POST /api/v1/official-exams/questions` hoặc `POST /api/v1/questions/draft` với `usageScope: "exam"`), gửi Trưởng Bộ Môn duyệt (`APPROVED`) trước khi đóng gói vào `exam_sets` (`OFFICIAL` $\to$ `HANDED_OVER`).
 
 #### 1. Danh sách giọng đọc AI Giám khảo (`GET /api/v1/speech/voices`)
 - **Quyền:** Public (`AllowAnonymous`)
@@ -2517,7 +3040,11 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
 | **Giảng viên xem Evidence Panel (MF-04)** | `GET /api/v1/official-exams/shifts/{shiftId}/audit-evidence` | Alias tương thích: `/api/v1/official-exams/shifts/{shiftId}/audit-submissions` |
 | **Công bố điểm & Khóa 1 chiều (MF-04)** | `POST /api/v1/official-exams/shifts/{shiftId}/publish-grades` | Kích hoạt `is_locked = true` và `OneWayLockInterceptor` (`HTTP 403`) |
 | **Xuất Báo cáo Excel / PDF & QR Verify** | `GET /api/v1/official-exams/shifts/{shiftId}/export-excel`<br>`GET /api/v1/official-exams/shifts/{shiftId}/export-pdf`<br>`GET /api/v1/verification/grades/{certificateHash}` | Kèm Header `X-Certificate-Hash` và tra cứu công khai qua QR |
-| **Phúc khảo nội bộ & Chấm lại (MF-04)** | `POST /api/v1/appeals`<br>`PUT /api/v1/appeals/{id}/assign-lecturer`<br>`PUT /api/v1/appeals/{id}/regrade`<br>`PUT /api/v1/appeals/{id}/review` | Hỗ trợ chấm lại cả đơn theo từng câu (`submissionId != null`) lẫn đơn toàn vé (`submissionId == null`) |
+| **Phúc khảo nội bộ 5 bước (MF-04 - R7)** | `POST /api/v1/student/appeals`<br>`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`<br>`POST /api/v1/department-head/appeals/{id}/assign-lecturer`<br>`PUT /api/v1/lecturer/appeals/{id}/regrade`<br>`POST /api/v1/department-head/appeals/{id}/decision` | Luồng 5 bước: SV nộp $\to$ Khảo thí thẩm tra chuyển giao $\to$ Trưởng BM phân công GV $\to$ GV chấm lại $\to$ Trưởng BM phê duyệt quyết định |
+| **DLQ Replay phân tách (R2)** | `/api/v1/admin/dlq/*` (MF-01/02)<br>`/api/v1/examination-officer/dlq/*` (MF-04) | Admin quản lý DLQ MF-01/02; Cán bộ Khảo thí quản lý DLQ MF-04; cắt bỏ Trưởng BM khỏi DLQ |
+| **Giám thị Phòng Lab (R4)** | `POST /api/v1/proctor/shifts/{id}/attendance`<br>`POST /api/v1/proctor/shifts/{id}/violations` | Chỉ điểm danh ghế 1–40 & báo cáo vi phạm vào `exam_anti_cheat_logs` |
+| **Chuỗi phân cấp học thuật 4 cấp (R5)** | `PUT /api/v1/admin/courses/{id}/assign-department-head`<br>`POST /api/v1/department-head/courses/{id}/lecturers`<br>`POST /api/v1/lecturer/classes`<br>`POST /api/v1/lecturer/classes/{id}/reset-join-password`<br>`POST /api/v1/student/classes/join` | Admin gán Trưởng BM $\to$ Trưởng BM phân công nhiều GV (`course_lecturers`) $\to$ GV tạo lớp & mật khẩu $\to$ SV tự tham gia lớp |
+| **Ca thi trong lớp & TOTP 5m (R6 - MF-05)** | `POST /api/v1/lecturer/in-class-shifts`<br>`GET /api/v1/lecturer/in-class-shifts/{id}/active-password`<br>`POST /api/v1/student/in-class-shifts/{id}/join`<br>`PUT /api/v1/lecturer/in-class-shifts/{id}/submissions/{subId}/grade`<br>`POST /api/v1/lecturer/in-class-shifts/{id}/finalize-grades` | Mật khẩu 6 ký tự xoay vòng 5 phút + grace period 60s, hậu kiểm điểm thành phần & chốt One-Way Lock |
 | **Student Dashboard & Xác nhận điểm** | `GET /api/v1/student/dashboard`<br>`POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade` | Đồng bộ hạn ngạch thi thử theo múi giờ Việt Nam (GMT+7) |
 
 ---

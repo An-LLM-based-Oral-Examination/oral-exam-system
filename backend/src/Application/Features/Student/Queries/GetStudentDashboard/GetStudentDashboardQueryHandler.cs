@@ -9,6 +9,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Student.DTOs;
+using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Student.Queries.GetStudentDashboard;
@@ -62,6 +63,8 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             .AsNoTracking()
             .Include(ps => ps.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .AsSplitQuery()
             .Where(ps => ps.StudentId == request.StudentId)
             .ToListAsync(cancellationToken);
@@ -73,7 +76,7 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         var practiceSessionScores = new List<decimal>();
         foreach (var session in practiceSessions)
         {
-            var answers = session.Answers ?? new List<Domain.Entities.PracticeAnswer>();
+            var answers = session.Answers ?? new List<PracticeAnswer>();
             var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
             var isCompleted = string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase);
 
@@ -94,26 +97,14 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
                         .SelectMany(a => a.AiEvaluations)
                         .OrderByDescending(e => e.EvaluatedAt)
                         .FirstOrDefault();
-                    var followUpScores = g
+                    var followUpEvals = g
                         .Where(a => a.IsFollowUp)
-                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                        .Where(e => e != null)
+                        .Cast<AiEvaluation>()
                         .ToList();
 
-                    if (followUpScores.Count == 0)
-                    {
-                        return mainAnswerEval?.TotalScore ?? 0.0m;
-                    }
-
-                    var mainScore = mainAnswerEval?.TotalScore ?? 0.0m;
-                    var avgFollowUp = followUpScores.Average();
-                    if (avgFollowUp >= mainScore)
-                    {
-                        return g.SelectMany(a => a.AiEvaluations).Max(e => e.TotalScore);
-                    }
-
-                    var allScores = new List<decimal> { mainScore };
-                    allScores.AddRange(followUpScores);
-                    return Math.Round(allScores.Average(), 2, MidpointRounding.AwayFromZero);
+                    return FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainAnswerEval, followUpEvals);
                 })
                 .ToList();
 
@@ -145,11 +136,13 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             ? Math.Round(practiceSessionScores.Average(), 2, MidpointRounding.AwayFromZero)
             : null;
 
-        // 2. Thống kê Thi thử (MF-02) — Tự động đóng các phiên thi thử đã hết giờ
+        // 2. Thống kê Thi thử (MF-02) — Tự động đóng các ca thi thử đã hết giờ
         var nowUtc = DateTime.UtcNow;
         var expiredMockSessions = await context.MockExamSessions
             .Include(ms => ms.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .Where(ms => ms.StudentId == request.StudentId &&
                          ms.Status == "in_progress" &&
                          nowUtc > ms.ExpiresAt.AddSeconds(10))
@@ -176,8 +169,28 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
                              (!hasAnsweredFollowUps || string.Equals(a.Status, "graded", StringComparison.OrdinalIgnoreCase))))
                 {
                     int totalMainCount = Math.Max(1, mainAnswers.Count);
-                    decimal sumMainScores = answeredMains.Sum(a =>
-                        a.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).First().TotalScore);
+                    decimal sumMainScores = 0.0m;
+                    foreach (var mainAns in answeredMains)
+                    {
+                        var mainEval = mainAns.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+                        var followUpEvals = allAnswered
+                            .Where(f => f.IsFollowUp &&
+                                        ((f.ParentAnswerId.HasValue && f.ParentAnswerId == mainAns.Id) ||
+                                         (!f.ParentAnswerId.HasValue && f.QuestionId == mainAns.QuestionId)))
+                            .Select(f => f.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                            .Where(e => e != null)
+                            .Cast<AiEvaluation>()
+                            .ToList();
+
+                        var effectiveQuestionScore = FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainEval, followUpEvals);
+                        if (mainEval != null && followUpEvals.Count > 0)
+                        {
+                            mainEval.TotalScore = effectiveQuestionScore;
+                        }
+
+                        sumMainScores += effectiveQuestionScore;
+                    }
+
                     expired.TotalScore = Math.Clamp(
                         Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
                         0.0m,
@@ -326,17 +339,12 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             if (isGradeVisible)
             {
                 visibleScore = t.LecturerAudit?.AuditedScore
-                    ?? (t.Submissions.Any(s => s.FinalScore.HasValue)
+                    ?? (t.Submissions.Count > 0 && t.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
                         ? (decimal?)Math.Round(
-                            t.Submissions
-                                .Select(s => s.FinalScore ?? s.AiScore)
-                                .Where(v => v.HasValue)
-                                .Average(v => v!.Value),
+                            t.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0.0m) / t.Submissions.Count,
                             2,
                             MidpointRounding.AwayFromZero)
-                        : (t.Submissions.Any(s => s.AiScore.HasValue)
-                            ? (decimal?)Math.Round(t.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
-                            : null));
+                        : null);
             }
 
             return new StudentOfficialExamSummaryDto

@@ -55,5 +55,11 @@ $RECYCLE.BIN/
 .*.bkp
 ~$*
 
-# Analyzer & Temporary Outputs
+# Analyzer, AI Agent Workspaces & Temporary Outputs
 graphify-out/
+.gemini/
+.agents/
+.playwright-mcp/
+__pycache__/
+*.py[cod]
+backend/wwwroot/uploads/

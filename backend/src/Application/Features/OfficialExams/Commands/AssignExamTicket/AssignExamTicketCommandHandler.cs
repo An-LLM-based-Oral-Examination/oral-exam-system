@@ -32,7 +32,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || actor.Role != UserRole.DepartmentHead)
+        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer))
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -97,17 +97,36 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return null;
         }
 
-        var candidateSets = await context.ExamSets
+        var candidateSetsQuery = context.ExamSets
             .AsNoTracking()
-            .Where(es => es.IsActive && (es.StructureId == shift.Session.ExamStructureId || es.CourseId == shift.Session.CourseId))
+            .Where(es => es.IsActive);
+
+        if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
+        {
+            candidateSetsQuery = candidateSetsQuery.Where(es => es.StructureId == shift.Session.ExamStructureId.Value || es.CourseId == shift.Session.CourseId);
+        }
+        else
+        {
+            candidateSetsQuery = candidateSetsQuery.Where(es => es.CourseId == shift.Session.CourseId);
+        }
+
+        var candidateSets = await candidateSetsQuery
             .OrderBy(es => es.GeneratedAt)
             .ThenBy(es => es.Id)
             .Select(es => es.Id)
             .ToListAsync(cancellationToken);
 
-        if (candidateSets.Count > 0)
+        // Filter out exam sets already assigned in this shift to prevent duplicate set in same room (uq_tickets_shift_exam_set)
+        var assignedSetIds = await context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.ShiftId == shift.Id && t.ExamSetId.HasValue)
+            .Select(t => t.ExamSetId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var availableSet = candidateSets.FirstOrDefault(id => !assignedSetIds.Contains(id));
+        if (availableSet != Guid.Empty && availableSet != default)
         {
-            return candidateSets[Math.Abs(seatNumber - 1) % candidateSets.Count];
+            return availableSet;
         }
 
         var approvedQuestions = await context.ExamQuestions
@@ -123,12 +142,23 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return null;
         }
 
+        var structureId = shift.Session.ExamStructureId
+            ?? await context.ExamStructures
+                .Where(s => s.CourseId == shift.Session.CourseId && s.IsActive)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        if (structureId == Guid.Empty)
+        {
+            return null;
+        }
+
         var autoExamSet = new ExamSet
         {
             Id = Guid.NewGuid(),
-            StructureId = shift.Session.ExamStructureId,
+            StructureId = structureId,
             CourseId = shift.Session.CourseId,
-            SetCode = $"AUTO-SET-{(seatNumber > 0 ? seatNumber : 1):D2}",
+            SetCode = $"AUTO-SET-{(seatNumber > 0 ? seatNumber : 1):D2}-{Guid.NewGuid().ToString("N")[..4]}",
             GeneratedAt = DateTime.UtcNow,
             IsActive = true
         };

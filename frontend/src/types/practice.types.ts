@@ -192,6 +192,11 @@ export interface CriterionScore {
 export interface ScorecardPayload {
   submissionId: string
   totalScore: number
+  previousTotalScore?: number | null
+  followUpTurnScore?: number | null
+  followUpCriterionName?: string | null
+  followUpCriterionScore?: number | null
+  followUpCriterionMaxScore?: number | null
   criteriaScores: CriterionScore[]
   feedback: string
   needsFollowUp?: boolean

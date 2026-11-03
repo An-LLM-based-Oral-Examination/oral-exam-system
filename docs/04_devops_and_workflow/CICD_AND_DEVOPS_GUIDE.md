@@ -5,7 +5,7 @@
 > **Đội ngũ kỹ sư tác chiến (FA26SE166):**  
 > - **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect  
 > - **Nguyễn Trọng Tốt:** Backend Developer, AI Engineer & QA Lead  
-> - **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer  
+> - **Phạm Nguyễn Đăng Hải:** DB Specialist (38 bảng 3NF) & Frontend Developer  
 > - **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator  
 > **Repository:** `05_Source_Code` | **Git Branch:** `feature/be-core-infrastructure`  
 > **Tiêu chuẩn chất lượng:** Enterprise Level · Zero-Defect Delivery · Zero Trust Architecture · CIS Benchmark Non-Root Containers  
@@ -181,7 +181,7 @@ Hệ thống triển khai sản xuất sử dụng tệp `docker-compose.prod.ym
 ```mermaid
 graph TB
     subgraph Internet_Zone [Môi Trường Bên Ngoài / Internet]
-        Browser[Client Browser: Sinh Viên / Giảng Viên / Giám Thị]
+        Browser[Client Browser: 6 Roles RBAC - Admin / Trưởng BM / Khảo Thí / Giảng Viên / Giám Thị / Sinh Viên]
         Mic[Microphone Hardware: Thu Âm Vấn Đáp]
     end
 
@@ -207,7 +207,7 @@ graph TB
             subgraph Container_Database ["Container: oralexam-postgres-prod (PostgreSQL 16-alpine)"]
                 PGServer[PostgreSQL Database Engine: Port 5432 internal]
                 PGData[(Volume: postgres_prod_data)]
-                EFCoreMigrations[EF Core Code-First Migrations: 30 tables 3NF]
+                EFCoreMigrations[EF Core Code-First Migrations: 38 tables 3NF]
             end
         end
     end
@@ -299,7 +299,7 @@ Mọi thông tin nhạy cảm (thông tin đăng nhập máy chủ, mật khẩu
   ```
 
 ### 3. `GEMINI_API_KEY` (Khóa Tích Hợp Google Gemini AI)
-- **Mục đích:** Cấp phép cho module AI Service gọi các model `gemini-1.5-flash` và `gemini-1.5-pro` thực hiện bóc tách Rubric FLM (MF-03), hỏi follow-up ngữ cảnh và chấm điểm chuỗi suy luận Chain-of-Thought (CoT) trong MF-04.
+- **Mục đích:** Cấp phép cho module AI Service gọi các model `gemini-1.5-flash` và `gemini-1.5-pro` thực hiện bóc tách Rubric & Course CLOs (MF-03), hỏi follow-up ngữ cảnh và chấm điểm chuỗi suy luận Chain-of-Thought (CoT) trong MF-04.
 - **Khuyến nghị an toàn:** Thiết lập hạn mức ngân sách (Spending Limit) và giới hạn API Key chỉ sử dụng cho Gemini API trên Google Cloud Console.
 
 ### 4. `R2_ACCESS_KEY_ID` & `R2_SECRET_ACCESS_KEY` (Cloudflare R2 Object Storage)
@@ -508,7 +508,7 @@ Kịch bản demo được thiết kế nhịp nhàng, liền mạch trong thờ
 | **Nguyễn Quang Thành** | Team Leader & Lead Backend Architect | **Chủ trì phần thi & Mở đầu:** Giới thiệu tổng quan hệ thống, triết lý Shift-Left DevOps bảo vệ tính toàn vẹn kỳ thi vấn đáp; demo luồng CD Deployment, Containerization và điều phối phần Q&A phản biện. |
 | **Nguyễn Trọng Tốt** | Backend Developer, AI Engineer & QA Lead | **Demo 2 (Phần Backend):** Trình diễn tab GitHub Actions với bộ 542 unit tests đỗ 100%, biên dịch 0 warning (`-warnaserror`), tích hợp kiểm tra an ninh packages và luồng chấm thi AI CoT. |
 | **Lê Vũ Hoàng** | Lead Frontend Architect & Fullstack Coordinator | **Demo 1 (Commit Linter) & Demo 2 (Phần Frontend):** Trình diễn cơ chế chặn commit sai quy cách tại PR; trình diễn tốc độ Oxlint (74ms), strict TypeScript composite typecheck (`tsc -b`) và đóng gói Vite. |
-| **Phạm Nguyễn Đăng Hải** | DB Specialist & Frontend Developer | **Demo 3 (Hạ Tầng & Reverse Proxy):** Trình diễn mô hình mạng nội bộ `oralexam-network` cô lập 30 bảng PostgreSQL 16 3NF; giải thích cơ chế Nginx Reverse Proxy xử lý mượt mà SignalR WebSocket `/hubs/`. |
+| **Phạm Nguyễn Đăng Hải** | DB Specialist & Frontend Developer | **Demo 3 (Hạ Tầng & Reverse Proxy):** Trình diễn mô hình mạng nội bộ `oralexam-network` cô lập 38 bảng 3NF PostgreSQL 16 (7 Bounded Contexts, 6 roles RBAC); giải thích cơ chế Nginx Reverse Proxy xử lý mượt mà SignalR WebSocket `/hubs/`. |
 
 ---
 
@@ -596,7 +596,7 @@ Thành chuyển sang workflow `cd.yml`:
 ### 2. Kiến Trúc Mạng Biệt Lập & Nginx Reverse Proxy — Phạm Nguyễn Đăng Hải
 Hải mở giao diện dòng lệnh trên máy chủ hoặc mô hình topology:
 - **Cô lập Database PostgreSQL 16:**
-  > *"Kính thưa Thầy Cô, cơ sở dữ liệu lưu trữ 30 bảng của đồ án hoàn toàn **không mở cổng 5432 ra Internet**. Cổng 5432 chỉ lắng nghe bên trong mạng bridge nội bộ `oralexam-network`. Hacker bên ngoài quét IP máy chủ sẽ hoàn toàn không thấy cổng cơ sở dữ liệu, loại bỏ 100% các cuộc tấn công brute-force mật khẩu từ Internet."*
+  > *"Kính thưa Thầy Cô, cơ sở dữ liệu lưu trữ 38 bảng 3NF của đồ án hoàn toàn **không mở cổng 5432 ra Internet**. Cổng 5432 chỉ lắng nghe bên trong mạng bridge nội bộ `oralexam-network`. Hacker bên ngoài quét IP máy chủ sẽ hoàn toàn không thấy cổng cơ sở dữ liệu, loại bỏ 100% các cuộc tấn công brute-force mật khẩu từ Internet."*
 - **Nginx Reverse Proxy & SignalR WebSocket:**
   > *"Nginx 1.27 đóng vai trò cổng chặn duy nhất ở Port 80. Khi sinh viên trả lời vấn đáp, Nginx định tuyến luồng `/hubs/practice` sang Kestrel Backend với cấu hình `Connection: Upgrade` và timeout kéo dài **300 giây (5 phút)**. Chúng em đã kiểm thử thực tế: sinh viên có thể trả lời liên tục mà không bao giờ bị ngắt kết nối WebSocket giữa chừng."*
 

@@ -192,7 +192,7 @@ public class GradingQueueWorker : BackgroundService
 
         var previousFollowUpPrompts = priorQuestionAnswers
             .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
-            .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+            .Select(FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt)
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => p!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -213,14 +213,13 @@ public class GradingQueueWorker : BackgroundService
             }
             else if (gradingTask.ParentAnswerId.HasValue)
             {
-                var parentCot = await dbContext.AiEvaluations
+                var parentEval = await dbContext.AiEvaluations
                     .AsNoTracking()
                     .Where(e => e.PracticeAnswerId == gradingTask.ParentAnswerId.Value)
                     .OrderByDescending(e => e.EvaluatedAt)
-                    .Select(e => e.CotTrace)
                     .FirstOrDefaultAsync(cancellationToken);
 
-                answeredFollowUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+                answeredFollowUpPrompt = FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt(parentEval);
             }
 
             if (string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
@@ -235,7 +234,60 @@ public class GradingQueueWorker : BackgroundService
             }
         }
 
-        var criteriaContext = question.Rubric.Criteria.Select(c => new AiGradingCriterion
+        var allOrderedCriteria = question.Rubric.Criteria
+            .OrderBy(c => c.OrderIndex)
+            .ToList();
+
+        var orderedCriteria = allOrderedCriteria;
+        var isEnglishCourse = FollowUpPromptBuilder.IsEnglishCourse(
+            question.Course?.Code,
+            allOrderedCriteria.Select(c => c.CriterionName),
+            question.Content);
+
+        if (gradingTask.IsFollowUp && !isEnglishCourse && allOrderedCriteria.Count > 1)
+        {
+            var rootEvalDetails = rootAnswer?.AiEvaluations
+                .OrderByDescending(e => e.EvaluatedAt)
+                .FirstOrDefault()?.Details;
+
+            var alreadyTargetedFollowUpCriteria = priorQuestionAnswers
+                .Where(a => a.IsFollowUp)
+                .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                .Where(e => e.Details.Count == 1)
+                .Select(e => e.Details.First().CriterionId)
+                .ToHashSet();
+
+            RubricCriterion? targetCriterion = null;
+            decimal lowestRatio = decimal.MaxValue;
+
+            if (rootEvalDetails != null && rootEvalDetails.Count > 0)
+            {
+                var candidates = allOrderedCriteria
+                    .Where(c => !alreadyTargetedFollowUpCriteria.Contains(c.Id))
+                    .ToList();
+                if (candidates.Count == 0)
+                {
+                    candidates = allOrderedCriteria;
+                }
+
+                foreach (var crit in candidates)
+                {
+                    var detail = rootEvalDetails.FirstOrDefault(d => d.CriterionId == crit.Id);
+                    var score = detail?.Score ?? 0m;
+                    var ratio = crit.MaxScore > 0m ? score / crit.MaxScore : 0m;
+                    if (ratio < lowestRatio)
+                    {
+                        lowestRatio = ratio;
+                        targetCriterion = crit;
+                    }
+                }
+            }
+
+            targetCriterion ??= allOrderedCriteria[0];
+            orderedCriteria = new System.Collections.Generic.List<RubricCriterion> { targetCriterion };
+        }
+
+        var criteriaContext = orderedCriteria.Select(c => new AiGradingCriterion
         {
             Id = c.Id.ToString(),
             Name = c.CriterionName,
@@ -262,10 +314,6 @@ public class GradingQueueWorker : BackgroundService
         };
 
         var gradingResult = await aiGradingService.GradeAnswerAsync(request, cancellationToken);
-
-        var orderedCriteria = question.Rubric.Criteria
-            .OrderBy(c => c.OrderIndex)
-            .ToList();
 
         var evalDetails = new System.Collections.Generic.List<AiEvaluationDetail>();
         var criteriaScoreDtos = new System.Collections.Generic.List<PracticeEvaluationDetailDto>();
@@ -335,23 +383,39 @@ public class GradingQueueWorker : BackgroundService
             decimal clampedScore;
             if (rawDetails.Count > 0)
             {
-                clampedScore = matchedDetail != null
-                    ? Math.Clamp(Math.Round(matchedDetail.Score, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore)
-                    : 0.0m;
+                if (matchedDetail != null)
+                {
+                    var rawScore = matchedDetail.Score;
+                    if (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m && orderedCriteria.Count == 1 &&
+                        rawScore > criterion.MaxScore && rawScore <= 10.0m)
+                    {
+                        rawScore = rawScore * (criterion.MaxScore / 10.0m);
+                    }
+
+                    clampedScore = Math.Clamp(Math.Round(rawScore, 2, MidpointRounding.AwayFromZero), 0.0m, criterion.MaxScore);
+                }
+                else
+                {
+                    clampedScore = 0.0m;
+                }
             }
             else if (totalCriteriaMax > 0.0m && clampedOverallScore > 0.0m)
             {
+                var targetScaleSum = (totalCriteriaMax < 10.0m && clampedOverallScore > totalCriteriaMax)
+                    ? clampedOverallScore * (totalCriteriaMax / 10.0m)
+                    : clampedOverallScore;
+
                 if (i == orderedCriteria.Count - 1)
                 {
                     clampedScore = Math.Clamp(
-                        Math.Round(clampedOverallScore - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
+                        Math.Round(targetScaleSum - runningAllocatedScore, 2, MidpointRounding.AwayFromZero),
                         0.0m,
                         criterion.MaxScore);
                 }
                 else
                 {
                     clampedScore = Math.Clamp(
-                        Math.Round(clampedOverallScore * (criterion.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
+                        Math.Round(targetScaleSum * (criterion.MaxScore / totalCriteriaMax), 2, MidpointRounding.AwayFromZero),
                         0.0m,
                         criterion.MaxScore);
                     runningAllocatedScore += clampedScore;
@@ -385,8 +449,11 @@ public class GradingQueueWorker : BackgroundService
             });
         }
 
+        var sumDetailScores = evalDetails.Sum(d => d.Score);
         var finalTotalScore = evalDetails.Count > 0
-            ? Math.Clamp(Math.Round(evalDetails.Sum(d => d.Score), 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+            ? (totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m
+                ? Math.Clamp(Math.Round((sumDetailScores / totalCriteriaMax) * 10.0m, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
+                : Math.Clamp(Math.Round(sumDetailScores, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m))
             : clampedOverallScore;
 
         // KÍCH HOẠT FOLLOW-UP ENGINE MF-01: Điểm ranh giới 4.0 <= Score <= 8.0 ở chế độ Per-Question
@@ -408,18 +475,54 @@ public class GradingQueueWorker : BackgroundService
             {
                 try
                 {
-                    // Tìm tiêu chí có tỷ lệ điểm thấp nhất để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
+                    // Tìm tiêu chí có tỷ lệ điểm thấp nhất tiếp theo để đặt câu hỏi phụ xoáy sâu đúng chỗ hổng kiến thức
                     RubricCriterion? weakestCriterion = null;
                     decimal lowestRatio = decimal.MaxValue;
-                    for (int i = 0; i < orderedCriteria.Count; i++)
+                    if (gradingTask.IsFollowUp && !isEnglishCourse && allOrderedCriteria.Count > 1)
                     {
-                        var crit = orderedCriteria[i];
-                        var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
-                        var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
-                        if (ratio < lowestRatio)
+                        var rootEvalDetails = rootAnswer?.AiEvaluations
+                            .OrderByDescending(e => e.EvaluatedAt)
+                            .FirstOrDefault()?.Details;
+                        var usedFollowUpCriteria = priorQuestionAnswers
+                            .Where(a => a.IsFollowUp)
+                            .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                            .Where(e => e.Details.Count == 1)
+                            .Select(e => e.Details.First().CriterionId)
+                            .Concat(evalDetails.Select(d => d.CriterionId))
+                            .ToHashSet();
+
+                        var nextCandidates = allOrderedCriteria
+                            .Where(c => !usedFollowUpCriteria.Contains(c.Id))
+                            .ToList();
+                        if (nextCandidates.Count == 0)
                         {
-                            lowestRatio = ratio;
-                            weakestCriterion = crit;
+                            nextCandidates = allOrderedCriteria;
+                        }
+
+                        foreach (var crit in nextCandidates)
+                        {
+                            var detail = rootEvalDetails?.FirstOrDefault(d => d.CriterionId == crit.Id);
+                            var detailScore = detail?.Score ?? 0m;
+                            var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                            if (ratio < lowestRatio)
+                            {
+                                lowestRatio = ratio;
+                                weakestCriterion = crit;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < orderedCriteria.Count; i++)
+                        {
+                            var crit = orderedCriteria[i];
+                            var detailScore = i < evalDetails.Count ? evalDetails[i].Score : 0m;
+                            var ratio = crit.MaxScore > 0m ? detailScore / crit.MaxScore : 0m;
+                            if (ratio < lowestRatio)
+                            {
+                                lowestRatio = ratio;
+                                weakestCriterion = crit;
+                            }
                         }
                     }
 
@@ -431,7 +534,7 @@ public class GradingQueueWorker : BackgroundService
                         nextFollowUpSequence,
                         weakestCriterion?.CriterionName,
                         weakestCriterion?.Description,
-                        orderedCriteria.Select(c => c.CriterionName),
+                        allOrderedCriteria.Select(c => c.CriterionName),
                         question.Content,
                         null,
                         gradingTask.AnswerText,
@@ -467,10 +570,6 @@ public class GradingQueueWorker : BackgroundService
             }
         }
 
-        var cotToPersist = needsFollowUp
-            ? FollowUpPromptBuilder.AppendFollowUpTagToCot(gradingResult.CotTrace, resolvedFollowUpPrompt)
-            : gradingResult.CotTrace;
-
         var evaluation = new AiEvaluation
         {
             AnswerType = "practice",
@@ -478,7 +577,8 @@ public class GradingQueueWorker : BackgroundService
             TotalScore = finalTotalScore,
             ConfidenceScore = gradingResult.ConfidenceScore,
             Feedback = gradingResult.Feedback,
-            CotTrace = cotToPersist,
+            CotTrace = gradingResult.CotTrace,
+            FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null,
             Details = evalDetails
         };
 

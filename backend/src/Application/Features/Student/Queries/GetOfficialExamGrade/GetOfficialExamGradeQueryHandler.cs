@@ -73,17 +73,12 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
             : new Dictionary<Guid, Domain.Entities.ExamQuestion>();
 
         decimal? totalScore = ticket.LecturerAudit?.AuditedScore
-            ?? (ticket.Submissions.Any(s => s.FinalScore.HasValue)
+            ?? (ticket.Submissions.Count > 0 && ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
                 ? Math.Round(
-                    ticket.Submissions
-                        .Select(s => s.FinalScore ?? s.AiScore)
-                        .Where(v => v.HasValue)
-                        .Average(v => v!.Value),
+                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticket.Submissions.Count,
                     2,
                     MidpointRounding.AwayFromZero)
-                : (ticket.Submissions.Any(s => s.AiScore.HasValue)
-                    ? Math.Round(ticket.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
-                    : null));
+                : null);
 
         var detailedScorecard = ticket.Submissions
             .OrderBy(s => s.SubmittedAt)

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.DTOs;
+using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamHistory;
 
@@ -28,6 +29,8 @@ public sealed class GetMockExamHistoryQueryHandler(
         var expiredSessions = await _context.MockExamSessions
             .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .Where(s => s.StudentId == request.StudentId &&
                         s.Status == "in_progress" &&
                         nowUtc > s.ExpiresAt.AddSeconds(10))
@@ -56,8 +59,28 @@ public sealed class GetMockExamHistoryQueryHandler(
                 {
                     // Tất cả các câu đã trả lời (bao gồm cả câu chính lẫn Follow-Up) đều đã chấm xong -> tổng hợp điểm trung bình trên tổng số câu chính
                     int totalMainCount = Math.Max(1, mainAnswers.Count);
-                    decimal sumMainScores = answeredMains.Sum(a =>
-                        a.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).First().TotalScore);
+                    decimal sumMainScores = 0.0m;
+                    foreach (var mainAns in answeredMains)
+                    {
+                        var mainEval = mainAns.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+                        var followUpEvals = allAnswered
+                            .Where(f => f.IsFollowUp &&
+                                        ((f.ParentAnswerId.HasValue && f.ParentAnswerId == mainAns.Id) ||
+                                         (!f.ParentAnswerId.HasValue && f.QuestionId == mainAns.QuestionId)))
+                            .Select(f => f.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                            .Where(e => e != null)
+                            .Cast<AiEvaluation>()
+                            .ToList();
+
+                        var effectiveQuestionScore = FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainEval, followUpEvals);
+                        if (mainEval != null && followUpEvals.Count > 0)
+                        {
+                            mainEval.TotalScore = effectiveQuestionScore;
+                        }
+
+                        sumMainScores += effectiveQuestionScore;
+                    }
+
                     expired.TotalScore = Math.Clamp(
                         Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
                         0.0m,

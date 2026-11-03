@@ -7,7 +7,7 @@ public partial class MockExamSession
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid StudentId { get; set; }
-    public Guid ExamSetId { get; set; }
+    public Guid? ExamSetId { get; set; }
     public Guid CourseId { get; set; }
     public bool HasFollowUp { get; set; } = false;
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
@@ -17,7 +17,7 @@ public partial class MockExamSession
     public decimal? TotalScore { get; set; }
 
     public virtual User Student { get; set; } = null!;
-    public virtual ExamSet ExamSet { get; set; } = null!;
+    public virtual ExamSet? ExamSet { get; set; }
     public virtual Course Course { get; set; } = null!;
     public virtual ICollection<MockExamAnswer> Answers { get; set; } = new List<MockExamAnswer>();
 }

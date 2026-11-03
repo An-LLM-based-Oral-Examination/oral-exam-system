@@ -248,29 +248,40 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                   <FeedbackBlock question={question} />
                   <CriteriaBlock question={question} />
 
-                  {followUps.map((followUp, index) => (
-                    <div
-                      key={questionKey(followUp)}
-                      className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#1C4D8D]">
-                            Câu hỏi phụ {index + 1}
-                          </p>
-                          <p className="mt-1.5 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
-                            {followUp.content}
-                          </p>
+                  {followUps.map((followUp, index) => {
+                    const singleFuCriterion =
+                      followUp.criteriaScores.length === 1 ? followUp.criteriaScores[0] : null
+                    const showSingleCriterionScale =
+                      singleFuCriterion &&
+                      singleFuCriterion.maxScore > 0 &&
+                      singleFuCriterion.maxScore < 10
+
+                    return (
+                      <div
+                        key={questionKey(followUp)}
+                        className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-[#1C4D8D]">
+                              Câu hỏi phụ {index + 1}
+                            </p>
+                            <p className="mt-1.5 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                              {followUp.content}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                            {showSingleCriterionScale
+                              ? `${formatScore(singleFuCriterion.score, 1)}/${formatScore(singleFuCriterion.maxScore, 1)}đ (${formatScore(followUp.score, 1)}/10)`
+                              : `${formatScore(followUp.score, 1)}/10`}
+                          </span>
                         </div>
-                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
-                          {formatScore(followUp.score, 1)}/10
-                        </span>
+                        <AnswerBlock label="Câu trả lời phụ" transcript={followUp.transcript} />
+                        <FeedbackBlock question={followUp} />
+                        <CriteriaBlock question={followUp} />
                       </div>
-                      <AnswerBlock label="Câu trả lời phụ" transcript={followUp.transcript} />
-                      <FeedbackBlock question={followUp} />
-                      <CriteriaBlock question={followUp} />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </article>

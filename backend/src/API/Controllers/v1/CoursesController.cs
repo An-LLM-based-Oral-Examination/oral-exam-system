@@ -149,4 +149,127 @@ public class CoursesController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    /// <summary>
+    /// Lấy danh sách Chuẩn đầu ra (CLOs) của môn học.
+    /// </summary>
+    [HttpGet("{id:guid}/clos")]
+    public async Task<IActionResult> GetCourseClos(Guid id, [FromQuery] bool? activeOnly)
+    {
+        var query = new OralExamination.Application.Features.Courses.Queries.GetCourseClos.GetCourseClosQuery(id, activeOnly);
+        var result = await _sender.Send(query);
+
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Tạo mới Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// </summary>
+    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [HttpPost("{id:guid}/clos")]
+    public async Task<IActionResult> CreateCourseClo(Guid id, [FromBody] CreateCourseCloRequest request)
+    {
+        var actorRole = GetActorRole();
+        var command = new OralExamination.Application.Features.Courses.Commands.CreateCourseClo.CreateCourseCloCommand(
+            id,
+            request.CloCode,
+            request.Description,
+            request.BloomLevel,
+            request.OrderIndex,
+            actorRole);
+
+        var result = await _sender.Send(command);
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Unprocessable Entity",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return CreatedAtAction(nameof(GetCourseClos), new { id }, result.Value);
+    }
+
+    /// <summary>
+    /// Cập nhật Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// </summary>
+    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [HttpPut("{id:guid}/clos/{cloId:guid}")]
+    public async Task<IActionResult> UpdateCourseClo(Guid id, Guid cloId, [FromBody] UpdateCourseCloRequest request)
+    {
+        var actorRole = GetActorRole();
+        var command = new OralExamination.Application.Features.Courses.Commands.UpdateCourseClo.UpdateCourseCloCommand(
+            id,
+            cloId,
+            request.CloCode,
+            request.Description,
+            request.BloomLevel,
+            request.OrderIndex,
+            request.IsActive,
+            actorRole);
+
+        var result = await _sender.Send(command);
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Unprocessable Entity",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Xóa Chuẩn đầu ra (CLO) của môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// </summary>
+    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [HttpDelete("{id:guid}/clos/{cloId:guid}")]
+    public async Task<IActionResult> DeleteCourseClo(Guid id, Guid cloId)
+    {
+        var actorRole = GetActorRole();
+        var command = new OralExamination.Application.Features.Courses.Commands.DeleteCourseClo.DeleteCourseCloCommand(id, cloId, actorRole);
+        var result = await _sender.Send(command);
+
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Unprocessable Entity",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return NoContent();
+    }
+
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
+    }
 }

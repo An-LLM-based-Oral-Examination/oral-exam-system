@@ -16,9 +16,12 @@ public sealed class CreateOfficialExamSessionCommandValidator : AbstractValidato
             .NotEmpty()
             .WithMessage("Môn học không được để trống.");
 
-        RuleFor(command => command.ExamStructureId)
-            .NotEmpty()
-            .WithMessage("Cấu trúc đề không được để trống.");
+        When(command => command.ExamStructureId.HasValue && command.ExamStructureId.Value != Guid.Empty, () =>
+        {
+            RuleFor(command => command.ExamStructureId!.Value)
+                .NotEmpty()
+                .WithMessage("Cấu trúc đề không hợp lệ.");
+        });
 
         RuleFor(command => command.Title)
             .NotEmpty()

@@ -74,6 +74,12 @@ public class ContractCompletenessTests
             IsActive = true
         };
         db.Courses.Add(course);
+        db.CourseClos.AddRange(
+            new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO1", Description = "Hiểu nguyên lý .NET", BloomLevel = "Understand", OrderIndex = 1, IsActive = true },
+            new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO2", Description = "Vận dụng Clean Architecture", BloomLevel = "Apply", OrderIndex = 2, IsActive = true },
+            new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO3", Description = "Phân tích hiệu năng", BloomLevel = "Analyze", OrderIndex = 3, IsActive = true },
+            new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO4", Description = "Đánh giá kiến trúc", BloomLevel = "Evaluate", OrderIndex = 4, IsActive = true }
+        );
         await db.SaveChangesAsync();
 
         var handler = new GetFlmSyllabusQueryHandler(db);

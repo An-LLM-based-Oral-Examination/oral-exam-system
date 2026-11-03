@@ -14,6 +14,7 @@ public partial class AiEvaluation
     public string? Feedback { get; set; }
     public decimal? ConfidenceScore { get; set; }
     public string? CotTrace { get; set; }
+    public string? FollowUpPrompt { get; set; }
     public DateTime EvaluatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual PracticeAnswer? PracticeAnswer { get; set; }

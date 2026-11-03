@@ -2,7 +2,20 @@
  * Role-Based Access Control (RBAC) User Roles used by the portals.
  * Backend returns lowercase roles; the client maps them onto these three portals.
  */
-export type UserRole = 'Student' | 'Instructor' | 'DepartmentHead' | 'Proctor' | 'Admin'
+export type UserRole =
+  | 'Student'
+  | 'Instructor'
+  | 'Lecturer'
+  | 'DepartmentHead'
+  | 'ExaminationOfficer'
+  | 'Proctor'
+  | 'Admin'
+  | 'student'
+  | 'lecturer'
+  | 'department_head'
+  | 'examination_officer'
+  | 'proctor'
+  | 'admin'
 
 /**
  * Authenticated User Profile Contract

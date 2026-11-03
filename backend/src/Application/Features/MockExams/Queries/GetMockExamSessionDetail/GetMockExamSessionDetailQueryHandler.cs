@@ -108,7 +108,16 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 : q.Content;
 
             var criterionScores = new List<MockExamCriterionScoreDto>();
-            foreach (var c in q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex) ?? Enumerable.Empty<RubricCriterion>())
+            var allRubricCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
+            var effectiveCriteria = (a.IsFollowUp && aiEval?.Details != null && aiEval.Details.Count > 0 && aiEval.Details.Count < allRubricCriteria.Count)
+                ? allRubricCriteria.Where(c => aiEval.Details.Any(d => d.CriterionId == c.Id)).ToList()
+                : allRubricCriteria;
+            if (effectiveCriteria.Count == 0)
+            {
+                effectiveCriteria = allRubricCriteria;
+            }
+
+            foreach (var c in effectiveCriteria)
             {
                 var detail = aiEval?.Details?.FirstOrDefault(d => d.CriterionId == c.Id);
                 var score = detail?.Score ?? 0.0m;

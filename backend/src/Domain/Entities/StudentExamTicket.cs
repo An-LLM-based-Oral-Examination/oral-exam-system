@@ -29,4 +29,5 @@ public partial class StudentExamTicket : ILockableEntity
     public virtual ExamSet? ExamSet { get; set; }
     public virtual ICollection<ExamQuestionSubmission> Submissions { get; set; } = new List<ExamQuestionSubmission>();
     public virtual LecturerAudit? LecturerAudit { get; set; }
+    public virtual ICollection<ExamAntiCheatLog> AntiCheatLogs { get; set; } = new List<ExamAntiCheatLog>();
 }

@@ -348,4 +348,31 @@ public class PublishGradesCommandHandlerTests
         var updatedAudit = await context.LecturerAudits.FindAsync(audit.Id);
         updatedAudit!.IsLocked.Should().BeTrue();
     }
+
+    [Fact(DisplayName = "9. ExaminationOfficer và Admin có quyền công bố điểm ca thi (RBAC 6 roles)")]
+    public async Task Handle_Should_Pass_When_Actor_Is_ExaminationOfficer_Or_Admin()
+    {
+        using var context = CreateDbContext();
+        var (_, shift, _) = await SeedShiftDataAsync(context, ticketCount: 2, allScored: true);
+
+        var examOfficer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.exam@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(examOfficer);
+        await context.SaveChangesAsync();
+
+        var handler = new PublishGradesCommandHandler(context);
+        var command = new PublishGradesCommand(shift.Id, examOfficer.Id);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value.TotalPublished.Should().Be(2);
+    }
 }

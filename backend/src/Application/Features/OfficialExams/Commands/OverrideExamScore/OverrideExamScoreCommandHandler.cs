@@ -74,6 +74,7 @@ public sealed class OverrideExamScoreCommandHandler
 
         var trimmedReason = request.OverrideReason.Trim();
         var roundedAuditedScore = Math.Round(request.AuditedScore, 2, MidpointRounding.AwayFromZero);
+        var totalTicketQuestions = Math.Max(1, ticket.Submissions.Count);
 
         decimal originalAiScore;
         if (ticket.LecturerAudit is not null)
@@ -83,7 +84,7 @@ public sealed class OverrideExamScoreCommandHandler
         else if (ticket.Submissions.Any(s => s.AiScore.HasValue))
         {
             originalAiScore = Math.Round(
-                ticket.Submissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value),
+                ticket.Submissions.Sum(s => s.AiScore ?? 0m) / totalTicketQuestions,
                 2,
                 MidpointRounding.AwayFromZero);
         }
@@ -95,7 +96,7 @@ public sealed class OverrideExamScoreCommandHandler
                 .ToList();
 
             originalAiScore = evalScores.Count > 0
-                ? Math.Round(evalScores.Average(), 2, MidpointRounding.AwayFromZero)
+                ? Math.Round(evalScores.Sum() / totalTicketQuestions, 2, MidpointRounding.AwayFromZero)
                 : roundedAuditedScore;
         }
 
@@ -136,7 +137,10 @@ public sealed class OverrideExamScoreCommandHandler
 
             if (scoredValues.Count > 0)
             {
-                effectiveTicketAuditedScore = Math.Round(scoredValues.Average(), 2, MidpointRounding.AwayFromZero);
+                effectiveTicketAuditedScore = Math.Round(
+                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / totalTicketQuestions,
+                    2,
+                    MidpointRounding.AwayFromZero);
             }
         }
 

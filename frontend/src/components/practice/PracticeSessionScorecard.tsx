@@ -164,12 +164,45 @@ function computeEffectiveQuestionScore(
   if (fuScores.length === 0) {
     return mainScore
   }
+
+  const mainCriteria = item.mainAnswer?.criteriaScores ?? []
+  if (mainCriteria.length > 1) {
+    const mergedScores = mainCriteria.map((c) => ({
+      criterionId: c.criterionId,
+      criterionName: c.criterionName,
+      score: c.score,
+      maxScore: c.maxScore ?? 0,
+    }))
+    let hasCriterionImprovement = false
+
+    for (const fu of item.followUpAnswers) {
+      for (const fuCrit of fu.answer.criteriaScores ?? []) {
+        const target = mergedScores.find(
+          (m) =>
+            m.criterionId === fuCrit.criterionId ||
+            (m.criterionName &&
+              fuCrit.criterionName &&
+              m.criterionName.toLowerCase() === fuCrit.criterionName.toLowerCase()),
+        )
+        if (target && fuCrit.score > target.score) {
+          target.score =
+            target.maxScore > 0 ? Math.min(fuCrit.score, target.maxScore) : fuCrit.score
+          hasCriterionImprovement = true
+        }
+      }
+    }
+
+    if (hasCriterionImprovement) {
+      const mergedSum = mergedScores.reduce((acc, c) => acc + c.score, 0)
+      return Math.min(10, Math.max(0, Math.round(mergedSum * 100) / 100))
+    }
+  }
+
   const avgFu = fuScores.reduce((acc, s) => acc + s, 0) / fuScores.length
   if (avgFu >= mainScore) {
     return Math.max(mainScore, ...fuScores)
   }
-  const all = [mainScore, ...fuScores]
-  return Math.round((all.reduce((acc, s) => acc + s, 0) / all.length) * 100) / 100
+  return Math.min(10, Math.max(0, Math.round((mainScore * 0.7 + avgFu * 0.3) * 100) / 100))
 }
 
 export function PracticeSessionScorecard({ session }: { session: PracticeSessionDetail }) {
@@ -430,38 +463,52 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
                   />
                   <CriteriaBlock criteriaScores={item.mainAnswer?.criteriaScores ?? []} />
 
-                  {item.followUpAnswers.map((fuItem, index) => (
-                    <div
-                      key={fuItem.answer.answerId}
-                      className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-[#1C4D8D]">
-                            Câu hỏi phụ {index + 1}
-                          </p>
-                          <p className="mt-1.5 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
-                            {fuItem.promptText}
-                          </p>
+                  {item.followUpAnswers.map((fuItem, index) => {
+                    const singleFuCriterion =
+                      fuItem.answer.criteriaScores?.length === 1
+                        ? fuItem.answer.criteriaScores[0]
+                        : null
+                    const showSingleCriterionScale =
+                      singleFuCriterion &&
+                      singleFuCriterion.maxScore &&
+                      singleFuCriterion.maxScore > 0 &&
+                      singleFuCriterion.maxScore < 10
+
+                    return (
+                      <div
+                        key={fuItem.answer.answerId}
+                        className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-[#1C4D8D]">
+                              Câu hỏi phụ {index + 1}
+                            </p>
+                            <p className="mt-1.5 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                              {fuItem.promptText}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                            {fuItem.answer.totalScore !== null
+                              ? showSingleCriterionScale
+                                ? `${formatScore(singleFuCriterion.score, 1)}/${formatScore(singleFuCriterion.maxScore!, 1)}đ (${formatScore(fuItem.answer.totalScore, 1)}/10)`
+                                : `${formatScore(fuItem.answer.totalScore, 1)}/10`
+                              : 'Đang chấm'}
+                          </span>
                         </div>
-                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
-                          {fuItem.answer.totalScore !== null
-                            ? `${formatScore(fuItem.answer.totalScore, 1)}/10`
-                            : 'Đang chấm'}
-                        </span>
+                        <AnswerBlock
+                          label="Câu trả lời phụ"
+                          transcript={fuItem.answer.answerText}
+                        />
+                        <FeedbackBlock
+                          feedback={fuItem.answer.feedback}
+                          confidenceScore={fuItem.answer.confidenceScore}
+                          status={fuItem.answer.status}
+                        />
+                        <CriteriaBlock criteriaScores={fuItem.answer.criteriaScores} />
                       </div>
-                      <AnswerBlock
-                        label="Câu trả lời phụ"
-                        transcript={fuItem.answer.answerText}
-                      />
-                      <FeedbackBlock
-                        feedback={fuItem.answer.feedback}
-                        confidenceScore={fuItem.answer.confidenceScore}
-                        status={fuItem.answer.status}
-                      />
-                      <CriteriaBlock criteriaScores={fuItem.answer.criteriaScores} />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </article>

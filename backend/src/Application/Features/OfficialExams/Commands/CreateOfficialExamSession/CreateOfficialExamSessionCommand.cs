@@ -7,7 +7,7 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.CreateOffi
 public sealed record CreateOfficialExamSessionCommand(
     Guid ActorUserId,
     Guid CourseId,
-    Guid ExamStructureId,
+    Guid? ExamStructureId,
     string? Title,
     DateOnly ExamDate,
     bool HasFollowUp,

@@ -9,6 +9,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Practice.DTOs;
+using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory;
 
@@ -43,6 +44,8 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
             .Include(s => s.Course)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .Where(s => s.StudentId == request.StudentId)
             .OrderByDescending(s => s.StartedAt)
             .ThenByDescending(s => s.Id)
@@ -50,7 +53,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
 
         var result = sessions.Select(s =>
         {
-            var answers = s.Answers ?? new List<OralExamination.Domain.Entities.PracticeAnswer>();
+            var answers = s.Answers ?? new List<PracticeAnswer>();
             var isFullSession = string.Equals(s.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
             var isCompleted = string.Equals(s.Status, "completed", StringComparison.OrdinalIgnoreCase);
 
@@ -78,31 +81,14 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                         .SelectMany(a => a.AiEvaluations)
                         .OrderByDescending(e => e.EvaluatedAt)
                         .FirstOrDefault();
-                    var followUpScores = g
+                    var followUpEvals = g
                         .Where(a => a.IsFollowUp)
-                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                        .Where(e => e != null)
+                        .Cast<AiEvaluation>()
                         .ToList();
 
-                    if (followUpScores.Count == 0)
-                    {
-                        return mainAnswerEval?.TotalScore ?? 0.0m;
-                    }
-
-                    if (mainAnswerEval == null)
-                    {
-                        return Math.Round(followUpScores.Average(), 2, MidpointRounding.AwayFromZero);
-                    }
-
-                    var mainScore = mainAnswerEval.TotalScore;
-                    var avgFollowUp = followUpScores.Average();
-                    if (avgFollowUp >= mainScore)
-                    {
-                        return g.SelectMany(a => a.AiEvaluations).Max(e => e.TotalScore);
-                    }
-
-                    var allScores = new List<decimal> { mainScore };
-                    allScores.AddRange(followUpScores);
-                    return Math.Round(allScores.Average(), 2, MidpointRounding.AwayFromZero);
+                    return FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainAnswerEval, followUpEvals);
                 })
                 .ToList();
 

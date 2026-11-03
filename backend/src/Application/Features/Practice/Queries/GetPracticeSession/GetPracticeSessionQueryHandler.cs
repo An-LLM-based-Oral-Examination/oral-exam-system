@@ -153,9 +153,14 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                     x.Id != a.Id &&
                     (x.ParentAnswerId == a.Id ||
                      (x.QuestionId == a.QuestionId && x.SubmittedAt > a.SubmittedAt)));
-                bool needsFollowUp = isBorderline && !hasChildFollowUp && followUpsCountForQuestion < maxAllowedFollowUps;
+                bool hasProgressedToLaterQuestion = !isFullSession &&
+                    (sessionAnswers.Any(x => x.QuestionId != a.QuestionId && x.SubmittedAt > a.SubmittedAt) ||
+                     (session.SelectedQuestionIds.Count > 0 &&
+                      session.SelectedQuestionIds[^1] != a.QuestionId &&
+                      session.SelectedQuestionIds.Contains(a.QuestionId)));
+                bool needsFollowUp = isBorderline && !hasChildFollowUp && !hasProgressedToLaterQuestion && followUpsCountForQuestion < maxAllowedFollowUps;
 
-                string? followUpPrompt = FollowUpPromptBuilder.TryExtractFollowUpFromCot(evaluation?.CotTrace);
+                string? followUpPrompt = FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt(evaluation);
                 if (needsFollowUp)
                 {
                     try
@@ -176,7 +181,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                             var prevPrompts = sessionAnswers
                                 .Where(x => x.QuestionId == a.QuestionId && x.SubmittedAt < a.SubmittedAt)
                                 .SelectMany(x => x.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
-                                .Select(e => FollowUpPromptBuilder.TryExtractFollowUpFromCot(e.CotTrace))
+                                .Select(FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt)
                                 .Where(p => !string.IsNullOrWhiteSpace(p))
                                 .Select(p => p!.Trim())
                                 .Distinct(StringComparer.OrdinalIgnoreCase)

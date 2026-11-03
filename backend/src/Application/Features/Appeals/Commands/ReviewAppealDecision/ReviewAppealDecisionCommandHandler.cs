@@ -90,14 +90,12 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 audit.OverrideReason = request.ReviewNotes.Trim();
                 if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
                 {
-                    var scoredValues = ticketSubmissions
-                        .Select(s => s.FinalScore ?? s.AiScore)
-                        .Where(v => v.HasValue)
-                        .Select(v => v!.Value)
-                        .ToList();
-
-                    audit.AuditedScore = scoredValues.Count > 0
-                        ? Math.Round(scoredValues.Average(), 2, MidpointRounding.AwayFromZero)
+                    var hasAnyScore = ticketSubmissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue);
+                    audit.AuditedScore = hasAnyScore
+                        ? Math.Round(
+                            ticketSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticketSubmissions.Count,
+                            2,
+                            MidpointRounding.AwayFromZero)
                         : request.ProposedScore.Value;
                 }
                 else

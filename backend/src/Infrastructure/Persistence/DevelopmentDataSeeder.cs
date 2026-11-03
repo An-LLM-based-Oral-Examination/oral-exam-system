@@ -16,7 +16,7 @@ namespace OralExamination.Infrastructure.Persistence;
 /// mỗi học phần có đủ 12 câu hỏi PracticeQuestions (4 Easy, 4 Medium, 4 Hard), Rubric chuẩn 10.0đ,
 /// ExamStructure active, ghi danh lớp học và lịch sử phiên Luyện tập / Thi thử đã chấm điểm.
 /// </summary>
-public static class DevelopmentDataSeeder
+public static partial class DevelopmentDataSeeder
 {
     public static readonly Guid SemesterFa26Id = Guid.Parse("00000000-0000-0000-0000-000000000007");
 
@@ -103,6 +103,7 @@ public static class DevelopmentDataSeeder
         await EnsureExamQuestionsAsync(context, cancellationToken);
         await EnsureClassesAndEnrollmentsAsync(context, cancellationToken);
         await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
+        await SeedAdditionalThreeCoursesAndClosAsync(context, cancellationToken);
     }
 
     private static async Task EnsureSemesterAndUsersAsync(OralExamDbContext context, CancellationToken cancellationToken)
@@ -216,6 +217,19 @@ public static class DevelopmentDataSeeder
                 PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-SE184236!", "SE184236"),
                 MustChangePassword = false,
                 Role = UserRole.Student,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = ExaminationOfficerUserId,
+                Email = "khaothi@fe.edu.vn",
+                FullName = "Phòng Khảo Thí FPTU",
+                Username = "khaothi",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-KhaoThi!", "khaothi"),
+                MustChangePassword = false,
+                Role = UserRole.ExaminationOfficer,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
@@ -4130,7 +4144,7 @@ public static class DevelopmentDataSeeder
                 Id = TicketMaiId,
                 ShiftId = shift.Id,
                 StudentId = StudentMaiId,
-                ExamSetId = prnSet.Id,
+                ExamSetId = ExamSetPrn231Set02Id,
                 SeatNumber = 2,
                 IpAddress = "192.168.1.102",
                 Status = ExamTicketStatus.AiGraded,

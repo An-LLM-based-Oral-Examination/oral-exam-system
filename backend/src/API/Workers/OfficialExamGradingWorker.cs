@@ -98,16 +98,57 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(submission.TranscriptWhisper))
-        {
-            throw new InvalidOperationException("The submission has no transcript to grade.");
-        }
-
         var rubric = submission.ExamQuestion?.Rubric;
         var orderedCriteria = rubric?.Criteria?.OrderBy(item => item.OrderIndex).ToList() ?? [];
         if (orderedCriteria.Count == 0)
         {
             throw new InvalidOperationException("The exam question has no rubric criteria.");
+        }
+
+        if (string.IsNullOrWhiteSpace(submission.TranscriptWhisper))
+        {
+            var emptyNow = DateTime.UtcNow;
+            var emptyDetails = orderedCriteria.Select(criterion => new AiEvaluationDetail
+            {
+                CriterionId = criterion.Id,
+                Score = 0m,
+                Comment = $"Sinh viên không trả lời câu hỏi này (0.00/{criterion.MaxScore:0.00} cho tiêu chí '{criterion.CriterionName}')."
+            }).ToList();
+
+            context.AiEvaluations.Add(new AiEvaluation
+            {
+                AnswerType = "exam",
+                ExamSubmissionId = submission.Id,
+                TotalScore = 0m,
+                ConfidenceScore = 1.00m,
+                Feedback = "Sinh viên bỏ trống không trả lời câu hỏi này (0.0/10.0 điểm).",
+                CotTrace = "[NON_ANSWER_GUARD]: Bản nộp câu hỏi trống (TranscriptWhisper rỗng) -> Chấm 0.0 điểm để bảo toàn mẫu số trung bình của toàn bộ đề thi.",
+                EvaluatedAt = emptyNow,
+                Details = emptyDetails
+            });
+
+            submission.AiScore = 0m;
+            submission.GradingStatus = "ai_graded";
+            submission.IsSuspicious = true;
+            submission.SuspiciousReason = "Sinh viên bỏ trống không trả lời câu hỏi này (0.0/10.0 điểm).";
+            CompleteJob(job, emptyNow);
+
+            var hasOtherPending = await context.ExamQuestionSubmissions
+                .AsNoTracking()
+                .AnyAsync(item => item.TicketId == submission.TicketId &&
+                    item.Id != submission.Id && item.GradingStatus != "ai_graded", cancellationToken);
+            if (!hasOtherPending)
+            {
+                var currentTicket = await context.StudentExamTickets
+                    .FirstOrDefaultAsync(item => item.Id == submission.TicketId, cancellationToken);
+                if (currentTicket?.Status == "SUBMITTED")
+                {
+                    currentTicket.Status = "AI_GRADED";
+                }
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+            return;
         }
 
         submission.GradingStatus = "transcribed";

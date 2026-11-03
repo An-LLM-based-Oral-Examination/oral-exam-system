@@ -121,19 +121,19 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
 
             // Scores (Trung bình cộng toàn bộ câu hỏi của vé thi khi chưa có LecturerAudit)
             decimal? aiScore = ticket.LecturerAudit?.OriginalAiScore
-                ?? (orderedSubmissions.Any(s => s.AiScore.HasValue)
-                    ? (decimal?)Math.Round(orderedSubmissions.Where(s => s.AiScore.HasValue).Average(s => s.AiScore!.Value), 2, MidpointRounding.AwayFromZero)
+                ?? (orderedSubmissions.Count > 0 && orderedSubmissions.Any(s => s.AiScore.HasValue)
+                    ? (decimal?)Math.Round(
+                        orderedSubmissions.Sum(s => s.AiScore ?? 0m) / orderedSubmissions.Count,
+                        2,
+                        MidpointRounding.AwayFromZero)
                     : null)
                 ?? latestSubmission?.AiScore
                 ?? latestEval?.TotalScore;
 
             decimal? finalScore = ticket.LecturerAudit?.AuditedScore
-                ?? (orderedSubmissions.Any(s => s.FinalScore.HasValue)
+                ?? (orderedSubmissions.Count > 0 && orderedSubmissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
                     ? (decimal?)Math.Round(
-                        orderedSubmissions
-                            .Select(s => s.FinalScore ?? s.AiScore)
-                            .Where(v => v.HasValue)
-                            .Average(v => v!.Value),
+                        orderedSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / orderedSubmissions.Count,
                         2,
                         MidpointRounding.AwayFromZero)
                     : null)

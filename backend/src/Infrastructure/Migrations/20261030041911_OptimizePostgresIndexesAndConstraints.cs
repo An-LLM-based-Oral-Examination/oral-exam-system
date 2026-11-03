@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -38,6 +38,12 @@ namespace OralExamination.Infrastructure.Migrations
                 name: "submission_id",
                 table: "lecturer_audit_details",
                 type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "follow_up_prompt",
+                table: "ai_evaluations",
+                type: "text",
                 nullable: true);
 
             migrationBuilder.CreateIndex(
@@ -116,6 +122,10 @@ namespace OralExamination.Infrastructure.Migrations
             migrationBuilder.DropColumn(
                 name: "submission_id",
                 table: "lecturer_audit_details");
+
+            migrationBuilder.DropColumn(
+                name: "follow_up_prompt",
+                table: "ai_evaluations");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_ai_evaluations_type",

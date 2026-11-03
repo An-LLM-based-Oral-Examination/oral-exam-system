@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Common.Interfaces;
 
@@ -325,5 +326,108 @@ public static class FollowUpPromptBuilder
         var newlineIdx = remainder.IndexOfAny(new[] { '\r', '\n' });
         var extracted = (newlineIdx >= 0 ? remainder[..newlineIdx] : remainder).Trim();
         return string.IsNullOrWhiteSpace(extracted) ? null : extracted;
+    }
+
+    public static string? ResolveEvaluationFollowUpPrompt(AiEvaluation? evaluation)
+    {
+        if (evaluation == null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(evaluation.FollowUpPrompt))
+        {
+            return evaluation.FollowUpPrompt.Trim();
+        }
+
+        return TryExtractFollowUpFromCot(evaluation.CotTrace);
+    }
+
+    public static decimal ComputeEffectiveQuestionScore(
+        AiEvaluation? mainEvaluation,
+        IReadOnlyList<AiEvaluation> followUpEvaluations)
+    {
+        if (mainEvaluation == null)
+        {
+            if (followUpEvaluations != null && followUpEvaluations.Count > 0)
+            {
+                return Math.Clamp(
+                    Math.Round(followUpEvaluations.Average(e => e.TotalScore), 2, MidpointRounding.AwayFromZero),
+                    0.0m,
+                    10.0m);
+            }
+
+            return 0.0m;
+        }
+
+        var originalMainScore = Math.Clamp(mainEvaluation.TotalScore, 0.0m, 10.0m);
+        if (followUpEvaluations == null || followUpEvaluations.Count == 0)
+        {
+            return originalMainScore;
+        }
+
+        var avgFollowUpScore = followUpEvaluations.Average(e => e.TotalScore);
+        var weightedScore = Math.Round(
+            originalMainScore * 0.7m + avgFollowUpScore * 0.3m,
+            2,
+            MidpointRounding.AwayFromZero);
+
+        var mainDetails = mainEvaluation.Details?.ToList();
+        if (mainDetails != null && mainDetails.Count > 0)
+        {
+            decimal mergedSum = 0.0m;
+            foreach (var mainDetail in mainDetails)
+            {
+                decimal bestCritScore = mainDetail.Score;
+                decimal maxCritScore = mainDetail.Criterion?.MaxScore > 0m
+                    ? mainDetail.Criterion.MaxScore
+                    : 10.0m;
+
+                foreach (var fuEval in followUpEvaluations)
+                {
+                    if (fuEval.Details == null || fuEval.Details.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var matchedFuDetail = fuEval.Details.FirstOrDefault(
+                        d => d.CriterionId == mainDetail.CriterionId && mainDetail.CriterionId != Guid.Empty);
+                    if (matchedFuDetail != null && matchedFuDetail.Score > bestCritScore)
+                    {
+                        bestCritScore = Math.Clamp(
+                            Math.Round(matchedFuDetail.Score, 2, MidpointRounding.AwayFromZero),
+                            0.0m,
+                            maxCritScore);
+                    }
+                }
+
+                mergedSum += bestCritScore;
+            }
+
+            mergedSum = Math.Round(mergedSum, 2, MidpointRounding.AwayFromZero);
+            if (mergedSum > originalMainScore)
+            {
+                return Math.Clamp(mergedSum, 0.0m, 10.0m);
+            }
+
+            if (avgFollowUpScore >= originalMainScore)
+            {
+                return mainDetails.Count > 1
+                    ? Math.Clamp(mergedSum > 0.0m ? mergedSum : originalMainScore, 0.0m, 10.0m)
+                    : Math.Clamp(Math.Max(originalMainScore, followUpEvaluations.Max(e => e.TotalScore)), 0.0m, 10.0m);
+            }
+
+            return Math.Clamp(weightedScore, 0.0m, 10.0m);
+        }
+
+        if (avgFollowUpScore >= originalMainScore)
+        {
+            return Math.Clamp(Math.Max(originalMainScore, followUpEvaluations.Max(e => e.TotalScore)), 0.0m, 10.0m);
+        }
+
+        return Math.Clamp(
+            Math.Round((originalMainScore + followUpEvaluations.Sum(e => e.TotalScore)) / (1 + followUpEvaluations.Count), 2, MidpointRounding.AwayFromZero),
+            0.0m,
+            10.0m);
     }
 }

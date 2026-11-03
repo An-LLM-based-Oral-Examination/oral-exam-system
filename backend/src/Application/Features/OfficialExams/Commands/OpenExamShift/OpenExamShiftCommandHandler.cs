@@ -32,7 +32,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || actor.Role != UserRole.DepartmentHead)
+        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer))
         {
             return Result<ExamShiftResponse>.Failure(OfficialExamErrors.Forbidden);
         }

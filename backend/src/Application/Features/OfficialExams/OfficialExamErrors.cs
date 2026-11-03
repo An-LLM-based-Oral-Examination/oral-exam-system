@@ -31,4 +31,12 @@ public static class OfficialExamErrors
     public const string ExamSetNotAssigned = "Vé thi chưa được gán bộ đề.";
     public const string SubmissionQuestionsMismatch = "Danh sách câu trả lời không khớp với bộ đề của vé thi.";
     public const string SubmissionAlreadyExists = "Bài thi đã được nộp trước đó.";
+    public const string NoAvailableExamSet = "Không còn bộ đề khả dụng chưa gán trong ca thi.";
+    public const string ExamSetNotFound = "Bộ đề không tồn tại.";
+    public const string ExamSetStatusInvalid = "Trạng thái bộ đề không hợp lệ cho thao tác này.";
+    public const string ExamSetAlreadyApproved = "Bộ đề đã được phê duyệt chính thức.";
+    public const string ExamSetAlreadyHandedOver = "Bộ đề đã được bàn giao.";
+    public const string ExamSetNoQuestions = "Bộ đề phải có ít nhất một câu hỏi.";
+    public const string ShiftAlreadyPublished = "Ca thi đã được công bố đề thi trước đó.";
+    public const string ShiftNotScheduledForPublish = "Chỉ có thể công bố đề thi cho ca thi đang ở trạng thái chờ diễn ra (scheduled).";
 }

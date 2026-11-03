@@ -37,7 +37,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ActorNotFound);
         }
 
-        if (!lecturer.IsActive || lecturer.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
+        if (!lecturer.IsActive || lecturer.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.ExaminationOfficer or UserRole.Admin))
         {
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.Forbidden);
         }

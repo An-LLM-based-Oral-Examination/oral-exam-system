@@ -2,7 +2,7 @@
 Tài liệu này quy định cách chia nhánh (Branching) và làm việc nhóm để tránh xung đột mã nguồn (Conflict) cho đội ngũ 4 kỹ sư FA26SE166:
 - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect
 - 🧑 **Nguyễn Trọng Tốt:** Backend Developer, AI Engineer & QA Lead
-- 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)
+- 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 38 bảng 3NF PostgreSQL trong 7 Bounded Contexts và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)
 - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator
 
 Nhánh làm việc chung hiện tại là nhánh `develop`.
@@ -53,15 +53,15 @@ Dự án áp dụng bắt buộc 100% chuẩn **Conventional Commits v1.0.0** b�
   - `chore`: Cấu hình build, dependencies, migration, CI/CD, seed data.
   - `style`: Thay đổi format code, CSS, không ảnh hưởng logic.
 
-* **Bảng danh mục các `<scope>` theo Bounded Context:**
-  - `(practice)`: Luồng MF-01 Luyện tập tương tác.
-  - `(mock-exam)`: Luồng MF-02 Thi thử tính giờ.
-  - `(rubric)`: Luồng MF-03 Ngân hàng câu hỏi & Rubric Studio.
-  - `(official-exam)`: Luồng MF-04 Thi thật Kiosk phòng lab & Hậu kiểm.
-  - `(auth)`: Xác thực Google OAuth, RBAC.
-  - `(kiosk)`: Khóa màn hình Kiosk phòng Lab, hardware mic, blur detection.
+* **Bảng danh mục các `<scope>` theo Bounded Context (7 Bounded Contexts & 38 bảng 3NF):**
+  - `(practice)`: Luồng MF-01 Luyện tập tương tác (DLQ do Admin giám sát & replay).
+  - `(mock-exam)`: Luồng MF-02 Thi thử tính giờ (Quota động do Admin cấu hình, DLQ do Admin giám sát & replay).
+  - `(rubric)`: Luồng MF-03 Ngân hàng câu hỏi phân tách độc lập 2 luồng (`practice_questions` & `exam_questions` bám sát ma trận đề mẫu) & Rubric Studio 10.0đ.
+  - `(official-exam)`: Luồng MF-04 Thi thật Kiosk phòng lab, Trưởng BM độc quyền cấu hình Follow-up (1–5 câu, mặc định 2), Cán bộ Khảo thí quản lý ca thi & DLQ thi thật, Hậu kiểm & Phúc khảo 5 bước qua Khảo thí; `(in-class-exam)`: Ca thi trong lớp & mật khẩu xoay vòng 5 phút.
+  - `(auth)`: Xác thực kép (Google OAuth 2.0 & Tài khoản trường cấp), phân quyền RBAC 6 roles (`admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`).
+  - `(kiosk)`: Khóa màn hình Kiosk phòng Lab, hardware mic, blur detection, Giám thị (`proctor`) chỉ điểm danh ghế 1–40 và báo cáo vi phạm phòng thi (`exam_anti_cheat_logs`).
   - `(api)`: Cấu hình middleware, routing, Swagger/OpenAPI.
-  - `(db)`: Entity, migrations, schema PostgreSQL.
+  - `(db)`: Entity, migrations, schema PostgreSQL 38 bảng 3NF.
   - `(storage)`: Lưu trữ audio, bóc băng Whisper STT.
 
 * **Quy tắc vàng khi viết Commit Message:**

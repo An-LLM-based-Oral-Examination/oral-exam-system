@@ -30,4 +30,5 @@ public partial class Course
     public virtual ICollection<PracticeSession> PracticeSessions { get; set; } = new List<PracticeSession>();
     public virtual ICollection<MockExamSession> MockExamSessions { get; set; } = new List<MockExamSession>();
     public virtual ICollection<OfficialExamSession> OfficialExamSessions { get; set; } = new List<OfficialExamSession>();
+    public virtual ICollection<CourseClo> CourseClos { get; set; } = new List<CourseClo>();
 }

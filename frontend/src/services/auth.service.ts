@@ -12,7 +12,7 @@ import { clearPracticeRuntimes } from '@/utils/practiceSessionStorage'
 
 function normalizePortalRole(role: unknown): UserRole | null {
   if (role === 'Student' || role === 'student') return 'Student'
-  if (role === 'Instructor' || role === 'instructor' || role === 'lecturer') return 'Instructor'
+  if (role === 'Instructor' || role === 'instructor' || role === 'lecturer' || role === 'Lecturer') return 'Instructor'
   if (
     role === 'DepartmentHead' ||
     role === 'department_head' ||
@@ -21,6 +21,7 @@ function normalizePortalRole(role: unknown): UserRole | null {
   ) {
     return 'DepartmentHead'
   }
+  if (role === 'ExaminationOfficer' || role === 'examination_officer') return 'ExaminationOfficer'
   if (role === 'Proctor' || role === 'proctor') return 'Proctor'
   if (role === 'Admin' || role === 'admin') return 'Admin'
   return null

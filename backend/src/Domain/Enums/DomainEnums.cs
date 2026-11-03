@@ -47,9 +47,10 @@ public static class PracticeDifficulty
 public static class QuestionSource
 {
     public const string Manual = "manual";
-    public const string FlmApi = "flm_api";
+    public const string AiGenerated = "ai_generated";
+    public const string FlmApi = "flm_api"; // Deprecated: Kept for backwards compatibility
 
-    public static readonly string[] All = { Manual, FlmApi };
+    public static readonly string[] All = { Manual, AiGenerated, FlmApi };
 }
 
 public static class UsageScope
@@ -65,11 +66,46 @@ public static class UserRole
 {
     public const string Admin = "admin";
     public const string DepartmentHead = "department_head";
+    public const string ExaminationOfficer = "examination_officer";
     public const string Lecturer = "lecturer";
     public const string Proctor = "proctor";
     public const string Student = "student";
 
-    public static readonly string[] All = { Admin, DepartmentHead, Lecturer, Proctor, Student };
+    public static readonly string[] All = { Admin, DepartmentHead, ExaminationOfficer, Lecturer, Proctor, Student };
+}
+
+public static class ExamSetStatus
+{
+    public const string Draft = "DRAFT";
+    public const string SubmittedForReview = "SUBMITTED_FOR_REVIEW";
+    public const string Official = "OFFICIAL";
+    public const string HandedOver = "HANDED_OVER";
+    public const string Rejected = "REJECTED";
+
+    public static readonly string[] All = { Draft, SubmittedForReview, Official, HandedOver, Rejected };
+}
+
+public static class AntiCheatEventType
+{
+    public const string TabSwitch = "TAB_SWITCH";
+    public const string WindowBlur = "WINDOW_BLUR";
+    public const string FullscreenExit = "FULLSCREEN_EXIT";
+    public const string MultipleFaces = "MULTIPLE_FACES";
+    public const string VoiceDetected = "VOICE_DETECTED";
+    public const string DeviceDisconnection = "DEVICE_DISCONNECTION";
+    public const string DisallowedProcess = "DISALLOWED_PROCESS";
+
+    public static readonly string[] All = { TabSwitch, WindowBlur, FullscreenExit, MultipleFaces, VoiceDetected, DeviceDisconnection, DisallowedProcess };
+}
+
+public static class AntiCheatSeverity
+{
+    public const string Low = "low";
+    public const string Medium = "medium";
+    public const string High = "high";
+    public const string Critical = "critical";
+
+    public static readonly string[] All = { Low, Medium, High, Critical };
 }
 
 public static class AppealStatus

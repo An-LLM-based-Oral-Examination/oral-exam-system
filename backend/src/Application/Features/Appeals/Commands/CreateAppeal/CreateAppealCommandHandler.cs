@@ -88,15 +88,13 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         else
         {
             originalScore = ticket.LecturerAudit?.AuditedScore;
-            if (!originalScore.HasValue && ticket.Submissions.Any())
+            if (!originalScore.HasValue && ticket.Submissions.Count > 0 &&
+                ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue))
             {
-                var scoredSubmissions = ticket.Submissions
-                    .Where(s => s.FinalScore.HasValue || s.AiScore.HasValue)
-                    .ToList();
-                if (scoredSubmissions.Any())
-                {
-                    originalScore = scoredSubmissions.Average(s => s.FinalScore ?? s.AiScore ?? 0m);
-                }
+                originalScore = Math.Round(
+                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticket.Submissions.Count,
+                    2,
+                    MidpointRounding.AwayFromZero);
             }
         }
 

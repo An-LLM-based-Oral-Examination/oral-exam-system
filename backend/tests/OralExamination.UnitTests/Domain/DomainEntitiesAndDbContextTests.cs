@@ -28,13 +28,13 @@ public class DomainEntitiesAndDbContextTests
     }
 
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 30 thực thể trong Model")]
-    public void DbContext_Must_Contain_Exactly_31_Entity_Types()
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 33 thực thể trong Model")]
+    public void DbContext_Must_Contain_Exactly_33_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(31, "durable official grading adds the grading_jobs table");
+        entityTypes.Should().HaveCount(33, "durable official grading adds grading_jobs, course_clos and exam_anti_cheat_logs tables");
 
         var expectedEntities = new[]
         {
@@ -42,6 +42,7 @@ public class DomainEntitiesAndDbContextTests
             typeof(RefreshToken),
             typeof(Semester),
             typeof(Course),
+            typeof(CourseClo),
             typeof(Class),
             typeof(ClassEnrollment),
             typeof(Rubric),
@@ -67,6 +68,7 @@ public class DomainEntitiesAndDbContextTests
             typeof(AppealRequest),
             typeof(DeadLetterQueue),
             typeof(GradingJob),
+            typeof(ExamAntiCheatLog),
             typeof(AuditLog),
             typeof(SystemConfig)
         };
@@ -114,6 +116,8 @@ public class DomainEntitiesAndDbContextTests
             (typeof(AppealRequest), "appeal_requests"),
             (typeof(DeadLetterQueue), "dead_letter_queues"),
             (typeof(GradingJob), "grading_jobs"),
+            (typeof(CourseClo), "course_clos"),
+            (typeof(ExamAntiCheatLog), "exam_anti_cheat_logs"),
             (typeof(AuditLog), "audit_logs"),
             (typeof(SystemConfig), "system_configs")
         };
@@ -197,7 +201,7 @@ public class DomainEntitiesAndDbContextTests
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(44, "grading_jobs adds status and non-negative attempt constraints");
+        allCheckConstraints.Count.Should().Be(49, "grading_jobs adds status and non-negative attempt constraints, plus 5 new constraints for course clos, anti-cheat, exam sets, practice questions");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
@@ -409,10 +413,11 @@ public class DomainEntitiesAndDbContextTests
         // 1. UserRole constants
         UserRole.Admin.Should().Be("admin");
         UserRole.DepartmentHead.Should().Be("department_head");
+        UserRole.ExaminationOfficer.Should().Be("examination_officer");
         UserRole.Lecturer.Should().Be("lecturer");
         UserRole.Proctor.Should().Be("proctor");
         UserRole.Student.Should().Be("student");
-        UserRole.All.Should().BeEquivalentTo(new[] { "admin", "department_head", "lecturer", "proctor", "student" });
+        UserRole.All.Should().BeEquivalentTo(new[] { "admin", "department_head", "examination_officer", "lecturer", "proctor", "student" });
 
         // 2. AppealStatus constants
         AppealStatus.Pending.Should().Be("PENDING");

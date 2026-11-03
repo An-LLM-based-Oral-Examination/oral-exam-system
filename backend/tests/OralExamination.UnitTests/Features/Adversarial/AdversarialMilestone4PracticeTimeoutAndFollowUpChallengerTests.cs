@@ -1402,4 +1402,185 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         skippedEval.Details.Should().NotBeEmpty();
         skippedEval.Details.All(d => d.Score == 0.0m).Should().BeTrue();
     }
+
+    [Fact(DisplayName = "ADV-FOL-07. Chấm câu hỏi Follow-up: Lấy tiêu chí điểm thấp nhất (Score/MaxScore) của câu chính làm barem và quy đổi điểm về thang 10.0")]
+    public async Task FollowUpGrading_UsesWeakestCriterionFromMainAnswer_AndScalesScoreToTen()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateDbContext(dbName);
+        var (course, student, session) = await SeedPracticeSessionAsync(context, DateTime.UtcNow.AddMinutes(-2));
+
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Rubric 3 Tiêu Chí",
+            TotalMaxScore = 10.0m
+        };
+        var crit1 = new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = rubric.Id,
+            CriterionName = "TC1 - Khái niệm DI",
+            Description = "Định nghĩa Dependency Injection",
+            MaxScore = 3.0m,
+            OrderIndex = 1
+        };
+        var crit2 = new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = rubric.Id,
+            CriterionName = "TC2 - Vòng đời Service",
+            Description = "Phân biệt Transient, Scoped, Singleton",
+            MaxScore = 4.0m,
+            OrderIndex = 2
+        };
+        var crit3 = new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = rubric.Id,
+            CriterionName = "TC3 - Captive Dependency",
+            Description = "Phân tích lỗi Captive Dependency và cách phòng tránh",
+            MaxScore = 3.0m,
+            OrderIndex = 3
+        };
+        rubric.Criteria.Add(crit1);
+        rubric.Criteria.Add(crit2);
+        rubric.Criteria.Add(crit3);
+
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Rubric = rubric,
+            Title = "Dependency Injection & Captive Dependency",
+            Content = "Trình bày DI, 3 vòng đời Service và lỗi Captive Dependency trong .NET 8.",
+            SampleAnswer = "DI giảm phụ thuộc cứng. Có 3 vòng đời Transient, Scoped, Singleton. Captive Dependency xảy ra khi inject Scoped vào Singleton.",
+            Difficulty = "medium",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
+
+        // Câu trả lời chính đạt 6.1/10.0:
+        // TC1: 2.7/3.0 (90%)
+        // TC2: 2.8/4.0 (70%)
+        // TC3: 0.6/3.0 (20% -> Thấp nhất, sẽ được lấy làm barem cho câu hỏi phụ #1)
+        var mainAnswer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            AnswerText = "Em trình bày được khái niệm DI và 3 vòng đời nhưng quên mất Captive Dependency.",
+            Status = "graded",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-2),
+            IsFollowUp = false
+        };
+        var mainEval = new AiEvaluation
+        {
+            Id = Guid.NewGuid(),
+            PracticeAnswerId = mainAnswer.Id,
+            AnswerType = "practice",
+            TotalScore = 6.1m,
+            ConfidenceScore = 0.95m,
+            Feedback = "Thiếu phân tích Captive Dependency.",
+            CotTrace = "Main trace",
+            EvaluatedAt = DateTime.UtcNow.AddMinutes(-2)
+        };
+        mainEval.Details.Add(new AiEvaluationDetail { Id = Guid.NewGuid(), EvaluationId = mainEval.Id, CriterionId = crit1.Id, Score = 2.7m, Comment = "Tốt" });
+        mainEval.Details.Add(new AiEvaluationDetail { Id = Guid.NewGuid(), EvaluationId = mainEval.Id, CriterionId = crit2.Id, Score = 2.8m, Comment = "Khá" });
+        mainEval.Details.Add(new AiEvaluationDetail { Id = Guid.NewGuid(), EvaluationId = mainEval.Id, CriterionId = crit3.Id, Score = 0.6m, Comment = "Thiếu Captive Dependency" });
+        mainAnswer.AiEvaluations.Add(mainEval);
+
+        var followUpAnswer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            ParentAnswerId = mainAnswer.Id,
+            PromptText = "Khi một Singleton service giữ tham chiếu trực tiếp tới Scoped DbContext thì điều gì sẽ xảy ra?",
+            AnswerText = "Scoped DbContext sẽ bị giữ sống suốt vòng đời ứng dụng như Singleton, gây rò rỉ bộ nhớ và lỗi đồng thời truy cập DbContext.",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-1),
+            IsFollowUp = true
+        };
+
+        context.PracticeAnswers.AddRange(mainAnswer, followUpAnswer);
+        await context.SaveChangesAsync();
+
+        AiGradingRequest? capturedRequest = null;
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(s => s.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AiGradingRequest, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync((AiGradingRequest req, CancellationToken _) => new AiGradingResult
+            {
+                // AI chấm câu trả lời phụ đạt 2.4 / 3.0 trên tiêu chí TC3 -> Quy đổi về thang 10: (2.4 / 3.0) * 10 = 8.00đ
+                Score = 8.0m,
+                ConfidenceScore = 0.94m,
+                Feedback = "Giải thích chính xác lỗi Captive Dependency.",
+                CotTrace = "Follow-up trace",
+                Details = new List<GradingDetailDto>
+                {
+                    new GradingDetailDto
+                    {
+                        CriterionId = crit3.Id.ToString(),
+                        Score = 2.4m,
+                        Comment = "Trả lời đúng bản chất Captive Dependency (2.4/3.0)"
+                    }
+                }
+            });
+
+        var services = new ServiceCollection();
+        services.AddScoped<IApplicationDbContext>(_ => CreateDbContext(dbName));
+        services.AddScoped(_ => aiMock.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var hubMock = new Mock<IHubContext<PracticeHub, IPracticeClient>>();
+        var hubClientsMock = new Mock<IHubClients<IPracticeClient>>();
+        var clientMock = new Mock<IPracticeClient>();
+        hubMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+        hubClientsMock.Setup(c => c.Group($"session_{session.Id}")).Returns(clientMock.Object);
+
+        var receivedDtos = new List<PracticeAnswerDetailDto>();
+        clientMock.Setup(c => c.ReceiveGradingResult(It.IsAny<PracticeAnswerDetailDto>()))
+            .Callback<PracticeAnswerDetailDto>(dto => receivedDtos.Add(dto))
+            .Returns(Task.CompletedTask);
+
+        var channel = new TestGradingChannel();
+        var worker = new GradingQueueWorker(channel, serviceProvider, hubMock.Object, NullLogger<GradingQueueWorker>.Instance);
+        await worker.StartAsync(CancellationToken.None);
+        await channel.EnqueueAsync(new GradingTask
+        {
+            AnswerId = followUpAnswer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            ParentAnswerId = mainAnswer.Id,
+            AnswerText = followUpAnswer.AnswerText,
+            IsFollowUp = true,
+            IsFullSession = false
+        });
+        channel.Complete();
+        for (int i = 0; i < 50 && receivedDtos.Count < 1; i++) await Task.Delay(50);
+        await worker.StopAsync(CancellationToken.None);
+
+        // Assert 1: Barem gửi cho AI chỉ chứa duy nhất tiêu chí có tỷ lệ điểm thấp nhất (TC3: 0.6/3.0 = 20%)
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Criteria.Should().ContainSingle("Câu hỏi phụ chỉ lấy tiêu chí yếu nhất của câu chính làm barem chấm điểm");
+        capturedRequest.Criteria[0].Id.Should().Be(crit3.Id.ToString());
+        capturedRequest.Criteria[0].MaxScore.Should().Be(3.0m);
+
+        // Assert 2: Điểm tiêu chí lưu đúng trên thang MaxScore của tiêu chí (2.4 / 3.0), còn TotalScore quy đổi về thang 10.0 ((2.4 / 3.0) * 10 = 8.00)
+        receivedDtos.Should().ContainSingle();
+        var followUpResult = receivedDtos[0];
+        followUpResult.TotalScore.Should().Be(8.0m);
+        followUpResult.CriteriaScores.Should().ContainSingle();
+        followUpResult.CriteriaScores![0].CriterionId.Should().Be(crit3.Id);
+        followUpResult.CriteriaScores[0].Score.Should().Be(2.4m);
+        followUpResult.CriteriaScores[0].MaxScore.Should().Be(3.0m);
+    }
 }

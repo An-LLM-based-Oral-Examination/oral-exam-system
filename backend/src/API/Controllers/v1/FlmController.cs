@@ -12,6 +12,7 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/flm")]
 [Authorize(Roles = "lecturer,department_head,admin")]
+[Obsolete("Endpoint FLM legacy đã được thay thế bằng /api/v1/courses/{id}/clos và /api/v1/questions/generate-from-clo.")]
 public class FlmController : ControllerBase
 {
     private readonly ISender _sender;
