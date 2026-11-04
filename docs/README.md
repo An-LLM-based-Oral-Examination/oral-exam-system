@@ -46,10 +46,7 @@ docs/
 ### 🔌 Nhóm 3: Hợp Đồng Giao Tiếp API & Tích Hợp Frontend ([`03_api_and_contracts/`](./03_api_and_contracts/))
 | STT | Tài liệu kỹ thuật | Phạm vi nội dung cốt lõi | Đối tượng sử dụng chính |
 |:---:|:---|:---|:---:|
-| 5 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & WebSocket:** Chi tiết request/response JSON camelCase, mã lỗi RFC 7807 Problem Details, SignalR `/hubs/practice` & `/hubs/anti-cheat`, Dual Auth, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
-| 6 | [**`MF01_Frontend_Integration.md`**](./03_api_and_contracts/MF01_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-01:** Đặc tả 7 API endpoints, hook React 19 `usePracticeHub.ts`, logic Buffer Screen 60s, Follow-up Engine đa nấc và hướng dẫn chạy Mini Tester. | Hoàng & Hải (FE) |
-| 7 | [**`MF02_Frontend_Integration.md`**](./03_api_and_contracts/MF02_Frontend_Integration.md) | **Hướng dẫn tích hợp Frontend cho MF-02 (Thi thử bấm giờ):** Đặc tả 6 API endpoints (Quota Guard, Start Session, Voice-First Answer, Instant Scorecard, Lịch sử), mã lỗi RFC 7807 (429, 410) và code mẫu MediaRecorder. | Hải & Hoàng (FE) |
-| 8 | [**`FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/FE_GOOGLE_AUTH_INTEGRATION_GUIDE.md) | **Hướng dẫn tích hợp Google OAuth 2.0 & Dual Auth:** Đăng nhập bằng Google ID Token hoặc tài khoản trường cấp, Silent Refresh Token Rotation, thu hồi token khi đăng xuất và cấu hình Client ID. | Hoàng & Hải (FE) |
+| 5 | [**`API_CONTRACT_AND_INTEGRATION_GUIDE.md`**](./03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) | **Hợp đồng giao tiếp API Contract-First & Hướng dẫn tích hợp Frontend hợp nhất (SSOT):** Chi tiết toàn bộ 23 Controllers, request/response JSON camelCase, mã lỗi RFC 7807 Problem Details (410 Gone, 422, 429, 403), SignalR `/hubs/practice` & `/hubs/anti-cheat`, Dual Auth (Google OAuth 2.0 + Tài khoản trường cấp), tích hợp MF-01/MF-02/MF-03/MF-04/MF-05, presigned R2, export Excel/PDF chuẩn FPT. | Hoàng, Hải (FE) & Thành, Tốt (BE) |
 
 ---
 
@@ -82,11 +79,12 @@ docs/
 
 ---
 
-### 📅 Nhóm 7: Kế Hoạch Tác Chiến, Bảng Phân Công & Báo Cáo Tiến Độ ([`07_reports_and_plans/`](./07_reports_and_plans/))
+### 📅 Nhóm 7: Kế Hoạch Tác Chiến, Bảng Phân Công & Báo Cáo Tiến Độ ([`07_reports_and_plans/`](./07_reports_and_plans/) & [`Task Daily/`](./Task%20Daily/))
 - **Bảng Phân Công & Tiến Độ Backend (Master v9.0):** [BE_TASK_BOARD.md](./07_reports_and_plans/BE_TASK_BOARD.md)
-- **Bảng Phân Công & Tiến Độ Frontend (Master v9.0):** [FE_TASK_BOARD.md](./07_reports_and_plans/week5/FE_TASK_BOARD.md)
-- **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./07_reports_and_plans/MVP_2_WEEKS_MASTER_PLAN.md)
-- **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./07_reports_and_plans/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
+- **Bảng Phân Công & Tiến Độ Frontend (Master v9.0):** [FE_TASK_BOARD.md](./07_reports_and_plans/FE_TASK_BOARD.md)
+- **Kế hoạch Sprint MVP 2 tuần:** [MVP_2_WEEKS_MASTER_PLAN.md](./Task%20Daily/MVP_2_WEEKS_MASTER_PLAN.md)
+- **Báo cáo Report 3 (Functional Specifications — 6 Roles RBAC & 71 BR):** [Report3_3.1_3.2_3.3_Aligned_71BR.md](./Task%20Daily/Report3_3.1_3.2_3.3_Aligned_71BR.md)
+- **Nhật ký công việc Tuần 5:** [Task Tuần 5 _ Report 1,2.md](./Task%20Daily/Task%20Tu%E1%BA%A7n%205%20_%20Report%201,2.md)
 - **Báo cáo Report 2 (Markdown & Diagram):** [Thanh_Report2.md](./07_reports_and_plans/week5/Thanh_Report2.md) kèm sơ đồ quy trình [figure_2_2_1_project_process.svg](./07_reports_and_plans/week5/figure_2_2_1_project_process.svg)
 
 ---

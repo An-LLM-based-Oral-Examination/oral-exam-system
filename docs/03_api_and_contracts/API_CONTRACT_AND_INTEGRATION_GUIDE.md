@@ -2062,7 +2062,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 ### 5.6. Thi Thử Bấm Giờ (Mock Exam & Voice-First) — MF-02
 *(Phân hệ CSDL: `courses`, `exam_structures`, `exam_sets`, `mock_exam_quotas`, `mock_exam_sessions`, `mock_exam_answers`, `ai_evaluations`, `ai_evaluation_details`)*  
-*(Xem tài liệu tích hợp chi tiết tại: [`MF02_Frontend_Integration.md`](file:///d:/Đồ%20Án/05_Source_Code/docs/03_api_and_contracts/MF02_Frontend_Integration.md))*
+*(Xem chi tiết mẫu tích hợp Frontend React 19 tại Mục 6.4 bên dưới)*
 
 #### 1. Tra cứu hạn ngạch thi thử trong ngày (Dynamic Daily Quota)
 - **Endpoint:** `GET /api/v1/mock-exams/quota?courseId={courseId}`
@@ -3399,6 +3399,27 @@ VITE_GOOGLE_CLIENT_ID=<GOOGLE_OAUTH_CLIENT_ID_CUA_TRUONG>
 | 21 | `StorageController` | `POST /api/v1/storage/upload-audio`<br>`POST /api/v1/storage/upload-question-image` | `student,lecturer,department_head,admin` | Stream âm thanh bóc băng nhanh cho màn hình đệm MF-01 và alias tải ảnh câu hỏi MF-03 |
 | 22 | `FlmController` | `GET /api/v1/courses/{courseId}/flm` | `lecturer,department_head,examination_officer,admin` | Alias tương thích ngược tra cứu danh mục CLO môn học |
 | 23 | `VerificationController` | `GET /api/v1/verification/grades/{certificateHash}` | Public (`AllowAnonymous`) | Xác thực công khai chữ ký số SHA-256 trên báo cáo bảng điểm PDF qua mã QR |
+
+---
+### 6.4. Mẫu Code Tích Hợp Frontend React 19 (Dual Auth, MF-01 SignalR Hub & MF-02 Voice-First)
+
+#### 1. Đăng nhập Kép (Dual Auth: Google OAuth 2.0 & Tài khoản Trường cấp)
+- **Biến môi trường `.env`:** `VITE_GOOGLE_CLIENT_ID=<google-oauth-client-id>.apps.googleusercontent.com`
+- **Luồng Google Login:** Dùng `@react-oauth/google` lấy `credentialResponse.credential` (`idToken`) $\to$ gọi `POST /api/v1/auth/google-login` với `{ idToken }`.
+- **Luồng Tài khoản Trường cấp (`username`/`password`):** Gọi `POST /api/v1/auth/password-login` với `{ username, password }`. Nếu response trả về `mustChangePassword: true`, điều hướng bắt buộc sang màn hình `POST /api/v1/auth/change-password` trước khi vào hệ thống.
+- **Silent Refresh Token Rotation:** Khi Axios nhận `HTTP 401 Unauthorized`, tự động gọi `POST /api/v1/auth/refresh-token` với `{ refreshToken }` để lấy cặp `accessToken` + `refreshToken` mới.
+
+#### 2. Hook SignalR `usePracticeHub.ts` & Màn Hình Đệm 60s (MF-01)
+- Kết nối tới `${import.meta.env.VITE_HUB_BASE_URL}/hubs/practice` kèm `accessTokenFactory: () => localStorage.getItem('access_token') ?? ''`.
+- Sau khi `connection.start()`, gọi `await connection.invoke('JoinSession', sessionId)`.
+- Lắng nghe `connection.on('ReceiveGradingResult', (result: PracticeAnswerResultDto) => { ... })`:
+  - Nếu `result.needsFollowUp === true` và `result.followUpPrompt`: Hiển thị thẻ câu hỏi phụ (Follow-up A2) ngay trong phiên.
+  - Nếu `result.needsFollowUp === false`: Mở modal Scorecard hiển thị điểm tổng và chi tiết từng tiêu chí Rubric.
+- **Xử lý `HTTP 410 Gone` (Inactivity Timeout 5 phút):** Khi API trả về `status === 410`, hiển thị thông báo phiên đã tự động hoàn tất do quá 5 phút không tương tác và mở bảng tổng kết điểm các câu đã làm.
+
+#### 3. Thu Âm Voice-First Gate & Bóc Băng STT (MF-02)
+- Trong MF-02 (Thi thử bấm giờ), **khóa cứng ô nhập văn bản thủ công** khi chưa thu âm (`hasRecordedAudio === false`).
+- Sử dụng `MediaRecorder` (`audio/webm`) thu âm giọng nói sinh viên $\to$ gửi `FormData` lên `POST /api/v1/speech/stt` (hoặc `POST /api/v1/storage/upload-audio`) để nhận `transcript` $\to$ mở màn hình đệm đếm ngược `transcriptBufferSeconds` (10–300s, mặc định 60s) cho phép sinh viên sửa thuật ngữ chuyên ngành tiếng Anh (Code-Switching) $\to$ gửi `POST /api/v1/mock-exams/sessions/{sessionId}/answers` kèm `{ questionId, transcript, timeSpentSeconds }`.
 
 ---
 *(Hợp đồng giao diện API Contract này là tài liệu pháp lý kỹ thuật bất biến giữa Frontend và Backend, bảo đảm tính toàn vẹn 100% khi tích hợp hệ thống).*

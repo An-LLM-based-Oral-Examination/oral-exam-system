@@ -5,9 +5,9 @@
 > **Syllabus ID:** 12223 | **Số tín chỉ:** 3 tín chỉ (45 giờ contact slots trên lớp + 104 giờ tự học)  
 > **Tài liệu tham khảo chính:** *The C Programming Language (2nd Edition)* — Kernighan & Ritchie (K&R); *Foundations of Programming Using C* — Evan Weaver.  
 > **Đơn vị biên soạn:** Tiểu ban Đảm bảo Chất lượng Học thuật & Đánh giá Vấn đáp AI (FA26SE166)  
-> **Mã tệp tài liệu:** `PRF192_Question_Bank_Review.md` | **Phiên bản:** v1.0.0 (Chính thức)  
+> **Mã tệp tài liệu:** `PRF192_Question_Bank_Review.md` | **Phiên bản:** v2.0.0 (Chuẩn hóa FLM 1-1 & 3NF)  
 > **Tổng quy mô ngân hàng:** **62 câu hỏi vấn đáp kỹ thuật chuẩn hóa** (36 câu Kho Luyện tập & Thi thử + 26 câu Kho Thi thật)
-> **Tiêu chuẩn kỹ thuật bắt buộc:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, 100% có Follow-up Prompt, Zero Placeholder.
+> **Tiêu chuẩn kỹ thuật bắt buộc:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, 100% có Follow-up Prompt, Cô lập tuyệt đối 2 kho theo Quy tắc R8, Zero Placeholder.
 
 ---
 
@@ -20,59 +20,59 @@
 | **Mã môn học (Course Code)** | **PRF192** |
 | **Tên môn học tiếng Việt** | Cơ sở lập trình |
 | **Tên môn học tiếng Anh** | Programming Fundamentals |
-| **Syllabus ID** | `12223` |
+| **Syllabus ID** | `12223` (Ban hành kèm Quyết định `1286/QĐ-ĐHFPT`) |
 | **Số tín chỉ (Credits)** | 3 tín chỉ (150 giờ học: 45 giờ trên lớp, 1 giờ thi kết thúc, 104 giờ tự học) |
 | **Môn tiên quyết (Prerequisite)** | Không có (None) |
 | **Môi trường & Trình biên dịch** | **C/C++ (Dev-C++ 6.3, GCC/MinGW, Clang, VS Code)** |
 | **Cơ cấu đánh giá quá trình** | Assignment (15%) + Practical Exam PE (30%) + Progress Tests (15%) + Workshop (10%) + Final Exam (30%) |
 | **Điều kiện đạt học phần** | Điểm trung bình tổng kết $\ge 5.0/10$ và Điểm thi Final Exam $\ge 4.0/10$ |
-| **Chuẩn kiểm định ABET** | ABET (e) - Giải quyết bài toán; ABET (k) - Đọc hiểu mã nguồn C; ABET (i) - Tự học và làm việc nhóm |
+| **Chuẩn đầu ra (`course_clos` 3NF)** | Đồng bộ **1-1 đủ 9 CLOs** (`CLO1` đến `CLO9`) giữa FLM Syllabus và CSDL |
 
-### 1.2. Ánh xạ Chuẩn đầu ra (9 FLM CLOs -> 4 Database 3NF CLOs)
+### 1.2. Ánh xạ Chuẩn đầu ra 1-1 (9 FLM CLOs <-> 9 Database 3NF CLOs)
 
-| Mã CLO FLM | Mô tả chuẩn đầu ra theo Syllabus FLM | Mức Bloom | Ánh xạ CLO 3NF (DB) | GUID Khóa chính CSDL (`course_clos`) |
+| Mã CLO FLM | Mô tả chuẩn đầu ra theo Syllabus FLM | Mức Bloom | Mã CLO DB (`course_clos`) | GUID Khóa chính CSDL (`course_clos.id`) |
 |:---:|---|:---:|:---:|---|
-| **CLO1** | Hiểu chương trình máy tính, quy trình biên dịch (preprocessor, compile, assemble, link) | Remember / Understand | **CLO1** (Cú pháp & Rẽ nhánh) | `00000000-0000-0000-0000-000000000461` |
-| **CLO2** | Minh họa và vận dụng biến, hằng, kiểu dữ liệu, biểu thức, ép kiểu và toán tử | Understand / Apply | **CLO1** (Cú pháp & Rẽ nhánh) | `00000000-0000-0000-0000-000000000461` |
-| **CLO3** | Cấu trúc điều khiển rẽ nhánh (if/else, switch/case) và vòng lặp (for, while, do-while) | Understand / Apply | **CLO1** (Cú pháp & Rẽ nhánh) | `00000000-0000-0000-0000-000000000461` |
-| **CLO4** | Thiết kế module hóa, hàm tự định nghĩa, truyền tham trị (Pass by value), scope và đệ quy | Understand / Apply | **CLO3** (Con trỏ & Bộ nhớ) | `00000000-0000-0000-0000-000000000463` |
-| **CLO5** | Hiểu và sử dụng con trỏ, toán tử &, *, số học con trỏ và cấp phát động malloc/calloc/free | Apply / Analyze | **CLO3** (Con trỏ & Bộ nhớ) | `00000000-0000-0000-0000-000000000463` |
-| **CLO6** | Khai thác các thư viện chuẩn C (stdio.h, stdlib.h, string.h, math.h, ctype.h, time.h) | Understand / Apply | **CLO2** (Vòng lặp & Chuỗi) | `00000000-0000-0000-0000-000000000462` |
-| **CLO7** | Mảng một chiều (tìm kiếm, sắp xếp), ma trận hai chiều và kiểu dữ liệu cấu trúc struct | Apply / Analyze | **CLO2** (Mảng) / **CLO4** (Struct) | `00000000-0000-0000-0000-000000000464` |
-| **CLO8** | Chuỗi ký tự (C Strings, null terminator '\0') và các hàm thao tác chuỗi an toàn | Apply / Analyze | **CLO2** (Vòng lặp & Chuỗi) | `00000000-0000-0000-0000-000000000462` |
-| **CLO9** | Luồng tệp (File Streams), phân biệt Text File vs Binary File, các hàm fopen, fread, fwrite | Apply / Analyze | **CLO4** (Struct & File I/O) | `00000000-0000-0000-0000-000000000464` |
+| **CLO1** | Hiểu chương trình máy tính, quy trình biên dịch (preprocessor, compile, assemble, link) và quy chuẩn chú thích mã nguồn C | Remember / Understand | **CLO1** | `00000000-0000-0000-0000-000000000461` |
+| **CLO2** | Minh họa và vận dụng biến, hằng, kiểu dữ liệu, biểu thức, ép kiểu và các toán tử (số học, quan hệ, logic, thao tác bit) | Understand / Apply | **CLO2** | `00000000-0000-0000-0000-000000000462` |
+| **CLO3** | Sử dụng cấu trúc điều khiển rẽ nhánh (if/else, switch/case) và vòng lặp (for, while, do-while) trong giải thuật C | Understand / Apply | **CLO3** | `00000000-0000-0000-0000-000000000463` |
+| **CLO4** | Thiết kế module hóa chương trình (Cohesion & Coupling), hàm tự định nghĩa, truyền tham trị (Pass-by-value), phạm vi biến và lớp lưu trữ | Understand / Apply / Analyze | **CLO4** | `00000000-0000-0000-0000-000000000464` |
+| **CLO5** | Hiểu và vận dụng con trỏ (&, *), số học con trỏ, truyền địa chỉ, cấp phát bộ nhớ động (malloc, calloc, realloc, free) và con trỏ hàm | Apply / Analyze | **CLO5** | `00000000-0000-0000-0000-000000000465` |
+| **CLO6** | Khai thác hiệu quả các thư viện chuẩn C (stdio.h, stdlib.h, string.h, math.h, ctype.h, time.h), sinh số ngẫu nhiên và định dạng nhập/xuất | Understand / Apply | **CLO6** | `00000000-0000-0000-0000-000000000466` |
+| **CLO7** | Cài đặt và xử lý mảng một chiều (tìm kiếm tuyến tính, nhị phân, sắp xếp), ma trận hai chiều và kiểu dữ liệu cấu trúc (struct) | Apply / Analyze | **CLO7** | `00000000-0000-0000-0000-000000000467` |
+| **CLO8** | Xử lý chuỗi ký tự C (null terminator '\0'), chuẩn hóa xâu và phòng chống lỗ hổng tràn bộ đệm (Buffer Overflow) | Apply / Analyze | **CLO8** | `00000000-0000-0000-0000-000000000468` |
+| **CLO9** | Làm việc với luồng tệp (File Streams), phân biệt tệp văn bản (Text File) và tệp nhị phân (Binary File), đọc/ghi cấu trúc và truy cập ngẫu nhiên | Apply / Analyze | **CLO9** | `00000000-0000-0000-0000-000000000469` |
 
 ### 1.3. Ma trận Phân bổ theo Kho & Độ khó
 
 | Kho câu hỏi | Dễ (Easy) | Trung bình (Medium) | Khó (Hard) | Tổng số câu | Tỷ lệ (%) | Mục đích sử dụng nghiệp vụ |
 |---|:---:|:---:|:---:|:---:|:---:|---|
 | **Kho Luyện tập & Thi thử (`practice_questions`)** | 12 | 14 | 10 | **36** | 58.1% | Luyện tập tự do MF-01 & Thi thử tính giờ MF-02 |
-| **Kho Thi thật phòng Lab (`exam_questions`)** | 6 | 15 | 5 | **26** | 41.9% | Đề thi oral exam Kiosk MF-04 (Theo 5 blueprint slots) |
-| **TỔNG CỘNG TOÀN NGÂN HÀNG** | **18** | **29** | **15** | **62** | **100.0%** | Đáp ứng vượt mức yêu cầu $\ge 60$ câu hỏi/môn |
+| **Kho Thi thật phòng Lab (`exam_questions`)** | 5 | 13 | 8 | **26** | 41.9% | Đề thi oral exam Kiosk MF-04 (Theo 5 blueprint slots) |
+| **TỔNG CỘNG TOÀN NGÂN HÀNG** | **17** | **27** | **18** | **62** | **100.0%** | Đáp ứng vượt mức yêu cầu $\ge 60$ câu hỏi/môn |
 
 ### 1.4. Ma trận Phân bổ theo Thang Nhận thức Bloom
 
 | Kho câu hỏi | Nhớ (Remember) | Hiểu (Understand) | Vận dụng (Apply) | Phân tích (Analyze) | Tổng cộng |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **Kho Luyện tập (`practice_questions`)** | 4 | 14 | 11 | 7 | **36** |
+| **Kho Luyện tập (`practice_questions`)** | 5 | 13 | 11 | 7 | **36** |
 | **Kho Thi thật (`exam_questions`)** | 6 | 8 | 7 | 5 | **26** |
-| **TỔNG SỐ CÂU HỎI THEO BLOOM** | **10** | **22** | **18** | **12** | **62** |
-| **Tỷ lệ phần trăm (%)** | 16.1% | 35.5% | 29.0% | 19.4% | **100.0%** |
+| **TỔNG SỐ CÂU HỎI THEO BLOOM** | **11** | **21** | **18** | **12** | **62** |
+| **Tỷ lệ phần trăm (%)** | 17.7% | 33.9% | 29.0% | 19.4% | **100.0%** |
 
-### 1.5. Ma trận Phân bổ theo 9 Chuẩn Đầu Ra (CLOs FLM)
+### 1.5. Ma trận Phân bổ theo 9 Chuẩn Đầu Ra (CLOs FLM & DB 1-1)
 
-| Mã CLO | Tên Chuẩn Đầu Ra FLM | Số câu Luyện tập | Số câu Thi thật | Tổng số câu | Trọng tâm đánh giá chuyên môn |
+| Mã CLO | Mô tả Chuẩn Đầu Ra | Số câu Luyện tập | Số câu Thi thật | Tổng số câu | Trọng tâm đánh giá chuyên môn |
 |---|---|:---:|:---:|:---:|---|
-| **CLO1** | C Program Structure & Compilation Pipeline | 2 | 2 | **4** | Cấu trúc chương trình, hàm main, preprocessor, quy trình dịch 4 bước |
-| **CLO2** | Variables, Data Types & Operators | 4 | 2 | **6** | Kiểu dữ liệu, sizeof, dải giá trị, toán tử ++/--, đoản mạch, ép kiểu |
-| **CLO3** | Control Flow: Selection & Loops | 4 | 2 | **6** | if-else, ternary, switch-case, fall-through, while, do-while, break |
-| **CLO4** | Functions, Modularity & Recursion | 3 | 3 | **6** | Function prototypes, pass by value, call stack frame, scope, Tháp Hà Nội |
-| **CLO5** | Pointers & Dynamic Memory Allocation | 7 | 6 | **13** | Toán tử &, *, pointer arithmetic, malloc/calloc/free, int**, qsort callback |
-| **CLO6** | Standard C Libraries Usage | 2 | 1 | **3** | Thư viện stdio.h, stdlib.h, string.h, math.h, ctype.h, time.h |
-| **CLO7** | 1D/2D Arrays & Structures (Struct) | 6 | 4 | **10** | Mảng liên tục, row-major order, Selection/Bubble sort, struct padding |
-| **CLO8** | Strings & String Manipulation | 4 | 3 | **7** | Ký tự null '\0', fgets an toàn, chuẩn hóa xâu, buffer overflow audit |
-| **CLO9** | File I/O: Streams, Text vs Binary | 4 | 3 | **7** | Text vs Binary file, fopen modes, fread/fwrite struct, fseek, bẫy feof |
-| **TỔNG** | **Toàn bộ 9 Chuẩn Đầu Ra Môn Học** | **36** | **26** | **62** | **Phủ kín toàn diện 60 Sessions và 12 Chủ đề kỹ thuật C** |
+| **CLO1** | Hiểu chương trình máy tính, quy trình biên dịch (preprocessor, compile, assemble, link) và quy chuẩn chú thích mã nguồn C | 2 | 1 | **3** | Cấu trúc chương trình, hàm main, preprocessor, quy trình biên dịch 4 bước, chú thích mã nguồn (CQ2.2) |
+| **CLO2** | Minh họa và vận dụng biến, hằng, kiểu dữ liệu, biểu thức, ép kiểu và các toán tử (số học, quan hệ, logic, thao tác bit) | 5 | 3 | **8** | Kiểu dữ liệu, dải giá trị, ép kiểu, toán tử ++/--, đoản mạch, toán tử thao tác bit (Bitwise & Bitmask) |
+| **CLO3** | Sử dụng cấu trúc điều khiển rẽ nhánh (if/else, switch/case) và vòng lặp (for, while, do-while) trong giải thuật C | 4 | 1 | **5** | Rẽ nhánh if-else, toán tử 3 ngôi, switch-case, vòng lặp đơn/lồng nhau, cờ hiệu & lính canh |
+| **CLO4** | Thiết kế module hóa chương trình (Cohesion & Coupling), hàm tự định nghĩa, truyền tham trị (Pass-by-value), phạm vi biến và lớp lưu trữ | 3 | 4 | **7** | Thiết kế Module hóa, Cohesion & Coupling, nguyên mẫu hàm, truyền tham trị, Storage Classes, Header Guards |
+| **CLO5** | Hiểu và vận dụng con trỏ (&, *), số học con trỏ, truyền địa chỉ, cấp phát bộ nhớ động (malloc, calloc, realloc, free) và con trỏ hàm | 7 | 6 | **13** | Toán tử &, *, con trỏ NULL/void*/const, số học con trỏ, malloc/calloc/realloc/free, int**, qsort callback |
+| **CLO6** | Khai thác hiệu quả các thư viện chuẩn C (stdio.h, stdlib.h, string.h, math.h, ctype.h, time.h), sinh số ngẫu nhiên và định dạng nhập/xuất | 3 | 2 | **5** | Thư viện chuẩn stdio.h, stdlib.h, math.h, time.h, ctype.h, PRNG rand()/srand(), định dạng printf/scanf |
+| **CLO7** | Cài đặt và xử lý mảng một chiều (tìm kiếm tuyến tính, nhị phân, sắp xếp), ma trận hai chiều và kiểu dữ liệu cấu trúc (struct) | 6 | 3 | **9** | Mảng 1D/2D, Row-major order, Linear Search, Selection/Bubble Sort, Struct, Data Alignment & Padding |
+| **CLO8** | Xử lý chuỗi ký tự C (null terminator '\0'), chuẩn hóa xâu và phòng chống lỗ hổng tràn bộ đệm (Buffer Overflow) | 3 | 3 | **6** | Chuỗi ký tự '\0', fgets, chuẩn hóa họ tên, Buffer Overflow, Off-by-One strncpy & snprintf an toàn |
+| **CLO9** | Làm việc với luồng tệp (File Streams), phân biệt tệp văn bản (Text File) và tệp nhị phân (Binary File), đọc/ghi cấu trúc và truy cập ngẫu nhiên | 3 | 3 | **6** | Text vs Binary File, fopen modes, fgets/sscanf log parsing, fread/fwrite Struct, cập nhật ngẫu nhiên fseek |
+| **TỔNG** | **Toàn bộ 9 Chuẩn Đầu Ra Môn Học (1-1)** | **36** | **26** | **62** | **Phủ kín 60 Sessions, cô lập 100% giữa 2 kho theo R8** |
 
 ---
 
@@ -84,71 +84,71 @@
 |:---:|---|:---:|:---:|:---:|:---:|:---:|---|
 | **PRF_PQ01** | Cấu trúc cơ bản của chương trình C và vai trò của hàm main | CLO1 | CLO1 | `Remember` | **Easy** | Session 1-3 | C Basic Syntax & Program Structure |
 | **PRF_PQ02** | Quy trình biên dịch mã nguồn C qua 4 giai đoạn | CLO1 | CLO1 | `Understand` | **Easy** | Session 3 | C Compilation Pipeline |
-| **PRF_PQ03** | Kiểu dữ liệu nguyên thủy, dải giá trị và kích thước bộ nhớ trong C | CLO2 | CLO1 | `Remember` | **Easy** | Session 4-5 | Data Types & Memory Allocation |
-| **PRF_PQ04** | Phân biệt hằng số #define (Macro) và từ khóa const trong C | CLO2 | CLO1 | `Understand` | **Easy** | Session 4 | Constants & Preprocessor vs Compiler |
-| **PRF_PQ05** | Phép chia nguyên và kỹ thuật ép kiểu tường minh trong C | CLO2 | CLO1 | `Understand` | **Easy** | Session 7-8 | Expressions & Type Casting |
-| **PRF_PQ06** | Toán tử tăng/giảm tiền tố (++x) và hậu tố (x++) trong C | CLO2 | CLO1 | `Understand` | **Easy** | Session 7 | Operators & Pre/Post-increment |
-| **PRF_PQ07** | Cấu trúc điều khiển rẽ nhánh if-else và toán tử điều kiện 3 ngôi | CLO3 | CLO1 | `Understand` | **Easy** | Session 9 | Control Flow & Selection Constructs |
-| **PRF_PQ08** | Cấu trúc lựa chọn switch-case và hiện tượng fall-through khi thiếu break | CLO3 | CLO1 | `Understand` | **Easy** | Session 9 | Switch-Case & Fall-through Behavior |
-| **PRF_PQ09** | So sánh vòng lặp while và do-while về số lần lặp tối thiểu | CLO3 | CLO1 | `Understand` | **Easy** | Session 10 | Loops: While vs Do-While |
-| **PRF_PQ10** | Lệnh điều khiển vòng lặp: Phân biệt break và continue | CLO3 | CLO1 | `Remember` | **Easy** | Session 10 | Loop Control: Break vs Continue |
-| **PRF_PQ11** | Bản chất lưu trữ ô nhớ của mảng một chiều và đánh chỉ số trong C | CLO7 | CLO2 | `Remember` | **Easy** | Session 37 | 1D Arrays & Memory Layout |
-| **PRF_PQ12** | Bản chất chuỗi ký tự C và vai trò của ký tự null terminator '\0' | CLO8 | CLO2 | `Remember` | **Easy** | Session 46 | C Strings & Null Terminator |
-| **PRF_PQ13** | Cơ chế đánh giá đoản mạch (Short-circuit Evaluation) của toán tử logic && và || | CLO2 | CLO1 | `Understand` | **Medium** | Session 7 | Logical Operators & Short-circuit Evaluation |
-| **PRF_PQ14** | Nguyên mẫu hàm (Function Prototype) và vai trò trong kiểm tra kiểu dữ liệu | CLO4 | CLO3 | `Understand` | **Medium** | Session 19 | Modular Programming & Function Prototypes |
-| **PRF_PQ15** | Cơ chế truyền tham trị (Pass-by-value) và Stack Frame khi gọi hàm trong C | CLO4 | CLO3 | `Understand` | **Medium** | Session 20 | Function Calls & Call Stack Frames |
-| **PRF_PQ16** | Phân biệt biến cục bộ (Local), toàn cục (Global) và biến tĩnh cục bộ (static local) | CLO4 | CLO3 | `Understand` | **Medium** | Session 22 | Variable Scope & Storage Duration |
-| **PRF_PQ17** | Đệ quy cơ bản: Điều kiện dừng (Base case) và rủi ro Stack Overflow | CLO4 | CLO3 | `Understand` | **Medium** | Session 23 | Recursion & Stack Overflow |
-| **PRF_PQ18** | Bản chất con trỏ, toán tử lấy địa chỉ & và toán tử giải tham chiếu * | CLO5 | CLO3 | `Understand` | **Medium** | Session 28-29 | Pointers & Address Operators |
-| **PRF_PQ19** | Mô phỏng truyền tham chiếu bằng con trỏ trong bài toán hoán vị swap | CLO5 | CLO3 | `Apply` | **Medium** | Session 30 | Pass-by-reference Simulation & Swap |
-| **PRF_PQ20** | Số học con trỏ (Pointer Arithmetic): Ý nghĩa của ptr + 1 phụ thuộc vào sizeof(*ptr) | CLO5 | CLO3 | `Apply` | **Medium** | Session 29 | Pointer Arithmetic & Memory Scaling |
-| **PRF_PQ21** | Mối quan hệ tương đương giữa Mảng và Con trỏ: arr[i] == *(arr + i) | CLO5 | CLO3 | `Apply` | **Medium** | Session 41 | Array-Pointer Equivalence |
-| **PRF_PQ22** | Ma trận hai chiều (2D Array) và thứ tự lưu trữ ưu tiên dòng (Row-major order) | CLO7 | CLO2 | `Apply` | **Medium** | Session 38 | 2D Matrices & Row-Major Layout |
-| **PRF_PQ23** | Thuật toán sắp xếp chọn (Selection Sort) trên mảng một chiều | CLO7 | CLO2 | `Apply` | **Medium** | Session 39 | Sorting Algorithms: Selection Sort |
-| **PRF_PQ24** | Nguy cơ bảo mật của hàm gets() và kỹ thuật nhập chuỗi an toàn với fgets() | CLO8 | CLO2 | `Apply` | **Medium** | Session 47 | String Input Security: gets vs fgets |
-| **PRF_PQ25** | Các hàm thao tác chuỗi cốt lõi trong string.h: strlen, strcmp, strcpy, strcat | CLO6 | CLO2 | `Apply` | **Medium** | Session 48 | String Functions in string.h |
-| **PRF_PQ26** | Khai báo Struct và phân biệt toán tử chấm '.' và mũi tên '->' | CLO7 | CLO4 | `Apply` | **Medium** | Session 40, 42 | Structures: Dot vs Arrow Operator |
-| **PRF_PQ27** | Quản lý bộ nhớ động trong C: Phân biệt malloc, calloc, realloc và free | CLO5 | CLO3 | `Apply` | **Hard** | Session 31 | Dynamic Memory Allocation (DMA) |
-| **PRF_PQ28** | Phân tích 3 lỗi bộ nhớ nguy hiểm: Memory Leak, Dangling Pointer và Double Free | CLO5 | CLO3 | `Analyze` | **Hard** | Session 31 | Memory Bugs: Leak, Dangling Pointer, Double Free |
-| **PRF_PQ29** | Kỹ thuật cấp phát động ma trận 2 chiều bằng con trỏ cấp hai (int**) và giải phóng bộ nhớ đúng cách | CLO5 | CLO3 | `Analyze` | **Hard** | Session 31, 38 | Dynamic 2D Arrays & Double Pointers |
-| **PRF_PQ30** | Căn chỉnh bộ nhớ (Data Alignment) và Byte Padding trong cấu trúc Struct C | CLO7 | CLO4 | `Analyze` | **Hard** | Session 40 | Struct Padding & Memory Alignment |
-| **PRF_PQ31** | Mảng các cấu trúc (Array of Structs): Quản lý danh sách sinh viên và sắp xếp theo điểm | CLO7 | CLO4 | `Apply` | **Hard** | Session 42, 45 | Array of Structs & Sorting Algorithm |
-| **PRF_PQ32** | Phân tích bản chất lỗi tràn bộ đệm (Buffer Overflow) trên Call Stack và cách khai thác | CLO8 | CLO2 | `Analyze` | **Hard** | Session 47 | Stack-based Buffer Overflow Analysis |
-| **PRF_PQ33** | Phân biệt tệp văn bản (Text File) và tệp nhị phân (Binary File): Cơ chế mã hóa và hiệu năng | CLO9 | CLO4 | `Analyze` | **Hard** | Session 53 | File I/O: Text vs Binary Files |
-| **PRF_PQ34** | Kỹ thuật lưu trữ và phục hồi mảng Struct bằng hàm fread và fwrite trên File nhị phân | CLO9 | CLO4 | `Apply` | **Hard** | Session 55, 57 | Binary File I/O: fread & fwrite with Structs |
-| **PRF_PQ35** | Truy cập ngẫu nhiên trên File với fseek, ftell, rewind và bẫy lỗi vòng lặp feof() | CLO9 | CLO4 | `Analyze` | **Hard** | Session 54-56 | Random File Access & feof Pitfalls |
-| **PRF_PQ36** | Con trỏ hàm (Function Pointer) và cơ chế Callback trong hàm thư viện chuẩn qsort | CLO6 | CLO3 | `Analyze` | **Hard** | Session 32 | Function Pointers & qsort Callback |
+| **PRF_PQ03** | Kiểu dữ liệu nguyên thủy, dải giá trị và kích thước bộ nhớ trong C | CLO2 | CLO2 | `Remember` | **Easy** | Session 4-5 | Data Types & Memory Allocation |
+| **PRF_PQ04** | Phân biệt hằng số #define (Macro) và từ khóa const trong C | CLO2 | CLO2 | `Understand` | **Easy** | Session 4 | Constants & Preprocessor vs Compiler |
+| **PRF_PQ05** | Phép chia nguyên và kỹ thuật ép kiểu tường minh trong C | CLO2 | CLO2 | `Understand` | **Easy** | Session 7-8 | Expressions & Type Casting |
+| **PRF_PQ06** | Toán tử tăng/giảm tiền tố (++x) và hậu tố (x++) trong C | CLO2 | CLO2 | `Understand` | **Easy** | Session 7 | Operators & Pre/Post-increment |
+| **PRF_PQ07** | Cấu trúc điều khiển rẽ nhánh if-else và toán tử điều kiện 3 ngôi | CLO3 | CLO3 | `Understand` | **Easy** | Session 9 | Control Flow & Selection Constructs |
+| **PRF_PQ08** | Cấu trúc lựa chọn switch-case và hiện tượng fall-through khi thiếu break | CLO3 | CLO3 | `Understand` | **Easy** | Session 9 | Switch-Case & Fall-through Behavior |
+| **PRF_PQ09** | So sánh vòng lặp while và do-while về số lần lặp tối thiểu | CLO3 | CLO3 | `Understand` | **Easy** | Session 10 | Loops: While vs Do-While |
+| **PRF_PQ10** | Lệnh điều khiển vòng lặp: Phân biệt break và continue | CLO3 | CLO3 | `Remember` | **Easy** | Session 10 | Loop Control: Break vs Continue |
+| **PRF_PQ11** | Bản chất lưu trữ ô nhớ của mảng một chiều và đánh chỉ số trong C | CLO7 | CLO7 | `Remember` | **Easy** | Session 37 | 1D Arrays & Memory Layout |
+| **PRF_PQ12** | Bản chất chuỗi ký tự C và vai trò của ký tự null terminator '\0' | CLO8 | CLO8 | `Remember` | **Easy** | Session 46 | C Strings & Null Terminator |
+| **PRF_PQ13** | Cơ chế đánh giá đoản mạch (Short-circuit Evaluation) của toán tử logic && và || | CLO2 | CLO2 | `Understand` | **Medium** | Session 7 | Logical Operators & Short-circuit Evaluation |
+| **PRF_PQ14** | Nguyên mẫu hàm (Function Prototype) và vai trò trong kiểm tra kiểu dữ liệu | CLO4 | CLO4 | `Understand` | **Medium** | Session 19 | Modular Programming & Function Prototypes |
+| **PRF_PQ15** | Cơ chế truyền tham trị (Pass-by-value) và Stack Frame khi gọi hàm trong C | CLO4 | CLO4 | `Understand` | **Medium** | Session 20 | Function Calls & Call Stack Frames |
+| **PRF_PQ16** | Phân biệt biến cục bộ (Local), toàn cục (Global) và biến tĩnh cục bộ (static local) | CLO4 | CLO4 | `Understand` | **Medium** | Session 22 | Variable Scope & Storage Duration |
+| **PRF_PQ17** | Khai thác thư viện chuẩn math.h, time.h và cơ chế sinh số giả ngẫu nhiên rand() / srand() | CLO6 | CLO6 | `Understand` | **Medium** | Session 32-33 | Standard Libraries: math.h, time.h & Pseudo-Random Number Generation |
+| **PRF_PQ18** | Bản chất con trỏ, toán tử lấy địa chỉ & và toán tử giải tham chiếu * | CLO5 | CLO5 | `Understand` | **Medium** | Session 28-29 | Pointers & Address Operators |
+| **PRF_PQ19** | Mô phỏng truyền tham chiếu bằng con trỏ trong bài toán hoán vị swap | CLO5 | CLO5 | `Apply` | **Medium** | Session 30 | Pass-by-reference Simulation & Swap |
+| **PRF_PQ20** | Số học con trỏ (Pointer Arithmetic): Ý nghĩa của ptr + 1 phụ thuộc vào sizeof(*ptr) | CLO5 | CLO5 | `Apply` | **Medium** | Session 29 | Pointer Arithmetic & Memory Scaling |
+| **PRF_PQ21** | Mối quan hệ tương đương giữa Mảng và Con trỏ: arr[i] == *(arr + i) | CLO5 | CLO5 | `Apply` | **Medium** | Session 29-30 & 37 | Array-Pointer Equivalence |
+| **PRF_PQ22** | Ma trận hai chiều (2D Array) và thứ tự lưu trữ ưu tiên dòng (Row-major order) | CLO7 | CLO7 | `Apply` | **Medium** | Session 38 | 2D Matrices & Row-Major Layout |
+| **PRF_PQ23** | Thuật toán sắp xếp chọn (Selection Sort) trên mảng một chiều | CLO7 | CLO7 | `Apply` | **Medium** | Session 39 | Sorting Algorithms: Selection Sort |
+| **PRF_PQ24** | Nguy cơ bảo mật của hàm gets() và kỹ thuật nhập chuỗi an toàn với fgets() | CLO8 | CLO8 | `Apply` | **Medium** | Session 47 | String Input Security: gets vs fgets |
+| **PRF_PQ25** | Các hàm thao tác chuỗi cốt lõi trong string.h: strlen, strcmp, strcpy, strcat | CLO6 | CLO6 | `Apply` | **Medium** | Session 48 | String Functions in string.h |
+| **PRF_PQ26** | Khai báo Struct và phân biệt toán tử chấm '.' và mũi tên '->' | CLO7 | CLO7 | `Apply` | **Medium** | Session 40, 42 | Structures: Dot vs Arrow Operator |
+| **PRF_PQ27** | Quản lý bộ nhớ động trong C: Phân biệt malloc, calloc, realloc và free | CLO5 | CLO5 | `Apply` | **Hard** | Session 31 | Dynamic Memory Allocation (DMA) |
+| **PRF_PQ28** | Phân tích 3 lỗi bộ nhớ nguy hiểm: Memory Leak, Dangling Pointer và Double Free | CLO5 | CLO5 | `Analyze` | **Hard** | Session 31 | Memory Bugs: Leak, Dangling Pointer, Double Free |
+| **PRF_PQ29** | Kỹ thuật cấp phát động ma trận 2 chiều bằng con trỏ cấp hai (int**) và giải phóng bộ nhớ đúng cách | CLO5 | CLO5 | `Analyze` | **Hard** | Session 31, 38 | Dynamic 2D Arrays & Double Pointers |
+| **PRF_PQ30** | Căn chỉnh bộ nhớ (Data Alignment) và Byte Padding trong cấu trúc Struct C | CLO7 | CLO7 | `Analyze` | **Hard** | Session 40 | Struct Padding & Memory Alignment |
+| **PRF_PQ31** | Mảng các cấu trúc (Array of Structs): Quản lý danh sách sinh viên và sắp xếp theo điểm | CLO7 | CLO7 | `Apply` | **Hard** | Session 42, 45 | Array of Structs & Sorting Algorithm |
+| **PRF_PQ32** | Phân tích bản chất lỗi tràn bộ đệm (Buffer Overflow) trên Call Stack và cách khai thác | CLO8 | CLO8 | `Analyze` | **Hard** | Session 47 | Stack-based Buffer Overflow Analysis |
+| **PRF_PQ33** | Phân biệt tệp văn bản (Text File) và tệp nhị phân (Binary File): Cơ chế mã hóa và hiệu năng | CLO9 | CLO9 | `Analyze` | **Hard** | Session 53 | File I/O: Text vs Binary Files |
+| **PRF_PQ34** | Kỹ thuật lưu trữ và phục hồi mảng Struct bằng hàm fread và fwrite trên File nhị phân | CLO9 | CLO9 | `Apply` | **Hard** | Session 55, 57 | Binary File I/O: fread & fwrite with Structs |
+| **PRF_PQ35** | Truy cập ngẫu nhiên trên File với fseek, ftell, rewind và bẫy lỗi vòng lặp feof() | CLO9 | CLO9 | `Analyze` | **Hard** | Session 54-56 | Random File Access & feof Pitfalls |
+| **PRF_PQ36** | Con trỏ hàm (Function Pointer) và cơ chế Callback trong hàm thư viện chuẩn qsort | CLO6 | CLO6 | `Analyze` | **Hard** | Session 32 | Function Pointers & qsort Callback |
 
 ### 2.2. Chỉ mục 26 câu hỏi Kho Thi thật (`exam_questions`: `PRF_EQ01` — `PRF_EQ26`)
 
 | Mã câu hỏi | Tiêu đề câu hỏi vấn đáp kỹ thuật | FLM CLO | DB CLO | Mức Bloom | Độ khó | Buổi học (Session) | Cụm kỹ thuật trọng tâm |
 |:---:|---|:---:|:---:|:---:|:---:|:---:|---|
-| **PRF_EQ01** | Định nghĩa cấu trúc chương trình C chuẩn và vai trò của các chỉ thị tiền xử lý | CLO1 | CLO1 | `Remember` | **Easy** | Session 1-3 | C Program Skeleton & Preprocessor Directives |
-| **PRF_EQ02** | Bảng kích thước ô nhớ và dải giá trị các kiểu dữ liệu cơ bản trong chuẩn C99 | CLO2 | CLO1 | `Remember` | **Easy** | Session 5 | C99 Primitive Data Types & Range Table |
-| **PRF_EQ03** | Danh mục và mức ưu tiên của các toán tử số học, logic và quan hệ trong C | CLO2 | CLO1 | `Remember` | **Easy** | Session 7-8 | Operator Precedence & Associativity Table |
-| **PRF_EQ04** | Định nghĩa và phân loại 4 lớp lưu trữ (Storage Classes): auto, register, static, extern | CLO4 | CLO3 | `Remember` | **Medium** | Session 22 | C Storage Classes (auto, register, static, extern) |
-| **PRF_EQ05** | Cú pháp khai báo biến con trỏ, toán tử & và toán tử * trong C | CLO5 | CLO3 | `Remember` | **Easy** | Session 28-29 | Pointer Syntax & Address Operations |
-| **PRF_EQ06** | Danh mục các chế độ mở tệp (File Open Modes) trong hàm fopen | CLO9 | CLO4 | `Remember` | **Easy** | Session 55 | File Handling: fopen Modes (r, w, a, rb, wb, ab) |
-| **PRF_EQ07** | Cơ chế biên dịch C: Từ mã nguồn .c đến file thực thi .exe qua 4 giai đoạn | CLO1 | CLO1 | `Understand` | **Medium** | Session 3 | Deep Dive: 4 Stages of C Compilation |
-| **PRF_EQ08** | Cơ chế thăng hạng kiểu ngầm định (Implicit Type Promotion) trong biểu thức số học | CLO2 | CLO1 | `Understand` | **Medium** | Session 8 | Type Promotion & Arithmetic Conversions |
-| **PRF_EQ09** | So sánh nguyên lý kiểm tra điều kiện và ứng dụng của vòng lặp while, do-while và for | CLO3 | CLO1 | `Understand` | **Medium** | Session 10 | Loop Comparison: while vs do-while vs for |
-| **PRF_EQ10** | Cơ chế Call Stack và cấp phát vùng nhớ Stack Frame khi gọi hàm trong ngôn ngữ C | CLO4 | CLO3 | `Understand` | **Medium** | Session 20 | Call Stack Architecture & Activation Records |
-| **PRF_EQ11** | Tại sao tên mảng bị suy giảm thành con trỏ (Decay to Pointer) khi truyền vào hàm? | CLO5 | CLO3 | `Understand` | **Medium** | Session 41 | Array Decay to Pointer Phenomenon |
-| **PRF_EQ12** | Phân biệt bản chất bộ nhớ giữa mảng ký tự (char[]) và con trỏ hằng chuỗi (char*) | CLO8 | CLO2 | `Understand` | **Medium** | Session 46 | String Memory Segments: char[] vs char* |
-| **PRF_EQ13** | Cơ chế căn chỉnh dữ liệu (Data Alignment & Structure Padding) trong kiến trúc bộ nhớ vi xử lý | CLO7 | CLO4 | `Understand` | **Medium** | Session 40 | Hardware Memory Alignment & Padding |
-| **PRF_EQ14** | Cơ chế hoạt động của File Buffering trong thư viện stdio và vai trò của hàm fflush() | CLO6 | CLO4 | `Understand` | **Medium** | Session 52, 55 | File Streams & I/O Buffering (fflush) |
-| **PRF_EQ15** | Cài đặt thuật toán kiểm tra số nguyên tố tối ưu hóa vòng lặp trong C | CLO3 | CLO1 | `Apply` | **Medium** | Session 12, 15 | Algorithmic Functions: Prime Check Optimization |
-| **PRF_EQ16** | Cài đặt hàm đảo ngược mảng một chiều bằng kỹ thuật hai con trỏ (Two Pointers) | CLO5 | CLO3 | `Apply` | **Medium** | Session 30, 43 | Two-Pointer Technique & Array Reversal |
-| **PRF_EQ17** | Cài đặt thuật toán sắp xếp nổi bọt (Bubble Sort) trên mảng số nguyên tối ưu với cờ swapped | CLO7 | CLO2 | `Apply` | **Medium** | Session 39 | Bubble Sort & Early Termination Optimization |
-| **PRF_EQ18** | Xử lý chuỗi ký tự: Viết hàm chuẩn hóa họ tên trong C | CLO8 | CLO2 | `Apply` | **Medium** | Session 51 | String Manipulation: Name Normalization |
-| **PRF_EQ19** | Cấp phát động mảng số nguyên bằng malloc, kiểm tra NULL, mở rộng bằng realloc và giải phóng bằng free | CLO5 | CLO3 | `Apply` | **Hard** | Session 31 | Dynamic Array Resizing with realloc |
-| **PRF_EQ20** | Thiết kế Struct quản lý Sinh viên và viết hàm sắp xếp mảng Struct theo điểm GPA giảm dần | CLO7 | CLO4 | `Apply` | **Hard** | Session 42, 45 | Struct Array Management & Sorting |
-| **PRF_EQ21** | Đọc và ghi danh sách đối tượng Struct ra file nhị phân sử dụng fread và fwrite | CLO9 | CLO4 | `Apply` | **Hard** | Session 55, 57 | Binary File Persistence for Struct Array |
-| **PRF_EQ22** | Phân tích bài toán đệ quy Tháp Hà Nội (Tower of Hanoi): Không gian Stack Frame và độ phức tạp | CLO4 | CLO3 | `Analyze` | **Hard** | Session 23 | Algorithmic Analysis: Tower of Hanoi Recursion |
-| **PRF_EQ23** | Phân tích sự cố rò rỉ bộ nhớ (Memory Leak) và con trỏ lơ lửng (Dangling Pointer) trong hệ thống nhúng | CLO5 | CLO3 | `Analyze` | **Hard** | Session 31 | Memory Bugs Deep Analysis in Embedded Systems |
-| **PRF_EQ24** | Phân tích thiết kế ma trận động bằng con trỏ cấp 2 (int**) vs mảng 1 chiều liên tục | CLO5 | CLO3 | `Analyze` | **Hard** | Session 38 | 2D Matrix Architecture: Double Pointer vs 1D Flattened |
-| **PRF_EQ25** | Phân tích lỗ hổng tràn bộ đệm (Stack-based Buffer Overflow) khi sử dụng các hàm chuỗi không an toàn trong C | CLO8 | CLO2 | `Analyze` | **Hard** | Session 47 | Security Audit: Unsafe String Functions & Buffer Overflow |
-| **PRF_EQ26** | Phân tích bẫy lỗi vòng lặp feof() khi đọc file trong C và giải pháp xử lý I/O chuẩn công nghiệp | CLO9 | CLO4 | `Analyze` | **Hard** | Session 55-56 | File I/O EOF Handling & Industry Best Practices |
+| **PRF_EQ01** | Quy chuẩn chú thích mã nguồn C (// vs /* */) và cơ chế xử lý của Preprocessor (CQ2.2) | CLO1 | CLO1 | `Remember` | **Easy** | Session 2 | Code Documentation, Comments (CQ2.2) & Preprocessor Stripping |
+| **PRF_EQ02** | Các toán tử thao tác Bit (Bitwise Operators) và kỹ thuật mặt nạ Bitmask trong C | CLO2 | CLO2 | `Remember` | **Easy** | Session 7 | Bitwise Operators (&, |, ^, ~, <<, >>) & Bitmasking |
+| **PRF_EQ03** | Danh mục và mức ưu tiên của các toán tử số học, logic và quan hệ trong C | CLO2 | CLO2 | `Remember` | **Easy** | Session 7-8 | Operator Precedence & Associativity Table |
+| **PRF_EQ04** | Định nghĩa và phân loại 4 lớp lưu trữ (Storage Classes): auto, register, static, extern | CLO4 | CLO4 | `Remember` | **Medium** | Session 22 | C Storage Classes (auto, register, static, extern) |
+| **PRF_EQ05** | Phân biệt con trỏ NULL, con trỏ tổng quát void* và con trỏ hoang (Wild Pointer) trong C | CLO5 | CLO5 | `Remember` | **Easy** | Session 28-29 | Pointer Classifications: NULL Pointer, void* Generic Pointer & Wild Pointer |
+| **PRF_EQ06** | Danh mục các chế độ mở tệp (File Open Modes) trong hàm fopen | CLO9 | CLO9 | `Remember` | **Easy** | Session 55 | File Handling: fopen Modes (r, w, a, rb, wb, ab) |
+| **PRF_EQ07** | Đặc tả định dạng nhập xuất (Format Specifiers) và kiểm soát luồng đệm trong printf / scanf | CLO6 | CLO6 | `Understand` | **Medium** | Session 6 & 34 | Formatted I/O Specifiers, Field Width, Scanset & Return Value of scanf |
+| **PRF_EQ08** | Cơ chế thăng hạng kiểu ngầm định (Implicit Type Promotion) trong biểu thức số học | CLO2 | CLO2 | `Understand` | **Medium** | Session 8 | Type Promotion & Arithmetic Conversions |
+| **PRF_EQ09** | Phân tích vòng lặp lồng nhau (Nested Loops), biến cờ hiệu (Flag) và vòng lặp lính canh (Sentinel) | CLO3 | CLO3 | `Understand` | **Medium** | Session 10-12 | Nested Loops Complexity, Boolean Flags & Sentinel-Controlled Loops |
+| **PRF_EQ10** | Nguyên lý thiết kế Module hóa chương trình C: Độ kết dính (Cohesion) và Độ ghép nối (Coupling) | CLO4 | CLO4 | `Understand` | **Medium** | Session 16-18 | Modular Programming: High Cohesion, Low Coupling & Top-Down Design |
+| **PRF_EQ11** | Ý nghĩa của từ khóa const khi kết hợp với con trỏ và bảo vệ tham số mảng trong hàm C | CLO5 | CLO5 | `Understand` | **Medium** | Session 29-30 & 37 | Const-Correctness with Pointers & Read-Only Array Parameters |
+| **PRF_EQ12** | Phân biệt bản chất bộ nhớ giữa mảng ký tự (char[]) và con trỏ hằng chuỗi (char*) | CLO8 | CLO8 | `Understand` | **Medium** | Session 46 | String Memory Segments: char[] vs char |
+| **PRF_EQ13** | Thuật toán Tìm kiếm tuyến tính (Linear Search) và Tìm kiếm nhị phân (Binary Search) trên mảng 1 chiều | CLO7 | CLO7 | `Understand` | **Medium** | Session 39 | 1D Array Searching: Linear Search vs Binary Search & Overflow-Safe Midpoint |
+| **PRF_EQ14** | Cơ chế hoạt động của File Buffering trong thư viện stdio và vai trò của hàm fflush() | CLO6 | CLO6 | `Understand` | **Medium** | Session 52, 55 | File Streams & I/O Buffering (fflush) |
+| **PRF_EQ15** | Cài đặt thuật toán kiểm tra số nguyên tố tối ưu hóa vòng lặp trong C | CLO4 | CLO4 | `Apply` | **Medium** | Session 19-20 | Algorithmic Functions: Prime Check Optimization |
+| **PRF_EQ16** | Cài đặt hàm đảo ngược mảng một chiều bằng kỹ thuật hai con trỏ (Two Pointers) | CLO5 | CLO5 | `Apply` | **Medium** | Session 30, 43 | Two-Pointer Technique & Array Reversal |
+| **PRF_EQ17** | Cài đặt thuật toán sắp xếp nổi bọt (Bubble Sort) trên mảng số nguyên tối ưu với cờ swapped | CLO7 | CLO7 | `Apply` | **Medium** | Session 39 | Bubble Sort & Early Termination Optimization |
+| **PRF_EQ18** | Xử lý chuỗi ký tự: Viết hàm chuẩn hóa họ tên trong C | CLO8 | CLO8 | `Apply` | **Medium** | Session 51 | String Manipulation: Name Normalization |
+| **PRF_EQ19** | Cấp phát động mảng số nguyên bằng malloc, kiểm tra NULL, mở rộng bằng realloc và giải phóng bằng free | CLO5 | CLO5 | `Apply` | **Hard** | Session 31 | Dynamic Array Resizing with realloc |
+| **PRF_EQ20** | Thiết kế Struct quản lý Kho hàng (Inventory) và cài đặt hàm tìm kiếm, lọc mặt hàng dưới định mức | CLO7 | CLO7 | `Apply` | **Hard** | Session 42-45 | Struct Array Processing: Inventory Search & Low-Stock Filtering |
+| **PRF_EQ21** | Đọc và phân tích tệp văn bản có cấu trúc (CSV / Log File) an toàn bằng kết hợp fgets() và sscanf() | CLO9 | CLO9 | `Apply` | **Hard** | Session 54-56 | Text File Parsing: Combining fgets() and sscanf() for Resilient I/O |
+| **PRF_EQ22** | Phân tích kiến trúc biên dịch đa tệp (Multi-file Compilation) và cơ chế Header Guards (#ifndef / #define / #endif) | CLO4 | CLO4 | `Analyze` | **Hard** | Session 16-22 | Multi-File C Architecture, Header Guards & Internal vs External Linkage |
+| **PRF_EQ23** | Phân tích lỗi trả về địa chỉ biến cục bộ trên Stack (Returning Pointer to Local Variable) và 2 mẫu thiết kế thay thế an toàn | CLO5 | CLO5 | `Analyze` | **Hard** | Session 30-31 | Stack Frame Lifetime Hazard: Returning Local Address vs Caller-Allocated Buffer |
+| **PRF_EQ24** | Thiết kế ma trận động bằng mảng 1 chiều trải phẳng (1D Flattened Array) và tối ưu hóa CPU Cache Locality | CLO5 | CLO5 | `Analyze` | **Hard** | Session 31 & 38 | Contiguous 1D Flattened Matrix vs Pointer-to-Pointer & Cache Locality |
+| **PRF_EQ25** | Phân tích bẫy lỗi thiếu ký tự kết thúc '\0' của strncpy() và thiết kế hàm ghép chuỗi an toàn với snprintf() | CLO8 | CLO8 | `Analyze` | **Hard** | Session 47-50 | String Termination Traps: strncpy Non-Null-Termination & snprintf Truncation Detection |
+| **PRF_EQ26** | Kỹ thuật cập nhật trực tiếp bản ghi Struct tại chỗ (In-Place Update) trên tệp nhị phân bằng fseek() và ftell() | CLO9 | CLO9 | `Analyze` | **Hard** | Session 56-57 | Random Access Binary File I/O: In-Place Record Modification with fseek & rb+ |
 
 ---
 
@@ -156,9 +156,7 @@
 
 > Kho câu hỏi này được lưu trữ độc lập trong bảng `practice_questions`, phục vụ hai luồng nghiệp vụ:
 > 1. **MF-01:** Luyện tập tương tác tự do (chế độ On-Demand từng câu hoặc Progressive 3–10 câu tăng dần từ Dễ đến Khó).
-> 2. **MF-02:** Thi thử tính giờ có hạn ngạch quota theo ngày, tự động sinh điểm số và bảng Scorecard phân tích theo CLO.
-> - Barem Rubric chuẩn hóa 10.0đ (gồm 3-4 tiêu chí con) giúp AI chấm điểm tức thì và sinh CoT giải trình minh bạch.
-> - 100% câu hỏi có câu hỏi đào sâu phản biện nối tiếp (`FollowUpPrompt`) khi điểm số rơi vào dải phân vân [4.0, 8.0].
+> 2. **MF-02:** Thi thử tính giờ có hạn ngạch quota theo ngày, tự động sinh điểm số và bảng Scorecard phân tích theo đúng 9 CLOs.
 
 ### 1. [PRF_PQ01] Cấu trúc cơ bản của chương trình C và vai trò của hàm main
 
@@ -231,7 +229,7 @@ Quy trình biên dịch chương trình C trải qua 4 giai đoạn tuần tự:
 
 - **Mã định danh (Question Code):** `PRF_PQ03`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 4-5 — *Data Types & Memory Allocation*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về các kiểu dữ liệu cơ bản, dung lượng ô nhớ và định từ bổ nghĩa trong C.
@@ -267,7 +265,7 @@ Các kiểu dữ liệu nguyên thủy cơ bản trong ngôn ngữ C gồm:
 
 - **Mã định danh (Question Code):** `PRF_PQ04`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 4 — *Constants & Preprocessor vs Compiler*
 - **Mục tiêu đánh giá:** Đánh giá khả năng phân biệt cơ chế tiền xử lý thay thế chuỗi và kiểm tra kiểu của trình biên dịch.
@@ -305,7 +303,7 @@ Sự khác biệt căn bản giữa `#define` và `const`:
 
 - **Mã định danh (Question Code):** `PRF_PQ05`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 7-8 — *Expressions & Type Casting*
 - **Mục tiêu đánh giá:** Kiểm tra sự hiểu biết về phép chia số nguyên và kỹ thuật ép kiểu (type casting) trong biểu thức số học.
@@ -343,7 +341,7 @@ Lưu ý: Nếu viết `(double)(a / b)` thì phép chia nguyên `a / b` đã di�
 
 - **Mã định danh (Question Code):** `PRF_PQ06`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 7 — *Operators & Pre/Post-increment*
 - **Mục tiêu đánh giá:** Đánh giá khả năng phân biệt thời điểm cập nhật giá trị giữa toán tử tiền tố và hậu tố.
@@ -383,7 +381,7 @@ Quy tắc tương tự áp dụng cho toán tử giảm tiền tố `--x` và h�
 
 - **Mã định danh (Question Code):** `PRF_PQ07`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 9 — *Control Flow & Selection Constructs*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng sử dụng cấu trúc rẽ nhánh if-else và toán tử điều kiện bậc 3 (ternary operator).
@@ -427,7 +425,7 @@ Quy tắc tương tự áp dụng cho toán tử giảm tiền tố `--x` và h�
 
 - **Mã định danh (Question Code):** `PRF_PQ08`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 9 — *Switch-Case & Fall-through Behavior*
 - **Mục tiêu đánh giá:** Đánh giá sự am hiểu về cấu trúc switch-case, vai trò của lệnh break và hiện tượng fall-through.
@@ -464,7 +462,7 @@ Nếu thiếu lệnh `break` ở cuối một nhánh `case`, trình biên dịch
 
 - **Mã định danh (Question Code):** `PRF_PQ09`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 10 — *Loops: While vs Do-While*
 - **Mục tiêu đánh giá:** Kiểm tra khả năng phân biệt vòng lặp kiểm tra trước và vòng lặp kiểm tra sau.
@@ -510,7 +508,7 @@ do {
 
 - **Mã định danh (Question Code):** `PRF_PQ10`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 10 — *Loop Control: Break vs Continue*
 - **Mục tiêu đánh giá:** Đánh giá mức độ nắm vững hành vi của lệnh break và continue trong vòng lặp C.
@@ -552,7 +550,7 @@ Lưu ý: Trong vòng lặp lồng nhau, cả `break` và `continue` chỉ tác �
 
 - **Mã định danh (Question Code):** `PRF_PQ11`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 37 — *1D Arrays & Memory Layout*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức nền tảng về cấu trúc ô nhớ liên tục của mảng một chiều và đánh chỉ số 0-based.
@@ -592,7 +590,7 @@ Ngôn ngữ C KHÔNG thực hiện kiểm tra ranh giới mảng lúc chạy (No
 
 - **Mã định danh (Question Code):** `PRF_PQ12`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 46 — *C Strings & Null Terminator*
 - **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về bản chất mảng ký tự và vai trò kết thúc chuỗi của ký tự null trong C.
@@ -632,7 +630,7 @@ Nếu mảng ký tự không có ký tự null ở cuối:
 
 - **Mã định danh (Question Code):** `PRF_PQ13`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 7 — *Logical Operators & Short-circuit Evaluation*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu cơ chế tối ưu hóa đánh giá biểu thức logic đoản mạch và các tác dụng phụ (side-effects).
@@ -670,7 +668,7 @@ Trong C, các toán tử logic `&&` và `||` đánh giá các toán hạng từ 
 
 - **Mã định danh (Question Code):** `PRF_PQ14`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 19 — *Modular Programming & Function Prototypes*
 - **Mục tiêu đánh giá:** Kiểm tra hiểu biết về khai báo nguyên mẫu hàm (Forward Declaration) và kiểm tra kiểu lúc biên dịch.
@@ -708,7 +706,7 @@ Nguyên mẫu hàm (hay khai báo trước - Forward Declaration) là câu lện
 
 - **Mã định danh (Question Code):** `PRF_PQ15`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 20 — *Function Calls & Call Stack Frames*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu về mô hình Call Stack và cơ chế truyền tham trị trong bộ nhớ RAM.
@@ -747,7 +745,7 @@ Biến ban đầu ở hàm `main()` nằm trên một Stack Frame hoàn toàn đ
 
 - **Mã định danh (Question Code):** `PRF_PQ16`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 22 — *Variable Scope & Storage Duration*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về phạm vi (Scope), thời gian sống (Lifetime) và từ khóa static trong C.
@@ -787,40 +785,59 @@ So sánh 3 loại biến trong ngôn ngữ C:
 
 ---
 
-### 17. [PRF_PQ17] Đệ quy cơ bản: Điều kiện dừng (Base case) và rủi ro Stack Overflow
+### 17. [PRF_PQ17] Khai thác thư viện chuẩn math.h, time.h và cơ chế sinh số giả ngẫu nhiên rand() / srand()
 
 - **Mã định danh (Question Code):** `PRF_PQ17`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000466`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 23 — *Recursion & Stack Overflow*
-- **Mục tiêu đánh giá:** Đánh giá sự am hiểu về bản chất của hàm đệ quy, điều kiện dừng và rủi ro tiêu tốn bộ nhớ ngăn xếp.
+- **Chủ đề bài học (Syllabus):** Session 32-33 — *Standard Libraries: math.h, time.h & Pseudo-Random Number Generation*
+- **Mục tiêu đánh giá:** Đánh giá khả năng sử dụng các hàm toán học trong <math.h>, thời gian hệ thống trong <time.h> và khởi tạo hạt giống sinh số ngẫu nhiên an toàn.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hàm đệ quy (Recursive Function) là gì? Hai thành phần bắt buộc phải có trong một hàm đệ quy là gì? Điều gì sẽ xảy ra nếu hàm đệ quy thiếu điều kiện dừng hoặc điều kiện dừng không bao giờ đạt được?"
+> "Tại sao khi gọi hàm `rand()` trong `<stdlib.h>` mà không gọi `srand()` thì chương trình luôn sinh ra cùng một dãy số giống hệt nhau ở mọi lần chạy? Hãy giải thích vai trò của `srand((unsigned int)time(NULL))`, công thức sinh số nguyên ngẫu nhiên trong đoạn `[min, max]` và lưu ý khi dùng các hàm toán học `sqrt()`, `pow()`, `fabs()` trong `<math.h>`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại sao đệ quy ngây thơ tính số Fibonacci O(2^n) lại không được khuyến khích trong thực tế?"*
+> *"Tại sao ta chỉ nên gọi hàm `srand(time(NULL))` đúng một lần duy nhất ở đầu hàm `main()` thay vì đặt `srand(time(NULL))` bên trong vòng lặp `for` mỗi khi lấy số ngẫu nhiên?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Bản chất hàm đệ quy:
-Hàm đệ quy là hàm tự gọi lại chính nó (trực tiếp hoặc gián tiếp) để giải quyết một bài toán con tương tự có quy mô nhỏ hơn.
+1. Bản chất bộ sinh số giả ngẫu nhiên (PRNG) với `rand()` và `srand()`:
+- Hàm `rand()` trong `<stdlib.h>` sử dụng thuật toán đồng dư tuyến tính (Linear Congruential Generator - LCG) để tính toán số tiếp theo dựa trên một giá trị trạng thái khởi đầu gọi là **Hạt giống (Seed)**, trả về số nguyên trong đoạn `[0, RAND_MAX]`.
+- Nếu lập trình viên không gọi `srand()`, chuẩn C mặc định khởi tạo hạt giống cố định `srand(1)`. Vì thuật toán hoàn toàn tất định (deterministic), cùng một hạt giống `1` sẽ luôn tạo ra chính xác cùng một chuỗi số ở mọi lần khởi chạy chương trình.
+- Hàm `time(NULL)` trong `<time.h>` trả về số giây đã trôi qua kể từ mốc Unix Epoch (`00:00:00 UTC 01/01/1970`). Khi gọi `srand((unsigned int)time(NULL))` đúng **1 lần duy nhất** ở đầu hàm `main()`, hạt giống sẽ thay đổi theo từng giây thực tế, giúp mỗi lần chạy chương trình sinh ra một dãy số khác nhau. *(Nếu đặt `srand(time(NULL))` bên trong vòng lặp chạy hàng ngàn lần trong cùng 1 giây, hạt giống bị reset liên tục về cùng một giá trị `time(NULL)` khiến `rand()` in ra toàn các số trùng nhau).*
 
-2. Hai thành phần bắt buộc:
-- Điều kiện dừng (Base Case / Anchor): Trường hợp suy biến nhỏ nhất mà bài toán đã biết trước kết quả mà không cần gọi đệ quy tiếp. Thành phần này giúp ngắt chuỗi gọi hàm và bắt đầu quay lui (unwinding).
-- Bước đệ quy (Recursive Step / Inductive Step): Lệnh gọi lại hàm với đối số thu nhỏ dần để tiến dần về điều kiện dừng.
+2. Công thức chuẩn sinh số ngẫu nhiên trong đoạn `[min, max]` và ví dụ kết hợp `<math.h>`:
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
 
-3. Rủi ro khi thiếu điều kiện dừng (Lỗi Stack Overflow):
-Mỗi lần hàm tự gọi lại chính nó, một Stack Frame mới lại được cấp phát trên vùng nhớ Call Stack để lưu trữ biến cục bộ và địa chỉ trả về.
-Nếu thiếu điều kiện dừng hoặc điều kiện dừng bị sai logic, hàm sẽ tự gọi vô tận (Infinite Recursion). Vùng nhớ Stack vốn có dung lượng giới hạn (thường từ 1MB đến 8MB) sẽ nhanh chóng bị lấp đầy và tràn (Stack Overflow), dẫn đến việc hệ điều hành can thiệp cưỡng chế dừng tiến trình bằng lỗi Crash (Segmentation Fault).
+int randomInRange(int min, int max) {
+    return min + rand() % (max - min + 1);
+}
+
+int main(void) {
+    srand((unsigned int)time(NULL)); // Khởi tạo seed 1 lần duy nhất
+    int x = randomInRange(-10, 10);
+    double val = fabs((double)x);
+    printf("x = %d, |x| = %.2f, sqrt(|x|) = %.4f, x^3 = %.2f\n",
+           x, val, sqrt(val), pow((double)x, 3.0));
+    return 0;
+}
+```
+
+3. Lưu ý kỹ thuật khi sử dụng `<math.h>`:
+- Các hàm `sqrt(double)`, `pow(double, double)`, `ceil(double)`, `floor(double)`, `fabs(double)` đều nhận và trả về kiểu dấu chấm động `double` (không dùng `abs()` của `<stdlib.h>` cho số thực vì `abs()` sẽ cắt cụt phần thập phân về `int`).
+- Với `sqrt(x)`, phải kiểm tra điều kiện miền xác định `x >= 0.0` để tránh lỗi miền giá trị (`Domain Error` sinh `NaN`).
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Định nghĩa hàm đệ quy** | **2.5đ** | Trình bày rõ bản chất tự gọi lại chính nó với bài toán quy mô nhỏ hơn. |
-| **Mô tả 2 thành phần bắt buộc (Base Case & Step)** | **4.0đ** | Phân tích rõ vai trò ngắt chuỗi của Base Case và bước thu nhỏ của Recursive Step. |
-| **Phân tích cơ chế gây lỗi tràn ngăn xếp (Stack Overflow)** | **3.5đ** | Giải thích Call Stack tích tụ quá nhiều frames không được giải phóng dẫn đến sập chương trình. |
+| **Giải thích cơ chế PRNG của rand() và vai trò hạt giống srand(time(NULL))** | **3.5đ** | Nêu rõ mặc định srand(1) gây lặp dãy số và cách dùng time(NULL) khởi tạo 1 lần ở đầu hàm main. |
+| **Viết đúng công thức quy đổi dải số ngẫu nhiên [min, max]** | **3.5đ** | Viết đúng công thức min + rand() % (max - min + 1) và cài đặt minh họa chuẩn C. |
+| **Phân biệt các hàm trong math.h (fabs, sqrt, pow) và kiểm tra miền xác định** | **3.0đ** | Chỉ rõ kiểu trả về double của fabs/sqrt/pow và kiểm tra điều kiện không âm trước khi gọi sqrt. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -829,7 +846,7 @@ Nếu thiếu điều kiện dừng hoặc điều kiện dừng bị sai logic,
 
 - **Mã định danh (Question Code):** `PRF_PQ18`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 28-29 — *Pointers & Address Operators*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức cốt lõi về biến con trỏ, toán tử địa chỉ ô nhớ và toán tử truy xuất giá trị.
@@ -867,7 +884,7 @@ Kích thước của mọi biến con trỏ phụ thuộc hoàn toàn vào kiế
 
 - **Mã định danh (Question Code):** `PRF_PQ19`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 30 — *Pass-by-reference Simulation & Swap*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng áp dụng con trỏ để sửa đổi dữ liệu ngoài phạm vi hàm thông qua bài toán kinh điển swap.
@@ -911,7 +928,7 @@ void swap(int *a, int *b) {
 
 - **Mã định danh (Question Code):** `PRF_PQ20`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 29 — *Pointer Arithmetic & Memory Scaling*
 - **Mục tiêu đánh giá:** Kiểm tra hiểu biết về phép toán số học trên con trỏ và cơ chế nhân kích thước kiểu dữ liệu tự động.
@@ -957,9 +974,9 @@ Trong đó `sizeof(*ptr)` là kích thước byte của kiểu dữ liệu mà c
 
 - **Mã định danh (Question Code):** `PRF_PQ21`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 41 — *Array-Pointer Equivalence*
+- **Chủ đề bài học (Syllabus):** Session 29-30 & 37 — *Array-Pointer Equivalence*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu bản chất tên mảng là hằng con trỏ và tính tương đương giữa chỉ số và giải tham chiếu.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -1001,7 +1018,7 @@ Tên mảng là một HẰNG CON TRỎ (Constant Pointer), địa chỉ của n�
 
 - **Mã định danh (Question Code):** `PRF_PQ22`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 38 — *2D Matrices & Row-Major Layout*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về cơ chế trải phẳng mảng hai chiều trên RAM và cách truyền ma trận vào hàm.
@@ -1041,7 +1058,7 @@ Nếu không khai báo `COLS`, trình biên dịch không thể biết được 
 
 - **Mã định danh (Question Code):** `PRF_PQ23`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 39 — *Sorting Algorithms: Selection Sort*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu nguyên lý, cài đặt và phân tích độ phức tạp của thuật toán Selection Sort trong C.
@@ -1080,7 +1097,7 @@ void selectionSort(int arr[], int n) {
 ```
 
 3. Độ phức tạp thời gian:
-- Tổng số phép so sánh luôn là $(n-1) + (n-2) + ... + 1 = rac{n(n-1)}{2}$.
+- Tổng số phép so sánh luôn là $(n-1) + (n-2) + ... + 1 = \frac{n(n-1)}{2}$.
 - Độ phức tạp thời gian trong cả trường hợp tốt nhất (Best Case), trung bình (Average Case) và xấu nhất (Worst Case) đều là $O(N^2)$.
 - Độ phức tạp không gian phụ: $O(1)$ (in-place sort).
 - Selection Sort không ổn định (Unstable) vì phép hoán đổi xa có thể làm đảo lộn thứ tự tương đối của các phần tử có giá trị bằng nhau.
@@ -1100,7 +1117,7 @@ void selectionSort(int arr[], int n) {
 
 - **Mã định danh (Question Code):** `PRF_PQ24`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 47 — *String Input Security: gets vs fgets*
 - **Mục tiêu đánh giá:** Kiểm tra nhận thức về lỗ hổng tràn bộ đệm khi nhập chuỗi và kỹ thuật sử dụng fgets an toàn kèm xử lý ký tự xuống dòng.
@@ -1123,19 +1140,16 @@ Ví dụ nhập chuỗi an toàn từ bàn phím:
 char buffer[100];
 printf("Nhap chuoi: ");
 fgets(buffer, sizeof(buffer), stdin);
-```
-`fgets` luôn đảm bảo đọc tối đa `sizeof(buffer) - 1` ký tự và tự động chèn ký tự null `'\0'` ở cuối, chống tràn bộ đệm tuyệt đối.
+```\n`fgets` luôn đảm bảo đọc tối đa `sizeof(buffer) - 1` ký tự và tự động chèn ký tự null `'\0'` ở cuối, chống tràn bộ đệm tuyệt đối.
 
 3. Xử lý ký tự xuống dòng `\n`:
 `fgets` lưu cả ký tự Enter (`'\n'`) mà người dùng nhấn vào cuối chuỗi. Để loại bỏ nó, ta dùng thư viện `string.h`:
 ```c
-buffer[strcspn(buffer, "
-")] = ' ';
+buffer[strcspn(buffer, "\n")] = '\0';
 // Hoặc kiểm tra thủ công:
 size_t len = strlen(buffer);
-if (len > 0 && buffer[len - 1] == '
-') {
-    buffer[len - 1] = ' ';
+if (len > 0 && buffer[len - 1] == '\n') {
+    buffer[len - 1] = '\0';
 }
 ```
 
@@ -1154,7 +1168,7 @@ if (len > 0 && buffer[len - 1] == '
 
 - **Mã định danh (Question Code):** `PRF_PQ25`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000466`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 48 — *String Functions in string.h*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu và vận dụng đúng các hàm xử lý chuỗi thư viện chuẩn và giá trị trả về của chúng.
@@ -1195,7 +1209,7 @@ Trong C, `str1` và `str2` thực chất là các biến con trỏ chứa địa
 
 - **Mã định danh (Question Code):** `PRF_PQ26`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 40, 42 — *Structures: Dot vs Arrow Operator*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về cấu trúc dữ liệu Struct, khai báo typedef và cách truy xuất thành viên qua biến và con trỏ.
@@ -1243,7 +1257,7 @@ Từ khóa `typedef` cho phép đặt bí danh kiểu dữ liệu, giúp khai b�
 
 - **Mã định danh (Question Code):** `PRF_PQ27`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 31 — *Dynamic Memory Allocation (DMA)*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu và vận dụng thành thạo 4 hàm cấp phát bộ nhớ động trên Heap trong stdlib.h.
@@ -1289,7 +1303,7 @@ Nếu chương trình không kiểm tra mà cố tình truy cập giải tham ch
 
 - **Mã định danh (Question Code):** `PRF_PQ28`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 31 — *Memory Bugs: Leak, Dangling Pointer, Double Free*
 - **Mục tiêu đánh giá:** Đánh giá khả năng nhận diện, phân tích nguyên nhân gốc rễ và đề xuất giải pháp phòng ngừa 3 lỗi bộ nhớ kinh điển trong C.
@@ -1331,7 +1345,7 @@ Nếu chương trình không kiểm tra mà cố tình truy cập giải tham ch
 
 - **Mã định danh (Question Code):** `PRF_PQ29`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 31, 38 — *Dynamic 2D Arrays & Double Pointers*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng cấp phát động mảng hai chiều kích thước linh hoạt bằng con trỏ cấp hai và thứ tự giải phóng bộ nhớ tránh rò rỉ.
@@ -1377,7 +1391,7 @@ Bắt buộc phải giải phóng NGƯỢC THỨ TỰ: từ trong ra ngoài!
   free(matrix);
   matrix = NULL;
   ```
-Hậu quả nếu `free(matrix)` trước: Con trỏ ngoài bị hủy, chương trình mất toàn bộ địa chỉ của $M$ mảng dòng con trên Heap, dẫn đến lỗi Rò rỉ bộ nhớ (Memory Leak) vĩnh viễn đối với $M 	imes N$ số nguyên.
+Hậu quả nếu `free(matrix)` trước: Con trỏ ngoài bị hủy, chương trình mất toàn bộ địa chỉ của $M$ mảng dòng con trên Heap, dẫn đến lỗi Rò rỉ bộ nhớ (Memory Leak) vĩnh viễn đối với $M \times N$ số nguyên.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
@@ -1394,7 +1408,7 @@ Hậu quả nếu `free(matrix)` trước: Con trỏ ngoài bị hủy, chương
 
 - **Mã định danh (Question Code):** `PRF_PQ30`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 40 — *Struct Padding & Memory Alignment*
 - **Mục tiêu đánh giá:** Đánh giá hiểu biết sâu sắc về kiến trúc phần cứng, lý do tại sao sizeof(struct) không bằng tổng kích thước các thành viên.
@@ -1427,7 +1441,7 @@ Tại sao kết quả `sizeof(struct Example)` lại bằng 12 bytes chứ khôn
 - Offset 4..7: `int b` (4 bytes).
 - Offset 8: `char c` (1 byte).
 - Offset 9..11: Trình biên dịch chèn thêm 3 padding bytes vào cuối để tổng kích thước struct là bội số của thành viên lớn nhất (bội số của 4).
--> Tổng kích thước: $1 + 3 (pad) + 4 + 1 + 3 (pad) = 12	ext{ bytes}$.
+-> Tổng kích thước: $1 + 3 (pad) + 4 + 1 + 3 (pad) = 12\text{ bytes}$.
 
 3. Cách tối ưu hóa thứ tự khai báo:
 Gom các biến có kích thước nhỏ lại cạnh nhau:
@@ -1456,7 +1470,7 @@ struct Optimized {
 
 - **Mã định danh (Question Code):** `PRF_PQ31`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 42, 45 — *Array of Structs & Sorting Algorithm*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng quản lý mảng các đối tượng phức tạp và cài đặt thuật toán sắp xếp dựa trên trường dữ liệu struct.
@@ -1525,7 +1539,7 @@ Nên hoán đổi trực tiếp toàn bộ biến struct thông qua biến tạm
 
 - **Mã định danh (Question Code):** `PRF_PQ32`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 47 — *Stack-based Buffer Overflow Analysis*
 - **Mục tiêu đánh giá:** Đánh giá nhận thức an ninh phần mềm chuyên sâu về cơ chế ghi đè Call Stack và các biện pháp bảo vệ của trình biên dịch.
@@ -1577,7 +1591,7 @@ Xảy ra khi một hàm ghi dữ liệu vào một mảng đệm cục bộ (Loc
 
 - **Mã định danh (Question Code):** `PRF_PQ33`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 53 — *File I/O: Text vs Binary Files*
 - **Mục tiêu đánh giá:** Kiểm tra sự hiểu biết sâu sắc về sự khác nhau giữa lưu trữ văn bản ký tự và lưu trữ nhị phân trực tiếp từ RAM xuống đĩa.
@@ -1622,7 +1636,7 @@ So sánh chi tiết giữa Text File và Binary File:
 
 - **Mã định danh (Question Code):** `PRF_PQ34`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 55, 57 — *Binary File I/O: fread & fwrite with Structs*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng đọc ghi cấu trúc dữ liệu phức hợp ra file nhị phân bằng một lệnh duy nhất.
@@ -1666,8 +1680,7 @@ void saveAndLoad(Student list[], int n) {
     fp = fopen("students.dat", "rb");
     if (fp != NULL) {
         size_t read_count = fread(loaded, sizeof(Student), n, fp);
-        printf("Da doc thanh cong %zu sinh vien.
-", read_count);
+        printf("Da doc thanh cong %zu sinh vien.\n", read_count);
         fclose(fp);
     }
 }
@@ -1691,7 +1704,7 @@ TUYỆT ĐỐI KHÔNG an toàn! Nếu struct chứa trường con trỏ (như `c
 
 - **Mã định danh (Question Code):** `PRF_PQ35`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 54-56 — *Random File Access & feof Pitfalls*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng điều khiển con trỏ tệp ngẫu nhiên và hiểu biết về cơ chế hoạt động của cờ EOF.
@@ -1743,7 +1756,7 @@ rewind(fp);
 
 - **Mã định danh (Question Code):** `PRF_PQ36`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000466`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 32 — *Function Pointers & qsort Callback*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức nâng cao về con trỏ hàm, nguyên lý Callback và áp dụng vào hàm sắp xếp tổng quát qsort.
@@ -1755,121 +1768,144 @@ rewind(fp);
 > *"Tại sao tham số trong hàm so sánh của qsort lại là `const void*` và làm sao để lấy giá trị số nguyên từ nó?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Khái niệm và cú pháp Con trỏ hàm (Function Pointer):
-Trong C, mã máy của một hàm cũng được nạp vào phân vùng Text Segment trong bộ nhớ RAM và có một địa chỉ bắt đầu. Con trỏ hàm là biến lưu trữ địa chỉ bắt đầu của hàm đó.
-Cú pháp khai báo:
-`return_type (*ptr_name)(param_type1, param_type2, ...);`
-Lưu ý dấu ngoặc tròn `(*ptr_name)` là bắt buộc; nếu không có ngoặc `return_type *ptr_name(...)` sẽ trở thành khai báo một hàm trả về con trỏ.
+1. Bản chất của Con trỏ hàm (Function Pointer) và cơ chế Callback:
+- Con trỏ hàm là biến lưu trữ địa chỉ bắt đầu của đoạn mã máy (machine code) của một hàm trong vùng nhớ Text/Code Segment.
+- Cơ chế Callback: Hàm thư viện chuẩn `qsort` trong `<stdlib.h>` được thiết kế tổng quát để sắp xếp mảng thuộc bất kỳ kiểu dữ liệu nào (`int`, `double`, `struct`). Vì `qsort` không biết trước quy tắc so sánh hai phần tử cụ thể, nó nhận vào một con trỏ hàm `compar`. Ở mỗi bước phân hoạch, `qsort` sẽ "gọi ngược" (callback) hàm `compar` này để quyết định thứ tự giữa hai phần tử.
+- Nguyên mẫu hàm `qsort`:
+  `void qsort(void *base, size_t nmemb, size_t size, int (*compar)(const void *, const void *));`
 
-2. Cơ chế Callback và hàm thư viện `qsort`:
-- Nguyên mẫu `qsort`:
-  `void qsort(void *base, size_t nitems, size_t size, int (*compar)(const void *, const void*));`
-- Cơ chế Callback: `qsort` là một thuật toán sắp xếp nhanh (QuickSort) tổng quát, nó không quan tâm dữ liệu bên trong mảng là `int`, `float`, `string` hay `struct`. Khi cần so sánh thứ tự giữa 2 phần tử bất kỳ, nó gọi ngược lại (Call back) hàm so sánh do lập trình viên cung cấp qua con trỏ hàm `compar`.
-- Vai trò của `const void*`: Con trỏ vô kiểu tổng quát có thể nhận địa chỉ của bất kỳ kiểu dữ liệu nào; từ khóa `const` bảo đảm hàm so sánh không làm biến đổi dữ liệu của mảng.
-
-3. Ví dụ hàm so sánh cho mảng số nguyên:
+2. Cài đặt hàm so sánh `compareInts` chuẩn công nghiệp (Chống tràn số nguyên có dấu - Signed Integer Overflow):
 ```c
+#include <stdio.h>
+#include <stdlib.h>
+
 int compareInts(const void *a, const void *b) {
-    int val_a = *(const int*)a; // Ép kiểu void* sang int* rồi giải tham chiếu
-    int val_b = *(const int*)b;
-    return (val_a - val_b);     // Trả về âm nếu a < b, 0 nếu a == b, dương nếu a > b
+    int val_a = *(const int *)a;
+    int val_b = *(const int *)b;
+    // TUYỆT ĐỐI KHÔNG DÙNG: return (val_a - val_b); vì gây Signed Integer Overflow (Undefined Behavior)
+    // khi hiệu vượt quá INT_MAX (ví dụ val_a = -2000000000, val_b = 1000000000).
+    return (val_a > val_b) - (val_a < val_b);
+}
+
+int main(void) {
+    int arr[] = {1000000000, -2000000000, 42, -15, 0};
+    size_t n = sizeof(arr) / sizeof(arr[0]);
+    qsort(arr, n, sizeof(int), compareInts);
+    for (size_t i = 0; i < n; i++) {
+        printf("%d ", arr[i]);
+    }
+    return 0;
 }
 ```
+
+3. Tại sao phép trừ `return (val_a - val_b);` là lỗi Undefined Behavior nghiêm trọng:
+- Trong chuẩn C99/C11, tràn số nguyên có dấu (`Signed Integer Overflow`) là **Undefined Behavior**.
+- Ví dụ: Nếu `val_a = -2,000,000,000` và `val_b = 1,000,000,000`, hiệu toán học là `-3,000,000,000` vượt quá giới hạn âm của kiểu `int` 32-bit (`INT_MIN = -2,147,483,648`). Trên kiến trúc bù 2, phép trừ bị tràn vòng (wrap-around) thành số dương `+1,294,967,296 > 0`, khiến `qsort` kết luận sai lầm rằng `-2 tỷ > +1 tỷ` và sắp xếp mảng sai hoàn toàn!
+- Biểu thức chuẩn `(val_a > val_b) - (val_a < val_b)` chỉ thực hiện phép so sánh quan hệ trả về `0` hoặc `1`, do đó kết quả luôn nằm trong tập `{-1, 0, +1}` và miễn nhiễm 100% với lỗi tràn số trên mọi dải giá trị `int`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Định nghĩa và cú pháp chuẩn của con trỏ hàm** | **3.0đ** | Nêu rõ con trỏ trỏ tới địa chỉ code hàm trong Text Segment và phân biệt dấu ngoặc (*ptr). |
-| **Giải thích cơ chế Callback và tính tổng quát của qsort** | **4.0đ** | Phân tích rõ qsort độc lập kiểu dữ liệu và gọi lại hàm compar để so sánh 2 phần tử. |
-| **Cài đặt hàm so sánh và ép kiểu con trỏ void*** | **3.0đ** | Viết chuẩn hàm compare nhận const void*, ép kiểu và giải tham chiếu chính xác. |
+| **Giải thích bản chất Con trỏ hàm và cơ chế Callback trong qsort** | **3.5đ** | Trình bày rõ con trỏ hàm lưu địa chỉ mã lệnh và cách qsort gọi ngược hàm so sánh qua đối số con trỏ hàm. |
+| **Cài đặt đúng hàm compareInts ép kiểu const void* an toàn** | **3.5đ** | Ép kiểu chính xác từ const void* sang const int* và giải tham chiếu lấy giá trị. |
+| **Phân tích rủi ro Signed Integer Overflow và viết biểu thức so sánh an toàn** | **3.0đ** | Giải thích rõ vì sao (val_a - val_b) gây tràn số UB khi gần INT_MIN/INT_MAX và dùng (val_a > val_b) - (val_a < val_b). |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
 ## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB KIOSK (`exam_questions`)
 
-> Kho câu hỏi này được lưu trữ độc lập trong bảng `exam_questions`, phục vụ độc quyền luồng **MF-04**:
-> 1. Bám sát ma trận cấu trúc đề thi chính thức (`exam_structures`, `slot_definitions`) do Trưởng Bộ Môn phê duyệt.
-> 2. Khảo thí phân bổ đề không trùng (`uq_tickets_shift_exam_set`) cho sinh viên trên máy trạm Kiosk phòng Lab.
-> 3. Phân bổ theo 4 bậc nhận thức Bloom: **6 Remember (23%) + 8 Understand (31%) + 7 Apply (27%) + 5 Analyze (19%) = 26 câu (100%)**.
-> 4. Cấu hình Follow-up duy nhất 100% cho đề thi / ca thi thật (`has_follow_up`, 1–5 câu, mặc định 2 do Trưởng BM quy định).
+> Kho câu hỏi này được cô lập hoàn toàn trong bảng `exam_questions` theo Quy tắc R8, chỉ phục vụ cho kỳ thi vấn đáp chính thức tại phòng Lab Kiosk (**MF-04**), bám sát Ma trận Cấu trúc Đề thi (`exam_structures`) do Trưởng Bộ Môn ban hành.
 
-### 1. [PRF_EQ01] Định nghĩa cấu trúc chương trình C chuẩn và vai trò của các chỉ thị tiền xử lý
+### 1. [PRF_EQ01] Quy chuẩn chú thích mã nguồn C (// vs /* */) và cơ chế xử lý của Preprocessor (CQ2.2)
 
 - **Mã định danh (Question Code):** `PRF_EQ01`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
 - **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 1-3 — *C Program Skeleton & Preprocessor Directives*
-- **Mục tiêu đánh giá:** Đánh giá khả năng ghi nhớ và trình bày chuẩn xác cấu trúc khung chương trình C và vai trò của preprocessor.
+- **Chủ đề bài học (Syllabus):** Session 2 — *Code Documentation, Comments (CQ2.2) & Preprocessor Stripping*
+- **Mục tiêu đánh giá:** Đánh giá việc nắm vững quy tắc viết chú thích mã nguồn C theo câu hỏi Constructive Question CQ2.2 trong Syllabus và cách bộ tiền xử lý xử lý comment.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy trình bày cấu trúc tổng thể chuẩn của một chương trình nguồn C. Chỉ thị tiền xử lý `#include` và `#define` đóng vai trò gì và chúng hoạt động ở giai đoạn nào trong quy trình xây dựng phần mềm?"
+> "Trình bày hai cú pháp viết chú thích (comment) trong ngôn ngữ C (`/* ... */` và `//`). Tại sao chuẩn C không cho phép lồng các khối chú thích `/* ... */` vào nhau, và bộ tiền xử lý (Preprocessor) thay thế mỗi khối chú thích bằng gì trước khi biên dịch?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Sự khác biệt giữa `#include <stdio.h>` (ngoặc nhọn) và `#include "myheader.h"` (ngoặc kép) là gì?"*
+> *"Nếu bạn cần tạm thời vô hiệu hóa (comment out) một đoạn mã nguồn lớn bên trong đã có sẵn nhiều chú thích dạng `/* ... */`, bạn nên dùng chỉ thị tiền xử lý nào thay thế để không bị lỗi cú pháp?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cấu trúc tổng thể của chương trình C chuẩn gồm:
-- Phần 1: Các chỉ thị tiền xử lý (Preprocessor Directives): `#include` để nạp tệp tiêu đề, `#define` để định nghĩa hằng số hoặc macro.
-- Phần 2: Khai báo biến toàn cục (Global Variables) và khai báo nguyên mẫu hàm (Function Prototypes).
-- Phần 3: Hàm thực thi chính `int main(int argc, char *argv[])`: Điểm vào (Entry point) duy nhất của chương trình do hệ điều hành nạp và khởi động.
-- Phần 4: Thân hàm chứa các khối lệnh và câu lệnh kết thúc `return 0;` trả mã trạng thái cho hệ điều hành.
-- Phần 5: Định nghĩa chi tiết các hàm tự định nghĩa phụ trợ (User-defined functions).
+1. Hai cú pháp chú thích (Comment) trong ngôn ngữ C:
+- **Chú thích khối nhiều dòng (`/* ... */` - Block Comment):** Có từ chuẩn K&R C / ANSI C89. Bắt đầu bằng cặp ký tự `/*` và kết thúc ngay khi gặp cặp ký tự `*/` đầu tiên. Có thể trải dài trên nhiều dòng hoặc đặt xen giữa một dòng lệnh.
+- **Chú thích một dòng (`//` - Single-line Comment):** Được chuẩn hóa chính thức vào C từ chuẩn **C99**. Bắt đầu từ `//` và kéo dài đến hết dòng hiện tại (gặp ký tự xuống dòng `\n`).
 
-2. Vai trò của `#include` và `#define`:
-- Chúng hoạt động trong giai đoạn Tiền xử lý (Preprocessing), diễn ra trước khi trình biên dịch dịch mã nguồn sang hợp ngữ.
-- `#include`: Chỉ thị bộ tiền xử lý tìm kiếm tệp tiêu đề được chỉ định và sao chép toàn bộ nội dung của tệp đó chèn trực tiếp vào vị trí khai báo. Dạng `<file.h>` tìm trong thư mục thư viện hệ thống chuẩn; dạng `"file.h"` tìm trong thư mục dự án hiện tại trước rồi mới tìm đến thư viện hệ thống.
-- `#define`: Thực hiện cơ chế thay thế văn bản thô (macro replacement) trên toàn bộ mã nguồn trước khi biên dịch.
+2. Tại sao C cấm lồng khối chú thích `/* ... */` (No Nested Block Comments):
+- Bộ phân tích từ vựng (Lexer) của C không đếm độ sâu mở/đóng của `/*`. Ngay khi đang ở trong trạng thái comment `/*`, nó sẽ bỏ qua mọi ký tự (kể cả các dấu `/*` bên trong) và **kết thúc khối chú thích ngay tại dấu `*/` đầu tiên** nó bắt gặp.
+- Hậu quả: Phần mã lệnh nằm sau dấu `*/` đầu tiên cho tới dấu `*/` cuối cùng sẽ lộ ra ngoài và gây **Lỗi biên dịch (Compile Error)** tại dấu `*/` dư thừa ở cuối.
+- Giải pháp chuẩn công nghiệp khi muốn vô hiệu hóa một khối code lớn có chứa sẵn `/* ... */`: Sử dụng chỉ thị tiền xử lý điều kiện `#if 0 ... #endif` vì các chỉ thị `#if` hỗ trợ lồng nhau hoàn hảo.
+
+3. Cơ chế xử lý chú thích của Bộ tiền xử lý (Translation Phase 3):
+- Trong giai đoạn Tiền xử lý (Preprocessing), mỗi chú thích **KHÔNG bị xóa trắng hoàn toàn**, mà được thay thế bằng **đúng một ký tự khoảng trắng đơn (`' '`)**.
+- Ví dụ: `int/*comment*/x = 10;` sẽ được biến đổi thành `int x = 10;` (hợp lệ), chứ không bị dính liền thành `intx = 10;`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Trình bày đầy đủ cấu trúc khung chương trình C** | **3.0đ** | Nêu đủ 5 thành phần: chỉ thị tiền xử lý, khai báo prototype, hàm main, return code, hàm con. |
-| **Vai trò của #include và phân biệt ngoặc nhọn/ngoặc kép** | **4.0đ** | Giải thích đúng cơ chế chèn text header và phân biệt thứ tự tìm kiếm giữa < > và " ". |
-| **Vai trò của #define và xác định đúng giai đoạn tiền xử lý** | **3.0đ** | Khẳng định cơ chế thay thế chuỗi macro diễn ra ở giai đoạn Preprocessing trước khi compile. |
+| **Phân biệt 2 kiểu chú thích /* ... */ (C89) và // (C99)** | **3.0đ** | Trình bày rõ cú pháp, phạm vi dòng và chuẩn C áp dụng cho block comment và single-line comment. |
+| **Giải thích nguyên nhân lỗi khi lồng khối /* ... */ và giải pháp #if 0** | **4.0đ** | Chỉ rõ Lexer đóng comment ngay tại dấu */ đầu tiên gây lỗi cú pháp và nêu giải pháp dùng #if 0 ... #endif. |
+| **Cơ chế Preprocessor thay thế comment bằng 1 khoảng trắng** | **3.0đ** | Khẳng định ở giai đoạn Preprocessing mỗi comment được thay bằng 1 khoảng trắng đơn tránh dính từ khóa. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 2. [PRF_EQ02] Bảng kích thước ô nhớ và dải giá trị các kiểu dữ liệu cơ bản trong chuẩn C99
+### 2. [PRF_EQ02] Các toán tử thao tác Bit (Bitwise Operators) và kỹ thuật mặt nạ Bitmask trong C
 
 - **Mã định danh (Question Code):** `PRF_EQ02`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 5 — *C99 Primitive Data Types & Range Table*
-- **Mục tiêu đánh giá:** Kiểm tra trí nhớ chuẩn xác về bảng kiểu dữ liệu, định từ bổ nghĩa và dải giá trị số học trong C.
+- **Chủ đề bài học (Syllabus):** Session 7 — *Bitwise Operators (&, |, ^, ~, <<, >>) & Bitmasking*
+- **Mục tiêu đánh giá:** Đánh giá khả năng ghi nhớ và phân biệt 6 toán tử thao tác trên bit với các toán tử logic, cùng công thức bật/tắt/đảo/kiểm tra bit thứ k.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy liệt kê bảng kích thước ô nhớ (bytes) và dải giá trị tương ứng của các kiểu dữ liệu số nguyên trong chuẩn C: signed char, unsigned char, short, int, long, và long long trên hệ thống 64-bit hiện đại."
+> "Hãy liệt kê 6 toán tử thao tác bit (Bitwise Operators: `&`, `|`, `^`, `~`, `<<`, `>>`) trong ngôn ngữ C và phân biệt sự khác nhau căn bản giữa toán tử `&`, `|` với toán tử logic `&&`, `||`. Viết biểu thức C sử dụng mặt nạ bit (Bitmask) để bật (set), tắt (clear), đảo (toggle) và kiểm tra (check) bit thứ `k` của một số nguyên không dấu `unsigned int flags`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu biến `unsigned char x = 255;` thực hiện lệnh `x = x + 1;` thì giá trị mới của x là bao nhiêu?"*
+> *"Tại sao trong ngôn ngữ C, việc thực hiện phép dịch phải `>>` trên một số nguyên âm có dấu (`signed int`) lại phụ thuộc vào trình biên dịch (Implementation-defined behavior), và làm thế nào để đảm bảo phép dịch phải luôn là dịch logic (chèn bit 0)?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Bảng thông số các kiểu dữ liệu số nguyên trong chuẩn C99 trên hệ thống 64-bit:
+1. Danh mục 6 toán tử thao tác bit (Bitwise Operators) trong C:
+- `&` (Bitwise AND): Kết quả bit bằng `1` khi và chỉ khi cả 2 bit tương ứng đều bằng `1`.
+- `|` (Bitwise OR): Kết quả bit bằng `1` khi có ít nhất 1 trong 2 bit tương ứng bằng `1`.
+- `^` (Bitwise XOR): Kết quả bit bằng `1` khi 2 bit tương ứng khác nhau (`0 ^ 1 = 1`), bằng `0` khi giống nhau (`x ^ x = 0`).
+- `~` (Bitwise NOT / One's Complement): Đảo ngược toàn bộ từng bit (`0` thành `1`, `1` thành `0`).
+- `<<` (Left Shift): Dịch các bit sang trái `k` vị trí, chèn `0` vào bên phải (tương đương nhân với $2^k$ nếu không tràn số).
+- `>>` (Right Shift): Dịch các bit sang phải `k` vị trí (trên kiểu `unsigned`, luôn chèn bit `0` vào bên trái — tương đương chia nguyên cho $2^k$).
 
-1. `signed char`: 1 byte (8 bits), dải giá trị: $-2^7$ đến $2^7 - 1$ ($-128$ đến $127$).
-2. `unsigned char`: 1 byte (8 bits), dải giá trị: $0$ đến $2^8 - 1$ ($0$ đến $255$).
-3. `short` (hoặc `short int`): 2 bytes (16 bits), dải giá trị: $-2^{15}$ đến $2^{15} - 1$ ($-32,768$ đến $32,767$).
-4. `unsigned short`: 2 bytes (16 bits), dải giá trị: $0$ đến $2^{16} - 1$ ($0$ đến $65,535$).
-5. `int`: 4 bytes (32 bits), dải giá trị: $-2^{31}$ đến $2^{31} - 1$ ($-2,147,483,648$ đến $2,147,483,647$).
-6. `unsigned int`: 4 bytes (32 bits), dải giá trị: $0$ đến $2^{32} - 1$ ($0$ đến $4,294,967,295$).
-7. `long` (trên Windows x64: 4 bytes; trên Linux x64: 8 bytes, $-2^{63}$ đến $2^{63}-1$).
-8. `long long` (hoặc `int64_t`): 8 bytes (64 bits) chuẩn hóa trên mọi nền tảng, dải giá trị: $-2^{63}$ đến $2^{63} - 1$ (khoảng $\pm 9.22 \times 10^{18}$).
+2. Phân biệt Bitwise (`&`, `|`) với Logical (`&&`, `||`):
+- **Đơn vị thao tác & Kết quả:** `&` và `|` tính toán độc lập trên từng cặp bit nhị phân của hai toán hạng nguyên và trả về một giá trị nguyên mới; trong khi `&&` và `||` đánh giá tính đúng/sai của toàn bộ biểu thức và chỉ trả về `0` hoặc `1`.
+- **Cơ chế đoản mạch (Short-circuit):** `&&` và `||` có tính chất đoản mạch (dừng đánh giá vế phải ngay khi vế trái đã quyết định kết quả); ngược lại `&` và `|` **luôn luôn tính toán cả hai toán hạng**.
 
-*Hiện tượng quay vòng (Wraparound):* Khi `unsigned char x = 255;` cộng thêm 1, giá trị vượt quá giới hạn 8 bits và tự động quay vòng về `0` (theo phép tính modulo $2^8$).
+3. Bốn công thức mặt nạ bit (Bitmask) kinh điển cho bit thứ `k` ($0 \le k < 32$):
+```c
+unsigned int flags = 0U;
+// 1. Bật (Set) bit thứ k lên 1:
+flags |= (1U << k);
+// 2. Tắt (Clear) bit thứ k về 0:
+flags &= ~(1U << k);
+// 3. Đảo trạng thái (Toggle) bit thứ k:
+flags ^= (1U << k);
+// 4. Kiểm tra (Check) bit thứ k có bằng 1 hay không:
+int is_set = (flags & (1U << k)) != 0U;
+```
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Liệt kê đầy đủ kích thước các kiểu dữ liệu nguyên** | **4.0đ** | Nêu chuẩn xác: char 1 byte, short 2 bytes, int 4 bytes, long long 8 bytes. |
-| **Dải giá trị signed và unsigned chính xác theo công thức 2^N** | **3.0đ** | Trình bày đúng dải giá trị số học tương ứng từ char đến int và long long. |
-| **Hiện tượng quay vòng modulo của kiểu số không dấu** | **3.0đ** | Giải thích chính xác x + 1 khi x=255 sẽ quay vòng về 0 theo chuẩn số học không dấu. |
+| **Liệt kê đúng 6 toán tử Bitwise (&, |, ^, ~, <<, >>)** | **3.0đ** | Trình bày chính xác chức năng của cả 6 toán tử thao tác bit trong C. |
+| **Phân biệt rõ Bitwise (&, |) với Logical (&&, ||)** | **3.0đ** | Chỉ rõ sự khác biệt về thao tác mức bit vs mức giá trị boolean và cơ chế đoản mạch Short-circuit. |
+| **Viết đúng 4 biểu thức Bitmask (Set, Clear, Toggle, Check bit k)** | **4.0đ** | Sử dụng đúng hằng không dấu (1U << k) kết hợp |=, &= ~, ^= và & để thao tác bit thứ k. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -1878,7 +1914,7 @@ Bảng thông số các kiểu dữ liệu số nguyên trong chuẩn C99 trên 
 
 - **Mã định danh (Question Code):** `PRF_EQ03`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 7-8 — *Operator Precedence & Associativity Table*
 - **Mục tiêu đánh giá:** Đánh giá khả năng ghi nhớ và áp dụng bảng thứ tự ưu tiên (Precedence) và tính kết hợp (Associativity) của các toán tử C.
@@ -1920,7 +1956,7 @@ Các toán tử có tính kết hợp từ PHẢI qua TRÁI: Toán tử một ng
 
 - **Mã định danh (Question Code):** `PRF_EQ04`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 22 — *C Storage Classes (auto, register, static, extern)*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về 4 từ khóa định nghĩa lớp lưu trữ, phạm vi, thời gian sống và cơ chế liên kết trong C.
@@ -1964,42 +2000,39 @@ Bốn lớp lưu trữ trong ngôn ngữ C:
 
 ---
 
-### 5. [PRF_EQ05] Cú pháp khai báo biến con trỏ, toán tử & và toán tử * trong C
+### 5. [PRF_EQ05] Phân biệt con trỏ NULL, con trỏ tổng quát void* và con trỏ hoang (Wild Pointer) trong C
 
 - **Mã định danh (Question Code):** `PRF_EQ05`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 28-29 — *Pointer Syntax & Address Operations*
-- **Mục tiêu đánh giá:** Đánh giá khả năng nhận diện cú pháp khai báo, con trỏ NULL và hai toán tử cơ bản của con trỏ.
+- **Chủ đề bài học (Syllabus):** Session 28-29 — *Pointer Classifications: NULL Pointer, void* Generic Pointer & Wild Pointer*
+- **Mục tiêu đánh giá:** Đánh giá khả năng nhận diện và phân biệt rõ 3 trạng thái/loại con trỏ đặc biệt trong C cùng các quy tắc an toàn khi giải tham chiếu.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Trình bày cú pháp khai báo một biến con trỏ kiểu số nguyên trong C. Toán tử `&` và `*` có ý nghĩa gì trong câu lệnh `int *p = &x;` và `*p = 50;`? Tại sao nên khởi tạo con trỏ bằng giá trị NULL nếu chưa trỏ tới ô nhớ cụ thể?"
+> "Hãy định nghĩa và phân biệt rõ sự khác nhau giữa: (1) Con trỏ `NULL` (`NULL Pointer`), (2) Con trỏ kiểu `void*` (`Generic Pointer`), và (3) Con trỏ hoang (`Wild Pointer`). Tại sao trình biên dịch C cấm giải tham chiếu trực tiếp `*ptr` hoặc cộng trừ số học trên biến con trỏ kiểu `void*`?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Con trỏ chưa được khởi tạo (Wild Pointer) chứa giá trị gì và gây nguy hiểm ra sao?"*
+> *"Khi khai báo một biến con trỏ cục bộ trong hàm mà chưa có vùng nhớ đích để gán ngay, thói quen khởi tạo nào giúp lập trình viên ngăn chặn triệt để lỗi Wild Pointer?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cú pháp khai báo biến con trỏ:
-Cú pháp: `data_type *pointer_name;`
-Ví dụ: `int *p;` khai báo biến con trỏ `p` có khả năng lưu trữ địa chỉ ô nhớ của một biến kiểu số nguyên `int`.
+1. Phân biệt 3 khái niệm con trỏ cốt lõi trong C:
+- **Con trỏ `NULL` (`NULL Pointer`):** Là con trỏ đã được khởi tạo tường minh bằng hằng số `NULL` (thường định nghĩa là `((void *)0)` trong `<stddef.h>`), biểu thị có chủ đích rằng con trỏ hiện **không trỏ tới bất kỳ vùng nhớ hợp lệ nào**. Lập trình viên có thể kiểm tra an toàn qua `if (ptr != NULL)` trước khi truy xuất.
+- **Con trỏ tổng quát `void*` (`Generic Pointer`):** Là con trỏ lưu trữ địa chỉ vùng nhớ hợp lệ nhưng **không gắn liền với bất kỳ kiểu dữ liệu cụ thể nào** (ví dụ kiểu trả về của `malloc()` hay tham số của `qsort()`, `memcpy()`). Mọi con trỏ dữ liệu (`int*`, `double*`, `struct Student*`) đều có thể gán sang `void*` và ngược lại.
+- **Con trỏ hoang (`Wild Pointer`):** Là biến con trỏ cục bộ được khai báo trên Stack nhưng **chưa được khởi tạo giá trị** (ví dụ `int *p;`). Nó chứa giá trị rác ngẫu nhiên còn sót lại trên RAM. Vì `p != NULL`, câu lệnh kiểm tra `if (p != NULL)` hoàn toàn vô tác dụng, và việc ghi vào `*p = 10;` sẽ gây lỗi nghiêm trọng **Segmentation Fault** hoặc làm hỏng dữ liệu ngẫu nhiên của tiến trình.
 
-2. Ý nghĩa của hai toán tử `&` và `*`:
-- Trong câu lệnh `int *p = &x;`: Toán tử `&` (Address-of) trích xuất địa chỉ ô nhớ của biến `x` trong RAM và gán địa chỉ đó vào biến con trỏ `p`. Lúc này con trỏ `p` đang trỏ tới biến `x`.
-- Trong câu lệnh `*p = 50;`: Toán tử `*` (Dereference / Indirection) thực hiện giải tham chiếu đến ô nhớ mà `p` đang trỏ tới và ghi đè giá trị `50` trực tiếp vào ô nhớ đó, làm giá trị biến `x` trở thành 50.
-
-3. Tầm quan trọng của việc khởi tạo bằng `NULL`:
-- Nếu một con trỏ được khai báo mà không khởi tạo (`int *ptr;`), nó chứa một giá trị rác ngẫu nhiên trỏ vào một vùng nhớ bất kỳ trong RAM (gọi là Con trỏ hoang dã - Wild Pointer).
-- Nếu chương trình giải tham chiếu vào Wild Pointer, nó có thể vô tình ghi đè lên cấu trúc dữ liệu quan trọng của hệ điều hành hoặc bị bắn lỗi Segmentation Fault.
-- Khởi tạo `int *ptr = NULL;` giúp con trỏ trỏ vào địa chỉ 0x0 an toàn. Trước khi sử dụng, ta có thể dễ dàng kiểm tra `if (ptr != NULL)` để tránh crash chương trình.
+2. Tại sao chuẩn C cấm giải tham chiếu `*vptr` và số học con trỏ `vptr + 1` trên `void*`:
+- Để giải tham chiếu `*vptr`, CPU cần biết phải đọc bao nhiêu byte kể từ địa chỉ đó (1 byte cho `char`, 4 bytes cho `int`, 8 bytes cho `double`) và giải mã theo định dạng nào.
+- Để tính `vptr + 1`, trình biên dịch cần áp dụng công thức địa chỉ: `Address(vptr) + 1 * sizeof(*vptr)`.
+- Vì kiểu `void` là kiểu không hoàn chỉnh (incomplete type) không có kích thước xác định, trình biên dịch không biết `sizeof(void)` bằng bao nhiêu. Do đó, bắt buộc phải **ép kiểu tường minh** sang con trỏ có kiểu cụ thể trước khi giải tham chiếu: `*(int *)vptr` hoặc `((char *)vptr) + 1`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Cú pháp khai báo biến con trỏ chuẩn xác** | **2.5đ** | Trình bày đúng cú pháp data_type *ptr và ý nghĩa kiểu dữ liệu cơ sở. |
-| **Ý nghĩa toán tử lấy địa chỉ & và giải tham chiếu *** | **4.0đ** | Giải thích chính xác lấy địa chỉ ô nhớ và truy xuất đọc/ghi giá trị ô nhớ qua *. |
-| **Rủi ro của Wild Pointer và nguyên tắc khởi tạo NULL** | **3.5đ** | Phân tích con trỏ rác gây crash và lợi ích của việc gán NULL để kiểm tra an toàn. |
+| **Định nghĩa và phân biệt rõ NULL Pointer, void* và Wild Pointer** | **4.0đ** | Trình bày chính xác bản chất từng loại con trỏ và sự nguy hiểm của Wild Pointer chứa địa chỉ rác trên Stack. |
+| **Giải thích lý do không thể giải tham chiếu hoặc tính số học trực tiếp trên void*** | **3.5đ** | Phân tích rõ trình biên dịch không biết kích thước sizeof(*vptr) để đọc số byte hoặc nhảy bước địa chỉ. |
+| **Nêu đúng cách ép kiểu void* và quy tắc khởi tạo phòng chống Wild Pointer** | **2.5đ** | Viết đúng cú pháp ép kiểu *(int*)vptr và quy tắc luôn khởi tạo int *p = NULL ngay khi khai báo. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2008,7 +2041,7 @@ Ví dụ: `int *p;` khai báo biến con trỏ `p` có khả năng lưu trữ đ
 
 - **Mã định danh (Question Code):** `PRF_EQ06`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 55 — *File Handling: fopen Modes (r, w, a, rb, wb, ab)*
 - **Mục tiêu đánh giá:** Kiểm tra trí nhớ và sự phân biệt rõ ràng giữa các chế độ mở file văn bản và nhị phân trong C.
@@ -2036,9 +2069,7 @@ Các chế độ mở tệp cơ bản trong hàm `FILE *fopen(const char *filena
 
 4. Hậu tố `"b"` (Binary Mode - Chế độ nhị phân):
 - Ví dụ: `"rb"`, `"wb"`, `"ab"`.
-- Báo hiệu cho thư viện C xử lý tệp theo luồng byte nhị phân thô nguyên bản, ngăn chặn việc hệ thống tự động chuyển đổi ký tự kết thúc dòng `
-` thành cặp byte `
-` (CRLF) trên môi trường Windows.
+- Báo hiệu cho thư viện C xử lý tệp theo luồng byte nhị phân thô nguyên bản, ngăn chặn việc hệ thống tự động chuyển đổi ký tự kết thúc dòng `\n` thành cặp byte `\r\n` (CRLF) trên môi trường Windows.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
@@ -2051,52 +2082,48 @@ Các chế độ mở tệp cơ bản trong hàm `FILE *fopen(const char *filena
 
 ---
 
-### 7. [PRF_EQ07] Cơ chế biên dịch C: Từ mã nguồn .c đến file thực thi .exe qua 4 giai đoạn
+### 7. [PRF_EQ07] Đặc tả định dạng nhập xuất (Format Specifiers) và kiểm soát luồng đệm trong printf / scanf
 
 - **Mã định danh (Question Code):** `PRF_EQ07`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000466`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 3 — *Deep Dive: 4 Stages of C Compilation*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu quy trình chuyển đổi mã nguồn và định dạng dữ liệu đầu vào/đầu ra của từng giai đoạn biên dịch.
+- **Chủ đề bài học (Syllabus):** Session 6 & 34 — *Formatted I/O Specifiers, Field Width, Scanset & Return Value of scanf*
+- **Mục tiêu đánh giá:** Đánh giá mức độ hiểu sâu về các bộ đặc tả định dạng của printf/scanf, ý nghĩa giá trị trả về của scanf và cách chống lỗi trôi lệnh nhập.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy phân tích chi tiết dòng dữ liệu (Dataflow) qua 4 giai đoạn của chuỗi công cụ biên dịch C: Tiền xử lý (Preprocessing), Biên dịch (Compilation), Hợp dịch (Assembly) và Liên kết (Linking). Chỉ rõ định dạng tệp và nội dung thay đổi qua từng bước."
+> "Hãy giải thích ý nghĩa của các đặc tả định dạng sau trong `printf` và `scanf`: `%-12s`, `%08.2f`, `%19[^\n]`, và sự khác biệt giữa `%f` với `%lf` khi dùng trong `scanf`. Giá trị trả về của hàm `scanf()` có ý nghĩa gì và làm thế nào để kiểm tra người dùng nhập sai kiểu dữ liệu (ví dụ nhập chữ cái khi chương trình yêu cầu số nguyên `%d`)?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Lỗi cú pháp (Syntax Error) được phát hiện ở giai đoạn nào, và lỗi không tìm thấy định nghĩa hàm (Undefined Reference) xuất hiện ở giai đoạn nào?"*
+> *"Tại sao khi gọi `scanf("%d", &age);` rồi gọi tiếp `scanf("%c", &grade);` thì biến `grade` lại tự động nhận ký tự xuống dòng `'\n'` mà không dừng lại chờ người dùng nhập, và cách khắc phục gọn nhất trong chuỗi định dạng của `scanf` là gì?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Dòng dữ liệu chi tiết qua 4 giai đoạn của Compilation Pipeline:
+1. Giải mã chi tiết các đặc tả định dạng (Format Specifiers):
+- `%-12s` (trong `printf`): In chuỗi ký tự với độ rộng trường tối thiểu 12 ký tự và **căn lề trái** (dấu `-`). Nếu chuỗi ngắn hơn 12 ký tự, phần dư bên phải được bù bằng khoảng trắng.
+- `%08.2f` (trong `printf`): In số thực với tổng độ rộng tối thiểu 8 ký tự (bao gồm cả dấu chấm thập phân), làm tròn **2 chữ số sau dấu phẩy** (`.2`), và điền các chữ số `0` vào phần trống bên trái (`08`).
+- `%19[^\n]` (Scanset trong `scanf`): Đọc tối đa **19 ký tự** (chừa 1 byte cuối cho `'\0'` trong mảng `char[20]`) bao gồm cả khoảng trắng cho đến khi gặp ký tự xuống dòng `'\n'`.
+- Phân biệt `%f` và `%lf` trong `scanf()`: Trong `scanf`, đối số truyền vào là **con trỏ địa chỉ** (`float*` hoặc `double*`) nên không có cơ chế tự động thăng hạng `float` lên `double` như trong `printf`. Do đó, biến `float` bắt buộc dùng `%f` (ghi 4 bytes), còn biến `double` **bắt buộc phải dùng `%lf`** (ghi 8 bytes). Dùng nhầm `%f` cho biến `double` trong `scanf` sẽ chỉ ghi 4 bytes đầu và làm hỏng giá trị số thực!
 
-1. Giai đoạn 1: Tiền xử lý (Preprocessing - Công cụ: `cpp`):
-- Đầu vào: Tệp mã nguồn gốc `.c` và các tệp tiêu đề `.h`.
-- Xử lý: Nạp và dán nội dung các header (`#include`), thay thế các macro và hằng số (`#define`), xử lý biên dịch có điều kiện (`#ifdef`, `#ifndef`, `#endif`), xóa sạch các chú thích (comments).
-- Đầu ra: Tệp mã C trung gian mở rộng `.i` (Text thuần, chưa kiểm tra cú pháp).
-
-2. Giai đoạn 2: Biên dịch (Compilation - Công cụ: `gcc / cc1`):
-- Đầu vào: Tệp mã mở rộng `.i`.
-- Xử lý: Phân tích từ vựng (Tokens), dựng cây cú pháp trừu tượng (AST), kiểm tra ngữ nghĩa và an toàn kiểu, tối ưu hóa mã (Optimization level `-O2`). Phát hiện toàn bộ các lỗi cú pháp (Syntax Errors) và lỗi kiểu dữ liệu tại đây.
-- Đầu ra: Tệp hợp ngữ Assembly `.s` (Text chứa các chỉ lệnh hợp ngữ CPU x86/ARM).
-
-3. Giai đoạn 3: Hợp dịch (Assembly - Công cụ: `as`):
-- Đầu vào: Tệp hợp ngữ `.s`.
-- Xử lý: Dịch các câu lệnh hợp ngữ thành các mã máy nhị phân (Opcode) và địa chỉ tương đối.
-- Đầu ra: Tệp đối tượng mã máy (Object file `.o` hoặc `.obj`).
-
-4. Giai đoạn 4: Liên kết (Linking - Công cụ: `ld`):
-- Đầu vào: Nhiều tệp `.o` của dự án và các tệp thư viện liên kết tĩnh/động (`.a`, `.so`, `.lib`, `.dll`).
-- Xử lý: Giải quyết các tham chiếu biểu tượng bên ngoài (Symbol Resolution) và tái định vị địa chỉ bộ nhớ (Relocation). Nếu gọi hàm mà không có mã máy thực thi, lỗi `undefined reference to ...` sẽ bị chặn tại đây.
-- Đầu ra: Tệp thực thi nhị phân hoàn chỉnh (`.exe` trên Windows hoặc ELF trên Linux).
+2. Ý nghĩa giá trị trả về của `scanf()` và xử lý lỗi nhập sai kiểu dữ liệu:
+- Hàm `scanf()` trả về **số lượng mục dữ liệu đã được đọc và gán thành công** (hoặc `EOF` nếu kết thúc luồng đầu vào).
+- Ví dụ với `int rc = scanf("%d %lf", &id, &score);`: Nếu người dùng nhập hợp lệ cả 2 số, `rc == 2`. Nếu người dùng nhập chữ `"abc"`, `scanf` dừng ngay, giữ nguyên `"abc"` trong bộ đệm `stdin` và trả về `rc == 0`.
+- Cách kiểm tra và xả bộ đệm `stdin` chuẩn:
+```c
+int age, c;
+while (printf("Nhap tuoi: "), scanf("%d", &age) != 1) {
+    printf("Du lieu khong hop le! Vui long nhap so nguyen.\n");
+    while ((c = getchar()) != '\n' && c != EOF) { } // Xả sạch ký tự rác và '\n'
+}
+```
+*(Mẹo xử lý trôi lệnh khi đọc `%c` sau `%d`: Thêm một khoảng trắng trước `%c` dưới dạng `scanf(" %c", &grade);` để `scanf` tự động bỏ qua mọi ký tự whitespace/newline còn tồn đọng).*
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Phân tích giai đoạn Preprocessing và tệp trung gian .i** | **2.5đ** | Mô tả xử lý macro, include, comment và xuất ra tệp text C mở rộng .i. |
-| **Phân tích giai đoạn Compilation và tệp hợp ngữ .s** | **2.5đ** | Giải thích AST, kiểm tra cú pháp/kiểu, tối ưu hóa và phát hiện Syntax Error. |
-| **Phân tích giai đoạn Assembly và Linking** | **3.0đ** | Nêu rõ assembler dịch ra .o và linker giải quyết symbol reference tạo file .exe. |
-| **Phân biệt thời điểm phát sinh lỗi Syntax Error vs Undefined Reference** | **2.0đ** | Chỉ rõ Syntax Error ở Compilation còn Undefined Reference ở Linking. |
+| **Giải thích đúng các đặc tả %-12s, %08.2f, %19[^\n]** | **3.5đ** | Phân tích chính xác cờ căn trái (-), bù số 0, độ rộng, độ chính xác và giới hạn độ dài scanset chống tràn đệm. |
+| **Phân biệt rõ %f (float*) và %lf (double*) trong scanf** | **3.0đ** | Giải thích vì sao scanf truyền con trỏ nên bắt buộc phân biệt kích thước 4 bytes (%f) và 8 bytes (%lf). |
+| **Kiểm tra giá trị trả về của scanf và xả bộ đệm stdin khi nhập lỗi** | **3.5đ** | Nêu đúng ý nghĩa giá trị trả về của scanf và viết vòng lặp getchar() xả sạch rác tới '\n' hoặc EOF. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2105,7 +2132,7 @@ Dòng dữ liệu chi tiết qua 4 giai đoạn của Compilation Pipeline:
 
 - **Mã định danh (Question Code):** `PRF_EQ08`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 8 — *Type Promotion & Arithmetic Conversions*
 - **Mục tiêu đánh giá:** Kiểm tra sự hiểu biết về quy tắc thăng hạng số nguyên (Integer Promotion) và chuyển đổi số học thông thường trong C.
@@ -2145,130 +2172,130 @@ Quy tắc thăng hạng số nguyên (Integer Promotion): Các kiểu dữ liệ
 
 ---
 
-### 9. [PRF_EQ09] So sánh nguyên lý kiểm tra điều kiện và ứng dụng của vòng lặp while, do-while và for
+### 9. [PRF_EQ09] Phân tích vòng lặp lồng nhau (Nested Loops), biến cờ hiệu (Flag) và vòng lặp lính canh (Sentinel)
 
 - **Mã định danh (Question Code):** `PRF_EQ09`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 10 — *Loop Comparison: while vs do-while vs for*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu về cấu trúc logic, tính tương đương và tiêu chí chọn lựa vòng lặp phù hợp.
+- **Chủ đề bài học (Syllabus):** Session 10-12 — *Nested Loops Complexity, Boolean Flags & Sentinel-Controlled Loops*
+- **Mục tiêu đánh giá:** Đánh giá khả năng phân tích luồng thực thi của vòng lặp lồng nhau, kỹ thuật thoát sớm bằng biến cờ hiệu và điều khiển vòng lặp bằng giá trị lính canh.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy phân tích sự giống và khác nhau giữa ba cấu trúc vòng lặp trong C: for, while và do-while. Khi nào nên ưu tiên sử dụng vòng lặp for thay vì while? Trình bày cách viết một vòng lặp vô tận (Infinite Loop) chuẩn bằng cả hai cấu trúc for và while."
+> "Hãy phân tích cơ chế hoạt động và tổng số bước lặp của cấu trúc vòng lặp lồng nhau (Nested Loops) khi vòng ngoài chạy $M$ lần và vòng trong chạy $N$ lần. Thế nào là vòng lặp điều khiển bằng giá trị lính canh (Sentinel-Controlled Loop) và làm thế nào để dùng biến cờ hiệu (Flag variable) nhằm thoát an toàn khỏi cả hai vòng lặp lồng nhau mà không lạm dụng lệnh `goto`?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Trong vòng lặp `for (init; cond; step)`, nếu ta bỏ trống cả 3 phần `for (;;)` thì điều kiện lặp được ngầm định là đúng hay sai?"*
+> *"Trong vòng lặp lồng nhau phụ thuộc chỉ số dạng `for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++)`, tổng số lần thân vòng lặp trong được thực thi theo $n$ là bao nhiêu?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. So sánh 3 cấu trúc vòng lặp:
-- Giống nhau: Đều cho phép lặp lại một khối lệnh nhiều lần dựa trên biểu thức điều kiện; đều hỗ trợ hai lệnh điều khiển `break` và `continue`.
-- Khác nhau:
-  + Vòng lặp `while (condition)`: Kiểm tra điều kiện trước (Pre-test). Phù hợp khi số lần lặp CHƯA BIẾT TRƯỚC và phụ thuộc vào sự kiện lúc chạy (ví dụ đọc file đến khi hết dữ liệu). Số lần lặp tối thiểu là 0.
-  + Vòng lặp `do { ... } while (condition);`: Kiểm tra điều kiện sau (Post-test). Thân vòng lặp luôn được chạy ÍT NHẤT 1 LẦN. Thích hợp cho việc nhập dữ liệu kiểm tra tính hợp lệ hoặc hiển thị Menu.
-  + Vòng lặp `for (init; condition; step)`: Gom toàn bộ 3 thành phần (khởi tạo, kiểm tra điều kiện, bước nhảy) vào cùng một dòng tiêu đề. Thích hợp nhất khi SỐ LẦN LẶP ĐÃ BIẾT TRƯỚC (ví dụ duyệt mảng từ 0 đến $N-1$).
+1. Cơ chế hoạt động và số lần thực thi của Vòng lặp lồng nhau (Nested Loops):
+- Trong cấu trúc vòng lặp lồng nhau, ứng với **mỗi 1 lần lặp** của vòng lặp bên ngoài (outer loop), vòng lặp bên trong (inner loop) sẽ khởi tạo lại từ đầu và chạy **trọn vẹn toàn bộ chu kỳ** của nó.
+- Nếu vòng ngoài chạy $M$ lần độc lập và vòng trong chạy $N$ lần, tổng số lần thực thi khối lệnh trong cùng là tích Đề-các: $M 	imes N$ lần (độ phức tạp $O(M 	imes N)$, hoặc $rac{n(n-1)}{2} = O(n^2)$ nếu `j` chạy từ `i + 1` đến `n - 1`).
 
-2. Cú pháp vòng lặp vô tận (Infinite Loop):
-- Bằng vòng lặp `while`: `while (1) { /* logic */ }` (hoặc bất kỳ hằng số nguyên khác 0).
-- Bằng vòng lặp `for`: `for (;;) { /* logic */ }`
-  Trong chuẩn C, nếu biểu thức điều kiện trong vòng lặp `for` bị bỏ trống, trình biên dịch mặc định gán điều kiện là luôn ĐÚNG (True 1).
+2. Vòng lặp điều khiển bằng giá trị lính canh (Sentinel-Controlled Loop):
+- Là kỹ thuật dùng cho bài toán **chưa biết trước số lượng phần tử đầu vào**. Chương trình quy ước một giá trị đặc biệt nằm ngoài miền dữ liệu hợp lệ gọi là **Lính canh (Sentinel)** (ví dụ nhập `-1` để kết thúc việc nhập điểm số dương).
+- Giá trị Sentinel chỉ đóng vai trò tín hiệu chấm dứt vòng lặp và **tuyệt đối không được cộng gộp** vào kết quả thống kê (tổng, trung bình).
+
+3. Kỹ thuật dùng biến cờ hiệu (`Flag`) để thoát khỏi nhiều tầng vòng lặp lồng nhau (Thay thế `goto`):
+- Câu lệnh `break;` trong C chỉ thoát khỏi **duy nhất 1 vòng lặp gần nhất** chứa nó. Để thoát đồng thời cả vòng trong lẫn vòng ngoài một cách có cấu trúc (Structured Programming), ta kết hợp biến cờ `found` trong điều kiện duy trì vòng lặp:
+```c
+int found = 0;
+for (int i = 0; i < rows && !found; i++) {
+    for (int j = 0; j < cols && !found; j++) {
+        if (grid[i][j] == target) {
+            found = 1; // Bật cờ hiệu -> cả vòng trong và vòng ngoài đều dừng ngay ở bước kiểm tra kế tiếp
+        }
+    }
+}
+```
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Phân tích tiêu chí chọn lựa for vs while vs do-while** | **4.0đ** | Chỉ rõ for dùng khi biết trước số lần, while cho sự kiện chưa biết trước, do-while tối thiểu 1 lần. |
-| **Tính tương đương cú pháp và cơ chế kiểm tra điều kiện** | **3.0đ** | Mô tả chuẩn cơ chế Pre-test (for, while) so với Post-test (do-while). |
-| **Cú pháp vòng lặp vô tận while(1) và for(;;)** | **3.0đ** | Viết đúng 2 cú pháp chuẩn và giải thích cơ chế bỏ trống điều kiện của for(;;). |
+| **Phân tích đúng quy tắc nhân số bước lặp của Nested Loops** | **3.5đ** | Giải thích rõ mỗi bước vòng ngoài kích hoạt toàn bộ chu kỳ vòng trong với tổng chi phí M * N (hoặc n(n-1)/2). |
+| **Trình bày đúng bản chất vòng lặp điều khiển bằng Sentinel** | **3.0đ** | Định nghĩa rõ giá trị lính canh ngoài miền hợp lệ và nguyên tắc không tính giá trị sentinel vào dữ liệu. |
+| **Cài đặt kỹ thuật biến cờ hiệu (Flag) thoát đa vòng lặp cấu trúc** | **3.5đ** | Chỉ rõ giới hạn của break chỉ thoát 1 vòng lặp và viết đúng điều kiện kết hợp && !found ở cả 2 vòng lặp. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 10. [PRF_EQ10] Cơ chế Call Stack và cấp phát vùng nhớ Stack Frame khi gọi hàm trong ngôn ngữ C
+### 10. [PRF_EQ10] Nguyên lý thiết kế Module hóa chương trình C: Độ kết dính (Cohesion) và Độ ghép nối (Coupling)
 
 - **Mã định danh (Question Code):** `PRF_EQ10`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 20 — *Call Stack Architecture & Activation Records*
-- **Mục tiêu đánh giá:** Kiểm tra hiểu biết về kiến trúc vi xử lý, cơ chế hoạt động của ngăn xếp phần cứng và vòng đời Stack Frame.
+- **Chủ đề bài học (Syllabus):** Session 16-18 — *Modular Programming: High Cohesion, Low Coupling & Top-Down Design*
+- **Mục tiêu đánh giá:** Đánh giá tư duy thiết kế phần mềm C theo hướng module hóa (Modular Programming), phân rã bài toán Top-Down và tiêu chuẩn High Cohesion - Low Coupling.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy mô tả chi tiết quy trình tạo lập và giải phóng một Stack Frame (Activation Record) trên vùng nhớ Call Stack khi một hàm được gọi và trả về trong ngôn ngữ C. Hai thanh ghi con trỏ ngăn xếp ESP/RSP và EBP/RBP đóng vai trò gì?"
+> "Trong thiết kế chương trình C theo phương pháp Module hóa (Modular Programming / Top-Down Stepwise Refinement), hãy giải thích hai tiêu chuẩn chất lượng cốt lõi: Độ kết dính nội tại cao (`High Cohesion`) và Độ ghép nối thấp (`Low Coupling`). Tại sao việc lạm dụng biến toàn cục (`Global Variables`) để chia sẻ dữ liệu giữa các hàm lại vi phạm nghiêm trọng nguyên tắc `Low Coupling`?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại sao việc trả về con trỏ trỏ tới một biến mảng cục bộ `char buffer[100]` từ hàm lại là một lỗi lập trình tai hại?"*
+> *"Khi thiết kế một hàm xử lý nghiệp vụ tính thuế thu nhập trong C, vì sao ta nên tách riêng hàm nhập/xuất (`printf`/`scanf`) ra khỏi hàm tính toán toán học thuần túy?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Quy trình tạo lập Stack Frame khi gọi hàm:
-Vùng nhớ Call Stack hoạt động theo cơ chế LIFO (Last In First Out) và phát triển từ địa chỉ cao xuống địa chỉ thấp:
-- Bước 1: Trước khi gọi hàm, hàm gọi (Caller) đẩy các đối số truyền vào lên Stack.
-- Bước 2: Lệnh `CALL` của CPU đẩy địa chỉ câu lệnh tiếp theo (Return Address) lên Stack để biết vị trí quay về sau khi hàm con kết thúc.
-- Bước 3: Hàm con được kích hoạt, thực hiện mở khung ngăn xếp (Function Prologue):
-  + Đẩy giá trị con trỏ khung cũ lên stack: `PUSH EBP`.
-  + Gán con trỏ khung mới bằng đỉnh stack: `MOV EBP, ESP`.
-  + Trừ thanh ghi con trỏ đỉnh stack `ESP` một khoảng dung lượng để cấp phát không gian cho các biến cục bộ: `SUB ESP, N`.
+1. Phương pháp phân rã Top-Down và hai tiêu chuẩn `High Cohesion` — `Low Coupling`:
+- **Phân rã từ trên xuống (Top-Down Stepwise Refinement):** Chia một bài toán lớn phức tạp thành các bài toán con nhỏ hơn (Sub-problems), mỗi bài toán con được đóng gói thành một hàm (Function) hoặc một module độc lập.
+- **Độ kết dính nội tại cao (`High Cohesion`):** Mỗi hàm chỉ nên thực hiện **đúng một nhiệm vụ chức năng duy nhất, rõ ràng và trọn vẹn** (Single Responsibility). Ví dụ: hàm `calculateTax(double income)` chỉ tính và trả về tiền thuế, không kiêm nhiệm thêm việc in menu hay đọc tệp. Điều này giúp hàm dễ hiểu, dễ kiểm thử đơn vị (Unit Test) và tái sử dụng ở nhiều nơi.
+- **Độ ghép nối thấp (`Low Coupling`):** Các hàm/module nên phụ thuộc vào nhau ít nhất có thể và chỉ giao tiếp với nhau thông qua **danh sách tham số đầu vào tường minh và giá trị trả về** (Data Coupling).
 
-2. Vai trò của 2 thanh ghi con trỏ ngăn xếp:
-- `ESP / RSP` (Stack Pointer): Luôn trỏ tới đỉnh hiện tại của Call Stack, thay đổi liên tục mỗi khi có lệnh push/pop.
-- `EBP / RBP` (Base Pointer / Frame Pointer): Cố định tại đáy của Stack Frame hiện tại, làm mốc tham chiếu cố định để truy xuất tham số (offset dương `[EBP + 8]`) và biến cục bộ (offset âm `[EBP - 4]`).
-
-3. Quy trình giải phóng khi hàm kết thúc (Function Epilogue):
-- Khôi phục con trỏ đỉnh stack: `MOV ESP, EBP`.
-- Khôi phục con trỏ khung cũ: `POP EBP`.
-- Lệnh `RET` lấy Return Address ra khỏi stack và nạp vào thanh ghi con trỏ lệnh EIP để quay về hàm gọi.
-- Hậu quả nếu trả về con trỏ mảng cục bộ: Khi hàm return, Stack Frame bị giải phóng. Vùng nhớ đó sẽ bị ghi đè bởi các hàm tiếp theo, con trỏ trả về trở thành Dangling Pointer gây sai lệch dữ liệu trầm trọng.
+2. Tại sao lạm dụng biến toàn cục (`Global Variables`) tạo ra `Tight/Common Coupling` nguy hiểm:
+- **Mất tính cô lập và phát sinh hiệu ứng phụ ngầm (Hidden Side Effects):** Bất kỳ hàm nào trong toàn bộ chương trình cũng có thể âm thầm sửa đổi giá trị biến toàn cục. Khi biến toàn cục mang giá trị sai, lập trình viên phải rà soát toàn bộ hàng chục hàm thay vì chỉ kiểm tra nơi truyền tham số.
+- **Phá vỡ khả năng tái sử dụng (Non-reusable) và không an toàn luồng:** Hàm phụ thuộc cứng vào tên biến toàn cục không thể tách sang dự án khác hoặc gọi đệ quy/song song an toàn.
+- **Chuẩn thiết kế C:** Hạn chế tối đa biến toàn cục; truyền dữ liệu qua tham số giá trị hoặc con trỏ `const` khi chỉ đọc.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Quy trình Function Prologue và cấp phát biến cục bộ** | **3.5đ** | Mô tả đúng lưu Return Address, push EBP, set EBP=ESP và trừ ESP cấp phát bộ nhớ. |
-| **Vai trò của hai thanh ghi ESP (đỉnh) và EBP (mốc đáy)** | **3.5đ** | Giải thích chuẩn xác ESP theo dõi đỉnh và EBP làm mốc tham chiếu truy xuất tham số/biến. |
-| **Quy trình Function Epilogue và cảnh báo trả về con trỏ cục bộ** | **3.0đ** | Chỉ rõ lệnh RET khôi phục EIP và lý do cấm trả về con trỏ trỏ vào Stack Frame đã hủy. |
+| **Định nghĩa rõ nguyên lý High Cohesion (Độ kết dính cao)** | **3.5đ** | Giải thích nguyên tắc mỗi hàm chỉ đảm nhận một chức năng đơn lẻ rõ ràng, tách biệt tính toán và nhập/xuất. |
+| **Định nghĩa rõ nguyên lý Low Coupling (Độ ghép nối thấp)** | **3.5đ** | Giải thích việc giao tiếp minh bạch qua tham số và giá trị trả về thay vì phụ thuộc trạng thái ngầm. |
+| **Phân tích tác hại của Global Variables gây Common/Tight Coupling** | **3.0đ** | Chỉ rõ rủi ro hiệu ứng phụ ngầm (side effects), khó truy vết lỗi và mất khả năng tái sử dụng hàm. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 11. [PRF_EQ11] Tại sao tên mảng bị suy giảm thành con trỏ (Decay to Pointer) khi truyền vào hàm?
+### 11. [PRF_EQ11] Ý nghĩa của từ khóa const khi kết hợp với con trỏ và bảo vệ tham số mảng trong hàm C
 
 - **Mã định danh (Question Code):** `PRF_EQ11`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 41 — *Array Decay to Pointer Phenomenon*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu lý do kỹ thuật đằng sau hiện tượng Array Decay và tại sao sizeof(arr) trong hàm chỉ ra kích thước con trỏ.
+- **Chủ đề bài học (Syllabus):** Session 29-30 & 37 — *Const-Correctness with Pointers & Read-Only Array Parameters*
+- **Mục tiêu đánh giá:** Đánh giá khả năng phân biệt 3 cách đặt từ khóa const với con trỏ và ứng dụng bảo vệ dữ liệu mảng truyền vào hàm không bị sửa đổi ngoài ý muốn.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hiện tượng mảng suy giảm thành con trỏ (Array Decay to Pointer) trong C là gì? Tại sao khi viết hàm `void printArray(int arr[])`, toán tử `sizeof(arr)` bên trong hàm lại chỉ trả về 4 bytes (trên 32-bit) hoặc 8 bytes (trên 64-bit) thay vì tổng dung lượng thực tế của mảng? Làm sao để khắc phục hạn chế này?"
+> "Hãy phân biệt sự khác nhau về quyền thay đổi giá trị vùng nhớ (`*p`) và quyền thay đổi địa chỉ con trỏ (`p`) giữa ba khai báo sau trong C: (1) `const int *p`, (2) `int *const p`, và (3) `const int *const p`. Tại sao các hàm chỉ đọc dữ liệu mảng hoặc chuỗi (như `strlen(const char *s)` hay `double calcAverage(const int arr[], int n)`) luôn sử dụng từ khóa `const` trong khai báo tham số?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Hai trường hợp ngoại lệ nào trong C mà tên mảng KHÔNG bị suy giảm thành con trỏ?"*
+> *"Nếu một biến được khai báo là `const int max_users = 100;`, điều gì sẽ xảy ra nếu lập trình viên cố tình ép kiểu bỏ `const` qua con trỏ `int *ptr = (int *)&max_users; *ptr = 200;` theo chuẩn C?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Hiện tượng suy giảm mảng (Array Decay):
-Trong C, một mảng không lưu trữ thông tin về kích thước của chính nó. Khi một mảng được truyền vào hàm dưới dạng đối số (Argument), tên mảng sẽ tự động bị suy giảm (Decay) thành một con trỏ thông thường trỏ tới địa chỉ của phần tử đầu tiên:
-`int arr[]` trong danh sách tham số hàm thực chất được trình biên dịch chuyển đổi 100% thành `int *arr`.
+1. Quy tắc đọc từ phải sang trái (Right-to-Left Rule) cho 3 dạng kết hợp `const` và con trỏ `*`:
+- **Trường hợp 1: `const int *p` (hoặc `int const *p` — Pointer to Constant Data):**
+  + Bản chất: `p` là con trỏ trỏ tới một số nguyên hằng.
+  + Giá trị vùng nhớ `*p` là **chỉ đọc (Read-only)** thông qua `p` (`*p = 10;` $\to$ **Lỗi biên dịch**).
+  + Bản thân con trỏ `p` **được phép thay đổi địa chỉ** để trỏ sang biến khác (`p = &other_var;` hoặc `p++;` $\to$ **Hợp lệ**).
+- **Trường hợp 2: `int *const p = &x;` (Constant Pointer to Mutable Data):**
+  + Bản chất: `p` là một **con trỏ hằng** (bắt buộc phải khởi tạo địa chỉ ngay lúc khai báo).
+  + Địa chỉ lưu trong `p` bị **khóa cố định** (`p = &y;` $\to$ **Lỗi biên dịch**).
+  + Giá trị tại vùng nhớ mà `p` trỏ tới **được phép thay đổi** (`*p = 99;` $\to$ **Hợp lệ**).
+- **Trường hợp 3: `const int *const p = &x;` (Constant Pointer to Constant Data):**
+  + Khóa kép cả hai chiều: Không được phép đổi địa chỉ `p` VÀ cũng không được phép sửa giá trị `*p`.
 
-2. Tại sao `sizeof(arr)` trong hàm chỉ ra kích thước con trỏ:
-Vì bên trong thân hàm, biến `arr` thực chất chỉ là một biến con trỏ thông thường (chứa địa chỉ 4 hoặc 8 bytes). Do đó, toán tử `sizeof(arr)` chỉ đo kích thước ô nhớ của một con trỏ (4 bytes trên hệ 32-bit, 8 bytes trên hệ 64-bit), chứ không thể biết mảng gốc bên ngoài có bao nhiêu phần tử.
-
-3. Giải pháp khắc phục chuẩn C:
-Bắt buộc phải truyền thêm một tham số chỉ định số lượng phần tử của mảng kèm theo:
-`void printArray(const int arr[], int size);`
-Ở hàm `main()`, ta tính kích thước mảng trước khi truyền: `int size = sizeof(arr) / sizeof(arr[0]);` rồi truyền vào hàm.
-
-4. Hai trường hợp ngoại lệ tên mảng KHÔNG bị decay:
-- Khi tên mảng là toán hạng của toán tử `sizeof(arr)` (trả về tổng byte của toàn mảng).
-- Khi tên mảng là toán hạng của toán tử lấy địa chỉ `&arr` (trả về con trỏ trỏ tới toàn bộ mảng `int (*)[N]`).
+2. Lý do sử dụng `const` cho tham số mảng/chuỗi chỉ đọc (`const int arr[]` / `const char *s`):
+- Vì mảng truyền vào hàm bị suy giảm thành con trỏ địa chỉ gốc (pass-by-address), mọi thao tác ghi `arr[i] = ...` bên trong hàm sẽ làm biến đổi trực tiếp mảng gốc của hàm gọi (`Caller`).
+- Khai báo `const int arr[]` thiết lập **Hợp đồng giao diện (Interface Contract - Const-Correctness)**: Trình biên dịch sẽ chặn đứng ngay lúc compile nếu thân hàm vô tình ghi đè phần tử mảng, đồng thời cho phép truyền cả mảng hằng (`const`) lẫn mảng thường vào hàm một cách an toàn.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Bản chất hiện tượng Array Decay và chuyển đổi thành int* ptr** | **3.5đ** | Giải thích rõ tên mảng tự động suy giảm thành con trỏ trỏ tới phần tử đầu &arr[0]. |
-| **Lý do sizeof(arr) chỉ trả về 4 hoặc 8 bytes** | **3.5đ** | Chỉ ra bên trong hàm biến arr chỉ là con trỏ trên Stack, không lưu metadata độ dài. |
-| **Giải pháp truyền kèm tham số size và các trường hợp ngoại lệ** | **3.0đ** | Nêu đúng quy chuẩn truyền int size và 2 ngoại lệ của sizeof và toán tử &. |
+| **Phân biệt chính xác const int *p và int *const p** | **4.0đ** | Chỉ rõ trường hợp nào khóa giá trị vùng nhớ (*p) và trường hợp nào khóa địa chỉ con trỏ (p). |
+| **Giải thích đúng khai báo khóa kép const int *const p** | **2.5đ** | Nêu rõ cả địa chỉ con trỏ p và giá trị vùng nhớ *p đều không thể bị thay đổi. |
+| **Phân tích vai trò của const trong bảo vệ tham số mảng truyền vào hàm** | **3.5đ** | Giải thích cơ chế mảng suy giảm thành con trỏ và vai trò của const giúp trình biên dịch chặn lỗi ghi đè ngoài ý muốn. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2277,9 +2304,9 @@ Bắt buộc phải truyền thêm một tham số chỉ định số lượng p
 
 - **Mã định danh (Question Code):** `PRF_EQ12`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 46 — *String Memory Segments: char[] vs char**
+- **Chủ đề bài học (Syllabus):** Session 46 — *String Memory Segments: char[] vs char*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về các phân vùng bộ nhớ (Stack vs Read-Only Data Segment) khi khai báo chuỗi trong C.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -2321,52 +2348,56 @@ So sánh chi tiết giữa `char s1[]` và `char *s2`:
 
 ---
 
-### 13. [PRF_EQ13] Cơ chế căn chỉnh dữ liệu (Data Alignment & Structure Padding) trong kiến trúc bộ nhớ vi xử lý
+### 13. [PRF_EQ13] Thuật toán Tìm kiếm tuyến tính (Linear Search) và Tìm kiếm nhị phân (Binary Search) trên mảng 1 chiều
 
 - **Mã định danh (Question Code):** `PRF_EQ13`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 40 — *Hardware Memory Alignment & Padding*
-- **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về lý do phần cứng yêu cầu căn chỉnh dữ liệu và tác động đến dung lượng Struct.
+- **Chủ đề bài học (Syllabus):** Session 39 — *1D Array Searching: Linear Search vs Binary Search & Overflow-Safe Midpoint*
+- **Mục tiêu đánh giá:** Đánh giá khả năng cài đặt và so sánh hai thuật toán tìm kiếm cốt lõi trên mảng một chiều trong chương trình PRF192.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Tại sao các vi xử lý hiện đại (x86-64, ARM) lại yêu cầu cơ chế Căn chỉnh dữ liệu (Data Alignment)? Giải thích hiện tượng Byte Padding được trình biên dịch C chèn vào bên trong cấu trúc Struct và chỉ thị tiền xử lý nào (như `#pragma pack`) có thể dùng để vô hiệu hóa padding?"
+> "Hãy trình bày nguyên lý hoạt động, điều kiện áp dụng và độ phức tạp thời gian (tốt nhất, xấu nhất) của thuật toán Tìm kiếm tuyến tính (`Linear Search`) và Tìm kiếm nhị phân (`Binary Search`) trên mảng 1 chiều. Viết hàm C cài đặt `Linear Search` trả về chỉ số xuất hiện đầu tiên của khóa `key` (hoặc `-1` nếu không thấy) và giải thích vì sao trong `Binary Search` ta nên viết `int mid = left + (right - left) / 2;` thay vì `(left + right) / 2`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu vô hiệu hóa padding hoàn toàn (packed struct), hiệu năng truy xuất dữ liệu của CPU sẽ bị ảnh hưởng như thế nào?"*
+> *"Nếu một mảng gồm $N = 1,000,000$ phần tử chưa được sắp xếp và chương trình chỉ cần tìm kiếm đúng 1 lần duy nhất, ta nên dùng ngay `Linear Search` hay sắp xếp mảng rồi dùng `Binary Search`? Giải thích bằng độ phức tạp thuật toán."*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Lý do phần cứng yêu cầu Data Alignment:
-- Bus dữ liệu của vi xử lý (CPU Data Bus) kết nối với RAM theo các khối từ nhớ (Memory Words: 32 bits = 4 bytes hoặc 64 bits = 8 bytes).
-- Nếu một biến 4 bytes nằm ở một địa chỉ không chia hết cho 4 (Unaligned Memory Access):
-  + CPU buộc phải thực hiện 2 chu kỳ đọc bộ nhớ (Memory Read Cycles) liên tiếp.
-  + Sau đó CPU phải thực hiện thêm các phép dịch bit và ghép thanh ghi để lấy được giá trị hoàn chỉnh, làm giảm nghiêm trọng hiệu năng thực thi của hệ thống.
-- Nếu biến nằm ở địa chỉ là bội số của kích thước kiểu (Aligned), CPU chỉ tốn ĐÚNG 1 CHU KỲ MÁY để đọc toàn bộ dữ liệu.
+1. So sánh nguyên lý, điều kiện áp dụng và độ phức tạp giữa `Linear Search` và `Binary Search`:
+- **Tìm kiếm tuyến tính (`Linear Search`):**
+  + Nguyên lý: Duyệt tuần tự từng phần tử từ chỉ số `0` đến `n - 1`, so sánh `arr[i] == key`. Dừng ngay khi tìm thấy phần tử đầu tiên khớp hoặc khi hết mảng.
+  + Điều kiện áp dụng: Hoạt động trên **mọi mảng** (không yêu cầu mảng phải được sắp xếp trước).
+  + Độ phức tạp: Tốt nhất $O(1)$ (nằm ngay ở `arr[0]`), Xấu nhất và Trung bình $O(n)$ (so sánh tối đa $n$ lần).
+- **Tìm kiếm nhị phân (`Binary Search`):**
+  + Nguyên lý: Liên tục chia đôi khoảng tìm kiếm `[left, right]` bằng cách so sánh `key` với phần tử chính giữa `arr[mid]`.
+  + Điều kiện tiên quyết bắt buộc: Mảng **phải được sắp xếp có thứ tự** (tăng dần hoặc giảm dần).
+  + Độ phức tạp: Tốt nhất $O(1)$, Xấu nhất $O(\log_2 n)$ (ví dụ với $n = 10^6$ chỉ cần tối đa $\lceil \log_2(10^6) \rceil = 20$ phép so sánh).
 
-2. Hiện tượng Byte Padding:
-Để bảo đảm mọi thành viên trong struct đều nằm ở địa chỉ căn chỉnh hợp lệ, trình biên dịch C sẽ tự động chèn các byte đệm không sử dụng (Padding Bytes) giữa các trường và ở cuối struct.
-
-3. Vô hiệu hóa Padding với `#pragma pack(1)`:
-Lập trình viên có thể ép trình biên dịch không chèn byte đệm bằng chỉ thị:
+2. Cài đặt chuẩn hàm `linearSearch` trong C:
 ```c
-#pragma pack(push, 1)
-struct PackedData {
-    char a; // 1 byte
-    int b;  // 4 bytes, bắt đầu ngay offset 1
-};
-#pragma pack(pop)
+int linearSearch(const int arr[], int n, int key) {
+    if (arr == NULL || n <= 0) return -1;
+    for (int i = 0; i < n; i++) {
+        if (arr[i] == key) {
+            return i; // Trả về vị trí đầu tiên tìm thấy (0-indexed)
+        }
+    }
+    return -1; // Không tìm thấy key trong mảng
+}
 ```
-- Khi đó `sizeof(struct PackedData) = 5 bytes`.
-- Đánh đổi (Trade-off): Tiết kiệm bộ nhớ tối đa (thường dùng khi truyền gói tin mạng TCP/IP hoặc đọc file header phần cứng), nhưng tốc độ truy xuất trường `b` sẽ chậm hơn do CPU phải xử lý unaligned access.
+
+3. Tại sao trong `Binary Search` phải viết `int mid = left + (right - left) / 2;`:
+- Nếu mảng rất lớn có `left` và `right` đều lớn hơn `INT_MAX / 2` (ví dụ `left = 1,200,000,000` và `right = 1,500,000,000`), tổng `left + right = 2,700,000,000` vượt quá `INT_MAX` ($2,147,483,647$), gây **Tràn số nguyên có dấu (`Signed Integer Overflow`)** khiến `mid` bị âm và làm chương trình truy cập ngoài mảng (`Segmentation Fault`).
+- Công thức `left + (right - left) / 2` luôn bảo đảm hiệu `right - left >= 0` không bao giờ vượt quá `right`, triệt tiêu 100% nguy cơ tràn số.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Giải thích bản chất phần cứng và bus từ nhớ của CPU** | **3.5đ** | Phân tích CPU đọc theo khối Word và so sánh 1 chu kỳ máy vs 2 chu kỳ máy khi unaligned. |
-| **Bản chất của các byte đệm Padding chèn vào struct** | **3.0đ** | Nêu rõ compiler tự động chèn byte rác để đưa offset trường tiếp theo về bội số hợp lệ. |
-| **Chỉ thị #pragma pack(1) và phân tích đánh đổi hiệu năng** | **3.5đ** | Viết đúng chỉ thị pack(1) giảm dung lượng và phân tích trade-off giảm tốc độ CPU. |
+| **So sánh đúng điều kiện áp dụng và độ phức tạp của Linear Search vs Binary Search** | **3.5đ** | Chỉ rõ Linear Search O(n) không cần sắp xếp, Binary Search O(log n) bắt buộc mảng đã sắp xếp. |
+| **Cài đặt chuẩn xác hàm linearSearch trong C** | **3.5đ** | Viết đúng vòng lặp kiểm tra arr[i] == key, dùng const int arr[] và trả về -1 khi không tìm thấy. |
+| **Giải thích công thức tính mid = left + (right - left) / 2 chống tràn số** | **3.0đ** | Phân tích rõ hiện tượng tràn số nguyên khi tổng left + right vượt quá INT_MAX. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2375,7 +2406,7 @@ struct PackedData {
 
 - **Mã định danh (Question Code):** `PRF_EQ14`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000466`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 52, 55 — *File Streams & I/O Buffering (fflush)*
 - **Mục tiêu đánh giá:** Kiểm tra hiểu biết về cơ chế bộ đệm luồng I/O (Stream Buffering) và cách ép đẩy dữ liệu xuống đĩa an toàn.
@@ -2391,13 +2422,11 @@ struct PackedData {
 Thao tác đọc/ghi trực tiếp xuống đĩa cứng vật lý (Disk I/O) rất chậm do liên quan đến chuyển động cơ học hoặc giao tiếp bus hệ thống.
 Thư viện `<stdio.h>` sử dụng một vùng nhớ trung gian trên RAM gọi là Bộ đệm luồng (Stream Buffer):
 - Khi gọi `fprintf` hoặc `fwrite`, dữ liệu chưa được ghi ngay xuống đĩa mà tạm thời tích tụ trong bộ đệm RAM.
-- Chỉ khi bộ đệm bị đầy, hoặc tệp được đóng bằng `fclose()`, hoặc gặp ký tự `
-` (tùy chế độ), dữ liệu mới được đẩy hàng loạt xuống đĩa (Flush), giúp giảm thiểu số lần gọi System Call của hệ điều hành.
+- Chỉ khi bộ đệm bị đầy, hoặc tệp được đóng bằng `fclose()`, hoặc gặp ký tự `\n` (tùy chế độ), dữ liệu mới được đẩy hàng loạt xuống đĩa (Flush), giúp giảm thiểu số lần gọi System Call của hệ điều hành.
 
 2. Ba chế độ đệm chuẩn:
 - Không đệm (`_IONBF` - Unbuffered): Dữ liệu được ghi ngay lập tức (ví dụ luồng lỗi `stderr`).
-- Đệm theo dòng (`_IOLBF` - Line-buffered): Dữ liệu được xả mỗi khi gặp ký tự xuống dòng `
-` (mặc định cho màn hình `stdout`).
+- Đệm theo dòng (`_IOLBF` - Line-buffered): Dữ liệu được xả mỗi khi gặp ký tự xuống dòng `\n` (mặc định cho màn hình `stdout`).
 - Đệm toàn phần (`_IOFBF` - Fully-buffered): Chỉ xả khi bộ đệm (thường là 4KB - 8KB) đầy hoàn toàn (mặc định cho tệp trên đĩa).
 
 3. Vai trò của hàm `fflush(FILE *stream)`:
@@ -2406,12 +2435,10 @@ Thư viện `<stdio.h>` sử dụng một vùng nhớ trung gian trên RAM gọi
 4. Cảnh báo cấm sử dụng `fflush(stdin)`:
 Theo chuẩn ISO C, hàm `fflush()` CHỈ ĐƯỢC ĐỊNH NGHĨA CHO LUỒNG ĐẦU RA (Output Streams như `stdout`, file write).
 Hành vi gọi `fflush()` trên luồng đầu vào (Input Stream như `stdin`) là một Hành vi không xác định (Undefined Behavior): Một số trình biên dịch Windows cũ (MSVC) có thể xóa đệm, nhưng trên Linux/GCC thao tác này hoàn toàn bị phớt lờ.
-Giải pháp dọn đệm stdin chuẩn C: Dùng vòng lặp đọc hết ký tự rác cho tới khi gặp `
-` hoặc `EOF`:
+Giải pháp dọn đệm stdin chuẩn C: Dùng vòng lặp đọc hết ký tự rác cho tới khi gặp `\n` hoặc `EOF`:
 ```c
 int c;
-while ((c = getchar()) != '
-' && c != EOF);
+while ((c = getchar()) != '\n' && c != EOF);
 ```
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
@@ -2429,9 +2456,9 @@ while ((c = getchar()) != '
 
 - **Mã định danh (Question Code):** `PRF_EQ15`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000461`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 12, 15 — *Algorithmic Functions: Prime Check Optimization*
+- **Chủ đề bài học (Syllabus):** Session 19-20 — *Algorithmic Functions: Prime Check Optimization*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt hàm thuật toán, tối ưu hóa điều kiện lặp từ O(N) xuống O(sqrt(N)) và xử lý các trường hợp biên.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -2441,40 +2468,42 @@ while ((c = getchar()) != '
 > *"Các số nguyên n <= 1 (như 0, 1 hoặc số âm) có phải là số nguyên tố không và hàm của bạn xử lý trường hợp này như thế nào?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cài đặt hàm `isPrime` tối ưu:
-```c
-int isPrime(int n) {
-    // Trường hợp biên: n <= 1 không phải là số nguyên tố
-    if (n <= 1) return 0;
-    // 2 và 3 là hai số nguyên tố đầu tiên
-    if (n <= 3) return 1;
-    // Loại bỏ tất cả các số chẵn > 2 và bội số của 3
-    if (n % 2 == 0 || n % 3 == 0) return 0;
+1. Phân tích toán học để tối ưu hóa hàm kiểm tra số nguyên tố `isPrime(int n)`:
+- Theo định nghĩa, số nguyên tố $n$ là số tự nhiên lớn hơn 1 chỉ chia hết cho 1 và chính nó. Do đó mọi $n \le 1$ đều không phải là số nguyên tố.
+- Nếu $n$ là hợp số, nó bắt buộc phải có ít nhất một ước số nguyên tố $d$ thỏa mãn $2 \le d \le \sqrt{n}$. Nếu duyệt tới $\lfloor\sqrt{n}floor$ mà không tìm thấy ước nào, ta kết luận chắc chắn $n$ là số nguyên tố (giảm độ phức tạp từ $O(n)$ xuống $O(\sqrt{n})$).
+- Tối ưu hóa quy luật $6k \pm 1$: Mọi số nguyên lớn hơn 3 không chia hết cho 2 và 3 đều có dạng $6k - 1$ hoặc $6k + 1$. Ta kiểm tra riêng $n == 2, n == 3$, loại bỏ các bội số của 2 và 3, sau đó vòng lặp chỉ cần bắt đầu từ $i = 5$ với bước nhảy `i += 6` (kiểm tra cặp `i` và `i + 2`).
 
-    // Duyệt với bước nhảy 6 (dạng 6k - 1 và 6k + 1) đến sqrt(n)
-    for (int i = 5; i * i <= n; i += 6) {
+2. Cài đặt hàm `isPrime(int n)` chuẩn C99 chống tràn số nguyên (`i <= n / i`):
+```c
+#include <stdbool.h>
+
+bool isPrime(int n) {
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 == 0 || n % 3 == 0) return false;
+
+    // BẮT BUỘC dùng điều kiện i <= n / i thay vì i * i <= n để chống tràn số (Signed Integer Overflow)
+    for (int i = 5; i <= n / i; i += 6) {
         if (n % i == 0 || n % (i + 2) == 0) {
-            return 0; // Tìm thấy ước số
+            return false;
         }
     }
-    return 1; // Là số nguyên tố
+    return true;
 }
 ```
 
-2. Giải thích cơ chế tối ưu hóa đến `i * i <= n`:
-- Nếu $n$ là một hợp số, thì $n = a \times b$.
-- Nếu cả hai ước số $a > \sqrt{n}$ và $b > \sqrt{n}$ thì $a \times b > \sqrt{n} \times \sqrt{n} = n$ (vô lý). Do đó, chắc chắn phải tồn tại ít nhất một ước số $a \le \sqrt{n}$.
-- Vì vậy, nếu ta đã kiểm tra tất cả các số từ 2 đến $\sqrt{n}$ mà không tìm thấy ước số nào, thì chắc chắn $n$ không thể có bất kỳ ước số nào lớn hơn $\sqrt{n}$, suy ra $n$ là số nguyên tố.
-- Điều kiện `i * i <= n` được ưu tiên sử dụng thay vì `i <= sqrt(n)` vì tránh được việc phải gọi hàm số thực `sqrt()` tốn kém trong thư viện `math.h` ở mỗi bước lặp.
-- Độ phức tạp thời gian giảm từ $O(N)$ xuống $O(\sqrt{N})$.
+3. Tại sao phải viết `i <= n / i` thay vì `i * i <= n` khi `n` gần `INT_MAX`:
+- Trong kiểu `int` 32-bit có dấu, `INT_MAX = 2,147,483,647` (là một số nguyên tố Mersenne $2^{31}-1$), có $\sqrt{	ext{INT\_MAX}} pprox 46,340.95$.
+- Khi vòng lặp chạy tới $i = 46,337$ (hoặc $i + 6 = 46,343$), tích `i * i` bằng $46,343^2 = 2,147,673,649 > 	ext{INT\_MAX}$, gây ra **Tràn số nguyên có dấu (Signed Integer Overflow — Undefined Behavior)**, làm giá trị `i * i` bị lật thành số âm khiến điều kiện `i * i <= n` luôn đúng và dẫn đến vòng lặp chạy sai hoặc vô tận!
+- Khi viết `i <= n / i`, phép chia nguyên `n / i` hoàn toàn không bao giờ vượt quá `n`, đảm bảo an toàn tuyệt đối cho mọi giá trị `n` thuộc toàn dải `[INT_MIN, INT_MAX]`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Xử lý chính xác các trường hợp biên (n <= 1, n=2, n=3)** | **3.0đ** | Bắt chuẩn các giá trị <= 1 trả về 0 và số chẵn chia hết cho 2 loại bỏ sớm. |
-| **Cài đặt đúng vòng lặp tối ưu i * i <= n** | **4.0đ** | Viết đúng điều kiện dừng căn bậc hai tránh gọi hàm sqrt() và trả về 0/1 chính xác. |
-| **Chứng minh toán học nguyên lý ước số a <= sqrt(n)** | **3.0đ** | Giải thích logic phản chứng a*b=n và độ phức tạp O(sqrt(N)) thuyết phục. |
+| **Xử lý đúng các ca biên (n <= 1, n <= 3, chia hết cho 2 và 3)** | **3.0đ** | Kiểm tra đầy đủ và chính xác các trường hợp biên n <= 1 trả về false, 2 và 3 trả về true, loại bội số của 2 và 3. |
+| **Tối ưu hóa vòng lặp O(sqrt(n)) với bước nhảy i += 6** | **3.5đ** | Giải thích nguyên lý ước số không vượt quá căn bậc hai của n và quy luật 6k +- 1 kiểm tra n % i và n % (i + 2). |
+| **Chống tràn số nguyên có dấu bằng điều kiện i <= n / i** | **3.5đ** | Viết đúng điều kiện lặp i <= n / i và giải thích rủi ro tràn số của i * i <= n khi n gần INT_MAX. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2483,7 +2512,7 @@ int isPrime(int n) {
 
 - **Mã định danh (Question Code):** `PRF_EQ16`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 30, 43 — *Two-Pointer Technique & Array Reversal*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng vận dụng số học con trỏ và giải tham chiếu để thao tác đảo ngược mảng tại chỗ không dùng mảng phụ.
@@ -2539,7 +2568,7 @@ void reverseArray(int *start, int *end) {
 
 - **Mã định danh (Question Code):** `PRF_EQ17`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 39 — *Bubble Sort & Early Termination Optimization*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt thuật toán Bubble Sort và kỹ thuật cờ hiệu dừng sớm (Early Termination) khi mảng đã sắp xếp.
@@ -2596,7 +2625,7 @@ void bubbleSort(int a[], int n) {
 
 - **Mã định danh (Question Code):** `PRF_EQ18`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 51 — *String Manipulation: Name Normalization*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng thao tác mảng ký tự, sử dụng thư viện ctype.h và xử lý các khoảng trắng thừa.
@@ -2626,7 +2655,7 @@ void normalizeName(char *str) {
         read_idx++;
     }
 
-    while (str[read_idx] != ' ') {
+    while (str[read_idx] != '\0') {
         if (!isspace((unsigned char)str[read_idx])) {
             // Nếu bắt đầu một từ mới và không phải từ đầu tiên -> chèn đúng 1 khoảng trắng
             if (in_word == 0 && write_idx > 0) {
@@ -2646,7 +2675,7 @@ void normalizeName(char *str) {
         read_idx++;
     }
     // Đóng chuỗi tại vị trí viết cuối cùng bằng ký tự null
-    str[write_idx] = ' ';
+    str[write_idx] = '\0';
 }
 ```
 
@@ -2654,7 +2683,7 @@ void normalizeName(char *str) {
 - Sử dụng kỹ thuật hai con trỏ chỉ số đọc/ghi (`read_idx` và `write_idx`) để xử lý chuỗi trực tiếp tại chỗ (In-place) không cần cấp phát thêm bộ nhớ phụ.
 - Dùng hàm `isspace()` kiểm tra khoảng trắng, `toupper()` chuyển chữ hoa và `tolower()` chuyển chữ thường từ thư viện `<ctype.h>`.
 - Biến trạng thái `in_word` theo dõi đang ở trong từ hay khoảng trắng, bảo đảm chèn đúng 1 khoảng trắng giữa các từ và viết hoa chữ cái đầu từ.
-- Cuối cùng kết thúc mảng bằng ký tự ` ` tại vị trí `write_idx`.
+- Cuối cùng kết thúc mảng bằng ký tự `\0` tại vị trí `write_idx`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
@@ -2671,7 +2700,7 @@ void normalizeName(char *str) {
 
 - **Mã định danh (Question Code):** `PRF_EQ19`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 31 — *Dynamic Array Resizing with realloc*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng quản lý mảng động co giãn kích thước an toàn, chống rò rỉ bộ nhớ khi realloc thất bại.
@@ -2737,135 +2766,433 @@ int main() {
 
 ---
 
-### 20. [PRF_EQ20] Thiết kế Struct quản lý Sinh viên và viết hàm sắp xếp mảng Struct theo điểm GPA giảm dần
+### 20. [PRF_EQ20] Thiết kế Struct quản lý Kho hàng (Inventory) và cài đặt hàm tìm kiếm, lọc mặt hàng dưới định mức
 
 - **Mã định danh (Question Code):** `PRF_EQ20`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000467`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 42, 45 — *Struct Array Management & Sorting*
-- **Mục tiêu đánh giá:** Đánh giá kỹ năng thiết kế cấu trúc dữ liệu struct thực tế và cài đặt hàm thuật toán xử lý dữ liệu phức hợp.
+- **Chủ đề bài học (Syllabus):** Session 42-45 — *Struct Array Processing: Inventory Search & Low-Stock Filtering*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng định nghĩa kiểu dữ liệu cấu trúc Struct thực tế, thao tác trên mảng Struct với con trỏ và tìm kiếm chuỗi không phân biệt/có phân biệt mã định danh.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy định nghĩa cấu trúc `Student` gồm: mã số (chuỗi), tên (chuỗi) và điểm trung bình tích lũy GPA (float). Viết một chương trình C hoàn chỉnh gồm hàm nhập mảng N sinh viên, hàm sắp xếp mảng sinh viên theo GPA giảm dần và hàm in danh sách sinh viên dưới dạng bảng định dạng đẹp bằng printf."
+> "Hãy khai báo kiểu cấu trúc `Product` trong C để quản lý hàng hóa trong kho gồm: mã SKU (`char sku[16]`), tên sản phẩm (`char name[64]`), đơn giá (`double unit_price`), số lượng tồn kho (`int quantity`) và ngưỡng cảnh báo tồn tối thiểu (`int min_threshold`). Viết hai hàm C hoàn chỉnh: (1) `int findProductBySku(const Product list[], int n, const char *target_sku)` trả về chỉ số mặt hàng theo mã SKU, và (2) `double exportLowStockReport(const Product list[], int n)` in danh sách các mặt hàng cần nhập thêm (`quantity < min_threshold`) và trả về tổng chi phí cần chi để bù đủ định mức tối thiểu."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Làm thế nào để căn lề trái cột họ tên và định dạng điểm GPA có đúng 2 chữ số thập phân trong hàm printf?"*
+> *"Tại sao khi so sánh hai mã SKU dạng chuỗi trong hàm `findProductBySku`, ta bắt buộc phải dùng hàm `strcmp(list[i].sku, target_sku) == 0` thay vì phép so sánh `list[i].sku == target_sku`?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Chương trình C hoàn chỉnh quản lý và sắp xếp Struct Student:
+1. Thiết kế cấu trúc `Product` và cài đặt hai hàm nghiệp vụ kho hàng:
 ```c
 #include <stdio.h>
 #include <string.h>
 
 typedef struct {
-    char id[15];
-    char name[40];
-    float gpa;
-} Student;
+    char sku[16];
+    char name[64];
+    double unit_price;
+    int quantity;
+    int min_threshold;
+} Product;
 
-void sortStudentsByGPA(Student arr[], int n) {
-    for (int i = 0; i < n - 1; i++) {
-        for (int j = i + 1; j < n; j++) {
-            if (arr[j].gpa > arr[i].gpa) {
-                Student temp = arr[i];
-                arr[i] = arr[j];
-                arr[j] = temp;
-            }
+// 1. Tìm kiếm tuyến tính mặt hàng theo mã SKU bằng strcmp
+int findProductBySku(const Product list[], int n, const char *target_sku) {
+    if (list == NULL || target_sku == NULL || n <= 0) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        if (strcmp(list[i].sku, target_sku) == 0) {
+            return i;
         }
     }
+    return -1;
 }
 
-void printStudentTable(const Student arr[], int n) {
-    printf("
-%-12s | %-25s | %-6s
-", "Ma SV", "Ho va Ten", "GPA");
-    printf("---------------------------------------------------
-");
+// 2. Lọc các mặt hàng dưới định mức tồn tối thiểu và tính tổng chi phí nhập bù
+double exportLowStockReport(const Product list[], int n) {
+    if (list == NULL || n <= 0) return 0.0;
+    double total_restock_cost = 0.0;
+
+    printf("\n=== DANH SACH MAT HANG CAN NHAP BO SUNG ===\n");
+    printf("%-12s | %-28s | %-8s | %-8s | %-12s\n", "SKU", "Ten San Pham", "Ton Kho", "Toi Thieu", "Chi Phi Bu");
+    printf("--------------------------------------------------------------------------------\n");
+
     for (int i = 0; i < n; i++) {
-        // %-12s: căn lề trái độ rộng 12, %-25s: căn lề trái 25, %.2f: 2 số lẻ
-        printf("%-12s | %-25s | %6.2f
-", arr[i].id, arr[i].name, arr[i].gpa);
+        if (list[i].quantity < list[i].min_threshold) {
+            int deficit = list[i].min_threshold - list[i].quantity;
+            double item_cost = (double)deficit * list[i].unit_price;
+            total_restock_cost += item_cost;
+            printf("%-12s | %-28s | %-8d | %-8d | %12.2f\n",
+                   list[i].sku, list[i].name, list[i].quantity, list[i].min_threshold, item_cost);
+        }
     }
+    return total_restock_cost;
 }
 ```
-*Giải thích định dạng `printf`:*
-- Ký tự dấu trừ `-` trong `%-25s` chỉ đạo trình biên dịch căn lề trái (Left-aligned).
-- Định dạng `%6.2f` quy định độ rộng toàn trường tối thiểu là 6 ký tự và hiển thị chính xác 2 chữ số sau dấu phẩy thập phân.
+
+2. Lý giải kỹ thuật quan trọng:
+- Phép so sánh `list[i].sku == target_sku` chỉ so sánh **hai địa chỉ ô nhớ (con trỏ)** chứ không so sánh nội dung ký tự bên trong chuỗi, nên sẽ luôn trả về sai (`0`) khi hai chuỗi nằm ở hai vùng nhớ khác nhau. Bắt buộc phải dùng `strcmp(s1, s2) == 0` để so sánh từng ký tự cho tới `'\0'`.
+- Sử dụng từ khóa `const Product list[]` bảo đảm các hàm tra cứu và xuất báo cáo không vô tình làm biến đổi dữ liệu tồn kho gốc.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Định nghĩa Struct Student chuẩn cú pháp typedef** | **2.5đ** | Khai báo đầy đủ id, name, gpa với kiểu dữ liệu mảng ký tự và float phù hợp. |
-| **Cài đặt hàm sắp xếp GPA giảm dần** | **4.0đ** | Cài đặt thuật toán sắp xếp đúng, hoán đổi nguyên khối biến struct Student an toàn. |
-| **Định dạng xuất bảng đẹp với căn lề trái và %.2f** | **3.5đ** | Sử dụng đúng các đặc tả căn lề %-25s và định dạng số thực 2 chữ số lẻ %.2f. |
+| **Định nghĩa đúng typedef struct Product với các trường và kích thước chuẩn** | **3.0đ** | Khai báo đầy đủ 5 trường sku, name, unit_price, quantity, min_threshold với kiểu dữ liệu phù hợp. |
+| **Cài đặt đúng hàm findProductBySku sử dụng strcmp và kiểm tra NULL** | **3.5đ** | Kiểm tra tham số đầu vào an toàn, duyệt mảng và dùng strcmp(list[i].sku, target_sku) == 0. |
+| **Cài đặt đúng hàm lọc tồn kho và tính tổng chi phí bù định mức** | **3.5đ** | Tính đúng lượng thiếu hụt deficit = min_threshold - quantity, cộng dồn chi phí ép kiểu double và định dạng bảng rõ ràng. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 21. [PRF_EQ21] Đọc và ghi danh sách đối tượng Struct ra file nhị phân sử dụng fread và fwrite
+### 21. [PRF_EQ21] Đọc và phân tích tệp văn bản có cấu trúc (CSV / Log File) an toàn bằng kết hợp fgets() và sscanf()
 
 - **Mã định danh (Question Code):** `PRF_EQ21`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 55, 57 — *Binary File Persistence for Struct Array*
-- **Mục tiêu đánh giá:** Kiểm tra kỹ năng lưu trữ bền vững (Persistence) dữ liệu mảng cấu trúc ra đĩa cứng và đọc phục hồi nguyên khối.
+- **Chủ đề bài học (Syllabus):** Session 54-56 — *Text File Parsing: Combining fgets() and sscanf() for Resilient I/O*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng đọc tệp văn bản theo dòng an toàn và bóc tách trường dữ liệu có kiểm tra lỗi định dạng bằng bộ đôi fgets() + sscanf().
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy viết hai hàm C hoàn chỉnh:
-1. `int writeStudentsToBinaryFile(const char *filename, const Student list[], int count)`: Ghi toàn bộ danh sách sinh viên xuống file nhị phân.
-2. `int readStudentsFromBinaryFile(const char *filename, Student list[], int max_capacity)`: Đọc toàn bộ danh sách sinh viên từ file nhị phân vào RAM và trả về số lượng sinh viên đọc được."
+> "Giả sử một tệp văn bản `sensors.csv` lưu dữ liệu cảm biến theo từng dòng có định dạng `SensorID,Temperature,Humidity` (ví dụ: `SEN01,26.5,78`). Tại sao việc dùng trực tiếp `fscanf(fp, "%[^,],%lf,%d", ...)` trong vòng lặp dễ bị treo hoặc lệch dòng khi tệp có một dòng bị hỏng định dạng? Hãy viết hàm C sử dụng kết hợp `fgets()` và `sscanf()` để đọc tệp này, bỏ qua các dòng lỗi định dạng và tính nhiệt độ trung bình của các dòng hợp lệ."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Làm sao để biết được có bao nhiêu bản ghi sinh viên trong file nhị phân mà không cần lưu trước trường count vào đầu file?"*
+> *"Nếu một dòng trong tệp `sensors.csv` dài hơn kích thước bộ đệm `char line[128]` truyền vào `fgets()`, làm thế nào để nhận biết dòng đó chưa được đọc hết và xử lý phần dư của dòng đó trước khi đọc dòng tiếp theo?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Cài đặt hai hàm đọc ghi file nhị phân chuẩn công nghiệp trong C:
+1. Tại sao dùng trực tiếp `fscanf()` trên tệp văn bản dễ gây lỗi dây chuyền:
+- Hàm `fscanf()` đọc trực tiếp trên luồng byte và không nhận biết ranh giới từng dòng vật lý. Nếu dòng số 5 bị lỗi định dạng (ví dụ thiếu trường hoặc ghi chữ `"ERR"` vào cột số thực), `fscanf()` dừng lại ngay tại ký tự lỗi đó trong bộ đệm tệp. Ở các vòng lặp tiếp theo, con trỏ tệp bị kẹt tại chỗ hoặc đọc lệch cột của dòng sau nối vào dòng trước, làm hỏng toàn bộ dữ liệu phía sau.
+- **Giải pháp chuẩn công nghiệp (`fgets` + `sscanf`):** Dùng `fgets(line, sizeof(line), fp)` để đọc trọn vẹn **từng dòng độc lập** vào bộ đệm RAM trước, sau đó dùng `sscanf()` phân tích chuỗi `line`. Nếu dòng số 5 bị lỗi (`sscanf` trả về `< 3`), ta chỉ việc ghi cảnh báo và bỏ qua dòng 5; vòng lặp kế tiếp gọi `fgets` sẽ tự động đọc sang dòng số 6 một cách hoàn toàn sạch sẽ!
+
+2. Cài đặt hàm đọc và phân tích tệp `sensors.csv` bằng `fgets()` + `sscanf()`:
+```c
+#include <stdio.h>
+#include <string.h>
+
+int parseSensorCsv(const char *filename, double *out_avg_temp) {
+    if (filename == NULL || out_avg_temp == NULL) return -1;
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        perror("Khong the mo tep sensors.csv");
+        return -1;
+    }
+
+    char line[256];
+    char sensor_id[32];
+    double temp = 0.0, sum_temp = 0.0;
+    int humidity = 0, valid_count = 0, line_no = 0;
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        line_no++;
+        // Bỏ qua dòng trống hoặc dòng tiêu đề/comment bắt đầu bằng '#'
+        if (line[0] == '\n' || line[0] == '\r' || line[0] == '#') continue;
+
+        if (sscanf(line, "%31[^,],%lf,%d", sensor_id, &temp, &humidity) == 3) {
+            sum_temp += temp;
+            valid_count++;
+        } else {
+            fprintf(stderr, "Canh bao: Dong %d sai dinh dang CSV, da bo qua.\n", line_no);
+        }
+    }
+
+    fclose(fp);
+    *out_avg_temp = (valid_count > 0) ? (sum_temp / valid_count) : 0.0;
+    return valid_count;
+}
+```
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Phân tích nhược điểm của fscanf() khi gặp dòng lỗi và ưu thế của fgets() + sscanf()** | **3.5đ** | Giải thích rõ cơ chế cô lập lỗi theo từng dòng của fgets giúp không làm kẹt con trỏ luồng tệp. |
+| **Cài đặt đúng vòng lặp fgets() kết hợp kiểm tra sscanf() == 3** | **3.5đ** | Sử dụng đúng đặc tả %31[^,],%lf,%d trong sscanf và kiểm tra giá trị trả về bằng đúng 3 trường. |
+| **Quản lý tài nguyên tệp an toàn (kiểm tra fopen NULL, fclose, chia cho 0)** | **3.0đ** | Kiểm tra fp != NULL, gọi fclose(fp) đầy đủ và kiểm tra valid_count > 0 trước khi tính trung bình. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 22. [PRF_EQ22] Phân tích kiến trúc biên dịch đa tệp (Multi-file Compilation) và cơ chế Header Guards (#ifndef / #define / #endif)
+
+- **Mã định danh (Question Code):** `PRF_EQ22`
+- **Kho lưu trữ (Target Pool):** `exam_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
+- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
+- **Chủ đề bài học (Syllabus):** Session 16-22 — *Multi-File C Architecture, Header Guards & Internal vs External Linkage*
+- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích quy trình tách chương trình C thành nhiều tệp .h/.c, phòng chống lỗi định nghĩa lặp và kiểm soát phạm vi liên kết (Linkage).
+
+#### ❓ Câu hỏi vấn đáp:
+> "Khi tổ chức một dự án C lớn thành nhiều tệp tiêu đề (`.h`) và tệp mã nguồn (`.c`), hãy phân tích nguyên nhân xảy ra lỗi biên dịch `redefinition of struct ...` và lỗi liên kết `multiple definition of ...`. Cơ chế Header Guards (`#ifndef` / `#define` / `#endif`) hoạt động như thế nào để ngăn chặn lỗi nạp chồng tệp `.h` trong cùng một Translation Unit, và tại sao không được đặt định nghĩa biến toàn cục (không kèm `extern` hay `static`) bên trong tệp `.h`?"
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Nếu bạn viết một hàm tiện ích nội bộ `static int helper(int x)` trong tệp `math_utils.c`, từ khóa `static` ở mức hàm này tác động như thế nào đến Bảng ký hiệu (Symbol Table) của trình liên kết (Linker)?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Phân biệt lỗi Biên dịch (`Redefinition`) và lỗi Liên kết (`Multiple Definition`):
+- **Translation Unit (Đơn vị dịch):** Là một tệp `.c` sau khi Bộ tiền xử lý (Preprocessor) đã nhúng toàn bộ nội dung các tệp `.h` được `#include` vào.
+- **Lỗi `Redefinition of struct ...` (Compile-time Error):** Xảy ra trong **cùng một Translation Unit** khi tệp `main.c` vừa `#include "student.h"`, vừa `#include "course.h"`, mà bản thân `course.h` lại `#include "student.h"` lần nữa $\to$ cấu trúc `struct Student` bị khai báo 2 lần trong cùng một tệp `.c`.
+- **Lỗi `Multiple definition of ...` (Link-time Error):** Xảy ra ở giai đoạn **Linker** ghép nhiều tệp đối tượng (`main.o`, `course.o`) lại với nhau. Nếu tệp `.h` chứa định nghĩa thân hàm hoặc định nghĩa biến toàn cục `int g_count = 0;`, thì cả `main.o` và `course.o` đều xuất khẩu ký hiệu `g_count` (External Linkage) $\to$ Linker báo lỗi trùng lặp ký hiệu toàn cục!
+
+2. Cơ chế hoạt động của Header Guards (`#ifndef` / `#define` / `#endif`):
+```c
+// Tệp student.h
+#ifndef STUDENT_H
+#define STUDENT_H
+
+typedef struct {
+    char id[12];
+    double gpa;
+} Student;
+
+extern int g_total_students; // CHỈ KHAI BÁO (Declaration) với extern, không cấp phát bộ nhớ
+void printStudent(const Student *s); // Nguyên mẫu hàm (Prototype)
+
+#endif /* STUDENT_H */
+```
+- Lần đầu tiên `student.h` được nạp vào `main.c`, macro `STUDENT_H` chưa tồn tại nên Preprocessor định nghĩa `STUDENT_H` và giữ lại nội dung. Ở lần `#include "student.h"` thứ hai trong cùng `main.c`, vì `STUDENT_H` đã được định nghĩa, Preprocessor loại bỏ toàn bộ nội dung bên trong, chống lỗi `Redefinition` 100%.
+- **Lưu ý quan trọng:** Header Guards chỉ có tác dụng trong phạm vi **từng Translation Unit riêng lẻ** (mỗi tệp `.c` biên dịch độc lập). Vì vậy, biến toàn cục dùng chung bắt buộc phải khai báo `extern int g_total_students;` trong `.h` và chỉ định nghĩa cấp phát bộ nhớ `int g_total_students = 0;` trong **đúng một tệp `.c` duy nhất**.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Phân biệt rõ lỗi Redefinition (Compile-time) và Multiple Definition (Link-time)** | **3.5đ** | Giải thích chính xác khái niệm Translation Unit và sự khác biệt giữa lỗi nạp lặp trong 1 file .c với lỗi trùng symbol khi Linker ghép nhiều file .o. |
+| **Trình bày đúng cơ chế và cú pháp Header Guards (#ifndef/#define/#endif)** | **3.5đ** | Viết đúng cấu trúc Header Guard và giải thích cách Preprocessor bỏ qua nội dung nạp lặp lần 2. |
+| **Giải thích quy tắc dùng extern trong .h và định nghĩa biến trong duy nhất 1 tệp .c** | **3.0đ** | Chỉ rõ vì sao Header Guard không ngăn được lỗi Linker nếu đặt định nghĩa biến toàn cục trong file .h. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 23. [PRF_EQ23] Phân tích lỗi trả về địa chỉ biến cục bộ trên Stack (Returning Pointer to Local Variable) và 2 mẫu thiết kế thay thế an toàn
+
+- **Mã định danh (Question Code):** `PRF_EQ23`
+- **Kho lưu trữ (Target Pool):** `exam_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
+- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
+- **Chủ đề bài học (Syllabus):** Session 30-31 — *Stack Frame Lifetime Hazard: Returning Local Address vs Caller-Allocated Buffer*
+- **Mục tiêu đánh giá:** Đánh giá năng lực chẩn đoán lỗi con trỏ treo do trả về địa chỉ mảng cục bộ trên Call Stack và thiết kế giao diện hàm C an toàn bộ nhớ.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Hãy phân tích đoạn mã C sau đây và giải thích tại sao hàm `createGreeting()` lại chứa lỗi bộ nhớ nghiêm trọng dù có thể biên dịch không báo lỗi (chỉ cảnh báo): `char* createGreeting(const char *name) { char buf[64]; snprintf(buf, sizeof(buf), "Xin chao %s", name); return buf; }`. Trình bày 2 phương pháp thiết kế lại hàm này chuẩn công nghiệp trong C và phân tích ưu/nhược điểm của từng phương pháp."
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Nếu một lập trình viên sửa nhanh hàm trên bằng cách thêm từ khóa `static` trước mảng cục bộ (`static char buf[64];`), giải pháp này có nhược điểm nguy hiểm nào khi gọi hàm nhiều lần trong cùng một biểu thức `printf("%s va %s", createGreeting("An"), createGreeting("Binh"))`?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Phân tích nguyên nhân gốc rễ (Stack Frame Unwinding & Dangling Pointer):
+- Trong hàm `createGreeting()`, mảng `char buf[64]` là biến cục bộ có lớp lưu trữ tự động (`auto`), được cấp phát trên **Stack Frame** của riêng hàm `createGreeting`.
+- Ngay khi câu lệnh `return buf;` thực thi, hàm `createGreeting` kết thúc, con trỏ ngăn xếp (`Stack Pointer - ESP/RSP`) lập tức lùi về để **thu hồi toàn bộ Stack Frame** của hàm này.
+- Địa chỉ trả về cho hàm `main()` trở thành một **Con trỏ lơ lửng (Dangling Pointer)** trỏ vào vùng nhớ Stack đã bị giải phóng. Khi hàm tiếp theo (như `printf`) được gọi, Stack Frame mới của `printf` sẽ ghi đè trực tiếp lên vùng nhớ cũ của `buf`, làm chuỗi bị biến dạng thành ký tự rác hoặc gây crash (**Undefined Behavior**).
+
+2. Hai phương pháp thiết kế lại chuẩn công nghiệp:
+- **Phương pháp 1: Hàm gọi tự cấp phát bộ đệm và truyền vào kèm kích thước (Caller-Allocated Buffer — Khuyên dùng nhất trong C hệ thống/nhúng):**
+```c
+int createGreetingSafe(const char *name, char *out_buf, size_t buf_size) {
+    if (name == NULL || out_buf == NULL || buf_size == 0) return -1;
+    return snprintf(out_buf, buf_size, "Xin chao %s", name);
+}
+```
+  + *Ưu điểm:* Không tốn chi phí cấp phát Heap (`malloc`), không bao giờ bị Memory Leak, an toàn tuyệt đối trong môi trường đa luồng.
+- **Phương pháp 2: Cấp phát động trên vùng nhớ Heap (`malloc`) và chuyển giao quyền sở hữu cho Caller:**
+```c
+char* createGreetingHeap(const char *name) {
+    if (name == NULL) return NULL;
+    size_t len = strlen(name) + 16;
+    char *buf = (char *)malloc(len);
+    if (buf != NULL) {
+        snprintf(buf, len, "Xin chao %s", name);
+    }
+    return buf; // Caller BẮT BUỘC phải gọi free() sau khi dùng xong
+}
+```
+  + *Ưu điểm:* Linh hoạt với chuỗi có độ dài bất kỳ. *Nhược điểm:* Tốn chi phí Heap và có nguy cơ Memory Leak nếu Caller quên `free()`.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Phân tích đúng cơ chế thu hồi Stack Frame biến buf thành Dangling Pointer** | **4.0đ** | Giải thích rõ vòng đời biến cục bộ trên Stack kết thúc ngay khi hàm return và bị ghi đè bởi lời gọi hàm kế tiếp. |
+| **Cài đặt đúng Phương pháp 1 (Caller-Allocated Buffer kèm kích thước)** | **3.0đ** | Viết đúng chữ ký hàm nhận out_buf và buf_size, dùng snprintf an toàn không cần cấp phát động. |
+| **Cài đặt đúng Phương pháp 2 (Cấp phát Heap bằng malloc) và so sánh đánh đổi** | **3.0đ** | Tính đúng kích thước cấp phát, kiểm tra malloc != NULL và nêu rõ trách nhiệm gọi free() của Caller. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 24. [PRF_EQ24] Thiết kế ma trận động bằng mảng 1 chiều trải phẳng (1D Flattened Array) và tối ưu hóa CPU Cache Locality
+
+- **Mã định danh (Question Code):** `PRF_EQ24`
+- **Kho lưu trữ (Target Pool):** `exam_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000465`)
+- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
+- **Chủ đề bài học (Syllabus):** Session 31 & 38 — *Contiguous 1D Flattened Matrix vs Pointer-to-Pointer & Cache Locality*
+- **Mục tiêu đánh giá:** Đánh giá năng lực thiết kế ma trận động hiệu năng cao bằng khối nhớ liên tục duy nhất và phân tích tác động của thứ tự duyệt dòng/cột lên bộ nhớ đệm CPU Cache.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Thay vì cấp phát ma trận động $R 	imes C$ bằng con trỏ cấp hai `double **mat` (phải gọi `malloc` $R + 1$ lần), hãy trình bày kỹ thuật cấp phát ma trận động bằng **một khối nhớ liên tục duy nhất** (`double *mat`) chỉ với 1 lệnh `malloc()`. Viết hàm C nhân hai ma trận động theo cách biểu diễn này và giải thích tại sao việc đổi thứ tự vòng lặp từ `i-j-k` sang `i-k-j` lại giúp tăng tốc độ thực thi vượt trội nhờ nguyên lý **Spatial Locality (Tính cục bộ không gian)** trên CPU Cache?"
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Trong công thức ánh xạ chỉ số hai chiều `(r, c)` sang mảng một chiều `r * cols + c`, điều gì sẽ xảy ra nếu `r * cols` vượt quá giới hạn kiểu `int` và tại sao ta nên dùng kiểu `size_t` cho các biến chỉ số và kích thước bộ nhớ?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Kỹ thuật cấp phát ma trận động bằng 1 khối nhớ liên tục (`1D Flattened Row-Major Array`):
+- Toàn bộ ma trận kích thước $R \times C$ được cấp phát bằng **đúng 1 lệnh `malloc(R * C * sizeof(double))`** và giải phóng chỉ bằng **1 lệnh `free()`**, triệt tiêu hoàn toàn hiện tượng phân mảnh bộ nhớ Heap và không tốn thêm $R \times 8$ bytes cho mảng con trỏ trung gian.
+- Công thức ánh xạ tọa độ dòng `r`, cột `c` ($0 \le r < R, 0 \le c < C$) theo thứ tự ưu tiên dòng (`Row-Major Order`):
+  `INDEX(r, c, C) = (r) * (C) + (c)`.
+
+2. Cài đặt hàm nhân hai ma trận động tối ưu hóa thứ tự vòng lặp `i-k-j`:
+```c
+#include <stdlib.h>
+
+double* multiplyMatrices(const double *A, const double *B, size_t M, size_t K, size_t N) {
+    if (A == NULL || B == NULL || M == 0 || K == 0 || N == 0) return NULL;
+    // Dùng calloc để khởi tạo toàn bộ ma trận kết quả C[M x N] về 0.0
+    double *C = (double *)calloc(M * N, sizeof(double));
+    if (C == NULL) return NULL;
+
+    // Thứ tự vòng lặp tối ưu Cache: i -> k -> j (duyệt tuần tự theo dòng cho cả B và C)
+    for (size_t i = 0; i < M; i++) {
+        for (size_t k = 0; k < K; k++) {
+            double a_ik = A[i * K + k]; // Giữ cố định trong thanh ghi CPU suốt vòng lặp j
+            for (size_t j = 0; j < N; j++) {
+                C[i * N + j] += a_ik * B[k * N + j];
+            }
+        }
+    }
+    return C;
+}
+```
+
+3. Phân tích hiệu năng CPU Cache (`Spatial Locality`):
+- Trong vòng lặp truyền thống `i-j-k`, vòng trong cùng chạy theo `k` sẽ truy cập `B[k * N + j]`, tức là nhảy cách quãng $N$ phần tử ($N \times 8$ bytes) ở mỗi bước (duyệt theo cột), gây ra **CPU Cache Miss** liên tục.
+- Khi đảo thành thứ tự `i-k-j`, vòng trong cùng chạy theo `j` truy cập cả `C[i * N + j]` và `B[k * N + j]` tại các ô nhớ nằm **liền kề nhau liên tiếp trên RAM** (bước nhảy bằng 1 phần tử), tận dụng tối đa một đường Cache Line (64 bytes = 8 số `double`), giúp tốc độ nhân ma trận nhanh hơn từ 3 đến 10 lần.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Trình bày đúng kỹ thuật cấp phát 1 khối nhớ liên tục và công thức ánh xạ r * cols + c** | **3.5đ** | Giải thích rõ ưu điểm 1 lần malloc/free, không phân mảnh Heap và công thức chỉ số Row-major order. |
+| **Cài đặt chuẩn hàm nhân ma trận động với calloc và kiểu size_t** | **3.5đ** | Kiểm tra con trỏ NULL, dùng calloc khởi tạo 0.0 và viết đúng công thức tính tích ma trận. |
+| **Phân tích nguyên lý Spatial Locality và lợi ích của thứ tự vòng lặp i-k-j** | **3.0đ** | Giải thích rõ vì sao duyệt theo dòng (stride-1) giảm thiểu Cache Miss so với duyệt nhảy cột (stride-N). |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 25. [PRF_EQ25] Phân tích bẫy lỗi thiếu ký tự kết thúc '\0' của strncpy() và thiết kế hàm ghép chuỗi an toàn với snprintf()
+
+- **Mã định danh (Question Code):** `PRF_EQ25`
+- **Kho lưu trữ (Target Pool):** `exam_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
+- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
+- **Chủ đề bài học (Syllabus):** Session 47-50 — *String Termination Traps: strncpy Non-Null-Termination & snprintf Truncation Detection*
+- **Mục tiêu đánh giá:** Đánh giá khả năng phân tích hành vi biên nguy hiểm của hàm strncpy() và cài đặt hàm ghép đường dẫn tệp có kiểm tra tràn bộ đệm bằng snprintf().
+
+#### ❓ Câu hỏi vấn đáp:
+> "Nhiều lập trình viên cho rằng chỉ cần thay `strcpy(dest, src)` bằng `strncpy(dest, src, sizeof(dest))` là chuỗi luôn an toàn tuyệt đối. Hãy phân tích tại sao cách viết này vẫn gây lỗi nghiêm trọng **thiếu ký tự kết thúc chuỗi `'\0'`** khi `strlen(src) >= sizeof(dest)` và gây lãng phí hiệu năng khi `sizeof(dest)` rất lớn? Hãy viết hàm `int buildFilePath(char *out_buf, size_t buf_size, const char *dir, const char *file)` sử dụng `snprintf()` để nối đường dẫn `"dir/file"` an toàn và phát hiện chính xác khi chuỗi bị cắt cụt (Truncation)."
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Hàm `strncat(dest, src, n)` khác với `strncpy(dest, src, n)` như thế nào về việc tự động ghi ký tự `'\0'`, và tham số `n` truyền vào `strncat` phải được tính như thế nào để không gây tràn mảng `dest`?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Hai cạm bẫy thiết kế của hàm `strncpy(dest, src, n)` trong chuẩn C:
+- **Bẫy 1 — Không tự động ghi ký tự `'\0'` khi nguồn dài bằng hoặc hơn `n`:** Theo đặc tả chuẩn C99/C11, nếu trong `n` byte đầu tiên của `src` không có ký tự `'\0'` (tức là `strlen(src) >= n`), hàm `strncpy()` sẽ sao chép đúng `n` ký tự và **KHÔNG ghi thêm ký tự `'\0'` nào cả**! Khi đó `dest` trở thành mảng ký tự không có null-terminator; mọi lời gọi `printf("%s", dest)` hoặc `strlen(dest)` tiếp theo sẽ đọc tràn qua các biến lân cận trên Stack (**Buffer Over-read**). Nếu bắt buộc dùng `strncpy`, luôn phải ép `dest[sizeof(dest) - 1] = '\0';`.
+- **Bẫy 2 — Ghi đè toàn bộ phần dư bằng byte `'\0'` (Zero-Padding Overhead):** Ngược lại, nếu `src` chỉ dài 5 ký tự nhưng `n = 65536`, `strncpy` sẽ sao chép 5 ký tự rồi tiếp tục ghi thêm 65,531 byte `'\0'` vào phần còn lại của `dest`, gây lãng phí chu kỳ CPU không cần thiết.
+
+2. Thiết kế hàm ghép đường dẫn an toàn và phát hiện cắt cụt (Truncation) bằng `snprintf()`:
+```c
+#include <stdio.h>
+#include <stddef.h>
+
+// Trả về 0 nếu thành công trọn vẹn, -1 nếu tham số không hợp lệ hoặc bị cắt cụt (Truncated)
+int buildFilePath(char *out_buf, size_t buf_size, const char *dir, const char *file) {
+    if (out_buf == NULL || dir == NULL || file == NULL || buf_size == 0) {
+        return -1;
+    }
+    // snprintf LUÔN bảo đảm ghi ký tự '\0' ở cuối (khi buf_size > 0)
+    // và trả về số ký tự LẼ RA đã được ghi (không tính '\0') nếu bộ đệm đủ lớn.
+    int written = snprintf(out_buf, buf_size, "%s/%s", dir, file);
+    if (written < 0 || (size_t)written >= buf_size) {
+        // Chuỗi kết quả đã bị cắt cụt vì vượt quá sức chứa của out_buf!
+        return -1;
+    }
+    return 0;
+}
+```
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Phân tích đúng 2 cạm bẫy của strncpy (không chèn '\0' khi strlen >= n và zero-padding)** | **4.0đ** | Giải thích chính xác vì sao strncpy(dest, src, sizeof(dest)) làm mất '\0' gây Buffer Over-read. |
+| **Cài đặt đúng hàm buildFilePath bằng snprintf()** | **3.0đ** | Kiểm tra tham số NULL/buf_size == 0 và sử dụng snprintf(out_buf, buf_size, "%s/%s", dir, file). |
+| **Kiểm tra điều kiện phát hiện cắt cụt chuỗi (size_t)written >= buf_size** | **3.0đ** | Giải thích đúng ý nghĩa giá trị trả về của snprintf và phát hiện chính xác khi chuỗi bị cắt cụt. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 26. [PRF_EQ26] Kỹ thuật cập nhật trực tiếp bản ghi Struct tại chỗ (In-Place Update) trên tệp nhị phân bằng fseek() và ftell()
+
+- **Mã định danh (Question Code):** `PRF_EQ26`
+- **Kho lưu trữ (Target Pool):** `exam_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO9** (`00000000-0000-0000-0000-000000000469`)
+- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
+- **Chủ đề bài học (Syllabus):** Session 56-57 — *Random Access Binary File I/O: In-Place Record Modification with fseek & rb+*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng định vị con trỏ tệp nhị phân với độ phức tạp O(1) để đọc và ghi đè một bản ghi Struct cụ thể mà không cần nạp toàn bộ tệp vào RAM.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Giả sử một tệp nhị phân `accounts.dat` lưu trữ hàng triệu bản ghi có kích thước cố định `Account` (`int id; char owner[40]; double balance;`). Làm thế nào để cập nhật số dư mới cho bản ghi tại vị trí chỉ số `index` (0-indexed) với độ phức tạp thời gian $O(1)$ mà không cần đọc toàn bộ tệp vào RAM? Hãy viết hàm C mở tệp ở chế độ cập nhật nhị phân `"rb+"`, kiểm tra `index` có vượt quá số lượng bản ghi thực tế của tệp bằng `fseek()`/`ftell()` hay không, đọc bản ghi lên cập nhật và ghi đè lại đúng vị trí đó."
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Theo đặc tả chuẩn ANSI C (C99/C11), khi mở tệp ở chế độ cập nhật (`"rb+"`), tại sao chương trình BẮT BUỘC phải gọi `fseek()` hoặc `fflush()` ở giữa thao tác đọc (`fread`) và thao tác ghi (`fwrite`) liên tiếp trên cùng một luồng `FILE*`?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Nguyên lý truy cập ngẫu nhiên $O(1)$ và quy tắc chuyển đổi Đọc $\leftrightarrow$ Ghi trên luồng `"rb+"`:
+- Vì mỗi phần tử `Account` trong tệp nhị phân có kích thước cố định bằng `sizeof(Account)` bytes, bản ghi thứ `index` ($0, 1, 2, \dots$) luôn nằm tại độ lệch byte (Byte Offset) chính xác là: `offset = (long)index * (long)sizeof(Account)`.
+- Để xác định tổng số bản ghi hiện có trong tệp: Dịch con trỏ tệp về cuối bằng `fseek(fp, 0L, SEEK_END)`, gọi `long file_size = ftell(fp)`, suy ra tổng số bản ghi là `total_records = file_size / sizeof(Account)`.
+- **Quy tắc sống còn của chuẩn C khi dùng `"rb+"`:** Trên một luồng cập nhật (`+`), một thao tác đọc (`fread`) **không được theo sau trực tiếp** bởi một thao tác ghi (`fwrite`) (và ngược lại) nếu không có một lời gọi định vị lại con trỏ tệp (`fseek`, `fsetpos`, `rewind`) hoặc `fflush` ở giữa để đồng bộ hóa bộ đệm đọc/ghi nội bộ của `FILE*`.
+
+2. Cài đặt hàm cập nhật bản ghi tại chỗ (`updateAccountBalanceAt`) chuẩn công nghiệp:
 ```c
 #include <stdio.h>
 
 typedef struct {
-    char id[15];
-    char name[40];
-    float gpa;
-} Student;
+    int id;
+    char owner[40];
+    double balance;
+} Account;
 
-// Hàm ghi danh sách sinh viên ra file nhị phân
-int writeStudentsToBinaryFile(const char *filename, const Student list[], int count) {
-    if (filename == NULL || list == NULL || count <= 0) return 0;
+int updateAccountBalanceAt(const char *filename, size_t index, double delta) {
+    if (filename == NULL) return -1;
+    FILE *fp = fopen(filename, "rb+"); // Mở đọc + ghi nhị phân, không xóa nội dung cũ
+    if (fp == NULL) return -1;
 
-    FILE *fp = fopen(filename, "wb");
-    if (fp == NULL) return 0; // Mở file thất bại
+    // 1. Kiểm tra kích thước tệp để xác nhận index hợp lệ
+    if (fseek(fp, 0L, SEEK_END) != 0) { fclose(fp); return -1; }
+    long file_size = ftell(fp);
+    if (file_size < 0 || (size_t)file_size < (index + 1) * sizeof(Account)) {
+        fclose(fp);
+        return -1; // Index nằm ngoài phạm vi tệp!
+    }
 
-    size_t written = fwrite(list, sizeof(Student), count, fp);
+    long target_offset = (long)(index * sizeof(Account));
+    Account acc;
+
+    // 2. Nhảy tới vị trí bản ghi để đọc
+    if (fseek(fp, target_offset, SEEK_SET) != 0 || fread(&acc, sizeof(Account), 1, fp) != 1) {
+        fclose(fp);
+        return -1;
+    }
+
+    // 3. Cập nhật số dư và gọi fseek lùi lại đúng target_offset trước khi fwrite
+    acc.balance += delta;
+    if (fseek(fp, target_offset, SEEK_SET) != 0 || fwrite(&acc, sizeof(Account), 1, fp) != 1) {
+        fclose(fp);
+        return -1;
+    }
+
+    fflush(fp);
     fclose(fp);
-    return (written == (size_t)count); // Trả về 1 nếu ghi đủ, 0 nếu lỗi
-}
-
-// Hàm đọc danh sách sinh viên từ file nhị phân
-int readStudentsFromBinaryFile(const char *filename, Student list[], int max_capacity) {
-    if (filename == NULL || list == NULL || max_capacity <= 0) return 0;
-
-    FILE *fp = fopen(filename, "rb");
-    if (fp == NULL) return 0; // File không tồn tại
-
-    // Cách 1: Đọc tuần tự từng bản ghi đến khi hết file
-    int count = 0;
-    while (count < max_capacity && fread(&list[count], sizeof(Student), 1, fp) == 1) {
-        count++;
-    }
-
-    /* Cách 2 tính trước số bản ghi bằng fseek:
-       fseek(fp, 0, SEEK_END);
-       long totalBytes = ftell(fp);
-       rewind(fp);
-       int totalRecords = totalBytes / sizeof(Student);
-    */
-
-    fclose(fp);
-    return count; // Trả về số lượng sinh viên đọc được
+    return 0;
 }
 ```
 
@@ -2873,281 +3200,9 @@ int readStudentsFromBinaryFile(const char *filename, Student list[], int max_cap
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Cài đặt chuẩn hàm writeStudentsToBinaryFile với fwrite** | **4.0đ** | Mở file mode wb, kiểm tra NULL, gọi fwrite(list, sizeof(Student), count, fp) và fclose. |
-| **Cài đặt chuẩn hàm readStudentsFromBinaryFile với fread** | **4.0đ** | Mở file mode rb, kiểm tra NULL, đọc an toàn tránh buffer overflow và trả về count. |
-| **Kỹ thuật tính tổng số bản ghi bằng fseek/ftell** | **2.0đ** | Trình bày cách lấy totalBytes chia cho sizeof(Student) để suy ra số lượng bản ghi. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 22. [PRF_EQ22] Phân tích bài toán đệ quy Tháp Hà Nội (Tower of Hanoi): Không gian Stack Frame và độ phức tạp
-
-- **Mã định danh (Question Code):** `PRF_EQ22`
-- **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
-- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 23 — *Algorithmic Analysis: Tower of Hanoi Recursion*
-- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích thuật toán đệ quy chia để trị, cây đệ quy, không gian Call Stack và độ phức tạp tính toán hàm mũ.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Hãy trình bày thuật toán đệ quy giải bài toán Tháp Hà Nội (Tower of Hanoi) gồm N đĩa chuyển từ cọc nguồn A sang cọc đích C qua cọc trung gian B. Viết hàm C cài đặt thuật toán. Phân tích độ sâu tối đa của Call Stack và độ phức tạp thời gian Big-O của thuật toán."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Với N = 64 đĩa, nếu mỗi giây máy tính thực hiện được 1 bước chuyển đĩa thì mất khoảng bao nhiêu năm để hoàn thành bài toán?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Thuật toán đệ quy Tháp Hà Nội:
-Bài toán chia để trị chuyển $N$ đĩa từ cọc nguồn A sang cọc đích C dùng cọc phụ B:
-- Base Case: Nếu $N = 1$, chuyển trực tiếp đĩa 1 từ A sang C.
-- Recursive Step:
-  + Bước 1: Chuyển $N - 1$ đĩa trên cùng từ cọc A sang cọc phụ B (dùng cọc C làm trung gian).
-  + Bước 2: Chuyển đĩa thứ $N$ (đĩa lớn nhất) trực tiếp từ cọc A sang cọc đích C.
-  + Bước 3: Chuyển $N - 1$ đĩa từ cọc phụ B sang cọc đích C (dùng cọc A làm trung gian).
-
-2. Cài đặt hàm C:
-```c
-#include <stdio.h>
-
-void towerOfHanoi(int n, char from_rod, char to_rod, char aux_rod) {
-    if (n == 1) {
-        printf("Chuyen dia 1 tu coc %c sang coc %c
-", from_rod, to_rod);
-        return;
-    }
-    towerOfHanoi(n - 1, from_rod, aux_rod, to_rod);
-    printf("Chuyen dia %d tu coc %c sang coc %c
-", n, from_rod, to_rod);
-    towerOfHanoi(n - 1, aux_rod, to_rod, from_rod);
-}
-```
-
-3. Phân tích độ phức tạp thuật toán:
-- Số bước chuyển đĩa tuân theo hệ thức truy hồi: $T(N) = 2T(N - 1) + 1$, với $T(1) = 1$.
-  -> $T(N) = 2^N - 1$.
-  -> Độ phức tạp thời gian: **$O(2^N)$** (Tăng trưởng theo cấp số nhân khổng lồ).
-- Độ sâu ngăn xếp (Call Stack Depth): Cây đệ quy duyệt theo chiều sâu (DFS), tại mỗi thời điểm độ sâu tối đa của Stack Frame chỉ bằng số đĩa $N$.
-  -> Độ phức tạp không gian bộ nhớ: **$O(N)$**.
-
-*Với $N = 64$:* $2^{64} - 1 pprox 1.84 	imes 10^{19}$ giây $pprox 584$ tỷ năm (lớn hơn nhiều lần tuổi của vũ trụ).
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Trình bày đúng 3 bước chia để trị của thuật toán Tháp Hà Nội** | **3.0đ** | Nêu rõ chuyển n-1 đĩa sang cọc phụ, chuyển đĩa n sang đích, chuyển n-1 đĩa về đích. |
-| **Cài đặt đúng 100% mã nguồn C với điều kiện dừng n == 1** | **3.5đ** | Viết đúng tham số from_rod, to_rod, aux_rod và hoán vị vai trò cọc trong 2 lời gọi. |
-| **Phân tích độ phức tạp thời gian O(2^N) và không gian Stack O(N)** | **3.5đ** | Chứng minh công thức 2^N - 1 và chỉ rõ độ sâu Stack Frame bằng N theo chiều sâu. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 23. [PRF_EQ23] Phân tích sự cố rò rỉ bộ nhớ (Memory Leak) và con trỏ lơ lửng (Dangling Pointer) trong hệ thống nhúng
-
-- **Mã định danh (Question Code):** `PRF_EQ23`
-- **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
-- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 31 — *Memory Bugs Deep Analysis in Embedded Systems*
-- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích nguyên nhân gốc rễ và đề xuất giải pháp kỹ thuật phòng chống lỗi bộ nhớ trong phần mềm C chạy lâu dài.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Trong các ứng dụng hệ thống nhúng (Embedded) hoặc thiết bị IoT chạy 24/7 bằng C, sự cố Rò rỉ bộ nhớ (Memory Leak) và Con trỏ lơ lửng (Dangling Pointer) gây ra những thảm họa nào? Phân tích một kịch bản mã nguồn C điển hình gây ra lỗi và đề xuất 3 quy chuẩn lập trình phòng vệ (Defensive Programming)."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại sao nhiều chuẩn an toàn nhúng như MISRA C lại nghiêm cấm việc sử dụng cấp phát động (malloc/free) sau giai đoạn khởi động?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Thảm họa trong hệ thống nhúng chạy liên tục (24/7):
-- Thiết bị nhúng thường có dung lượng RAM vật lý rất hạn chế (vài chục KB đến vài MB), không có bộ nhớ ảo (Virtual Memory / Swap) và không có Garbage Collector.
-- Rò rỉ bộ nhớ dù chỉ vài bytes mỗi chu kỳ: Sau vài ngày hoặc vài tuần hoạt động, phân vùng Heap bị cạn kiệt hoàn toàn, hàm `malloc` tiếp theo trả về `NULL`. Nếu thiếu kiểm tra, thiết bị sẽ crash ngay lập tức (Watchdog Timer reset), làm gián đoạn hệ thống phanh ô tô, thiết bị y tế hoặc trạm viễn thông.
-- Con trỏ lơ lửng (Dangling Pointer): Ghi đè vào ô nhớ đã giải phóng làm biến dạng dữ liệu cấu hình hoặc lệnh điều khiển cảm biến, gây sai lệch hành vi thiết bị mà không có cảnh báo.
-
-2. Kịch bản lỗi mã nguồn điển hình:
-```c
-void processPacket(void) {
-    char *buffer = (char*)malloc(128);
-    if (readSensorData(buffer) < 0) {
-        return; // LỖI: Thoát sớm do lỗi đọc nhưng QUÊN gọi free(buffer) -> Memory Leak!
-    }
-    // ...
-    free(buffer);
-    // LỖI: Quên gán buffer = NULL; nếu hàm gọi tiếp buffer[0] -> Dangling Pointer!
-}
-```
-
-3. Ba quy chuẩn lập trình phòng vệ (Defensive Programming):
-- Quy tắc 1 (Single Return Point / Cleanup Label): Sử dụng mẫu thiết kế một điểm thoát duy nhất hoặc khối dọn dẹp nhãn `goto cleanup;` để bảo đảm mọi nhánh rẽ nhánh lỗi đều được giải phóng bộ nhớ.
-- Quy tắc 2 (Immediate NULL Assignment): Bắt buộc viết macro hoặc hàm bao đóng: `#define SAFE_FREE(p) do { free(p); (p) = NULL; } while(0)`.
-- Quy tắc 3 (Tuân thủ chuẩn MISRA C): Nghiêm cấm cấp phát động `malloc/free` trong vòng lặp runtime; thay vào đó cấp phát tĩnh cố định (Static Memory Allocation) hoặc dùng bộ nhớ đệm dạng mảng tròn (Ring Buffer) ngay từ khi khởi động hệ thống.
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Phân tích thảm họa cạn RAM và crash trên hệ thống nhúng** | **3.0đ** | Nêu rõ hạn chế RAM, không có GC/swap và hậu quả crash làm ngưng trệ thiết bị. |
-| **Phân tích kịch bản code lỗi thoát sớm gây leak và dangling** | **3.5đ** | Chỉ rõ nhánh return sớm bỏ sót free và quên gán NULL sau khi free. |
-| **Ba quy chuẩn phòng vệ và nguyên tắc MISRA C cấm malloc** | **3.5đ** | Trình bày macro SAFE_FREE, cleanup pattern và giải pháp cấp phát tĩnh chuẩn MISRA. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 24. [PRF_EQ24] Phân tích thiết kế ma trận động bằng con trỏ cấp 2 (int**) vs mảng 1 chiều liên tục
-
-- **Mã định danh (Question Code):** `PRF_EQ24`
-- **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000463`)
-- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 38 — *2D Matrix Architecture: Double Pointer vs 1D Flattened*
-- **Mục tiêu đánh giá:** Kiểm tra năng lực so sánh hai trường phái thiết kế ma trận động về độ phân mảnh bộ nhớ, CPU Cache Locality và chi phí giải phóng.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Có hai cách để quản lý một ma trận động M dòng N cột trong C: (Cách 1) Dùng con trỏ cấp hai `int **matrix` cấp phát M mảng con riêng biệt; (Cách 2) Dùng con trỏ một chiều `int *matrix` cấp phát một khối liên tục $M 	imes N$ phần tử và truy xuất qua công thức `matrix[i * N + j]`. Hãy so sánh hai giải pháp này về: Tính liên tục ô nhớ, Tận dụng CPU Cache Locality, Số lượng lệnh malloc/free cần gọi, và Khả năng hỗ trợ các dòng có độ dài khác nhau (Ragged Array)."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Cách nào trong hai cách trên cho hiệu năng tính toán số học ma trận (như nhân 2 ma trận lớn) cao hơn vượt trội và tại sao?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-So sánh chi tiết hai kiến trúc thiết kế ma trận động trong C:
-
-1. Cách 1: Con trỏ cấp hai (`int **matrix`):
-- Cấu trúc: Cấp phát 1 mảng con trỏ dòng gồm $M$ phần tử, sau đó mỗi dòng cấp phát $N$ phần tử riêng rẽ trên Heap.
-- Ưu điểm:
-  + Cú pháp truy xuất tự nhiên: `matrix[i][j]`.
-  + Hỗ trợ ma trận răng cưa (Ragged Array): Mỗi hàng có thể có số cột khác nhau tùy ý, tiết kiệm RAM cho các cấu trúc tam giác hoặc chuỗi ký tự.
-- Nhược điểm:
-  + Bộ nhớ bị phân mảnh (Memory Fragmentation): Các dòng có thể nằm rải rác ở các trang nhớ xa nhau trên Heap.
-  + Tốn chi phí quản lý: Phải gọi $M + 1$ lệnh `malloc()` và $M + 1$ lệnh `free()`. Tốn thêm $M 	imes 8$ bytes cho mảng con trỏ.
-  + Phá hủy CPU Cache: Truy cập `matrix[i][j]` phải giải tham chiếu 2 lần (Double Indirection). CPU dễ bị Cache Miss liên tục.
-
-2. Cách 2: Mảng một chiều trải phẳng liên tục (`int *matrix`):
-- Cấu trúc: Cấp phát duy nhất 1 khối nhớ liên tục có kích thước $M 	imes N 	imes 	ext{sizeof}(int)$ bytes: `malloc(M * N * sizeof(int))`. Truy xuất qua `matrix[i * N + j]`.
-- Ưu điểm:
-  + Bộ nhớ liên tục 100%: Tận dụng tối đa bộ nhớ đệm CPU (CPU Cache Line Locality). Khi nạp phần tử `matrix[i * N + j]`, các phần tử lân cận đã được tải sẵn vào L1/L2 Cache của CPU.
-  + Hiệu năng vượt trội: Tốc độ tính toán nhân ma trận nhanh hơn từ 2 đến 5 lần so với Cách 1.
-  + Tối ưu quản lý: Chỉ cần ĐÚNG 1 LỆNH `malloc()` và ĐÚNG 1 LỆNH `free()`.
-- Nhược điểm:
-  + Không hỗ trợ ma trận răng cưa (mọi hàng buộc phải có cùng kích thước $N$). Cú pháp tính chỉ số phức tạp hơn một chút.
-
--> Trong tính toán khoa học, xử lý ảnh và đồ họa game, Cách 2 (Mảng phẳng liên tục) là chuẩn công nghiệp bắt buộc.
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Phân tích ưu nhược điểm kiến trúc con trỏ cấp hai int**** | **3.5đ** | Nêu rõ cú pháp [i][j], hỗ trợ ragged array nhưng tốn M+1 lần malloc/free và phân mảnh. |
-| **Phân tích ưu nhược điểm kiến trúc mảng phẳng int* liên tục** | **3.5đ** | Chỉ ra 1 lệnh malloc duy nhất, bộ nhớ liên tục tuyệt đối và công thức [i*N + j]. |
-| **So sánh CPU Cache Locality và hiệu năng tính toán ma trận** | **3.0đ** | Chứng minh mảng phẳng tận dụng Cache line L1/L2 vượt trội, tránh Double Indirection. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 25. [PRF_EQ25] Phân tích lỗ hổng tràn bộ đệm (Stack-based Buffer Overflow) khi sử dụng các hàm chuỗi không an toàn trong C
-
-- **Mã định danh (Question Code):** `PRF_EQ25`
-- **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000462`)
-- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 47 — *Security Audit: Unsafe String Functions & Buffer Overflow*
-- **Mục tiêu đánh giá:** Đánh giá năng lực kiểm toán an ninh mã nguồn, nhận diện hàm nguy hiểm và đề xuất danh mục hàm thay thế an toàn.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Hãy liệt kê danh sách các hàm xử lý chuỗi và nhập xuất KHÔNG AN TOÀN kinh điển trong thư viện chuẩn C (như gets, strcpy, strcat, sprintf, scanf) và phân tích tại sao chúng gây ra lỗ hổng Buffer Overflow. Đưa ra danh mục các hàm an toàn tương ứng và giải thích cơ chế bảo vệ của chúng."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Hàm strncpy có tự động chèn ký tự null '\0' vào cuối mảng đích nếu chuỗi nguồn dài hơn kích thước giới hạn không?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Danh sách các hàm không an toàn và nguyên nhân gây lỗi:
-- `gets(buf)`: Hoàn toàn không nhận tham số giới hạn kích thước đệm. Đọc vô tận đến khi gặp ký tự xuống dòng.
-- `strcpy(dest, src)`: Sao chép toàn bộ chuỗi `src` sang `dest` mà không kiểm tra xem mảng `dest` có đủ dung lượng chứa hay không.
-- `strcat(dest, src)`: Nối chuỗi mà không kiểm tra dung lượng còn lại của mảng `dest`.
-- `sprintf(buf, format, ...)`: Định dạng chuỗi không kiểm soát độ dài kết quả sinh ra.
-- `scanf("%s", buf)`: Đọc từ bàn phím và dừng khi gặp khoảng trắng nhưng không giới hạn số ký tự đọc vào.
-
-*Nguyên nhân cốt lõi:* Các hàm này tin tưởng ngây thơ vào dữ liệu đầu vào và chỉ dừng lại khi gặp ký tự `'\0'` hoặc `
-`, dẫn đến việc ghi đè lên các vùng nhớ lân cận trên Stack Frame (Return Address, biến cục bộ).
-
-2. Danh mục các hàm thay thế an toàn chuẩn công nghiệp:
-- Thay `gets()` bằng `fgets(buf, sizeof(buf), stdin)`: Bắt buộc chỉ định kích thước tối đa đọc vào.
-- Thay `strcpy()` bằng `strncpy(dest, src, n)` hoặc `snprintf(dest, sizeof(dest), "%s", src)`:
-  + Cảnh báo với `strncpy`: Nếu độ dài `src >= n`, hàm `strncpy` sẽ KHÔNG tự động chèn ký tự null `'\0'` ở cuối! Do đó phải luôn chủ động viết: `dest[sizeof(dest) - 1] = ' ';`.
-- Thay `strcat()` bằng `strncat(dest, src, n)`: Chỉ nối tối đa `n` ký tự và LUÔN tự động đảm bảo có ký tự `'\0'` kết thúc.
-- Thay `sprintf()` bằng `snprintf(dest, sizeof(dest), format, ...)`: Giới hạn số ký tự tối đa ghi vào đệm, trả về số ký tự lẽ ra đã được ghi nếu bộ đệm đủ lớn.
-- Thay `scanf("%s", buf)` bằng `scanf("%19s", buf)` (đối với mảng 20 phần tử): Chỉ định độ rộng trường tối đa trong chuỗi định dạng.
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Liệt kê đầy đủ 5 hàm không an toàn kinh điển trong C** | **3.0đ** | Nêu rõ gets, strcpy, strcat, sprintf, scanf("%s") và lý do thiếu bounds check. |
-| **Danh mục hàm an toàn tương ứng (fgets, strncpy, snprintf)** | **4.0đ** | Đưa ra danh mục chuẩn hóa kèm cơ chế giới hạn dung lượng byte bộ đệm tối đa. |
-| **Cảnh báo bẫy thiếu '\0' của hàm strncpy** | **3.0đ** | Phân tích sâu trường hợp src >= n thì strncpy không tự thêm '\0' và cách khắc phục. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 26. [PRF_EQ26] Phân tích bẫy lỗi vòng lặp feof() khi đọc file trong C và giải pháp xử lý I/O chuẩn công nghiệp
-
-- **Mã định danh (Question Code):** `PRF_EQ26`
-- **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO9** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000464`)
-- **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 55-56 — *File I/O EOF Handling & Industry Best Practices*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu sâu về trạng thái luồng tệp, cơ chế kích hoạt cờ EOF/Error và viết code đọc file chuẩn mực.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Rất nhiều lập trình viên C mới học mắc phải lỗi sử dụng vòng lặp kiểm tra `while (!feof(fp))` khi đọc dữ liệu từ tệp tin. Hãy phân tích cơ chế nội tại của hàm feof() và ferror() để giải thích tại sao đoạn mã sau lại in ra phần tử cuối cùng 2 lần:
-```c
-while (!feof(fp)) {
-    fscanf(fp, "%d", &val);
-    printf("%d ", val);
-}
-```
-Hãy viết lại đoạn mã chuẩn công nghiệp để khắc phục triệt để lỗi này."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Hàm feof() dùng để làm gì nếu không được dùng làm điều kiện điều khiển vòng lặp đọc file?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cơ chế nội tại của hàm `feof()` và trạng thái luồng tệp:
-Trong cấu trúc `FILE*` của thư viện C, mỗi luồng tệp có hai cờ trạng thái nội tại: Cờ kết thúc tệp (EOF indicator) và Cờ lỗi I/O (Error indicator).
-- Hàm `feof(fp)` kiểm tra cờ EOF indicator: Cờ này BAN ĐẦU BẰNG 0 (False).
-- QUY TẮC CỐT LÕI: Cờ EOF KHÔNG được kích hoạt khi con trỏ tệp vừa chạm đáy tệp. Nó CHỈ ĐƯỢC BẬT LÊN SAU KHI một thao tác đọc (như `fgetc`, `fscanf`, `fread`) cố gắng đọc tiếp dữ liệu nhưng nhận thấy không còn byte nào để đọc (gặp EOF).
-
-2. Phân tích từng bước tại sao in ra phần tử cuối 2 lần:
-- Giả sử tệp tin chỉ chứa 1 số duy nhất: `100`.
-- Lần lặp 1:
-  + `feof(fp)` kiểm tra cờ EOF: cờ đang bằng 0 -> Điều kiện `!feof(fp)` là ĐÚNG.
-  + `fscanf(fp, "%d", &val)`: Đọc thành công số `100`, con trỏ tệp chạm đáy file. `val = 100`.
-  + `printf("%d ", val)`: In ra màn hình số `100`.
-- Lần lặp 2:
-  + `feof(fp)` lại được kiểm tra: Vì CHƯA CÓ LỆNH ĐỌC NÀO THẤT BẠI ở đáy file, cờ EOF VẪN BẰNG 0! -> Điều kiện `!feof(fp)` vẫn ĐÚNG!
-  + `fscanf(fp, "%d", &val)`: Cố đọc số tiếp theo -> Thất bại (trả về EOF). Lúc này cờ EOF mới được bật! Tuy nhiên, biến `val` KHÔNG HỀ ĐƯỢC CẬP NHẬT (vẫn giữ giá trị cũ là `100`).
-  + `printf("%d ", val)`: Lại in tiếp giá trị cũ `100` lần thứ hai!
-- Lần lặp 3: `feof(fp)` lúc này mới trả về 1, vòng lặp dừng.
-
-3. Giải pháp chuẩn công nghiệp:
-Điều khiển vòng lặp trực tiếp bằng GIÁ TRỊ TRẢ VỀ của hàm đọc:
-```c
-// Chuẩn công nghiệp: fscanf trả về số lượng biến đọc thành công
-while (fscanf(fp, "%d", &val) == 1) {
-    printf("%d ", val);
-}
-
-// Với hàm đọc nhị phân fread:
-while (fread(&item, sizeof(Item), 1, fp) == 1) {
-    processItem(&item);
-}
-```
-*Vai trò thực tế của `feof()` và `ferror()`:* Được sử dụng SAU KHI vòng lặp đọc đã kết thúc để phân loại nguyên nhân dừng vòng lặp: do đã đọc hết tệp bình thường (`feof(fp)`) hay do gặp lỗi phần cứng/đĩa bị ngắt kết nối (`ferror(fp)`).
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Giải thích cơ chế kích hoạt cờ EOF indicator** | **3.0đ** | Phân tích rõ cờ EOF chỉ bật khi lệnh đọc cố đọc vượt đáy tệp và thất bại. |
-| **Truy vết chi tiết từng bước lặp dẫn đến in đúp dữ liệu** | **4.0đ** | Mô tả chuẩn xác lần lặp thứ hai fscanf thất bại nhưng biến val giữ giá trị cũ và bị in lại. |
-| **Đoạn mã chuẩn công nghiệp và vai trò thực sự của feof/ferror** | **3.0đ** | Viết đúng while(fscanf == 1) và giải thích feof/ferror dùng phân loại lỗi sau vòng lặp. |
+| **Giải thích công thức tính Byte Offset O(1) và kiểm tra giới hạn tệp bằng SEEK_END + ftell** | **3.5đ** | Nêu đúng công thức offset = index * sizeof(Account) và cách tính tổng số bản ghi từ ftell(fp). |
+| **Cài đặt đúng quy trình mở tệp rb+, đọc fread, cập nhật và ghi đè fwrite** | **3.5đ** | Sử dụng đúng chế độ rb+ (không dùng wb+ vì sẽ xóa sạch tệp) và kiểm tra giá trị trả về của fread/fwrite. |
+| **Giải thích và thực hiện gọi fseek() giữa fread() và fwrite()** | **3.0đ** | Nêu rõ vừa để lùi con trỏ tệp về đầu bản ghi vừa tuân thủ chuẩn C khi chuyển từ trạng thái đọc sang ghi trên luồng rb+. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---

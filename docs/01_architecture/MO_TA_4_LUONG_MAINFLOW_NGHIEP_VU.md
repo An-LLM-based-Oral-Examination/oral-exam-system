@@ -8,7 +8,7 @@
 > **Đội ngũ kỹ sư thực hiện (4 thành viên):**  
 > - 🧑 **Nguyễn Quang Thành:** Team Leader & Lead Backend Architect (Backend MF-01 + MF-02, Module Báo cáo Khảo thí FPT Excel .xlsx + PDF, Tích hợp hệ thống Clean Architecture)  
 > - 🧑 **Nguyễn Trọng Tốt:** Backend Developer, AI Specialist & QA Lead (Dual Auth Google OAuth 2.0 + Tài khoản trường cấp, Backend MF-03, TOÀN BỘ Backend MF-04, Backend APIs vệ tinh Semester/Notification/User Mgmt, AI Core & Polly/DLQ, xUnit/NetArchTest)  
-> - 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 30 bảng PostgreSQL và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend; Student Portal Dashboard, Lịch sử luyện tập & thi thử, UI Thi thử Voice-First MF-02, UI Duyệt đề MF-03, UI Ca thi & Thẩm định phúc khảo MF-04, User Mgmt FE-09, Semester CRUD FE-08)  
+> - 🧑 **Phạm Nguyễn Đăng Hải:** DB Specialist & Frontend Developer (phụ trách Database 38 bảng PostgreSQL 3NF trong 7 Bounded Contexts và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend; Student Portal Dashboard, Lịch sử luyện tập & thi thử, UI Thi thử Voice-First MF-02, UI Duyệt đề MF-03, UI Ca thi & Thẩm định phúc khảo MF-04, User Mgmt FE-09, Semester CRUD FE-08)  
 > - 🧑 **Lê Vũ Hoàng:** Lead Frontend Architect & Fullstack Coordinator (Kiến trúc Frontend Core React 19 + Tailwind v4, UI Luyện tập MF-01, Màn hình Kiosk phòng Lab MF-04, Màn hình Hậu kiểm Evidence Panel cho Giảng viên, Dual Auth UI, Notification in-app FE-11, Dashboard FE-10)  
 > **Thư mục sơ đồ Draw.io:** [**`05_Source_Code/docs/05_diagrams/`**](../05_diagrams/)  
 > • Tệp Master 4 Tabs: [`CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`](../05_diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)

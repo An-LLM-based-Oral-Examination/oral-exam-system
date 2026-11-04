@@ -227,7 +227,7 @@ backend/src/
   - Tích hợp Gemini 1.5 Flash CoT chấm điểm song song `Task.WhenAll` (SLA 3–5s) trả về Scorecard Rubric 10.0đ chi tiết theo từng CLO.
   - Xếp loại 5 bậc học thuật (Xuất sắc, Giỏi, Khá, Trung bình, Yếu) và lưu chi tiết vào `ai_evaluations`, `ai_evaluation_details`.
   - Bộ API `GET /history` và `GET /history/{sessionId}` phân trang, thống kê chính xác số câu đã làm cho Student Portal.
-* **Tiêu chí nghiệm thu (DoD):** 627/627 unit & adversarial tests passed (100%). Đã khắc phục triệt để 5 lỗi Cấp 1 từ đợt Thẩm định Đối kháng (SEC-R1-01, SEC-R1-02, SEC-R1-03, QA-R3-01, QA-R3-02). Tài liệu `docs/MF02_Frontend_Integration.md` hoàn chỉnh.
+* **Tiêu chí nghiệm thu (DoD):** 627/627 unit & adversarial tests passed (100%). Đã khắc phục triệt để 5 lỗi Cấp 1 từ đợt Thẩm định Đối kháng (SEC-R1-01, SEC-R1-02, SEC-R1-03, QA-R3-01, QA-R3-02). Tài liệu [`API_CONTRACT_AND_INTEGRATION_GUIDE.md`](../03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md) hoàn chỉnh.
 
 ---
 

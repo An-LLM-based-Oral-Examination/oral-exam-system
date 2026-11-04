@@ -160,7 +160,7 @@ erDiagram
 
 ---
 
-## 3. TỪ ĐIỂN DỮ LIỆU CHI TIẾT (DATA DICTIONARY 30 BẢNG: 27 BẢNG LÕI + 1 BẢNG PHÚC KHẢO + 2 BẢNG HỆ THỐNG & THÔNG BÁO)
+## 3. TỪ ĐIỂN DỮ LIỆU CHI TIẾT (DATA DICTIONARY 38 BẢNG 3NF TRONG 7 BOUNDED CONTEXTS: 34 DBSETS HIỆN HÀNH TRONG `OralExamDbContext` + 4 BẢNG CA THI TẠI LỚP `in_class_*` MỞ RỘNG R6)
 
 ### 3.1. Phân hệ 1: Định danh & Phân quyền (Identity & RBAC)
 
