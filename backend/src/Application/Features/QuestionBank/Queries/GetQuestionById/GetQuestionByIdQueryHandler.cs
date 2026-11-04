@@ -48,8 +48,7 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
 
         if (question != null)
         {
-            var usageScope = practiceQuestion != null ? "both" : "exam";
-            return Result<QuestionDetailDto>.Success(MapExamQuestionToDetailDto(question, usageScope));
+            return Result<QuestionDetailDto>.Success(MapExamQuestionToDetailDto(question, "exam"));
         }
 
         if (practiceQuestion != null)

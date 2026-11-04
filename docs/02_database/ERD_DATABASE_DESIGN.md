@@ -795,18 +795,17 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_practice_answers_session_order` | `practice_answers` | `(session_id, is_follow_up, order_index)` | ESR Composite B-Tree | Truy xuất tức thì các câu trả lời chính/phụ theo đúng thứ tự câu hỏi trong phiên luyện tập. |
 | `ix_courses_dept_head` | `courses` | `(department_head_user_id)` | B-Tree | Tra cứu nhanh các môn học do một Trưởng Bộ Môn phụ trách trong chuỗi phân cấp học thuật R5. |
 
-### 4.2. Cơ Chế Điều Phối Lưu Trữ Phạm Vi Câu Hỏi (Storage Dispatching Policy)
-Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questions` (Kho mở) và `exam_questions` (Kho bảo mật), tham số `usageScope` trong API `POST /api/v1/questions/batch-approve` được điều phối lưu trữ như sau:
+### 4.2. Cơ Chế Điều Phối Lưu Trữ Phạm Vi Câu Hỏi (Storage Dispatching Policy — Cô Lập 2 Kho Đề R8)
+Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questions` (Kho mở) và `exam_questions` (Kho bảo mật), tham số `usageScope` trong các API tạo/duyệt câu hỏi (`POST /api/v1/questions/draft`, `POST /api/v1/questions/batch-approve`) được điều phối lưu trữ độc lập như sau:
 1. **`usageScope == 'practice'`**:
-   - Câu hỏi được INSERT trực tiếp vào bảng `practice_questions`.
+   - Câu hỏi được INSERT trực tiếp và duy nhất vào bảng `practice_questions` (liên kết với `course_id`, `clo_id`, `rubric_id`, không gắn `structure_id`).
    - Sinh viên có thể tự do xem trước đề bài, câu trả lời mẫu (`sample_answer`), ý chính (`key_points`) và barem rubric để tự ôn luyện (MF-01) hoặc làm nguồn bốc đề thi thử bấm giờ (MF-02).
 2. **`usageScope == 'exam'`**:
-   - Câu hỏi được INSERT vào bảng `exam_questions`.
+   - Câu hỏi được INSERT trực tiếp và duy nhất vào bảng `exam_questions` (liên kết với `course_id`, `clo_id`, `structure_id`, `rubric_id`).
    - Hệ thống tự động gán `approved_by = current_user_id` (Trưởng Bộ Môn phê duyệt).
-   - Nội dung câu hỏi và đáp án mẫu được bảo mật tuyệt đối, chỉ phục vụ bốc đề thi thật phòng Lab (MF-04). Thi thử (MF-02) rút đề ngẫu nhiên từ kho câu hỏi luyện tập chung (`practice_questions`).
-3. **`usageScope == 'shared'`**:
-   - Câu hỏi được INSERT đồng thời vào cả hai bảng `practice_questions` và `exam_questions` trong cùng một ACID Transaction.
-   - Cho phép một nội dung kiến thức chuẩn hóa từ CLOs môn học vừa làm tài liệu ôn tập mở vừa làm ngân hàng đề thi chính thức.
+   - Nội dung câu hỏi và đáp án mẫu được bảo mật tuyệt đối, chỉ phục vụ đóng gói vào `exam_sets` và bốc đề thi thật phòng Lab (MF-04).
+3. **Từ chối các phạm vi gộp (`'both'`, `'shared'`, `'all'`)**:
+   - Hệ thống từ chối mọi yêu cầu truyền `usageScope` gộp chung hai kho nhằm ngăn chặn rò rỉ đề thi thật sang luồng luyện tập/thi thử (R8).
 
 ### 4.3. Ràng Buộc Nghiệp Vụ Bất Biến (System Invariant Constraints)
 - **Ràng buộc vai trò người dùng (6 roles):** `users.role` có CHECK constraint `role IN ('admin', 'department_head', 'examination_officer', 'lecturer', 'proctor', 'student')`.

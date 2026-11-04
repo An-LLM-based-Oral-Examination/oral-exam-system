@@ -1,10 +1,10 @@
 # BẢNG RÀ SOÁT NGÂN HÀNG CÂU HỎI VẤN ĐÁP MÔN DBI202 (DATABASE SYSTEMS)
 
 > **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (FA26SE166)
-> **Mã môn học:** **DBI202** | **Tên môn học:** Database Systems (Các hệ cơ sở dữ liệu)
+> **Mã môn học:** **DBI202** | **Tên môn học:** Introduction to Databases / Database Systems (Các hệ cơ sở dữ liệu)
 > **Tài liệu nguồn:** Syllabus FLM ID 12039 ban hành theo Quyết định 1286/QĐ-ĐHFPT (ĐH FPT)
 > **Quy mô ngân hàng:** **62 câu hỏi vấn đáp** (36 câu Kho Luyện tập & Thi thử + 26 câu Kho Thi thật)
-> **Tiêu chuẩn kỹ thuật:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, Zero Placeholder.
+> **Tiêu chuẩn kỹ thuật:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, Đồng bộ 1-1 đủ 7 CLOs (`CLO1`..`CLO7`), Cô lập 2 kho theo R8, Zero Placeholder.
 
 ---
 
@@ -15,43 +15,54 @@
 | Thuộc tính | Chi tiết trong Chương trình Đào tạo FLM |
 |---|---|
 | **Mã môn học** | **DBI202** |
-| **Tên tiếng Anh** | Database Systems |
+| **Tên tiếng Anh** | Introduction to Databases / Database Systems |
 | **Tên tiếng Việt** | Các hệ cơ sở dữ liệu |
-| **Số tín chỉ** | 3 tín chỉ (45 giờ contact slots trên lớp + 104 giờ tự học) |
+| **Số tín chỉ** | 3 tín chỉ (45 giờ contact slots trên lớp + 1 giờ thi FE + 104 giờ tự học = 150 giờ) |
 | **Hệ quản trị CSDL chuẩn** | **Microsoft SQL Server** (T-SQL / SSMS) |
-| **Chuẩn đầu ra (FLM)** | 7 CLOs (CLO1 đến CLO7) |
-| **Chuẩn đầu ra CSDL (`course_clos` 3NF)** | CLO1 (ERD & Quan hệ), CLO2 (SQL Nâng cao), CLO3 (Chuẩn hóa 3NF/BCNF), CLO4 (ACID & Indexing) |
+| **Chuẩn đầu ra (FLM & CSDL 3NF)** | Đồng bộ **1-1 đủ 7 CLOs** (`CLO1` đến `CLO7` theo Quyết định `1286/QĐ-ĐHFPT`) |
 | **Phân bổ cấu trúc ngân hàng** | **36 câu Luyện tập (`practice_questions`) + 26 câu Thi thật (`exam_questions`) = 62 câu** |
 
-### 1.2. Ma trận Phân bổ theo Kho & Độ khó
+### 1.2. Ánh xạ Chuẩn đầu ra 1-1 (7 FLM CLOs <-> 7 Database 3NF CLOs)
+
+| Mã CLO FLM | Mô tả Chuẩn Đầu Ra theo Syllabus FLM | Mức Bloom | Mã CLO DB (`course_clos`) | GUID Khóa chính CSDL (`course_clos.id`) |
+|:---:|---|:---:|:---:|---|
+| **CLO1** | Understand database concepts, evolution of database systems, and three-schema DBMS architecture (ANSI-SPARC) | Remember / Understand | **CLO1** | `00000000-0000-0000-0000-000000000661` |
+| **CLO2** | Understand the relational data model, relational schemas, integrity constraints, and relational algebra operations | Remember / Understand / Apply | **CLO2** | `00000000-0000-0000-0000-000000000662` |
+| **CLO3** | Apply functional dependencies, Armstrong's axioms, attribute closure, normalization (1NF, 2NF, 3NF, BCNF), and lossless-join decomposition | Remember / Understand / Apply / Analyze | **CLO3** | `00000000-0000-0000-0000-000000000663` |
+| **CLO4** | Model application data requirements using Entity-Relationship Diagrams (ERD), weak entities, ISA hierarchies, and map ERD to relational schemas | Understand / Apply / Analyze | **CLO4** | `00000000-0000-0000-0000-000000000664` |
+| **CLO5** | Write proficient SQL statements including DDL constraints, DML modifications, complex JOINs, aggregations, subqueries, and CTEs in MS SQL Server | Remember / Understand / Apply / Analyze | **CLO5** | `00000000-0000-0000-0000-000000000665` |
+| **CLO6** | Develop T-SQL procedural objects including Views, DML Triggers (AFTER / INSTEAD OF), Stored Procedures, User-Defined Functions (UDF), and Cursors | Remember / Understand / Apply / Analyze | **CLO6** | `00000000-0000-0000-0000-000000000666` |
+| **CLO7** | Apply B-Tree indexing (Clustered / Non-Clustered), query execution plan optimization, ACID transaction management, isolation levels, and deadlock prevention | Remember / Understand / Apply / Analyze | **CLO7** | `00000000-0000-0000-0000-000000000667` |
+
+### 1.3. Ma trận Phân bổ theo Kho & Độ khó
 
 | Kho câu hỏi | Dễ (Easy) | Trung bình (Medium) | Khó (Hard) | Tổng số câu | Tỷ lệ (%) | Mục đích sử dụng |
 |---|:---:|:---:|:---:|:---:|:---:|---|
 | **Kho Luyện tập & Thi thử (`practice_questions`)** | 12 | 14 | 10 | **36** | 58.1% | Luyện tập tự do MF-01 & Thi thử tính giờ MF-02 |
-| **Kho Thi thật phòng Lab (`exam_questions`)** | 4 | 12 | 10 | **26** | 41.9% | Đề thi oral exam Kiosk MF-04 (Theo 5 blueprint slots) |
-| **Tổng cộng toàn ngân hàng** | **16** | **26** | **20** | **62** | **100.0%** | Phủ đều toàn diện 7 phân hệ chuyên môn |
+| **Kho Thi thật phòng Lab (`exam_questions`)** | 5 | 12 | 9 | **26** | 41.9% | Đề thi oral exam Kiosk MF-04 (Theo 5 blueprint slots) |
+| **Tổng cộng toàn ngân hàng** | **17** | **26** | **19** | **62** | **100.0%** | Phủ đều toàn diện 7 CLOs chuyên môn |
 
-### 1.3. Ma trận Phân bổ theo Thang Nhận thức Bloom
+### 1.4. Ma trận Phân bổ theo Thang Nhận thức Bloom
 
 | Kho câu hỏi | Nhớ (Remember) | Hiểu (Understand) | Vận dụng (Apply) | Phân tích (Analyze) | Tổng cộng |
 |---|:---:|:---:|:---:|:---:|:---:|
-| **Kho Luyện tập (`practice_questions`)** | 2 | 16 | 9 | 9 | **36** |
+| **Kho Luyện tập (`practice_questions`)** | 2 | 19 | 7 | 8 | **36** |
 | **Kho Thi thật (`exam_questions`)** | 6 | 8 | 7 | 5 | **26** |
-| **Tổng số câu hỏi theo Bloom** | **8** | **24** | **16** | **14** | **62** |
-| **Tỷ lệ phần trăm (%)** | 12.9% | 38.7% | 25.8% | 22.6% | **100.0%** |
+| **Tổng số câu hỏi theo Bloom** | **8** | **27** | **14** | **13** | **62** |
+| **Tỷ lệ phần trăm (%)** | 12.9% | 43.5% | 22.6% | 21.0% | **100.0%** |
 
-### 1.4. Ma trận Phân bổ theo 7 Chuẩn Đầu Ra (CLOs FLM)
+### 1.5. Ma trận Phân bổ theo 7 Chuẩn Đầu Ra (CLOs FLM & DB 1-1)
 
 | Mã CLO | Tên Chuẩn Đầu Ra FLM | Số câu Luyện tập | Số câu Thi thật | Tổng số câu | Trọng tâm đánh giá |
 |---|---|:---:|:---:|:---:|---|
-| **CLO1** | Understand database concepts & DBMS architecture | 1 | 1 | **2** | Khái niệm DBMS, kiến trúc 3 mức ANSI-SPARC, độc lập dữ liệu |
-| **CLO2** | Understand relational model & algebraic query language | 3 | 2 | **5** | Thể hiện, lược đồ quan hệ, các phép toán đại số quan hệ |
-| **CLO3** | Understand data normalization & design theory | 6 | 6 | **12** | FDs, Armstrong, bao đóng, 1NF/2NF/3NF/BCNF, Lossless Join |
-| **CLO4** | Model application's data requirements using ERD | 5 | 3 | **8** | Thực thể, thuộc tính đa trị, bội số 1:1/1:N/M:N, thực thể yếu, ISA |
-| **CLO5** | Proficient in SQL (DDL, DML, Joins, Aggregations) | 10 | 4 | **14** | DDL constraints, Joins, Subqueries, GROUP BY - HAVING, CTE |
-| **CLO6** | T-SQL programming with Views, Triggers, SP, Functions | 5 | 5 | **10** | Standard Views, DML Triggers, inserted/deleted, SP, UDF, Cursor |
-| **CLO7** | Apply Indexing & ACID transactions optimization | 6 | 5 | **11** | B-Tree Clustered/Non-Clustered, 4 thuộc tính ACID, Mức cô lập, Deadlock |
-| **TỔNG** | **Toàn bộ 7 Chuẩn Đầu Ra Môn Học** | **36** | **26** | **62** | Phủ kín 60 Sessions và 30 CQs của Syllabus |
+| **CLO1** | Understand database concepts, evolution of database systems, and three-schema DBMS architecture (ANSI-SPARC) | 1 | 1 | **2** | Tiến hóa hệ CSDL (CQ1.1), DBMS, kiến trúc 3 mức ANSI-SPARC, độc lập dữ liệu vật lý & logic |
+| **CLO2** | Understand the relational data model, relational schemas, integrity constraints, and relational algebra operations | 2 | 2 | **4** | Lược đồ & thể hiện quan hệ, 5 phép toán Đại số quan hệ cơ bản, biểu diễn ràng buộc toàn vẹn E = ∅ & E1 ⊆ E2 (CQ3.2/3.3) |
+| **CLO3** | Apply functional dependencies, Armstrong's axioms, attribute closure, normalization (1NF, 2NF, 3NF, BCNF), and lossless-join decomposition | 6 | 6 | **12** | Phụ thuộc hàm, tiên đề Armstrong, bao đóng X+, phủ tối tiểu Fc, chuẩn hóa 1NF/2NF/3NF/BCNF, Lossless Join & Dependency Preservation |
+| **CLO4** | Model application data requirements using Entity-Relationship Diagrams (ERD), weak entities, ISA hierarchies, and map ERD to relational schemas | 5 | 2 | **7** | Thực thể, thuộc tính đa trị, bội số 1:1/1:N/M:N, thực thể yếu, quan hệ bậc 3, kế thừa ISA và ánh xạ sang lược đồ quan hệ |
+| **CLO5** | Write proficient SQL statements including DDL constraints, DML modifications, complex JOINs, aggregations, subqueries, and CTEs in MS SQL Server | 11 | 4 | **15** | Ràng buộc PK/FK/CHECK, DELETE vs TRUNCATE, thứ tự thực thi SQL, JOINs, GROUP BY/HAVING, Correlated Subquery, CTE & Window Functions |
+| **CLO6** | Develop T-SQL procedural objects including Views, DML Triggers (AFTER / INSTEAD OF), Stored Procedures, User-Defined Functions (UDF), and Cursors | 5 | 6 | **11** | Updatable Views (CHECK OPTION/SCHEMABINDING), DML Triggers (inserted/deleted), Stored Procedures, Scalar UDF vs Inline TVF, Cursor vs Set-based |
+| **CLO7** | Apply B-Tree indexing (Clustered / Non-Clustered), query execution plan optimization, ACID transaction management, isolation levels, and deadlock prevention | 6 | 5 | **11** | Clustered/Non-Clustered B-Tree Index, ESR Composite Index, ACID & WAL, Isolation Levels, RCSI, Lock Escalation & chống Deadlock |
+| **TỔNG** | **Toàn bộ 7 Chuẩn Đầu Ra Môn Học (1-1)** | **36** | **26** | **62** | **Phủ kín 60 Sessions và 30 CQs của Syllabus** |
 
 ---
 
@@ -60,76 +71,76 @@
 | STT | Mã câu hỏi | Tiêu đề câu hỏi | Kho | CLO FLM | CLO DB | Mức Bloom | Độ khó | Buổi học (Slot) |
 |:---:|---|---|:---:|:---:|:---:|:---:|:---:|---|
 | 1 | `DBI202-PRAC-001` | Khái niệm Hệ quản trị cơ sở dữ liệu (DBMS) và Kiến trúc 3 mức ANSI-SPARC | Practice | CLO1 | CLO1 | Understand | Easy | Session 1 (Slot 1) |
-| 2 | `DBI202-PRAC-002` | Phân biệt Lược đồ quan hệ (Schema) và Thể hiện quan hệ (Instance) | Practice | CLO2 | CLO1 | Understand | Easy | Session 4 (Slot 2) |
-| 3 | `DBI202-PRAC-003` | Các phép toán cơ bản trong Đại số quan hệ: Selection và Projection | Practice | CLO2 | CLO1 | Understand | Easy | Session 5 (Slot 3) |
-| 4 | `DBI202-PRAC-004` | Phân loại thuộc tính trong Sơ đồ Thực thể Kết hợp (ERD) | Practice | CLO4 | CLO1 | Understand | Easy | Session 19 (Slot 10) |
-| 5 | `DBI202-PRAC-005` | Bội số kết hợp (Multiplicity) trong mô hình ERD: 1:1, 1:N và M:N | Practice | CLO4 | CLO1 | Understand | Easy | Session 20 (Slot 10) |
-| 6 | `DBI202-PRAC-006` | Khái niệm Khóa chính (Primary Key) và Khóa ngoại (Foreign Key) | Practice | CLO2 | CLO1 | Remember | Easy | Session 29 (Slot 15) |
-| 7 | `DBI202-PRAC-007` | Cú pháp và cách hoạt động của câu lệnh SELECT với WHERE và ORDER BY | Practice | CLO5 | CLO2 | Understand | Easy | Session 31 (Slot 16) |
-| 8 | `DBI202-PRAC-008` | Xử lý giá trị NULL trong SQL và toán tử IS NULL / IS NOT NULL | Practice | CLO5 | CLO2 | Understand | Easy | Session 32 (Slot 16) |
+| 2 | `DBI202-PRAC-002` | Phân biệt Lược đồ quan hệ (Schema) và Thể hiện quan hệ (Instance) | Practice | CLO2 | CLO2 | Understand | Easy | Session 4 (Slot 2) |
+| 3 | `DBI202-PRAC-003` | Các phép toán cơ bản trong Đại số quan hệ: Selection và Projection | Practice | CLO2 | CLO2 | Understand | Easy | Session 5 (Slot 3) |
+| 4 | `DBI202-PRAC-004` | Phân loại thuộc tính trong Sơ đồ Thực thể Kết hợp (ERD) | Practice | CLO4 | CLO4 | Understand | Easy | Session 19 (Slot 10) |
+| 5 | `DBI202-PRAC-005` | Bội số kết hợp (Multiplicity) trong mô hình ERD: 1:1, 1:N và M:N | Practice | CLO4 | CLO4 | Understand | Easy | Session 20 (Slot 10) |
+| 6 | `DBI202-PRAC-006` | Khái niệm Khóa chính (Primary Key) và Khóa ngoại (Foreign Key) | Practice | CLO5 | CLO5 | Remember | Easy | Session 29 (Slot 15) |
+| 7 | `DBI202-PRAC-007` | Các toán tử lọc dữ liệu BETWEEN, IN, LIKE (Wildcards) và phân trang OFFSET-FETCH trong T-SQL | Practice | CLO5 | CLO5 | Understand | Easy | Session 31-32 (Slot 16) |
+| 8 | `DBI202-PRAC-008` | Xử lý giá trị NULL trong SQL và toán tử IS NULL / IS NOT NULL | Practice | CLO5 | CLO5 | Understand | Easy | Session 32 (Slot 16) |
 | 9 | `DBI202-PRAC-009` | Định nghĩa Dạng chuẩn 1 (1NF) và điều kiện nguyên tử của thuộc tính | Practice | CLO3 | CLO3 | Understand | Easy | Session 13 (Slot 7) |
-| 10 | `DBI202-PRAC-010` | Định nghĩa 4 thuộc tính ACID trong Giao dịch (Transaction) | Practice | CLO7 | CLO4 | Remember | Easy | Session 43 (Slot 22) |
-| 11 | `DBI202-PRAC-011` | Khái niệm và mục đích sử dụng Khung nhìn (View) trong cơ sở dữ liệu | Practice | CLO6 | CLO2 | Understand | Easy | Session 51 (Slot 26) |
-| 12 | `DBI202-PRAC-012` | Phân biệt ngôn ngữ DDL và DML trong SQL | Practice | CLO5 | CLO2 | Understand | Easy | Session 27 (Slot 14) |
-| 13 | `DBI202-PRAC-013` | Phân biệt Phép kết nối trong (INNER JOIN) và Phép kết nối ngoài (OUTER JOIN) | Practice | CLO5 | CLO2 | Understand | Medium | Session 33-34 (Slot 17) |
-| 14 | `DBI202-PRAC-014` | Phân biệt mệnh đề WHERE và HAVING khi kết hợp với GROUP BY | Practice | CLO5 | CLO2 | Apply | Medium | Session 37-38 (Slot 19) |
-| 15 | `DBI202-PRAC-015` | Phân biệt hàm COUNT(*) và COUNT(tên_cột) khi bảng chứa giá trị NULL | Practice | CLO5 | CLO2 | Understand | Medium | Session 37 (Slot 19) |
+| 10 | `DBI202-PRAC-010` | Định nghĩa 4 thuộc tính ACID trong Giao dịch (Transaction) | Practice | CLO7 | CLO7 | Remember | Easy | Session 43 (Slot 22) |
+| 11 | `DBI202-PRAC-011` | Khái niệm và mục đích sử dụng Khung nhìn (View) trong cơ sở dữ liệu | Practice | CLO6 | CLO6 | Understand | Easy | Session 51 (Slot 26) |
+| 12 | `DBI202-PRAC-012` | Phân biệt ngôn ngữ DDL và DML trong SQL | Practice | CLO5 | CLO5 | Understand | Easy | Session 27 (Slot 14) |
+| 13 | `DBI202-PRAC-013` | Phân biệt Phép kết nối trong (INNER JOIN) và Phép kết nối ngoài (OUTER JOIN) | Practice | CLO5 | CLO5 | Understand | Medium | Session 33-34 (Slot 17) |
+| 14 | `DBI202-PRAC-014` | Phân biệt mệnh đề WHERE và HAVING khi kết hợp với GROUP BY | Practice | CLO5 | CLO5 | Apply | Medium | Session 37-38 (Slot 19) |
+| 15 | `DBI202-PRAC-015` | Phân biệt hàm COUNT(*) và COUNT(tên_cột) khi bảng chứa giá trị NULL | Practice | CLO5 | CLO5 | Understand | Medium | Session 37 (Slot 19) |
 | 16 | `DBI202-PRAC-016` | Thuật toán tính bao đóng của tập thuộc tính (Attribute Closure X+) | Practice | CLO3 | CLO3 | Apply | Medium | Session 10 (Slot 5) |
 | 17 | `DBI202-PRAC-017` | Phân biệt Phụ thuộc hàm đầy đủ và Phụ thuộc hàm bộ phận trong 2NF | Practice | CLO3 | CLO3 | Understand | Medium | Session 13 (Slot 7) |
 | 18 | `DBI202-PRAC-018` | Ba dạng dị thường dữ liệu (Insertion, Deletion, Update Anomalies) | Practice | CLO3 | CLO3 | Understand | Medium | Session 12 (Slot 6) |
-| 19 | `DBI202-PRAC-019` | Quy tắc chuyển đổi mối kết hợp Nhiều - Nhiều (M:N) từ ERD sang Lược đồ quan hệ | Practice | CLO4 | CLO1 | Apply | Medium | Session 21 (Slot 11) |
-| 20 | `DBI202-PRAC-020` | Khái niệm Thực thể yếu (Weak Entity) và Khóa bộ phận (Discriminator) | Practice | CLO4 | CLO1 | Understand | Medium | Session 21 (Slot 11) |
-| 21 | `DBI202-PRAC-021` | Phân biệt Clustered Index và Non-Clustered Index trong MS SQL Server | Practice | CLO7 | CLO4 | Understand | Medium | Session 41 (Slot 21) |
-| 22 | `DBI202-PRAC-022` | Bảng ảo inserted và deleted trong cơ chế hoạt động của DML Trigger | Practice | CLO6 | CLO2 | Understand | Medium | Session 49 (Slot 25) |
-| 23 | `DBI202-PRAC-023` | Phân biệt Stored Procedure và User-Defined Function (UDF) | Practice | CLO6 | CLO2 | Understand | Medium | Session 51-54 (Slot 26-27) |
-| 24 | `DBI202-PRAC-024` | Tùy chọn xử lý vi phạm khóa ngoại: ON DELETE CASCADE vs ON DELETE SET NULL | Practice | CLO5 | CLO2 | Apply | Medium | Session 29 (Slot 15) |
-| 25 | `DBI202-PRAC-025` | Phân biệt câu lệnh DELETE và TRUNCATE TABLE | Practice | CLO5 | CLO2 | Understand | Medium | Session 28 (Slot 14) |
-| 26 | `DBI202-PRAC-026` | Kỹ thuật tự kết nối (SELF JOIN) để biểu diễn mối quan hệ đệ quy | Practice | CLO5 | CLO2 | Apply | Medium | Session 34 (Slot 17) |
-| 27 | `DBI202-PRAC-027` | Truy vấn con tương quan (Correlated Subquery) và tối ưu hóa với toán tử EXISTS | Practice | CLO5 | CLO2 | Analyze | Hard | Session 36 (Slot 18) |
+| 19 | `DBI202-PRAC-019` | Quy tắc chuyển đổi mối kết hợp Nhiều - Nhiều (M:N) từ ERD sang Lược đồ quan hệ | Practice | CLO4 | CLO4 | Apply | Medium | Session 21 (Slot 11) |
+| 20 | `DBI202-PRAC-020` | Khái niệm Thực thể yếu (Weak Entity) và Khóa bộ phận (Discriminator) | Practice | CLO4 | CLO4 | Understand | Medium | Session 21 (Slot 11) |
+| 21 | `DBI202-PRAC-021` | Phân biệt Clustered Index và Non-Clustered Index trong MS SQL Server | Practice | CLO7 | CLO7 | Understand | Medium | Session 41 (Slot 21) |
+| 22 | `DBI202-PRAC-022` | Bảng ảo inserted và deleted trong cơ chế hoạt động của DML Trigger | Practice | CLO6 | CLO6 | Understand | Medium | Session 49 (Slot 25) |
+| 23 | `DBI202-PRAC-023` | Phân biệt Stored Procedure và User-Defined Function (UDF) | Practice | CLO6 | CLO6 | Understand | Medium | Session 51-54 (Slot 26-27) |
+| 24 | `DBI202-PRAC-024` | Tùy chọn xử lý vi phạm khóa ngoại: ON DELETE CASCADE vs ON DELETE SET NULL | Practice | CLO5 | CLO5 | Apply | Medium | Session 29 (Slot 15) |
+| 25 | `DBI202-PRAC-025` | Phân biệt câu lệnh DELETE và TRUNCATE TABLE | Practice | CLO5 | CLO5 | Understand | Medium | Session 39-40 (Slot 20) |
+| 26 | `DBI202-PRAC-026` | Kỹ thuật tự kết nối (SELF JOIN) để biểu diễn mối quan hệ đệ quy | Practice | CLO5 | CLO5 | Apply | Medium | Session 34 (Slot 17) |
+| 27 | `DBI202-PRAC-027` | Truy vấn con tương quan (Correlated Subquery) và tối ưu hóa với toán tử EXISTS | Practice | CLO5 | CLO5 | Analyze | Hard | Session 36 (Slot 18) |
 | 28 | `DBI202-PRAC-028` | Điều kiện Dạng chuẩn 3 (3NF) vs Dạng chuẩn Boyce-Codd (BCNF) | Practice | CLO3 | CLO3 | Analyze | Hard | Session 14 (Slot 7) |
-| 29 | `DBI202-PRAC-029` | Tính chất Kết nối không mất thông tin (Lossless Join) và Bảo toàn phụ thuộc | Practice | CLO3 | CLO3 | Analyze | Hard | Session 16 (Slot 8) |
-| 30 | `DBI202-PRAC-030` | Phân tích 4 mức cô lập giao dịch (Transaction Isolation Levels) và hiện tượng Phantom Read | Practice | CLO7 | CLO4 | Analyze | Hard | Session 44 (Slot 22) |
-| 31 | `DBI202-PRAC-031` | Bản chất Deadlock trong cơ sở dữ liệu và các kỹ thuật phòng chống / giải quyết | Practice | CLO7 | CLO4 | Analyze | Hard | Session 44 (Slot 22) |
-| 32 | `DBI202-PRAC-032` | Các trường hợp vô hiệu hóa chỉ mục B-Tree (Index Invalidation) và giải pháp khắc phục | Practice | CLO7 | CLO4 | Analyze | Hard | Session 42 (Slot 21) |
-| 33 | `DBI202-PRAC-033` | Cài đặt AFTER Trigger kết hợp ROLLBACK TRANSACTION để thực thi toàn vẹn nghiệp vụ phức tạp | Practice | CLO6 | CLO2 | Apply | Hard | Session 50 (Slot 25) |
-| 34 | `DBI202-PRAC-034` | Phân tích ưu nhược điểm của 3 chiến lược ánh xạ mối quan hệ kế thừa ISA sang CSDL quan hệ | Practice | CLO4 | CLO1 | Analyze | Hard | Session 22 (Slot 11) |
-| 35 | `DBI202-PRAC-035` | Tác động của Cursor đến hiệu năng hệ thống và giải pháp chuyển đổi sang tư duy tập hợp (Set-based) | Practice | CLO6 | CLO2 | Analyze | Hard | Session 53 (Slot 27) |
-| 36 | `DBI202-PRAC-036` | Thiết kế và quản lý Giao dịch lồng ghép (Nested Transactions) và Điểm lưu (Savepoints) trong T-SQL | Practice | CLO7 | CLO4 | Apply | Hard | Session 40 (Slot 20) |
-| 37 | `DBI202-EXAM-001` | Kiến trúc 3 mức ANSI-SPARC và Hai cấp độ Độc lập Dữ liệu | Exam | CLO1 | CLO1 | Remember | Medium | Session 1 (Slot 1) |
-| 38 | `DBI202-EXAM-002` | Định nghĩa và Ký hiệu hình thức của 5 phép toán cơ bản trong Đại số quan hệ | Exam | CLO2 | CLO1 | Remember | Easy | Session 5 (Slot 3) |
+| 29 | `DBI202-PRAC-029` | Kiểm tra tính Bảo toàn Phụ thuộc hàm (Dependency Preservation) và Sự đánh đổi giữa 3NF với BCNF | Practice | CLO3 | CLO3 | Analyze | Hard | Session 11-14 (Slot 6-7) |
+| 30 | `DBI202-PRAC-030` | Phân tích 4 mức cô lập giao dịch (Transaction Isolation Levels) và hiện tượng Phantom Read | Practice | CLO7 | CLO7 | Analyze | Hard | Session 44 (Slot 22) |
+| 31 | `DBI202-PRAC-031` | Bản chất Deadlock trong cơ sở dữ liệu và các kỹ thuật phòng chống / giải quyết | Practice | CLO7 | CLO7 | Analyze | Hard | Session 44 (Slot 22) |
+| 32 | `DBI202-PRAC-032` | Các trường hợp vô hiệu hóa chỉ mục B-Tree (Index Invalidation) và giải pháp khắc phục | Practice | CLO7 | CLO7 | Analyze | Hard | Session 42 (Slot 21) |
+| 33 | `DBI202-PRAC-033` | So sánh Hàm Vô hướng (Scalar UDF) và Hàm Giá trị Bảng Nội tuyến (Inline TVF) trong T-SQL & Tối ưu hóa Hiệu năng | Practice | CLO6 | CLO6 | Apply | Hard | Session 52-54 (Slot 26-27) |
+| 34 | `DBI202-PRAC-034` | Phân tích ưu nhược điểm của 3 chiến lược ánh xạ mối quan hệ kế thừa ISA sang CSDL quan hệ | Practice | CLO4 | CLO4 | Analyze | Hard | Session 22 (Slot 11) |
+| 35 | `DBI202-PRAC-035` | Tác động của Cursor đến hiệu năng hệ thống và giải pháp chuyển đổi sang tư duy tập hợp (Set-based) | Practice | CLO6 | CLO6 | Analyze | Hard | Session 53 (Slot 27) |
+| 36 | `DBI202-PRAC-036` | Thiết kế và quản lý Giao dịch lồng ghép (Nested Transactions) và Điểm lưu (Savepoints) trong T-SQL | Practice | CLO7 | CLO7 | Apply | Hard | Session 43-44 (Slot 22) |
+| 37 | `DBI202-EXAM-001` | Các giai đoạn Tiến hóa của Hệ CSDL và 5 Nhược điểm Cốt lõi của Hệ thống Quản lý Tệp phẳng (CQ1.1) | Exam | CLO1 | CLO1 | Remember | Easy | Session 1-2 (Slot 1) |
+| 38 | `DBI202-EXAM-002` | Định nghĩa và Ký hiệu hình thức của 5 phép toán cơ bản trong Đại số quan hệ | Exam | CLO2 | CLO2 | Remember | Easy | Session 5 (Slot 3) |
 | 39 | `DBI202-EXAM-003` | Hệ tiên đề Armstrong cho Phụ thuộc hàm | Exam | CLO3 | CLO3 | Remember | Medium | Session 10 (Slot 5) |
 | 40 | `DBI202-EXAM-004` | Định nghĩa Khóa chính, Siêu khóa và Khóa ứng viên trong lý thuyết CSDL | Exam | CLO3 | CLO3 | Remember | Easy | Session 11 (Slot 6) |
-| 41 | `DBI202-EXAM-005` | Danh mục Ràng buộc Toàn vẹn Dữ liệu chuẩn trong SQL DDL | Exam | CLO5 | CLO2 | Remember | Easy | Session 29-30 (Slot 15) |
-| 42 | `DBI202-EXAM-006` | Định nghĩa và Phân loại 2 dạng DML Triggers chính trong MS SQL Server | Exam | CLO6 | CLO2 | Remember | Easy | Session 49 (Slot 25) |
-| 43 | `DBI202-EXAM-007` | Cơ chế ánh xạ mối kết hợp Một - Một (1:1) từ ERD sang Lược đồ quan hệ | Exam | CLO4 | CLO1 | Understand | Medium | Session 20 (Slot 10) |
-| 44 | `DBI202-EXAM-008` | Cơ chế hoạt động của Phép Natural Join và Điều kiện Khả hợp trong Phép toán Tập hợp | Exam | CLO2 | CLO1 | Understand | Medium | Session 6 (Slot 3) |
-| 45 | `DBI202-EXAM-009` | Tại sao Quan hệ đạt chuẩn 3NF vẫn có thể Dư thừa và Nhu cầu Dạng chuẩn BCNF | Exam | CLO3 | CLO3 | Understand | Medium | Session 14 (Slot 7) |
-| 46 | `DBI202-EXAM-010` | Thứ tự Thực thi Logic của các mệnh đề trong Câu truy vấn SQL | Exam | CLO5 | CLO2 | Understand | Medium | Session 31-38 (Slot 16-19) |
-| 47 | `DBI202-EXAM-011` | Cơ chế hoạt động của Cây B-Tree trong Clustered Index và Tìm kiếm Bản ghi | Exam | CLO7 | CLO4 | Understand | Medium | Session 41 (Slot 21) |
-| 48 | `DBI202-EXAM-012` | Bảo đảm Tính Nguyên tố (Atomicity) và Bền vững (Durability) qua Write-Ahead Logging (WAL) | Exam | CLO7 | CLO4 | Understand | Medium | Session 43 (Slot 22) |
-| 49 | `DBI202-EXAM-013` | Cơ chế Bảo vệ An ninh Dữ liệu và Che giấu Cấu trúc Vật lý của View trong DBMS | Exam | CLO6 | CLO2 | Understand | Easy | Session 43 (Slot 22) |
-| 50 | `DBI202-EXAM-014` | Cơ chế Tái sử dụng Kế hoạch Thực thi (Execution Plan Cache) của Stored Procedure | Exam | CLO6 | CLO2 | Understand | Medium | Session 54 (Slot 27) |
-| 51 | `DBI202-EXAM-015` | Chuyển đổi Đặc tả ERD (Thực thể yếu & Quan hệ M:N) sang Lược đồ Quan hệ | Exam | CLO4 | CLO1 | Apply | Medium | Session 21 (Slot 11) |
+| 41 | `DBI202-EXAM-005` | Danh mục Ràng buộc Toàn vẹn Dữ liệu chuẩn trong SQL DDL | Exam | CLO5 | CLO5 | Remember | Easy | Session 29-30 (Slot 15) |
+| 42 | `DBI202-EXAM-006` | Định nghĩa và Phân loại 2 dạng DML Triggers chính trong MS SQL Server | Exam | CLO6 | CLO6 | Remember | Easy | Session 49 (Slot 25) |
+| 43 | `DBI202-EXAM-007` | Cơ chế ánh xạ mối kết hợp Một - Một (1:1) từ ERD sang Lược đồ quan hệ | Exam | CLO4 | CLO4 | Understand | Medium | Session 20 (Slot 10) |
+| 44 | `DBI202-EXAM-008` | Biểu diễn Ràng buộc Toàn vẹn trên Lược đồ Quan hệ bằng Đại số Quan hệ (CQ3.2 & CQ3.3) | Exam | CLO2 | CLO2 | Understand | Medium | Session 7-8 (Slot 4) |
+| 45 | `DBI202-EXAM-009` | Khái niệm Phủ tối tiểu (Minimal Cover / Canonical Cover) và Quy trình 3 Bước Thu gọn Tập Phụ thuộc Hàm | Exam | CLO3 | CLO3 | Understand | Medium | Session 10-11 (Slot 5-6) |
+| 46 | `DBI202-EXAM-010` | Thứ tự Thực thi Logic của các mệnh đề trong Câu truy vấn SQL | Exam | CLO5 | CLO5 | Understand | Medium | Session 31-38 (Slot 16-19) |
+| 47 | `DBI202-EXAM-011` | Cơ chế hoạt động của Cây B-Tree trong Clustered Index và Tìm kiếm Bản ghi | Exam | CLO7 | CLO7 | Understand | Medium | Session 41 (Slot 21) |
+| 48 | `DBI202-EXAM-012` | Bảo đảm Tính Nguyên tố (Atomicity) và Bền vững (Durability) qua Write-Ahead Logging (WAL) | Exam | CLO7 | CLO7 | Understand | Medium | Session 43 (Slot 22) |
+| 49 | `DBI202-EXAM-013` | Điều kiện Khung nhìn Có thể Cập nhật (Updatable Views), WITH CHECK OPTION và WITH SCHEMABINDING (CQ7.3) | Exam | CLO6 | CLO6 | Understand | Medium | Session 45 & 51 (Slot 23 & 26) |
+| 50 | `DBI202-EXAM-014` | Cơ chế Tái sử dụng Kế hoạch Thực thi (Execution Plan Cache) của Stored Procedure | Exam | CLO6 | CLO6 | Understand | Medium | Session 54 (Slot 27) |
+| 51 | `DBI202-EXAM-015` | Ánh xạ Thực thể Kết hợp (Associative Entity), Mối kết hợp Bậc 3 (Ternary) và Thuộc tính Đa trị từ ERD sang Lược đồ Quan hệ | Exam | CLO4 | CLO4 | Apply | Medium | Session 20-22 (Slot 10-11) |
 | 52 | `DBI202-EXAM-016` | Xác định tất cả các Khóa ứng viên (Candidate Keys) của Quan hệ | Exam | CLO3 | CLO3 | Apply | Medium | Session 11 (Slot 6) |
-| 53 | `DBI202-EXAM-017` | Phân rã Chuẩn hóa Lược đồ đạt Dạng chuẩn 3 (3NF) Bảo toàn Phụ thuộc | Exam | CLO3 | CLO3 | Apply | Hard | Session 14-16 (Slot 7-8) |
-| 54 | `DBI202-EXAM-018` | Viết câu truy vấn SQL tìm Khách hàng có Tổng giá trị đơn hàng cao nhất trong từng Thành phố | Exam | CLO5 | CLO2 | Apply | Hard | Session 36 (Slot 18) |
-| 55 | `DBI202-EXAM-019` | Thiết kế câu lệnh DDL với các ràng buộc CHECK và FOREIGN KEY phức tạp | Exam | CLO5 | CLO2 | Apply | Medium | Session 29-30 (Slot 15) |
-| 56 | `DBI202-EXAM-020` | Viết DML AFTER Trigger tự động cập nhật Tồn kho và Hủy đơn khi Thiếu hàng | Exam | CLO6 | CLO2 | Apply | Hard | Session 50 (Slot 25) |
-| 57 | `DBI202-EXAM-021` | Xây dựng Stored Procedure Thực hiện Giao dịch Chuyển tiền An toàn | Exam | CLO6 | CLO2 | Apply | Hard | Session 54 (Slot 27) |
-| 58 | `DBI202-EXAM-022` | Phân tích và Chứng minh Phép phân rã Kết nối Không Mất Thông tin (Lossless Join) | Exam | CLO3 | CLO3 | Analyze | Hard | Session 16 (Slot 8) |
-| 59 | `DBI202-EXAM-023` | Phân tích Tranh chấp Dữ liệu giữa Hai Giao dịch và Đề xuất Mức Cô lập Tối ưu | Exam | CLO7 | CLO4 | Analyze | Hard | Session 44 (Slot 22) |
-| 60 | `DBI202-EXAM-024` | Phân tích Kế hoạch Thực thi, Phát hiện Table Scan và Thiết kế Composite Index theo ESR | Exam | CLO7 | CLO4 | Analyze | Hard | Session 42 (Slot 21) |
-| 61 | `DBI202-EXAM-025` | Phân tích Kịch bản Deadlock giữa Hai Giao dịch và Đề xuất 2 Giải pháp Triệt để | Exam | CLO7 | CLO4 | Analyze | Hard | Session 44 (Slot 22) |
-| 62 | `DBI202-EXAM-026` | So sánh Toàn diện giữa INSTEAD OF Trigger trên View Phức tạp và Stored Procedure | Exam | CLO6 | CLO2 | Analyze | Hard | Session 49-54 (Slot 25-27) |
+| 53 | `DBI202-EXAM-017` | Phân rã Chuẩn hóa Lược đồ đạt Dạng chuẩn 3 (3NF) Bảo toàn Phụ thuộc | Exam | CLO3 | CLO3 | Apply | Hard | Session 11-14 (Slot 6-7) |
+| 54 | `DBI202-EXAM-018` | Viết câu truy vấn SQL tìm Khách hàng có Tổng giá trị đơn hàng cao nhất trong từng Thành phố | Exam | CLO5 | CLO5 | Apply | Hard | Session 36 (Slot 18) |
+| 55 | `DBI202-EXAM-019` | Thiết kế câu lệnh DDL với các ràng buộc CHECK và FOREIGN KEY phức tạp | Exam | CLO5 | CLO5 | Apply | Medium | Session 29-30 (Slot 15) |
+| 56 | `DBI202-EXAM-020` | Viết DML AFTER Trigger tự động cập nhật Tồn kho và Hủy đơn khi Thiếu hàng | Exam | CLO6 | CLO6 | Apply | Hard | Session 50 (Slot 25) |
+| 57 | `DBI202-EXAM-021` | Xây dựng Stored Procedure Thực hiện Giao dịch Chuyển tiền An toàn | Exam | CLO6 | CLO6 | Apply | Hard | Session 54 (Slot 27) |
+| 58 | `DBI202-EXAM-022` | Phân tích và Chứng minh Phép phân rã Kết nối Không Mất Thông tin (Lossless Join) | Exam | CLO3 | CLO3 | Analyze | Hard | Session 11-14 (Slot 6-7) |
+| 59 | `DBI202-EXAM-023` | Phân tích Tranh chấp Dữ liệu giữa Hai Giao dịch và Đề xuất Mức Cô lập Tối ưu | Exam | CLO7 | CLO7 | Analyze | Hard | Session 44 (Slot 22) |
+| 60 | `DBI202-EXAM-024` | Phân tích Kế hoạch Thực thi, Phát hiện Table Scan và Thiết kế Composite Index theo ESR | Exam | CLO7 | CLO7 | Analyze | Hard | Session 42 (Slot 21) |
+| 61 | `DBI202-EXAM-025` | Phân tích Độ mịn của Khóa (Lock Granularity), Hiện tượng Leo thang Khóa (Lock Escalation) và Cơ chế RCSI trong SQL Server | Exam | CLO7 | CLO7 | Analyze | Hard | Session 43-44 & 55-56 (Slot 22 & 28) |
+| 62 | `DBI202-EXAM-026` | So sánh Toàn diện giữa INSTEAD OF Trigger trên View Phức tạp và Stored Procedure | Exam | CLO6 | CLO6 | Analyze | Hard | Session 49-54 (Slot 25-27) |
 
 ---
 
-## PHẦN 3: CHI TIẾT 36 CÂU HỎI KHO LUYỆN TẬP & THI THỬ (PRACTICE_QUESTIONS)
+## PHẦN 3: CHI TIẾT 36 CÂU HỎI KHO LUYỆN TẬP & THI THỬ (`practice_questions`)
 
 > **Đặc điểm luồng MF-01 / MF-02:**
 > - Bốc câu hỏi linh hoạt phục vụ sinh viên ôn luyện theo chủ đề, độ khó đơn hoặc tổ hợp.
 > - Mỗi câu hỏi có Câu hỏi phản biện nối tiếp (`FollowUpPrompt`) để AI kích hoạt khi điểm số câu trả lời ban đầu nằm trong dải [4.0, 8.0].
-> - Barem Rubric chuẩn hóa 10.0đ (gồm 3-4 tiêu chí con) giúp AI chấm điểm tức thì và sinh CoT giải trình minh bạch.
+> - Barem Rubric chuẩn hóa 10.0đ (gồm 3-4 tiêu chí con) giúp AI chấm điểm tức thì và sinh CoT giải trình minh bạch theo đúng 7 CLOs.
 
 ### 1. `DBI202-PRAC-001`: Khái niệm Hệ quản trị cơ sở dữ liệu (DBMS) và Kiến trúc 3 mức ANSI-SPARC
 
@@ -138,7 +149,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-001` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO1** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO1** (`00000000-0000-0000-0000-000000000661`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 1 (Slot 1) — The Worlds of Database Systems |
@@ -171,7 +182,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-002` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO2** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO2** (`00000000-0000-0000-0000-000000000662`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 4 (Slot 2) — The Relational Model of Data |
@@ -204,7 +215,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-003` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO2** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO2** (`00000000-0000-0000-0000-000000000662`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 5 (Slot 3) — Algebraic Query Language |
@@ -237,7 +248,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-004` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 19 (Slot 10) — High-Level Database Models (ERD) |
@@ -270,7 +281,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-005` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 20 (Slot 10) — High-Level Database Models (ERD) |
@@ -302,8 +313,8 @@
 |---|---|
 | **Mã câu hỏi** | `DBI202-PRAC-006` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
-| **Ánh xạ CLO FLM** | **CLO2** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 29 (Slot 15) — SQL Constraints on Attributes |
@@ -329,35 +340,54 @@
 
 ---
 
-### 7. `DBI202-PRAC-007`: Cú pháp và cách hoạt động của câu lệnh SELECT với WHERE và ORDER BY
+### 7. `DBI202-PRAC-007`: Các toán tử lọc dữ liệu BETWEEN, IN, LIKE (Wildcards) và phân trang OFFSET-FETCH trong T-SQL
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-PRAC-007` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
-| **Phân bổ Session** | Session 31 (Slot 16) — SQL Queries (DML Basics) |
-| **Mục tiêu sư phạm** | Kiểm tra cú pháp cơ bản và thứ tự thực thi các mệnh đề lọc và sắp xếp trong SQL. |
+| **Phân bổ Session** | Session 31-32 (Slot 16) — 6.3 Simple Queries in SQL & Pattern Matching |
+| **Mục tiêu sư phạm** | Đánh giá kỹ năng sử dụng các toán tử lọc phạm vi, tập hợp, so khớp mẫu ký tự đại diện và phân trang chuẩn ANSI/T-SQL. |
 
 **Nội dung câu hỏi phát vấn:**
-> Hãy nêu cú pháp tổng quát của câu lệnh truy vấn SQL cơ bản gồm SELECT, FROM, WHERE, ORDER BY. Cho biết thứ tự thực thi logic của hệ quản trị cơ sở dữ liệu đối với 4 mệnh đề này?
+> Hãy giải thích cách hoạt động của các toán tử lọc trong mệnh đề `WHERE` của MS SQL Server: (1) `BETWEEN a AND b` có bao gồm hai đầu mút `a` và `b` không? (2) Sự khác nhau giữa các ký tự đại diện `%`, `_`, `[a-z]` trong toán tử `LIKE` và cách tìm chuỗi có chứa chính ký tự `%` thật bằng từ khóa `ESCAPE`. (3) Cú pháp phân trang chuẩn `ORDER BY ... OFFSET ... FETCH NEXT ...` hoạt động như thế nào?
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Trong mệnh đề WHERE, chúng ta có thể sử dụng bí danh cột (Column Alias) đã được đặt trong mệnh đề SELECT không? Tại sao?"*
+> *"Tại sao khi một cột có thể chứa giá trị `NULL`, mệnh đề `WHERE DeptID NOT IN (10, 20, NULL)` lại luôn trả về tập kết quả rỗng (0 dòng), trong khi `WHERE DeptID IN (10, 20, NULL)` vẫn trả về các dòng có `DeptID` bằng 10 hoặc 20?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Cú pháp tổng quát: SELECT <danh_sách_cột/biểu_thức> FROM <tên_bảng> WHERE <điều_kiện_lọc> ORDER BY <cột_sắp_xếp> [ASC|DESC]. Thứ tự thực thi logic của hệ quản trị CSDL: (1) FROM: Xác định bảng nguồn dữ liệu; (2) WHERE: Đánh giá vị từ trên từng dòng để lọc dữ liệu thô; (3) SELECT: Trích xuất các cột chỉ định và tính toán biểu thức (gán bí danh alias); (4) ORDER BY: Sắp xếp kết quả cuối cùng theo thứ tự tăng dần hoặc giảm dần. Trong mệnh đề WHERE, lập trình viên TUYỆT ĐỐI KHÔNG ĐƯỢC dùng bí danh cột đặt trong SELECT vì mệnh đề WHERE được thực thi TRƯỚC mệnh đề SELECT; tại thời điểm WHERE xử lý dữ liệu thì bí danh cột trong SELECT chưa hề tồn tại trong ngữ cảnh của bộ xử lý truy vấn.
+> 1. Toán tử phạm vi `BETWEEN ... AND ...` và tập hợp `IN (...)`:
+- `expr BETWEEN a AND b` là toán tử **bao gồm cả hai đầu mút (Inclusive)**, hoàn toàn tương đương với biểu thức `(expr >= a AND expr <= b)`. Lưu ý cần viết giá trị nhỏ `a` trước và giá trị lớn `b` sau.
+- `expr IN (v1, v2, v3)` tương đương với `(expr = v1 OR expr = v2 OR expr = v3)`. Tuy nhiên, cần đặc biệt cẩn trọng với `NOT IN`: vì `x NOT IN (10, NULL)` tương đương `(x <> 10 AND x <> NULL)`, mà trong Logic 3 giá trị (Three-Valued Logic) của SQL thì `x <> NULL` luôn trả về `UNKNOWN`, nên phép `AND` với `UNKNOWN` khiến `WHERE` không trả về bất kỳ dòng nào!
+
+2. Các ký tự đại diện (Wildcards) trong `LIKE` và từ khóa `ESCAPE` trong T-SQL:
+- `%`: Đại diện cho một chuỗi bất kỳ gồm **0, 1 hoặc nhiều ký tự**.
+- `_` (dấu gạch dưới): Đại diện cho **đúng 1 ký tự đơn lẻ** bất kỳ.
+- `[charlist]` / `[^charlist]` (Đặc thù T-SQL): Khớp 1 ký tự nằm trong (hoặc không nằm trong) tập/dải ký tự chỉ định, ví dụ `LIKE 'SE[0-9][0-9]%'`.
+* **Từ khóa `ESCAPE`:** Khi cần tìm chuỗi chứa ký tự `%` hoặc `_` thực sự (ví dụ tìm chương trình khuyến mãi `'Giảm 50%'`), ta định nghĩa ký tự thoát như `'\'`:
+  `WHERE PromoText LIKE N'%50\%%' ESCAPE '\'`
+
+3. Cú pháp phân trang chuẩn `OFFSET ... FETCH NEXT` (SQL Server 2012+):
+- Bắt buộc phải đi kèm mệnh đề `ORDER BY` để thứ tự dòng xác định. Để lấy trang thứ `@PageNumber` (bắt đầu từ 1) với kích thước `@PageSize` dòng/trang:
+```sql
+SELECT ProductID, ProductName, UnitPrice
+FROM Products
+ORDER BY UnitPrice DESC, ProductID ASC
+OFFSET (@PageNumber - 1) * @PageSize ROWS
+FETCH NEXT @PageSize ROWS ONLY;
+```
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Cú pháp tổng quát câu lệnh SELECT** | Viết đúng cấu trúc SELECT, FROM, WHERE, ORDER BY và các tùy chọn ASC/DESC. | Remember | **3.0đ** |
-| **Thứ tự thực thi logic của DBMS** | Trình bày chính xác trình tự xử lý: FROM -> WHERE -> SELECT -> ORDER BY. | Understand | **4.0đ** |
-| **Giải thích quy tắc sử dụng Bí danh (Alias)** | Lập luận thuyết phục vì sao WHERE không dùng được Alias đặt tại SELECT dựa trên thứ tự thực thi. | Understand | **3.0đ** |
+| **Giải thích tính bao gồm 2 đầu mút của BETWEEN và lưu ý NOT IN với NULL** | Khẳng định BETWEEN tương đương >= a AND <= b, giải thích rõ logic 3 giá trị UNKNOWN khi dùng NOT IN có NULL. | Understand | **3.5đ** |
+| **Phân biệt các ký tự đại diện %, _, [...] trong LIKE và cú pháp ESCAPE** | Nêu đúng ý nghĩa %, _, [...] và viết đúng ví dụ dùng mệnh đề ESCAPE để tìm ký tự % hoặc _ thật. | Understand | **3.5đ** |
+| **Viết đúng cú pháp phân trang ORDER BY ... OFFSET ... FETCH NEXT** | Nêu rõ điều kiện bắt buộc phải có ORDER BY và công thức bỏ qua (PageNumber - 1) * PageSize dòng. | Apply | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -369,7 +399,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-008` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 32 (Slot 16) — SQL Queries (Handling NULLs) |
@@ -402,7 +432,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-009` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 13 (Slot 7) — Design Theory (Normal Forms) |
@@ -435,7 +465,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-010` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 43 (Slot 22) — Transactions & Practical Issues |
@@ -468,7 +498,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-011` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 51 (Slot 26) — T-SQL Programming (Views) |
@@ -501,7 +531,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-012` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 27 (Slot 14) — Data Definition Language (DDL) |
@@ -534,7 +564,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-013` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 33-34 (Slot 17) — SQL Queries (Joins) |
@@ -567,7 +597,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-014` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 37-38 (Slot 19) — SQL Queries (Aggregation & Grouping) |
@@ -600,7 +630,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-015` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 37 (Slot 19) — SQL Queries (Aggregate Functions) |
@@ -633,7 +663,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-016` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 10 (Slot 5) — Design Theory (Functional Dependencies) |
@@ -666,7 +696,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-017` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 13 (Slot 7) — Design Theory (Second Normal Form) |
@@ -699,7 +729,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-018` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 12 (Slot 6) — Design Theory (Data Anomalies) |
@@ -732,7 +762,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-019` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 21 (Slot 11) — ERD to Relational Mapping |
@@ -765,7 +795,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-020` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 21 (Slot 11) — High-Level Database Models (Weak Entities) |
@@ -798,7 +828,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-021` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 41 (Slot 21) — Practical Issues (Indexing) |
@@ -831,7 +861,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-022` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 49 (Slot 25) — T-SQL Programming (Triggers) |
@@ -864,7 +894,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-023` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 51-54 (Slot 26-27) — T-SQL Programming (SP vs Functions) |
@@ -897,7 +927,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-024` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 29 (Slot 15) — SQL Constraints on Attributes |
@@ -930,10 +960,10 @@
 | **Mã câu hỏi** | `DBI202-PRAC-025` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
-| **Phân bổ Session** | Session 28 (Slot 14) — Data Definition Language (DDL vs DML) |
+| **Phân bổ Session** | Session 39-40 (Slot 20) — 6.7 Database Modifications (DELETE vs TRUNCATE) |
 | **Mục tiêu sư phạm** | Đánh giá mức độ am hiểu về cơ chế ghi nhật ký giao dịch, hiệu năng và xử lý cột IDENTITY. |
 
 **Nội dung câu hỏi phát vấn:**
@@ -964,7 +994,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-026` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 34 (Slot 17) — SQL Queries (Self Joins) |
@@ -997,7 +1027,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-027` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 36 (Slot 18) — Nested Queries in SQL |
@@ -1030,7 +1060,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-028` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 14 (Slot 7) — Design Theory (3NF vs BCNF) |
@@ -1056,35 +1086,45 @@
 
 ---
 
-### 29. `DBI202-PRAC-029`: Tính chất Kết nối không mất thông tin (Lossless Join) và Bảo toàn phụ thuộc
+### 29. `DBI202-PRAC-029`: Kiểm tra tính Bảo toàn Phụ thuộc hàm (Dependency Preservation) và Sự đánh đổi giữa 3NF với BCNF
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-PRAC-029` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 16 (Slot 8) — Schema Decomposition Trade-offs |
-| **Mục tiêu sư phạm** | Kiểm tra năng lực đánh giá chất lượng của thuật toán phân rã lược đồ cơ sở dữ liệu quan hệ. |
+| **Phân bổ Session** | Session 11-14 (Slot 6-7) — 3.3 Design of Relational Database Schema & 3.5 Normal Forms |
+| **Mục tiêu sư phạm** | Đánh giá năng lực kiểm tra tính chất Bảo toàn phụ thuộc hàm của một phép phân rã và phân tích bài toán kinh điển khi chuẩn BCNF làm mất phụ thuộc hàm. |
 
 **Nội dung câu hỏi phát vấn:**
-> Khi phân rã một lược đồ quan hệ R thành hai lược đồ con R1 và R2, thế nào là Phép phân rã kết nối không mất thông tin (Lossless Join Decomposition)? Hãy nêu định lý kiểm tra nhanh điều kiện cần và đủ để phép phân rã (R1, R2) là Lossless Join.
+> Thế nào là một phép phân rã lược đồ bảo đảm tính chất **Bảo toàn phụ thuộc hàm (`Dependency Preservation`)**? Tại sao trong hệ quản trị CSDL thực tế, việc một phép phân rã làm mất phụ thuộc hàm lại gây tốn kém chi phí hiệu năng nghiêm trọng mỗi khi thực thi lệnh `INSERT`/`UPDATE`? Hãy phân tích ví dụ kinh điển trên lược đồ `R(Student, Course, Instructor)` với tập phụ thuộc hàm $F = \{\text{Student, Course} \to \text{Instructor};\; \text{Instructor} \to \text{Course}\}$ để chứng minh vì sao ta không thể vừa đạt chuẩn **BCNF** vừa bảo toàn được toàn bộ phụ thuộc hàm.
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Nếu một phép phân rã bị mất thông tin (Lossy Join), hiện tượng nguy hiểm gì sẽ xảy ra khi ta thực hiện phép kết nối tự nhiên (NATURAL JOIN) giữa R1 và R2?"*
+> *"Trong trường hợp thực tế gặp lược đồ giống như `R(Student, Course, Instructor)` ở trên, người kiến trúc sư CSDL thường ưu tiên giữ nguyên ở chuẩn **3NF** hay ép phân rã lên **BCNF**? Vì sao?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Phép phân rã R thành R1 và R2 được gọi là Kết nối không mất thông tin (Lossless Join Decomposition) nếu khi ta thực hiện phép kết nối tự nhiên (Natural Join) giữa hai thể hiện r1(R1) và r2(R2) thì kết quả thu được CHÍNH XÁC BẰNG thể hiện ban đầu r(R), tức là π_R1(r) ⋈ π_R2(r) = r. Định lý kiểm tra nhanh: Phép phân rã R thành (R1, R2) dưới tập phụ thuộc hàm F là Lossless Join khi và chỉ khi phần giao của hai quan hệ (R1 ∩ R2) chứa một siêu khóa của ít nhất một trong hai quan hệ sau phân rã, tức là: (R1 ∩ R2 -> R1) HOẶC (R1 ∩ R2 -> R2) phải thuộc bao đóng phụ thuộc hàm F+. Nếu một phép phân rã bị mất thông tin (Lossy Join), điều nguy hiểm là: Phép kết nối tự nhiên sẽ SINH RA CÁC BẢN GHI RÁC GIẢ MẠO (Spurious Tuples). 'Mất thông tin' ở đây mang bản chất toán học là mất đi tính chính xác của dữ liệu ban đầu do dữ liệu kết nối bị bùng nổ sai lệch, khiến hệ thống không còn biết bản ghi nào mới là thông tin chân thực ban đầu.
+> 1. Định nghĩa và ý nghĩa hiệu năng của Bảo toàn phụ thuộc hàm (`Dependency Preservation`):
+- Cho lược đồ $R$ với tập phụ thuộc hàm $F$ được phân rã thành $\rho = \{R_1, R_2, \dots, R_k\}$. Gọi $\pi_{R_i}(F)$ là tập các phụ thuộc hàm trong $F^+$ chỉ chứa các thuộc tính thuộc về $R_i$. Phép phân rã $\rho$ được gọi là **Bảo toàn phụ thuộc hàm** nếu:
+  $$\left(\bigcup_{i=1}^{k} \pi_{R_i}(F)\right)^+ = F^+$$
+* **Ý nghĩa hiệu năng sống còn:** Nếu bảo toàn phụ thuộc hàm, mỗi phụ thuộc hàm đều nằm gọn trong một bảng đơn lẻ $R_i$ và có thể được DBMS kiểm tra tức thì ($O(\log n)$) bằng ràng buộc `PRIMARY KEY` / `UNIQUE` cục bộ trên bảng đó. Ngược lại, nếu mất phụ thuộc hàm, mỗi câu lệnh `INSERT` hoặc `UPDATE` buộc DBMS phải thực hiện phép kết nối (`JOIN`) đắt đỏ giữa nhiều bảng mới kiểm tra được ràng buộc!
+
+2. Phân tích bài toán kinh điển `R(Student, Course, Instructor)` với $F = \{SC \to I,\; I \to C\}$:
+* **Khóa ứng viên:** $(SC)^+ = \{S, C, I\}$ và $(SI)^+ = \{S, I, C\} \Rightarrow$ Hai khóa ứng viên là $\{S, C\}$ và $\{S, I\}$. Toàn bộ 3 thuộc tính $S, C, I$ đều là thuộc tính khóa (Prime attributes).
+* **Kiểm tra 3NF vs BCNF:**
+  + Vì $C$ là thuộc tính khóa, phụ thuộc hàm $I \to C$ **thỏa mãn 3NF** $\Rightarrow R(S, C, I)$ đã đạt chuẩn **3NF** và bảo toàn 100% phụ thuộc hàm!
+  + Nhưng trong $I \to C$, vế trái $I$ không phải là siêu khóa của $R$, nên $R$ **vi phạm BCNF**.
+* **Hệ quả khi phân rã về BCNF:** Ta buộc phải tách theo $I \to C$ thành $R_1(\underline{I}, C)$ và $R_2(\underline{S, I})$. Khi đó cả hai bảng con đều đạt BCNF và kết nối không mất thông tin ($R_1 \cap R_2 = \{I\} \to C$), nhưng phụ thuộc hàm $SC \to I$ (một sinh viên học một môn chỉ do một giảng viên dạy) bị xé lẻ qua hai bảng và **bị mất hoàn toàn**!
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Định nghĩa toán học Lossless Join Decomposition** | Nêu đúng công thức π_R1(r) ⋈ π_R2(r) = r tái tạo hoàn hảo không thừa không thiếu. | Understand | **3.0đ** |
-| **Định lý kiểm tra điều kiện cần và đủ** | Phát biểu chính xác định lý giao của hai bảng phải là siêu khóa của R1 hoặc R2. | Apply | **4.0đ** |
-| **Bản chất hiện tượng Spurious Tuples trong Lossy Join** | Giải thích rõ ràng vì sao gọi là 'mất thông tin' do sinh ra dòng rác làm sai lệch dữ liệu. | Analyze | **3.0đ** |
+| **Định nghĩa đúng tính chất Bảo toàn phụ thuộc hàm và chi phí JOIN khi vi phạm** | Nêu đúng công thức hợp các hình chiếu phụ thuộc hàm bằng F+ và giải thích việc kiểm tra cục bộ bằng UNIQUE/PK mà không cần JOIN. | Understand | **3.5đ** |
+| **Xác định đúng 2 khóa ứng viên {S, C}, {S, I} và chứng minh R đạt 3NF nhưng vi phạm BCNF** | Chỉ rõ mọi thuộc tính đều là prime nên I -> C thỏa 3NF, nhưng I không phải siêu khóa nên vi phạm BCNF. | Analyze | **3.5đ** |
+| **Chứng minh phép phân rã BCNF {R1(I,C), R2(S,I)} làm mất phụ thuộc hàm SC -> I** | Chỉ rõ sau khi tách thành (I, C) và (S, I), không bảng nào chứa đồng thời cả S, C, I để kiểm tra SC -> I. | Analyze | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1096,7 +1136,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-030` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 44 (Slot 22) — Transactions & Concurrency Control |
@@ -1129,7 +1169,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-031` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 44 (Slot 22) — Transactions & Concurrency Control |
@@ -1162,7 +1202,7 @@
 | **Mã câu hỏi** | `DBI202-PRAC-032` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 42 (Slot 21) — Query Optimization & Indexing |
@@ -1188,55 +1228,68 @@
 
 ---
 
-### 33. `DBI202-PRAC-033`: Cài đặt AFTER Trigger kết hợp ROLLBACK TRANSACTION để thực thi toàn vẹn nghiệp vụ phức tạp
+### 33. `DBI202-PRAC-033`: So sánh Hàm Vô hướng (Scalar UDF) và Hàm Giá trị Bảng Nội tuyến (Inline TVF) trong T-SQL & Tối ưu hóa Hiệu năng
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-PRAC-033` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 50 (Slot 25) — T-SQL Programming (Complex Constraints via Triggers) |
-| **Mục tiêu sư phạm** | Đánh giá kỹ năng lập trình T-SQL mức nâng cao để giải quyết các ràng buộc liên bảng mà ràng buộc CHECK không làm được. |
+| **Phân bổ Session** | Session 52-54 (Slot 26-27) — 8.2 User-Defined Functions (Scalar UDF vs Inline TVF) |
+| **Mục tiêu sư phạm** | Đánh giá kỹ năng viết User-Defined Functions trong T-SQL, phân biệt 3 loại UDF và giải quyết điểm nghẽn hiệu năng RBAR của Scalar UDF bằng Inline TVF + CROSS APPLY. |
 
 **Nội dung câu hỏi phát vấn:**
-> Tại sao có những ràng buộc nghiệp vụ bắt buộc phải dùng Trigger thay vì dùng ràng buộc CHECK? Hãy viết một đoạn mã T-SQL hoàn chỉnh tạo AFTER INSERT, UPDATE Trigger trên bảng OrderDetails để kiểm tra: Nếu số lượng đặt hàng (Quantity) vượt quá số lượng tồn kho (UnitsInStock) hiện có trong bảng Products thì lập tức hủy bỏ thao tác và ném ra thông báo lỗi thích hợp.
+> Trong MS SQL Server, hãy phân biệt 3 loại Hàm do người dùng định nghĩa (`User-Defined Functions - UDF`): (1) `Scalar UDF`, (2) `Inline Table-Valued Function (iTVF)`, và (3) `Multi-Statement Table-Valued Function (mTVF)`. Tại sao việc gọi một `Scalar UDF` có chứa câu lệnh truy vấn bảng bên trong mệnh đề `SELECT` hoặc `WHERE` trên bảng hàng triệu dòng lại gây suy giảm hiệu năng nghiêm trọng, và làm thế nào để viết lại thành `Inline TVF` kết hợp toán tử `CROSS APPLY`?
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Tại sao trong phần thân Trigger, chúng ta luôn phải viết code xử lý theo tập hợp (Set-based) để hỗ trợ câu lệnh INSERT chèn nhiều dòng cùng lúc thay vì giả định chỉ có 1 dòng được chèn?"*
+> *"Tại sao một `User-Defined Function (UDF)` trong MS SQL Server bị cấm sử dụng các câu lệnh có hiệu ứng phụ làm thay đổi trạng thái cơ sở dữ liệu (như `INSERT`, `UPDATE`, `DELETE` lên bảng thật) hoặc gọi hàm không tất định như `RAND()`, `NEWID()`?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Ràng buộc CHECK trong chuẩn SQL chỉ có thể đánh giá biểu thức trên các cột thuộc về DUY NHẤT một dòng dữ liệu của chính bảng đó; nó không thể thực hiện truy vấn SELECT sang một bảng khác để kiểm tra tính toàn vẹn liên bảng phức tạp. Do đó, các nghiệp vụ đòi hỏi đối chiếu tồn kho, kiểm tra hạn mức tín dụng bắt buộc phải dùng Trigger. Viết Trigger bắt buộc phải theo tư duy tập hợp (Set-based) vì câu lệnh INSERT có thể chèn 100 dòng cùng lúc; nếu dùng biến vô hướng `@qty = SELECT Quantity FROM inserted` thì hệ thống chỉ lấy ngẫu nhiên 1 dòng và bỏ sót 99 dòng vi phạm còn lại. Mã T-SQL chuẩn mực: 
+> 1. Phân biệt 3 loại `User-Defined Functions (UDF)` trong MS SQL Server:
+* **`Scalar UDF` (Hàm vô hướng):** Có phần thân `BEGIN ... END`, trả về một giá trị đơn lẻ thuộc kiểu dữ liệu cơ bản (`INT`, `DECIMAL`, `NVARCHAR`,...).
+* **`Inline Table-Valued Function (iTVF)` (Hàm bảng nội tuyến):** **KHÔNG có khối `BEGIN ... END`**; toàn bộ nội dung chỉ gồm `RETURN (<Một câu lệnh SELECT duy nhất>)`. Đóng vai trò như một **Khung nhìn có tham số (`Parameterized View`)**.
+* **`Multi-Statement Table-Valued Function (mTVF)` (Hàm bảng đa câu lệnh):** Khai báo cấu trúc một biến bảng `@ResultTable TABLE (...)`, thực hiện nhiều câu lệnh chèn dữ liệu vào biến bảng đó trong khối `BEGIN ... END` rồi mới `RETURN`.
+
+2. Tại sao `Scalar UDF` có truy vấn dữ liệu gây thảm họa hiệu năng (`RBAR — Row-By-Agonizing-Row`):
+- Khi đặt `dbo.ufn_GetTotalSpent(c.CustomerID)` trong câu lệnh `SELECT` trên bảng `Customers` gồm $1,000,000$ dòng, bộ tối ưu hóa truy vấn (`Query Optimizer`) coi `Scalar UDF` như một "hộp đen", dẫn đến:
+  1. Thực thi lặp lại câu lệnh `SELECT SUM(...)` bên trong hàm **1,000,000 lần riêng biệt** (mỗi dòng 1 lần ngữ cảnh gọi hàm).
+  2. Ép toàn bộ kế hoạch thực thi của câu truy vấn ngoài phải chạy **Đơn luồng (`Serial Plan`, cấm thực thi song song `Parallelism`)**.
+
+3. Cài đặt chuẩn mực chuyển đổi sang `Inline TVF` kết hợp `CROSS APPLY`:
 ```sql
-CREATE TRIGGER trg_CheckInventory_OrderDetails
-ON OrderDetails
-AFTER INSERT, UPDATE
+-- 1. Định nghĩa Inline TVF (Không có BEGIN...END, được Optimizer trải phẳng trực tiếp vào cây đại số)
+CREATE FUNCTION dbo.ufn_CustomerOrderSummary (@CustomerID INT)
+RETURNS TABLE
 AS
-BEGIN
-    SET NOCOUNT ON;
-    IF EXISTS (
-        SELECT 1 
-        FROM inserted i
-        INNER JOIN Products p ON i.ProductID = p.ProductID
-        WHERE i.Quantity > p.UnitsInStock
-    )
-    BEGIN
-        RAISERROR (N'Lỗi: Số lượng đặt hàng vượt quá số lượng tồn kho hiện có!', 16, 1);
-        ROLLBACK TRANSACTION;
-        RETURN;
-    END
-END;
+RETURN (
+    SELECT 
+        COUNT(OrderID) AS OrderCount,
+        ISNULL(SUM(TotalAmount), 0.00) AS TotalSpent
+    FROM Orders
+    WHERE CustomerID = @CustomerID
+);
+GO
+
+-- 2. Gọi hàm bằng CROSS APPLY (Cho phép Optimizer gộp thành 1 phép JOIN tập hợp duy nhất)
+SELECT 
+    c.CustomerID,
+    c.CustomerName,
+    s.OrderCount,
+    s.TotalSpent
+FROM Customers c
+CROSS APPLY dbo.ufn_CustomerOrderSummary(c.CustomerID) s;
 ```
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Giới hạn của ràng buộc CHECK vs Vai trò của Trigger** | Giải thích rõ CHECK chỉ kiểm tra nội bộ 1 dòng, Trigger cho phép truy vấn liên bảng kiểm tra chéo. | Understand | **3.0đ** |
-| **Tư duy tập hợp (Set-based) trong viết Trigger** | Phân tích vì sao phải dùng IF EXISTS kết hợp JOIN với inserted thay vì gán biến đơn lẻ. | Analyze | **3.5đ** |
-| **Đoạn mã T-SQL hoàn chỉnh và chuẩn xác** | Viết đầy đủ cú pháp CREATE TRIGGER, JOIN inserted, RAISERROR và ROLLBACK TRANSACTION. | Apply | **3.5đ** |
+| **Phân biệt chính xác 3 loại UDF (Scalar UDF, Inline TVF, Multi-Statement TVF)** | Trình bày rõ cú pháp và kiểu trả về của từng loại, nhấn mạnh Inline TVF không có BEGIN...END và tương đương View có tham số. | Understand | **3.5đ** |
+| **Phân tích đúng nguyên nhân nghẽn hiệu năng RBAR và chặn Parallelism của Scalar UDF** | Chỉ rõ việc gọi lặp hàm theo từng dòng (Row-by-row) và hạn chế ép thực thi đơn luồng trên bảng lớn. | Analyze | **3.0đ** |
+| **Viết đúng mã T-SQL cho Inline TVF (RETURNS TABLE AS RETURN (...)) và CROSS APPLY** | Cài đặt chuẩn cú pháp Inline TVF và viết câu truy vấn kết hợp CROSS APPLY tối ưu hóa theo tập hợp. | Apply | **3.5đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1248,7 +1301,7 @@ END;
 | **Mã câu hỏi** | `DBI202-PRAC-034` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 22 (Slot 11) — ERD Subclassing & Mapping |
@@ -1281,7 +1334,7 @@ END;
 | **Mã câu hỏi** | `DBI202-PRAC-035` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 53 (Slot 27) — T-SQL Programming (Cursors vs Set-based) |
@@ -1314,10 +1367,10 @@ END;
 | **Mã câu hỏi** | `DBI202-PRAC-036` |
 | **Kho dữ liệu** | `practice_questions` (MF-01 / MF-02) |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 40 (Slot 20) — Transactions (Nested Transactions & Savepoints) |
+| **Phân bổ Session** | Session 43-44 (Slot 22) — 7.2 Transaction Processing & Savepoints |
 | **Mục tiêu sư phạm** | Kiểm tra kỹ năng quản trị giao dịch nâng cao, cơ chế biến @@TRANCOUNT và kỹ thuật Rollback có chọn lọc. |
 
 **Nội dung câu hỏi phát vấn:**
@@ -1340,43 +1393,53 @@ END;
 
 ---
 
-## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB KIOSK (EXAM_QUESTIONS)
+## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB KIOSK (`exam_questions`)
 
-> **Đặc điểm luồng MF-04:**
-> - Bám sát 5 blueprint slots trong Ma trận Cấu trúc Đề thi Oral Exam do Trưởng Bộ Môn ban hành.
-> - Phục vụ đánh giá chính thức tại phòng Lab máy trạm có giám thị và niêm phong âm thanh R2.
-> - Barem Rubric tổng 10.0đ hỗ trợ Hội đồng Giám khảo và AI chấm độc lập, phục vụ cổng Evidence Panel hậu kiểm.
+> **Đặc điểm luồng MF-04 (Phòng Lab Kiosk):**
+> - Cô lập hoàn toàn với kho luyện tập theo Quy tắc R8, bám sát Ma trận 5 Slots Đề thi của Trưởng Bộ Môn.
+> - 100% câu hỏi có Barem Rubric 10.0đ, Model Answer >= 50 ký tự và FollowUpPrompt phục vụ hỏi xoáy theo cấu hình Trưởng Bộ Môn.
 
-### 1. `DBI202-EXAM-001`: Kiến trúc 3 mức ANSI-SPARC và Hai cấp độ Độc lập Dữ liệu
+### 1. `DBI202-EXAM-001`: Các giai đoạn Tiến hóa của Hệ CSDL và 5 Nhược điểm Cốt lõi của Hệ thống Quản lý Tệp phẳng (CQ1.1)
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-EXAM-001` |
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
-| **Cấu trúc đề thi** | **Slot 1 (Lý thuyết nền tảng CSDL & Mô hình)** |
+| **Cấu trúc đề thi** | **Slot 1 (Kiến trúc CSDL & Mô hình quan hệ)** |
 | **Ánh xạ CLO FLM** | **CLO1** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO1** (`00000000-0000-0000-0000-000000000661`) |
 | **Mức nhận thức Bloom** | **Remember** |
-| **Mức độ khó** | **Medium** |
-| **Phân bổ Session** | Session 1 (Slot 1) — The Worlds of Database Systems |
-| **Mục tiêu đánh giá** | Kiểm tra khả năng tái hiện chính xác kiến trúc 3 mức ANSI-SPARC và hai cấp độ độc lập dữ liệu trong hệ quản trị CSDL. |
+| **Mức độ khó** | **Easy** |
+| **Phân bổ Session** | Session 1-2 (Slot 1) — 1.2 Evolution of Database Systems (CQ1.1) |
+| **Mục tiêu đánh giá** | Đánh giá mức độ nắm vững lịch sử tiến hóa của các hệ quản trị CSDL theo câu hỏi Constructive Question CQ1.1 trong Syllabus và lý do chuyển dịch từ File-based sang RDBMS. |
 
 **Nội dung câu hỏi phát vấn:**
-> Trình bày 3 cấp độ trong mô hình kiến trúc ANSI-SPARC của hệ cơ sở dữ liệu. Nêu định nghĩa và phân biệt rõ ràng hai cấp độ: Độc lập dữ liệu vật lý (Physical Data Independence) và Độc lập dữ liệu logic (Logical Data Independence).
+> Theo nội dung tiến hóa của các hệ cơ sở dữ liệu (Constructive Question `CQ1.1`), hãy trình bày các giai đoạn phát triển chính từ Hệ thống quản lý tệp truyền thống (`File-based Systems`) đến Hệ quản trị CSDL quan hệ (`RDBMS`) và hiện đại. Phân tích 5 nhược điểm nghiêm trọng của việc lưu trữ dữ liệu nghiệp vụ trên các tệp phẳng độc lập khiến doanh nghiệp bắt buộc phải sử dụng DBMS.
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Nếu DBA chuyển đổi cấu trúc bảng từ Heap sang Clustered Index hoặc cấu hình Partitioning theo năm trên các Filegroup khác nhau, tầng ứng dụng có cần phải sửa đổi mã nguồn hay biên dịch lại không? Thuộc tính độc lập dữ liệu nào bảo đảm điều này, và có ngoại lệ nào khiến ứng dụng bị ảnh hưởng gián tiếp không?"*
+> *"Trong 5 nhược điểm của hệ thống tệp phẳng, hiện tượng 'Phụ thuộc chương trình - dữ liệu' (Program-Data Dependence) gây tốn kém chi phí bảo trì phần mềm như thế nào khi doanh nghiệp muốn thêm một trường mới vào bản ghi khách hàng?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Kiến trúc ANSI-SPARC chia hệ thống cơ sở dữ liệu thành 3 cấp độ trừu tượng: (1) Cấp độ ngoài (External/View Level): Là giao diện hiển thị dữ liệu phù hợp với nhu cầu của từng nhóm người dùng hoặc ứng dụng cụ thể; che giấu các phần còn lại của CSDL. (2) Cấp độ khái niệm (Conceptual/Logical Level): Mô tả toàn bộ cấu trúc dữ liệu của tổ chức, bao gồm các thực thể, kiểu dữ liệu, mối liên kết giữa các thực thể và các ràng buộc bảo toàn toàn vẹn dữ liệu. (3) Cấp độ trong (Internal/Physical Level): Mô tả cách thức dữ liệu được lưu trữ vật lý thực tế trên các thiết bị nhớ thứ cấp (cấu trúc tệp, khối lưu trữ, chỉ mục B-Tree, nén dữ liệu). Hai cấp độ độc lập dữ liệu: (a) Độc lập dữ liệu vật lý là khả năng thay đổi lược đồ ở cấp độ trong (như tạo thêm Index, thay đổi thuật toán băm, chuyển đổi đĩa lưu trữ) mà không làm thay đổi lược đồ mức khái niệm và không làm gián đoạn mã nguồn ứng dụng mức ngoài. (b) Độc lập dữ liệu logic là khả năng sửa đổi, bổ sung lược đồ mức khái niệm (như thêm bảng mới, mở rộng thêm thuộc tính vào bảng hiện có) mà không làm ảnh hưởng đến các khung nhìn ngoài (External Views) hiện tại của người dùng.
+> 1. Các giai đoạn tiến hóa lịch sử của Hệ thống Cơ sở dữ liệu (`CQ1.1`):
+* **Giai đoạn 1 — Hệ thống quản lý tệp phẳng (`File-Processing Systems`, trước 1960s):** Dữ liệu được lưu trữ rời rạc trong các tệp văn bản/nhị phân riêng lẻ của từng phòng ban; mỗi ứng dụng tự viết mã nguồn C/COBOL để đọc/ghi định dạng tệp của riêng mình.
+* **Giai đoạn 2 — Hệ CSDL Phân cấp và Mạng (`Hierarchical & Network DBMS`, 1960s–1970s):** Tiêu biểu là IBM IMS (mô hình cây phân cấp 1:N) và CODASYL DBTG (mô hình đồ thị mạng). Tốc độ truy xuất nhanh nhưng cấu trúc cứng nhắc, lập trình viên phải điều hướng con trỏ vật lý cực kỳ phức tạp.
+* **Giai đoạn 3 — Hệ quản trị CSDL Quan hệ (`Relational DBMS - RDBMS`, từ 1970 đến nay):** Do E.F. Codd khởi xướng. Dữ liệu được trừu tượng hóa thành các Bảng (Relations) 2 chiều dựa trên lý thuyết tập hợp và Đại số quan hệ, sử dụng ngôn ngữ truy vấn phi thủ tục chuẩn hóa **SQL**, tách biệt hoàn toàn mức logic khỏi mức lưu trữ vật lý.
+* **Giai đoạn 4 — Hệ CSDL Hướng đối tượng, Quan hệ-Đối tượng và NoSQL / NewSQL (1990s–nay):** Mở rộng cho dữ liệu bán cấu trúc, phi cấu trúc (JSON, Graph, Key-Value) và phân tán đám mây.
+
+2. Năm (05) nhược điểm chí mạng của Hệ thống tệp phẳng (`File-based Systems`):
+1. **Dư thừa và Không nhất quán dữ liệu (`Data Redundancy & Inconsistency`):** Cùng một thông tin khách hàng bị sao chép ở nhiều tệp của phòng Kế toán và phòng Kinh doanh; khi cập nhật số điện thoại ở một nơi mà quên nơi kia sẽ gây mâu thuẫn dữ liệu.
+2. **Phụ thuộc chặt giữa Chương trình và Dữ liệu (`Program-Data Dependence`):** Cấu trúc bản ghi được nhúng cứng trong mã nguồn ứng dụng; chỉ cần đổi thứ tự cột hoặc thêm 1 trường là phải sửa code và biên dịch lại toàn bộ phần mềm.
+3. **Khó khăn khi truy cập và tổng hợp dữ liệu liên phòng ban (`Data Isolation`):** Không có ngôn ngữ truy vấn chung; mỗi báo cáo mới đều phải viết một chương trình đọc ghép tệp thủ công.
+4. **Không đảm bảo tính Nguyên tố khi xảy ra sự cố (`Atomicity Problems`):** Nếu hệ thống mất điện giữa lúc đang chuyển tiền giữa 2 tệp, dữ liệu sẽ rơi vào trạng thái hỏng một nửa mà không có cơ chế tự động khôi phục (`Recovery/WAL`).
+5. **Dị thường truy cập đồng thời và Thiếu an ninh phân quyền (`Concurrent-Access Anomalies & Security Gaps`):** Hai nhân viên cùng ghi vào một tệp dễ ghi đè mất dữ liệu của nhau (`Lost Update`) và không thể phân quyền chi tiết đến từng cột/dòng.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Mô tả 3 cấp độ kiến trúc ANSI-SPARC** | Trình bày chính xác và đầy đủ Mức ngoài, Mức khái niệm và Mức trong. | Remember | **3.5đ** |
-| **Định nghĩa Độc lập dữ liệu vật lý** | Nêu đúng việc thay đổi mức vật lý không làm ảnh hưởng mức khái niệm và ứng dụng. | Remember | **3.5đ** |
-| **Định nghĩa Độc lập dữ liệu logic** | Nêu đúng việc bổ sung, thay đổi mức khái niệm không làm thay đổi các View ngoài hiện có. | Remember | **3.0đ** |
+| **Trình bày đúng 4 giai đoạn tiến hóa của hệ CSDL (CQ1.1)** | Nêu rõ tiến trình từ File-based -> Hierarchical/Network -> Relational DBMS (E.F. Codd, SQL) -> NoSQL/NewSQL. | Remember | **3.5đ** |
+| **Phân tích rõ sự dư thừa/bất nhất và phụ thuộc chương trình - dữ liệu** | Giải thích cụ thể nguyên nhân gây mâu thuẫn dữ liệu và việc phải sửa code ứng dụng khi đổi cấu trúc tệp phẳng. | Understand | **3.5đ** |
+| **Phân tích 3 nhược điểm về Atomicity, Concurrency và Bảo mật/Cô lập dữ liệu** | Chỉ rõ rủi ro mất toàn vẹn khi crash giữa chừng, xung đột ghi đè đồng thời và thiếu ngôn ngữ truy vấn chuẩn. | Understand | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1389,7 +1452,7 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 1 (Lý thuyết nền tảng CSDL & Mô hình)** |
 | **Ánh xạ CLO FLM** | **CLO2** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO2** (`00000000-0000-0000-0000-000000000662`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 5 (Slot 3) — Algebraic Query Language |
@@ -1423,7 +1486,7 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 10 (Slot 5) — Rules About Functional Dependencies |
@@ -1457,7 +1520,7 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 11 (Slot 6) — Design Theory (Keys) |
@@ -1491,7 +1554,7 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 29-30 (Slot 15) — SQL Constraints on Attributes |
@@ -1534,7 +1597,7 @@ CREATE TABLE Employees (
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Remember** |
 | **Mức độ khó** | **Easy** |
 | **Phân bổ Session** | Session 49 (Slot 25) — T-SQL Programming (Triggers) |
@@ -1568,7 +1631,7 @@ CREATE TABLE Employees (
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 1 (Lý thuyết nền tảng CSDL & Mô hình)** |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 20 (Slot 10) — High-Level Database Models (ERD to Relational) |
@@ -1594,41 +1657,56 @@ CREATE TABLE Employees (
 
 ---
 
-### 8. `DBI202-EXAM-008`: Cơ chế hoạt động của Phép Natural Join và Điều kiện Khả hợp trong Phép toán Tập hợp
+### 8. `DBI202-EXAM-008`: Biểu diễn Ràng buộc Toàn vẹn trên Lược đồ Quan hệ bằng Đại số Quan hệ (CQ3.2 & CQ3.3)
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-EXAM-008` |
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
-| **Cấu trúc đề thi** | **Slot 1 (Lý thuyết nền tảng CSDL & Mô hình)** |
+| **Cấu trúc đề thi** | **Slot 1 (Kiến trúc CSDL & Mô hình quan hệ)** |
 | **Ánh xạ CLO FLM** | **CLO2** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO2** (`00000000-0000-0000-0000-000000000662`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
-| **Phân bổ Session** | Session 6 (Slot 3) — Algebraic Query Language |
-| **Mục tiêu đánh giá** | Kiểm tra mức độ am hiểu về cơ chế đối khớp thuộc tính của Natural Join và điều kiện union-compatible của phép toán tập hợp. |
+| **Phân bổ Session** | Session 7-8 (Slot 4) — 2.4 Algebraic Constraints on Relations (CQ3.2 & CQ3.3) |
+| **Mục tiêu đánh giá** | Đánh giá khả năng sử dụng hai dạng phương trình Đại số quan hệ E = ∅ và E1 ⊆ E2 để đặc tả hình thức các ràng buộc khóa ngoại, miền giá trị và khóa chính. |
 
 **Nội dung câu hỏi phát vấn:**
-> Trong Đại số quan hệ, phép kết nối tự nhiên (Natural Join R ⋈ S) hoạt động như thế nào khi hai quan hệ có một hoặc nhiều thuộc tính cùng tên? Thế nào là hai quan hệ Khả hợp (Union-compatible) và điều kiện này bắt buộc đối với những phép toán nào?
+> Trong lý thuyết Mô hình Quan hệ (Constructive Questions `CQ3.2` & `CQ3.3`), mọi ràng buộc toàn vẹn đều có thể được biểu diễn hình thức bằng một trong hai dạng biểu thức Đại số quan hệ: (1) $E = \emptyset$ (biểu thức trả về tập rỗng) hoặc (2) $E_1 \subseteq E_2$ (phép bao hàm tập hợp). Cho hai quan hệ `Employees(EmpID, FullName, Salary, DeptID)` và `Departments(DeptID, DeptName)`. Hãy viết biểu thức Đại số quan hệ theo cả 2 cách để biểu diễn: (a) Ràng buộc khóa ngoại `Employees.DeptID` tham chiếu tới `Departments.DeptID`, và (b) Ràng buộc miền giá trị lương của mọi nhân viên phải lớn hơn hoặc bằng `500`.
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Nếu hai quan hệ R và S không có bất kỳ thuộc tính nào cùng tên thì kết quả của phép Natural Join (R ⋈ S) sẽ trở thành phép toán nào? Ngược lại, nếu toàn bộ thuộc tính của R và S đều trùng tên thì Natural Join tương đương với phép toán nào?"*
+> *"Làm thế nào để biểu diễn ràng buộc Khóa chính (Functional Dependency `DeptID -> DeptName` không có hai bộ trùng `DeptID` nhưng khác `DeptName`) chỉ bằng phép Đổi tên (`ρ`), Phép Chọn (`σ`) và Tích Đề-các (`×`) với phương trình $E = \emptyset$?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Phép kết nối tự nhiên (Natural Join R ⋈ S): Hệ thống sẽ tự động xác định tất cả các thuộc tính có cùng tên xuất hiện ở cả quan hệ R và quan hệ S. Sau đó, nó thực hiện kết nối bằng (Equi-join) trên tất cả các cặp thuộc tính cùng tên đó và tự động chiếu để LOẠI BỎ CÁC CỘT TRÙNG LẶP, chỉ giữ lại một cột duy nhất cho mỗi thuộc tính chung. Nếu giữa R và S không có bất kỳ thuộc tính nào cùng tên, phép Natural Join sẽ thoái hóa thành Tích Descartes (Cartesian Product R × S). Điều kiện Khả hợp (Union-compatible / Type-compatible): Hai quan hệ R và S được gọi là khả hợp khi và chỉ khi: (1) Chúng có cùng bậc (tức cùng số lượng thuộc tính: Degree(R) = Degree(S)); (2) Miền giá trị (kiểu dữ liệu) của các thuộc tính tương ứng theo thứ tự từ trái sang phải phải tương thích nhau (Domain(R.Ai) = Domain(S.Bi)). Điều kiện khả hợp là BẮT BUỘC đối với 3 phép toán tập hợp: Phép Hợp (Union ∪), Phép Giao (Intersection ∩) và Phép Hiệu (Set Difference -).
+> 1. Hai hình thức tương đương biểu diễn Ràng buộc Toàn vẹn trong Đại số quan hệ (`CQ3.2` & `CQ3.3`):
+* **Dạng 1 — Tập hợp vi phạm bằng rỗng ($E = \emptyset$):** Xây dựng biểu thức đại số $E$ truy vấn tất cả các bộ dữ liệu **vi phạm** quy tắc nghiệp vụ, và đặt điều kiện $E = \emptyset$ (không tồn tại bộ vi phạm nào).
+* **Dạng 2 — Bao hàm tập hợp ($E_1 \subseteq E_2$):** Mọi giá trị xuất hiện trong tập chiếu $E_1$ bắt buộc phải nằm trong tập hợp hợp lệ $E_2$. Hai dạng này hoàn toàn tương đương nhau vì:
+  $$E_1 \subseteq E_2 \iff E_1 - E_2 = \emptyset$$
+
+2. Áp dụng cho hai bài toán cụ thể trên `Employees` và `Departments`:
+* **Bài toán (a): Ràng buộc toàn vẹn tham chiếu (Khóa ngoại `Employees.DeptID` $\to$ `Departments.DeptID`):**
+  + *Biểu diễn theo dạng bao hàm ($E_1 \subseteq E_2$):* Tập hợp mọi mã phòng ban của nhân viên phải là tập con của tập mã phòng ban hiện có trong bảng `Departments`:
+    $$\pi_{\text{DeptID}}(\text{Employees}) \subseteq \pi_{\text{DeptID}}(\text{Departments})$$
+  + *Biểu diễn theo dạng tập rỗng ($E = \emptyset$):* Hiệu tập hợp giữa mã phòng ban trong `Employees` và mã phòng ban trong `Departments` phải bằng rỗng:
+    $$\pi_{\text{DeptID}}(\text{Employees}) - \pi_{\text{DeptID}}(\text{Departments}) = \emptyset$$
+* **Bài toán (b): Ràng buộc miền giá trị (`Salary >= 500` cho mọi nhân viên):**
+  + *Biểu diễn theo dạng tập rỗng ($E = \emptyset$):* Tập hợp các nhân viên có mức lương nhỏ hơn `500` phải bằng rỗng:
+    $$\sigma_{\text{Salary} < 500}(\text{Employees}) = \emptyset$$
+  + *Biểu diễn theo dạng bao hàm ($E_1 \subseteq E_2$):* Toàn bộ quan hệ `Employees` phải là tập con của tập các bộ nhân viên thỏa mãn `Salary >= 500`:
+    $$\text{Employees} \subseteq \sigma_{\text{Salary} \ge 500}(\text{Employees})$$
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Cơ chế hoạt động của Natural Join** | Giải thích rõ việc tự động đối khớp thuộc tính cùng tên và khử cột trùng lặp. | Understand | **3.5đ** |
-| **Trường hợp thoái hóa về Tích Descartes** | Chỉ ra kết quả tương đương tích Descartes khi hai bảng không có thuộc tính chung. | Understand | **2.5đ** |
-| **Định nghĩa Khả hợp (Union-compatible) & Phép toán áp dụng** | Nêu đủ 2 điều kiện cùng bậc, tương thích kiểu dữ liệu và chỉ rõ áp dụng cho ∪, ∩, -. | Understand | **4.0đ** |
+| **Giải thích nguyên lý tương đương giữa E1 ⊆ E2 và E1 - E2 = ∅** | Trình bày rõ bản chất toán học của hai cách biểu diễn ràng buộc toàn vẹn bằng đại số quan hệ. | Understand | **3.0đ** |
+| **Viết đúng biểu thức Ràng buộc Khóa ngoại bằng Phép Chiếu π và Phép Trừ -** | Viết chính xác π_DeptID(Employees) ⊆ π_DeptID(Departments) và π_DeptID(Employees) - π_DeptID(Departments) = ∅. | Apply | **3.5đ** |
+| **Viết đúng biểu thức Ràng buộc Miền giá trị bằng Phép Chọn σ** | Viết chính xác σ_{Salary < 500}(Employees) = ∅ và dạng bao hàm tương đương. | Apply | **3.5đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
 
-### 9. `DBI202-EXAM-009`: Tại sao Quan hệ đạt chuẩn 3NF vẫn có thể Dư thừa và Nhu cầu Dạng chuẩn BCNF
+### 9. `DBI202-EXAM-009`: Khái niệm Phủ tối tiểu (Minimal Cover / Canonical Cover) và Quy trình 3 Bước Thu gọn Tập Phụ thuộc Hàm
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
@@ -1636,28 +1714,37 @@ CREATE TABLE Employees (
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
-| **Phân bổ Session** | Session 14 (Slot 7) — Design Theory (3NF to BCNF) |
-| **Mục tiêu đánh giá** | Đánh giá mức độ thấu hiểu về kẽ hở lý thuyết của 3NF dẫn tới sự ra đời của dạng chuẩn BCNF. |
+| **Phân bổ Session** | Session 10-11 (Slot 5-6) — 3.2 Functional Dependencies & Minimal Cover |
+| **Mục tiêu đánh giá** | Đánh giá mức độ nắm vững 3 điều kiện của một Phủ tối tiểu (Minimal Cover) và thuật toán loại bỏ thuộc tính dư thừa, phụ thuộc hàm dư thừa. |
 
 **Nội dung câu hỏi phát vấn:**
-> Tại sao một lược đồ quan hệ đã đạt Dạng chuẩn 3 (3NF) nhưng vẫn có thể phát sinh dư thừa dữ liệu và dị thường cập nhật? Điều kiện nới lỏng nào trong định nghĩa 3NF tạo ra kẽ hở này và Dạng chuẩn Boyce-Codd (BCNF) đã khắc phục nó như thế nào?
+> Trong lý thuyết thiết kế CSDL quan hệ, thế nào là hai tập phụ thuộc hàm tương đương ($F \equiv G$) và một tập phụ thuộc hàm $F_c$ cần thỏa mãn **3 điều kiện chuẩn mực nào** để được gọi là **Phủ tối tiểu (Minimal Cover / Canonical Cover)** của $F$? Tại sao bước tìm Phủ tối tiểu $F_c$ luôn là bước khởi đầu bắt buộc trong Thuật toán tổng hợp chuẩn 3NF (Bernstein's 3NF Synthesis)?
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Cho lược đồ quan hệ R(Student, Course, Instructor) với các phụ thuộc hàm: (Student, Course) -> Instructor và Instructor -> Course. Hãy giải thích tại sao lược đồ này đạt chuẩn 3NF nhưng vi phạm BCNF, và chỉ ra dị thường cập nhật (Update Anomaly) cụ thể sẽ xảy ra khi một giảng viên đổi môn giảng dạy."*
+> *"Khi thực hiện 3 bước tìm Phủ tối tiểu, tại sao ta BẮT BUỘC phải thực hiện bước 'Loại bỏ thuộc tính dư thừa ở vế trái' TRƯỚC bước 'Loại bỏ phụ thuộc hàm dư thừa' (hoặc kiểm tra lại sau khi rút gọn vế trái)? Cho ví dụ minh họa."*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Dạng chuẩn 3 (3NF) chấp nhận một phụ thuộc hàm X -> A nếu thỏa mãn: X là siêu khóa HOẶC A là thuộc tính khóa (Prime Attribute). Chính vế điều kiện nới lỏng 'A là thuộc tính khóa' là kẽ hở cho phép dư thừa tồn tại. Khi một quan hệ có nhiều khóa ứng viên phức hợp và chúng bị gối/chồng lấn lên nhau (Overlapping Candidate Keys), có thể tồn tại một phụ thuộc hàm X -> A trong đó X KHÔNG PHẢI LÀ SIÊU KHÓA nhưng A lại thuộc về một khóa ứng viên khác. Khi đó, quan hệ vẫn đạt 3NF hợp lệ, nhưng vì X không phải siêu khóa nên giá trị của X và A sẽ bị lặp lại ở nhiều dòng dữ liệu, dẫn đến dị thường chèn, sửa, xóa. Dạng chuẩn Boyce-Codd (BCNF) ra đời để khắc phục triệt để kẽ hở này bằng cách LOẠI BỎ HOÀN TOÀN vế ngoại lệ 'A là thuộc tính khóa'; BCNF quy định nghiêm ngặt: Mọi vế trái X của mọi phụ thuộc hàm không tầm thường BẮT BUỘC PHẢI LÀ MỘT SIÊU KHÓA. Nhờ đó, BCNF loại bỏ 100% hiện tượng dư thừa bắt nguồn từ các phụ thuộc hàm.
+> 1. Khái niệm tương đương ($F \equiv G$) và 3 điều kiện của Phủ tối tiểu ($F_c$):
+- Hai tập phụ thuộc hàm $F$ và $G$ trên cùng lược đồ $R$ được gọi là tương đương ($F \equiv G$) nếu bao đóng của chúng bằng nhau: $F^+ = G^+$ (mọi phụ thuộc hàm suy dẫn được từ $F$ đều suy dẫn được từ $G$ và ngược lại).
+- Một tập phụ thuộc hàm $F_c$ tương đương với $F$ được gọi là **Phủ tối tiểu (Minimal Cover)** khi và chỉ khi thỏa mãn đồng thời **3 điều kiện**:
+  1. **Vế phải đơn thuộc tính (Singleton Right-Hand Side):** Mọi phụ thuộc hàm trong $F_c$ đều có dạng $X \to A$, trong đó $A$ chỉ gồm **duy nhất 1 thuộc tính đơn lẻ**.
+  2. **Không có thuộc tính dư thừa ở vế trái (No Extraneous Attributes in LHS):** Với mọi $X \to A \in F_c$, không tồn tại bất kỳ tập con thực sự $Y \subsetneq X$ nào sao cho $(F_c - \{X \to A\}) \cup \{Y \to A\} \equiv F_c$ (kiểm tra bằng cách xem $A \in Y^+$ hoặc thuộc tính bị bỏ có suy ra được từ các thuộc tính còn lại của $X$ hay không).
+  3. **Không có phụ thuộc hàm dư thừa (No Redundant Dependencies):** Không tồn tại bất kỳ phụ thuộc hàm $X \to A \in F_c$ nào mà khi loại bỏ nó đi, tập còn lại $F_c - \{X \to A\}$ vẫn tương đương với $F_c$ (tức là $A \in X^+_{\text{trên } F_c - \{X \to A\}}$).
+
+2. Tại sao tìm Phủ tối tiểu $F_c$ là bước bắt buộc đầu tiên khi tổng hợp chuẩn 3NF:
+- Nếu không rút gọn thuộc tính dư thừa ở vế trái trước khi tạo bảng con, thuật toán sẽ chọn vế trái bị thừa làm khóa của bảng con, dẫn đến tạo ra các bảng vi phạm ngay chuẩn 2NF (phụ thuộc bộ phận).
+- Nếu không loại bỏ các phụ thuộc hàm bắc cầu dư thừa (ví dụ có $A \to B, B \to C$ và cả $A \to C$), thuật toán sẽ sinh ra bảng dư thừa $R_k(A, C)$ gây trùng lặp dữ liệu và tốn chi phí lưu trữ không cần thiết.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Chỉ ra kẽ hở vế ngoại lệ Prime Attribute trong 3NF** | Phân tích rõ điều kiện 'A là thuộc tính khóa' cho phép X không phải siêu khóa. | Understand | **3.5đ** |
-| **Bản chất Overlapping Candidate Keys gây dư thừa** | Giải thích vì sao các khóa gối nhau dẫn đến lặp lại cặp (X, A) sinh dị thường. | Understand | **3.5đ** |
-| **Quy tắc khắt khe của BCNF khắc phục triệt để** | Khẳng định BCNF ép buộc mọi vế trái phải là siêu khóa, xóa bỏ hoàn toàn dư thừa FD. | Understand | **3.0đ** |
+| **Định nghĩa đúng hai tập phụ thuộc hàm tương đương F+ = G+** | Nêu rõ khái niệm bao đóng tập phụ thuộc hàm và điều kiện suy dẫn hai chiều giữa F và G. | Understand | **2.5đ** |
+| **Trình bày chính xác 3 điều kiện của Phủ tối tiểu Fc** | Nêu đủ: (1) Vế phải 1 thuộc tính, (2) Vế trái không có thuộc tính dư thừa, (3) Không có phụ thuộc hàm dư thừa. | Understand | **4.5đ** |
+| **Giải thích vai trò của Fc trong thuật toán tổng hợp 3NF và thứ tự thực hiện** | Chỉ rõ việc rút gọn vế trái trước giúp phát hiện các phụ thuộc trùng lặp và ngăn sinh bảng con dư thừa hoặc vi phạm 2NF. | Analyze | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1670,7 +1757,7 @@ CREATE TABLE Employees (
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 2 (Phân tích kịch bản truy vấn SQL)** |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 31-38 (Slot 16-19) — SQL Logical Query Processing |
@@ -1711,7 +1798,7 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 4 (ACID, Mức cô lập & Indexing)** |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 41 (Slot 21) — Practical Issues (B-Tree Indexing) |
@@ -1745,7 +1832,7 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 4 (ACID, Mức cô lập & Indexing)** |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 43 (Slot 22) — Transactions (WAL & Crash Recovery) |
@@ -1771,7 +1858,7 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 
 ---
 
-### 13. `DBI202-EXAM-013`: Cơ chế Bảo vệ An ninh Dữ liệu và Che giấu Cấu trúc Vật lý của View trong DBMS
+### 13. `DBI202-EXAM-013`: Điều kiện Khung nhìn Có thể Cập nhật (Updatable Views), WITH CHECK OPTION và WITH SCHEMABINDING (CQ7.3)
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
@@ -1779,28 +1866,40 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Understand** |
-| **Mức độ khó** | **Easy** |
-| **Phân bổ Session** | Session 43 (Slot 22) — Practical Issues (Views & Security) |
-| **Mục tiêu đánh giá** | Đánh giá mức độ thấu hiểu vai trò của View trong phân quyền an ninh mức cột/mức dòng và tính độc lập logic. |
+| **Mức độ khó** | **Medium** |
+| **Phân bổ Session** | Session 45 & 51 (Slot 23 & 26) — 7.3 Views & Indexed Views (CQ7.3) |
+| **Mục tiêu đánh giá** | Đánh giá mức độ hiểu sâu về các điều kiện để một View cho phép thực hiện INSERT/UPDATE/DELETE trực tiếp và vai trò của WITH CHECK OPTION, WITH SCHEMABINDING. |
 
 **Nội dung câu hỏi phát vấn:**
-> View trong cơ sở dữ liệu giúp tăng cường bảo mật dữ liệu và bảo đảm tính độc lập dữ liệu logic (Logical Data Independence) như thế nào? Cho một kịch bản phân quyền an ninh cụ thể bằng View trong hệ thống doanh nghiệp.
+> Trong MS SQL Server (Constructive Question `CQ7.3`), một Khung nhìn (`View`) cần thỏa mãn những điều kiện nào để trở thành **Khung nhìn có thể cập nhật (`Updatable View`)** thông qua các lệnh `INSERT`, `UPDATE`, `DELETE`? Hãy giải thích vai trò của hai tùy chọn nâng cao khi định nghĩa View: (1) `WITH CHECK OPTION` (đặt ở cuối View) và (2) `WITH SCHEMABINDING` (đặt ở đầu View).
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Nếu một người dùng chỉ được cấp quyền SELECT trên một View mà không có quyền SELECT trên các bảng gốc nằm bên dưới (Underlying Tables), hệ quản trị CSDL xử lý quyền truy cập như thế nào thông qua cơ chế Ownership Chaining?"*
+> *"Nếu một View kết nối hai bảng `Orders` và `Customers` bằng `INNER JOIN`, điều gì xảy ra nếu một câu lệnh `UPDATE` trên View đó cố tình sửa đồng thời một cột của bảng `Orders` và một cột của bảng `Customers` trong cùng một lệnh?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> View là công cụ bảo mật then chốt trong RDBMS thông qua hai cơ chế: (1) Bảo mật dữ liệu mức cột (Column-level Security): View cho phép chọn lọc các thuộc tính an toàn để công bố cho người dùng và loại trừ các cột nhạy cảm (như PasswordHash, Salary, NationalID, BankAccount); quản trị viên chỉ cấp quyền SELECT trên View và thu hồi hoàn toàn quyền truy cập trực tiếp vào bảng gốc. (2) Bảo mật dữ liệu mức dòng (Row-level Security): View sử dụng mệnh đề WHERE để giới hạn phạm vi bản ghi mà người dùng được phép nhìn thấy (ví dụ nhân viên chi nhánh Đà Nẵng chỉ thấy hóa đơn của Đà Nẵng). Về mặt Độc lập dữ liệu logic: Khi cấu trúc các bảng vật lý cơ sở thay đổi (ví dụ tách 1 bảng thành 2 bảng để chuẩn hóa 3NF), quản trị viên có thể định nghĩa lại View bằng phép JOIN hai bảng mới này để giữ nguyên tên gọi và cấu trúc cột cũ; nhờ đó các ứng dụng client bên ngoài tiếp tục truy vấn từ View mà không cần phải biên dịch lại hay sửa đổi bất kỳ dòng mã nào. Kịch bản phân quyền: Tạo `vw_PublicStaffList` chỉ gồm (StaffID, FullName, Title, WorkEmail) từ bảng Staff để cấp quyền cho nhân viên lễ tân tra cứu.
+> 1. Các điều kiện bắt buộc để một View là `Updatable View` trong MS SQL Server (`CQ7.3`):
+- Mọi thao tác sửa đổi (`INSERT`, `UPDATE`, `DELETE`) trên View thực chất được dịch chuyển xuống bảng vật lý cơ sở (`Base Table`). Một View chỉ cho phép cập nhật trực tiếp (không cần `INSTEAD OF Trigger`) khi thỏa mãn đồng thời:
+  1. Mỗi câu lệnh sửa đổi chỉ được phép tác động lên các cột thuộc về **duy nhất một bảng cơ sở (Single Base Table)** tại một thời điểm (ngay cả khi View có `JOIN` nhiều bảng).
+  2. Các cột được cập nhật phải tham chiếu trực tiếp tới cột vật lý của bảng gốc, **không phải** là cột tính toán từ biểu thức số học, hằng số, hay hàm tổng hợp (`SUM`, `COUNT`, `AVG`, `MAX`, `MIN`).
+  3. Câu truy vấn định nghĩa View **không được chứa** các mệnh đề làm mất ánh xạ 1-1 tới dòng gốc như: `GROUP BY`, `HAVING`, `DISTINCT`, `TOP` (không kèm `OFFSET` hợp lệ), hoặc các phép toán tập hợp `UNION`, `UNION ALL`, `INTERSECT`, `EXCEPT`.
+
+2. Vai trò của tùy chọn `WITH CHECK OPTION`:
+- Ngăn chặn hiện tượng **"Biến mất dòng qua View" (Row Migration out of View Scope)**: Khi có `WITH CHECK OPTION`, mọi câu lệnh `INSERT` hoặc `UPDATE` thực hiện thông qua View bắt buộc phải tạo ra bản ghi **vẫn thỏa mãn điều kiện lọc `WHERE` của chính View đó**.
+- Ví dụ: Nếu `vw_ActiveEmployees` có điều kiện `WHERE IsActive = 1 WITH CHECK OPTION`, câu lệnh `UPDATE vw_ActiveEmployees SET IsActive = 0 WHERE EmpID = 5` sẽ bị SQL Server từ chối báo lỗi vì sau khi sửa, dòng đó không còn nhìn thấy được qua View nữa.
+
+3. Vai trò của tùy chọn `WITH SCHEMABINDING`:
+- Khóa chặt cấu trúc của các bảng cơ sở được tham chiếu bởi View: Không ai được phép `DROP TABLE` hoặc `ALTER TABLE` (xóa cột, đổi kiểu dữ liệu cột đang dùng trong View) nếu không xóa hoặc gỡ `SCHEMABINDING` của View trước.
+- Bắt buộc phải viết tên bảng theo định dạng 2 phần (`dbo.TableName`) và liệt kê tường minh tên cột (cấm dùng `SELECT *`). Đây cũng là điều kiện tiên quyết bắt buộc để tạo **Indexed View (Materialized View)** trong SQL Server.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Bảo mật dữ liệu mức cột và mức dòng** | Trình bày rõ cơ chế che giấu cột nhạy cảm và lọc dòng qua WHERE của View. | Understand | **3.5đ** |
-| **Cơ chế bảo đảm Độc lập dữ liệu logic** | Giải thích rõ việc định nghĩa lại View khi split bảng giúp ứng dụng không bị ảnh hưởng. | Understand | **3.5đ** |
-| **Kịch bản phân quyền thực tế chuẩn mực** | Đưa ví dụ kịch bản doanh nghiệp và câu lệnh phân quyền mạch lạc, thuyết phục. | Apply | **3.0đ** |
+| **Nêu đúng các điều kiện của Updatable View (1 bảng đích, không GROUP BY/DISTINCT/Aggregate)** | Trình bày đầy đủ điều kiện ánh xạ trực tiếp tới 1 base table và các từ khóa làm View trở thành Read-only. | Understand | **4.0đ** |
+| **Giải thích chính xác cơ chế kiểm soát của WITH CHECK OPTION** | Giải thích rõ WITH CHECK OPTION ép mọi dòng INSERT/UPDATE qua View phải thỏa mãn mệnh đề WHERE của View. | Understand | **3.0đ** |
+| **Giải thích vai trò khóa cấu trúc và điều kiện tạo Indexed View của WITH SCHEMABINDING** | Nêu rõ tác dụng chống ALTER/DROP cột bảng gốc, quy tắc viết dbo.Table và điều kiện tạo Unique Clustered Index trên View. | Understand | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1813,7 +1912,7 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Understand** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 54 (Slot 27) — T-SQL Programming (Stored Procedures) |
@@ -1839,40 +1938,59 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 
 ---
 
-### 15. `DBI202-EXAM-015`: Chuyển đổi Đặc tả ERD (Thực thể yếu & Quan hệ M:N) sang Lược đồ Quan hệ
+### 15. `DBI202-EXAM-015`: Ánh xạ Thực thể Kết hợp (Associative Entity), Mối kết hợp Bậc 3 (Ternary) và Thuộc tính Đa trị từ ERD sang Lược đồ Quan hệ
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-EXAM-015` |
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
-| **Cấu trúc đề thi** | **Slot 1 (Lý thuyết nền tảng CSDL & Mô hình)** |
+| **Cấu trúc đề thi** | **Slot 1 (Kiến trúc CSDL & Mô hình quan hệ)** |
 | **Ánh xạ CLO FLM** | **CLO4** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO1** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO4** (`00000000-0000-0000-0000-000000000664`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
-| **Phân bổ Session** | Session 21 (Slot 11) — ERD to Relational Mapping |
-| **Mục tiêu đánh giá** | Đánh giá kỹ năng áp dụng các quy tắc chuyển đổi lược đồ ERD phức tạp sang lược đồ quan hệ vật lý chính xác. |
+| **Phân bổ Session** | Session 20-22 (Slot 10-11) — 4.5 Mapping ERD to Relational Schema |
+| **Mục tiêu đánh giá** | Đánh giá kỹ năng chuyển đổi các cấu trúc ERD nâng cao (mối kết hợp bậc 3, thuộc tính đa trị và thực thể kết hợp) sang lược đồ quan hệ chuẩn 3NF. |
 
 **Nội dung câu hỏi phát vấn:**
-> Cho đặc tả: Một Dự án (Project: ProjID, ProjName) có nhiều Nhân viên (Employee: EmpID, EmpName) tham gia và một Nhân viên có thể tham gia nhiều Dự án, kèm theo thuộc tính số giờ làm việc (HoursWorked). Mỗi Nhân viên có thể có nhiều Người phụ thuộc (Dependent: DepName, BirthDate, Relationship), trong đó Dependent là thực thể yếu phụ thuộc vào Employee. Hãy chuyển đổi mô hình trên sang Lược đồ quan hệ chuẩn hóa; xác định rõ Khóa chính (PK) và các Khóa ngoại (FK) cho từng bảng.
+> Hãy áp dụng quy tắc ánh xạ từ Sơ đồ Thực thể Kết hợp (ERD) sang Lược đồ Cơ sở dữ liệu Quan hệ chuẩn 3NF cho bài toán Quản lý Khám chữa bệnh tại Bệnh viện gồm: (1) Thực thể `Doctor(DoctorID, FullName)` có thuộc tính đa trị `Specialties` (một bác sĩ có thể có nhiều chuyên khoa); (2) Thực thể `Patient(PatientID, FullName, BirthDate)`; (3) Thực thể `Medicine(MedID, MedName, UnitPrice)`; và (4) Mối kết hợp bậc 3 (Ternary Relationship) `Prescribes` giữa `Doctor`, `Patient` và `Medicine` có thuộc tính riêng là `PrescriptionDate` và `Dosage` (một bác sĩ có thể kê nhiều thuốc cho một bệnh nhân vào nhiều ngày khác nhau). Hãy xác định đầy đủ tên các quan hệ, Khóa chính (PK) và Khóa ngoại (FK).
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Đối với bảng Dependent phái sinh từ thực thể yếu, nếu nhân viên (Employee) bị xóa khỏi hệ thống thì các bản ghi người phụ thuộc tương ứng nên được xử lý như thế nào thông qua ràng buộc khóa ngoại (CASCADE hay NO ACTION)? Phân tích rủi ro dữ liệu mồ côi (Orphan Records)."*
+> *"Nếu nghiệp vụ bệnh viện thay đổi thành: Mỗi lần khám của Bác sĩ cho Bệnh nhân tạo ra một Đơn thuốc (`Prescription` có mã định danh độc lập `PrescriptionID`), và trong đơn thuốc đó mới liệt kê nhiều loại thuốc `Medicine`, thì mô hình lúc này là một mối kết hợp bậc 3 hay hai mối kết hợp hai ngôi (`1:N` và `M:N`)? So sánh ưu điểm của cách thiết kế này."*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Quy trình chuyển đổi chuẩn hóa: 
-(1) Thực thể mạnh Project -> Bảng Project(**ProjID**, ProjName) với Khóa chính là ProjID. 
-(2) Thực thể mạnh Employee -> Bảng Employee(**EmpID**, EmpName) với Khóa chính là EmpID. 
-(3) Mối kết hợp Nhiều - Nhiều (M:N) giữa Employee và Project kèm thuộc tính HoursWorked -> Tạo bảng trung gian ProjectAssignment(**EmpID, ProjID**, HoursWorked). Khóa chính phức hợp là (EmpID, ProjID); trong đó EmpID là FK trỏ về Employee(EmpID) và ProjID là FK trỏ về Project(ProjID). 
-(4) Thực thể yếu Dependent liên kết định danh với Employee -> Tạo bảng Dependent(**EmpID, DepName**, BirthDate, Relationship). Khóa chính phức hợp kết hợp từ khóa chính của cha và khóa bộ phận là (EmpID, DepName); trong đó EmpID là FK trỏ về Employee(EmpID) kèm tùy chọn ON DELETE CASCADE để bảo đảm tính phụ thuộc sinh tồn của thực thể yếu.
+> Áp dụng chuẩn xác quy tắc ánh xạ ERD sang Lược đồ Quan hệ chuẩn 3NF (tổng cộng **5 quan hệ**):
+
+1. **Ánh xạ các Thực thể mạnh (Strong Entities):**
+   - `Doctors`(**<u>DoctorID</u>**, FullName)
+     + *Khóa chính (PK):* `(DoctorID)`
+   - `Patients`(**<u>PatientID</u>**, FullName, BirthDate)
+     + *Khóa chính (PK):* `(PatientID)`
+   - `Medicines`(**<u>MedID</u>**, MedName, UnitPrice)
+     + *Khóa chính (PK):* `(MedID)`
+
+2. **Ánh xạ Thuộc tính Đa trị (`Specialties` của `Doctor`):**
+   - Để bảo toàn Dạng chuẩn 1 (1NF — cấm nhồi nhiều chuyên khoa phân cách bằng dấu phẩy vào 1 cột), thuộc tính đa trị bắt buộc phải được tách thành một **bảng riêng biệt**, nhận khóa chính của thực thể chủ làm khóa ngoại, và khóa chính của bảng mới là **khóa phức hợp gồm cả hai cột**:
+   - `DoctorSpecialties`(**<u>DoctorID, SpecialtyName</u>**)
+     + *Khóa chính (PK):* `(DoctorID, SpecialtyName)`
+     + *Khóa ngoại (FK):* `DoctorID` tham chiếu tới `Doctors(DoctorID)` (`ON DELETE CASCADE`).
+
+3. **Ánh xạ Mối kết hợp Bậc 3 (`Prescribes` giữa `Doctor` — `Patient` — `Medicine`):**
+   - Tạo một quan hệ trung gian mới gom khóa chính của cả 3 thực thể tham gia kèm theo các thuộc tính mô tả của mối kết hợp. Vì một bác sĩ có thể kê cùng một loại thuốc cho cùng một bệnh nhân vào các ngày khác nhau, thuộc tính phân biệt thời gian `PrescriptionDate` tham gia vào khóa chính phức hợp:
+   - `Prescriptions`(**<u>DoctorID, PatientID, MedID, PrescriptionDate</u>**, Dosage)
+     + *Khóa chính (PK):* `(DoctorID, PatientID, MedID, PrescriptionDate)`
+     + *Khóa ngoại (FK):*
+       * `DoctorID` tham chiếu tới `Doctors(DoctorID)`
+       * `PatientID` tham chiếu tới `Patients(PatientID)`
+       * `MedID` tham chiếu tới `Medicines(MedID)`
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Chuyển đổi đúng các thực thể mạnh Project & Employee** | Xác định đúng cấu trúc bảng và khóa chính đơn lẻ cho Project và Employee. | Apply | **2.5đ** |
-| **Chuyển đổi mối kết hợp M:N thành bảng trung gian** | Tạo bảng ProjectAssignment với Khóa chính phức hợp và cặp FK trỏ về hai bảng cha. | Apply | **3.5đ** |
-| **Chuyển đổi thực thể yếu Dependent chuẩn xác** | Xác định đúng Khóa chính kết hợp (EmpID, DepName), FK và tùy chọn CASCADE. | Apply | **4.0đ** |
+| **Ánh xạ đúng 3 bảng Thực thể mạnh (Doctors, Patients, Medicines)** | Xác định đúng lược đồ và khóa chính đơn cho 3 thực thể mạnh. | Apply | **2.5đ** |
+| **Tách bảng riêng cho Thuộc tính đa trị DoctorSpecialties bảo toàn 1NF** | Tạo bảng DoctorSpecialties với khóa chính phức hợp (DoctorID, SpecialtyName) và khóa ngoại DoctorID. | Apply | **3.5đ** |
+| **Ánh xạ đúng Mối kết hợp bậc 3 Prescriptions với PK và 3 FK** | Tạo bảng Prescriptions chứa đủ 3 khóa ngoại tham chiếu 3 thực thể, thuộc tính Dosage và khóa chính phức hợp (DoctorID, PatientID, MedID, PrescriptionDate). | Apply | **4.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1885,7 +2003,7 @@ Giải thích về bí danh (Alias): Mệnh đề WHERE được thực thi ở 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 11 (Slot 6) — Design Theory (Candidate Keys) |
@@ -1929,10 +2047,10 @@ Kết luận: Quan hệ R có đúng 4 Khóa ứng viên là: {A}, {E}, {C, D}, 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 14-16 (Slot 7-8) — Design Theory (3NF Decomposition) |
+| **Phân bổ Session** | Session 13-14 (Slot 7) — 3.5 Normal Forms (2NF & 3NF Synthesis Algorithm) |
 | **Mục tiêu đánh giá** | Đánh giá kỹ năng áp dụng thuật toán tổng hợp Bernsteins (3NF Synthesis Algorithm) bảo toàn thông tin và phụ thuộc hàm. |
 
 **Nội dung câu hỏi phát vấn:**
@@ -1942,29 +2060,36 @@ Kết luận: Quan hệ R có đúng 4 Khóa ứng viên là: {A}, {E}, {C, D}, 
 > *"Sau khi phân rã theo thuật toán tổng hợp 3NF (Bernstein's Synthesis), nếu không có quan hệ con nào chứa một Khóa ứng viên của lược đồ ban đầu R, chúng ta bắt buộc phải bổ sung thêm quan hệ nào để bảo đảm tính chất Kết nối không mất thông tin (Lossless Join)?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> 1. Tìm khóa ứng viên của R: 
-Ta thấy A chỉ xuất hiện ở vế trái nên A bắt buộc phải nằm trong mọi khóa. Xét (AB)+: (AB)+ = {A, B, C} -> {A, B, C, D} -> {A, B, C, D, E} = R => (AB) là khóa ứng viên. 
-Do D -> B nên xét (AD)+: (AD)+ = {A, D, B, E} -> {A, B, D, E, C} = R => (AD) là khóa ứng viên. 
-Do C -> D nên xét (AC)+: (AC)+ = {A, C, D} = (AD)+ = R => (AC) là khóa ứng viên. 
-Vậy R có 3 khóa ứng viên: {AB}, {AC}, {AD}. Thuộc tính khóa: {A, B, C, D}. Thuộc tính không khóa: {E}. 
-2. Kiểm tra dạng chuẩn: 
-Xét D -> E: D không phải là siêu khóa, và E không phải là thuộc tính khóa. Do đó phụ thuộc hàm D -> E vi phạm nghiêm trọng Dạng chuẩn 3 (3NF) (là phụ thuộc bắc cầu từ khóa qua D tới E). R chỉ đạt 2NF. 
-3. Phân rã theo thuật toán tổng hợp 3NF (3NF Synthesis Algorithm): 
-- Bước 1: Tìm phủ tối tiểu F_min: F_min = { AB -> C, C -> D, D -> B, D -> E } (đã là phủ tối tiểu). 
-- Bước 2: Tạo quan hệ cho từng phụ thuộc hàm trong F_min: 
-  + R1(A, B, C) với khóa {AB} ứng với AB -> C 
-  + R2(C, D) với khóa {C} ứng với C -> D 
-  + R3(B, D, E) với khóa {D} ứng với D -> B và D -> E 
-- Bước 3: Kiểm tra xem có quan hệ con nào chứa một khóa ứng viên của R chưa: Ta thấy R1 chứa khóa {AB}. Do đó không cần bổ sung thêm quan hệ khóa. 
-Kết luận: Lược đồ sau phân rã gồm 3 quan hệ: R1(**A, B**, C), R2(**C**, D), R3(**D**, B, E). Phép phân rã này bảo đảm 100% đạt 3NF, bảo toàn phụ thuộc hàm và kết nối không mất thông tin (Lossless Join).
+> 1. Tìm tất cả các Khóa ứng viên (Candidate Keys) của $R(A, B, C, D, E)$ với $F = \{AB \to C, C \to D, D \to B, D \to E\}$:
+- Nhận xét: Thuộc tính $A$ chỉ xuất hiện ở vế trái và không bao giờ xuất hiện ở vế phải của bất kỳ phụ thuộc hàm nào trong $F$, do đó $A$ bắt buộc phải có mặt trong mọi khóa ứng viên của $R$. Bao đóng $A^+ = \{A\} \neq R$.
+- Xét $(AB)^+ = \{A, B\} \xrightarrow{AB \to C} \{A, B, C\} \xrightarrow{C \to D} \{A, B, C, D\} \xrightarrow{D \to E} \{A, B, C, D, E\} = R \Rightarrow \{AB\}$ là khóa ứng viên.
+- Do có $D \to B$ và $C \to D$, ta kiểm tra $(AC)^+$ và $(AD)^+$:
+  + $(AD)^+ = \{A, D\} \xrightarrow{D \to B, D \to E} \{A, B, D, E\} \xrightarrow{AB \to C} \{A, B, C, D, E\} = R \Rightarrow \{AD\}$ là khóa ứng viên.
+  + $(AC)^+ = \{A, C\} \xrightarrow{C \to D} \{A, C, D\} = (AD)^+ = R \Rightarrow \{AC\}$ là khóa ứng viên.
+- Kết luận tập khóa: $R$ có **3 khóa ứng viên** là $\{AB\}, \{AC\}, \{AD\}$. Tập thuộc tính khóa (Prime attributes): $\{A, B, C, D\}$. Tập thuộc tính không khóa (Non-prime attributes): $\{E\}$.
+
+2. Đánh giá dạng chuẩn hiện tại của $R$ (Phát hiện vi phạm ngay từ 2NF):
+- Xét phụ thuộc hàm $D \to E$: Vế phải $E$ là **thuộc tính không khóa (non-prime attribute)**, còn vế trái $D$ là một **tập con thực sự** của khóa ứng viên $\{AD\}$ ($D \subsetneq \{AD\}$).
+- Theo định nghĩa chuẩn hóa: Một thuộc tính không khóa ($E$) phụ thuộc hàm vào một phần của khóa ứng viên ($\{AD\}$) là **Phụ thuộc hàm bộ phận (Partial Dependency)**.
+- Do đó, **$R$ vi phạm ngay từ Dạng chuẩn 2 (2NF)** (và tất yếu cũng vi phạm 3NF và BCNF). Vậy lược đồ **$R$ hiện tại chỉ đạt Dạng chuẩn 1 (1NF)**!
+*(Ngoài ra, các phụ thuộc $C \to D$ và $D \to B$ có vế phải $D, B$ là thuộc tính khóa nên không vi phạm 2NF/3NF nhưng vi phạm BCNF vì $C$ và $D$ không phải là siêu khóa).*
+
+3. Phân rã $R$ về Dạng chuẩn 3 (3NF) bảo toàn phụ thuộc hàm và kết nối không mất thông tin (Thuật toán tổng hợp Bernstein):
+* **Bước 1:** Tìm phủ tối tiểu $F_{\min} = \{AB \to C, C \to D, D \to B, D \to E\}$ (vế phải đã đơn thuộc tính, không có phụ thuộc dư thừa, thuộc tính $A$ và $B$ trong $AB \to C$ không dư thừa vì $A^+ = \{A\}$ và $B^+ = \{B\}$).
+* **Bước 2:** Gom các phụ thuộc hàm có cùng vế trái để tạo các lược đồ con:
+  + Từ $AB \to C \Rightarrow R_1(\underline{A, B}, C)$ với khóa chính $\{AB\}$.
+  + Từ $C \to D \Rightarrow R_2(\underline{C}, D)$ với khóa chính $\{C\}$.
+  + Từ $D \to B$ và $D \to E \Rightarrow R_3(\underline{D}, B, E)$ với khóa chính $\{D\}$.
+* **Bước 3:** Kiểm tra điều kiện Kết nối không mất thông tin (Lossless Join): Vì $R_1(A, B, C)$ đã chứa khóa ứng viên $\{AB\}$ của lược đồ gốc $R$, ta không cần thêm quan hệ khóa nào nữa.
+* **Kết quả:** Phép phân rã $\rho = \{R_1(\underline{A, B}, C), R_2(\underline{C}, D), R_3(\underline{D}, B, E)\}$ đạt **3NF**, bảo toàn 100% phụ thuộc hàm và bảo đảm Lossless Join.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Tìm đúng 3 khóa ứng viên và thuộc tính không khóa** | Xác định chuẩn xác khóa {AB}, {AC}, {AD} và chỉ ra E là non-prime attribute. | Apply | **3.0đ** |
-| **Đánh giá chính xác vi phạm 3NF** | Chỉ rõ D -> E vi phạm điều kiện 3NF vì D không là siêu khóa và E không là thuộc tính khóa. | Understand | **3.0đ** |
-| **Thực hiện thuật toán phân rã 3NF chính xác** | Sinh đúng 3 quan hệ R1(A,B,C), R2(C,D), R3(D,B,E) và chứng minh bảo toàn Lossless Join. | Apply | **4.0đ** |
+| **Tìm đúng 3 khóa ứng viên {AB}, {AC}, {AD} và thuộc tính không khóa E** | Xác định chuẩn xác 3 khóa ứng viên thông qua bao đóng và chỉ rõ E là thuộc tính không khóa duy nhất. | Apply | **3.0đ** |
+| **Chẩn đoán chính xác R vi phạm 2NF (chỉ đạt 1NF) do phụ thuộc bộ phận D -> E** | Giải thích rõ vì D là tập con thực sự của khóa ứng viên {AD} và E là thuộc tính không khóa nên D -> E là phụ thuộc bộ phận, khiến R vi phạm ngay từ 2NF và chỉ đạt 1NF. | Analyze | **3.0đ** |
+| **Thực hiện chuẩn xác thuật toán tổng hợp 3NF (Bernstein)** | Tìm phủ tối tiểu, gom nhóm theo vế trái sinh đúng R1(A,B,C), R2(C,D), R3(D,B,E) và kiểm tra R1 chứa khóa ứng viên {AB} bảo đảm Lossless Join. | Apply | **4.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -1977,7 +2102,7 @@ Kết luận: Lược đồ sau phân rã gồm 3 quan hệ: R1(**A, B**, C), R2
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 2 (Phân tích kịch bản truy vấn SQL)** |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 36 (Slot 18) — SQL Queries (Advanced Subqueries & CTE) |
@@ -2047,7 +2172,7 @@ Phân tích giải thuật: (1) CTE thứ nhất `CustomerSpending` thực hiệ
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO5** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO5** (`00000000-0000-0000-0000-000000000665`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Medium** |
 | **Phân bổ Session** | Session 29-30 (Slot 15) — SQL Constraints Implementation |
@@ -2117,7 +2242,7 @@ CREATE TABLE CourseEnrollments (
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 50 (Slot 25) — T-SQL Programming (Inventory Triggers) |
@@ -2188,7 +2313,7 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Apply** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 54 (Slot 27) — T-SQL Programming (Transactions & Error Handling) |
@@ -2203,7 +2328,7 @@ Thủ tục phải quản trị Transaction chặt chẽ: kiểm tra số tiền
 > *"Trong kịch bản chuyển tiền đồng thời giữa hai tài khoản (A chuyển cho B cùng lúc B chuyển cho A), cơ chế khóa hàng (Row-level X-Lock) của câu lệnh UPDATE có thể dẫn đến Deadlock như thế nào? Thủ tục lưu trữ cần làm gì để phòng chống triệt để tình huống này?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Đoạn mã T-SQL hoàn chỉnh cho Stored Procedure: 
+> Đoạn mã T-SQL hoàn chỉnh chuẩn công nghiệp cho Stored Procedure `sp_TransferMoney` (Tích hợp `SET XACT_ABORT ON` và **Khóa dòng theo thứ tự ID tăng dần** để triệt tiêu 100% Cyclic Deadlock):
 ```sql
 CREATE PROCEDURE sp_TransferMoney
     @FromAccountID INT,
@@ -2212,62 +2337,75 @@ CREATE PROCEDURE sp_TransferMoney
 AS
 BEGIN
     SET NOCOUNT ON;
-    
-    -- 1. Kiểm tra tham số đầu vào cơ bản
-    IF (@Amount <= 0)
+    SET XACT_ABORT ON; -- Tự động hủy và rollback giao dịch ngay khi phát sinh lỗi runtime nghiêm trọng
+
+    -- 1. Kiểm tra tính hợp lệ của tham số đầu vào trước khi mở Transaction
+    IF (@Amount IS NULL OR @Amount <= 0)
     BEGIN
         RAISERROR(N'Số tiền chuyển khoản phải lớn hơn 0!', 16, 1);
         RETURN -1;
     END
-    
-    IF (@FromAccountID = @ToAccountID)
+
+    IF (@FromAccountID IS NULL OR @ToAccountID IS NULL OR @FromAccountID = @ToAccountID)
     BEGIN
-        RAISERROR(N'Tài khoản nguồn và tài khoản đích không được trùng nhau!', 16, 1);
+        RAISERROR(N'Tài khoản nguồn và tài khoản đích không hợp lệ hoặc trùng nhau!', 16, 1);
         RETURN -2;
     END
 
     BEGIN TRY
         BEGIN TRANSACTION;
-        
-        -- 2. Kiểm tra và khóa dòng tài khoản nguồn (chống tranh chấp số dư)
+
         DECLARE @SourceBalance DECIMAL(15,2), @SourceActive BIT;
-        SELECT @SourceBalance = Balance, @SourceActive = IsActive
-        FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
-        WHERE AccountID = @FromAccountID;
-        
+        DECLARE @DestBalance DECIMAL(15,2), @DestActive BIT;
+
+        -- 2. Khóa UPDLOCK, ROWLOCK theo đúng THỨ TỰ AccountID TĂNG DẦN để chống Cyclic Deadlock
+        IF (@FromAccountID < @ToAccountID)
+        BEGIN
+            SELECT @SourceBalance = Balance, @SourceActive = IsActive
+            FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
+            WHERE AccountID = @FromAccountID;
+
+            SELECT @DestBalance = Balance, @DestActive = IsActive
+            FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
+            WHERE AccountID = @ToAccountID;
+        END
+        ELSE
+        BEGIN
+            SELECT @DestBalance = Balance, @DestActive = IsActive
+            FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
+            WHERE AccountID = @ToAccountID;
+
+            SELECT @SourceBalance = Balance, @SourceActive = IsActive
+            FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
+            WHERE AccountID = @FromAccountID;
+        END
+
+        -- 3. Kiểm tra trạng thái hoạt động và số dư khả dụng
         IF (@SourceBalance IS NULL OR @SourceActive = 0)
         BEGIN
             RAISERROR(N'Tài khoản nguồn không tồn tại hoặc đã bị khóa!', 16, 1);
         END
-        
+
+        IF (@DestBalance IS NULL OR @DestActive = 0)
+        BEGIN
+            RAISERROR(N'Tài khoản đích không tồn tại hoặc không hoạt động!', 16, 1);
+        END
+
         IF (@SourceBalance < @Amount)
         BEGIN
             RAISERROR(N'Số dư tài khoản nguồn không đủ để thực hiện giao dịch!', 16, 1);
         END
-        
-        -- 3. Kiểm tra tài khoản đích
-        DECLARE @DestActive BIT;
-        SELECT @DestActive = IsActive
-        FROM BankAccounts WITH (UPDLOCK, ROWLOCK)
-        WHERE AccountID = @ToAccountID;
-        
-        IF (@DestActive IS NULL OR @DestActive = 0)
-        BEGIN
-            RAISERROR(N'Tài khoản đích không tồn tại hoặc không hoạt động!', 16, 1);
-        END
-        
-        -- 4. Thực hiện chuyển tiền
-        UPDATE BankAccounts 
-        SET Balance = Balance - @Amount 
+
+        -- 4. Cập nhật trừ tiền tài khoản nguồn và cộng tiền tài khoản đích
+        UPDATE BankAccounts
+        SET Balance = Balance - @Amount
         WHERE AccountID = @FromAccountID;
-        
-        UPDATE BankAccounts 
-        SET Balance = Balance + @Amount 
+
+        UPDATE BankAccounts
+        SET Balance = Balance + @Amount
         WHERE AccountID = @ToAccountID;
-        
-        -- 5. Xác nhận giao dịch thành công
+
         COMMIT TRANSACTION;
-        PRINT N'Chuyển tiền thành công!';
         RETURN 0;
     END TRY
     BEGIN CATCH
@@ -2275,10 +2413,11 @@ BEGIN
         BEGIN
             ROLLBACK TRANSACTION;
         END
-        
-        -- Tái phát thông báo lỗi
+
         DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
-        RAISERROR(@ErrorMessage, 16, 1);
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        RAISERROR(@ErrorMessage, @ErrorSeverity, @ErrorState);
         RETURN -99;
     END CATCH
 END;
@@ -2288,9 +2427,9 @@ END;
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Kiểm tra tính hợp lệ của tham số và tài khoản** | Validate Amount > 0, From != To, kiểm tra tồn tại và cờ IsActive = 1. | Apply | **3.0đ** |
-| **Quản trị Transaction & Cập nhật số dư 2 chiều** | Viết đúng BEGIN TRAN, UPDATE trừ tài khoản nguồn, UPDATE cộng tài khoản đích và COMMIT. | Apply | **4.0đ** |
-| **Bẫy lỗi TRY...CATCH & Cơ chế Rollback an toàn** | Sử dụng đúng khối TRY...CATCH, kiểm tra @@TRANCOUNT > 0 để ROLLBACK chống rò rỉ giao dịch. | Apply | **3.0đ** |
+| **Kiểm tra tham số đầu vào và thiết lập SET XACT_ABORT ON** | Kiểm tra @Amount > 0, @FromAccountID <> @ToAccountID và bật SET NOCOUNT ON, SET XACT_ABORT ON trước khi mở Transaction. | Apply | **2.5đ** |
+| **Khóa dòng UPDLOCK, ROWLOCK theo thứ tự ID tăng dần chống Deadlock** | Sử dụng IF (@FromAccountID < @ToAccountID) để luôn lấy khóa tài khoản có ID nhỏ trước, ID lớn sau, kết hợp kiểm tra tồn tại và số dư. | Analyze | **4.0đ** |
+| **Cập nhật số dư nguyên tố và xử lý ROLLBACK an toàn trong TRY...CATCH** | Thực hiện UPDATE trừ/cộng chính xác, COMMIT khi thành công và kiểm tra IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION trong khối CATCH. | Apply | **3.5đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -2303,10 +2442,10 @@ END;
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 3 (Chuẩn hóa lược đồ & Ràng buộc toàn vẹn)** |
 | **Ánh xạ CLO FLM** | **CLO3** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO3** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO3** (`00000000-0000-0000-0000-000000000663`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 16 (Slot 8) — Schema Decomposition (Lossless Join Proof) |
+| **Phân bổ Session** | Session 11-12 (Slot 6) — 3.3 Design of Relational Database Schema (Lossless Join Proof) |
 | **Mục tiêu đánh giá** | Đánh giá năng lực tư duy toán học hình thức trong việc chứng minh tính chất Lossless Join bằng phương pháp bảng kiểm tra Chase Test. |
 
 **Nội dung câu hỏi phát vấn:**
@@ -2318,25 +2457,39 @@ Hãy sử dụng Thuật toán Bảng kiểm tra (Chase Test / Tableau Method) h
 > *"Nếu một phép phân rã bị mất tính chất Kết nối không mất thông tin (Lossy Join Decomposition) thì khi chúng ta thực hiện phép kết nối tự nhiên (NATURAL JOIN) các bảng con lại với nhau, kết quả thu được sẽ bị thiếu bản ghi hay phát sinh thêm các bản ghi giả mạo (Spurious Tuples)?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Áp dụng Thuật toán Bảng kiểm tra (Chase Test) cho R(A, B, C, D, E): 
-Khởi tạo bảng ma trận gồm 3 dòng tương ứng với 3 quan hệ R1, R2, R3 và 5 cột thuộc tính (A, B, C, D, E). Ký hiệu a_j biểu thị thuộc tính có mặt trong quan hệ con, b_ij biểu thị thuộc tính vắng mặt: 
-- Dòng 1 (R1): [a1, b12, b13, a4, b15] 
-- Dòng 2 (R2): [b21, a2, b23, b24, a5] 
-- Dòng 3 (R3): [b31, b32, a3, a4, a5] 
-Thực hiện áp dụng lặp các phụ thuộc hàm trong F để đồng nhất các ký hiệu: 
-(1) Áp dụng A -> D: Cột A chỉ có dòng 1 mang ký hiệu a1, không có dòng nào khác có cùng giá trị trên A -> Không thay đổi bảng. 
-(2) Áp dụng B -> E: Cột B chỉ có dòng 2 mang a2 -> Không thay đổi bảng. 
-(3) Áp dụng DE -> C: Ta tìm các dòng có giá trị trùng nhau trên cả hai cột D và E. Xét Dòng 3 (R3) có D = a4 và E = a5. Không có dòng nào khác có cùng cả a4 và a5. 
-Nhận xét: Không có bất kỳ phụ thuộc hàm nào trong F cho phép ta biến đổi các ký hiệu b_ij thành a_j trên bất kỳ dòng nào. Sau khi duyệt hết toàn bộ F, bảng ma trận giữ nguyên trạng thái ban đầu và KHÔNG XUẤT HIỆN BẤT KỲ DÒNG NÀO CHỨA TOÀN BỘ KÝ HIỆU (a1, a2, a3, a4, a5). 
-Kết luận: Phép phân rã R thành (R1, R2, R3) KHÔNG PHẢI là phép phân rã kết nối không mất thông tin (Lossy Join). Khi thực hiện phép kết nối tự nhiên R1 ⋈ R2 ⋈ R3, hệ thống sẽ sinh ra các dòng rác giả mạo (Spurious Tuples) làm sai lệch dữ liệu gốc. Ý nghĩa của dòng chứa toàn bộ ký hiệu (a1, ..., an): Nó chứng minh rằng tồn tại ít nhất một đường kết nối đại số bảo đảm tái tạo lại 100% dòng ban đầu nguyên vẹn.
+> Ta có thể chứng minh chặt chẽ phép phân rã $\rho = \{R_1(A, D), R_2(B, E), R_3(C, D, E)\}$ trên $R(A, B, C, D, E)$ với $F = \{A \to D, B \to E, DE \to C\}$ theo **cả 2 phương pháp chuẩn mực** (sinh viên trình bày đúng 1 trong 2 hoặc cả 2 đều đạt điểm tối đa):
+
+### Phương pháp 1: Thuật toán Bảng kiểm tra (Chase Test / Tableau Method)
+1. **Khởi tạo bảng ma trận ($3 \text{ dòng} \times 5 \text{ cột}$):**
+   Ký hiệu $a_j$ nếu thuộc tính thứ $j$ thuộc lược đồ con $R_i$, và $b_{ij}$ nếu thuộc tính vắng mặt:
+   - Dòng 1 ($R_1(A, D)$): $[a_1, b_{12}, b_{13}, a_4, b_{15}]$
+   - Dòng 2 ($R_2(B, E)$): $[b_{21}, a_2, b_{23}, b_{24}, a_5]$
+   - Dòng 3 ($R_3(C, D, E)$): $[b_{31}, b_{32}, a_3, a_4, a_5]$
+2. **Áp dụng lặp các phụ thuộc hàm trong $F$:**
+   - Xét $A \to D$: Cột $A$ có 3 giá trị đôi một khác nhau ($a_1, b_{21}, b_{31}$) $\to$ không đồng nhất được dòng nào.
+   - Xét $B \to E$: Cột $B$ có 3 giá trị khác nhau ($b_{12}, a_2, b_{32}$) $\to$ không thay đổi bảng.
+   - Xét $DE \to C$: Chỉ có Dòng 3 mang bộ $(a_4, a_5)$ trên hai cột $(D, E)$ (Dòng 1 là $(a_4, b_{15})$, Dòng 2 là $(b_{24}, a_5)$) $\to$ không có hai dòng nào trùng nhau đồng thời trên cả $D$ và $E$.
+3. **Kết luận theo Chase Test:** Bảng dừng lại mà **không có bất kỳ dòng nào chứa toàn bộ ký hiệu $a_1, a_2, a_3, a_4, a_5$**.
+
+### Phương pháp 2: Định lý Bao đóng Phép giao Nhị phân (Binary Intersection Closure Test)
+Một phép phân rã thành 3 lược đồ là Lossless Join khi và chỉ khi ta có thể ghép nối không mất thông tin từng cặp liên tiếp (trong đó bao đóng của phần giao $(S_1 \cap S_2)^+$ phải chứa toàn bộ $S_1$ hoặc toàn bộ $S_2$):
+1. **Thử ghép cặp 1:**
+   - Cặp $(R_1, R_2)$: $R_1 \cap R_2 = \{A, D\} \cap \{B, E\} = \emptyset \to$ Không thể kết nối không mất thông tin.
+   - Cặp $(R_1, R_3)$: $R_1 \cap R_3 = \{A, D\} \cap \{C, D, E\} = \{D\}$. Tính bao đóng: $D^+ = \{D\}$. Vì $R_1 \not\subseteq D^+$ (thiếu $A$) và $R_3 \not\subseteq D^+$ (thiếu $C, E$), nên $\{D\}$ không phải là siêu khóa của $R_1$ cũng không phải siêu khóa của $R_3$.
+   - Cặp $(R_2, R_3)$: $R_2 \cap R_3 = \{B, E\} \cap \{C, D, E\} = \{E\}$. Tính bao đóng: $E^+ = \{E\}$. Tương tự, $\{E\}$ không phải siêu khóa của $R_2$ (thiếu $B$) cũng không phải siêu khóa của $R_3$ (thiếu $C, D$).
+2. **Thử ghép bước 2 (giả sử ghép $(R_1 \cup R_3)$ với $R_2$):**
+   - $(R_1 \cup R_3) \cap R_2 = \{A, C, D, E\} \cap \{B, E\} = \{E\}$, có $E^+ = \{E\}$ vẫn không phải siêu khóa của bất kỳ bên nào.
+
+### Kết luận chung:
+Phép phân rã $\rho = \{R_1, R_2, R_3\}$ là **Phép phân rã MẤT THÔNG TIN (Lossy Join Decomposition)**. Khi thực hiện phép kết nối tự nhiên $R_1 \bowtie R_2 \bowtie R_3$, kết quả sẽ phát sinh các **bản ghi giả mạo (Spurious Tuples)**. Một dòng toàn ký hiệu $(a_1, \dots, a_n)$ trong bảng Chase (hoặc phần giao là siêu khóa) là điều kiện cần và đủ bảo đảm phép kết nối tự nhiên tái tạo đúng 100% quan hệ gốc.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Thiết lập đúng Bảng ma trận Chase Test ban đầu** | Khởi tạo ma trận 3 dòng x 5 cột với các ký hiệu a_j và b_ij chuẩn mực. | Apply | **3.0đ** |
-| **Quy trình áp dụng các phụ thuộc hàm F lên bảng** | Lập luận chi tiết từng bước kiểm tra A->D, B->E, DE->C không thể biến đổi b thành a. | Analyze | **4.0đ** |
-| **Kết luận và giải thích bản chất Spurious Tuples** | Khẳng định đây là Lossy Join do không có dòng toàn a và giải thích hệ quả sinh dòng rác. | Analyze | **3.0đ** |
+| **Thiết lập đúng Bảng Chase 3x5 hoặc Phát biểu đúng Định lý Bao đóng Phép giao** | Khởi tạo đúng ma trận Chase 3 dòng x 5 cột với ký hiệu a_j, b_ij HOẶC nêu đúng điều kiện (S1 ∩ S2)+ phải là siêu khóa của S1 hoặc S2. | Apply | **3.5đ** |
+| **Chứng minh từng bước bằng Chase Test hoặc Tính bao đóng D+ = {D}, E+ = {E}** | Chứng minh A->D, B->E, DE->C không làm xuất hiện dòng toàn a_j HOẶC chỉ rõ R1∩R3={D} (D+={D}) và R2∩R3={E} (E+={E}) đều không phải siêu khóa. | Analyze | **3.5đ** |
+| **Kết luận chính xác Lossy Join và giải thích hiện tượng Spurious Tuples** | Khẳng định phép phân rã bị mất thông tin (Lossy Join), sinh ra các bộ giả mạo (Spurious Tuples) khi thực hiện Natural Join. | Analyze | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -2349,7 +2502,7 @@ Kết luận: Phép phân rã R thành (R1, R2, R3) KHÔNG PHẢI là phép phâ
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 4 (ACID, Mức cô lập & Indexing)** |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 44 (Slot 22) — Transactions (Concurrency & Isolation Trade-offs) |
@@ -2390,7 +2543,7 @@ Hiện tượng này được gọi là Dị thường Ghi đè Mất mát (Lost
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 4 (ACID, Mức cô lập & Indexing)** |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 42 (Slot 21) — Query Optimization (Execution Plan & ESR Rule) |
@@ -2437,61 +2590,48 @@ INCLUDE (TotalAmount);
 
 ---
 
-### 25. `DBI202-EXAM-025`: Phân tích Kịch bản Deadlock giữa Hai Giao dịch và Đề xuất 2 Giải pháp Triệt để
+### 25. `DBI202-EXAM-025`: Phân tích Độ mịn của Khóa (Lock Granularity), Hiện tượng Leo thang Khóa (Lock Escalation) và Cơ chế RCSI trong SQL Server
 
 | Thuộc tính | Giá trị cấu hình |
 |---|---|
 | **Mã câu hỏi** | `DBI202-EXAM-025` |
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
-| **Cấu trúc đề thi** | **Slot 4 (ACID, Mức cô lập & Indexing)** |
+| **Cấu trúc đề thi** | **Slot 4 (Tối ưu hóa Index & Quản trị Giao dịch ACID)** |
 | **Ánh xạ CLO FLM** | **CLO7** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO4** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO7** (`00000000-0000-0000-0000-000000000667`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
-| **Phân bổ Session** | Session 44 (Slot 22) — Transactions (Deadlock Root Cause Analysis) |
-| **Mục tiêu đánh giá** | Đánh giá năng lực phân tích nguyên nhân gốc rễ (Root Cause Analysis) của hiện tượng Deadlock từ mã nguồn và đề xuất giải pháp kiến trúc khắc phục vĩnh viễn. |
+| **Phân bổ Session** | Session 43-44 & 55-56 (Slot 22 & 28) — 9.2 Concurrency Control, Lock Escalation & Snapshot Isolation |
+| **Mục tiêu đánh giá** | Đánh giá năng lực phân tích cơ chế quản lý khóa đa cấp độ (Row, Page, Table), nguyên nhân gây nghẽn toàn bảng do Lock Escalation và giải pháp đa phiên bản dòng RCSI. |
 
 **Nội dung câu hỏi phát vấn:**
-> Cho đoạn mã của hai giao dịch chạy đồng thời: 
-- Giao dịch T1: 
-  BEGIN TRAN; 
-  UPDATE Accounts SET Balance = Balance - 100 WHERE AccountID = 1; -- (Thao tác 1.1) 
-  WAITFOR DELAY '00:00:05'; 
-  UPDATE Accounts SET Balance = Balance + 100 WHERE AccountID = 2; -- (Thao tác 1.2) 
-  COMMIT; 
-- Giao dịch T2: 
-  BEGIN TRAN; 
-  UPDATE Accounts SET Balance = Balance - 200 WHERE AccountID = 2; -- (Thao tác 2.1) 
-  WAITFOR DELAY '00:00:05'; 
-  UPDATE Accounts SET Balance = Balance + 200 WHERE AccountID = 1; -- (Thao tác 2.2) 
-  COMMIT; 
-Hãy phân tích chi tiết cơ chế khóa dẫn đến Deadlock giữa T1 và T2. Vẽ sơ đồ Đồ thị Chờ (Wait-For Graph). Đề xuất 2 giải pháp kỹ thuật triệt để ở cấp độ ứng dụng hoặc cơ sở dữ liệu để loại bỏ vĩnh viễn nguy cơ Deadlock này.
+> Trong MS SQL Server, hãy phân tích sự đánh đổi giữa các cấp độ mịn của khóa (`Lock Granularity`: `RID/KEY Row Lock`, `PAGE Lock`, `TABLE Lock`) và vai trò của **Khóa Ý định (`Intent Locks`: `IS`, `IX`, `SIX`)**. Hiện tượng **Leo thang khóa (`Lock Escalation`)** xảy ra khi nào và tại sao một câu lệnh `DELETE` hoặc `UPDATE` hàng chục ngàn dòng trong giờ cao điểm lại có thể làm treo đứng toàn bộ các giao dịch đọc `SELECT` khác trên bảng? Hãy đề xuất 2 giải pháp kỹ thuật (chia nhỏ lô `Batching` và bật `READ_COMMITTED_SNAPSHOT`) để xử lý triệt để.
 
 **Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):**
-> *"Khi phát hiện Deadlock thông qua chu trình trong Wait-For Graph, cơ chế Deadlock Monitor của SQL Server lựa chọn Giao dịch nạn nhân (Deadlock Victim) dựa trên tiêu chí nào, và ứng dụng phía client cần thiết kế cơ chế Retry logic như thế nào để xử lý mã lỗi 1205?"*
+> *"Khi bật tùy chọn `ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT ON (RCSI)`, MS SQL Server lưu trữ các phiên bản dòng cũ (`Row Versions`) ở cơ sở dữ liệu hệ thống nào, và cần giám sát tài nguyên phần cứng nào để tránh nghẽn hệ thống đó?"*
 
 **Câu trả lời mẫu chuẩn kỹ thuật (Model Answer):**
-> Phân tích cơ chế khóa dẫn đến Deadlock: 
-(1) Tại thời điểm t1: T1 thực thi lệnh 1.1, đặt Khóa độc quyền (Exclusive Lock - X-Lock) thành công trên dòng `AccountID = 1`. Cùng lúc đó, T2 thực thi lệnh 2.1, đặt X-Lock thành công trên dòng `AccountID = 2`. 
-(2) Cả hai giao dịch cùng tạm dừng 5 giây (WAITFOR DELAY) trong khi vẫn tiếp tục chiếm giữ các X-Lock nói trên. 
-(3) Tại thời điểm t2: T1 chạy tiếp lệnh 1.2, yêu cầu X-Lock trên `AccountID = 2`. Do T2 đang chiếm giữ X-Lock trên AccountID = 2 nên T1 bị đưa vào trạng thái CHỜ (T1 -> chờ T2). 
-(4) Cùng lúc đó, T2 chạy tiếp lệnh 2.2, yêu cầu X-Lock trên `AccountID = 1`. Do T1 đang chiếm giữ X-Lock trên AccountID = 1 nên T2 cũng bị đưa vào trạng thái CHỜ (T2 -> chờ T1). 
-Sơ đồ Đồ thị Chờ (Wait-For Graph): 
-[Giao dịch T1] --(Đang chờ khóa Account 2)--> [Giao dịch T2] 
-      ^                                            | 
-      |-----------(Đang chờ khóa Account 1)--------| 
-Xuất hiện một chu trình khép kín (Cycle): T1 -> T2 -> T1. Hệ thống rơi vào trạng thái Khóa chết (Deadlock). Sau khoảng 5 giây, Deadlock Monitor của SQL Server phát hiện chu trình, chọn 1 giao dịch làm Victim (thường là T2) để ROLLBACK và trả mã lỗi 1205. 
-2 giải pháp kỹ thuật triệt để: 
-- Giải pháp 1: Chuẩn hóa Thứ tự Truy cập Tài nguyên (Consistent Resource Access Order): Bắt buộc trong mã nguồn ứng dụng (hoặc Stored Procedure) mọi thao tác cập nhật trên nhiều tài khoản phải luôn khóa tài nguyên theo thứ tự tăng dần của AccountID (ví dụ: `IF @Acc1 > @Acc2 SWAP(@Acc1, @Acc2)`). Khi đó cả T1 và T2 đều bắt buộc phải cập nhật Account 1 trước rồi mới tới Account 2; T2 sẽ bị chặn ngay từ đầu và không thể tạo ra chu trình chờ đợi chéo. 
-- Giải pháp 2: Giảm thiểu thời gian giữ khóa bằng cách loại bỏ các tác vụ chờ (No Delays/I/O inside Transaction) và gom các thao tác UPDATE thành một câu lệnh duy nhất dựa trên biểu thức CASE WHEN.
+> 1. Đa độ mịn của Khóa (`Lock Granularity`) và Khóa Ý định (`Intent Locks`):
+* **Sự đánh đổi (Trade-off):**
+  + *Khóa mức dòng (`Row Lock - KEY/RID`):* Độ tương tranh (Concurrency) cao nhất vì các giao dịch khác vẫn truy cập được các dòng lân cận, nhưng tốn rất nhiều bộ nhớ RAM để quản lý hàng ngàn cấu trúc khóa (mỗi khóa tốn ~96 bytes).
+  + *Khóa mức bảng (`Table Lock`):* Chi phí quản lý bộ nhớ cực thấp (chỉ 1 khóa), nhưng triệt tiêu khả năng chạy đồng thời.
+* **Vai trò của Khóa Ý định (`Intent Shared - IS`, `Intent Exclusive - IX`):** Khi giao dịch $T_1$ muốn khóa độc quyền (`X`) một dòng, nó sẽ đặt khóa `IX` ở mức Bảng và mức Trang trước. Nhờ đó, nếu giao dịch $T_2$ muốn khóa toàn bộ Bảng (`S` hoặc `X`), $T_2$ chỉ cần kiểm tra cờ `IX` ở ngay đỉnh Bảng trong $O(1)$ mà không cần quét hàng triệu dòng để xem có dòng nào đang bị khóa hay không.
+
+2. Hiện tượng Leo thang khóa (`Lock Escalation`) gây treo bảng:
+- Khi một câu lệnh đơn lẻ tích lũy quá ngưỡng **5,000 khóa mức dòng/trang** trên cùng một bảng (hoặc khi bộ nhớ Lock Manager vượt ngưỡng), SQL Server tự động thu hồi toàn bộ các khóa nhỏ và nâng cấp thẳng lên một **Khóa toàn bảng (`Table-level X Lock`)** để giải phóng RAM (*lưu ý: SQL Server leo thang từ Row/Page thẳng lên Table, không leo thang từ Row lên Page*).
+- Hậu quả: Ở chế độ `READ COMMITTED` mặc định (dùng khóa bi quan), mọi câu lệnh `SELECT` cần xin khóa đọc (`S` / `IS`) trên bảng đó đều bị chặn đứng (`Blocked`) cho đến khi giao dịch `UPDATE`/`DELETE` khổng lồ kia `COMMIT`.
+
+3. Hai giải pháp khắc phục triệt để trong thực tế:
+* **Giải pháp 1 — Chia nhỏ lô cập nhật (`Chunking / Batching < 5,000 rows`):** Thay vì xóa/sửa 100,000 dòng trong 1 lệnh, dùng vòng lặp `WHILE (1 = 1)` kết hợp `DELETE TOP (2000) FROM ...` để mỗi giao dịch nhỏ chỉ giữ dưới 2,000 khóa dòng, không bao giờ chạm ngưỡng 5,000 của Lock Escalation.
+* **Giải pháp 2 — Bật `READ_COMMITTED_SNAPSHOT (RCSI)`:** Chuyển cơ chế đọc sang đa phiên bản dòng (`Row Versioning` lưu bản chụp cũ trong `tempdb`). Khi đó **Đọc không chặn Ghi và Ghi không chặn Đọc** (`Readers do not block Writers`), giúp các câu lệnh `SELECT` đọc ngay bản chụp nhất quán gần nhất mà không cần xin khóa `S`.
 
 **Barem Rubric chấm điểm chi tiết (Tổng 10.0đ):**
 
 | Tiêu chí đánh giá | Mô tả chi tiết tiêu chí | Mức Bloom | Điểm tối đa |
 |---|---|:---:|:---:|
-| **Phân tích diễn tiến cơ chế giữ khóa độc quyền X-Lock** | Trình bày rõ từng mốc thời gian t1, t2 và sự xung đột khóa chéo giữa hai giao dịch. | Analyze | **3.5đ** |
-| **Mô tả Đồ thị Chờ (Wait-For Graph) và chu trình Cycle** | Vẽ đúng sơ đồ chu trình T1 -> T2 -> T1 và giải thích cơ chế Deadlock Monitor chọn victim. | Analyze | **3.5đ** |
-| **Đề xuất giải pháp Thứ tự truy cập nhất quán (Consistent Order)** | Đưa giải pháp sắp xếp ID tăng dần triệt tiêu 100% chu trình chờ trong mã nguồn. | Apply | **3.0đ** |
+| **Phân tích đúng đánh đổi giữa Row/Page/Table Lock và vai trò của Intent Locks (IS, IX)** | Giải thích rõ sự đánh đổi Concurrency vs Memory Overhead và cách Intent Lock giúp kiểm tra xung đột ở mức bảng trong O(1). | Analyze | **3.5đ** |
+| **Giải thích cơ chế Lock Escalation (ngưỡng ~5,000 khóa) từ Row/Page lên Table Lock** | Mô tả chính xác nguyên nhân leo thang khóa thẳng lên mức Table gây chặn toàn bộ truy vấn đọc/ghi khác. | Analyze | **3.5đ** |
+| **Đề xuất đúng 2 giải pháp: Chia lô TOP (2000) và bật READ_COMMITTED_SNAPSHOT (RCSI)** | Trình bày rõ kỹ thuật Batching dưới 5,000 dòng và cơ chế Row Versioning trong tempdb giúp Đọc không bị chặn bởi Ghi. | Apply | **3.0đ** |
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
@@ -2504,7 +2644,7 @@ Xuất hiện một chu trình khép kín (Cycle): T1 -> T2 -> T1. Hệ thống 
 | **Kho dữ liệu** | `exam_questions` (MF-04 Phòng Lab Kiosk) |
 | **Cấu trúc đề thi** | **Slot 5 (Lập trình T-SQL & Toàn vẹn nghiệp vụ)** |
 | **Ánh xạ CLO FLM** | **CLO6** (Chi tiết chuẩn đầu ra Syllabus) |
-| **Ánh xạ CLO DB** | **CLO2** (`course_clos` 3NF hiện hành) |
+| **Ánh xạ CLO DB** | **CLO6** (`00000000-0000-0000-0000-000000000666`) |
 | **Mức nhận thức Bloom** | **Analyze** |
 | **Mức độ khó** | **Hard** |
 | **Phân bổ Session** | Session 49-54 (Slot 25-27) — T-SQL Architecture Trade-offs |
@@ -2542,25 +2682,3 @@ Kết luận: Chọn Phương án A khi muốn cung cấp một giao diện bả
 | **TỔNG ĐIỂM BAREM** | **Đạt trọn vẹn 100% các tiêu chí kỹ thuật chuẩn mực** | — | **10.0đ** |
 
 ---
-
-## PHẦN 5: BÁO CÁO KIỂM CHỨNG KỸ THUẬT VÀ CAM KẾT CHẤT LƯỢNG (INTEGRITY ATTESTATION)
-
-### 5.1. Bảng Tổng kết Các Cam kết Bất biến (Invariants Verification)
-
-| Cam kết kỹ thuật | Tiêu chuẩn đặt ra | Kết quả thực tế đạt được | Trạng thái thẩm định |
-|---|---|---|:---:|
-| **Tổng quy mô câu hỏi** | >= 60 câu hỏi | **Đúng 62 câu hỏi hoàn chỉnh** | **ĐẠT (PASS)** |
-| **Phân bổ Kho Luyện tập** | 36 câu (12 Easy, 14 Med, 10 Hard) | **Đúng 12 Easy, 14 Medium, 10 Hard** | **ĐẠT (PASS)** |
-| **Phân bổ Kho Thi thật** | 26 câu (6 Rem, 8 Und, 7 App, 5 Ana) | **Đúng 6 Rem, 8 Und, 7 App, 5 Ana** | **ĐẠT (PASS)** |
-| **Barem Rubric 10.0đ** | 100% câu hỏi có tổng = 10.0đ | **62/62 câu có tổng đúng 10.00 điểm** | **ĐẠT (PASS)** |
-| **Độ dài Model Answer** | 100% câu có độ dài >= 50 ký tự | **100% câu đạt (trung bình 250 - 450 ký tự)** | **ĐẠT (PASS)** |
-| **Zero Placeholder** | Cấm mã nguồn lười, facade hoặc giữ chỗ | **0 phát hiện placeholder vi phạm** | **ĐẠT (PASS)** |
-| **Độ phủ Chuẩn đầu ra** | Phủ đều 7 CLOs FLM & 4 CLOs DB | **100% CLOs có câu hỏi đại diện** | **ĐẠT (PASS)** |
-| **Độ phủ Phân hệ chuyên môn** | 7 chủ đề cốt lõi của môn học | **ERD, Quan hệ, 3NF/BCNF, DDL, SQL, Index/ACID, T-SQL** | **ĐẠT (PASS)** |
-
-### 5.2. Chữ ký Trách nhiệm Kỹ thuật
-
-- **Đơn vị biên soạn:** Worker Biên soạn Ngân hàng Câu hỏi DBI202 (`worker_dbi202_questions`)
-- **Thời điểm xuất bản:** 2026-11-03
-- **Công cụ kiểm chứng:** Automated Verification Script (`build_review_document.py`)
-- **Tình trạng:** Sẵn sàng chuyển giao cho Hội đồng Thẩm định và đưa vào Seed Data hệ thống.

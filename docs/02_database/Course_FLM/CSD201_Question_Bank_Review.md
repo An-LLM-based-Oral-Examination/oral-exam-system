@@ -4,9 +4,9 @@
 > **Quyết định ban hành:** 358/QĐ-ĐHFPT ngày 04/03/2024  
 > **Giáo trình chính:** Michael T. Goodrich, Roberto Tamassia, Michael H. Goldwasser: *Data Structures and Algorithms in Java*, 6th Edition, John Wiley & Sons.  
 > **Đơn vị biên soạn:** Tiểu ban Đảm bảo Chất lượng Học thuật & Đánh giá Vấn đáp AI (FA26SE166)  
-> **Mã tệp tài liệu:** `CSD201_Question_Bank_Review.md` | **Phiên bản:** v1.0.0 (Chính thức)  
+> **Mã tệp tài liệu:** `CSD201_Question_Bank_Review.md` | **Phiên bản:** v2.0.0 (Chuẩn hóa FLM Syllabus 1-1 & 3NF)  
 > **Tổng số câu hỏi:** **62 câu hỏi vấn đáp kỹ thuật chuẩn hóa** (36 câu Kho Luyện tập + 26 câu Kho Thi thật)
-> **Tiêu chuẩn kỹ thuật bắt buộc:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, 100% có Follow-up Prompt, Zero Placeholder.
+> **Tiêu chuẩn kỹ thuật bắt buộc:** 100% câu hỏi có Model Answer chuyên sâu (>= 50 ký tự), 100% có Barem Rubric tổng điểm đúng 10.0đ, 100% có Follow-up Prompt, cô lập tuyệt đối 2 kho đề (R8), Zero Placeholder.
 
 ---
 
@@ -18,32 +18,32 @@
 |---|---|
 | **Mã môn học (Course Code)** | **CSD201** |
 | **Tên môn học (Course Name)** | Data Structures and Algorithms (Cấu trúc dữ liệu và giải thuật) |
-| **Số tín chỉ (Credits)** | 3 tín chỉ (45 giờ lý thuyết + thực hành phòng Lab, 102.6 giờ tự học) |
+| **Số tín chỉ (Credits)** | 3 tín chỉ (`Study hour (150h) = 45h contact hours + 1h final exam + 104h self-study`) |
 | **Môn tiên quyết (Prerequisite)** | PRO192 (Object-Oriented Programming) |
 | **Ngôn ngữ thực hành chính** | **Java (JDK 17/21)**, Eclipse / IntelliJ IDEA |
-| **Cơ cấu đánh giá** | Progress Tests (20%) + Assignments (20%) + Practical Exam PE (30%) + Final Exam FE (30%) |
-| **Điều kiện đạt môn** | FE >= 4.0 / 10.0 và Điểm tổng kết môn Average >= 5.0 / 10.0 |
+| **Cơ cấu đánh giá** | Progress Tests (20%) + Assignments (20%) + Practical Exam (30%) + Final Exam (30%) |
+| **Cấu trúc Đề thi Vấn đáp (MF-04)** | 5 Slots câu hỏi / 1 Đề thi (Thời lượng: 25 phút/ca thi; Follow-up tối đa 2 câu) |
 
-### 1.2. Ánh xạ Chuẩn đầu ra (8 FLM CLOs -> 4 Database 3NF CLOs)
+### 1.2. Bảng Ánh xạ Chuẩn đầu ra 1-1 (8 FLM CLOs <-> 8 Database 3NF CLOs)
 
-| Mã CLO FLM | Mô tả chi tiết theo FLM Syllabus | Mức Bloom | Ánh xạ CLO 3NF (DB) | GUID Khóa chính CSDL (`course_clos`) |
-|:---:|---|:---:|:---:|---|
-| **CLO1** | Danh sách, mảng và các dạng Danh sách liên kết đơn/đôi/vòng | Understand / Apply | **CLO2** (Linear Structures) | `00000000-0000-0000-0000-000000000562` |
-| **CLO2** | Ngăn xếp (Stack), Hàng đợi (Queue), Deque và Priority Queue | Understand / Apply | **CLO2** (Linear Structures) | `00000000-0000-0000-0000-000000000562` |
-| **CLO3** | Định nghĩa đệ quy, hàm đệ quy, Call Stack và khử đệ quy đuôi | Understand / Analyze | **CLO1** (Complexity & Recursion) | `00000000-0000-0000-0000-000000000561` |
-| **CLO4** | Cây tổng quát, Cây nhị phân, Cây BST, Cây AVL và Binary Heap | Understand / Apply / Analyze | **CLO3** (Trees & Heaps) | `00000000-0000-0000-0000-000000000563` |
-| **CLO5** | Đồ thị, duyệt BFS/DFS, đường đi Dijkstra, cây khung Prim/Kruskal | Understand / Apply / Analyze | **CLO4** (Graph Algorithms) | `00000000-0000-0000-0000-000000000564` |
-| **CLO6** | Các thuật toán sắp xếp cơ bản và nâng cao (Quick, Merge, Heap) | Understand / Analyze | **CLO1** (Complexity & Sorting) | `00000000-0000-0000-0000-000000000561` |
-| **CLO7** | Bảng băm, hàm băm, xử lý xung đột, hệ số tải và Rehashing | Understand / Apply / Analyze | **CLO1** (Search & Hashing) | `00000000-0000-0000-0000-000000000561` |
-| **CLO8** | Xử lý chuỗi, so khớp mẫu KMP và thuật toán nén Huffman/LZW | Understand / Apply | **CLO2** (Text & Compression) | `00000000-0000-0000-0000-000000000562` |
+| Mã CLO FLM | Nội dung Chuẩn đầu ra theo Syllabus FLM (358/QĐ-ĐHFPT) | Thang Bloom | Mã CLO DB (`course_clos`) | GUID Định danh CSDL (`CourseClo.Id`) | Số câu (Practice + Exam = Tổng) |
+|:---:|---|:---:|:---:|:---:|:---:|
+| **CLO1** | Describe the list data structure and its different ways of implementations. Implement the singly linked list. | Understand / Apply / Analyze | **CLO1** | `00000000-0000-0000-0000-000000000561` | 5 + 4 = **9 câu** |
+| **CLO2** | Define stack and queue. Describe basic operations and the use of these structures. | Remember / Understand / Apply / Analyze | **CLO2** | `00000000-0000-0000-0000-000000000562` | 5 + 3 = **8 câu** |
+| **CLO3** | Describe recursive definitions, algorithms, functions and their implementation and use. | Understand / Apply / Analyze | **CLO3** | `00000000-0000-0000-0000-000000000563` | 3 + 2 = **5 câu** |
+| **CLO4** | Explain general tree, Binary Tree and Binary Search Tree (BST). Implement BST with basic operations. | Remember / Understand / Apply / Analyze | **CLO4** | `00000000-0000-0000-0000-000000000564` | 8 + 5 = **13 câu** |
+| **CLO5** | Discuss graphs and their application. Implement a graph with some basic operations. | Remember / Understand / Apply / Analyze | **CLO5** | `00000000-0000-0000-0000-000000000565` | 6 + 4 = **10 câu** |
+| **CLO6** | Explain the operation and performance of some basic and advanced sorting algorithms. | Remember / Understand / Apply / Analyze | **CLO6** | `00000000-0000-0000-0000-000000000566` | 3 + 4 = **7 câu** |
+| **CLO7** | Explain hashing and its application. | Remember / Understand / Apply / Analyze | **CLO7** | `00000000-0000-0000-0000-000000000567` | 3 + 2 = **5 câu** |
+| **CLO8** | Describe the Text Processing problem and its application. Explain Huffman, LZW and Run-length encoding. | Understand / Apply / Analyze | **CLO8** | `00000000-0000-0000-0000-000000000568` | 3 + 2 = **5 câu** |
 
-### 1.3. Ma trận Phân bổ 62 Câu hỏi Vấn đáp
+### 1.3. Ma trận Phân bổ 62 Câu hỏi theo Kho Lưu trữ, Thang Bloom và Độ khó
 
-| Kho câu hỏi (Target Pool) | Quy mô | Phân bổ Cấp độ Bloom | Phân bổ Độ khó (Difficulty) | Mục đích sử dụng nghiệp vụ |
+| Kho câu hỏi (Target Pool) | Số lượng | Phân bổ theo Thang Bloom | Phân bổ theo Độ khó (Difficulty) | Mục đích Nghiệp vụ |
 |---|:---:|---|---|---|
 | **Kho Luyện tập & Thi thử (`practice_questions`)** | **36 câu** | 12 Understand, 12 Apply, 12 Analyze | **12 Easy, 12 Medium, 12 Hard** (Phủ đều 100%) | Phục vụ sinh viên tự luyện tập on-demand (MF-01) và thi thử tính giờ (MF-02) |
 | **Kho Thi thật phòng Lab (`exam_questions`)** | **26 câu** | **6 Remember, 8 Understand, 7 Apply, 5 Analyze** | 6 Easy, 15 Medium, 5 Hard | Phục vụ Cán bộ Khảo thí tổ chức thi vấn đáp phòng Lab Kiosk (MF-04) |
-| **TỔNG CỘNG** | **62 câu** | **6 Remember, 20 Understand, 19 Apply, 17 Analyze** | **18 Easy, 27 Medium, 17 Hard** | **Đáp ứng vượt mức yêu cầu >= 60 câu hỏi/môn** |
+| **TỔNG CỘNG** | **62 câu** | **6 Remember, 20 Understand, 19 Apply, 17 Analyze** | **18 Easy, 27 Medium, 17 Hard** | **Đáp ứng vượt mức yêu cầu >= 60 câu hỏi/môn, phủ đủ 8/8 CLOs** |
 
 ---
 
@@ -54,72 +54,72 @@
 | Mã câu hỏi | Tiêu đề câu hỏi vấn đáp kỹ thuật | FLM CLO | DB CLO | Mức Bloom | Độ khó | Buổi học (Session) | Cụm kỹ thuật trọng tâm |
 |:---:|---|:---:|:---:|:---:|:---:|:---:|---|
 | **CSD_PQ01** | Phân tích Ký pháp Big-O và So sánh Tốc độ Tăng trưởng Thời gian | CLO1 | CLO1 | `Understand` | **Easy** | Session 1 | Big-O Analysis & Algorithm Complexity |
-| **CSD_PQ02** | Cơ chế Cấp phát Bộ nhớ và Chi phí Truy xuất giữa Mảng và Singly Linked List | CLO1 | CLO2 | `Understand` | **Easy** | Session 1-2 | Arrays vs Linked Lists |
-| **CSD_PQ03** | Cấu trúc Nút và Ưu thế của Doubly Linked List so với Singly Linked List | CLO1 | CLO2 | `Understand` | **Easy** | Session 2 | Doubly Linked Lists |
-| **CSD_PQ04** | Nguyên lý LIFO và Ba Thao tác Cơ bản của Ngăn xếp Stack | CLO2 | CLO2 | `Understand` | **Easy** | Session 5 | Stacks |
-| **CSD_PQ05** | Cơ chế FIFO của Hàng đợi Queue và Phân biệt Queue với Deque | CLO2 | CLO2 | `Understand` | **Easy** | Session 7 | Queues & Deque |
-| **CSD_PQ06** | Điều kiện Dừng (Base Case) và Bước Đệ quy trong Cấu trúc Hàm Đệ quy | CLO3 | CLO1 | `Understand` | **Easy** | Session 11 | Recursion Fundamentals |
-| **CSD_PQ07** | Các Khái niệm Cơ bản của Cây Nhị phân: Gốc, Lá, Chiều cao và Bậc | CLO4 | CLO3 | `Understand` | **Easy** | Session 15-16 | Binary Tree Terminology |
-| **CSD_PQ08** | Đặc tính Thứ tự của Cây Tìm kiếm Nhị phân (BST) và Phép duyệt In-Order | CLO4 | CLO3 | `Understand` | **Easy** | Session 19 | BST In-Order Traversal |
-| **CSD_PQ09** | So sánh Biểu diễn Đồ thị bằng Ma trận Kề và Danh sách Kề | CLO5 | CLO4 | `Understand` | **Easy** | Session 29 | Graph Representation |
-| **CSD_PQ10** | Nguyên lý Đổi chỗ và Độ phức tạp Thời gian của Thuật toán Bubble Sort | CLO6 | CLO1 | `Understand` | **Easy** | Session 41 | Bubble Sort |
-| **CSD_PQ11** | Khái niệm Bảng băm, Hàm băm và Nguyên nhân Gây ra Hiện tượng Xung đột | CLO7 | CLO1 | `Understand` | **Easy** | Session 49 | Hashing Concepts |
-| **CSD_PQ12** | Phân biệt Nén Dữ liệu Không Tổn hao và Nén Có Tổn hao | CLO8 | CLO2 | `Understand` | **Easy** | Session 55 | Text Compression Concepts |
-| **CSD_PQ13** | Cài đặt Thuật toán Đảo ngược Danh sách Liên kết Đơn tại chỗ | CLO1 | CLO2 | `Apply` | **Medium** | Session 1 | Linked List Manipulation |
+| **CSD_PQ02** | Cơ chế Cấp phát Bộ nhớ và Chi phí Truy xuất giữa Mảng và Singly Linked List | CLO1 | CLO1 | `Understand` | **Easy** | Session 1-2 | Arrays vs Linked Lists |
+| **CSD_PQ03** | Cấu trúc Nút và Ưu thế của Doubly Linked List so với Singly Linked List | CLO1 | CLO1 | `Understand` | **Easy** | Session 2 | Doubly Linked Lists |
+| **CSD_PQ04** | Biểu diễn Cây Tổng quát (First-Child / Next-Sibling) và Cấu trúc Cây Biểu thức (Expression Tree) | CLO4 | CLO4 | `Understand` | **Easy** | Session 15-16 | General Trees (First-Child/Next-Sibling) & Expression Trees |
+| **CSD_PQ05** | Nguyên lý FIFO của Hàng đợi (Queue) và Hiện tượng Tràn Giả (False Overflow) trên Mảng Tuyến tính | CLO2 | CLO2 | `Understand` | **Easy** | Session 7 | Queues & Linear Array False Overflow |
+| **CSD_PQ06** | Điều kiện Dừng (Base Case) và Bước Đệ quy trong Cấu trúc Hàm Đệ quy | CLO3 | CLO3 | `Understand` | **Easy** | Session 11 | Recursion Fundamentals |
+| **CSD_PQ07** | Nguyên lý LIFO và Ba Thao tác Cơ bản của Ngăn xếp Stack | CLO2 | CLO2 | `Understand` | **Easy** | Session 5 | Stacks |
+| **CSD_PQ08** | Đặc tính Thứ tự của Cây Tìm kiếm Nhị phân (BST) và Phép duyệt In-Order | CLO4 | CLO4 | `Understand` | **Easy** | Session 19 | BST In-Order Traversal |
+| **CSD_PQ09** | So sánh Biểu diễn Đồ thị bằng Ma trận Kề và Danh sách Kề | CLO5 | CLO5 | `Understand` | **Easy** | Session 29 | Graph Representation |
+| **CSD_PQ10** | Nguyên lý Đổi chỗ và Độ phức tạp Thời gian của Thuật toán Bubble Sort | CLO6 | CLO6 | `Understand` | **Easy** | Session 41 | Bubble Sort |
+| **CSD_PQ11** | Khái niệm Bảng băm, Hàm băm và Nguyên nhân Gây ra Hiện tượng Xung đột | CLO7 | CLO7 | `Understand` | **Easy** | Session 49 | Hashing Concepts |
+| **CSD_PQ12** | Phân biệt Nén Dữ liệu Không Tổn hao và Nén Có Tổn hao | CLO8 | CLO8 | `Understand` | **Easy** | Session 54 | Text Compression Concepts |
+| **CSD_PQ13** | Cài đặt Thuật toán Đảo ngược Danh sách Liên kết Đơn tại chỗ | CLO1 | CLO1 | `Apply` | **Medium** | Session 1 | Linked List Manipulation |
 | **CSD_PQ14** | Ứng dụng Stack trong Bài toán Kiểm tra Dãy Ngoặc Hợp lệ | CLO2 | CLO2 | `Apply` | **Medium** | Session 5 | Stack Applications |
 | **CSD_PQ15** | Cài đặt Hàng đợi Vòng (Circular Queue) bằng Mảng Cố định với Modulo | CLO2 | CLO2 | `Apply` | **Medium** | Session 7 | Circular Queue Implementation |
-| **CSD_PQ16** | Cơ chế Call Stack và Phân tích Tràn Bộ nhớ trong Đệ quy Tính Fibonacci | CLO3 | CLO1 | `Apply` | **Medium** | Session 12 | Call Stack & Recursion Tree |
-| **CSD_PQ17** | Cài đặt Thuật toán Duyệt Cây Pre-order, In-order và Post-order bằng Java | CLO4 | CLO3 | `Apply` | **Medium** | Session 16 | Tree Traversals |
-| **CSD_PQ18** | Quy trình Xóa Nút có Hai Con trên Cây BST bằng In-order Successor | CLO4 | CLO3 | `Apply` | **Medium** | Session 20 | BST Deletion |
-| **CSD_PQ19** | Thao tác Chèn Phần tử vào Min-Heap và Quy trình Vun Đống Ngược | CLO4 | CLO3 | `Apply` | **Medium** | Session 24 | Binary Heap Operations |
-| **CSD_PQ20** | Cài đặt Thuật toán Duyệt Đồ thị Theo Chiều Rộng (BFS) | CLO5 | CLO4 | `Apply` | **Medium** | Session 30 | Breadth-First Search (BFS) |
-| **CSD_PQ21** | Cài đặt Thuật toán Duyệt Đồ thị Theo Chiều Sâu (DFS) Xác định Thành phần Liên thông | CLO5 | CLO4 | `Apply` | **Medium** | Session 30 | Depth-First Search & Connected Components |
-| **CSD_PQ22** | Thuật toán Phân hoạch Lomuto trong QuickSort và Cách Lựa chọn Pivot | CLO6 | CLO1 | `Apply` | **Medium** | Session 42 | QuickSort Lomuto Partition |
-| **CSD_PQ23** | Cài đặt Chiến lược Giải quyết Xung đột Bảng băm bằng Separate Chaining | CLO7 | CLO1 | `Apply` | **Medium** | Session 49 | Separate Chaining Collision Handling |
-| **CSD_PQ24** | Cài đặt Thuật toán Tìm kiếm Mẫu Chuỗi Đối chiếu Thô (Brute-Force Pattern Matching) | CLO8 | CLO2 | `Apply` | **Medium** | Session 53 | String Pattern Matching |
-| **CSD_PQ25** | Ứng dụng Định lý Thợ (Master Theorem) Phân tích Phương trình Truy hồi Đệ quy | CLO1 | CLO1 | `Analyze` | **Hard** | Session 1 | Master Theorem & Recurrence Relations |
-| **CSD_PQ26** | Thuật toán Floyd's Tortoise and Hare Phát hiện Chu trình trong Singly Linked List | CLO1 | CLO2 | `Analyze` | **Hard** | Session 2 | Floyd's Cycle-Finding Algorithm |
+| **CSD_PQ16** | Phân loại Đệ quy Tuyến tính (Linear), Đệ quy Nhị phân (Binary) và Cài đặt Tính Tổng / Lũy thừa Chia để Trị | CLO3 | CLO3 | `Apply` | **Medium** | Session 11-12 | Linear Recursion vs Binary Recursion & Fast Exponentiation |
+| **CSD_PQ17** | Cài đặt Thuật toán Duyệt Cây Pre-order, In-order và Post-order bằng Java | CLO4 | CLO4 | `Apply` | **Medium** | Session 16 | Tree Traversals |
+| **CSD_PQ18** | Thao tác Chèn Phần tử vào Min-Heap và Quy trình Vun Đống Ngược | CLO4 | CLO4 | `Apply` | **Medium** | Session 24 | Binary Heap Operations |
+| **CSD_PQ19** | Quy trình Xóa Nút có Hai Con trên Cây BST bằng In-order Successor | CLO4 | CLO4 | `Apply` | **Medium** | Session 20 | BST Deletion (Two-Children Case & In-order Successor) |
+| **CSD_PQ20** | Cài đặt Thuật toán Duyệt Đồ thị Theo Chiều Rộng (BFS) | CLO5 | CLO5 | `Apply` | **Medium** | Session 30 | Breadth-First Search (BFS) |
+| **CSD_PQ21** | Cài đặt Thuật toán Duyệt Đồ thị Theo Chiều Sâu (DFS) Xác định Thành phần Liên thông | CLO5 | CLO5 | `Apply` | **Medium** | Session 30 | Depth-First Search & Connected Components |
+| **CSD_PQ22** | Thuật toán Phân hoạch Lomuto trong QuickSort và Cách Lựa chọn Pivot | CLO6 | CLO6 | `Apply` | **Medium** | Session 42 | QuickSort Lomuto Partition |
+| **CSD_PQ23** | Cài đặt Chiến lược Giải quyết Xung đột Bảng băm bằng Separate Chaining | CLO7 | CLO7 | `Apply` | **Medium** | Session 49 | Separate Chaining Collision Handling |
+| **CSD_PQ24** | Cài đặt Thuật toán Tìm kiếm Mẫu Chuỗi Đối chiếu Thô (Brute-Force Pattern Matching) | CLO8 | CLO8 | `Apply` | **Medium** | Session 53 | String Pattern Matching |
+| **CSD_PQ25** | Cài đặt Tường minh Phép Quay Đơn/Kép trên Cây AVL bằng Java và Thuật toán Cân bằng Toàn cục DSW (Day-Stout-Warren) | CLO4 | CLO4 | `Analyze` | **Hard** | Session 23 | Explicit AVL Rotations in Java & DSW (Day-Stout-Warren) Global Balancing Algorithm |
+| **CSD_PQ26** | Thuật toán Floyd's Tortoise and Hare Phát hiện Chu trình trong Singly Linked List | CLO1 | CLO1 | `Analyze` | **Hard** | Session 2 | Floyd's Cycle-Finding Algorithm |
 | **CSD_PQ27** | Phân tích Chi phí Priority Queue Cài đặt bằng Mảng vs Binary Heap | CLO2 | CLO2 | `Analyze` | **Hard** | Session 8 | Priority Queue Implementations |
-| **CSD_PQ28** | Kỹ thuật Khử Đệ quy Đuôi Tối ưu hóa Bộ nhớ Call Stack | CLO3 | CLO1 | `Analyze` | **Hard** | Session 12 | Tail Recursion Elimination |
-| **CSD_PQ29** | Phân tích Cơ chế Tự Cân bằng và 4 Phép Xoay trên Cây AVL | CLO4 | CLO3 | `Analyze` | **Hard** | Session 23 | AVL Tree Rotations |
-| **CSD_PQ30** | Phân tích Thuật toán HeapSort: Giai đoạn Build-Heap Tuyến tính O(n) | CLO4 | CLO3 | `Analyze` | **Hard** | Session 24 | HeapSort & Linear Build-Heap Analysis |
-| **CSD_PQ31** | Thuật toán Dijkstra Tìm Đường đi Ngắn nhất: Bản chất Tham lam và Cạnh Âm | CLO5 | CLO4 | `Analyze` | **Hard** | Session 34 | Dijkstra Algorithm & Negative Weights |
-| **CSD_PQ32** | So sánh Chuyên sâu Thuật toán Prim và Kruskal Tìm Cây Khung Nhỏ nhất | CLO5 | CLO4 | `Analyze` | **Hard** | Session 37-38 | Minimum Spanning Trees: Prim vs Kruskal |
-| **CSD_PQ33** | Phân tích Điều kiện Tồn tại Chu trình Euler và So sánh với Chu trình Hamilton | CLO5 | CLO4 | `Analyze` | **Hard** | Session 38 | Eulerian vs Hamiltonian Cycles |
-| **CSD_PQ34** | So sánh Toàn diện QuickSort vs MergeSort | CLO6 | CLO1 | `Analyze` | **Hard** | Session 45 | QuickSort vs MergeSort Comparison |
-| **CSD_PQ35** | Hiện tượng Cụm Chính trong Linear Probing, Hệ số Tải và Kỹ thuật Rehashing | CLO7 | CLO1 | `Analyze` | **Hard** | Session 50 | Open Addressing & Rehashing |
-| **CSD_PQ36** | Nguyên lý Xây dựng Cây Mã hóa Huffman Tối ưu Tiền tố và Thuật toán Giải nén Bit | CLO8 | CLO2 | `Analyze` | **Hard** | Session 57 | Huffman Coding Algorithm |
+| **CSD_PQ28** | Kỹ thuật Khử Đệ quy Đuôi Tối ưu hóa Bộ nhớ Call Stack | CLO3 | CLO3 | `Analyze` | **Hard** | Session 12 | Tail Recursion Elimination |
+| **CSD_PQ29** | Phân tích Hiện tượng Thoái hóa O(n) của Cây BST và Cơ chế Tự Cân bằng 4 Phép Quay trên Cây AVL | CLO4 | CLO4 | `Analyze` | **Hard** | Session 19-23 | BST Degeneration vs AVL 4 Rotation Cases (LL, RR, LR, RL) |
+| **CSD_PQ30** | Phân tích Thuật toán HeapSort: Giai đoạn Build-Heap Tuyến tính O(n) | CLO4 | CLO4 | `Analyze` | **Hard** | Session 24 | HeapSort & Linear Build-Heap Analysis |
+| **CSD_PQ31** | Thuật toán Dijkstra Tìm Đường đi Ngắn nhất: Bản chất Tham lam và Cạnh Âm | CLO5 | CLO5 | `Analyze` | **Hard** | Session 34 | Dijkstra Algorithm & Negative Weights |
+| **CSD_PQ32** | So sánh Chuyên sâu Thuật toán Prim và Kruskal Tìm Cây Khung Nhỏ nhất | CLO5 | CLO5 | `Analyze` | **Hard** | Session 37-38 | Minimum Spanning Trees: Prim vs Kruskal |
+| **CSD_PQ33** | Phân tích Điều kiện Tồn tại Chu trình Euler và So sánh với Chu trình Hamilton | CLO5 | CLO5 | `Analyze` | **Hard** | Session 38 | Eulerian vs Hamiltonian Cycles |
+| **CSD_PQ34** | So sánh Toàn diện QuickSort vs MergeSort | CLO6 | CLO6 | `Analyze` | **Hard** | Session 45 | QuickSort vs MergeSort Comparison |
+| **CSD_PQ35** | Hiện tượng Cụm Chính trong Linear Probing, Hệ số Tải và Kỹ thuật Rehashing | CLO7 | CLO7 | `Analyze` | **Hard** | Session 50 | Open Addressing & Rehashing |
+| **CSD_PQ36** | Nguyên lý Xây dựng Cây Mã hóa Huffman Tối ưu Tiền tố và Thuật toán Giải nén Bit | CLO8 | CLO8 | `Analyze` | **Hard** | Session 54 | Huffman Coding Algorithm |
 
 ### 2.2. Chỉ mục 26 câu hỏi Kho Thi thật (`exam_questions`: `CSD_EQ01` — `CSD_EQ26`)
 
 | Mã câu hỏi | Tiêu đề câu hỏi vấn đáp kỹ thuật | FLM CLO | DB CLO | Mức Bloom | Độ khó | Buổi học (Session) | Cụm kỹ thuật trọng tâm |
 |:---:|---|:---:|:---:|:---:|:---:|:---:|---|
-| **CSD_EQ01** | Định nghĩa Ký pháp Tiệm cận Big-O, Big-Omega và Big-Theta | CLO1 | CLO1 | `Remember` | **Easy** | Session 1 | Asymptotic Notations |
-| **CSD_EQ02** | Định nghĩa Cấu trúc Dữ liệu Stack, Queue và Phân biệt LIFO vs FIFO | CLO2 | CLO2 | `Remember` | **Easy** | Session 5 | Stack and Queue Definitions |
-| **CSD_EQ03** | Định nghĩa Cây Nhị phân Đầy đủ và Cây Nhị phân Hoàn chỉnh | CLO4 | CLO3 | `Remember` | **Easy** | Session 15 | Binary Tree Types |
-| **CSD_EQ04** | Phát biểu Định lý Bắt tay (Handshaking Lemma) trong Lý thuyết Đồ thị | CLO5 | CLO4 | `Remember` | **Easy** | Session 22 | Graph Handshaking Lemma |
-| **CSD_EQ05** | Định nghĩa Tính Ổn định của Thuật toán Sắp xếp và Phân loại | CLO6 | CLO1 | `Remember` | **Easy** | Session 41 | Sorting Stability |
-| **CSD_EQ06** | Định nghĩa Hàm Băm Hoàn Hảo và Tiêu chuẩn của Hàm Băm Lý tưởng | CLO7 | CLO1 | `Remember` | **Easy** | Session 49 | Perfect Hash Functions |
-| **CSD_EQ07** | Phân tích Chi phí Thao tác Chèn/Xóa ở Đầu giữa Mảng và Singly Linked List | CLO1 | CLO2 | `Understand` | **Easy** | Session 1-2 | Array vs Linked List Insertion Complexity |
+| **CSD_EQ01** | Định nghĩa Toán học Ba Ký pháp Tiệm cận Big-O, Big-Omega, Big-Theta và Ba Kịch bản Phân tích Thuật toán | CLO1 | CLO1 | `Remember` | **Easy** | Session 1 | Asymptotic Notations & Best/Average/Worst-Case Complexity |
+| **CSD_EQ02** | Định nghĩa Hàng đợi Hai đầu (Deque ADT) và Bảng Các Thao tác Chuẩn tại Hai Đầu First/Last | CLO2 | CLO2 | `Remember` | **Easy** | Session 7 | Double-Ended Queue (Deque ADT) & Java Deque Interface |
+| **CSD_EQ03** | Định nghĩa Cây Nhị phân Đầy đủ và Cây Nhị phân Hoàn chỉnh | CLO4 | CLO4 | `Remember` | **Easy** | Session 15 | Binary Tree Types |
+| **CSD_EQ04** | Phát biểu Định lý Bắt tay (Handshaking Lemma) trong Lý thuyết Đồ thị | CLO5 | CLO5 | `Remember` | **Easy** | Session 29 | Graph Handshaking Lemma |
+| **CSD_EQ05** | Định nghĩa Tính Ổn định của Thuật toán Sắp xếp và Phân loại | CLO6 | CLO6 | `Remember` | **Easy** | Session 41 | Sorting Stability |
+| **CSD_EQ06** | Định nghĩa Hàm Băm Hoàn Hảo và Tiêu chuẩn của Hàm Băm Lý tưởng | CLO7 | CLO7 | `Remember` | **Easy** | Session 49 | Perfect Hash Functions |
+| **CSD_EQ07** | Cấu trúc Danh sách Liên kết Vòng (Circularly Linked List), Con trỏ tail và Ứng dụng Lập lịch Round-Robin | CLO1 | CLO1 | `Understand` | **Easy** | Session 2 | Circularly Linked Lists & Round-Robin Scheduling |
 | **CSD_EQ08** | Cơ chế Hoạt động của Hàng đợi Ưu tiên và Sự Khác biệt với Hàng đợi FIFO | CLO2 | CLO2 | `Understand` | **Easy** | Session 8 | Priority Queue vs FIFO Queue |
-| **CSD_EQ09** | Cơ chế Tràn Ngăn xếp Call Stack và Vai trò của Base Case trong Đệ quy | CLO3 | CLO1 | `Understand` | **Easy** | Session 11 | Call Stack & StackOverflowError |
-| **CSD_EQ10** | Hiện tượng Thoái hóa của Cây BST khi Chèn Dãy Dữ liệu Đã Sắp xếp | CLO4 | CLO3 | `Understand` | **Medium** | Session 19 | BST Degeneration |
-| **CSD_EQ11** | Công thức Tính Hệ số Cân bằng và Điều kiện Cân bằng của Cây AVL | CLO4 | CLO3 | `Understand` | **Medium** | Session 23 | AVL Balance Factor Condition |
-| **CSD_EQ12** | Phân biệt Bản chất Chiến lược Khám phá giữa Duyệt BFS và Duyệt DFS | CLO5 | CLO4 | `Understand` | **Medium** | Session 30 | BFS vs DFS Exploration Strategy |
-| **CSD_EQ13** | Nguyên lý Hoạt động Thời gian Tuyến tính của Thuật toán Radix Sort | CLO6 | CLO1 | `Understand` | **Medium** | Session 46 | Radix Sort Linear Time |
-| **CSD_EQ14** | Nguyên lý Nén Run-Length Encoding và Các Trường hợp Gây Phình To Dữ liệu | CLO8 | CLO2 | `Understand` | **Medium** | Session 54 | Run-Length Encoding (RLE) |
-| **CSD_EQ15** | Cài đặt Thao tác Chèn Nút Mới vào Sau một Nút trong Doubly Linked List | CLO1 | CLO2 | `Apply` | **Medium** | Session 2 | Doubly Linked List Insertion |
+| **CSD_EQ09** | Thuật toán Hierholzer Tìm Chu trình và Đường đi Euler trong Thời gian Tuyến tính O(V + E) | CLO5 | CLO5 | `Understand` | **Easy** | Session 38 | Eulerian Path/Circuit & Hierholzer's Linear-Time Algorithm |
+| **CSD_EQ10** | Ứng dụng Định lý Thợ (Master Theorem) Phân tích Phương trình Truy hồi Đệ quy | CLO1 | CLO1 | `Understand` | **Medium** | Session 1 & 12 | Master Theorem & Recurrence Relations |
+| **CSD_EQ11** | Công thức Tính Hệ số Cân bằng và Điều kiện Cân bằng của Cây AVL | CLO4 | CLO4 | `Understand` | **Medium** | Session 23 | AVL Balance Factor Condition |
+| **CSD_EQ12** | Phân biệt Bản chất Chiến lược Khám phá giữa Duyệt BFS và Duyệt DFS | CLO5 | CLO5 | `Understand` | **Medium** | Session 30 | BFS vs DFS Exploration Strategy |
+| **CSD_EQ13** | Nguyên lý Hoạt động Thời gian Tuyến tính của Thuật toán Radix Sort | CLO6 | CLO6 | `Understand` | **Medium** | Session 46 | Radix Sort Linear Time |
+| **CSD_EQ14** | Nguyên lý Nén Run-Length Encoding (RLE) và Nén Từ điển Động LZW (Lempel-Ziv-Welch) | CLO8 | CLO8 | `Understand` | **Medium** | Session 54 | Run-Length Encoding (RLE) & LZW Dictionary Compression |
+| **CSD_EQ15** | Đệ quy Đảo ngược Singly Linked List và Phân tích Lỗi Đệ quy Vô tận (StackOverflowError) | CLO3 | CLO3 | `Apply` | **Medium** | Session 11-12 | Recursive Linked List Reversal & StackOverflowError Debugging |
 | **CSD_EQ16** | Ứng dụng Thuật toán Shunting-Yard Chuyển đổi Biểu thức Infix sang Postfix | CLO2 | CLO2 | `Apply` | **Medium** | Session 6 | Shunting-Yard Infix to Postfix |
-| **CSD_EQ17** | Các Bước Tìm Nút Thế thân và Cập nhật Con trỏ khi Xóa Nút 2 Con trên BST | CLO4 | CLO3 | `Apply` | **Medium** | Session 20 | BST Node Deletion Mechanism |
-| **CSD_EQ18** | Quy trình Xây dựng Max-Heap từ Mảng và Thao tác Xóa Phần tử Lớn nhất | CLO4 | CLO3 | `Apply` | **Medium** | Session 24 | Max-Heap Construction and Extract-Max |
-| **CSD_EQ19** | Thực thi Từng Bước Thuật toán Dijkstra trên Đồ thị Có Trọng số | CLO5 | CLO4 | `Apply` | **Medium** | Session 34 | Dijkstra Algorithm Execution |
-| **CSD_EQ20** | Quy trình Phân hoạch Hoare Partition trong QuickSort | CLO6 | CLO1 | `Apply` | **Medium** | Session 42 | Hoare Partition Procedure |
-| **CSD_EQ21** | Thực hiện Chèn Dãy Khóa vào Bảng băm theo Linear và Quadratic Probing | CLO7 | CLO1 | `Apply` | **Medium** | Session 50 | Linear Probing vs Quadratic Probing Execution |
-| **CSD_EQ22** | Phân tích Ba Phương pháp Cài đặt Tính Số Fibonacci: Đệ quy vs DP | CLO3 | CLO1 | `Analyze` | **Hard** | Session 12 | Fibonacci Algorithm Comparison |
-| **CSD_EQ23** | Phân tích Trường hợp Mất Cân bằng Left-Right trên Cây AVL và Phép Xoay Kép | CLO4 | CLO3 | `Analyze` | **Hard** | Session 23 | AVL LR Imbalance & Double Rotation |
-| **CSD_EQ24** | Phân tích Hiệu năng Prim vs Kruskal khi Tìm MST trên Đồ thị Dày và Thưa | CLO5 | CLO4 | `Analyze` | **Hard** | Session 37-38 | Prim vs Kruskal Dense/Sparse Performance |
-| **CSD_EQ25** | Phân tích Trường hợp Xấu nhất O(n^2) của QuickSort và Tối ưu Hóa Công nghiệp | CLO6 | CLO1 | `Analyze` | **Hard** | Session 45 | QuickSort Worst-Case & Industrial Optimization |
-| **CSD_EQ26** | Phân tích Mảng Tiền tố Thất bại T[i] trong KMP và Chứng minh Tuyến tính O(n + m) | CLO8 | CLO2 | `Analyze` | **Hard** | Session 54 | Knuth-Morris-Pratt (KMP) Failure Function |
+| **CSD_EQ17** | Tính chất Chiều cao Cây Nhị phân và Cài đặt Duyệt Theo Mức (Level-Order Traversal) bằng Queue | CLO4 | CLO4 | `Apply` | **Medium** | Session 15-16 | Binary Tree Properties & Level-Order Traversal using Queue |
+| **CSD_EQ18** | Quy trình Xây dựng Max-Heap từ Mảng và Thao tác Xóa Phần tử Lớn nhất | CLO4 | CLO4 | `Apply` | **Medium** | Session 24 | Max-Heap Construction and Extract-Max |
+| **CSD_EQ19** | Thuật toán Sắp xếp Tô-pô (Kahn's Topological Sort) trên DAG và Thuật toán Floyd-Warshall Mọi Cặp Đỉnh | CLO5 | CLO5 | `Apply` | **Medium** | Session 33-34 | Topological Sort (Kahn's Algorithm) & Floyd-Warshall All-Pairs Shortest Path |
+| **CSD_EQ20** | Cài đặt Thuật toán Sắp xếp Trộn (MergeSort) bằng Java và Phân tích Thao tác Trộn Hai Mảng Con | CLO6 | CLO6 | `Apply` | **Medium** | Session 45 | MergeSort Implementation & Two-Finger Merge Procedure |
+| **CSD_EQ21** | Xử lý Xung đột Bảng băm bằng Dò Bậc Hai (Quadratic Probing) và Băm Kép (Double Hashing) | CLO7 | CLO7 | `Apply` | **Medium** | Session 50 | Quadratic Probing, Secondary Clustering & Double Hashing |
+| **CSD_EQ22** | Phân tích Ba Phương pháp Cài đặt Tính Số Fibonacci: Đệ quy vs DP | CLO3 | CLO3 | `Analyze` | **Hard** | Session 12 | Fibonacci Algorithm Comparison |
+| **CSD_EQ23** | Thiết kế Doubly Linked List với Hai Nút Lính canh (Header/Trailer Sentinels) và Phân tích Bất biến Con trỏ O(1) | CLO1 | CLO1 | `Analyze` | **Hard** | Session 2 | Doubly Linked List with Header/Trailer Sentinels & O(1) Pointer Invariants |
+| **CSD_EQ24** | Phân tích Bất đối xứng Tái cân bằng trên Cây AVL: Phép Chèn (O(1) Phép Quay) vs Phép Xóa (O(log n) Phép Quay) | CLO4 | CLO4 | `Analyze` | **Hard** | Session 23 | AVL Tree Rebalancing Asymmetry: Insertion O(1) Rotations vs Deletion O(log n) Propagation |
+| **CSD_EQ25** | Phân tích Trường hợp Xấu nhất O(n^2) của QuickSort và Tối ưu Hóa Công nghiệp | CLO6 | CLO6 | `Analyze` | **Hard** | Session 45 | QuickSort Worst-Case & Industrial Optimization |
+| **CSD_EQ26** | Phân tích Mảng Tiền tố Thất bại T[i] trong KMP và Chứng minh Tuyến tính O(n + m) | CLO8 | CLO8 | `Analyze` | **Hard** | Session 53 | Knuth-Morris-Pratt (KMP) Failure Function |
 
 ---
 
@@ -127,7 +127,7 @@
 
 > Kho câu hỏi này được lưu trữ độc lập trong bảng `practice_questions`, phục vụ hai luồng nghiệp vụ:
 > 1. **MF-01:** Luyện tập tương tác tự do (chế độ On-Demand từng câu hoặc Progressive 3–10 câu tăng dần từ Dễ đến Khó).
-> 2. **MF-02:** Thi thử tính giờ có hạn ngạch quota theo ngày, tự động sinh điểm số và bảng Scorecard phân tích theo CLO.
+> 2. **MF-02:** Thi thử tính giờ có hạn ngạch quota theo ngày, tự động sinh điểm số và bảng Scorecard phân tích theo 8 CLOs.
 > - Barem Rubric chuẩn hóa 10.0đ (gồm 3-4 tiêu chí con) giúp AI chấm điểm tức thì và sinh CoT giải trình minh bạch.
 > - 100% câu hỏi có câu hỏi đào sâu phản biện nối tiếp (`FollowUpPrompt`) khi điểm số rơi vào dải phân vân [4.0, 8.0].
 
@@ -172,7 +172,7 @@ Thứ tự sắp xếp theo tốc độ tăng trưởng tăng dần (từ nhanh 
 
 - **Mã định danh (Question Code):** `CSD_PQ02`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 1-2 — *Arrays vs Linked Lists*
 - **Mục tiêu đánh giá:** Kiểm tra mức độ nắm vững sự khác biệt giữa cấu trúc nhớ liên tục (Array) và cấu trúc phân mảnh con trỏ (Linked List).
@@ -211,7 +211,7 @@ Thứ tự sắp xếp theo tốc độ tăng trưởng tăng dần (từ nhanh 
 
 - **Mã định danh (Question Code):** `CSD_PQ03`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 2 — *Doubly Linked Lists*
 - **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về cấu trúc nút 2 con trỏ và ưu nhược điểm của Doubly Linked List.
@@ -248,9 +248,158 @@ if (target.next != null) target.next.prev = target.prev;
 
 ---
 
-### 4. [CSD_PQ04] Nguyên lý LIFO và Ba Thao tác Cơ bản của Ngăn xếp Stack
+### 4. [CSD_PQ04] Biểu diễn Cây Tổng quát (First-Child / Next-Sibling) và Cấu trúc Cây Biểu thức (Expression Tree)
 
 - **Mã định danh (Question Code):** `CSD_PQ04`
+- **Kho lưu trữ (Target Pool):** `practice_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
+- **Chủ đề bài học (Syllabus):** Session 15-16 — *General Trees (First-Child/Next-Sibling) & Expression Trees*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng chuyển đổi Cây tổng quát có số con bất kỳ về cấu trúc nhị phân First-Child/Next-Sibling và cài đặt thuật toán dựng/tính giá trị Cây biểu thức số học.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Làm thế nào để biểu diễn một Cây tổng quát (General Tree — nơi mỗi nút có thể có số lượng nút con bất kỳ) bằng cấu trúc nút chỉ gồm đúng 2 con trỏ cố định (`First-Child / Next-Sibling`) mà không gây lãng phí bộ nhớ? Tiếp theo, hãy trình bày thuật toán dựng Cây biểu thức (Expression Tree) từ biểu thức hậu tố (Postfix) và cài đặt hàm đệ quy `evaluate(ExprNode root)` bằng Java để tính giá trị biểu thức."
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Trên một Cây biểu thức (Expression Tree), nếu ta thực hiện phép duyệt Trung thứ tự (In-order Traversal) thông thường mà không in thêm các cặp dấu ngoặc đơn `( ... )` bao quanh mỗi cây con toán tử, kết quả biểu thức trung tố thu được sẽ gặp sai lệch gì?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Biểu diễn Cây tổng quát (General Tree) bằng cấu trúc `First-Child / Next-Sibling` (Left-Child, Right-Sibling):
+- Nếu dùng mảng cố định `Node children[K]` tại mỗi nút, ta sẽ lãng phí rất nhiều con trỏ `null` ở các nút ít con hoặc nút lá.
+- Giải pháp chuẩn **First-Child / Next-Sibling** ánh xạ 1-1 mọi Cây tổng quát sang một Cây nhị phân, trong đó mỗi nút chỉ cần đúng 2 con trỏ:
+  + `firstChild`: Trỏ tới **nút con đầu tiên (con cả bên trái nhất)** của nút hiện tại.
+  + `nextSibling`: Trỏ tới **nút anh chị em ruột kế tiếp ngay bên phải** có cùng nút cha với nút hiện tại.
+- Nhờ cấu trúc này, một cây tổng quát $n$ nút luôn chỉ sử dụng đúng $2n$ con trỏ, không phụ thuộc vào bậc tối đa của cây.
+
+2. Thuật toán dựng Cây biểu thức (Expression Tree) từ biểu thức hậu tố (Postfix):
+- Trong Cây biểu thức: mọi **nút lá (Leaf Node)** là các toán hạng (số/biến), còn mọi **nút nội (Internal Node)** là các toán tử hai ngôi (`+`, `-`, `*`, `/`).
+- Quy trình dựng cây từ chuỗi Postfix sử dụng một Ngăn xếp `Stack<ExprNode>`:
+  + Duyệt từng token của biểu thức Postfix từ trái sang phải:
+  + Nếu token là **Toán hạng**: Tạo nút lá mới và đẩy (`push`) vào Stack.
+  + Nếu token là **Toán tử**: Lấy ra (`pop`) 2 nút từ đỉnh Stack: nút lấy ra đầu tiên làm **con phải (`right`)**, nút lấy ra thứ hai làm **con trái (`left`)** của nút toán tử mới, sau đó đẩy nút toán tử này trở lại Stack.
+  + Kết thúc duyệt, phần tử duy nhất còn lại trong Stack chính là nút gốc `root` của Cây biểu thức.
+
+3. Cài đặt hàm đệ quy tính giá trị Cây biểu thức `evaluate(ExprNode root)` (Duyệt Hậu thứ tự Post-order):
+```java
+class ExprNode {
+    String token;
+    ExprNode left, right;
+    ExprNode(String token) { this.token = token; }
+}
+
+public double evaluate(ExprNode root) {
+    if (root == null) return 0.0;
+    // Điều kiện dừng: Nút lá là toán hạng số
+    if (root.left == null && root.right == null) {
+        return Double.parseDouble(root.token);
+    }
+    // Duyệt Post-order: tính giá trị cây con trái và cây con phải trước
+    double leftVal = evaluate(root.left);
+    double rightVal = evaluate(root.right);
+
+    switch (root.token) {
+        case "+": return leftVal + rightVal;
+        case "-": return leftVal - rightVal;
+        case "*": return leftVal * rightVal;
+        case "/":
+            if (rightVal == 0.0) throw new ArithmeticException("Division by zero");
+            return leftVal / rightVal;
+        default:
+            throw new IllegalArgumentException("Unknown operator: " + root.token);
+    }
+}
+```
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Giải thích cấu trúc biểu diễn First-Child / Next-Sibling cho Cây tổng quát** | **3.0đ** | Làm rõ ý nghĩa 2 con trỏ firstChild (con đầu tiên) và nextSibling (anh em kế tiếp cùng cha) giúp tiết kiệm bộ nhớ. |
+| **Mô tả đúng thuật toán dựng Expression Tree từ Postfix bằng Stack** | **3.5đ** | Trình bày đúng quy tắc push toán hạng và pop 2 nút (pop 1 làm right, pop 2 làm left) khi gặp toán tử. |
+| **Cài đặt chuẩn hàm Java evaluate(ExprNode root) theo duyệt Post-order** | **3.5đ** | Viết đúng điều kiện dừng nút lá, gọi đệ quy hai nhánh trái/phải và xử lý phép toán kèm kiểm tra chia cho 0. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 5. [CSD_PQ05] Nguyên lý FIFO của Hàng đợi (Queue) và Hiện tượng Tràn Giả (False Overflow) trên Mảng Tuyến tính
+
+- **Mã định danh (Question Code):** `CSD_PQ05`
+- **Kho lưu trữ (Target Pool):** `practice_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
+- **Chủ đề bài học (Syllabus):** Session 7 — *Queues & Linear Array False Overflow*
+- **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về cơ chế vào trước ra trước (FIFO), hai con trỏ front/rear và nguyên nhân gây tràn giả khi cài đặt Queue bằng mảng tuyến tính không xoay vòng.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Giải thích nguyên lý FIFO (First-In, First-Out) và các thao tác cơ bản (`enqueue`, `dequeue`, `first`) của Hàng đợi (Queue). Tại sao khi cài đặt Queue trên mảng một chiều thông thường mà chỉ tăng dần con trỏ `front` và `rear`, ta lại gặp hiện tượng 'Tràn giả' (False Overflow / Drifting Queue) dù trong mảng vẫn còn nhiều ô trống?"
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Nếu ta khắc phục hiện tượng Tràn giả bằng cách dịch chuyển toàn bộ các phần tử còn lại về đầu mảng mỗi khi gọi `dequeue()`, độ phức tạp thời gian của thao tác `dequeue()` sẽ bị suy thoái từ O(1) xuống mức nào và vì sao?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Nguyên lý FIFO (First-In, First-Out) và các thao tác chuẩn của Queue:
+- Hàng đợi (Queue) là cấu trúc dữ liệu tuyến tính hoạt động theo nguyên lý **Vào trước - Ra trước (FIFO)**: phần tử nào được đưa vào hàng đợi sớm nhất sẽ được lấy ra xử lý đầu tiên, giống như hàng người xếp hàng tại quầy giao dịch hoặc hàng đợi in ấn (Print Spooler).
+- Các thao tác cơ bản chuẩn đạt thời gian $O(1)$:
+  + `enqueue(e)`: Chèn phần tử `e` vào phía cuối hàng đợi (đầu `rear` / `back`).
+  + `dequeue()`: Lấy ra và xóa phần tử đang đứng ở đầu hàng đợi (đầu `front`). Nếu hàng đợi rỗng thì trả về `null` (hoặc ném ngoại lệ).
+  + `first()` (hoặc `peek()`): Xem giá trị phần tử ở đầu `front` mà không xóa nó.
+
+2. Nguyên nhân gây hiện tượng "Tràn giả" (False Overflow / Drifting Queue) trên mảng tuyến tính:
+- Giả sử ta cấp phát mảng cố định `data[N]` và dùng hai chỉ số `front = 0`, `rear = -1`.
+- Mỗi lần gọi `enqueue(e)`, ta tăng `rear++` và gán `data[rear] = e`. Mỗi lần gọi `dequeue()`, ta lấy `data[front]` và tăng `front++` để giữ chi phí $O(1)$ mà không dịch mảng.
+- Sau một chuỗi thao tác thêm và xóa xen kẽ (ví dụ: chèn $N$ phần tử rồi xóa đi $N - 1$ phần tử), con trỏ `rear` đã chạm tới biên cuối mảng (`rear == N - 1`), trong khi `front == N - 1` (chỉ còn đúng 1 phần tử trong hàng đợi, các ô từ `0` đến `N - 2` đã bị giải phóng và hoàn toàn trống).
+- Khi gọi tiếp `enqueue()`, vì `rear == N - 1` chạm giới hạn mảng vật lý nên hệ thống báo lỗi `Queue Full` (Tràn hàng đợi), mặc dù thực tế trong mảng đang còn tới $N - 1$ ô trống ở phía trước chỉ số `front`. Đây chính là hiện tượng **Tràn giả (False Overflow)**, đòi hỏi phải sử dụng mảng vòng (Circular Array với phép toán modulo `% N`) để tái sử dụng các ô trống đầu mảng.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Giải thích nguyên lý FIFO và 3 thao tác cơ bản của Queue** | **3.5đ** | Trình bày rõ cơ chế Vào trước - Ra trước và vai trò của enqueue (vào rear), dequeue/first (tại front). |
+| **Phân tích cơ chế dịch chuyển chỉ số front và rear trên mảng tuyến tính** | **3.5đ** | Mô tả rõ việc tăng front++ khi dequeue và tăng rear++ khi enqueue dẫn tới vùng dữ liệu trôi dần về cuối mảng. |
+| **Làm rõ bản chất hiện tượng Tràn giả (False Overflow)** | **3.0đ** | Giải thích chính xác tình huống rear chạm N-1 báo đầy giả tạo trong khi các ô từ 0 đến front-1 vẫn đang bỏ trống. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 6. [CSD_PQ06] Điều kiện Dừng (Base Case) và Bước Đệ quy trong Cấu trúc Hàm Đệ quy
+
+- **Mã định danh (Question Code):** `CSD_PQ06`
+- **Kho lưu trữ (Target Pool):** `practice_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
+- **Chủ đề bài học (Syllabus):** Session 11 — *Recursion Fundamentals*
+- **Mục tiêu đánh giá:** Kiểm tra kiến thức về cấu tạo căn bản của giải thuật đệ quy và vai trò của điều kiện dừng.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Một hàm đệ quy chuẩn mực bắt buộc phải bao gồm những thành phần cơ bản nào? Điều gì sẽ xảy ra nếu lập trình viên quên định nghĩa điều kiện dừng (Base Case) hoặc thiết kế điều kiện dừng không bao giờ đạt được?"
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Tại sao việc hàm đệ quy đã có điều kiện dừng (Base Case) vẫn có thể gây ra lỗi nghiêm trọng StackOverflowError nếu bước đệ quy không đảm bảo quy mô dữ liệu n giảm dần hội tụ về Base Case?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+Một hàm đệ quy chuẩn mực bắt buộc phải bao gồm 2 thành phần cốt lõi:
+1. Điều kiện dừng (Base Case): Tình huống đơn giản nhất của bài toán mà kết quả có thể xác định ngay lập tức mà không cần gọi thêm bất kỳ lời gọi đệ quy nào. Base case đóng vai trò neo chặn, ngăn chặn đệ quy vô hạn.
+2. Bước đệ quy (Recursive Step): Lời gọi hàm chính nó với kích thước dữ liệu đầu vào nhỏ hơn hoặc gần với Base Case hơn, phân rã bài toán lớn thành bài toán con tương tự.
+
+Hậu quả khi thiếu hoặc sai Base Case:
+- Hàm sẽ liên tục tự gọi chính nó mà không có điểm dừng (infinite recursion).
+- Mỗi lời gọi hàm mới sẽ đẩy một khung ngăn xếp (stack frame) chứa địa chỉ hoàn trả và biến cục bộ vào vùng nhớ Call Stack của hệ điều hành/JVM.
+- Do bộ nhớ Call Stack có giới hạn cố định, việc tích tụ không ngừng này sẽ nhanh chóng dẫn đến hiện tượng tràn bộ nhớ ngăn xếp, gây ném ngoại lệ nghiêm trọng `java.lang.StackOverflowError` và làm sập ứng dụng.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Đặc tả 2 thành phần đệ quy** | **4.0đ** | Giải thích chính xác vai trò của Base Case và Recursive Step. |
+| **Cơ chế phân rã dữ liệu** | **2.5đ** | Nêu rõ dữ liệu đầu vào phải thu hẹp dần về phía Base Case. |
+| **Phân tích lỗi StackOverflowError** | **3.5đ** | Mô tả cơ chế tích lũy stack frame trên Call Stack dẫn tới tràn bộ nhớ. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
+### 7. [CSD_PQ07] Nguyên lý LIFO và Ba Thao tác Cơ bản của Ngăn xếp Stack
+
+- **Mã định danh (Question Code):** `CSD_PQ07`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
 - **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
@@ -286,125 +435,11 @@ Hai ứng dụng thực tế kinh điển trong khoa học máy tính:
 
 ---
 
-### 5. [CSD_PQ05] Cơ chế FIFO của Hàng đợi Queue và Phân biệt Queue với Deque
-
-- **Mã định danh (Question Code):** `CSD_PQ05`
-- **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
-- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 7 — *Queues & Deque*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu nguyên tắc FIFO của hàng đợi và mở rộng sang hàng đợi hai đầu Deque.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Hàng đợi (Queue) hoạt động theo nguyên tắc nào? Phân biệt Hàng đợi tiêu chuẩn (FIFO Queue) và Hàng đợi hai đầu (Deque - Double-Ended Queue) về các vị trí cho phép chèn và xóa dữ liệu."
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Làm thế nào để mô phỏng một Hàng đợi (Queue) bằng cách chỉ sử dụng hai Ngăn xếp (Two Stacks), và chi phí suy rộng (Amortized Time) của mỗi thao tác `dequeue()` trong mô hình này là bao nhiêu?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Hàng đợi (Queue) hoạt động theo nguyên tắc FIFO (First-In-First-Out) - phần tử nào vào hàng đợi trước sẽ được phục vụ và lấy ra trước, tương tự dòng người xếp hàng mua vé.
-
-Phân biệt giữa FIFO Queue và Deque:
-1. Hàng đợi tiêu chuẩn (Queue):
-- Chỉ cho phép thêm phần tử ở một đầu gọi là đuôi hàng đợi (Rear/Tail - thao tác `enqueue`).
-- Chỉ cho phép lấy/xóa phần tử ở đầu đối diện gọi là đầu hàng đợi (Front/Head - thao tác `dequeue`).
-- Có tính bất đối xứng nghiêm ngặt.
-
-2. Hàng đợi hai đầu (Deque - Double-Ended Queue):
-- Cho phép thao tác chèn và xóa ở cả hai đầu của cấu trúc dữ liệu.
-- Cung cấp 4 phương thức chính: `addFirst()`, `addLast()`, `removeFirst()`, `removeLast()`.
-- Deque là cấu trúc tổng quát hóa: có thể hoạt động vừa như một FIFO Queue (thêm vào cuối, lấy ở đầu) vừa như một LIFO Stack (thêm và lấy cùng ở một đầu). Mọi thao tác cơ bản trên Deque đều đạt O(1).
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Giải thích nguyên lý FIFO** | **2.5đ** | Trình bày chính xác cơ chế First-In-First-Out của Queue. |
-| **Phân tích cơ chế giới hạn của FIFO Queue** | **3.5đ** | Nêu rõ vị trí chèn ở Rear và xóa ở Front. |
-| **Đặc tả và so sánh với Deque** | **4.0đ** | Giải thích khả năng chèn/xóa ở 2 đầu của Deque và khả năng mô phỏng cả Stack lẫn Queue. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 6. [CSD_PQ06] Điều kiện Dừng (Base Case) và Bước Đệ quy trong Cấu trúc Hàm Đệ quy
-
-- **Mã định danh (Question Code):** `CSD_PQ06`
-- **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
-- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 11 — *Recursion Fundamentals*
-- **Mục tiêu đánh giá:** Kiểm tra kiến thức về cấu tạo căn bản của giải thuật đệ quy và vai trò của điều kiện dừng.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Một hàm đệ quy chuẩn mực bắt buộc phải bao gồm những thành phần cơ bản nào? Điều gì sẽ xảy ra nếu lập trình viên quên định nghĩa điều kiện dừng (Base Case) hoặc thiết kế điều kiện dừng không bao giờ đạt được?"
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại sao việc hàm đệ quy đã có điều kiện dừng (Base Case) vẫn có thể gây ra lỗi nghiêm trọng StackOverflowError nếu bước đệ quy không đảm bảo quy mô dữ liệu n giảm dần hội tụ về Base Case?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Một hàm đệ quy chuẩn mực bắt buộc phải bao gồm 2 thành phần cốt lõi:
-1. Điều kiện dừng (Base Case): Tình huống đơn giản nhất của bài toán mà kết quả có thể xác định ngay lập tức mà không cần gọi thêm bất kỳ lời gọi đệ quy nào. Base case đóng vai trò neo chặn, ngăn chặn đệ quy vô hạn.
-2. Bước đệ quy (Recursive Step): Lời gọi hàm chính nó với kích thước dữ liệu đầu vào nhỏ hơn hoặc gần với Base Case hơn, phân rã bài toán lớn thành bài toán con tương tự.
-
-Hậu quả khi thiếu hoặc sai Base Case:
-- Hàm sẽ liên tục tự gọi chính nó mà không có điểm dừng (infinite recursion).
-- Mỗi lời gọi hàm mới sẽ đẩy một khung ngăn xếp (stack frame) chứa địa chỉ hoàn trả và biến cục bộ vào vùng nhớ Call Stack của hệ điều hành/JVM.
-- Do bộ nhớ Call Stack có giới hạn cố định, việc tích tụ không ngừng này sẽ nhanh chóng dẫn đến hiện tượng tràn bộ nhớ ngăn xếp, gây ném ngoại lệ nghiêm trọng `java.lang.StackOverflowError` và làm sập ứng dụng.
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Đặc tả 2 thành phần đệ quy** | **4.0đ** | Giải thích chính xác vai trò của Base Case và Recursive Step. |
-| **Cơ chế phân rã dữ liệu** | **2.5đ** | Nêu rõ dữ liệu đầu vào phải thu hẹp dần về phía Base Case. |
-| **Phân tích lỗi StackOverflowError** | **3.5đ** | Mô tả cơ chế tích lũy stack frame trên Call Stack dẫn tới tràn bộ nhớ. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 7. [CSD_PQ07] Các Khái niệm Cơ bản của Cây Nhị phân: Gốc, Lá, Chiều cao và Bậc
-
-- **Mã định danh (Question Code):** `CSD_PQ07`
-- **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
-- **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 15-16 — *Binary Tree Terminology*
-- **Mục tiêu đánh giá:** Kiểm tra mức độ hiểu các thuật ngữ và tính chất hình học cấu trúc của cây nhị phân.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Định nghĩa Cây nhị phân (Binary Tree). Hãy giải thích các thuật ngữ: Nút gốc (Root), Nút lá (Leaf), Chiều cao của cây (Height) và Bậc của một nút (Degree). Một nút trong cây nhị phân có bậc tối đa là bao nhiêu?"
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Một cây nhị phân có n nút thì có thể có chiều cao tối thiểu và chiều cao tối đa là bao nhiêu? Trong trường hợp xấu nhất nào chiều cao cây đạt cực đại h = n?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Định nghĩa Cây nhị phân:
-Cây nhị phân là một cấu trúc dữ liệu phân cấp phi tuyến tính, bao gồm một tập hợp hữu hạn các nút, trong đó cây có thể rỗng hoặc bao gồm một nút gốc liên kết với tối đa hai cây con nhị phân rời nhau gọi là cây con trái (left subtree) và cây con phải (right subtree).
-
-2. Các thuật ngữ trọng tâm:
-- Nút gốc (Root): Nút duy nhất ở đỉnh cây không có nút cha (parent). Mọi đường đi trong cây đều bắt đầu từ gốc.
-- Nút lá (Leaf / External Node): Nút không có bất kỳ nút con nào (bậc bằng 0).
-- Chiều cao của cây (Height): Độ dài đường đi dài nhất tính bằng số cạnh (hoặc số nút tùy quy ước giáo trình) từ nút gốc tới một nút lá sâu nhất. Chiều cao của cây rỗng thường quy ước là -1, cây chỉ có nút gốc là 0.
-- Bậc của một nút (Degree of a node): Số lượng nút con trực tiếp của nút đó.
-
-Trong cây nhị phân, bậc của một nút chỉ có thể nhận các giá trị: 0 (nút lá), 1 (nút có 1 con), hoặc tối đa là 2 (nút có đủ 2 con trái và phải).
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Định nghĩa cây nhị phân** | **3.0đ** | Nêu đúng định nghĩa phân cấp và đặc tính tối đa 2 cây con trái/phải. |
-| **Giải thích 4 thuật ngữ** | **4.5đ** | Mô tả chính xác nút gốc, nút lá, chiều cao và bậc của nút. |
-| **Xác định bậc tối đa của nút** | **2.5đ** | Khẳng định bậc tối đa là 2 và chỉ nhận giá trị 0, 1 hoặc 2. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
 ### 8. [CSD_PQ08] Đặc tính Thứ tự của Cây Tìm kiếm Nhị phân (BST) và Phép duyệt In-Order
 
 - **Mã định danh (Question Code):** `CSD_PQ08`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 19 — *BST In-Order Traversal*
 - **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về tính chất bất biến của BST và kết quả của phép duyệt In-Order.
@@ -442,7 +477,7 @@ Lý do: Theo đặc tính BST, mọi phần tử ở cây con trái (nhỏ hơn 
 
 - **Mã định danh (Question Code):** `CSD_PQ09`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 29 — *Graph Representation*
 - **Mục tiêu đánh giá:** Kiểm tra khả năng phân biệt hai cấu trúc lưu trữ đồ thị cơ bản và trường hợp ứng dụng phù hợp.
@@ -481,7 +516,7 @@ Lý do: Theo đặc tính BST, mọi phần tử ở cây con trái (nhỏ hơn 
 
 - **Mã định danh (Question Code):** `CSD_PQ10`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 41 — *Bubble Sort*
 - **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về cơ chế hoạt động, tính ổn định và độ phức tạp của thuật toán sắp xếp nổi bọt.
@@ -518,7 +553,7 @@ Bubble Sort là một thuật toán sắp xếp ổn định (Stable). Khi gặp
 
 - **Mã định danh (Question Code):** `CSD_PQ11`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000567`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 49 — *Hashing Concepts*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức cơ bản về bảng băm, hàm băm và bản chất toán học của hiện tượng xung đột.
@@ -556,9 +591,9 @@ Bubble Sort là một thuật toán sắp xếp ổn định (Stable). Khi gặp
 
 - **Mã định danh (Question Code):** `CSD_PQ12`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000568`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 55 — *Text Compression Concepts*
+- **Chủ đề bài học (Syllabus):** Session 54 — *Text Compression Concepts*
 - **Mục tiêu đánh giá:** Đánh giá khả năng hiểu nguyên lý của 2 trường phái nén dữ liệu và phạm vi ứng dụng trong phần mềm.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -597,7 +632,7 @@ Bubble Sort là một thuật toán sắp xếp ổn định (Stable). Khi gặp
 
 - **Mã định danh (Question Code):** `CSD_PQ13`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 1 — *Linked List Manipulation*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng thao tác con trỏ và cài đặt thuật toán đảo ngược danh sách liên kết đơn tại chỗ.
@@ -784,48 +819,65 @@ Mọi thao tác enqueue và dequeue đều đạt độ phức tạp O(1) và t�
 
 ---
 
-### 16. [CSD_PQ16] Cơ chế Call Stack và Phân tích Tràn Bộ nhớ trong Đệ quy Tính Fibonacci
+### 16. [CSD_PQ16] Phân loại Đệ quy Tuyến tính (Linear), Đệ quy Nhị phân (Binary) và Cài đặt Tính Tổng / Lũy thừa Chia để Trị
 
 - **Mã định danh (Question Code):** `CSD_PQ16`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 12 — *Call Stack & Recursion Tree*
-- **Mục tiêu đánh giá:** Đánh giá khả năng phân tích cây đệ quy, cơ chế cấp phát stack frame và nhận diện nguyên nhân lãng phí tính toán.
+- **Chủ đề bài học (Syllabus):** Session 11-12 — *Linear Recursion vs Binary Recursion & Fast Exponentiation*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng phân biệt cấu trúc cây gọi hàm giữa đệ quy tuyến tính và đệ quy nhị phân, kết hợp cài đặt thuật toán tính lũy thừa nhanh O(log n).
 
 #### ❓ Câu hỏi vấn đáp:
-> "Vẽ sơ đồ cây đệ quy khi tính `fib(4)` với định nghĩa đệ quy `fib(n) = fib(n-1) + fib(n-2)`. Phân tích vì sao giải thuật này có độ phức tạp thời gian cấp số nhân O(2^n) và giải thích tại sao n lớn sẽ gây tràn Call Stack."
+> "Hãy phân biệt Đệ quy tuyến tính (Linear Recursion) và Đệ quy nhị phân (Binary Recursion) về số lượng lời gọi đệ quy trong mỗi khung kích hoạt. Áp dụng nguyên lý chia để trị để cài đặt hàm đệ quy tính lũy thừa nhanh `fastPower(double x, int n)` trong thời gian O(log n) bằng Java và giải thích tại sao không nên viết biểu thức `return fastPower(x, n / 2) * fastPower(x, n / 2);`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại sao kỹ thuật Ghi nhớ (Top-down Memoization) có thể biến đổi độ phức tạp thời gian tính số Fibonacci từ cấp số nhân O(2^n) xuống tuyến tính O(n) mà không làm tăng độ sâu tối đa của Call Stack?"*
+> *"Nếu số mũ `n` truyền vào hàm `fastPower(double x, int n)` là số nguyên âm (ví dụ `n = -2147483648` tức `Integer.MIN_VALUE`), phép đổi dấu `-n` trong Java sẽ gặp lỗi gì và cần xử lý như thế nào?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Sơ đồ Cây đệ quy khi tính `fib(4)`:
-```
-                    fib(4)
-                  /        \
-             fib(3)          fib(2)
-            /      \        /      \
-        fib(2)    fib(1)  fib(1)   fib(0)
-        /    \
-     fib(1) fib(0)
+1. Phân biệt Đệ quy tuyến tính (Linear Recursion) và Đệ quy nhị phân (Binary Recursion):
+* **Đệ quy tuyến tính (Linear Recursion):** Trong mỗi lần thực thi thân hàm (ngoài trường hợp cơ sở), hàm chỉ phát sinh **tối đa 1 lời gọi đệ quy** duy nhất. Cây kích hoạt có dạng một đường thẳng đơn (ví dụ: tính giai thừa `factorial(n)`, tổng mảng `linearSum(A, n)`).
+* **Đệ quy nhị phân (Binary Recursion):** Trong mỗi bước đệ quy, hàm phát sinh **2 lời gọi đệ quy** độc lập để giải hai bài toán con (ví dụ: duyệt cây nhị phân, MergeSort, tính tổng mảng bằng chia đôi `binarySum(A, low, high)`).
+
+2. Cài đặt hàm tính lũy thừa nhanh `fastPower(double x, int n)` đạt $O(\log n)$ bằng Java:
+Dựa trên tính chất toán học:
+- Nếu $n = 0$: $x^0 = 1$.
+- Đặt $ half = x^{\lfloor n/2 \rfloor} $. Nếu $n$ chẵn thì $x^n = half \times half$; nếu $n$ lẻ thì $x^n = x \times half \times half$.
+```java
+public double fastPower(double x, int n) {
+    long exp = n; // Ép sang kiểu long để tránh tràn số khi đổi dấu Integer.MIN_VALUE
+    if (exp < 0) {
+        x = 1.0 / x;
+        exp = -exp;
+    }
+    return powerHelper(x, exp);
+}
+
+private double powerHelper(double x, long exp) {
+    if (exp == 0) {
+        return 1.0;
+    }
+    double half = powerHelper(x, exp / 2); // Đệ quy tuyến tính: CHỈ GỌI 1 LẦN!
+    if (exp % 2 == 0) {
+        return half * half;
+    } else {
+        return x * half * half;
+    }
+}
 ```
 
-1. Nguyên nhân độ phức tạp thời gian O(2^n):
-Cây đệ quy là một cây nhị phân có chiều cao tối đa n. Số lượng nút ở mỗi tầng i tăng gấp đôi (2^i). Tổng số phép gọi hàm xấp xỉ tỉ lệ vàng phi^n ~ O(2^n).
-Quan sát trên cây, bài toán con `fib(2)` bị tính toán lặp lại 2 lần độc lập, `fib(1)` bị gọi 3 lần, gây ra sự dư thừa khổng lồ (Overlapping Subproblems).
-
-2. Phân tích tràn Call Stack:
-- Độ phức tạp không gian (Space Complexity) phụ thuộc vào chiều sâu tối đa của ngăn xếp lời gọi hàm tại một thời điểm, tương ứng chiều cao cây đệ quy là O(n).
-- Khi gọi `fib(50000)`: Mặc dù thời gian chạy là bất khả thi, ngăn xếp Call Stack của máy ảo JVM (mặc định chỉ 1MB - 2MB) sẽ phải chứa hàng chục nghìn stack frames xếp chồng lên nhau. Khi vượt quá ngưỡng dung lượng thread stack, JVM sẽ ngay lập tức ném ra ngoại lệ `StackOverflowError`.
+3. Tại sao tuyệt đối không viết `return fastPower(x, n / 2) * fastPower(x, n / 2);`:
+- Nếu gọi lặp lại 2 lần `fastPower(x, n / 2)`, thuật toán bị biến từ **Đệ quy tuyến tính** thành **Đệ quy nhị phân** với phương trình truy hồi:
+  $$T(n) = 2 \cdot T(n/2) + O(1)$$
+- Theo Định lý Thợ (Case 1 với $a = 2, b = 2 \Rightarrow n^{\log_2 2} = n^1$), độ phức tạp thời gian bị suy thoái nghiêm trọng từ **$O(\log n)$ về lại $O(n)$**, làm mất hoàn toàn ý nghĩa của thuật toán chia đôi số mũ! Việc lưu kết quả vào biến cục bộ `double half` giúp chỉ gọi đệ quy đúng 1 lần ở mỗi tầng.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Sơ đồ cây đệ quy fib(4)** | **3.0đ** | Vẽ đúng toàn bộ các nhánh rẽ và các lời gọi hàm từ fib(4) đến base cases. |
-| **Chứng minh thời gian O(2^n)** | **4.0đ** | Chỉ ra hiện tượng tính lặp lại bài toán con (overlapping) và số nút tăng lũy thừa 2^n. |
-| **Phân tích lỗi StackOverflow** | **3.0đ** | Giải thích mối quan hệ giữa độ sâu cây đệ quy O(n) và giới hạn bộ nhớ Call Stack của JVM. |
+| **Phân biệt rõ Đệ quy tuyến tính và Đệ quy nhị phân** | **3.0đ** | Nêu đúng số lượng lời gọi đệ quy trong mỗi khung kích hoạt (1 lời gọi vs 2 lời gọi) kèm ví dụ. |
+| **Cài đặt đúng hàm Java fastPower đạt độ phức tạp O(log n)** | **4.0đ** | Viết đúng điều kiện dừng exp == 0, biến tạm half = powerHelper(x, exp / 2) và nhánh chẵn/lẻ. |
+| **Chứng minh lỗi suy thoái từ O(log n) về O(n) khi gọi lặp 2 lần** | **3.0đ** | Giải thích phương trình truy hồi T(n) = 2T(n/2) + O(1) làm cây đệ quy phình ra O(n) nút nếu không lưu biến half. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -834,7 +886,7 @@ Quan sát trên cây, bài toán con `fib(2)` bị tính toán lặp lại 2 l�
 
 - **Mã định danh (Question Code):** `CSD_PQ17`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 16 — *Tree Traversals*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng cài đặt 3 thuật toán duyệt cây theo thứ tự chiều sâu bằng đệ quy trong Java.
@@ -897,74 +949,11 @@ public void postOrder(TreeNode root) {
 
 ---
 
-### 18. [CSD_PQ18] Quy trình Xóa Nút có Hai Con trên Cây BST bằng In-order Successor
+### 18. [CSD_PQ18] Thao tác Chèn Phần tử vào Min-Heap và Quy trình Vun Đống Ngược
 
 - **Mã định danh (Question Code):** `CSD_PQ18`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
-- **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 20 — *BST Deletion*
-- **Mục tiêu đánh giá:** Đánh giá mức độ thành thạo giải thuật xóa nút trên cây tìm kiếm nhị phân khi nút có 2 con.
-
-#### ❓ Câu hỏi vấn đáp:
-> "Trình bày giải thuật xóa một nút z có đầy đủ 2 nút con trên Cây tìm kiếm nhị phân (BST). Nút thế thân In-order Successor là gì, tìm nó ở đâu và tại sao nút thế thân này đảm bảo không bao giờ có 2 con?"
-
-#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu nút thế thân In-order Successor có một cây con bên phải (Right Subtree), ta phải thực hiện cập nhật liên kết của nút cha của Successor như thế nào khi chuyển Successor lên thay thế nút cần xóa?"*
-
-#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Quy trình xóa nút z có 2 nút con trên BST:
-- Bước 1: Tìm nút thế thân y là In-order Successor của z (hoặc In-order Predecessor).
-- Bước 2: Nút In-order Successor là nút có khóa nhỏ nhất nằm trong cây con bên phải của z (nút nằm tận cùng bên trái của cây con phải: đi sang phải 1 bước, sau đó đi sang trái liên tục cho đến khi gặp nút không có con trái).
-- Bước 3: Sao chép giá trị khóa của y sang nút z: `z.key = y.key`.
-- Bước 4: Xóa nút y khỏi cây con bên phải bằng phương thức xóa nút thông thường.
-
-2. Cài đặt mã Java:
-```java
-public TreeNode deleteNode(TreeNode root, int key) {
-    if (root == null) return null;
-    if (key < root.val) {
-        root.left = deleteNode(root.left, key);
-    } else if (key > root.val) {
-        root.right = deleteNode(root.right, key);
-    } else {
-        // Nút có 0 hoặc 1 con
-        if (root.left == null) return root.right;
-        if (root.right == null) return root.left;
-        
-        // Nút có 2 con: tìm In-order Successor (nhỏ nhất bên phải)
-        TreeNode successor = findMin(root.right);
-        root.val = successor.val;
-        root.right = deleteNode(root.right, successor.val);
-    }
-    return root;
-}
-
-private TreeNode findMin(TreeNode node) {
-    while (node.left != null) node = node.left;
-    return node;
-}
-```
-
-3. Vì sao In-order Successor không bao giờ có 2 con:
-Theo định nghĩa, successor là nút nằm tận cùng bên trái của cây con phải, tức là nó chắc chắn không có con bên trái (`successor.left == null`). Do đó, nút y chỉ có thể có tối đa 1 con (con phải) hoặc là nút lá (0 con), việc xóa y quy về trường hợp cơ bản đơn giản.
-
-#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
-
-| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
-|---|:---:|---|
-| **Mô tả các bước xóa nút 2 con** | **3.0đ** | Nêu rõ 4 bước tìm thế thân, sao chép khóa và xóa nút thế thân. |
-| **Đặc tả vị trí In-order Successor** | **3.5đ** | Chỉ rõ cách tìm phần tử nhỏ nhất nhánh con phải và viết mã cài đặt. |
-| **Chứng minh Successor có tối đa 1 con** | **3.5đ** | Lập luận chính xác tính chất node.left == null của nút tận cùng bên trái. |
-| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
-
----
-
-### 19. [CSD_PQ19] Thao tác Chèn Phần tử vào Min-Heap và Quy trình Vun Đống Ngược
-
-- **Mã định danh (Question Code):** `CSD_PQ19`
-- **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 24 — *Binary Heap Operations*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng cài đặt biểu diễn Heap bằng mảng và thao tác Up-Heap (Sift-Up).
@@ -1017,11 +1006,80 @@ private void siftUp(int i) {
 
 ---
 
+### 19. [CSD_PQ19] Quy trình Xóa Nút có Hai Con trên Cây BST bằng In-order Successor
+
+- **Mã định danh (Question Code):** `CSD_PQ19`
+- **Kho lưu trữ (Target Pool):** `practice_questions`
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
+- **Chủ đề bài học (Syllabus):** Session 20 — *BST Deletion (Two-Children Case & In-order Successor)*
+- **Mục tiêu đánh giá:** Đánh giá mức độ thành thạo giải thuật xóa nút trên cây tìm kiếm nhị phân khi nút có 2 con.
+
+#### ❓ Câu hỏi vấn đáp:
+> "Trình bày giải thuật xóa một nút `root` có đầy đủ 2 nút con trên Cây tìm kiếm nhị phân (BST). Nút thế thân `In-order Successor` là gì, tìm nó ở đâu và tại sao sau khi gán `root.key = temp.key`, lệnh gọi đệ quy bắt buộc phải xóa trên cây con phải `root.right = deleteNode(root.right, temp.key)` mà tuyệt đối không được gọi trên `root.left`?"
+
+#### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
+> *"Tại sao nút thế thân In-order Successor (`temp = minValueNode(root.right)`) được đảm bảo chắc chắn không bao giờ có nút con bên trái (`temp.left == null`), giúp phép xóa đệ quy `deleteNode(root.right, temp.key)` luôn quy về trường hợp cơ bản (0 hoặc 1 con)?"*
+
+#### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
+1. Quy trình xóa nút có 2 nút con trên Cây tìm kiếm nhị phân (BST):
+* **Bước 1:** Tìm nút thế thân `temp` là **In-order Successor** của nút cần xóa (hoặc dùng In-order Predecessor bên cây con trái).
+* **Bước 2:** Nút **In-order Successor** là nút có khóa nhỏ nhất nằm trong **cây con bên phải** (`root.right`): xuất phát từ `root.right`, đi sang trái liên tục (`while (current.left != null) current = current.left;`) cho đến khi gặp nút không còn con trái.
+* **Bước 3:** Sao chép giá trị khóa của nút thế thân `temp` lên nút hiện tại: `root.key = temp.key;`.
+* **Bước 4:** Gọi đệ quy xóa nút thế thân `temp.key` **bên trong cây con phải**: `root.right = deleteNode(root.right, temp.key);`. (Nếu viết nhầm thành `root.left = deleteNode(root.left, temp.key)` sẽ tìm xóa sai nhánh vì `temp` nằm ở `root.right`, làm cây giữ nguyên bản sao trùng lặp bên nhánh phải và hỏng cấu trúc BST).
+
+2. Cài đặt chuẩn mực bằng Java:
+```java
+public Node deleteNode(Node root, int key) {
+    if (root == null) return null;
+
+    if (key < root.key) {
+        root.left = deleteNode(root.left, key);
+    } else if (key > root.key) {
+        root.right = deleteNode(root.right, key);
+    } else {
+        // Trường hợp 1 & 2: Nút lá (0 con) hoặc chỉ có 1 con
+        if (root.left == null) return root.right;
+        if (root.right == null) return root.left;
+
+        // Trường hợp 3: Nút có đầy đủ 2 con
+        // Tìm In-order Successor (nút nhỏ nhất bên cây con phải)
+        Node temp = minValueNode(root.right);
+        root.key = temp.key;
+        // Bắt buộc xóa đệ quy nút thế thân trên cây con phải (root.right)
+        root.right = deleteNode(root.right, temp.key);
+    }
+    return root;
+}
+
+private Node minValueNode(Node node) {
+    Node current = node;
+    while (current.left != null) {
+        current = current.left;
+    }
+    return current;
+}
+```
+
+3. Chứng minh In-order Successor không bao giờ có 2 con:
+Vì `temp = minValueNode(root.right)` là nút nằm tận cùng bên trái của cây con phải nên `temp.left` luôn bằng `null`. Do đó, `temp` chỉ có tối đa 1 con (con phải `temp.right`) hoặc là nút lá (0 con), nên lời gọi `deleteNode(root.right, temp.key)` luôn kết thúc ngay ở nhánh cơ sở `if (root.left == null) return root.right;`.
+
+#### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
+
+| Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
+|---|:---:|---|
+| **Mô tả chính xác 4 bước xóa nút có 2 con bằng In-order Successor** | **3.0đ** | Nêu rõ cách tìm nút nhỏ nhất bên cây con phải `minValueNode(root.right)`, sao chép khóa và xóa nút thế thân. |
+| **Viết đúng mã Java `deleteNode` với `root.right = deleteNode(root.right, temp.key)`** | **4.0đ** | Cài đặt đúng cả 3 trường hợp (0 con, 1 con, 2 con) và giải thích vì sao phải gọi đệ quy trên `root.right` thay vì `root.left`. |
+| **Chứng minh In-order Successor có tối đa 1 con (`temp.left == null`)** | **3.0đ** | Lập luận rõ nút tận cùng bên trái của cây con phải không có con trái nên phép xóa quy về trường hợp cơ bản. |
+| **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
+
+---
+
 ### 20. [CSD_PQ20] Cài đặt Thuật toán Duyệt Đồ thị Theo Chiều Rộng (BFS)
 
 - **Mã định danh (Question Code):** `CSD_PQ20`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 30 — *Breadth-First Search (BFS)*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt thuật toán BFS sử dụng hàng đợi và ứng dụng tìm đường đi ngắn nhất không trọng số.
@@ -1083,7 +1141,7 @@ public void bfs(int startVertex, List<List<Integer>> adj, int numVertices) {
 
 - **Mã định danh (Question Code):** `CSD_PQ21`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 30 — *Depth-First Search & Connected Components*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng cài đặt DFS bằng đệ quy và ứng dụng đếm số thành phần liên thông của đồ thị.
@@ -1148,7 +1206,7 @@ public class GraphConnectedComponents {
 
 - **Mã định danh (Question Code):** `CSD_PQ22`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 42 — *QuickSort Lomuto Partition*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt phân hoạch mảng trong thuật toán QuickSort và hiểu cơ chế con trỏ chỉ số.
@@ -1209,7 +1267,7 @@ public int partitionLomuto(int[] arr, int low, int high) {
 
 - **Mã định danh (Question Code):** `CSD_PQ23`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000567`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 49 — *Separate Chaining Collision Handling*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng cài đặt bảng băm sử dụng danh sách liên kết tại mỗi bucket để chống xung đột.
@@ -1288,7 +1346,7 @@ public class SeparateChainingHashTable {
 
 - **Mã định danh (Question Code):** `CSD_PQ24`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000568`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 53 — *String Pattern Matching*
 - **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt thuật toán đối sánh chuỗi cơ bản và phân tích trường hợp xấu nhất.
@@ -1336,52 +1394,90 @@ public int bruteForceSearch(String text, String pattern) {
 
 ---
 
-### 25. [CSD_PQ25] Ứng dụng Định lý Thợ (Master Theorem) Phân tích Phương trình Truy hồi Đệ quy
+### 25. [CSD_PQ25] Cài đặt Tường minh Phép Quay Đơn/Kép trên Cây AVL bằng Java và Thuật toán Cân bằng Toàn cục DSW (Day-Stout-Warren)
 
 - **Mã định danh (Question Code):** `CSD_PQ25`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 1 — *Master Theorem & Recurrence Relations*
-- **Mục tiêu đánh giá:** Đánh giá khả năng áp dụng Định lý Thợ để giải phương trình truy hồi trong phân tích thuật toán chia để trị.
+- **Chủ đề bài học (Syllabus):** Session 23 — *Explicit AVL Rotations in Java & DSW (Day-Stout-Warren) Global Balancing Algorithm*
+- **Mục tiêu đánh giá:** Đánh giá năng lực cài đặt mã Java tường minh cho phép xoay đơn/kép cập nhật chiều cao trên cây AVL và phân tích thuật toán DSW cân bằng lại cây BST suy thoái tại chỗ với bộ nhớ phụ O(1).
 
 #### ❓ Câu hỏi vấn đáp:
-> "Phát biểu 3 trường hợp của Định lý Thợ (Master Theorem) đối với phương trình truy hồi dạng T(n) = a*T(n/b) + f(n). Hãy áp dụng định lý để xác định độ phức tạp thời gian tiệm cận của: (1) Thuật toán MergeSort với T(n) = 2*T(n/2) + O(n), và (2) Thuật toán Tìm kiếm nhị phân với T(n) = T(n/2) + O(1)."
+> "Hãy viết mã Java cài đặt tường minh hàm xoay phải `rotateRight(AVLNode y)` (kèm cập nhật chiều cao nút) và hàm xoay kép Left-Right `rotateLeftRight(AVLNode z)` trên cây AVL. Tiếp theo, khi một cây BST bị suy thoái nặng nhưng ta không muốn dùng cây AVL trong mọi thao tác chèn, Thuật toán DSW (Day-Stout-Warren) cân bằng lại toàn bộ cây về Cây nhị phân hoàn chỉnh trong thời gian O(n) và không gian bộ nhớ phụ O(1) qua 2 giai đoạn (Tạo trục xương sống Backbone/Vine và Nén cây bằng chuỗi phép quay trái) như thế nào?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Phương trình truy hồi `T(n) = 2*T(n/2) + n*log(n)` có thể áp dụng trực tiếp 3 trường hợp chuẩn của Định lý Thợ (Master Theorem) được không, và nếu không thì dạng mở rộng của định lý cho ra độ phức tạp tiệm cận là bao nhiêu?"*
+> *"Trong hàm `rotateRight(AVLNode y)` của cây AVL, tại sao bắt buộc phải tính lại chiều cao `height` của nút `y` (nút gốc cũ bị hạ xuống) TRƯỚC khi tính lại chiều cao của nút `x` (nút gốc mới được nâng lên)?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Phát biểu Định lý Thợ (Master Theorem):
-Phương trình truy hồi có dạng: T(n) = a * T(n/b) + f(n) với a >= 1, b > 1.
-Đặt c_crit = log_b(a). Ta so sánh tốc độ tăng trưởng của f(n) với n^(c_crit):
-- Trường hợp 1: Nếu f(n) = O(n^c) với c < c_crit (chi phí chia/gộp bị lấn át bởi cây đệ quy), thì:
-  T(n) = Theta(n^(log_b(a))).
-- Trường hợp 2: Nếu f(n) = Theta(n^(c_crit) * log^k(n)) với k >= 0 (chi phí chia/gộp tương đương cây đệ quy), thì:
-  T(n) = Theta(n^(log_b(a)) * log^(k+1)(n)).
-- Trường hợp 3: Nếu f(n) = Omega(n^c) với c > c_crit và thỏa mãn điều kiện đều đặn a*f(n/b) <= d*f(n) với d < 1, thì:
-  T(n) = Theta(f(n)).
+1. Cài đặt tường minh các phép quay đơn và kép trên cây AVL bằng Java:
+```java
+class AVLNode {
+    int key, height;
+    AVLNode left, right;
+    AVLNode(int key) { this.key = key; this.height = 1; }
+}
 
-2. Áp dụng giải hai bài toán cụ thể:
-- Bài toán 1: MergeSort với T(n) = 2*T(n/2) + O(n)
-  + Ta có: a = 2, b = 2, f(n) = O(n) = n^1.
-  + Tính c_crit = log_b(a) = log_2(2) = 1.
-  + So sánh: f(n) = Theta(n^1 * log^0(n)) tương ứng Trường hợp 2 với k = 0.
-  + Kết luận: T(n) = Theta(n^1 * log^(0+1)(n)) = Theta(n log n).
+private int height(AVLNode n) {
+    return (n == null) ? 0 : n.height;
+}
 
-- Bài toán 2: Tìm kiếm nhị phân với T(n) = T(n/2) + O(1)
-  + Ta có: a = 1, b = 2, f(n) = O(1) = n^0.
-  + Tính c_crit = log_2(1) = 0.
-  + So sánh: f(n) = Theta(n^0 * log^0(n)) tương ứng Trường hợp 2 với k = 0.
-  + Kết luận: T(n) = Theta(n^0 * log^1(n)) = Theta(log n).
+// Phép quay đơn sang phải (Right Rotation — xử lý mất cân bằng Left-Left tại y)
+public AVLNode rotateRight(AVLNode y) {
+    AVLNode x = y.left;
+    AVLNode T2 = x.right;
+
+    // Thực hiện phép quay con trỏ
+    x.right = y;
+    y.left = T2;
+
+    // BẮT BUỘC cập nhật chiều cao của y (con mới) TRƯỚC, rồi mới cập nhật x (cha mới)
+    y.height = 1 + Math.max(height(y.left), height(y.right));
+    x.height = 1 + Math.max(height(x.left), height(x.right));
+
+    return x; // x trở thành gốc mới của cây con
+}
+
+// Phép quay đơn sang trái (Left Rotation — xử lý mất cân bằng Right-Right tại x)
+public AVLNode rotateLeft(AVLNode x) {
+    AVLNode y = x.right;
+    AVLNode T2 = y.left;
+
+    y.left = x;
+    x.right = T2;
+
+    x.height = 1 + Math.max(height(x.left), height(x.right));
+    y.height = 1 + Math.max(height(y.left), height(y.right));
+
+    return y;
+}
+
+// Phép quay kép Trái-Phải (Left-Right Double Rotation tại nút z)
+public AVLNode rotateLeftRight(AVLNode z) {
+    z.left = rotateLeft(z.left); // Bước 1: Xoay trái tại con trái để nắn thẳng thành dạng LL
+    return rotateRight(z);       // Bước 2: Xoay phải tại nút gốc z
+}
+```
+
+2. Phân tích Thuật toán Cân bằng Toàn cục DSW (Day-Stout-Warren) trong $O(n)$ thời gian và $O(1)$ bộ nhớ phụ:
+Khác với phương pháp tạo mảng trung gian rồi chia đôi đệ quy (tốn $O(n)$ bộ nhớ mảng và $O(\log n)$ Call Stack), thuật toán **DSW** biến đổi cây BST bất kỳ thành Cây nhị phân tìm kiếm cân bằng hoàn chỉnh **ngay tại chỗ (in-place)** qua 2 giai đoạn:
+* **Giai đoạn 1 — Tạo trục xương sống phải (`treeToVine` / `createBackbone`):**
+  + Duyệt dọc theo đường sống bên phải của cây bắt đầu từ nút giả `pseudoRoot`.
+  + Bất cứ khi nào nút hiện tại `tmp` có **con trái (`tmp.left != null`)**, thực hiện **phép quay phải (`rotateRight`)** tại `tmp` để kéo con trái lên và đẩy `tmp` xuống bên phải.
+  + Khi không còn con trái, tiến `tmp` xuống con phải kế tiếp. Kết thúc Giai đoạn 1 sau tối đa $n - 1$ phép quay phải, cây biến thành một **danh sách liên kết đơn nghiêng hoàn toàn sang phải (Backbone / Vine)** đã có thứ tự tăng dần.
+* **Giai đoạn 2 — Nén trục xương sống thành cây cân bằng (`vineToTree` / `compress`):**
+  + Tính số nút trên mức hoàn chỉnh cao nhất: $m = 2^{\lfloor \log_2(n + 1) \rfloor} - 1$.
+  + Thực hiện bước nén đầu tiên gồm **`n - m` phép quay trái (`rotateLeft`)** tại mỗi nút cách quãng dọc theo trục xương sống để xử lý các nút lá ở tầng đáy.
+  + Sau đó lặp lại trong khi $m > 1$: đặt $m = m / 2$ và thực hiện tiếp **$m$ phép quay trái** dọc theo trục phải.
+* **Độ phức tạp:** Tổng số phép quay không vượt quá $2n$, đạt thời gian tuyến tính **$\Theta(n)$** và chỉ dùng vài biến con trỏ cục bộ nên đạt không gian phụ **$\Theta(1)$** tuyệt đối.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Phát biểu 3 trường hợp Master Theorem** | **4.0đ** | Nêu chính xác công thức dạng chuẩn và điều kiện so sánh f(n) với n^(log_b(a)). |
-| **Phân tích giải thuật MergeSort** | **3.0đ** | Xác định đúng a=2, b=2, c_crit=1, rơi vào Case 2 và suy ra Theta(n log n). |
-| **Phân tích Tìm kiếm nhị phân** | **3.0đ** | Xác định đúng a=1, b=2, c_crit=0, rơi vào Case 2 và suy ra Theta(log n). |
+| **Cài đặt chuẩn hàm Java rotateRight, rotateLeft và rotateLeftRight** | **4.0đ** | Viết đúng các phép gán con trỏ T2 = x.right, x.right = y, y.left = T2 và cập nhật chiều cao con trước cha sau. |
+| **Phân tích Giai đoạn 1 của thuật toán DSW (Tạo trục xương sống Backbone/Vine)** | **3.0đ** | Giải thích rõ việc dùng chuỗi phép quay phải (rotateRight) mỗi khi gặp con trái để duỗi cây thành danh sách nghiêng phải tăng dần. |
+| **Phân tích Giai đoạn 2 của DSW (Nén bằng phép quay trái) và độ phức tạp O(n) time / O(1) space** | **3.0đ** | Trình bày công thức m = 2^(floor(log2(n+1))) - 1, thực hiện n - m phép quay trái rồi chia đôi m liên tiếp tại chỗ không dùng mảng phụ. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -1390,7 +1486,7 @@ Phương trình truy hồi có dạng: T(n) = a * T(n/b) + f(n) với a >= 1, b 
 
 - **Mã định danh (Question Code):** `CSD_PQ26`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 2 — *Floyd's Cycle-Finding Algorithm*
 - **Mục tiêu đánh giá:** Kiểm tra năng lực phân tích thuật toán 2 con trỏ rùa và thỏ để phát hiện chu trình và tìm nút bắt đầu chu trình trong danh sách liên kết.
@@ -1478,7 +1574,7 @@ Phân tích lý do Binary Heap là lựa chọn tối ưu cho hệ thống thự
 
 - **Mã định danh (Question Code):** `CSD_PQ28`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 12 — *Tail Recursion Elimination*
 - **Mục tiêu đánh giá:** Kiểm tra hiểu biết sâu về đệ quy đuôi, cơ chế tối ưu của compiler và kỹ thuật chuyển đổi sang vòng lặp O(1) bộ nhớ.
@@ -1528,13 +1624,13 @@ Kỹ thuật Tail Call Optimization (TCO) trong trình biên dịch sẽ tự đ
 
 ---
 
-### 29. [CSD_PQ29] Phân tích Cơ chế Tự Cân bằng và 4 Phép Xoay trên Cây AVL
+### 29. [CSD_PQ29] Phân tích Hiện tượng Thoái hóa O(n) của Cây BST và Cơ chế Tự Cân bằng 4 Phép Quay trên Cây AVL
 
 - **Mã định danh (Question Code):** `CSD_PQ29`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 23 — *AVL Tree Rotations*
+- **Chủ đề bài học (Syllabus):** Session 19-23 — *BST Degeneration vs AVL 4 Rotation Cases (LL, RR, LR, RL)*
 - **Mục tiêu đánh giá:** Đánh giá năng lực phân tích điều kiện mất cân bằng trên Cây AVL và nguyên lý thực thi 4 phép xoay LL, RR, LR, RL.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -1574,7 +1670,7 @@ Trong trường hợp LR, cấu trúc nút bị gập khúc dạng zigzag (Left 
 
 - **Mã định danh (Question Code):** `CSD_PQ30`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 24 — *HeapSort & Linear Build-Heap Analysis*
 - **Mục tiêu đánh giá:** Đánh giá khả năng chứng minh toán học chi phí O(n) của giai đoạn Build-Heap từ dưới lên (Bottom-up).
@@ -1620,7 +1716,7 @@ Do đó, tổng số phép so sánh và hoán vị trong giai đoạn Build-Heap
 
 - **Mã định danh (Question Code):** `CSD_PQ31`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 34 — *Dijkstra Algorithm & Negative Weights*
 - **Mục tiêu đánh giá:** Kiểm tra mức độ thấu hiểu bản chất chiến lược Tham lam của Dijkstra và phân tích nguyên nhân thuật toán chạy sai khi có cạnh âm.
@@ -1662,7 +1758,7 @@ Khi có cạnh trọng số âm:
 
 - **Mã định danh (Question Code):** `CSD_PQ32`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 37-38 — *Minimum Spanning Trees: Prim vs Kruskal*
 - **Mục tiêu đánh giá:** Đánh giá năng lực so sánh hai thuật toán tìm cây khung nhỏ nhất và phân tích cấu trúc dữ liệu Disjoint Set Union.
@@ -1707,7 +1803,7 @@ Bảng so sánh toàn diện Prim vs Kruskal:
 
 - **Mã định danh (Question Code):** `CSD_PQ33`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 38 — *Eulerian vs Hamiltonian Cycles*
 - **Mục tiêu đánh giá:** Đánh giá khả năng phân biệt sự khác biệt bản chất độ phức tạp giữa bài toán Chu trình Euler (đa thức P) và Hamilton (NP-Complete).
@@ -1751,7 +1847,7 @@ Một đồ thị vô hướng liên thông G có chu trình Euler khi và chỉ
 
 - **Mã định danh (Question Code):** `CSD_PQ34`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 45 — *QuickSort vs MergeSort Comparison*
 - **Mục tiêu đánh giá:** Đánh giá năng lực phân tích đa chiều giữa hai thuật toán sắp xếp chia để trị hàng đầu trong ngành công nghiệp phần mềm.
@@ -1799,7 +1895,7 @@ Lý do thiết kế trong thư viện chuẩn Java (JDK `Arrays.sort()`):
 
 - **Mã định danh (Question Code):** `CSD_PQ35`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000567`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 50 — *Open Addressing & Rehashing*
 - **Mục tiêu đánh giá:** Kiểm tra mức độ am hiểu về hiện tượng suy thoái hiệu năng trong phương pháp mở địa chỉ và cơ chế mở rộng bảng băm.
@@ -1844,9 +1940,9 @@ Mặc dù thao tác Rehashing tốn O(n), nhưng vì chỉ diễn ra sau mỗi n
 
 - **Mã định danh (Question Code):** `CSD_PQ36`
 - **Kho lưu trữ (Target Pool):** `practice_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000568`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 57 — *Huffman Coding Algorithm*
+- **Chủ đề bài học (Syllabus):** Session 54 — *Huffman Coding Algorithm*
 - **Mục tiêu đánh giá:** Đánh giá năng lực phân tích thuật toán nén dữ liệu Huffman, cấu trúc cây tiền tố và cơ chế giải mã chuỗi bit.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -1892,87 +1988,110 @@ Tính chất này cực kỳ quan trọng vì nó cho phép giải nén tức th
 
 ---
 
-## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB KIOSK (`exam_questions`)
+## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB (`exam_questions`)
 
-> Kho câu hỏi này được lưu trữ độc lập trong bảng `exam_questions`, phục vụ độc quyền luồng **MF-04**:
-> 1. Bám sát ma trận cấu trúc đề thi chính thức (`exam_structures`, `slot_definitions`) do Trưởng Bộ Môn phê duyệt.
-> 2. Khảo thí phân bổ đề không trùng (`uq_tickets_shift_exam_set`) cho sinh viên trên máy trạm Kiosk phòng Lab.
-> 3. Phân bổ theo 4 bậc nhận thức Bloom: **6 Remember (23%) + 8 Understand (31%) + 7 Apply (27%) + 5 Analyze (19%) = 26 câu (100%)**.
+> Kho câu hỏi này được lưu trữ cô lập trong bảng `exam_questions`, phục vụ luồng nghiệp vụ **MF-04 (Thi thật phòng Lab Kiosk)**:
+> - Bám sát Ma trận Cấu trúc Đề thi (`exam_structures` & `slot_definitions`) do Trưởng Bộ Môn ban hành.
+> - Phân bổ chuẩn xác theo 4 mức nhận thức Bloom: **6 Remember, 8 Understand, 7 Apply, 5 Analyze**.
+> - Hoàn toàn cô lập kịch bản và bài toán với kho luyện tập `practice_questions` theo đúng quy định **R8**.
 
-### 1. [CSD_EQ01] Định nghĩa Ký pháp Tiệm cận Big-O, Big-Omega và Big-Theta
+---
+
+## PHẦN 4: CHI TIẾT 26 CÂU HỎI KHO THI THẬT PHÒNG LAB (`exam_questions`)
+
+> Kho câu hỏi này được lưu trữ cô lập trong bảng `exam_questions` (theo Quy tắc R8), phục vụ luồng nghiệp vụ **MF-03** (Giảng viên soạn đề, Trưởng Bộ Môn phê duyệt `APPROVED`) và **MF-04** (Cán bộ Khảo thí mở ca thi phòng Lab Kiosk):
+> - Phân bổ chuẩn xác theo ma trận 5 Slots của `StructureCsd201Id`: `6 Remember, 8 Understand, 7 Apply, 5 Analyze`.
+> - 100% câu hỏi có Barem Rubric tổng điểm đúng `10.0đ` và câu hỏi phản biện nối tiếp (`FollowUpPrompt`).
+
+### 1. [CSD_EQ01] Định nghĩa Toán học Ba Ký pháp Tiệm cận Big-O, Big-Omega, Big-Theta và Ba Kịch bản Phân tích Thuật toán
 
 - **Mã định danh (Question Code):** `CSD_EQ01`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
 - **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 1 — *Asymptotic Notations*
-- **Mục tiêu đánh giá:** Đánh giá khả năng ghi nhớ và phát biểu chính xác định nghĩa toán học của 3 ký pháp tiệm cận cơ bản.
+- **Chủ đề bài học (Syllabus):** Session 1 — *Asymptotic Notations & Best/Average/Worst-Case Complexity*
+- **Mục tiêu đánh giá:** Kiểm tra khả năng phát biểu chính xác định nghĩa toán học của Big-O, Big-Omega, Big-Theta và phân biệt 3 kịch bản đánh giá Best-case, Average-case, Worst-case.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy phát biểu định nghĩa toán học chính xác của 3 ký pháp tiệm cận: Big-O, Big-Omega (Ω) và Big-Theta (Θ). Ký pháp nào thể hiện chặn trên, chặn dưới và chặn chặt tiệm cận?"
+> "Hãy phát biểu định nghĩa toán học chính thức (theo các hằng số dương c và ngưỡng n0) của ba ký pháp tiệm cận: Big-O, Big-Omega và Big-Theta. Trong phân tích thuật toán, tại sao người ta thường ưu tiên đánh giá Trường hợp xấu nhất (Worst-Case) hơn là Trường hợp tốt nhất (Best-Case)?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Một thuật toán có độ phức tạp thời gian đo được là O(n^2) thì có thể khẳng định nó cũng là O(n^3) và O(2^n) theo định nghĩa toán học thuần túy của Big-O không? Tại sao trong phân tích thuật toán thực tế ta luôn tìm hàm g(n) tiệm cận chặt nhất có thể?"*
+> *"Nếu một thuật toán có thời gian chạy trường hợp xấu nhất là O(n^2) nhưng thời gian chạy trường hợp tốt nhất là Omega(n), ta có thể viết thời gian chạy tổng quát của thuật toán là Theta(n^2) được không? Vì sao?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Định nghĩa toán học của 3 ký pháp tiệm cận:
-- Big-O (Chặn trên tiệm cận - Asymptotic Upper Bound):
-  f(n) = O(g(n)) nếu tồn tại hai hằng số dương c > 0 và n0 >= 1 sao cho:
-  0 <= f(n) <= c * g(n) với mọi n >= n0.
-  Ý nghĩa: Tốc độ tăng của f(n) không vượt quá g(n).
+1. Định nghĩa toán học chính thức của 3 ký pháp tiệm cận (với hai hàm không âm $f(n)$ và $g(n)$):
+* **Ký pháp Big-O — Chặn trên tiệm cận (Asymptotic Upper Bound):**
+  $f(n) = O(g(n))$ nếu tồn tại hằng số dương $c > 0$ và số nguyên $n_0 \ge 1$ sao cho:
+  $$0 \le f(n) \le c \cdot g(n), \quad \forall n \ge n_0$$
+  Big-O cho biết tốc độ tăng trưởng của $f(n)$ **không vượt quá** một bội số hằng của $g(n)$ khi $n$ đủ lớn.
+* **Ký pháp Big-Omega ($\Omega$) — Chặn dưới tiệm cận (Asymptotic Lower Bound):**
+  $f(n) = \Omega(g(n))$ nếu tồn tại hằng số dương $c > 0$ và số nguyên $n_0 \ge 1$ sao cho:
+  $$0 \le c \cdot g(n) \le f(n), \quad \forall n \ge n_0$$
+  Big-Omega cho biết tốc độ tăng trưởng của $f(n)$ **ít nhất bằng** một bội số hằng của $g(n)$.
+* **Ký pháp Big-Theta ($\Theta$) — Chặn chặt tiệm cận (Asymptotic Tight Bound):**
+  $f(n) = \Theta(g(n))$ nếu tồn tại các hằng số dương $c_1, c_2 > 0$ và số nguyên $n_0 \ge 1$ sao cho:
+  $$0 \le c_1 \cdot g(n) \le f(n) \le c_2 \cdot g(n), \quad \forall n \ge n_0$$
+  Định lý tương đương: $f(n) = \Theta(g(n)) \iff f(n) = O(g(n))$ VÀ $f(n) = \Omega(g(n))$.
 
-- Big-Omega (Ω) (Chặn dưới tiệm cận - Asymptotic Lower Bound):
-  f(n) = Ω(g(n)) nếu tồn tại hai hằng số dương c > 0 và n0 >= 1 sao cho:
-  0 <= c * g(n) <= f(n) với mọi n >= n0.
-  Ý nghĩa: Tốc độ tăng của f(n) tối thiểu bằng g(n).
-
-- Big-Theta (Θ) (Chặn chặt tiệm cận - Asymptotically Tight Bound):
-  f(n) = Θ(g(n)) nếu tồn tại ba hằng số dương c1 > 0, c2 > 0 và n0 >= 1 sao cho:
-  0 <= c1 * g(n) <= f(n) <= c2 * g(n) với mọi n >= n0.
-  Điều kiện tương đương: f(n) = Θ(g(n)) khi và chỉ khi f(n) = O(g(n)) và f(n) = Ω(g(n)).
-  Ý nghĩa: f(n) và g(n) có cùng bậc tăng trưởng tiệm cận.
+2. Tại sao ưu tiên đánh giá Trường hợp xấu nhất (Worst-Case) hơn Trường hợp tốt nhất (Best-Case):
+* **Worst-Case (Trường hợp xấu nhất):** Cung cấp **cam kết giới hạn trên tuyệt đối (SLA guarantee)** về thời gian phản hồi tối đa đối với mọi đầu vào kích thước $n$. Điều này sống còn trong các hệ thống thời gian thực, tài chính, y tế hoặc phòng chống tấn công từ chối dịch vụ (Algorithmic Complexity DoS).
+* **Best-Case (Trường hợp tốt nhất):** Chỉ xảy ra trên một vài cấu hình đầu vào may mắn hiếm gặp (ví dụ phần tử cần tìm nằm ngay ở `arr[0]` trong Linear Search), không phản ánh hiệu năng thực tế của thuật toán.
+* **Average-Case (Trường hợp trung bình):** Phản ánh kỳ vọng toán học trên phân phối đầu vào nhưng thường đòi hỏi giả định xác suất phức tạp.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Định nghĩa toán học Big-O** | **3.0đ** | Nêu đúng điều kiện f(n) <= c*g(n) với mọi n >= n0 và vai trò chặn trên. |
-| **Định nghĩa toán học Big-Omega** | **3.0đ** | Nêu đúng điều kiện c*g(n) <= f(n) với mọi n >= n0 và vai trò chặn dưới. |
-| **Định nghĩa toán học Big-Theta** | **4.0đ** | Nêu đúng điều kiện chặn kép c1*g(n) <= f(n) <= c2*g(n) và vai trò chặn chặt. |
+| **Định nghĩa toán học chuẩn xác của Big-O và Big-Omega** | **4.0đ** | Viết đúng bất đẳng thức f(n) <= c*g(n) và f(n) >= c*g(n) kèm điều kiện tồn tại c > 0 và mọi n >= n0. |
+| **Định nghĩa toán học của Big-Theta và quan hệ tương đương** | **3.0đ** | Viết đúng bất đẳng thức kẹp giữa c1*g(n) và c2*g(n), nêu điều kiện cần và đủ đồng thời là O(g(n)) và Omega(g(n)). |
+| **Giải thích ý nghĩa thực tiễn của Worst-Case vs Best-Case** | **3.0đ** | Làm rõ cam kết giới hạn thời gian tối đa của Worst-Case trong hệ thống thực tế và tính thiếu đại diện của Best-Case. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 2. [CSD_EQ02] Định nghĩa Cấu trúc Dữ liệu Stack, Queue và Phân biệt LIFO vs FIFO
+### 2. [CSD_EQ02] Định nghĩa Hàng đợi Hai đầu (Deque ADT) và Bảng Các Thao tác Chuẩn tại Hai Đầu First/Last
 
 - **Mã định danh (Question Code):** `CSD_EQ02`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
 - **Ánh xạ Chuẩn đầu ra:** **FLM CLO2** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 5 — *Stack and Queue Definitions*
-- **Mục tiêu đánh giá:** Kiểm tra khả năng định nghĩa cấu trúc dữ liệu tuyến tính và phân biệt nguyên tắc truy cập dữ liệu.
+- **Chủ đề bài học (Syllabus):** Session 7 — *Double-Ended Queue (Deque ADT) & Java Deque Interface*
+- **Mục tiêu đánh giá:** Kiểm tra khả năng định nghĩa kiểu dữ liệu trừu tượng Hàng đợi hai đầu (Deque), các phép toán chuẩn ở cả hai đầu và cách giả lập Stack/Queue bằng Deque.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Định nghĩa cấu trúc dữ liệu Ngăn xếp (Stack) và Hàng đợi (Queue). Nêu rõ từ viết tắt và ý nghĩa của hai nguyên tắc truy cập dữ liệu LIFO và FIFO tương ứng."
+> "Kiểu dữ liệu trừu tượng Hàng đợi hai đầu (Deque — Double-Ended Queue) là gì? Hãy liệt kê các thao tác chuẩn thêm, xóa và truy vấn ở cả hai đầu của Deque, đồng thời giải thích vì sao trong Java Collections Framework, lớp `ArrayDeque` được khuyến nghị dùng thay thế cho cả lớp `Stack` lẫn `LinkedList` khi cài đặt ngăn xếp và hàng đợi."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Trong kiến trúc hệ điều hành máy tính, cơ chế ngắt phần cứng (Hardware Interrupt Handling) và hàng đợi tin nhắn tiến trình (IPC Message Queue) lần lượt ứng dụng cấu trúc dữ liệu nào trong hai cấu trúc Stack và Queue? Giải thích lý do lựa chọn."*
+> *"Khi cài đặt Deque bằng mảng vòng kích thước N, công thức cập nhật chỉ số `front` khi thực hiện thao tác chèn vào đầu `addFirst(e)` (lùi chỉ số ngược chiều kim đồng hồ) phải viết như thế nào trong Java để không bị chỉ số âm?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Ngăn xếp (Stack):
-Là một cấu trúc dữ liệu trừu tượng tuyến tính dạng danh sách có thứ tự, trong đó thao tác chèn phần tử mới (push) và thao tác xóa phần tử (pop) chỉ được thực hiện tại một đầu duy nhất gọi là Đỉnh ngăn xếp (Top).
-- Nguyên tắc hoạt động: LIFO (Last-In-First-Out) - Phần tử được thêm vào sau cùng sẽ là phần tử đầu tiên được lấy ra khỏi cấu trúc.
+1. Định nghĩa Hàng đợi hai đầu (Deque — Double-Ended Queue):
+* **Deque** (phát âm là *"deck"*) là một cấu trúc dữ liệu tuyến tính tổng quát hóa cả Ngăn xếp (Stack) và Hàng đợi (Queue), cho phép thực hiện các thao tác **chèn (insertion)** và **xóa (deletion)** phần tử một cách đối xứng tại **cả hai đầu**: đầu trước (`front` / `first`) và đầu sau (`rear` / `last`) với độ phức tạp thời gian chuẩn $O(1)$.
 
-2. Hàng đợi (Queue):
-Là một cấu trúc dữ liệu trừu tượng tuyến tính trong đó thao tác chèn phần tử (enqueue) chỉ được thực hiện tại một đầu gọi là Đuôi hàng đợi (Rear/Tail), và thao tác xóa phần tử (dequeue) chỉ được thực hiện tại đầu đối diện gọi là Đầu hàng đợi (Front/Head).
-- Nguyên tắc hoạt động: FIFO (First-In-First-Out) - Phần tử được đưa vào hàng đợi sớm nhất sẽ là phần tử đầu tiên được lấy ra phục vụ.
+2. Bảng 6 thao tác chuẩn của Deque ADT (và phương thức tương ứng trong `java.util.Deque` không ném ngoại lệ):
+* **Thao tác cập nhật (Update Methods):**
+  1. `addFirst(e)` / `offerFirst(e)`: Chèn phần tử `e` vào ngay đầu trước (`front`) của Deque.
+  2. `addLast(e)` / `offerLast(e)`: Chèn phần tử `e` vào ngay đầu sau (`rear`) của Deque.
+  3. `removeFirst()` / `pollFirst()`: Lấy ra và xóa phần tử tại đầu trước (`front`); trả về `null` nếu Deque rỗng.
+  4. `removeLast()` / `pollLast()`: Lấy ra và xóa phần tử tại đầu sau (`rear`); trả về `null` nếu Deque rỗng.
+* **Thao tác truy vấn (Accessor Methods):**
+  5. `first()` / `peekFirst()`: Xem giá trị phần tử tại đầu `front` mà không xóa.
+  6. `last()` / `peekLast()`: Xem giá trị phần tử tại đầu `rear` mà không xóa.
+
+3. Tại sao `ArrayDeque` trong Java được khuyến nghị thay thế cho cả `java.util.Stack` và `LinkedList`:
+* **Giả lập hoàn hảo cả Stack và Queue:**
+  + Làm **Stack (LIFO):** Chỉ dùng cặp `addFirst(e)` (`push`) và `removeFirst()` (`pop`).
+  + Làm **Queue (FIFO):** Dùng cặp `addLast(e)` (`enqueue`) và `removeFirst()` (`dequeue`).
+* **Hiệu năng vượt trội so với `java.util.Stack`:** Lớp `Stack` cũ trong JDK kế thừa từ `Vector` nên mọi phương thức đều bị khóa đồng bộ hóa (`synchronized`), gây chi phí tranh chấp khóa không cần thiết trong môi trường đơn luồng.
+* **Hiệu năng vượt trội so với `LinkedList`:** `ArrayDeque` lưu trữ trên mảng vòng liên tục nên tận dụng tối đa **CPU Cache Locality**, không tốn bộ nhớ cấp phát đối tượng `Node` (mỗi `Node` của Doubly Linked List tốn thêm 24 bytes header + 2 tham chiếu `prev/next`) và không gây áp lực dọn rác (GC overhead).
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Định nghĩa Stack và LIFO** | **5.0đ** | Định nghĩa đúng cấu trúc thao tác tại Top và giải thích nguyên tắc Last-In-First-Out. |
-| **Định nghĩa Queue và FIFO** | **5.0đ** | Định nghĩa đúng cấu trúc thao tác ở 2 đầu Front/Rear và giải thích First-In-First-Out. |
+| **Định nghĩa đúng bản chất cấu trúc dữ liệu Deque ADT** | **3.0đ** | Nêu rõ Deque là hàng đợi hai đầu hỗ trợ chèn và xóa đối xứng ở cả đầu front và đầu rear với chi phí O(1). |
+| **Liệt kê đầy đủ các thao tác chuẩn tại hai đầu First và Last** | **3.5đ** | Nêu đúng 4 thao tác cập nhật (addFirst, addLast, removeFirst, removeLast) và 2 thao tác xem (first/peekFirst, last/peekLast). |
+| **Giải thích cách giả lập Stack/Queue và ưu thế của ArrayDeque** | **3.5đ** | Chỉ rõ cách ghép cặp thao tác làm LIFO/FIFO và phân tích ưu điểm không khóa synchronized, tối ưu CPU cache so với Stack/LinkedList. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -1981,7 +2100,7 @@ Là một cấu trúc dữ liệu trừu tượng tuyến tính trong đó thao 
 
 - **Mã định danh (Question Code):** `CSD_EQ03`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 15 — *Binary Tree Types*
 - **Mục tiêu đánh giá:** Đánh giá khả năng phân biệt chính xác hai khái niệm cây nhị phân thường bị nhầm lẫn.
@@ -2019,9 +2138,9 @@ Cây nhị phân hoàn chỉnh (Complete Binary Tree) chính là cấu trúc hì
 
 - **Mã định danh (Question Code):** `CSD_EQ04`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 22 — *Graph Handshaking Lemma*
+- **Chủ đề bài học (Syllabus):** Session 29 — *Graph Handshaking Lemma*
 - **Mục tiêu đánh giá:** Kiểm tra việc ghi nhớ định lý bắt tay và hệ quả về số đỉnh bậc lẻ trong đồ thị vô hướng.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -2060,7 +2179,7 @@ Trong bất kỳ đồ thị vô hướng G = (V, E) nào, tổng bậc của t�
 
 - **Mã định danh (Question Code):** `CSD_EQ05`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 41 — *Sorting Stability*
 - **Mục tiêu đánh giá:** Đánh giá khả năng định nghĩa tính ổn định trong sắp xếp và phân loại chính xác các thuật toán.
@@ -2102,7 +2221,7 @@ Cụ thể: Nếu trong mảng ban đầu, phần tử A đứng trước phần
 
 - **Mã định danh (Question Code):** `CSD_EQ06`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000567`)
 - **Thang nhận thức Bloom:** `Remember` | **Mức độ khó:** `Easy`
 - **Chủ đề bài học (Syllabus):** Session 49 — *Perfect Hash Functions*
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức ghi nhớ về hàm băm hoàn hảo và các tiêu chuẩn thiết kế hàm băm trong kỹ thuật phần mềm.
@@ -2135,39 +2254,52 @@ Với mọi k1, k2 thuộc K, nếu k1 != k2 thì h(k1) != h(k2).
 
 ---
 
-### 7. [CSD_EQ07] Phân tích Chi phí Thao tác Chèn/Xóa ở Đầu giữa Mảng và Singly Linked List
+### 7. [CSD_EQ07] Cấu trúc Danh sách Liên kết Vòng (Circularly Linked List), Con trỏ tail và Ứng dụng Lập lịch Round-Robin
 
 - **Mã định danh (Question Code):** `CSD_EQ07`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 1-2 — *Array vs Linked List Insertion Complexity*
-- **Mục tiêu đánh giá:** Kiểm tra mức độ thông hiểu lý do cơ bản dẫn tới sự khác biệt về độ phức tạp khi chèn/xóa ở đầu danh sách.
+- **Chủ đề bài học (Syllabus):** Session 2 — *Circularly Linked Lists & Round-Robin Scheduling*
+- **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về cấu trúc liên kết vòng, lý do duy trì duy nhất con trỏ tail thay vì head và thao tác rotate() trong lập lịch CPU Round-Robin.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Tại sao thao tác chèn một phần tử vào vị trí đầu tiên của một Mảng động (Dynamic Array) lại tốn chi phí thời gian O(n), trong khi thao tác tương tự trên Danh sách liên kết đơn (Singly Linked List) chỉ tốn chi phí O(1)? Giải thích chi tiết cơ chế bộ nhớ bên dưới."
+> "Danh sách liên kết vòng đơn (Circularly Linked List) khác gì với Danh sách liên kết đơn thông thường? Tại sao khi cài đặt Circularly Linked List, người ta chỉ cần duy trì duy nhất một con trỏ tham chiếu `tail` (trỏ vào nút cuối) thay vì con trỏ `head`, và thao tác `rotate()` hỗ trợ thuật toán lập lịch CPU Round-Robin trong O(1) như thế nào?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu sử dụng cấu trúc Mảng vòng (Circular Buffer / ArrayDeque) để duy trì mảng dữ liệu, thao tác chèn đầu có thể đạt được độ phức tạp thời gian O(1) không và cấu trúc này có điểm hạn chế gì so với Danh sách liên kết?"*
+> *"Khi duyệt qua toàn bộ các phần tử của một Circularly Linked List không rỗng bắt đầu từ nút đầu tiên `tail.next`, điều kiện dừng của vòng lặp phải được viết như thế nào để không bị lặp vô tận?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Đối với Mảng động (Dynamic Array):
-- Cơ chế bộ nhớ: Mảng yêu cầu các phần tử phải nằm kề nhau trên một khối nhớ liên tục (contiguous memory block) và phần tử đầu tiên luôn gắn cố định tại chỉ số index = 0.
-- Chi phí O(n): Khi muốn chèn một phần tử x vào vị trí đầu mảng (index 0), hệ thống bắt buộc phải giải phóng ô nhớ index 0. Để làm được điều đó, toàn bộ n phần tử hiện có trong mảng bắt buộc phải được sao chép và dịch chuyển lùi sang phải một vị trí (phần tử tại i chuyển sang i + 1, thực hiện từ cuối mảng lùi dần về đầu). Số phép dịch chuyển bằng đúng n, dẫn tới độ phức tạp thời gian O(n).
+1. Sự khác biệt cấu trúc giữa Circularly Linked List và Singly Linked List:
+- Trong **Singly Linked List** thông thường, nút cuối cùng (`tail`) có con trỏ `next == null` để đánh dấu điểm kết thúc danh sách.
+- Trong **Circularly Linked List (Danh sách liên kết vòng)**, con trỏ `next` của nút cuối cùng (`tail`) không trỏ vào `null` mà **trỏ ngược trở lại nút đầu tiên (`head`)** của danh sách (`tail.next == head`), tạo thành một chu trình khép kín liên tục.
 
-2. Đối với Danh sách liên kết đơn (Singly Linked List):
-- Cơ chế bộ nhớ: Các nút (Nodes) được cấp phát rời rạc trên Heap, không yêu cầu liên tục. Vị trí đầu danh sách được quản lý độc quyền bởi con trỏ `head`.
-- Chi phí O(1): Để chèn nút mới `newNode` vào đầu:
-  1. `newNode.next = head;` (trỏ nút mới vào nút đầu hiện tại).
-  2. `head = newNode;` (cập nhật con trỏ head sang nút mới).
-  Chỉ có đúng hai phép gán tham chiếu hằng số được thực thi, hoàn toàn không phụ thuộc vào số lượng phần tử n hiện có trong danh sách. Do đó, thời gian luôn luôn là O(1).
+2. Tại sao chỉ cần duy trì duy nhất con trỏ `tail` thay vì `head`:
+- Nếu chỉ giữ con trỏ `head`, ta truy cập nút đầu trong $O(1)$, nhưng muốn truy cập nút cuối `tail` (để chèn vào cuối `addLast`) ta phải duyệt toàn bộ $n$ nút tốn $O(n)$.
+- Ngược lại, nếu ta chỉ duy trì duy nhất con trỏ **`tail`**:
+  + Nút cuối cùng chính là `tail` (truy cập trong $O(1)$).
+  + Nút đầu tiên (`head`) chính là nút kế tiếp ngay sau `tail`, tức là **`tail.next`** (cũng truy cập tức thì trong $O(1)$!).
+- Nhờ đó, ta tiết kiệm được một biến tham chiếu `head` trong bộ nhớ mà vẫn thực hiện được cả 3 thao tác `addFirst(e)`, `addLast(e)` và `removeFirst()` hoàn toàn trong thời gian hằng số **$O(1)$**.
+
+3. Thao tác `rotate()` và ứng dụng lập lịch CPU Round-Robin trong $O(1)$:
+- Trong thuật toán lập lịch chia sẻ thời gian **Round-Robin**, hệ điều hành cấp một lượng tử thời gian (time slice) cho tiến trình ở đầu hàng đợi (`head = tail.next`), sau đó chuyển tiến trình đó xuống cuối hàng đợi và chuyển CPU cho tiến trình kế tiếp.
+- Trên Singly Linked List thông thường, việc này cần thực hiện `enqueue(dequeue())` gồm tháo nút đầu và nối vào nút cuối.
+- Trên Circularly Linked List quản lý bởi `tail`, thao tác xoay vòng được thực hiện chỉ bằng **1 phép gán con trỏ duy nhất trong $O(1)$** mà không cần cấp phát hay sửa đổi bất kỳ trường `next` nào:
+```java
+public void rotate() {
+    if (tail != null) {
+        tail = tail.next; // Nút đầu cũ (tail.next) lập tức trở thành nút cuối mới!
+    }
+}
+```
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Giải thích cơ chế dịch mảng O(n)** | **5.0đ** | Nêu rõ ràng yêu cầu bộ nhớ liên tục và thao tác dịch n phần tử sang phải. |
-| **Giải thích cơ chế cập nhật con trỏ O(1)** | **5.0đ** | Trình bày chuẩn xác 2 bước gán con trỏ head và tính độc lập với kích thước n. |
+| **Phân biệt liên kết vòng tail.next == head với Singly Linked List** | **3.0đ** | Trình bày rõ nút cuối trỏ ngược về nút đầu tạo vòng khép kín thay vì trỏ vào null. |
+| **Giải thích lý do chỉ giữ con trỏ tail đạt O(1) cho cả hai đầu** | **3.5đ** | Chứng minh có tail thì truy cập ngay được cả nút cuối (tail) lẫn nút đầu (tail.next) trong O(1), hỗ trợ addFirst/addLast/removeFirst O(1). |
+| **Phân tích thao tác rotate() trong lập lịch Round-Robin** | **3.5đ** | Viết đúng lệnh tail = tail.next trong O(1) và giải thích cách chuyển tiến trình đầu xuống cuối hàng đợi mà không cần tháo/gắn nút. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2211,88 +2343,105 @@ Trong Hàng đợi ưu tiên, mỗi phần tử khi đưa vào cấu trúc dữ 
 
 ---
 
-### 9. [CSD_EQ09] Cơ chế Tràn Ngăn xếp Call Stack và Vai trò của Base Case trong Đệ quy
+### 9. [CSD_EQ09] Thuật toán Hierholzer Tìm Chu trình và Đường đi Euler trong Thời gian Tuyến tính O(V + E)
 
 - **Mã định danh (Question Code):** `CSD_EQ09`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Easy`
-- **Chủ đề bài học (Syllabus):** Session 11 — *Call Stack & StackOverflowError*
-- **Mục tiêu đánh giá:** Kiểm tra mức độ hiểu sâu cơ chế hoạt động của vùng nhớ Call Stack và tầm quan trọng của điều kiện dừng.
+- **Chủ đề bài học (Syllabus):** Session 38 — *Eulerian Path/Circuit & Hierholzer's Linear-Time Algorithm*
+- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích điều kiện tồn tại Đường đi/Chu trình Euler trên đồ thị vô hướng và có hướng, cùng cơ chế ghép chu trình con bằng hai ngăn xếp của Thuật toán Hierholzer O(V + E).
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy giải thích cơ chế bộ nhớ khi một hàm đệ quy được thực thi trên máy tính. Điều gì xảy ra bên trong Call Stack khi đệ quy rơi vào vòng lặp vô tận và tại sao điều kiện dừng (Base Case) được coi là thành phần sống còn?"
+> "Hãy phát biểu điều kiện cần và đủ để một đồ thị liên thông có: (1) Chu trình Euler (Eulerian Circuit) và (2) Đường đi Euler (Eulerian Path) đối với cả đồ thị vô hướng lẫn đồ thị có hướng. Tiếp theo, hãy trình bày Thuật toán Hierholzer sử dụng Ngăn xếp (Stack) để dựng Chu trình Euler trong thời gian tuyến tính O(V + E) và giải thích tại sao thuật toán này hiệu quả hơn thuật toán Fleury?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Mỗi Stack Frame của một lời gọi hàm đệ quy trong ngôn ngữ Java/C lưu trữ những thông tin cụ thể nào, và kích thước vùng nhớ Call Stack tối đa thường do thành phần nào của hệ thống quy định?"*
+> *"Khi áp dụng Thuật toán Hierholzer để tìm Đường đi Euler (không phải chu trình khép kín) trên đồ thị vô hướng có đúng 2 đỉnh bậc lẻ `u` và `v`, ta bắt buộc phải khởi tạo đỉnh xuất phát đầu tiên trong Ngăn xếp tại đâu?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cơ chế bộ nhớ Call Stack trong đệ quy:
-Mỗi khi một hàm được gọi (kể cả hàm thông thường hay hàm đệ quy tự gọi chính nó), hệ thống sẽ cấp phát một vùng nhớ gọi là Khung ngăn xếp (Stack Frame / Activation Record) và đẩy (push) lên đỉnh vùng nhớ Call Stack.
-Stack Frame này lưu trữ:
-- Tham số truyền vào hàm.
-- Các biến cục bộ của hàm.
-- Địa chỉ hoàn trả (Return Address) để CPU biết quay lại dòng lệnh nào sau khi hàm con kết thúc.
+1. Điều kiện cần và đủ tồn tại Chu trình Euler và Đường đi Euler (Định lý Euler):
+* **Đối với Đồ thị Vô hướng (các đỉnh có bậc > 0 thuộc cùng một thành phần liên thông):**
+  + **Có Chu trình Euler (đi qua mọi cạnh đúng 1 lần và quay về đỉnh xuất phát):** Khi và chỉ khi **100% các đỉnh đều có bậc chẵn** ($\text{deg}(v) \bmod 2 == 0, \forall v \in V$).
+  + **Có Đường đi Euler (không khép kín):** Khi và chỉ khi đồ thị có **đúng 0 hoặc 2 đỉnh bậc lẻ** (nếu có 2 đỉnh bậc lẻ thì đường đi bắt buộc xuất phát từ một đỉnh bậc lẻ và kết thúc tại đỉnh bậc lẻ còn lại).
+* **Đối với Đồ thị Có hướng:**
+  + **Có Chu trình Euler:** Mọi đỉnh có cạnh thuộc cùng một thành phần liên thông mạnh và mọi đỉnh đều có **Bán bậc vào bằng Bán bậc ra** ($\text{inDegree}(v) == \text{outDegree}(v), \forall v \in V$).
+  + **Có Đường đi Euler:** Tối đa 1 đỉnh có $\text{outDegree} - \text{inDegree} = 1$ (đỉnh bắt đầu), tối đa 1 đỉnh có $\text{inDegree} - \text{outDegree} = 1$ (đỉnh kết thúc), và mọi đỉnh còn lại có $\text{inDegree} == \text{outDegree}$.
 
-2. Điều gì xảy ra khi đệ quy vô hạn:
-Khi đệ quy bị lặp vô tận (do thiếu Base Case hoặc bước đệ quy không tiến dần về Base Case):
-- Các Stack Frame mới liên tục được sinh ra và đẩy chồng chất lên Call Stack.
-- Vì không có Base Case trả về kết quả, không có bất kỳ Stack Frame nào được giải phóng (`pop`).
-- Vùng nhớ Call Stack của mỗi luồng (Thread) trong hệ điều hành/JVM có giới hạn dung lượng cố định (thường từ 1MB đến 2MB). Khi Call Stack bị lấp đầy hoàn toàn, nỗ lực đẩy thêm frame tiếp theo sẽ bị hệ điều hành từ chối và JVM ném ra lỗi nghiêm trọng `java.lang.StackOverflowError`.
+2. Thuật toán Hierholzer tìm Chu trình Euler trong thời gian tuyến tính $O(V + E)$:
+* **Nguyên lý cốt lõi:** Nếu xuất phát từ đỉnh $v$ trên đồ thị thỏa mãn điều kiện Euler và đi ngẫu nhiên qua các cạnh chưa thăm (xóa cạnh ngay khi đi qua), ta chắc chắn sẽ chỉ dừng lại khi quay trở về đúng đỉnh $v$ (vì mỗi lần đi vào một đỉnh trung gian và đi ra làm giảm bậc của nó đi 2). Nếu vẫn còn các cạnh chưa được duyệt ở một đỉnh $u$ trên hành trình, ta thực hiện tìm chu trình phụ từ $u$ và ghép nối vào chu trình chính.
+* **Quy trình cài đặt bằng Ngăn xếp `currPath` và Danh sách kết quả `circuit`:**
+  + **Bước 1:** Đẩy đỉnh xuất phát `start` vào `currPath`.
+  + **Bước 2:** Lặp khi `currPath` chưa rỗng:
+    * Xét đỉnh ở đỉnh ngăn xếp `u = currPath.peek()`.
+    * Nếu `u` **vẫn còn cạnh chưa đi qua**: Chọn một cạnh `(u, v)`, xóa cạnh đó khỏi danh sách kề và đẩy `v` vào `currPath`.
+    * Nếu `u` **không còn cạnh nào chưa đi qua** (bậc hiện tại bằng 0): Lấy `u` ra khỏi `currPath` (`currPath.pop()`) và thêm `u` vào `circuit`.
+  + **Bước 3:** Đảo ngược danh sách `circuit` (nếu dùng đồ thị có hướng) để thu được Chu trình Euler hoàn chỉnh.
 
-3. Vai trò sống còn của Base Case:
-Base Case đóng vai trò là 'điểm phanh dừng' duy nhất của giải thuật. Khi chạm Base Case, hàm con cuối cùng bắt đầu trả về kết quả, kích hoạt quá trình thu hồi (unwinding) các Stack Frame từ đỉnh ngăn xếp lùi dần về đáy, hoàn tất tính toán an toàn.
+3. Tại sao Thuật toán Hierholzer ($O(V + E)$) vượt trội hơn Thuật toán Fleury ($O(E^2)$):
+- Thuật toán **Fleury** đòi hỏi ở mỗi bước chọn cạnh phải chạy DFS/BFS để kiểm tra xem cạnh đó có phải là **Cạnh cầu (Bridge)** hay không, làm chi phí mỗi bước tốn $O(V + E) \Rightarrow$ tổng thời gian lên tới $O(E^2)$.
+- Thuật toán **Hierholzer** không bao giờ cần kiểm tra cạnh cầu; việc lùi ngăn xếp (`pop` khi hết cạnh) tự động lồng ghép các chu trình con vào đúng vị trí phân nhánh, giúp mỗi cạnh chỉ bị chạm đúng một số lần hằng số và đạt độ phức tạp tối ưu tuyệt đối **$O(V + E)$**.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Cơ chế Stack Frame trên Call Stack** | **3.5đ** | Mô tả đầy đủ tham số, biến cục bộ và địa chỉ hoàn trả trong Activation Record. |
-| **Hiện tượng StackOverflowError** | **3.5đ** | Giải thích cơ chế tích lũy không hồi kết vượt quá giới hạn 1-2MB của thread stack. |
-| **Vai trò điểm dừng của Base Case** | **3.0đ** | Nêu rõ vai trò kích hoạt quá trình unwinding giải phóng các khung ngăn xếp. |
+| **Phát biểu đúng điều kiện Chu trình và Đường đi Euler cho đồ thị vô hướng và có hướng** | **3.5đ** | Nêu rõ điều kiện mọi đỉnh bậc chẵn / 2 đỉnh bậc lẻ (vô hướng) và inDegree == outDegree / lệch +-1 tại 2 đầu mút (có hướng). |
+| **Trình bày chính xác từng bước Thuật toán Hierholzer dùng Stack** | **3.5đ** | Mô tả rõ quy tắc đi tiếp xóa cạnh khi còn cạnh kề và pop đỉnh đưa vào danh sách circuit khi hết cạnh kề. |
+| **Chứng minh độ phức tạp tuyến tính O(V + E) và ưu thế so với thuật toán Fleury** | **3.0đ** | Giải thích vì sao Hierholzer không cần kiểm tra cạnh cầu (Bridge) tốn O(E^2) như Fleury mà tự động ghép chu trình con khi quay lui. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 10. [CSD_EQ10] Hiện tượng Thoái hóa của Cây BST khi Chèn Dãy Dữ liệu Đã Sắp xếp
+### 10. [CSD_EQ10] Ứng dụng Định lý Thợ (Master Theorem) Phân tích Phương trình Truy hồi Đệ quy
 
 - **Mã định danh (Question Code):** `CSD_EQ10`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 19 — *BST Degeneration*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu trường hợp xấu nhất của Cây BST thông thường và sự cần thiết của Cây cân bằng.
+- **Chủ đề bài học (Syllabus):** Session 1 & 12 — *Master Theorem & Recurrence Relations*
+- **Mục tiêu đánh giá:** Đánh giá khả năng áp dụng Định lý Thợ để giải phương trình truy hồi trong phân tích thuật toán chia để trị.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Điều gì sẽ xảy ra với hình dạng của Cây tìm kiếm nhị phân (BST) nếu ta lần lượt chèn một dãy số đã được sắp xếp tăng dần: 10, 20, 30, 40, 50 vào một cây rỗng ban đầu? Hiện tượng này ảnh hưởng như thế nào đến độ phức tạp thời gian tìm kiếm?"
+> "Phát biểu 3 trường hợp của Định lý Thợ (Master Theorem) đối với phương trình truy hồi dạng T(n) = a*T(n/b) + f(n) (với a >= 1, b > 1). Hãy áp dụng định lý để xác định độ phức tạp tiệm cận cho cả 3 trường hợp: (1) T(n) = 8*T(n/2) + Theta(n^2), (2) Thuật toán MergeSort với T(n) = 2*T(n/2) + Theta(n), và (3) Phương trình T(n) = 2*T(n/2) + Theta(n^2)."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Khi cây BST bị thoái hóa hoàn toàn thành danh sách liên kết với chiều cao n, các thao tác tìm kiếm, chèn và xóa đều suy thoái hiệu năng về O(n); các cấu trúc cây tìm kiếm tự cân bằng (Self-Balancing BST) ra đời nhằm duy trì bất biến chiều cao ở mức nào?"*
+> *"Phương trình truy hồi `T(n) = 2*T(n/2) + n*log(n)` có thể áp dụng trực tiếp 3 trường hợp chuẩn của Định lý Thợ (Master Theorem) được không, và nếu không thì dạng mở rộng của định lý cho ra độ phức tạp tiệm cận là bao nhiêu?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Hình dạng của Cây BST sau khi chèn dãy tăng dần:
-Khi chèn dãy tăng dần `10, 20, 30, 40, 50`:
-- Chèn 10: Nút gốc.
-- Chèn 20: 20 > 10, nằm bên phải của 10.
-- Chèn 30: 30 > 10, 30 > 20, nằm bên phải của 20.
-- Chèn 40: Nằm bên phải của 30.
-- Chèn 50: Nằm bên phải của 40.
-Cây nhị phân hoàn toàn KHÔNG CÓ bất kỳ nút con bên trái nào. Cây bị thoái hóa hoàn toàn thành một đường thẳng lệch phải (Skewed Binary Tree / Degenerate Tree), có hình dạng và cấu trúc hoàn toàn tương đương với một Danh sách liên kết đơn (Singly Linked List).
+1. Phát biểu 3 trường hợp của Định lý Thợ (Master Theorem):
+Xét phương trình truy hồi chia để trị: $T(n) = a \cdot T(n/b) + f(n)$ với $a \ge 1, b > 1$.
+Đặt số mũ tới hạn $c_{\text{crit}} = \log_b a$, đại diện cho tốc độ tăng trưởng số lượng lá trên cây đệ quy $n^{\log_b a}$. Ta so sánh $f(n)$ với $n^{\log_b a}$:
+* **Trường hợp 1 (Case 1 — Chi phí tập trung ở các nút lá):** Nếu tồn tại hằng số $\epsilon > 0$ sao cho $f(n) = O(n^{\log_b a - \epsilon})$ (tức $f(n)$ tăng chậm hơn đa thức so với $n^{\log_b a}$), thì:
+  $$T(n) = \Theta(n^{\log_b a})$$
+* **Trường hợp 2 (Case 2 — Chi phí phân bố đều qua các mức của cây đệ quy):** Nếu tồn tại hằng số $k \ge 0$ sao cho $f(n) = \Theta(n^{\log_b a} \cdot \log^k n)$, thì:
+  $$T(n) = \Theta(n^{\log_b a} \cdot \log^{k+1} n)$$
+  *(Đặc biệt với $k = 0$: khi $f(n) = \Theta(n^{\log_b a})$ thì $T(n) = \Theta(n^{\log_b a} \log n)$).*
+* **Trường hợp 3 (Case 3 — Chi phí tập trung tại nút gốc):** Nếu tồn tại hằng số $\epsilon > 0$ sao cho $f(n) = \Omega(n^{\log_b a + \epsilon})$ VÀ $f(n)$ thỏa mãn **điều kiện đều đặn (Regularity Condition)** $a \cdot f(n/b) \le c \cdot f(n)$ với hằng số $c < 1$ và mọi $n$ đủ lớn, thì:
+  $$T(n) = \Theta(f(n))$$
 
-2. Tác động đến độ phức tạp thời gian:
-- Chiều cao của cây h tăng tuyến tính: h = n - 1 (với n là số phần tử).
-- Độ phức tạp thời gian tìm kiếm, chèn, xóa trên BST phụ thuộc trực tiếp vào chiều cao h của cây:
-  + Trong trường hợp cân bằng lý tưởng: h = O(log n), chi phí tìm kiếm đạt O(log n).
-  + Trong trường hợp thoái hóa này: h = O(n), chi phí tìm kiếm bị suy biến nghiêm trọng về O(n) (phải duyệt tuần tự từ gốc 10 xuống 50).
-- Kết luận: Cây BST thông thường không đảm bảo hiệu năng trong trường hợp dữ liệu có thứ tự sẵn. Đây là lý do thúc đẩy sự ra đời của các Cấu trúc Cây tự cân bằng như AVL Tree hay Red-Black Tree.
+2. Áp dụng giải 3 phương trình truy hồi điển hình:
+* **Bài toán (1): $T(n) = 8T(n/2) + \Theta(n^2)$ (Nhân ma trận chia để trị thông thường)**
+  + Ta có $a = 8, b = 2 \Rightarrow c_{\text{crit}} = \log_2 8 = 3$, suy ra $n^{\log_b a} = n^3$.
+  + Vì $f(n) = \Theta(n^2) = O(n^{3 - \epsilon})$ với $\epsilon = 1 > 0$, phương trình rơi vào **Trường hợp 1 (Case 1)**.
+  + Kết luận: $T(n) = \Theta(n^3)$.
+* **Bài toán (2): Thuật toán MergeSort $T(n) = 2T(n/2) + \Theta(n)$**
+  + Ta có $a = 2, b = 2 \Rightarrow c_{\text{crit}} = \log_2 2 = 1$, suy ra $n^{\log_b a} = n^1 = n$.
+  + Vì $f(n) = \Theta(n) = \Theta(n^{\log_b a} \cdot \log^0 n)$ (hai hàm có cùng bậc tăng trưởng tiệm cận với $k = 0$), MergeSort rơi vào **Trường hợp 2 (Case 2)** (tuyệt đối không phải Case 3).
+  + Kết luận: $T(n) = \Theta(n \log n)$.
+* **Bài toán (3): Phương trình $T(n) = 2T(n/2) + \Theta(n^2)$**
+  + Ta có $a = 2, b = 2 \Rightarrow c_{\text{crit}} = \log_2 2 = 1$, suy ra $n^{\log_b a} = n^1 = n$.
+  + Vì $f(n) = n^2 = \Omega(n^{1 + \epsilon})$ với $\epsilon = 1 > 0$, và kiểm tra điều kiện đều đặn:
+    $$a \cdot f(n/b) = 2 \cdot (n/2)^2 = \frac{1}{2} n^2 \le c \cdot n^2 \quad (\text{chọn } c = 0.5 < 1)$$
+    nên phương trình rơi vào **Trường hợp 3 (Case 3)**.
+  + Kết luận: $T(n) = \Theta(n^2)$.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Mô tả hình dạng cây thoái hóa lệch phải** | **4.0đ** | Vẽ/mô tả chính xác cây biến thành đường thẳng lệch phải tương đương Singly Linked List. |
-| **Phân tích chiều cao h = O(n)** | **3.0đ** | Chỉ ra chiều cao cây tăng từ O(log n) lên O(n). |
-| **Đánh giá suy thoái độ phức tạp O(n)** | **3.0đ** | Khẳng định chi phí tìm kiếm bị suy biến về O(n) và nêu giải pháp Cây cân bằng. |
+| **Phát biểu chuẩn xác 3 trường hợp của Định lý Thợ (Master Theorem)** | **3.5đ** | Nêu đúng công thức so sánh f(n) với n^(log_b a) cho cả 3 Case kèm điều kiện đều đặn a*f(n/b) <= c*f(n) ở Case 3. |
+| **Giải đúng Case 1 cho T(n) = 8T(n/2) + n^2 và Case 2 cho MergeSort T(n) = 2T(n/2) + n** | **3.5đ** | Tính đúng log_2(8)=3 suy ra Theta(n^3) (Case 1) và log_2(2)=1 suy ra MergeSort thuộc Case 2 với Theta(n log n). |
+| **Giải đúng Case 3 cho T(n) = 2T(n/2) + n^2 kèm kiểm chứng Regularity Condition** | **3.0đ** | Chứng minh f(n)=n^2 thuộc Omega(n^(1+1)), kiểm tra 2*(n/2)^2 = 0.5*n^2 <= c*n^2 (c=0.5 < 1) và kết luận Theta(n^2). |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2301,7 +2450,7 @@ Cây nhị phân hoàn toàn KHÔNG CÓ bất kỳ nút con bên trái nào. Câ
 
 - **Mã định danh (Question Code):** `CSD_EQ11`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 23 — *AVL Balance Factor Condition*
 - **Mục tiêu đánh giá:** Kiểm tra mức độ thông hiểu điều kiện tự cân bằng của Cây AVL và ý nghĩa của hệ số cân bằng.
@@ -2347,7 +2496,7 @@ Do đó, chiều cao của cây AVL luôn bị chặn trên chặt chẽ bởi O
 
 - **Mã định danh (Question Code):** `CSD_EQ12`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 30 — *BFS vs DFS Exploration Strategy*
 - **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về sự khác biệt trong chiến lược lan tỏa và ứng dụng chuyên biệt của BFS và DFS.
@@ -2389,7 +2538,7 @@ Do đó, chiều cao của cây AVL luôn bị chặn trên chặt chẽ bởi O
 
 - **Mã định danh (Question Code):** `CSD_EQ13`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 46 — *Radix Sort Linear Time*
 - **Mục tiêu đánh giá:** Kiểm tra mức độ hiểu nguyên lý sắp xếp không so sánh và lý giải vì sao phá vỡ được giới hạn Omega(n log n).
@@ -2423,109 +2572,101 @@ Radix Sort là một thuật toán sắp xếp không dựa trên so sánh (Non-
 
 ---
 
-### 14. [CSD_EQ14] Nguyên lý Nén Run-Length Encoding và Các Trường hợp Gây Phình To Dữ liệu
+### 14. [CSD_EQ14] Nguyên lý Nén Run-Length Encoding (RLE) và Nén Từ điển Động LZW (Lempel-Ziv-Welch)
 
 - **Mã định danh (Question Code):** `CSD_EQ14`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000568`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 54 — *Run-Length Encoding (RLE)*
-- **Mục tiêu đánh giá:** Đánh giá khả năng hiểu thuật toán nén RLE và nhận diện trường hợp suy thoái làm tăng dung lượng.
+- **Chủ đề bài học (Syllabus):** Session 54 — *Run-Length Encoding (RLE) & LZW Dictionary Compression*
+- **Mục tiêu đánh giá:** Đánh giá sự hiểu biết về cơ chế nén lặp RLE, kịch bản phình dữ liệu và nguyên lý xây dựng từ điển động của thuật toán LZW không cần truyền kèm bảng từ điển.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Thuật toán nén Run-Length Encoding (RLE) hoạt động dựa trên nguyên lý nào? Hãy cho một ví dụ dữ liệu mà RLE nén rất tốt và một ví dụ dữ liệu đầu vào khiến RLE làm tăng kích thước tệp (phình to dữ liệu) thay vì nén nhỏ."
+> "Hãy trình bày nguyên lý nén dữ liệu của thuật toán Run-Length Encoding (RLE) và chỉ ra kịch bản dữ liệu khiến RLE làm phình to kích thước tệp. Tiếp theo, giải thích cơ chế hoạt động của thuật toán nén từ điển LZW (Lempel-Ziv-Welch) và tại sao bộ giải nén LZW có thể tự tái tạo lại chính xác từ điển mà không cần bộ nén phải đính kèm bảng từ điển vào tệp đầu ra?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu tệp dữ liệu đầu vào là chuỗi các ký tự xen kẽ không lặp lại: 'ABCDEFGH...', thuật toán RLE dạng đơn giản sẽ làm kích thước tệp tăng lên bao nhiêu phần trăm và giải pháp cải tiến cờ đánh dấu (Flag/Escape byte) khắc phục hiện tượng này như thế nào?"*
+> *"Trong thuật toán giải nén LZW, trường hợp đặc biệt 'cScSc' (khi bộ giải nén gặp một mã số vừa mới được tạo ra ở bước ngay trước đó nhưng chưa kịp thêm vào từ điển giải nén) được xử lý theo quy tắc nào?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Nguyên lý hoạt động của Run-Length Encoding (RLE):
-RLE là thuật toán nén dữ liệu không tổn hao (Lossless) hoạt động dựa trên việc tìm kiếm các đoạn dữ liệu lặp lại liên tiếp (runs).
-Thuật toán thay thế mỗi chuỗi các ký tự giống nhau lặp lại liên tiếp bằng một cặp gồm: [Độ dài đoạn lặp (Count), Ký tự lặp (Character)].
+1. Nguyên lý Run-Length Encoding (RLE) và kịch bản gây phình to dữ liệu (Negative Compression):
+* **Nguyên lý RLE:** Thay thế một chuỗi các ký tự giống hệt nhau nằm liên tiếp (gọi là một *run*) bằng một cặp gồm `(Số lần lặp, Ký tự)`. Ví dụ: chuỗi `"AAAAAABBBCCCC"` (13 ký tự) được nén thành `"6A3B4C"` (6 ký tự).
+* **Kịch bản phình to dữ liệu:** Khi dữ liệu nguồn có tần suất luân phiên cao, hầu như không có các ký tự lặp lại liên tiếp (ví dụ văn bản tự nhiên hoặc chuỗi `"ABCDEFGH"` độ dài 8). Khi đó RLE mã hóa thành `"1A1B1C1D1E1F1G1H"` (độ dài 16), làm kích thước dữ liệu sau nén **tăng gấp đôi (200%)** so với bản gốc.
 
-2. Ví dụ trường hợp RLE nén cực tốt:
-- Dữ liệu đầu vào: `"AAAAAAAABBBBBCCCCCCCCCCCC"` (25 ký tự).
-- Kết quả sau khi nén: `"8A5B12C"` (7 ký tự).
-- Đánh giá: Dung lượng giảm từ 25 byte xuống còn 7 byte, tỷ lệ nén đạt gần 72%. RLE cực kỳ hiệu quả với các hình ảnh hoạt hình đơn sắc, ảnh đen trắng (nhiều pixel trắng/đen liên tiếp), hoặc biểu tượng icon.
+2. Cơ chế hoạt động của thuật toán nén từ điển LZW (Lempel-Ziv-Welch):
+* **Khởi tạo:** Từ điển ban đầu chứa toàn bộ các chuỗi độ dài 1 trong bảng chữ cái chuẩn (ví dụ mã ASCII `0..255`).
+* **Quá trình nén:** Bộ nén tìm chuỗi dài nhất `W` trong luồng đầu vào hiện có mặt trong từ điển, đọc thêm ký tự kế tiếp `K`:
+  + Xuất ra mã số (codeword) của chuỗi `W`.
+  + Thêm chuỗi mở rộng `W + K` vào từ điển với một mã số mới tiếp theo (ví dụ từ `256` trở đi).
+  + Đặt lại `W = K` và tiếp tục lặp.
 
-3. Ví dụ trường hợp RLE làm phình to dữ liệu:
-- Dữ liệu đầu vào: `"ABCDEFGHIJ"` (10 ký tự khác nhau hoàn toàn, không có ký tự nào lặp lại liên tiếp).
-- Kết quả sau khi nén: `"1A1B1C1D1E1F1G1H1I1J"` (20 ký tự).
-- Đánh giá: Kích thước dữ liệu sau nén tăng gấp đôi từ 10 byte lên 20 byte (phình to 100%)!
-Lý do: Khi dữ liệu không có tính lặp lại (dữ liệu ngẫu nhiên hoặc văn bản tự nhiên), việc thêm số lượng đếm '1' vào trước mỗi ký tự đã vô tình nhân đôi dung lượng lưu trữ.
+3. Tại sao LZW không cần truyền kèm bảng từ điển vào tệp nén:
+- Khác với mã hóa Huffman tĩnh (bắt buộc phải lưu cây Huffman hoặc bảng tần suất ở phần Header của tệp nén), cả bộ nén (Encoder) và bộ giải nén (Decoder) của LZW đều **bắt đầu từ cùng một từ điển gốc cố định** (256 ký tự ASCII đơn).
+- Mỗi mã mới `W + K` chỉ được bộ nén sinh ra ngay sau khi nó xuất mã của `W`, và ký tự `K` chính là ký tự đầu tiên của chuỗi được giải mã ở bước kế tiếp. Do đó, bộ giải nén khi đọc luồng mã số có thể **tự động suy luận và xây dựng lại từ điển động hoàn toàn đồng bộ từng bước** với bộ nén mà không tốn một byte nào để lưu trữ bảng từ điển trên đường truyền.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Nguyên lý thay thế chuỗi lặp Count-Character** | **3.5đ** | Trình bày chính xác cơ chế gom nhóm các ký tự lặp liên tiếp. |
-| **Ví dụ nén tốt** | **3.0đ** | Đưa ra ví dụ chuỗi lặp dài và tính toán tỷ lệ giảm kích thước thuyết phục. |
-| **Ví dụ phình to dữ liệu** | **3.5đ** | Phân tích chuỗi không lặp dẫn đến kích thước tăng gấp đôi và giải thích nguyên nhân. |
+| **Trình bày nguyên lý RLE và ví dụ kịch bản phình to dữ liệu** | **3.5đ** | Giải thích cách ghép cặp (count, char) của RLE và chứng minh chuỗi không lặp liên tiếp làm kích thước tăng gấp đôi. |
+| **Giải thích quy trình tra cứu chuỗi W và thêm W + K trong LZW** | **3.5đ** | Mô tả rõ bước khởi tạo 256 mã cơ sở, xuất mã của chuỗi khớp dài nhất W và thêm chuỗi mới W + K vào từ điển động. |
+| **Làm rõ lý do bộ giải nén LZW tự tái tạo từ điển không cần Header** | **3.0đ** | Giải thích sự đồng bộ trạng thái giữa Encoder và Decoder từ bảng ASCII gốc và quy tắc ghép ký tự đầu của bước kế tiếp. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 15. [CSD_EQ15] Cài đặt Thao tác Chèn Nút Mới vào Sau một Nút trong Doubly Linked List
+### 15. [CSD_EQ15] Đệ quy Đảo ngược Singly Linked List và Phân tích Lỗi Đệ quy Vô tận (StackOverflowError)
 
 - **Mã định danh (Question Code):** `CSD_EQ15`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 2 — *Doubly Linked List Insertion*
-- **Mục tiêu đánh giá:** Đánh giá kỹ năng thao tác con trỏ kép khi chèn một nút mới vào danh sách liên kết đôi mà không làm đứt liên kết.
+- **Chủ đề bài học (Syllabus):** Session 11-12 — *Recursive Linked List Reversal & StackOverflowError Debugging*
+- **Mục tiêu đánh giá:** Đánh giá khả năng đọc hiểu vết đệ quy trên danh sách liên kết, phát hiện lỗi truyền sai đối số gây StackOverflowError và giải thích cơ chế đảo chiều con trỏ khi quay lui.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Cho một nút `prevNode` đã tồn tại trong Danh sách liên kết đôi (Doubly Linked List). Hãy viết phương thức Java `insertAfter(Node prevNode, int newData)` để chèn một nút mới có giá trị `newData` vào ngay sau `prevNode`. Trình bày đúng thứ tự 4 bước gán con trỏ để không làm mất liên kết."
+> "Xét hàm đệ quy đảo ngược Danh sách liên kết đơn trong Java. Tại sao nếu lập trình viên viết nhầm dòng gọi đệ quy thành `Node newHead = reverseList(head);` thay vì `Node newHead = reverseList(head.next);` thì chương trình sẽ lập tức bị sập với lỗi `StackOverflowError`? Hãy trình bày mã cài đặt đúng và giải thích cách lệnh `head.next.next = head; head.next = null;` đảo chiều liên kết trong pha quay lui (Unwinding Phase)."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Trong phương thức `insertAfter(Node prevNode, int newData)` của Doubly Linked List, nếu `prevNode` chính là nút đuôi (Tail) của danh sách thì bước gán con trỏ nào cần phải được kiểm tra điều kiện rẽ nhánh để tránh ném lỗi NullPointerException?"*
+> *"So với cách cài đặt đảo ngược Singly Linked List bằng vòng lặp (Iterative 3 con trỏ `prev`, `curr`, `next`), cách cài đặt đệ quy này có độ phức tạp không gian bộ nhớ phụ (Auxiliary Space Complexity) là bao nhiêu và tại sao?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-Định nghĩa cấu trúc nút:
+1. Nguyên nhân gây lỗi `StackOverflowError` khi viết `reverseList(head)` thay vì `reverseList(head.next)`:
+- Bản chất của mọi thuật toán đệ quy đúng đắn là ở mỗi bước gọi đệ quy, kích thước bài toán con phải **thu hẹp nghiêm ngặt** và tiến dần về **Điều kiện dừng (Base Case)**: `head == null || head.next == null`.
+- Khi truyền nhầm `reverseList(head)`, tham số đầu vào không hề tiến sang nút kế tiếp mà giữ nguyên địa chỉ nút `head` ban đầu. Điều kiện dừng không bao giờ đạt tới, khiến JVM liên tục đẩy (push) các khung kích hoạt (Activation Records / Stack Frames) mới vào bộ nhớ Call Stack cho đến khi cạn kiệt vùng nhớ Stack của luồng thực thi và ném ngoại lệ **`java.lang.StackOverflowError`**.
+
+2. Mã cài đặt chuẩn xác bằng Java:
 ```java
-public class Node {
-    int data;
-    Node prev;
-    Node next;
-    Node(int data) { this.data = data; }
+public Node reverseList(Node head) {
+    // 1. Điều kiện dừng (Base Case): danh sách rỗng hoặc chỉ có 1 nút
+    if (head == null || head.next == null) {
+        return head;
+    }
+
+    // 2. Bước đệ quy (Recursive Step): đảo ngược phần danh sách con từ head.next trở đi
+    Node newHead = reverseList(head.next);
+
+    // 3. Pha quay lui (Unwinding Phase): đảo ngược chiều liên kết tại nút hiện tại
+    head.next.next = head; // Bắt nút đứng liền sau head trỏ ngược lại chính head
+    head.next = null;      // Cắt liên kết xuôi cũ để tránh tạo chu trình 2 nút
+
+    return newHead;        // Luôn trả về nút cuối ban đầu (nay là đầu mới)
 }
 ```
 
-1. Thứ tự 4 bước gán con trỏ bắt buộc:
-- Bước 1: Khởi tạo nút mới: `Node newNode = new Node(newData);`
-- Bước 2: Thiết lập liên kết tiến của nút mới trỏ tới nút đứng sau prevNode:
-  `newNode.next = prevNode.next;`
-- Bước 3: Thiết lập liên kết lùi của nút mới trỏ về prevNode:
-  `newNode.prev = prevNode;`
-- Bước 4: Cập nhật liên kết tiến của prevNode trỏ tới newNode:
-  `prevNode.next = newNode;`
-- Bước 5 (Xử lý biên): Nếu newNode không phải là nút cuối cùng (tức là `newNode.next != null`), ta phải cập nhật liên kết lùi của nút đứng sau trỏ về newNode:
-  `newNode.next.prev = newNode;`
-
-2. Cài đặt hoàn chỉnh bằng Java:
-```java
-public void insertAfter(Node prevNode, int newData) {
-    if (prevNode == null) {
-        throw new IllegalArgumentException("Nút liền trước không được phép null");
-    }
-    Node newNode = new Node(newData);
-    newNode.next = prevNode.next;
-    newNode.prev = prevNode;
-    prevNode.next = newNode;
-    if (newNode.next != null) {
-        newNode.next.prev = newNode;
-    }
-}
-```
-Độ phức tạp thời gian: O(1) vì chỉ thực hiện các phép gán con trỏ trực tiếp.
+3. Cơ chế đảo chiều con trỏ trong pha quay lui (Unwinding Phase):
+- Giả sử danh sách là `1 -> 2 -> 3 -> null`. Khi đệ quy chạm đáy tại nút `3` (`head.next == null`), hàm trả về `newHead = 3` về cho khung gọi của nút `head = 2`.
+- Tại khung `head = 2`: `head.next` đang là nút `3`.
+  + Lệnh `head.next.next = head;` tương đương `3.next = 2`, biến liên kết thành `3 -> 2`.
+  + Lệnh `head.next = null;` cắt bỏ chiều cũ `2 -> 3`, tránh tạo vòng lặp vô tận `2 <-> 3`.
+- Quá trình tiếp tục quay lui về `head = 1`, thực hiện `2.next = 1` và `1.next = null`, thu được danh sách đảo ngược hoàn chỉnh `3 -> 2 -> 1 -> null`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Kiểm tra tiền điều kiện prevNode != null** | **2.0đ** | Bắt ngoại lệ IllegalArgumentException khi prevNode null. |
-| **Trình bày đúng thứ tự gán con trỏ** | **4.0đ** | Gán đúng newNode.next, newNode.prev trước khi cập nhật prevNode.next để không đứt chuỗi. |
-| **Xử lý nút kế tiếp newNode.next.prev** | **4.0đ** | Kiểm tra điều kiện newNode.next != null trước khi gán liên kết lùi. |
+| **Phân tích nguyên nhân lỗi StackOverflowError khi truyền nhầm head** | **3.0đ** | Giải thích rõ bài toán không thu hẹp về Base Case khiến Call Stack bị đẩy khung kích hoạt vô tận. |
+| **Trình bày đúng mã Java đệ quy reverseList(head.next)** | **3.5đ** | Viết đúng điều kiện dừng (head == null || head.next == null) và lời gọi đệ quy Node newHead = reverseList(head.next). |
+| **Giải thích cơ chế head.next.next = head và head.next = null** | **3.5đ** | Làm rõ cách nút kế tiếp trỏ ngược về nút hiện tại trong pha quay lui và lý do gán head.next = null để chống tạo chu trình. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2583,58 +2724,72 @@ Kết quả biểu thức Postfix cuối cùng: `A B C D - * +`.
 
 ---
 
-### 17. [CSD_EQ17] Các Bước Tìm Nút Thế thân và Cập nhật Con trỏ khi Xóa Nút 2 Con trên BST
+### 17. [CSD_EQ17] Tính chất Chiều cao Cây Nhị phân và Cài đặt Duyệt Theo Mức (Level-Order Traversal) bằng Queue
 
 - **Mã định danh (Question Code):** `CSD_EQ17`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 20 — *BST Node Deletion Mechanism*
-- **Mục tiêu đánh giá:** Đánh giá kỹ năng áp dụng thuật toán xóa nút có 2 con trên cây BST và chứng minh tính bảo toàn tính chất thứ tự.
+- **Chủ đề bài học (Syllabus):** Session 15-16 — *Binary Tree Properties & Level-Order Traversal using Queue*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng phân biệt các đại lượng hình học của Cây nhị phân và cài đặt duyệt theo chiều rộng trên cây bằng Queue.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Cho một cây tìm kiếm nhị phân (BST) với nút gốc có giá trị 50, nhánh con trái có nút 30 và nhánh con phải có cây con chứa các giá trị {70, 60, 80, 65}. Hãy mô tả chi tiết các bước xóa nút 50 bằng cách sử dụng phần tử thế thân nhỏ nhất bên phải (In-order Successor). Vẽ cấu trúc cây trước và sau khi xóa."
+> "Hãy phân biệt chiều cao (`Height`) và độ sâu (`Depth`) của một nút trên Cây nhị phân, đồng thời nêu công thức tính số nút tối đa ở mức `k` và trên toàn cây có chiều cao `h`. Viết phương thức Java cài đặt thuật toán duyệt cây nhị phân theo từng mức (`Level-Order Traversal` / `Breadth-First Traversal`) sử dụng cấu trúc Hàng đợi (`Queue`)."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Trong bài toán xóa nút 50 trên BST bằng In-order Successor từ cây con phải {70, 60, 80, 65}, giá trị của nút thế thân là bao nhiêu và nút cha của nó (nút 70) phải cập nhật con trỏ bên trái thành giá trị nào sau khi trích xuất nút thế thân?"*
+> *"Nếu yêu cầu in các nút của Cây nhị phân theo từng dòng riêng biệt tương ứng với từng tầng (Level 0, Level 1, Level 2,...), ta cần sử dụng biến `int levelSize = queue.size()` ở đầu vòng lặp `while` như thế nào?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Cấu trúc cây ban đầu trước khi xóa:
-```
-         50 (cần xóa)
-       /    \
-     30      70
-            /  \
-          60    80
-            \
-             65
-```
+1. Phân biệt Độ sâu (`Depth`), Chiều cao (`Height`) và các tính chất số lượng nút trên Cây nhị phân:
+* **Độ sâu của nút `u` (`Depth`):** Là số cạnh trên đường đi đơn từ nút gốc (`Root`) xuống nút `u` (Nút gốc có `Depth = 0`).
+* **Chiều cao của nút `u` (`Height`):** Là số cạnh trên đường đi dài nhất từ nút `u` xuống một nút lá hậu duệ của nó (Nút lá có `Height = 0`). Chiều cao của cây là chiều cao của nút gốc.
+* **Số nút tối đa tại mức (tầng) thứ `k` ($k \ge 0$):** Tối đa $2^k$ nút.
+* **Tổng số nút tối đa trên cây nhị phân có chiều cao `h`:**
+  $$N_{\max} = \sum_{k=0}^{h} 2^k = 2^{h+1} - 1$$
 
-2. Các bước thực hiện xóa nút 50:
-- Bước 1: Nhận diện nút 50 có đủ 2 con (con trái là 30, con phải là 70).
-- Bước 2: Tìm nút thế thân In-order Successor:
-  Đi sang cây con phải (gốc 70), sau đó đi sang trái liên tục tới nút tận cùng: từ 70 sang trái gặp 60. Tại nút 60, con trái bằng null. Vậy Nút thế thân là 60 (giá trị nhỏ nhất bên cây con phải).
-- Bước 3: Sao chép giá trị của nút thế thân vào nút cần xóa: `root.val = 60`.
-- Bước 4: Xóa nút 60 khỏi vị trí cũ trong cây con phải:
-  Quan sát nút 60 chỉ có 1 con bên phải là nút 65 (`60.right = 65`). Ta nối trực tiếp nút con trái của 70 trỏ vào 65 (`70.left = 65`).
+2. Cài đặt thuật toán Duyệt theo mức (`Level-Order Traversal`) bằng `Queue` trong Java:
+```java
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 
-3. Cấu trúc cây sau khi xóa nút 50:
+public List<List<Integer>> levelOrderTraversal(TreeNode root) {
+    List<List<Integer>> result = new ArrayList<>();
+    if (root == null) return result;
+
+    Queue<TreeNode> queue = new LinkedList<>();
+    queue.offer(root);
+
+    while (!queue.isEmpty()) {
+        int levelSize = queue.size(); // Chốt số lượng nút của tầng hiện tại
+        List<Integer> currentLevel = new ArrayList<>(levelSize);
+
+        for (int i = 0; i < levelSize; i++) {
+            TreeNode current = queue.poll();
+            currentLevel.add(current.val);
+
+            if (current.left != null) {
+                queue.offer(current.left);
+            }
+            if (current.right != null) {
+                queue.offer(current.right);
+            }
+        }
+        result.add(currentLevel);
+    }
+    return result;
+}
 ```
-         60 (gốc mới)
-       /    \
-     30      70
-            /  \
-          65    80
-```
-Tính chất BST được bảo toàn hoàn hảo: 30 < 60 < {65, 70, 80}.
+* **Độ phức tạp thuật toán:** Mỗi nút được đưa vào (`offer`) và lấy ra khỏi hàng đợi (`poll`) đúng 1 lần nên độ phức tạp thời gian là $O(n)$. Bộ nhớ phụ của `Queue` chứa tối đa số nút ở tầng rộng nhất (tầng đáy có tối đa $\lceil n/2 \rceil$ nút) nên độ phức tạp không gian là $O(n)$.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Xác định chính xác In-order Successor** | **3.0đ** | Tìm đúng nút thế thân là 60 (nhỏ nhất bên cây con phải). |
-| **Các bước cập nhật con trỏ** | **4.0đ** | Mô tả sao chép giá trị 60 lên gốc và nối 70.left vào 65. |
-| **Sơ đồ cây trước và sau khi xóa** | **3.0đ** | Vẽ đúng hình dạng cấu trúc cây trước và sau, khẳng định tính chất BST bảo toàn. |
+| **Phân biệt Depth vs Height và nêu công thức $2^k$, $2^{h+1}-1$** | **3.0đ** | Định nghĩa chính xác độ sâu (từ gốc xuống), chiều cao (từ nút xuống lá xa nhất) và 2 công thức số nút tối đa. |
+| **Cài đặt chuẩn xác hàm Java `levelOrderTraversal` bằng `Queue`** | **4.5đ** | Khởi tạo `Queue`, kiểm tra `root == null`, dùng `levelSize = queue.size()` tách từng tầng và đẩy `left`, `right` vào hàng đợi. |
+| **Phân tích độ phức tạp thời gian $O(n)$ và không gian $O(n)$** | **2.5đ** | Giải thích rõ mỗi nút qua Queue đúng 1 lần và kích thước Queue cực đại tỉ lệ với số lá $\lceil n/2 \rceil$. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2643,7 +2798,7 @@ Tính chất BST được bảo toàn hoàn hảo: 30 < 60 < {65, 70, 80}.
 
 - **Mã định danh (Question Code):** `CSD_EQ18`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
 - **Chủ đề bài học (Syllabus):** Session 24 — *Max-Heap Construction and Extract-Max*
 - **Mục tiêu đánh giá:** Kiểm tra kỹ năng xây dựng Heap từ mảng và thực hiện thao tác xóa phần tử gốc kèm Sift-Down.
@@ -2689,168 +2844,173 @@ Kích thước n = 5. Nút không phải lá cuối cùng có chỉ số: `(n / 
 
 ---
 
-### 19. [CSD_EQ19] Thực thi Từng Bước Thuật toán Dijkstra trên Đồ thị Có Trọng số
+### 19. [CSD_EQ19] Thuật toán Sắp xếp Tô-pô (Kahn's Topological Sort) trên DAG và Thuật toán Floyd-Warshall Mọi Cặp Đỉnh
 
 - **Mã định danh (Question Code):** `CSD_EQ19`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO5** (`00000000-0000-0000-0000-000000000565`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 34 — *Dijkstra Algorithm Execution*
-- **Mục tiêu đánh giá:** Đánh giá kỹ năng vận dụng thuật toán Dijkstra từng bước và cập nhật bảng khoảng cách khoảng cách tối ưu.
+- **Chủ đề bài học (Syllabus):** Session 33-34 — *Topological Sort (Kahn's Algorithm) & Floyd-Warshall All-Pairs Shortest Path*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt thuật toán Kahn sắp xếp tô-pô dựa trên bán bậc vào (in-degree) kiêm phát hiện chu trình có hướng và thuật toán quy hoạch động Floyd-Warshall.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Cho đồ thị có hướng có trọng số gồm 4 đỉnh {A, B, C, D} với các cạnh: (A->B, trọng số 2), (A->C, 5), (B->C, 1), (B->D, 7), (C->D, 3). Hãy thực thi thuật toán Dijkstra từng bước xuất phát từ đỉnh nguồn A để tìm khoảng cách ngắn nhất tới tất cả các đỉnh còn lại. Lập bảng mô phỏng chi tiết từng lượt lặp."
+> "Sắp xếp Tô-pô (Topological Sort) áp dụng cho loại đồ thị nào? Hãy trình bày từng bước Thuật toán Kahn sử dụng mảng bán bậc vào (`in-degree`) kết hợp Hàng đợi (Queue) để tìm thứ tự Tô-pô và giải thích làm thế nào thuật toán Kahn phát hiện được đồ thị có chu trình có hướng. Cuối cùng, viết công thức quy hoạch động 3 vòng lặp của thuật toán Floyd-Warshall tìm đường đi ngắn nhất giữa mọi cặp đỉnh."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Tại thời điểm một đỉnh v được chốt nhãn (Finalized / Visited) trong thuật toán Dijkstra, tính chất toán học nào của thuật toán đảm bảo khoảng cách d[v] đã là đường đi ngắn nhất tuyệt đối và không bao giờ bị cập nhật giảm xuống nữa trên đồ thị không có cạnh âm?"*
+> *"Trong thuật toán Floyd-Warshall với 3 vòng lặp lồng nhau theo các chỉ số `k`, `i`, `j`, tại sao biến đỉnh trung gian `k` BẮT BUỘC phải đặt ở vòng lặp ngoài cùng chứ không được đặt ở vòng lặp trong cùng?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Khởi tạo thuật toán Dijkstra với nguồn S = A:
-- Mảng khoảng cách: `dist[A] = 0`, `dist[B] = infinity`, `dist[C] = infinity`, `dist[D] = infinity`.
-- Tập đỉnh đã hoàn tất chốt kết quả: `Visited = {}`.
+1. Điều kiện áp dụng và Thuật toán Kahn cho Sắp xếp Tô-pô (Topological Sort):
+* **Điều kiện bắt buộc:** Chỉ áp dụng cho **Đồ thị có hướng không có chu trình (DAG — Directed Acyclic Graph)**, dùng để lập lịch các công việc có ràng buộc tiên quyết (như môn học tiên quyết hoặc thứ tự biên dịch gói phần mềm).
+* **Các bước của Thuật toán Kahn (Độ phức tạp $O(V + E)$):**
+  + **Bước 1:** Tính bán bậc vào `inDegree[u]` (số cạnh đi vào đỉnh `u`) cho mọi đỉnh $u \in V$.
+  + **Bước 2:** Đưa toàn bộ các đỉnh có `inDegree[u] == 0` (không phụ thuộc vào đỉnh nào khác) vào Hàng đợi `Queue`.
+  + **Bước 3:** Lặp khi `Queue` chưa rỗng:
+    * Lấy đỉnh `u = queue.poll()`, đưa `u` vào danh sách kết quả `topoOrder` và tăng biến đếm `visitedCount++`.
+    * Duyệt mọi đỉnh kề `v` của `u`: giảm `inDegree[v]--`. Nếu `inDegree[v] == 0` thì đẩy `v` vào `Queue`.
+* **Cách phát hiện chu trình có hướng:** Sau khi vòng lặp kết thúc, nếu `visitedCount < V` (số đỉnh lấy ra ít hơn tổng số đỉnh của đồ thị), ta kết luận chắc chắn đồ thị **chứa ít nhất một chu trình có hướng (Directed Cycle)** và không tồn tại thứ tự Tô-pô.
 
-2. Bảng mô phỏng từng bước lặp thuật toán:
-
-| Lượt lặp | Đỉnh chọn (min dist chưa thăm) | Thao tác Relaxation (Cập nhật khoảng cách cạnh kề) | Mảng dist sau lượt [A, B, C, D] | Visited |
-|---|---|---|---|---|
-| Khởi tạo | - | - | [0, inf, inf, inf] | {} |
-| Lượt 1 | **A** (dist = 0) | Cạnh A->B: dist[B] = min(inf, 0 + 2) = 2<br/>Cạnh A->C: dist[C] = min(inf, 0 + 5) = 5 | [0, **2**, 5, inf] | {A} |
-| Lượt 2 | **B** (dist = 2) | Cạnh B->C: dist[C] = min(5, 2 + 1) = 3 (giảm từ 5 xuống 3!)<br/>Cạnh B->D: dist[D] = min(inf, 2 + 7) = 9 | [0, 2, **3**, 9] | {A, B} |
-| Lượt 3 | **C** (dist = 3) | Cạnh C->D: dist[D] = min(9, 3 + 3) = 6 (giảm từ 9 xuống 6!) | [0, 2, 3, **6**] | {A, B, C} |
-| Lượt 4 | **D** (dist = 6) | Đỉnh D không có cạnh đi ra | [0, 2, 3, 6] | {A, B, C, D} |
-
-3. Kết quả khoảng cách ngắn nhất từ nguồn A:
-- A -> A: 0
-- A -> B: 2 (đường đi: A -> B)
-- A -> C: 3 (đường đi: A -> B -> C, tối ưu hơn đường trực tiếp A -> C có trọng số 5)
-- A -> D: 6 (đường đi: A -> B -> C -> D, tối ưu hơn đường qua B->D có trọng số 9).
+2. Công thức Quy hoạch động và Cài đặt Thuật toán Floyd-Warshall ($O(V^3)$):
+- Đặt `dist[i][j]` là độ dài đường đi ngắn nhất từ đỉnh `i` đến đỉnh `j` chỉ đi qua các đỉnh trung gian thuộc tập $\{0, 1, \dots, k\}$.
+- Công thức chuyển trạng thái:
+  $$\text{dist}[i][j] = \min\big(\text{dist}[i][j],\; \text{dist}[i][k] + \text{dist}[k][j]\big)$$
+```java
+public void floydWarshall(int[][] dist, int V) {
+    // k BẮT BUỘC là vòng lặp ngoài cùng (đỉnh trung gian được mở rộng dần từ 0 đến V-1)
+    for (int k = 0; k < V; k++) {
+        for (int i = 0; i < V; i++) {
+            for (int j = 0; j < V; j++) {
+                if (dist[i][k] != INF && dist[k][j] != INF
+                        && dist[i][k] + dist[k][j] < dist[i][j]) {
+                    dist[i][j] = dist[i][k] + dist[k][j];
+                }
+            }
+        }
+    }
+}
+```
+*(Nếu sau khi chạy xong tồn tại đỉnh `i` có `dist[i][i] < 0`, đồ thị chứa chu trình âm).*
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Khởi tạo khoảng cách và đỉnh nguồn** | **2.0đ** | Đặt đúng dist[A] = 0 và các đỉnh còn lại bằng infinity. |
-| **Bảng mô phỏng 4 lượt lặp chính xác** | **5.0đ** | Thể hiện chính xác việc chọn đỉnh min và 2 lần giảm khoảng cách relaxation tại C (từ 5 xuống 3) và D (từ 9 xuống 6). |
-| **Kết luận đường đi và khoảng cách tối ưu** | **3.0đ** | Đưa ra đáp án chuẩn xác: dist(B)=2, dist(C)=3, dist(D)=6 kèm vết đường đi. |
+| **Nêu đúng điều kiện đồ thị DAG và 3 bước Thuật toán Kahn** | **3.5đ** | Trình bày rõ điều kiện đồ thị có hướng không chu trình (DAG), cách tính inDegree và dùng Queue xử lý đỉnh có inDegree == 0. |
+| **Giải thích cơ chế phát hiện chu trình có hướng khi visitedCount < V** | **3.0đ** | Chứng minh các đỉnh nằm trong chu trình không bao giờ giảm inDegree về 0 nên visitedCount < V. |
+| **Viết đúng công thức quy hoạch động và 3 vòng lặp Floyd-Warshall** | **3.5đ** | Viết đúng công thức dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]) với vòng lặp đỉnh trung gian k ở ngoài cùng và kiểm tra INF. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 20. [CSD_EQ20] Quy trình Phân hoạch Hoare Partition trong QuickSort
+### 20. [CSD_EQ20] Cài đặt Thuật toán Sắp xếp Trộn (MergeSort) bằng Java và Phân tích Thao tác Trộn Hai Mảng Con
 
 - **Mã định danh (Question Code):** `CSD_EQ20`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 42 — *Hoare Partition Procedure*
-- **Mục tiêu đánh giá:** Kiểm tra kỹ năng cài đặt và theo dõi trạng thái con trỏ hai đầu trong thuật toán phân hoạch Hoare.
+- **Chủ đề bài học (Syllabus):** Session 45 — *MergeSort Implementation & Two-Finger Merge Procedure*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng cài đặt thuật toán chia để trị MergeSort và hàm merge hai nửa đã sắp xếp trên mảng Java đảm bảo tính ổn định (Stability).
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy trình bày thuật toán phân hoạch Hoare (Hoare Partition) trong QuickSort khi chọn phần tử ở giữa `arr[(low + high) / 2]` làm Pivot. Mô phỏng từng bước chạy của thuật toán trên mảng: `[5, 2, 9, 3, 7, 6, 1]` và cho biết trạng thái của mảng cùng vị trí phân hoạch sau khi hoàn tất."
+> "Hãy trình bày nguyên lý Chia để trị (Divide and Conquer) của thuật toán Sắp xếp Trộn (MergeSort) và viết mã Java cài đặt hàm `merge(int[] arr, int left, int mid, int right)` để trộn hai nửa mảng con đã sắp xếp. Tại sao trong câu lệnh so sánh của hàm `merge`, việc dùng toán tử `L[i] <= R[j]` thay vì `L[i] < R[j]` lại quyết định trực tiếp đến Tính ổn định (Stability) của MergeSort?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"So với phân hoạch Lomuto, phân hoạch Hoare thực hiện ít hơn trung bình bao nhiêu lần phép hoán đổi (swap) và tại sao phần tử Pivot trong phân hoạch Hoare không nhất thiết nằm ở vị trí phân hoạch cuối cùng sau khi hoàn tất?"*
+> *"Tại sao khi sắp xếp một Danh sách liên kết đơn (Singly Linked List), MergeSort lại là thuật toán được ưu tiên hàng đầu và có thể cài đặt mà không cần cấp phát mảng phụ O(n) như trên mảng tĩnh?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Nguyên lý thuật toán phân hoạch Hoare:
-- Chọn pivot: `pivot = arr[(low + high) / 2]`.
-- Sử dụng hai con trỏ: `i` chạy từ trái sang (`low - 1`) và `j` chạy từ phải sang (`high + 1`).
-- Trong vòng lặp vô hạn:
-  + Tăng `i` liên tục chừng nào `arr[i] < pivot`.
-  + Giảm `j` liên tục chừng nào `arr[j] > pivot`.
-  + Nếu `i >= j`, thuật toán kết thúc và trả về chỉ số `j` làm ranh giới phân hoạch.
-  + Ngược lại (`i < j`), hoán vị `arr[i]` với `arr[j]`.
+1. Nguyên lý Chia để trị (Divide and Conquer) của MergeSort:
+* **Chia (Divide):** Chia mảng gồm $n$ phần tử thành 2 mảng con có kích thước xấp xỉ $n/2$ tại chỉ số giữa `mid = left + (right - left) / 2`.
+* **Trị (Conquer):** Gọi đệ quy `mergeSort` để sắp xếp độc lập nửa bên trái `arr[left..mid]` và nửa bên phải `arr[mid+1..right]` cho tới khi mảng con chỉ còn 1 phần tử (Base Case: `left >= right`).
+* **Tổng hợp (Combine):** Dùng thủ tục hai con trỏ `merge` để trộn hai mảng con đã có thứ tự thành một mảng duy nhất được sắp xếp hoàn chỉnh trong thời gian tuyến tính $\Theta(n)$.
 
-2. Mô phỏng trên mảng `[5, 2, 9, 3, 7, 6, 1]` (low = 0, high = 6):
-- Chỉ số giữa: `(0 + 6) / 2 = 3` -> `pivot = arr[3] = 3`.
-- Khởi tạo con trỏ: `i = -1`, `j = 7`.
+2. Cài đặt hàm `merge(int[] arr, int left, int mid, int right)` chuẩn Java:
+```java
+public void merge(int[] arr, int left, int mid, int right) {
+    int n1 = mid - left + 1;
+    int n2 = right - mid;
 
-- Vòng 1:
-  + Tiến `i`: `i` dừng tại 0 vì `arr[0] = 5 >= 3`.
-  + Lùi `j`: `j` lùi qua 6 (giá trị 1 < 3) -> dừng tại 6 vì `arr[6] = 1 <= 3`.
-  + Vì `i = 0 < j = 6`, hoán vị `arr[0]` và `arr[6]`.
-  + Mảng trở thành: `[1, 2, 9, 3, 7, 6, 5]`.
+    int[] L = new int[n1];
+    int[] R = new int[n2];
 
-- Vòng 2:
-  + Tiến `i`: `arr[1] = 2 < 3` (tiếp tục), `arr[2] = 9 >= 3` -> dừng tại `i = 2`.
-  + Lùi `j`: `arr[6]=5 > 3`, `arr[5]=6 > 3`, `arr[4]=7 > 3`, `arr[3]=3 <= 3` -> dừng tại `j = 3`.
-  + Vì `i = 2 < j = 3`, hoán vị `arr[2]` và `arr[3]`.
-  + Mảng trở thành: `[1, 2, 3, 9, 7, 6, 5]`.
+    for (int i = 0; i < n1; i++) L[i] = arr[left + i];
+    for (int j = 0; j < n2; j++) R[j] = arr[mid + 1 + j];
 
-- Vòng 3:
-  + Tiến `i`: dừng tại `i = 3` vì `arr[3] = 9 >= 3`.
-  + Lùi `j`: `arr[3]=9 > 3`, `arr[2]=3 <= 3` -> dừng tại `j = 2`.
-  + Kiểm tra: `i = 3 >= j = 2` -> Hai con trỏ đã gặp và vượt qua nhau!
-  + Dừng thuật toán, trả về ranh giới phân hoạch `j = 2`.
+    int i = 0, j = 0, k = left;
+    while (i < n1 && j < n2) {
+        // BẮT BUỘC dùng dấu <= để bảo toàn tính ổn định (Stability)
+        if (L[i] <= R[j]) {
+            arr[k++] = L[i++];
+        } else {
+            arr[k++] = R[j++];
+        }
+    }
+    while (i < n1) arr[k++] = L[i++];
+    while (j < n2) arr[k++] = R[j++];
+}
+```
 
-3. Kết quả:
-Mảng sau phân hoạch: `[1, 2, 3, 9, 7, 6, 5]`.
-Phân vùng trái `[0 .. 2]` là `[1, 2, 3]` (toàn bộ <= pivot 3).
-Phân vùng phải `[3 .. 6]` là `[9, 7, 6, 5]` (toàn bộ >= pivot 3).
+3. Tại sao toán tử `L[i] <= R[j]` quyết định Tính ổn định (Stability) của MergeSort:
+- Mảng con bên trái `L[]` luôn chứa các phần tử nằm ở các vị trí chỉ số nhỏ hơn (đứng trước trong mảng ban đầu) so với các phần tử trong mảng con bên phải `R[]`.
+- Khi gặp hai phần tử có khóa bằng nhau (`L[i] == R[j]`), điều kiện `L[i] <= R[j]` đảm bảo phần tử thuộc nửa trái `L[i]` được chép vào mảng kết quả `arr[k]` **trước** phần tử `R[j]`, nhờ đó giữ nguyên 100% thứ tự tương đối ban đầu. Nếu viết `L[i] < R[j]`, phần tử đứng sau `R[j]` sẽ bị đưa lên trước `L[i]`, làm phá vỡ tính ổn định của thuật toán!
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Nguyên lý hai con trỏ i và j của Hoare** | **3.0đ** | Nêu đúng cơ chế con trỏ chạy ngược chiều vào giữa và điều kiện dừng i >= j. |
-| **Mô phỏng chi tiết 3 vòng lặp** | **4.5đ** | Ghi nhận đúng từng vị trí dừng của i và j, các bước hoán vị và giá trị mảng qua từng vòng. |
-| **Kết quả ranh giới phân hoạch j = 2** | **2.5đ** | Chỉ ra mảng chia làm 2 nửa [1, 2, 3] và [9, 7, 6, 5] chính xác. |
+| **Trình bày đúng 3 bước Chia - Trị - Tổng hợp của MergeSort** | **3.0đ** | Nêu rõ cách chia đôi theo mid = left + (right - left)/2, đệ quy hai nửa và trộn tuyến tính O(n). |
+| **Cài đặt chính xác hàm Java merge với kỹ thuật 2 con trỏ** | **4.0đ** | Sao chép đúng 2 mảng tạm L, R, chạy vòng lặp trộn chính và 2 vòng lặp vét cạn phần tử dư. |
+| **Giải thích vai trò của dấu <= đối với tính ổn định (Stability)** | **3.0đ** | Chứng minh khi L[i] == R[j], dấu <= ưu tiên lấy phần tử nửa trái đứng trước trong mảng gốc để bảo toàn thứ tự tương đối. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 21. [CSD_EQ21] Thực hiện Chèn Dãy Khóa vào Bảng băm theo Linear và Quadratic Probing
+### 21. [CSD_EQ21] Xử lý Xung đột Bảng băm bằng Dò Bậc Hai (Quadratic Probing) và Băm Kép (Double Hashing)
 
 - **Mã định danh (Question Code):** `CSD_EQ21`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO7** | **DB 3NF CLO7** (`00000000-0000-0000-0000-000000000567`)
 - **Thang nhận thức Bloom:** `Apply` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 50 — *Linear Probing vs Quadratic Probing Execution*
-- **Mục tiêu đánh giá:** Kiểm tra kỹ năng tính toán chỉ số băm và vận dụng công thức dò tuyến tính và dò bậc hai khi xử lý va chạm.
+- **Chủ đề bài học (Syllabus):** Session 50 — *Quadratic Probing, Secondary Clustering & Double Hashing*
+- **Mục tiêu đánh giá:** Đánh giá kỹ năng áp dụng công thức dò bậc hai và băm kép để chèn khóa vào bảng băm địa chỉ mở, đồng thời phân tích hiện tượng cụm thứ cấp (Secondary Clustering).
 
 #### ❓ Câu hỏi vấn đáp:
-> "Cho bảng băm có kích thước M = 7 với hàm băm `h(k) = k mod 7`. Hãy mô phỏng từng bước chèn dãy khóa sau vào bảng băm: `[10, 17, 24, 38]` bằng hai phương pháp: (1) Dò tuyến tính (Linear Probing), và (2) Dò bậc hai (Quadratic Probing với c1 = 0, c2 = 1: `h(k, i) = (h(k) + i^2) mod 7`)."
+> "Để khắc phục hiện tượng Cụm chính (Primary Clustering) của Dò tuyến tính (Linear Probing), hai phương pháp Dò bậc hai (Quadratic Probing) và Băm kép (Double Hashing) định nghĩa hàm dò vị trí như thế nào? Cho bảng băm kích thước M = 7 với hàm băm chính h1(k) = k mod 7, hãy thực hiện từng bước chèn dãy khóa `{10, 17, 24, 31}` theo: (a) Quadratic Probing `h(k, i) = (h1(k) + i^2) mod 7`, và (b) Double Hashing với hàm băm phụ `h2(k) = 5 - (k mod 5)`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Hiện tượng phân cụm thứ cấp (Secondary Clustering) trong Quadratic Probing xảy ra khi nào và tại sao nó vẫn có thể phát sinh ngay cả khi hai khóa ban đầu khác nhau nếu chúng có cùng giá trị băm ban đầu `h(k1) == h(k2)`?"*
+> *"Tại sao trong phương pháp Băm kép (Double Hashing), giá trị trả về của hàm băm phụ `h2(k)` bắt buộc phải khác 0 và nguyên tố cùng nhau (coprime) với kích thước bảng băm M?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Phương pháp 1: Dò tuyến tính (Linear Probing: `h(k, i) = (h(k) + i) mod 7`):
-Khởi tạo bảng băm M = 7 ô rỗng: `[-, -, -, -, -, -, -]`.
-- Chèn khóa 10: `h(10) = 10 mod 7 = 3`. Ô 3 trống -> Gán `table[3] = 10`.
-- Chèn khóa 17: `h(17) = 17 mod 7 = 3`. Xung đột tại ô 3!
-  Dò i = 1: `(3 + 1) mod 7 = 4`. Ô 4 trống -> Gán `table[4] = 17`.
-- Chèn khóa 24: `h(24) = 24 mod 7 = 3`. Xung đột tại ô 3!
-  Dò i = 1: ô 4 đã có 17 (xung đột tiếp).
-  Dò i = 2: `(3 + 2) mod 7 = 5`. Ô 5 trống -> Gán `table[5] = 24`.
-- Chèn khóa 38: `h(38) = 38 mod 7 = 3`. Xung đột tại ô 3!
-  Dò i = 1: ô 4 có 17.
-  Dò i = 2: ô 5 có 24.
-  Dò i = 3: `(3 + 3) mod 7 = 6`. Ô 6 trống -> Gán `table[6] = 38`.
-Kết quả bảng băm sau Linear Probing:
-`[0: -, 1: -, 2: -, 3: 10, 4: 17, 5: 24, 6: 38]` (hình thành cụm chính liên tục từ 3 đến 6).
+1. Công thức và bản chất của Quadratic Probing và Double Hashing:
+* **Dò bậc hai (Quadratic Probing):** $h(k, i) = (h_1(k) + i^2) \bmod M$ với $i = 0, 1, 2, \dots$
+  + Loại bỏ được Cụm chính (Primary Clustering) vì bước nhảy tăng bình phương ($+1, +4, +9, \dots$). Tuy nhiên vẫn bị **Cụm thứ cấp (Secondary Clustering)**: các khóa có cùng giá trị băm ban đầu $h_1(k_1) = h_1(k_2)$ sẽ đi theo cùng một quỹ đạo dò hệt nhau.
+* **Băm kép (Double Hashing):** $h(k, i) = (h_1(k) + i \cdot h_2(k)) \bmod M$ với $i = 0, 1, 2, \dots$
+  + Bước nhảy phụ thuộc vào hàm băm thứ hai $h_2(k)$ (thường chọn $h_2(k) = q - (k \bmod q)$ với $q < M$ là số nguyên tố), giúp hai khóa dù trùng $h_1(k)$ vẫn có bước nhảy $h_2(k)$ khác nhau, triệt tiêu cả Cụm chính lẫn Cụm thứ cấp.
 
-2. Phương pháp 2: Dò bậc hai (Quadratic Probing: `h(k, i) = (h(k) + i^2) mod 7`):
-Khởi tạo bảng băm M = 7 ô rỗng: `[-, -, -, -, -, -, -]`.
-- Chèn khóa 10: `h(10) = 3`. Ô 3 trống -> Gán `table[3] = 10`.
-- Chèn khóa 17: `h(17) = 3`. Xung đột tại 3!
-  Dò i = 1: `(3 + 1^2) mod 7 = 4 mod 7 = 4`. Ô 4 trống -> Gán `table[4] = 17`.
-- Chèn khóa 24: `h(24) = 3`. Xung đột tại 3!
-  Dò i = 1: `(3 + 1) mod 7 = 4` (đã có 17).
-  Dò i = 2: `(3 + 2^2) mod 7 = (3 + 4) mod 7 = 7 mod 7 = 0`. Ô 0 trống -> Gán `table[0] = 24`.
-- Chèn khóa 38: `h(38) = 3`. Xung đột tại 3!
-  Dò i = 1: ô 4 có 17.
-  Dò i = 2: ô 0 có 24.
-  Dò i = 3: `(3 + 3^2) mod 7 = (3 + 9) mod 7 = 12 mod 7 = 5`. Ô 5 trống -> Gán `table[5] = 38`.
-Kết quả bảng băm sau Quadratic Probing:
-`[0: 24, 1: -, 2: -, 3: 10, 4: 17, 5: 38, 6: -]` (các phần tử được phân tán rộng, triệt tiêu hiện tượng cụm chính).
+2. Thực hiện chèn dãy khóa `{10, 17, 24, 31}` vào bảng $M = 7$ (lưu ý cả 4 khóa đều có $h_1(k) = k \bmod 7 = 3$):
+* **(a) Theo Quadratic Probing $h(k, i) = (3 + i^2) \bmod 7$:**
+  + **Khóa 10:** $i = 0 \Rightarrow (3 + 0) \bmod 7 = \mathbf{3}$ (Trống $\to$ `T[3] = 10`).
+  + **Khóa 17:** $i = 0 \to 3$ (Đầy); $i = 1 \Rightarrow (3 + 1^2) \bmod 7 = \mathbf{4}$ (Trống $\to$ `T[4] = 17`).
+  + **Khóa 24:** $i = 0 \to 3$ (Đầy); $i = 1 \to 4$ (Đầy); $i = 2 \Rightarrow (3 + 2^2) \bmod 7 = 7 \bmod 7 = \mathbf{0}$ (Trống $\to$ `T[0] = 24`).
+  + **Khóa 31:** $i = 0 \to 3$ (Đầy); $i = 1 \to 4$ (Đầy); $i = 2 \to 0$ (Đầy); $i = 3 \Rightarrow (3 + 3^2) \bmod 7 = 12 \bmod 7 = \mathbf{5}$ (Trống $\to$ `T[5] = 31`).
+  + **Bảng kết quả (a):** `[0: 24, 1: _, 2: _, 3: 10, 4: 17, 5: 31, 6: _]`.
+
+* **(b) Theo Double Hashing $h(k, i) = (h_1(k) + i \cdot h_2(k)) \bmod 7$ với $h_2(k) = 5 - (k \bmod 5)$:**
+  + **Khóa 10:** $h_1(10) = 3 \Rightarrow$ đặt tại **`T[3] = 10`**.
+  + **Khóa 17:** $h_1(17) = 3$ (Đầy). Tính $h_2(17) = 5 - (17 \bmod 5) = 5 - 2 = 3$.
+    Với $i = 1 \Rightarrow (3 + 1 \cdot 3) \bmod 7 = \mathbf{6}$ (Trống $\to$ **`T[6] = 17`**).
+  + **Khóa 24:** $h_1(24) = 3$ (Đầy). Tính $h_2(24) = 5 - (24 \bmod 5) = 5 - 4 = 1$.
+    Với $i = 1 \Rightarrow (3 + 1 \cdot 1) \bmod 7 = \mathbf{4}$ (Trống $\to$ **`T[4] = 24`**).
+  + **Khóa 31:** $h_1(31) = 3$ (Đầy). Tính $h_2(31) = 5 - (31 \bmod 5) = 5 - 1 = 4$.
+    Với $i = 1 \Rightarrow (3 + 1 \cdot 4) \bmod 7 = 7 \bmod 7 = \mathbf{0}$ (Trống $\to$ **`T[0] = 31`**).
+  + **Bảng kết quả (b):** `[0: 31, 1: _, 2: _, 3: 10, 4: 24, 5: _, 6: 17]` (Mỗi khóa sau va chạm chỉ cần đúng 1 bước nhảy $i = 1$ nhờ $h_2(k)$ phân tán!).
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Mô phỏng Linear Probing** | **5.0đ** | Tính đúng chỉ số băm cơ sở 3, các bước dò +1, +2, +3 và thu được bảng [-, -, -, 10, 17, 24, 38]. |
-| **Mô phỏng Quadratic Probing** | **5.0đ** | Tính đúng công thức bước nhảy +1, +4, +9 và phân tán chính xác vào các ô 3, 4, 0, 5. |
+| **Nêu đúng công thức Quadratic Probing, Double Hashing và hiện tượng Secondary Clustering** | **3.0đ** | Trình bày chính xác hai công thức dò và giải thích vì sao Quadratic Probing vẫn bị cụm thứ cấp còn Double Hashing triệt tiêu được. |
+| **Tính đúng từng bước chèn dãy {10, 17, 24, 31} bằng Quadratic Probing** | **3.5đ** | Xác định đúng các vị trí T[3]=10, T[4]=17, T[0]=24, T[5]=31 theo bước nhảy bình phương. |
+| **Tính đúng từng bước chèn dãy {10, 17, 24, 31} bằng Double Hashing** | **3.5đ** | Tính đúng h2(17)=3, h2(24)=1, h2(31)=4 và xác định chính xác T[3]=10, T[6]=17, T[4]=24, T[0]=31. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -2859,7 +3019,7 @@ Kết quả bảng băm sau Quadratic Probing:
 
 - **Mã định danh (Question Code):** `CSD_EQ22`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO3** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 12 — *Fibonacci Algorithm Comparison*
 - **Mục tiêu đánh giá:** Đánh giá năng lực phân tích độ phức tạp thời gian/không gian của 3 cách tiếp cận bài toán Fibonacci và cơ chế tối ưu bộ nhớ.
@@ -2908,109 +3068,123 @@ Nhờ loại bỏ mảng `dp[]` kích thước n và chỉ duy trì hai biến s
 
 ---
 
-### 23. [CSD_EQ23] Phân tích Trường hợp Mất Cân bằng Left-Right trên Cây AVL và Phép Xoay Kép
+### 23. [CSD_EQ23] Thiết kế Doubly Linked List với Hai Nút Lính canh (Header/Trailer Sentinels) và Phân tích Bất biến Con trỏ O(1)
 
 - **Mã định danh (Question Code):** `CSD_EQ23`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO3** (`00000000-0000-0000-0000-000000000563`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO1** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 23 — *AVL LR Imbalance & Double Rotation*
-- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích hình học cây và chứng minh toán học tại sao phép xoay kép là bắt buộc cho trường hợp Left-Right.
+- **Chủ đề bài học (Syllabus):** Session 2 — *Doubly Linked List with Header/Trailer Sentinels & O(1) Pointer Invariants*
+- **Mục tiêu đánh giá:** Đánh giá năng lực phân tích thiết kế cấu trúc dữ liệu chuẩn công nghiệp dùng nút lính canh để khử điều kiện biên.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Vẽ sơ đồ hình học và phân tích trường hợp mất cân bằng Left-Right (LR) trên Cây AVL. Hãy chứng minh vì sao nếu chỉ áp dụng một phép xoay đơn (Single Right Rotation) tại nút gốc mất cân bằng thì cây vẫn không thể đạt được trạng thái cân bằng. Phép xoay kép (Double Rotation) giải quyết triệt để vấn đề này như thế nào?"
+> "Tại sao trong thiết kế công nghiệp (như giáo trình Goodrich & Tamassia), Danh sách liên kết đôi (`Doubly Linked List`) thường sử dụng hai nút lính canh giả (`Header` ở đầu và `Trailer` ở cuối) không chứa dữ liệu? Hãy viết phương thức Java `addBetween(E e, Node<E> predecessor, Node<E> successor)` và `remove(Node<E> node)`, đồng thời phân tích cách nút lính canh loại bỏ hoàn toàn các nhánh kiểm tra `head == null` / `tail == null`."
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Sau phép xoay kép Left-Right (LR) gồm xoay trái tại con trái (Left Child) rồi xoay phải tại nút gốc mất cân bằng, nút nào trong cụm 3 nút tham gia phép xoay sẽ trở thành nút gốc mới của cây con và chiều cao của cây con giảm đi bao nhiêu?"*
+> *"Khi khởi tạo một `DoublyLinkedList` rỗng có hai nút lính canh `header` và `trailer`, các con trỏ `header.next`, `header.prev`, `trailer.prev`, `trailer.next` phải được nối với nhau như thế nào để đảm bảo bất biến cấu trúc ngay từ trạng thái rỗng?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Sơ đồ hình học trường hợp mất cân bằng Left-Right (LR):
-Giả sử nút A bị mất cân bằng với `BF(A) = +2`.
-Nút con trái B có `BF(B) = -1` (do nút mới được chèn vào cây con C của B).
-```
-       A (BF = +2)
-      /
-     B (BF = -1)
-      \
-       C (chiều cao h)
-      / \
-     C1  C2 (chiều cao h-1)
-```
-Cấu trúc có dạng gấp khúc (zigzag): từ A rẽ sang trái tới B, rồi từ B rẽ sang phải tới C.
+1. Bản chất kiến trúc Nút Lính canh (`Header` & `Trailer` Sentinels) trên `Doubly Linked List`:
+* Trong danh sách liên kết đôi thông thường không có lính canh, các thao tác chèn/xóa phải liên tục rẽ nhánh kiểm tra biên: danh sách đang rỗng (`head == null`), chèn vào trước đầu (`node == head`), hay xóa ở cuối (`node == tail`).
+* Khi đặt hai nút giả cố định: **`header`** (luôn đứng trước phần tử đầu tiên) và **`trailer`** (luôn đứng sau phần tử cuối cùng):
+  + Ở trạng thái danh sách rỗng (`size == 0`): `header.next = trailer;` và `trailer.prev = header;`.
+  + **Bất biến cấu trúc (Structural Invariant):** Mọi nút dữ liệu thật trong danh sách **luôn luôn nằm kẹp giữa hai nút hiện hữu** (`predecessor != null` và `successor != null`). Không bao giờ có thao tác nào làm thay đổi tham chiếu của chính biến `header` hay `trailer`.
 
-2. Chứng minh phép xoay đơn (Single Right Rotation tại A) thất bại:
-- Khi thực hiện xoay phải đơn tại A: Nút B được nâng lên làm gốc mới, A trở thành con phải của B, và cây con phải của B (là C) được chuyển sang làm cây con trái của A.
-- Phân tích chiều cao sau khi xoay đơn:
-  + Cây con trái của B là B_left (chiều cao h - 1).
-  + Cây con phải của B chứa A, mà con trái của A là C (chiều cao h). Chiều cao của nhánh phải của B là `Height(C) + 1 = h + 1`.
-  + Tính lại hệ số cân bằng của B sau xoay: `BF(B) = Height(B_left) - Height(A) = (h - 1) - (h + 1) = -2`!
-- Kết luận: Cây không những không cân bằng mà còn bị lệch sang phải nghiêm trọng hơn (`BF(B) = -2`). Phép xoay đơn chỉ chuyển độ lệch từ bên này sang bên kia mà không làm giảm được chiều cao nhánh nhô ra.
+2. Cài đặt chuẩn mực `addBetween` và `remove` trong $O(1)$ không cần `if/else` kiểm tra biên:
+```java
+private static class Node<E> {
+    private E element;
+    private Node<E> prev;
+    private Node<E> next;
+    public Node(E e, Node<E> p, Node<E> n) {
+        this.element = e;
+        this.prev = p;
+        this.next = n;
+    }
+}
 
-3. Cơ chế giải quyết triệt để của Phép xoay kép (Double Rotation LR):
-Phép xoay kép gồm 2 bước độc lập:
-- Bước 1 (Xoay trái tại B): Biến đổi nhánh gấp khúc thành đường thẳng: C được nâng lên làm cha của B, B trở thành con trái của C. Cấu trúc chuyển hóa hoàn hảo về dạng LL (Left-Left thẳng hàng: A -> C -> B).
-- Bước 2 (Xoay phải tại A): Đưa C lên làm gốc mới của toàn bộ cây. B làm con trái của C, A làm con phải của C. C1 gắn vào con phải của B, C2 gắn vào con trái của A.
-Kết quả: Chiều cao hai bên cân bằng tuyệt đối với `BF(C) = 0`, `BF(A) thuộc {0, 1}`, `BF(B) thuộc {0, -1}`, khôi phục 100% tính chất AVL.
+// Chèn phần tử mới vào chính giữa hai nút predecessor và successor
+private void addBetween(E e, Node<E> predecessor, Node<E> successor) {
+    Node<E> newest = new Node<>(e, predecessor, successor);
+    predecessor.next = newest;
+    successor.prev = newest;
+    size++;
+}
+
+public void addFirst(E e) {
+    addBetween(e, header, header.next); // Chèn ngay sau header
+}
+
+public void addLast(E e) {
+    addBetween(e, trailer.prev, trailer); // Chèn ngay trước trailer
+}
+
+// Xóa một nút dữ liệu bất kỳ trong O(1)
+private E remove(Node<E> node) {
+    Node<E> predecessor = node.prev;
+    Node<E> successor = node.next;
+    predecessor.next = successor;
+    successor.prev = predecessor;
+    size--;
+    E answer = node.element;
+    node.prev = node.next = null; // Hỗ trợ Garbage Collector thu hồi bộ nhớ
+    node.element = null;
+    return answer;
+}
+```
+* **Đánh giá hiệu năng:** Cả `addFirst`, `addLast`, `removeFirst` (`remove(header.next)`), `removeLast` (`remove(trailer.prev)`) đều quy về đúng 1 hàm duy nhất chạy trong thời gian hằng số $O(1)$ tuyệt đối, mã nguồn ngắn gọn và triệt tiêu 100% nguy cơ `NullPointerException` ở hai đầu mút.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Sơ đồ cấu trúc zigzag Left-Right** | **3.0đ** | Vẽ đúng hình thái A(+2) -> B(-1) -> C và các cây con C1, C2. |
-| **Chứng minh phép xoay đơn tạo BF = -2** | **4.0đ** | Tính toán chiều cao hình học sau xoay đơn chứng minh B có BF = -2 vẫn mất cân bằng. |
-| **Cơ chế 2 bước của phép xoay kép** | **3.0đ** | Giải thích bước xoay trái tại B nắn thẳng trục thành LL và xoay phải tại A cân bằng gốc C. |
+| **Phân tích vai trò của 2 nút lính canh `header` / `trailer` và bất biến cấu trúc** | **3.5đ** | Giải thích rõ trạng thái rỗng `header.next = trailer`, mọi nút dữ liệu thật luôn có `prev` và `next` khác `null`. |
+| **Cài đặt chuẩn xác phương thức `addBetween` và `addFirst` / `addLast`** | **3.5đ** | Viết đúng 4 mối nối con trỏ trong `addBetween` và cách tái sử dụng cho `addFirst(header, header.next)`, `addLast(trailer.prev, trailer)`. |
+| **Cài đặt phương thức `remove(Node)` trong $O(1)$ kèm dọn dẹp tham chiếu** | **3.0đ** | Nối bắc cầu `predecessor.next = successor`, `successor.prev = predecessor` và gán `null` các trường của nút bị xóa hỗ trợ GC. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
 
-### 24. [CSD_EQ24] Phân tích Hiệu năng Prim vs Kruskal khi Tìm MST trên Đồ thị Dày và Thưa
+### 24. [CSD_EQ24] Phân tích Bất đối xứng Tái cân bằng trên Cây AVL: Phép Chèn (O(1) Phép Quay) vs Phép Xóa (O(log n) Phép Quay)
 
 - **Mã định danh (Question Code):** `CSD_EQ24`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO5** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO4** | **DB 3NF CLO4** (`00000000-0000-0000-0000-000000000564`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 37-38 — *Prim vs Kruskal Dense/Sparse Performance*
-- **Mục tiêu đánh giá:** Đánh giá khả năng phân tích sự phụ thuộc hiệu năng của Prim và Kruskal vào số lượng cạnh E và cấu trúc dữ liệu lưu trữ.
+- **Chủ đề bài học (Syllabus):** Session 23 — *AVL Tree Rebalancing Asymmetry: Insertion O(1) Rotations vs Deletion O(log n) Propagation*
+- **Mục tiêu đánh giá:** Đánh giá tư duy phân tích chuyên sâu về biến thiên chiều cao cây con và sự lan truyền phép xoay trên cây AVL.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Hãy phân tích chi phí thời gian của Thuật toán Prim và Thuật toán Kruskal khi tìm Cây khung nhỏ nhất (MST) trên hai kịch bản cực đoan: (1) Đồ thị cực thưa (Sparse Graph với E xấp xỉ V), và (2) Đồ thị cực dày (Dense Graph với E xấp xỉ V^2). Dựa trên phân tích đó, hãy đưa ra khuyến nghị kỹ thuật chọn thuật toán cho từng trường hợp."
+> "Trên Cây tìm kiếm nhị phân tự cân bằng **AVL**, tại sao sau khi **chèn (`insert`)** một khóa mới gây mất cân bằng, ta chỉ cần thực hiện **tối đa 1 phép quay** (đơn hoặc kép) tại nút mất cân bằng thấp nhất là khôi phục được độ cân bằng của toàn bộ cây, trong khi sau khi **xóa (`delete`)** một nút, quá trình tái cân bằng lại có thể lan truyền ngược lên tới tận nút gốc và đòi hỏi tới **$O(\log n)$ phép quay**?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
-> *"Nếu đồ thị là đồ thị đầy đủ cực dày (Complete Graph với E = V*(V-1)/2), cài đặt thuật toán Prim bằng Ma trận kề không dùng Heap đạt độ phức tạp O(V^2); tại sao cách cài đặt này lại chạy nhanh hơn cài đặt Prim sử dụng Min-Heap O(E log V) trong trường hợp này?"*
+> *"Khi xóa một nút trên cây AVL và phát hiện nút tổ tiên `z` bị mất cân bằng (`|BF(z)| == 2`), làm thế nào để xác định phải áp dụng phép quay đơn hay phép quay kép dựa vào hệ số cân bằng của nút con cao hơn `y` (đặc biệt trong trường hợp `BF(y) == 0`)?"*
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
-1. Phân tích chi phí thuật toán trên hai cấu trúc:
-- Thuật toán Prim:
-  + Cài đặt bằng Ma trận kề (Adjacency Matrix): O(V^2), độc lập hoàn toàn với số cạnh E.
-  + Cài đặt bằng Danh sách kề + Binary Heap: O((V + E) log V) = O(E log V).
-- Thuật toán Kruskal:
-  + Bước 1: Sắp xếp E cạnh tốn O(E log E).
-  + Bước 2: Duyệt E cạnh kết hợp kiểm tra chu trình và gộp tập hợp bằng Disjoint Set Union (DSU) tốn O(E * alpha(V)).
-  + Vì E <= V^2 nên log E <= 2 log V, tổng chi phí luôn là O(E log V).
+1. Phân tích sự bất đối xứng về số lượng phép quay giữa **Phép Chèn (`Insert`)** và **Phép Xóa (`Delete`)** trên Cây AVL:
+* **Đối với Phép Chèn (`Insert` — Tối đa $O(1)$ phép quay):**
+  + Trước khi chèn, cây con gốc `z` (nút thấp nhất bị mất cân bằng) có chiều cao $h$.
+  + Việc chèn nút mới làm chiều cao của một nhánh dưới `z` tăng thêm 1, khiến chiều cao của cây con gốc `z` tăng tạm thời lên $h + 1$ và gây ra $|BF(z)| = 2$.
+  + Khi thực hiện **1 phép quay đơn** (LL / RR) hoặc **1 phép quay kép** (LR / RL) tại `z`, chiều cao của cây con tại vị trí đó giảm đi 1, tức là **trở về đúng bằng $h$ như trước khi chèn**.
+  + Vì chiều cao của cây con này không thay đổi so với ban đầu, hệ số cân bằng của **tất cả các nút tổ tiên phía trên `z` được bảo toàn nguyên vẹn 100%**. Quá trình sửa cân bằng kết thúc ngay lập tức sau đúng 1 phép quay!
 
-2. Phân tích Kịch bản 1: Đồ thị cực thưa (Sparse Graph, E xấp xỉ V):
-- Chi phí Kruskal: O(V log V) (bước sắp xếp chỉ có khoảng V cạnh). DSU chạy cực nhanh.
-- Chi phí Prim (Binary Heap): O(V log V).
-- Chi phí Prim (Ma trận kề): O(V^2) (quá chậm, lãng phí thời gian quét các ô 0).
-- Đánh giá: Trên đồ thị thưa, Kruskal có lợi thế vượt trội nhờ cài đặt đơn giản, thao tác mảng phẳng cạnh liên tục và không có overhead quản lý heap phức tạp.
+* **Đối với Phép Xóa (`Delete` — Có thể cần tới $O(\log n)$ phép quay):**
+  + Trước khi xóa, giả sử cây con gốc `z` có chiều cao $h$. Phép xóa làm nhánh thấp hơn của `z` bị hụt đi 1 mức, gây ra $|BF(z)| = 2$.
+  + Khi thực hiện phép quay tại `z` để khôi phục cân bằng cục bộ, chiều cao của cây con mới tại vị trí `z` có thể bị **giảm từ $h$ xuống $h - 1$**.
+  + Sự sụt giảm chiều cao này tiếp tục làm thay đổi hệ số cân bằng của nút cha `parent(z)`, có thể gây mất cân bằng tại `parent(z)`, rồi tiếp tục lan truyền ngược lên từng mức cho tới tận nút gốc `Root`. Do chiều cao cây AVL là $O(\log n)$, số phép quay trong trường hợp xấu nhất của thao tác xóa là $O(\log n)$.
 
-3. Phân tích Kịch bản 2: Đồ thị cực dày (Dense Graph, E xấp xỉ V^2):
-- Chi phí Kruskal: O(V^2 log(V^2)) = O(2 * V^2 log V). Việc sắp xếp một mảng khổng lồ V^2 phần tử gây quá tải bộ nhớ và tốn nhiều phép so sánh.
-- Chi phí Prim (Binary Heap): O(V^2 log V).
-- Chi phí Prim (Ma trận kề): Đạt chính xác O(V^2)!
-- Đánh giá: Trên đồ thị dày, Prim cài đặt bằng Ma trận kề đạt O(V^2) NHANH HƠN HẲN Kruskal O(V^2 log V) một thừa số log V và hoàn toàn không phải sắp xếp cạnh.
-
-4. Khuyến nghị kỹ thuật:
-- Đồ thị thưa (E ~ V): Chọn Kruskal kết hợp DSU.
-- Đồ thị dày (E ~ V^2): Chọn Prim kết hợp Ma trận kề.
+2. Quy tắc chọn phép quay khi xóa nút gặp `|BF(z)| == 2` (gọi `y` là con cao hơn của `z`):
+* Giả sử `z` lệch trái (`BF(z) = +2`, tức nhánh trái `y = z.left` cao hơn nhánh phải):
+  + **Trường hợp 1 (`BF(y) >= 0`, tức `BF(y) == +1` hoặc `BF(y) == 0`):** Thực hiện **Phép quay đơn phải (`Right Rotation`)** quanh `z`. (Lưu ý riêng khi `BF(y) == 0` — chỉ xuất hiện khi xóa chứ không bao giờ xuất hiện khi chèn — phép quay đơn giữ nguyên chiều cao cây con là $h$ và dừng lan truyền!).
+  + **Trường hợp 2 (`BF(y) == -1`):** Thực hiện **Phép quay kép Trái-Phải (`Left-Right Rotation`)**: quay trái tại `y`, sau đó quay phải tại `z` (trường hợp này luôn làm giảm chiều cao cây con từ $h$ xuống $h - 1$, nên phải tiếp tục kiểm tra nút cha).
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
 | Tiêu chí thành phần | Điểm tối đa | Mô tả chi tiết mức độ đạt yêu cầu kỹ thuật |
 |---|:---:|---|
-| **Phân tích Big-O tổng quát của cả hai thuật toán** | **3.0đ** | Nêu rõ O(E log V) của Kruskal và O(V^2) vs O(E log V) của Prim. |
-| **Phân tích kịch bản đồ thị cực thưa (E ~ V)** | **3.5đ** | So sánh hiệu năng O(V log V) và chỉ ra ưu thế đơn giản của Kruskal. |
-| **Phân tích kịch bản đồ thị cực dày (E ~ V^2)** | **3.5đ** | Chứng minh Prim Ma trận kề O(V^2) đánh bại Kruskal O(V^2 log V) và đưa ra khuyến nghị. |
+| **Chứng minh Phép Chèn trên AVL chỉ cần tối đa 1 phép quay ($O(1)$)** | **4.0đ** | Phân tích rõ sau phép quay tại nút mất cân bằng thấp nhất `z`, chiều cao cây con trở về đúng bằng $h$ ban đầu nên không ảnh hưởng tổ tiên. |
+| **Chứng minh Phép Xóa trên AVL có thể lan truyền $O(\log n)$ phép quay** | **3.5đ** | Giải thích rõ phép quay sau khi xóa có thể làm chiều cao cây con giảm từ $h$ xuống $h-1$, kéo theo mất cân bằng dây chuyền lên nút gốc. |
+| **Đặc tả quy tắc chọn phép quay đơn/kép khi xóa (đặc biệt trường hợp `BF(y) == 0`)** | **2.5đ** | Nêu đúng cách xét dấu `BF(y)` để chọn quay đơn hay quay kép và chỉ ra `BF(y) == 0` dùng quay đơn. |
 | **TỔNG ĐIỂM BAREM** | **10.0đ** | **Bắt buộc bằng đúng 10.0 điểm theo Invariant của hệ thống** |
 
 ---
@@ -3019,7 +3193,7 @@ Kết quả: Chiều cao hai bên cân bằng tuyệt đối với `BF(C) = 0`, 
 
 - **Mã định danh (Question Code):** `CSD_EQ25`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO1** (`00000000-0000-0000-0000-000000000561`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO6** | **DB 3NF CLO6** (`00000000-0000-0000-0000-000000000566`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
 - **Chủ đề bài học (Syllabus):** Session 45 — *QuickSort Worst-Case & Industrial Optimization*
 - **Mục tiêu đánh giá:** Đánh giá khả năng phân tích nguyên nhân thoái hóa của QuickSort và các kỹ thuật tối ưu hóa trong thư viện công nghiệp.
@@ -3066,9 +3240,9 @@ Khi thuật toán luôn chọn phần tử đầu tiên (`arr[low]`) hoặc ph�
 
 - **Mã định danh (Question Code):** `CSD_EQ26`
 - **Kho lưu trữ (Target Pool):** `exam_questions`
-- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO2** (`00000000-0000-0000-0000-000000000562`)
+- **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000568`)
 - **Thang nhận thức Bloom:** `Analyze` | **Mức độ khó:** `Hard`
-- **Chủ đề bài học (Syllabus):** Session 54 — *Knuth-Morris-Pratt (KMP) Failure Function*
+- **Chủ đề bài học (Syllabus):** Session 53 — *Knuth-Morris-Pratt (KMP) Failure Function*
 - **Mục tiêu đánh giá:** Đánh giá năng lực phân tích thuật toán so khớp chuỗi KMP, ý nghĩa của mảng tiền tố pi / failure table và chứng minh thời gian tuyến tính.
 
 #### ❓ Câu hỏi vấn đáp:

@@ -25,7 +25,7 @@ public sealed class GenerateQuestionsFromFlmCommandValidator : AbstractValidator
 
         RuleFor(v => v.UsageScope)
             .Must(s => UsageScope.All.Contains(s))
-            .WithMessage("Phạm vi sử dụng phải là 'practice', 'exam', hoặc 'shared'.");
+            .WithMessage("Phạm vi sử dụng phải là 'practice' hoặc 'exam'.");
 
         RuleFor(v => v.TargetBloomLevels)
             .NotEmpty().WithMessage("Cần chọn ít nhất 1 bậc nhận thức Bloom.")

@@ -123,14 +123,20 @@ public sealed class BatchApproveQuestionsCommandHandler
                 ? JsonSerializer.Serialize(kpList)
                 : "[]";
             var normalizedScope = (item.UsageScope ?? "exam").Trim().ToLowerInvariant();
+            if (normalizedScope is not ("practice" or "exam" or "official_exam"))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi '{item.Title}' có phạm vi sử dụng '{item.UsageScope}' không hợp lệ. Chỉ chấp nhận 'practice' hoặc 'exam' tách biệt.");
+            }
+
             var normalizedSource = string.IsNullOrWhiteSpace(item.Source) ? "flm_api" : item.Source.Trim();
             var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? null : item.ImageUrl.Trim();
             var imageDescription = string.IsNullOrWhiteSpace(item.ImageDescription) ? null : item.ImageDescription.Trim();
             var sharedQuestionId = Guid.NewGuid();
             Guid primaryQuestionId = sharedQuestionId;
             var savedQuestionIds = new List<Guid>();
-            bool shouldSaveToPractice = normalizedScope is "practice" or "shared" or "both" or "all";
-            bool shouldSaveToExam = normalizedScope is not "practice";
+            bool shouldSaveToPractice = normalizedScope == "practice";
+            bool shouldSaveToExam = !shouldSaveToPractice;
 
             if (shouldSaveToExam)
             {

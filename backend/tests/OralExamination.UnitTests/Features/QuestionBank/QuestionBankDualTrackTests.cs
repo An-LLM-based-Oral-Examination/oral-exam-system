@@ -211,11 +211,11 @@ public sealed class QuestionBankDualTrackTests
         createdEq.ApprovalStatus.Should().Be(ApprovalStatus.Draft);
     }
 
-    [Theory(DisplayName = "3. R8 Tách biệt: Scope 'both', 'all', hoặc 'shared' tạo cả ExamQuestion và PracticeQuestion")]
+    [Theory(DisplayName = "3. R8 Tách biệt: Từ chối các scope gộp ('both', 'all', 'shared') và không tạo bản ghi ở bất kỳ kho nào")]
     [InlineData("both")]
     [InlineData("all")]
     [InlineData("shared")]
-    public async Task Handle_ScopeBoth_ShouldCreateBothExamAndPracticeQuestions(string scope)
+    public async Task Handle_ScopeBoth_ShouldRejectAndNotCreateAnyQuestion(string scope)
     {
         using var context = CreateDbContext();
         var (lecturer, course, _, _) = await SeedEntitiesAsync(context);
@@ -225,14 +225,14 @@ public sealed class QuestionBankDualTrackTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeEmpty();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Phạm vi sử dụng câu hỏi không hợp lệ");
 
         var examCount = await context.ExamQuestions.CountAsync();
         var practiceCount = await context.PracticeQuestions.CountAsync();
 
-        examCount.Should().Be(1, "scope both/shared phải tạo ExamQuestion");
-        practiceCount.Should().Be(1, "scope both/shared phải tạo PracticeQuestion");
+        examCount.Should().Be(0, "scope gộp không hợp lệ không được tạo ExamQuestion");
+        practiceCount.Should().Be(0, "scope gộp không hợp lệ không được tạo PracticeQuestion");
     }
 
     [Fact(DisplayName = "4. R8 CloId: Scope 'practice' với CloId gán chính xác CloId cho PracticeQuestion và ánh xạ navigation")]

@@ -503,7 +503,7 @@ flowchart TD
     subgraph Layer_Domain ["Domain Layer — Enterprise Kernel (Pure C# POCO)"]
         direction TB
         Domain_Entities["Core Domain Entities (Lược đồ 3NF)<br>• User, Course, CourseClo, CourseLecturer, Class, ClassEnrollment<br>• InClassExamShift, InClassShiftPassword, InClassShiftParticipant, InClassExamSubmission<br>• Question, RubricCriterion, ModelAnswer<br>• ExamStructure, ExamSet, ExamSetQuestion<br>• PracticeSession, StudentAnswer, AIEvaluation<br>• OfficialExamSession, RealExamSessionShift, StudentExamTicket<br>• ExamAntiCheatLog, DeadLetterQueue, SystemAuditLog, AppealRequest"]
-        Domain_Enums["Domain Enums & Value Objects<br>• UserRole (Student, Lecturer, DepartmentHead, ExaminationOfficer, Proctor, Admin)<br>• BloomLevel (Remember đến Create)<br>• ScopeType (EXAM_ONLY, PRACTICE_ONLY, SHARED)<br>• QuestionSource (Manual, AiGenerated)<br>• ExamSetStatus (Draft, SubmittedForReview, Official, HandedOver, Rejected)<br>• SubmissionStatus (PENDING đến LOCKED)<br>• AntiCheatEventType & AntiCheatSeverity"]
+        Domain_Enums["Domain Enums & Value Objects<br>• UserRole (Student, Lecturer, DepartmentHead, ExaminationOfficer, Proctor, Admin)<br>• BloomLevel (Remember đến Create)<br>• UsageScope (practice, exam)<br>• QuestionSource (Manual, AiGenerated)<br>• ExamSetStatus (Draft, SubmittedForReview, Official, HandedOver, Rejected)<br>• SubmissionStatus (PENDING đến LOCKED)<br>• AntiCheatEventType & AntiCheatSeverity"]
         Domain_Exceptions["Domain Business Exceptions<br>• DomainValidationException<br>• EntityNotFoundException<br>• ExamQuotaExceededException<br>• ScoreSheetLockedException"]
     end
 
@@ -1360,7 +1360,7 @@ flowchart TD
     M3_CheckMagic -- "Đúng Magic Bytes" --> M3_UploadR2["Lưu ảnh lên Cloudflare R2 -> Trả về image_url & Yêu cầu nhập image_description (phục vụ Gemini Multimodal CoT)"]
     M3_UploadR2 --> M3_SelectBanks
 
-    M3_SelectBanks["Tick chọn kho lưu trữ đích: practice_questions và/hoặc exam_questions (PRACTICE_ONLY / EXAM_ONLY / SHARED)"] --> M3_CheckRubric{"Kiểm tra Barem & Đáp án mẫu: Sum(Criteria.MaxScore) == 10.00 VÀ SampleAnswer.Length >= 50?"}
+    M3_SelectBanks["Chọn kho lưu trữ đích riêng biệt (R8): practice_questions (practice) hoặc exam_questions (exam)"] --> M3_CheckRubric{"Kiểm tra Barem & Đáp án mẫu: Sum(Criteria.MaxScore) == 10.00 VÀ SampleAnswer.Length >= 50?"}
     M3_CheckRubric -- "Sai lệch (Sum != 10.0 hoặc Sample < 50 ký tự)" --> M3_Ret422(["Chặn lưu/gửi duyệt & Trả HTTP 422 Unprocessable Entity"])
     M3_CheckRubric -- "Hợp lệ (Sum == 10.00)" --> M3_OptSim{"Chạy AI Calibration Simulator?"}
     M3_OptSim -- "Có" --> M3_SimRun["POST /api/v1/questions/simulate-grading: Chấm thử câu trả lời mẫu & Tinh chỉnh lại trọng số tiêu chí"]

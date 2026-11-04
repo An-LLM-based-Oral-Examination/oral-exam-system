@@ -307,8 +307,8 @@ public class ReviewQuestionDecisionCommandHandlerTests
         result.Error.Should().Contain("lệch 10.00đ");
     }
 
-    [Fact(DisplayName = "8. R4 MF-03: Khi Trưởng Bộ Môn duyệt APPROVED kèm TargetUsageScope = 'both', câu hỏi được đồng bộ sang kho PracticeQuestions")]
-    public async Task Handle_Should_Sync_To_PracticeQuestions_When_Approved_With_TargetUsageScope_Both()
+    [Fact(DisplayName = "8. R8 MF-03: Khi Trưởng Bộ Môn duyệt ExamQuestion kèm TargetUsageScope = 'both', hệ thống từ chối để giữ cô lập 2 kho đề")]
+    public async Task Handle_Should_Reject_TargetUsageScope_Both_For_ExamQuestion()
     {
         using var context = CreateDbContext();
         var (reviewer, course) = await SeedReviewerAndCourseAsync(context, role: "department_head");
@@ -322,16 +322,16 @@ public class ReviewQuestionDecisionCommandHandlerTests
             QuestionId: question.Id,
             ReviewerId: reviewer.Id,
             Decision: ApprovalStatus.Approved,
-            ReviewNotes: "Đồng ý đưa vào cả 2 kho đề thi thật và luyện tập.",
+            ReviewNotes: "Thử nghiệm truyền TargetUsageScope = both.",
             TargetUsageScope: "both"
         );
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("tách biệt hoàn toàn");
         var syncedPractice = await context.PracticeQuestions
             .FirstOrDefaultAsync(p => p.CourseId == course.Id && p.Title == question.Title);
-        syncedPractice.Should().NotBeNull();
-        syncedPractice!.RubricId.Should().Be(question.RubricId);
+        syncedPractice.Should().BeNull();
     }
 }

@@ -240,7 +240,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
             "medium",
             "Analyze",
             "flm_api",
-            "both",
+            "practice",
             false,
             null,
             rubric,
@@ -252,7 +252,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
         flmWithImageResult.IsSuccess.Should().BeFalse();
         flmWithImageResult.Error.Should().Contain("manual");
 
-        // 2. Cho phép khi Source = "manual" và lưu vào cả PracticeQuestions lẫn ExamQuestions
+        // 2. Cho phép khi Source = "manual" và lưu độc lập vào PracticeQuestions (usageScope = "practice")
         var manualWithImageResult = await createHandler.Handle(new CreateDraftQuestionCommand(
             courseId,
             lecturerId,
@@ -263,7 +263,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
             "hard",
             "Analyze",
             "manual",
-            "both",
+            "practice",
             true,
             "Nếu Authorization Code bị đánh cắp trên đường truyền thì PKCE bảo vệ như thế nào?",
             rubric,
@@ -274,14 +274,11 @@ public sealed class QuestionImageAndMultimodalGradingTests
 
         manualWithImageResult.IsSuccess.Should().BeTrue();
 
-        var savedExamQuestion = await context.ExamQuestions.FirstAsync(q => q.Id == manualWithImageResult.Value);
-        savedExamQuestion.ImageUrl.Should().Be("/uploads/questions/202610/oauth2-sequence.png");
-        savedExamQuestion.ImageDescription.Should().Contain("PKCE");
-
-        var savedPracticeQuestion = await context.PracticeQuestions.FirstAsync(q => q.CourseId == courseId);
+        var savedPracticeQuestion = await context.PracticeQuestions.FirstAsync(q => q.Id == manualWithImageResult.Value);
         savedPracticeQuestion.ImageUrl.Should().Be("/uploads/questions/202610/oauth2-sequence.png");
         savedPracticeQuestion.ImageDescription.Should().Contain("PKCE");
         savedPracticeQuestion.IsActive.Should().BeFalse("câu hỏi do giảng viên tạo ở trạng thái DRAFT chưa được kích hoạt vào kho luyện tập trước khi Trưởng Bộ môn duyệt");
+        (await context.ExamQuestions.CountAsync()).Should().Be(0, "câu hỏi luyện tập không được ghi lẫn vào kho đề thi thật");
 
         // Trưởng Bộ môn phê duyệt để kích hoạt câu hỏi vào kho luyện tập
         var headId = Guid.NewGuid();
@@ -297,17 +294,17 @@ public sealed class QuestionImageAndMultimodalGradingTests
 
         var reviewHandler = new ReviewQuestionDecisionCommandHandler(context);
         var approveResult = await reviewHandler.Handle(new ReviewQuestionDecisionCommand(
-            savedExamQuestion.Id,
+            savedPracticeQuestion.Id,
             headId,
             ApprovalStatus.Approved,
             "Duyệt câu hỏi sơ đồ Sequence Diagram OAuth2",
-            "both"), CancellationToken.None);
+            "practice"), CancellationToken.None);
         approveResult.IsSuccess.Should().BeTrue();
         savedPracticeQuestion.IsActive.Should().BeTrue();
 
         // 3. Kiểm tra Query chi tiết câu hỏi (MF-03) trả về đúng ImageUrl & ImageDescription
         var getByIdHandler = new GetQuestionByIdQueryHandler(context);
-        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(savedExamQuestion.Id), CancellationToken.None);
+        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(savedPracticeQuestion.Id), CancellationToken.None);
         detailResult.IsSuccess.Should().BeTrue();
         detailResult.Value.ImageUrl.Should().Be("/uploads/questions/202610/oauth2-sequence.png");
         detailResult.Value.ImageDescription.Should().Contain("PKCE");
@@ -328,7 +325,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
     }
 
     [Fact]
-    public async Task ReviewQuestionDecision_ShouldSyncImageToPracticePool_WhenApprovedForBothScopes()
+    public async Task ReviewQuestionDecision_ShouldKeepExamQuestionIsolatedFromPracticePool_WhenApproved()
     {
         using var context = CreateDbContext();
         var courseId = Guid.NewGuid();
@@ -375,14 +372,14 @@ public sealed class QuestionImageAndMultimodalGradingTests
             questionId,
             headId,
             ApprovalStatus.Approved,
-            "Sơ đồ ERD rất rõ ràng, duyệt cho cả 2 kho.",
-            "both"), CancellationToken.None);
+            "Sơ đồ ERD rất rõ ràng, duyệt cho kho đề thi thật.",
+            "exam"), CancellationToken.None);
 
         reviewResult.IsSuccess.Should().BeTrue();
-        var syncedPracticeQuestion = await context.PracticeQuestions.FirstOrDefaultAsync(p => p.CourseId == courseId && p.Title == "Câu hỏi sơ đồ ERD");
-        syncedPracticeQuestion.Should().NotBeNull();
-        syncedPracticeQuestion!.ImageUrl.Should().Be("/uploads/questions/202610/erd-3nf.png");
-        syncedPracticeQuestion.ImageDescription.Should().Be("Sơ đồ ERD 30 bảng chuẩn 3NF");
+        var approvedExamQuestion = await context.ExamQuestions.FirstAsync(q => q.Id == questionId);
+        approvedExamQuestion.ApprovalStatus.Should().Be(ApprovalStatus.Approved);
+        approvedExamQuestion.ImageUrl.Should().Be("/uploads/questions/202610/erd-3nf.png");
+        (await context.PracticeQuestions.CountAsync()).Should().Be(0, "câu hỏi thi thật phải cô lập tuyệt đối khỏi kho luyện tập");
     }
 
     [Fact]

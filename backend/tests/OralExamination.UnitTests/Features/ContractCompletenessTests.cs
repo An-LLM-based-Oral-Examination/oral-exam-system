@@ -190,8 +190,8 @@ public class ContractCompletenessTests
         questionResult.IsSuccess.Should().BeTrue();
     }
 
-    [Fact(DisplayName = "4. BatchApproveQuestionsCommandHandler kiểm tra quyền Trưởng BM, Barem 10.0đ và lưu đồng thời 2 kho khi shared")]
-    public async Task BatchApproveQuestionsCommandHandler_Should_Validate_And_Save_Shared_Questions()
+    [Fact(DisplayName = "4. BatchApproveQuestionsCommandHandler kiểm tra quyền Trưởng BM, Barem 10.0đ và lưu tách biệt theo từng kho đề (R8)")]
+    public async Task BatchApproveQuestionsCommandHandler_Should_Validate_And_Save_Isolated_Questions()
     {
         await using var db = CreateDbContext();
         var course = new Course
@@ -236,17 +236,29 @@ public class ContractCompletenessTests
                     "Giải thích chi tiết sự tách biệt giữa Domain và Infrastructure.",
                     "medium",
                     "Analyze",
-                    "shared",
+                    "exam",
                     "flm_api",
                     "Đây là câu trả lời mẫu chuẩn mực có độ dài lớn hơn 50 ký tự để vượt qua kiểm tra invariant.",
                     new List<string> { "Domain độc lập", "DIP" },
                     true,
                     "Nếu đổi DB thì sao?",
+                    rubric),
+                new(
+                    "Câu hỏi ôn luyện Dependency Injection",
+                    "Trình bày sự khác biệt giữa Transient, Scoped và Singleton.",
+                    "easy",
+                    "Understand",
+                    "practice",
+                    "flm_api",
+                    "Đây là câu trả lời mẫu chuẩn mực có độ dài lớn hơn 50 ký tự để vượt qua kiểm tra invariant.",
+                    new List<string> { "Transient", "Scoped", "Singleton" },
+                    true,
+                    "Khi nào dùng Scoped?",
                     rubric)
             }), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.TotalApproved.Should().Be(1);
+        result.Value.TotalApproved.Should().Be(2);
         (await db.ExamQuestions.CountAsync()).Should().Be(1);
         (await db.PracticeQuestions.CountAsync()).Should().Be(1);
     }

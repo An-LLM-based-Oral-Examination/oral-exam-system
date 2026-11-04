@@ -244,8 +244,8 @@ public class CreateDraftQuestionCommandHandlerTests
         result.Error.Should().Be("Câu trả lời mẫu (Model Answer) khi cung cấp bắt buộc phải từ 50 ký tự trở lên.");
     }
 
-    [Fact(DisplayName = "8. R4 MF-03: Handle tạo đồng thời cả ExamQuestion và PracticeQuestion khi UsageScope là 'both'")]
-    public async Task Handle_Should_Create_Both_Exam_And_Practice_Questions_When_UsageScope_Is_Both()
+    [Fact(DisplayName = "8. R8 MF-03: Handle từ chối UsageScope 'both' để bảo đảm cô lập 100% giữa kho ExamQuestions và PracticeQuestions")]
+    public async Task Handle_Should_Reject_When_UsageScope_Is_Both()
     {
         using var context = CreateDbContext();
         var (lecturer, course) = await SeedUserAndCourseAsync(context);
@@ -255,13 +255,10 @@ public class CreateDraftQuestionCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        var examQ = await context.ExamQuestions.FirstOrDefaultAsync(q => q.Id == result.Value);
-        examQ.Should().NotBeNull();
-
-        var practiceQ = await context.PracticeQuestions.FirstOrDefaultAsync(p => p.CourseId == course.Id && p.Title == command.Title);
-        practiceQ.Should().NotBeNull();
-        practiceQ!.HasFollowUp.Should().BeTrue();
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Chỉ chấp nhận 'practice'");
+        (await context.ExamQuestions.CountAsync()).Should().Be(0);
+        (await context.PracticeQuestions.CountAsync()).Should().Be(0);
     }
 
     [Fact(DisplayName = "9. Trưởng bộ môn tạo câu hỏi tự động APPROVED bắt buộc phải có SampleAnswer >= 50 ký tự")]

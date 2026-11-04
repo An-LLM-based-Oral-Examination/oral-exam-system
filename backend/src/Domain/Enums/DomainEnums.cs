@@ -57,9 +57,8 @@ public static class UsageScope
 {
     public const string Practice = "practice";
     public const string Exam = "exam";
-    public const string Shared = "shared";
 
-    public static readonly string[] All = { Practice, Exam, Shared };
+    public static readonly string[] All = { Practice, Exam };
 }
 
 public static class UserRole

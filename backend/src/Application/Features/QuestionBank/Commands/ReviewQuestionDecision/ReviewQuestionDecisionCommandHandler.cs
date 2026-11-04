@@ -112,10 +112,17 @@ public sealed class ReviewQuestionDecisionCommandHandler
             ));
         }
 
-        // 3. Xử lý quyết định cho câu hỏi trong ExamQuestions (và đồng bộ sang PracticeQuestions nếu có)
+        // 3. Xử lý quyết định cho câu hỏi trong kho đề thi thật (ExamQuestions — cô lập hoàn toàn với PracticeQuestions theo R8)
         switch (request.Decision)
         {
             case ApprovalStatus.Approved:
+                var targetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
+                if (!string.IsNullOrEmpty(targetScope) && targetScope is not ("exam" or "official_exam"))
+                {
+                    return Result<QuestionReviewDecisionResponseDto>.Failure(
+                        "Phạm vi sử dụng khi duyệt câu hỏi thi thật không hợp lệ. Kho câu hỏi thi thật ('exam') tách biệt hoàn toàn với kho luyện tập ('practice').");
+                }
+
                 var eqError = ValidateQuestionBeforeApprove(
                     question!.SampleAnswer,
                     question.Rubric,
@@ -131,68 +138,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
                 question.ReviewNotes = request.ReviewNotes;
-
-                var targetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
-                if (targetScope == "practice")
-                {
-                    question.IsActive = false;
-                }
-                else if (targetScope is "exam" or "official_exam" or "both" or "all" or "")
-                {
-                    question.IsActive = true;
-                }
-
-                var existingPracticeQ = await _context.PracticeQuestions
-                    .FirstOrDefaultAsync(
-                        p => p.Id == question.Id,
-                        cancellationToken);
-
-                if (targetScope is "both" or "practice" or "all" || existingPracticeQ != null)
-                {
-                    if (existingPracticeQ == null)
-                    {
-                        _context.PracticeQuestions.Add(new PracticeQuestion
-                        {
-                            Id = question.Id,
-                            CourseId = question.CourseId,
-                            CloId = question.CloId,
-                            RubricId = question.RubricId,
-                            Title = question.Title,
-                            Content = question.Content,
-                            SampleAnswer = question.SampleAnswer,
-                            KeyPoints = question.KeyPoints,
-                            Difficulty = question.Difficulty,
-                            BloomLevel = question.BloomLevel,
-                            HasFollowUp = true,
-                            ImageUrl = question.ImageUrl,
-                            ImageDescription = question.ImageDescription,
-                            Source = question.Source ?? "manual",
-                            ApprovalStatus = ApprovalStatus.Approved,
-                            SubmittedBy = question.SubmittedBy,
-                            ApprovedBy = request.ReviewerId,
-                            ReviewNotes = request.ReviewNotes,
-                            IsActive = true,
-                            CreatedAt = now
-                        });
-                    }
-                    else
-                    {
-                        existingPracticeQ.IsActive = true;
-                        existingPracticeQ.CloId = question.CloId;
-                        existingPracticeQ.Content = question.Content;
-                        existingPracticeQ.SampleAnswer = question.SampleAnswer;
-                        existingPracticeQ.KeyPoints = question.KeyPoints;
-                        existingPracticeQ.Difficulty = question.Difficulty;
-                        existingPracticeQ.BloomLevel = question.BloomLevel;
-                        existingPracticeQ.ImageUrl = question.ImageUrl;
-                        existingPracticeQ.ImageDescription = question.ImageDescription;
-                        existingPracticeQ.Source = question.Source ?? existingPracticeQ.Source;
-                        existingPracticeQ.ApprovalStatus = ApprovalStatus.Approved;
-                        existingPracticeQ.SubmittedBy = question.SubmittedBy ?? existingPracticeQ.SubmittedBy;
-                        existingPracticeQ.ApprovedBy = request.ReviewerId;
-                        existingPracticeQ.ReviewNotes = request.ReviewNotes;
-                    }
-                }
+                question.IsActive = true;
 
                 message = "Câu hỏi đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng đề thi.";
                 break;
@@ -200,16 +146,6 @@ public sealed class ReviewQuestionDecisionCommandHandler
             case ApprovalStatus.NeedsRevision:
                 question!.ApprovalStatus = ApprovalStatus.NeedsRevision;
                 question.ReviewNotes = request.ReviewNotes;
-                var revisionPracticeQ = await _context.PracticeQuestions
-                    .FirstOrDefaultAsync(
-                        p => p.Id == question.Id,
-                        cancellationToken);
-                if (revisionPracticeQ != null)
-                {
-                    revisionPracticeQ.ApprovalStatus = ApprovalStatus.NeedsRevision;
-                    revisionPracticeQ.ReviewNotes = request.ReviewNotes;
-                    revisionPracticeQ.IsActive = false;
-                }
                 message = "Đã yêu cầu Giảng viên chỉnh sửa câu hỏi kèm ý kiến thẩm định chi tiết.";
                 break;
 
@@ -217,16 +153,6 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question!.ApprovalStatus = ApprovalStatus.Rejected;
                 question.ReviewNotes = request.ReviewNotes;
                 question.IsActive = false;
-                var rejectedPracticeQ = await _context.PracticeQuestions
-                    .FirstOrDefaultAsync(
-                        p => p.Id == question.Id,
-                        cancellationToken);
-                if (rejectedPracticeQ != null)
-                {
-                    rejectedPracticeQ.ApprovalStatus = ApprovalStatus.Rejected;
-                    rejectedPracticeQ.ReviewNotes = request.ReviewNotes;
-                    rejectedPracticeQ.IsActive = false;
-                }
                 message = "Câu hỏi đã bị từ chối và loại khỏi danh sách thẩm định.";
                 break;
 

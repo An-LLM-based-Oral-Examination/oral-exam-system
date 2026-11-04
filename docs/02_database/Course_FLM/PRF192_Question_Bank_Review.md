@@ -134,7 +134,7 @@
 | **PRF_EQ09** | Phân tích vòng lặp lồng nhau (Nested Loops), biến cờ hiệu (Flag) và vòng lặp lính canh (Sentinel) | CLO3 | CLO3 | `Understand` | **Medium** | Session 10-12 | Nested Loops Complexity, Boolean Flags & Sentinel-Controlled Loops |
 | **PRF_EQ10** | Nguyên lý thiết kế Module hóa chương trình C: Độ kết dính (Cohesion) và Độ ghép nối (Coupling) | CLO4 | CLO4 | `Understand` | **Medium** | Session 16-18 | Modular Programming: High Cohesion, Low Coupling & Top-Down Design |
 | **PRF_EQ11** | Ý nghĩa của từ khóa const khi kết hợp với con trỏ và bảo vệ tham số mảng trong hàm C | CLO5 | CLO5 | `Understand` | **Medium** | Session 29-30 & 37 | Const-Correctness with Pointers & Read-Only Array Parameters |
-| **PRF_EQ12** | Phân biệt bản chất bộ nhớ giữa mảng ký tự (char[]) và con trỏ hằng chuỗi (char*) | CLO8 | CLO8 | `Understand` | **Medium** | Session 46 | String Memory Segments: char[] vs char |
+| **PRF_EQ12** | Phân biệt bản chất bộ nhớ giữa mảng ký tự (char[]) và con trỏ hằng chuỗi (char*) | CLO8 | CLO8 | `Understand` | **Medium** | Session 46 | String Memory Segments: char[] vs char* |
 | **PRF_EQ13** | Thuật toán Tìm kiếm tuyến tính (Linear Search) và Tìm kiếm nhị phân (Binary Search) trên mảng 1 chiều | CLO7 | CLO7 | `Understand` | **Medium** | Session 39 | 1D Array Searching: Linear Search vs Binary Search & Overflow-Safe Midpoint |
 | **PRF_EQ14** | Cơ chế hoạt động của File Buffering trong thư viện stdio và vai trò của hàm fflush() | CLO6 | CLO6 | `Understand` | **Medium** | Session 52, 55 | File Streams & I/O Buffering (fflush) |
 | **PRF_EQ15** | Cài đặt thuật toán kiểm tra số nguyên tố tối ưu hóa vòng lặp trong C | CLO4 | CLO4 | `Apply` | **Medium** | Session 19-20 | Algorithmic Functions: Prime Check Optimization |
@@ -1835,8 +1835,8 @@ int main(void) {
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Hai cú pháp chú thích (Comment) trong ngôn ngữ C:
-- **Chú thích khối nhiều dòng (`/* ... */` - Block Comment):** Có từ chuẩn K&R C / ANSI C89. Bắt đầu bằng cặp ký tự `/*` và kết thúc ngay khi gặp cặp ký tự `*/` đầu tiên. Có thể trải dài trên nhiều dòng hoặc đặt xen giữa một dòng lệnh.
-- **Chú thích một dòng (`//` - Single-line Comment):** Được chuẩn hóa chính thức vào C từ chuẩn **C99**. Bắt đầu từ `//` và kéo dài đến hết dòng hiện tại (gặp ký tự xuống dòng `\n`).
+* **Chú thích khối nhiều dòng (`/* ... */` - Block Comment):** Có từ chuẩn K&R C / ANSI C89. Bắt đầu bằng cặp ký tự `/*` và kết thúc ngay khi gặp cặp ký tự `*/` đầu tiên. Có thể trải dài trên nhiều dòng hoặc đặt xen giữa một dòng lệnh.
+* **Chú thích một dòng (`//` - Single-line Comment):** Được chuẩn hóa chính thức vào C từ chuẩn **C99**. Bắt đầu từ `//` và kéo dài đến hết dòng hiện tại (gặp ký tự xuống dòng `\n`).
 
 2. Tại sao C cấm lồng khối chú thích `/* ... */` (No Nested Block Comments):
 - Bộ phân tích từ vựng (Lexer) của C không đếm độ sâu mở/đóng của `/*`. Ngay khi đang ở trong trạng thái comment `/*`, nó sẽ bỏ qua mọi ký tự (kể cả các dấu `/*` bên trong) và **kết thúc khối chú thích ngay tại dấu `*/` đầu tiên** nó bắt gặp.
@@ -1883,8 +1883,8 @@ int main(void) {
 - `>>` (Right Shift): Dịch các bit sang phải `k` vị trí (trên kiểu `unsigned`, luôn chèn bit `0` vào bên trái — tương đương chia nguyên cho $2^k$).
 
 2. Phân biệt Bitwise (`&`, `|`) với Logical (`&&`, `||`):
-- **Đơn vị thao tác & Kết quả:** `&` và `|` tính toán độc lập trên từng cặp bit nhị phân của hai toán hạng nguyên và trả về một giá trị nguyên mới; trong khi `&&` và `||` đánh giá tính đúng/sai của toàn bộ biểu thức và chỉ trả về `0` hoặc `1`.
-- **Cơ chế đoản mạch (Short-circuit):** `&&` và `||` có tính chất đoản mạch (dừng đánh giá vế phải ngay khi vế trái đã quyết định kết quả); ngược lại `&` và `|` **luôn luôn tính toán cả hai toán hạng**.
+* **Đơn vị thao tác & Kết quả:** `&` và `|` tính toán độc lập trên từng cặp bit nhị phân của hai toán hạng nguyên và trả về một giá trị nguyên mới; trong khi `&&` và `||` đánh giá tính đúng/sai của toàn bộ biểu thức và chỉ trả về `0` hoặc `1`.
+* **Cơ chế đoản mạch (Short-circuit):** `&&` và `||` có tính chất đoản mạch (dừng đánh giá vế phải ngay khi vế trái đã quyết định kết quả); ngược lại `&` và `|` **luôn luôn tính toán cả hai toán hạng**.
 
 3. Bốn công thức mặt nạ bit (Bitmask) kinh điển cho bit thứ `k` ($0 \le k < 32$):
 ```c
@@ -2017,9 +2017,9 @@ Bốn lớp lưu trữ trong ngôn ngữ C:
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Phân biệt 3 khái niệm con trỏ cốt lõi trong C:
-- **Con trỏ `NULL` (`NULL Pointer`):** Là con trỏ đã được khởi tạo tường minh bằng hằng số `NULL` (thường định nghĩa là `((void *)0)` trong `<stddef.h>`), biểu thị có chủ đích rằng con trỏ hiện **không trỏ tới bất kỳ vùng nhớ hợp lệ nào**. Lập trình viên có thể kiểm tra an toàn qua `if (ptr != NULL)` trước khi truy xuất.
-- **Con trỏ tổng quát `void*` (`Generic Pointer`):** Là con trỏ lưu trữ địa chỉ vùng nhớ hợp lệ nhưng **không gắn liền với bất kỳ kiểu dữ liệu cụ thể nào** (ví dụ kiểu trả về của `malloc()` hay tham số của `qsort()`, `memcpy()`). Mọi con trỏ dữ liệu (`int*`, `double*`, `struct Student*`) đều có thể gán sang `void*` và ngược lại.
-- **Con trỏ hoang (`Wild Pointer`):** Là biến con trỏ cục bộ được khai báo trên Stack nhưng **chưa được khởi tạo giá trị** (ví dụ `int *p;`). Nó chứa giá trị rác ngẫu nhiên còn sót lại trên RAM. Vì `p != NULL`, câu lệnh kiểm tra `if (p != NULL)` hoàn toàn vô tác dụng, và việc ghi vào `*p = 10;` sẽ gây lỗi nghiêm trọng **Segmentation Fault** hoặc làm hỏng dữ liệu ngẫu nhiên của tiến trình.
+* **Con trỏ `NULL` (`NULL Pointer`):** Là con trỏ đã được khởi tạo tường minh bằng hằng số `NULL` (thường định nghĩa là `((void *)0)` trong `<stddef.h>`), biểu thị có chủ đích rằng con trỏ hiện **không trỏ tới bất kỳ vùng nhớ hợp lệ nào**. Lập trình viên có thể kiểm tra an toàn qua `if (ptr != NULL)` trước khi truy xuất.
+* **Con trỏ tổng quát `void*` (`Generic Pointer`):** Là con trỏ lưu trữ địa chỉ vùng nhớ hợp lệ nhưng **không gắn liền với bất kỳ kiểu dữ liệu cụ thể nào** (ví dụ kiểu trả về của `malloc()` hay tham số của `qsort()`, `memcpy()`). Mọi con trỏ dữ liệu (`int*`, `double*`, `struct Student*`) đều có thể gán sang `void*` và ngược lại.
+* **Con trỏ hoang (`Wild Pointer`):** Là biến con trỏ cục bộ được khai báo trên Stack nhưng **chưa được khởi tạo giá trị** (ví dụ `int *p;`). Nó chứa giá trị rác ngẫu nhiên còn sót lại trên RAM. Vì `p != NULL`, câu lệnh kiểm tra `if (p != NULL)` hoàn toàn vô tác dụng, và việc ghi vào `*p = 10;` sẽ gây lỗi nghiêm trọng **Segmentation Fault** hoặc làm hỏng dữ liệu ngẫu nhiên của tiến trình.
 
 2. Tại sao chuẩn C cấm giải tham chiếu `*vptr` và số học con trỏ `vptr + 1` trên `void*`:
 - Để giải tham chiếu `*vptr`, CPU cần biết phải đọc bao nhiêu byte kể từ địa chỉ đó (1 byte cho `char`, 4 bytes cho `int`, 8 bytes cho `double`) và giải mã theo định dạng nào.
@@ -2190,7 +2190,7 @@ Quy tắc thăng hạng số nguyên (Integer Promotion): Các kiểu dữ liệ
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Cơ chế hoạt động và số lần thực thi của Vòng lặp lồng nhau (Nested Loops):
 - Trong cấu trúc vòng lặp lồng nhau, ứng với **mỗi 1 lần lặp** của vòng lặp bên ngoài (outer loop), vòng lặp bên trong (inner loop) sẽ khởi tạo lại từ đầu và chạy **trọn vẹn toàn bộ chu kỳ** của nó.
-- Nếu vòng ngoài chạy $M$ lần độc lập và vòng trong chạy $N$ lần, tổng số lần thực thi khối lệnh trong cùng là tích Đề-các: $M 	imes N$ lần (độ phức tạp $O(M 	imes N)$, hoặc $rac{n(n-1)}{2} = O(n^2)$ nếu `j` chạy từ `i + 1` đến `n - 1`).
+- Nếu vòng ngoài chạy $M$ lần độc lập và vòng trong chạy $N$ lần, tổng số lần thực thi khối lệnh trong cùng là tích Đề-các: $M \times N$ lần (độ phức tạp $O(M \times N)$, hoặc $\frac{n(n-1)}{2} = O(n^2)$ nếu `j` chạy từ `i + 1` đến `n - 1`).
 
 2. Vòng lặp điều khiển bằng giá trị lính canh (Sentinel-Controlled Loop):
 - Là kỹ thuật dùng cho bài toán **chưa biết trước số lượng phần tử đầu vào**. Chương trình quy ước một giá trị đặc biệt nằm ngoài miền dữ liệu hợp lệ gọi là **Lính canh (Sentinel)** (ví dụ nhập `-1` để kết thúc việc nhập điểm số dương).
@@ -2237,14 +2237,14 @@ for (int i = 0; i < rows && !found; i++) {
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Phương pháp phân rã Top-Down và hai tiêu chuẩn `High Cohesion` — `Low Coupling`:
-- **Phân rã từ trên xuống (Top-Down Stepwise Refinement):** Chia một bài toán lớn phức tạp thành các bài toán con nhỏ hơn (Sub-problems), mỗi bài toán con được đóng gói thành một hàm (Function) hoặc một module độc lập.
-- **Độ kết dính nội tại cao (`High Cohesion`):** Mỗi hàm chỉ nên thực hiện **đúng một nhiệm vụ chức năng duy nhất, rõ ràng và trọn vẹn** (Single Responsibility). Ví dụ: hàm `calculateTax(double income)` chỉ tính và trả về tiền thuế, không kiêm nhiệm thêm việc in menu hay đọc tệp. Điều này giúp hàm dễ hiểu, dễ kiểm thử đơn vị (Unit Test) và tái sử dụng ở nhiều nơi.
-- **Độ ghép nối thấp (`Low Coupling`):** Các hàm/module nên phụ thuộc vào nhau ít nhất có thể và chỉ giao tiếp với nhau thông qua **danh sách tham số đầu vào tường minh và giá trị trả về** (Data Coupling).
+* **Phân rã từ trên xuống (Top-Down Stepwise Refinement):** Chia một bài toán lớn phức tạp thành các bài toán con nhỏ hơn (Sub-problems), mỗi bài toán con được đóng gói thành một hàm (Function) hoặc một module độc lập.
+* **Độ kết dính nội tại cao (`High Cohesion`):** Mỗi hàm chỉ nên thực hiện **đúng một nhiệm vụ chức năng duy nhất, rõ ràng và trọn vẹn** (Single Responsibility). Ví dụ: hàm `calculateTax(double income)` chỉ tính và trả về tiền thuế, không kiêm nhiệm thêm việc in menu hay đọc tệp. Điều này giúp hàm dễ hiểu, dễ kiểm thử đơn vị (Unit Test) và tái sử dụng ở nhiều nơi.
+* **Độ ghép nối thấp (`Low Coupling`):** Các hàm/module nên phụ thuộc vào nhau ít nhất có thể và chỉ giao tiếp với nhau thông qua **danh sách tham số đầu vào tường minh và giá trị trả về** (Data Coupling).
 
 2. Tại sao lạm dụng biến toàn cục (`Global Variables`) tạo ra `Tight/Common Coupling` nguy hiểm:
-- **Mất tính cô lập và phát sinh hiệu ứng phụ ngầm (Hidden Side Effects):** Bất kỳ hàm nào trong toàn bộ chương trình cũng có thể âm thầm sửa đổi giá trị biến toàn cục. Khi biến toàn cục mang giá trị sai, lập trình viên phải rà soát toàn bộ hàng chục hàm thay vì chỉ kiểm tra nơi truyền tham số.
-- **Phá vỡ khả năng tái sử dụng (Non-reusable) và không an toàn luồng:** Hàm phụ thuộc cứng vào tên biến toàn cục không thể tách sang dự án khác hoặc gọi đệ quy/song song an toàn.
-- **Chuẩn thiết kế C:** Hạn chế tối đa biến toàn cục; truyền dữ liệu qua tham số giá trị hoặc con trỏ `const` khi chỉ đọc.
+* **Mất tính cô lập và phát sinh hiệu ứng phụ ngầm (Hidden Side Effects):** Bất kỳ hàm nào trong toàn bộ chương trình cũng có thể âm thầm sửa đổi giá trị biến toàn cục. Khi biến toàn cục mang giá trị sai, lập trình viên phải rà soát toàn bộ hàng chục hàm thay vì chỉ kiểm tra nơi truyền tham số.
+* **Phá vỡ khả năng tái sử dụng (Non-reusable) và không an toàn luồng:** Hàm phụ thuộc cứng vào tên biến toàn cục không thể tách sang dự án khác hoặc gọi đệ quy/song song an toàn.
+* **Chuẩn thiết kế C:** Hạn chế tối đa biến toàn cục; truyền dữ liệu qua tham số giá trị hoặc con trỏ `const` khi chỉ đọc.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
@@ -2274,15 +2274,15 @@ for (int i = 0; i < rows && !found; i++) {
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Quy tắc đọc từ phải sang trái (Right-to-Left Rule) cho 3 dạng kết hợp `const` và con trỏ `*`:
-- **Trường hợp 1: `const int *p` (hoặc `int const *p` — Pointer to Constant Data):**
+* **Trường hợp 1: `const int *p` (hoặc `int const *p` — Pointer to Constant Data):**
   + Bản chất: `p` là con trỏ trỏ tới một số nguyên hằng.
   + Giá trị vùng nhớ `*p` là **chỉ đọc (Read-only)** thông qua `p` (`*p = 10;` $\to$ **Lỗi biên dịch**).
   + Bản thân con trỏ `p` **được phép thay đổi địa chỉ** để trỏ sang biến khác (`p = &other_var;` hoặc `p++;` $\to$ **Hợp lệ**).
-- **Trường hợp 2: `int *const p = &x;` (Constant Pointer to Mutable Data):**
+* **Trường hợp 2: `int *const p = &x;` (Constant Pointer to Mutable Data):**
   + Bản chất: `p` là một **con trỏ hằng** (bắt buộc phải khởi tạo địa chỉ ngay lúc khai báo).
   + Địa chỉ lưu trong `p` bị **khóa cố định** (`p = &y;` $\to$ **Lỗi biên dịch**).
   + Giá trị tại vùng nhớ mà `p` trỏ tới **được phép thay đổi** (`*p = 99;` $\to$ **Hợp lệ**).
-- **Trường hợp 3: `const int *const p = &x;` (Constant Pointer to Constant Data):**
+* **Trường hợp 3: `const int *const p = &x;` (Constant Pointer to Constant Data):**
   + Khóa kép cả hai chiều: Không được phép đổi địa chỉ `p` VÀ cũng không được phép sửa giá trị `*p`.
 
 2. Lý do sử dụng `const` cho tham số mảng/chuỗi chỉ đọc (`const int arr[]` / `const char *s`):
@@ -2306,7 +2306,7 @@ for (int i = 0; i < rows && !found; i++) {
 - **Kho lưu trữ (Target Pool):** `exam_questions`
 - **Ánh xạ Chuẩn đầu ra:** **FLM CLO8** | **DB 3NF CLO8** (`00000000-0000-0000-0000-000000000468`)
 - **Thang nhận thức Bloom:** `Understand` | **Mức độ khó:** `Medium`
-- **Chủ đề bài học (Syllabus):** Session 46 — *String Memory Segments: char[] vs char*
+- **Chủ đề bài học (Syllabus):** Session 46 — *String Memory Segments: char[] vs char**
 - **Mục tiêu đánh giá:** Kiểm tra kiến thức về các phân vùng bộ nhớ (Stack vs Read-Only Data Segment) khi khai báo chuỗi trong C.
 
 #### ❓ Câu hỏi vấn đáp:
@@ -2365,11 +2365,11 @@ So sánh chi tiết giữa `char s1[]` và `char *s2`:
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. So sánh nguyên lý, điều kiện áp dụng và độ phức tạp giữa `Linear Search` và `Binary Search`:
-- **Tìm kiếm tuyến tính (`Linear Search`):**
+* **Tìm kiếm tuyến tính (`Linear Search`):**
   + Nguyên lý: Duyệt tuần tự từng phần tử từ chỉ số `0` đến `n - 1`, so sánh `arr[i] == key`. Dừng ngay khi tìm thấy phần tử đầu tiên khớp hoặc khi hết mảng.
   + Điều kiện áp dụng: Hoạt động trên **mọi mảng** (không yêu cầu mảng phải được sắp xếp trước).
   + Độ phức tạp: Tốt nhất $O(1)$ (nằm ngay ở `arr[0]`), Xấu nhất và Trung bình $O(n)$ (so sánh tối đa $n$ lần).
-- **Tìm kiếm nhị phân (`Binary Search`):**
+* **Tìm kiếm nhị phân (`Binary Search`):**
   + Nguyên lý: Liên tục chia đôi khoảng tìm kiếm `[left, right]` bằng cách so sánh `key` với phần tử chính giữa `arr[mid]`.
   + Điều kiện tiên quyết bắt buộc: Mảng **phải được sắp xếp có thứ tự** (tăng dần hoặc giảm dần).
   + Độ phức tạp: Tốt nhất $O(1)$, Xấu nhất $O(\log_2 n)$ (ví dụ với $n = 10^6$ chỉ cần tối đa $\lceil \log_2(10^6) \rceil = 20$ phép so sánh).
@@ -2470,7 +2470,8 @@ while ((c = getchar()) != '\n' && c != EOF);
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Phân tích toán học để tối ưu hóa hàm kiểm tra số nguyên tố `isPrime(int n)`:
 - Theo định nghĩa, số nguyên tố $n$ là số tự nhiên lớn hơn 1 chỉ chia hết cho 1 và chính nó. Do đó mọi $n \le 1$ đều không phải là số nguyên tố.
-- Nếu $n$ là hợp số, nó bắt buộc phải có ít nhất một ước số nguyên tố $d$ thỏa mãn $2 \le d \le \sqrt{n}$. Nếu duyệt tới $\lfloor\sqrt{n}floor$ mà không tìm thấy ước nào, ta kết luận chắc chắn $n$ là số nguyên tố (giảm độ phức tạp từ $O(n)$ xuống $O(\sqrt{n})$).
+- Nếu $n$ là hợp số, nó bắt buộc phải có ít nhất một ước số nguyên tố $d$ thỏa mãn $2 \le d \le \sqrt{n}$. Nếu duyệt tới $\lfloor\sqrt{n}
+floor$ mà không tìm thấy ước nào, ta kết luận chắc chắn $n$ là số nguyên tố (giảm độ phức tạp từ $O(n)$ xuống $O(\sqrt{n})$).
 - Tối ưu hóa quy luật $6k \pm 1$: Mọi số nguyên lớn hơn 3 không chia hết cho 2 và 3 đều có dạng $6k - 1$ hoặc $6k + 1$. Ta kiểm tra riêng $n == 2, n == 3$, loại bỏ các bội số của 2 và 3, sau đó vòng lặp chỉ cần bắt đầu từ $i = 5$ với bước nhảy `i += 6` (kiểm tra cặp `i` và `i + 2`).
 
 2. Cài đặt hàm `isPrime(int n)` chuẩn C99 chống tràn số nguyên (`i <= n / i`):
@@ -2493,8 +2494,8 @@ bool isPrime(int n) {
 ```
 
 3. Tại sao phải viết `i <= n / i` thay vì `i * i <= n` khi `n` gần `INT_MAX`:
-- Trong kiểu `int` 32-bit có dấu, `INT_MAX = 2,147,483,647` (là một số nguyên tố Mersenne $2^{31}-1$), có $\sqrt{	ext{INT\_MAX}} pprox 46,340.95$.
-- Khi vòng lặp chạy tới $i = 46,337$ (hoặc $i + 6 = 46,343$), tích `i * i` bằng $46,343^2 = 2,147,673,649 > 	ext{INT\_MAX}$, gây ra **Tràn số nguyên có dấu (Signed Integer Overflow — Undefined Behavior)**, làm giá trị `i * i` bị lật thành số âm khiến điều kiện `i * i <= n` luôn đúng và dẫn đến vòng lặp chạy sai hoặc vô tận!
+- Trong kiểu `int` 32-bit có dấu, `INT_MAX = 2,147,483,647` (là một số nguyên tố Mersenne $2^{31}-1$), có $\sqrt{\text{INT\_MAX}} \approx 46,340.95$.
+- Khi vòng lặp chạy tới $i = 46,337$ (hoặc $i + 6 = 46,343$), tích `i * i` bằng $46,343^2 = 2,147,673,649 > \text{INT\_MAX}$, gây ra **Tràn số nguyên có dấu (Signed Integer Overflow — Undefined Behavior)**, làm giá trị `i * i` bị lật thành số âm khiến điều kiện `i * i <= n` luôn đúng và dẫn đến vòng lặp chạy sai hoặc vô tận!
 - Khi viết `i <= n / i`, phép chia nguyên `n / i` hoàn toàn không bao giờ vượt quá `n`, đảm bảo an toàn tuyệt đối cho mọi giá trị `n` thuộc toàn dải `[INT_MIN, INT_MAX]`.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
@@ -2863,7 +2864,7 @@ double exportLowStockReport(const Product list[], int n) {
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Tại sao dùng trực tiếp `fscanf()` trên tệp văn bản dễ gây lỗi dây chuyền:
 - Hàm `fscanf()` đọc trực tiếp trên luồng byte và không nhận biết ranh giới từng dòng vật lý. Nếu dòng số 5 bị lỗi định dạng (ví dụ thiếu trường hoặc ghi chữ `"ERR"` vào cột số thực), `fscanf()` dừng lại ngay tại ký tự lỗi đó trong bộ đệm tệp. Ở các vòng lặp tiếp theo, con trỏ tệp bị kẹt tại chỗ hoặc đọc lệch cột của dòng sau nối vào dòng trước, làm hỏng toàn bộ dữ liệu phía sau.
-- **Giải pháp chuẩn công nghiệp (`fgets` + `sscanf`):** Dùng `fgets(line, sizeof(line), fp)` để đọc trọn vẹn **từng dòng độc lập** vào bộ đệm RAM trước, sau đó dùng `sscanf()` phân tích chuỗi `line`. Nếu dòng số 5 bị lỗi (`sscanf` trả về `< 3`), ta chỉ việc ghi cảnh báo và bỏ qua dòng 5; vòng lặp kế tiếp gọi `fgets` sẽ tự động đọc sang dòng số 6 một cách hoàn toàn sạch sẽ!
+* **Giải pháp chuẩn công nghiệp (`fgets` + `sscanf`):** Dùng `fgets(line, sizeof(line), fp)` để đọc trọn vẹn **từng dòng độc lập** vào bộ đệm RAM trước, sau đó dùng `sscanf()` phân tích chuỗi `line`. Nếu dòng số 5 bị lỗi (`sscanf` trả về `< 3`), ta chỉ việc ghi cảnh báo và bỏ qua dòng 5; vòng lặp kế tiếp gọi `fgets` sẽ tự động đọc sang dòng số 6 một cách hoàn toàn sạch sẽ!
 
 2. Cài đặt hàm đọc và phân tích tệp `sensors.csv` bằng `fgets()` + `sscanf()`:
 ```c
@@ -2930,9 +2931,9 @@ int parseSensorCsv(const char *filename, double *out_avg_temp) {
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Phân biệt lỗi Biên dịch (`Redefinition`) và lỗi Liên kết (`Multiple Definition`):
-- **Translation Unit (Đơn vị dịch):** Là một tệp `.c` sau khi Bộ tiền xử lý (Preprocessor) đã nhúng toàn bộ nội dung các tệp `.h` được `#include` vào.
-- **Lỗi `Redefinition of struct ...` (Compile-time Error):** Xảy ra trong **cùng một Translation Unit** khi tệp `main.c` vừa `#include "student.h"`, vừa `#include "course.h"`, mà bản thân `course.h` lại `#include "student.h"` lần nữa $\to$ cấu trúc `struct Student` bị khai báo 2 lần trong cùng một tệp `.c`.
-- **Lỗi `Multiple definition of ...` (Link-time Error):** Xảy ra ở giai đoạn **Linker** ghép nhiều tệp đối tượng (`main.o`, `course.o`) lại với nhau. Nếu tệp `.h` chứa định nghĩa thân hàm hoặc định nghĩa biến toàn cục `int g_count = 0;`, thì cả `main.o` và `course.o` đều xuất khẩu ký hiệu `g_count` (External Linkage) $\to$ Linker báo lỗi trùng lặp ký hiệu toàn cục!
+* **Translation Unit (Đơn vị dịch):** Là một tệp `.c` sau khi Bộ tiền xử lý (Preprocessor) đã nhúng toàn bộ nội dung các tệp `.h` được `#include` vào.
+* **Lỗi `Redefinition of struct ...` (Compile-time Error):** Xảy ra trong **cùng một Translation Unit** khi tệp `main.c` vừa `#include "student.h"`, vừa `#include "course.h"`, mà bản thân `course.h` lại `#include "student.h"` lần nữa $\to$ cấu trúc `struct Student` bị khai báo 2 lần trong cùng một tệp `.c`.
+* **Lỗi `Multiple definition of ...` (Link-time Error):** Xảy ra ở giai đoạn **Linker** ghép nhiều tệp đối tượng (`main.o`, `course.o`) lại với nhau. Nếu tệp `.h` chứa định nghĩa thân hàm hoặc định nghĩa biến toàn cục `int g_count = 0;`, thì cả `main.o` và `course.o` đều xuất khẩu ký hiệu `g_count` (External Linkage) $\to$ Linker báo lỗi trùng lặp ký hiệu toàn cục!
 
 2. Cơ chế hoạt động của Header Guards (`#ifndef` / `#define` / `#endif`):
 ```c
@@ -2951,7 +2952,7 @@ void printStudent(const Student *s); // Nguyên mẫu hàm (Prototype)
 #endif /* STUDENT_H */
 ```
 - Lần đầu tiên `student.h` được nạp vào `main.c`, macro `STUDENT_H` chưa tồn tại nên Preprocessor định nghĩa `STUDENT_H` và giữ lại nội dung. Ở lần `#include "student.h"` thứ hai trong cùng `main.c`, vì `STUDENT_H` đã được định nghĩa, Preprocessor loại bỏ toàn bộ nội dung bên trong, chống lỗi `Redefinition` 100%.
-- **Lưu ý quan trọng:** Header Guards chỉ có tác dụng trong phạm vi **từng Translation Unit riêng lẻ** (mỗi tệp `.c` biên dịch độc lập). Vì vậy, biến toàn cục dùng chung bắt buộc phải khai báo `extern int g_total_students;` trong `.h` và chỉ định nghĩa cấp phát bộ nhớ `int g_total_students = 0;` trong **đúng một tệp `.c` duy nhất**.
+* **Lưu ý quan trọng:** Header Guards chỉ có tác dụng trong phạm vi **từng Translation Unit riêng lẻ** (mỗi tệp `.c` biên dịch độc lập). Vì vậy, biến toàn cục dùng chung bắt buộc phải khai báo `extern int g_total_students;` trong `.h` và chỉ định nghĩa cấp phát bộ nhớ `int g_total_students = 0;` trong **đúng một tệp `.c` duy nhất**.
 
 #### 📊 Barem Rubric Đánh giá (Tổng điểm: 10.0 / 10.0):
 
@@ -2986,7 +2987,7 @@ void printStudent(const Student *s); // Nguyên mẫu hàm (Prototype)
 - Địa chỉ trả về cho hàm `main()` trở thành một **Con trỏ lơ lửng (Dangling Pointer)** trỏ vào vùng nhớ Stack đã bị giải phóng. Khi hàm tiếp theo (như `printf`) được gọi, Stack Frame mới của `printf` sẽ ghi đè trực tiếp lên vùng nhớ cũ của `buf`, làm chuỗi bị biến dạng thành ký tự rác hoặc gây crash (**Undefined Behavior**).
 
 2. Hai phương pháp thiết kế lại chuẩn công nghiệp:
-- **Phương pháp 1: Hàm gọi tự cấp phát bộ đệm và truyền vào kèm kích thước (Caller-Allocated Buffer — Khuyên dùng nhất trong C hệ thống/nhúng):**
+* **Phương pháp 1: Hàm gọi tự cấp phát bộ đệm và truyền vào kèm kích thước (Caller-Allocated Buffer — Khuyên dùng nhất trong C hệ thống/nhúng):**
 ```c
 int createGreetingSafe(const char *name, char *out_buf, size_t buf_size) {
     if (name == NULL || out_buf == NULL || buf_size == 0) return -1;
@@ -2994,7 +2995,7 @@ int createGreetingSafe(const char *name, char *out_buf, size_t buf_size) {
 }
 ```
   + *Ưu điểm:* Không tốn chi phí cấp phát Heap (`malloc`), không bao giờ bị Memory Leak, an toàn tuyệt đối trong môi trường đa luồng.
-- **Phương pháp 2: Cấp phát động trên vùng nhớ Heap (`malloc`) và chuyển giao quyền sở hữu cho Caller:**
+* **Phương pháp 2: Cấp phát động trên vùng nhớ Heap (`malloc`) và chuyển giao quyền sở hữu cho Caller:**
 ```c
 char* createGreetingHeap(const char *name) {
     if (name == NULL) return NULL;
@@ -3029,7 +3030,7 @@ char* createGreetingHeap(const char *name) {
 - **Mục tiêu đánh giá:** Đánh giá năng lực thiết kế ma trận động hiệu năng cao bằng khối nhớ liên tục duy nhất và phân tích tác động của thứ tự duyệt dòng/cột lên bộ nhớ đệm CPU Cache.
 
 #### ❓ Câu hỏi vấn đáp:
-> "Thay vì cấp phát ma trận động $R 	imes C$ bằng con trỏ cấp hai `double **mat` (phải gọi `malloc` $R + 1$ lần), hãy trình bày kỹ thuật cấp phát ma trận động bằng **một khối nhớ liên tục duy nhất** (`double *mat`) chỉ với 1 lệnh `malloc()`. Viết hàm C nhân hai ma trận động theo cách biểu diễn này và giải thích tại sao việc đổi thứ tự vòng lặp từ `i-j-k` sang `i-k-j` lại giúp tăng tốc độ thực thi vượt trội nhờ nguyên lý **Spatial Locality (Tính cục bộ không gian)** trên CPU Cache?"
+> "Thay vì cấp phát ma trận động $R \times C$ bằng con trỏ cấp hai `double **mat` (phải gọi `malloc` $R + 1$ lần), hãy trình bày kỹ thuật cấp phát ma trận động bằng **một khối nhớ liên tục duy nhất** (`double *mat`) chỉ với 1 lệnh `malloc()`. Viết hàm C nhân hai ma trận động theo cách biểu diễn này và giải thích tại sao việc đổi thứ tự vòng lặp từ `i-j-k` sang `i-k-j` lại giúp tăng tốc độ thực thi vượt trội nhờ nguyên lý **Spatial Locality (Tính cục bộ không gian)** trên CPU Cache?"
 
 #### 🔄 Câu hỏi đào sâu / phản biện nối tiếp (Follow-up Prompt):
 > *"Trong công thức ánh xạ chỉ số hai chiều `(r, c)` sang mảng một chiều `r * cols + c`, điều gì sẽ xảy ra nếu `r * cols` vượt quá giới hạn kiểu `int` và tại sao ta nên dùng kiểu `size_t` cho các biến chỉ số và kích thước bộ nhớ?"*
@@ -3095,8 +3096,8 @@ double* multiplyMatrices(const double *A, const double *B, size_t M, size_t K, s
 
 #### 💡 Câu trả lời mẫu chuẩn mực (Model Answer):
 1. Hai cạm bẫy thiết kế của hàm `strncpy(dest, src, n)` trong chuẩn C:
-- **Bẫy 1 — Không tự động ghi ký tự `'\0'` khi nguồn dài bằng hoặc hơn `n`:** Theo đặc tả chuẩn C99/C11, nếu trong `n` byte đầu tiên của `src` không có ký tự `'\0'` (tức là `strlen(src) >= n`), hàm `strncpy()` sẽ sao chép đúng `n` ký tự và **KHÔNG ghi thêm ký tự `'\0'` nào cả**! Khi đó `dest` trở thành mảng ký tự không có null-terminator; mọi lời gọi `printf("%s", dest)` hoặc `strlen(dest)` tiếp theo sẽ đọc tràn qua các biến lân cận trên Stack (**Buffer Over-read**). Nếu bắt buộc dùng `strncpy`, luôn phải ép `dest[sizeof(dest) - 1] = '\0';`.
-- **Bẫy 2 — Ghi đè toàn bộ phần dư bằng byte `'\0'` (Zero-Padding Overhead):** Ngược lại, nếu `src` chỉ dài 5 ký tự nhưng `n = 65536`, `strncpy` sẽ sao chép 5 ký tự rồi tiếp tục ghi thêm 65,531 byte `'\0'` vào phần còn lại của `dest`, gây lãng phí chu kỳ CPU không cần thiết.
+* **Bẫy 1 — Không tự động ghi ký tự `'\0'` khi nguồn dài bằng hoặc hơn `n`:** Theo đặc tả chuẩn C99/C11, nếu trong `n` byte đầu tiên của `src` không có ký tự `'\0'` (tức là `strlen(src) >= n`), hàm `strncpy()` sẽ sao chép đúng `n` ký tự và **KHÔNG ghi thêm ký tự `'\0'` nào cả**! Khi đó `dest` trở thành mảng ký tự không có null-terminator; mọi lời gọi `printf("%s", dest)` hoặc `strlen(dest)` tiếp theo sẽ đọc tràn qua các biến lân cận trên Stack (**Buffer Over-read**). Nếu bắt buộc dùng `strncpy`, luôn phải ép `dest[sizeof(dest) - 1] = '\0';`.
+* **Bẫy 2 — Ghi đè toàn bộ phần dư bằng byte `'\0'` (Zero-Padding Overhead):** Ngược lại, nếu `src` chỉ dài 5 ký tự nhưng `n = 65536`, `strncpy` sẽ sao chép 5 ký tự rồi tiếp tục ghi thêm 65,531 byte `'\0'` vào phần còn lại của `dest`, gây lãng phí chu kỳ CPU không cần thiết.
 
 2. Thiết kế hàm ghép đường dẫn an toàn và phát hiện cắt cụt (Truncation) bằng `snprintf()`:
 ```c
@@ -3149,7 +3150,7 @@ int buildFilePath(char *out_buf, size_t buf_size, const char *dir, const char *f
 1. Nguyên lý truy cập ngẫu nhiên $O(1)$ và quy tắc chuyển đổi Đọc $\leftrightarrow$ Ghi trên luồng `"rb+"`:
 - Vì mỗi phần tử `Account` trong tệp nhị phân có kích thước cố định bằng `sizeof(Account)` bytes, bản ghi thứ `index` ($0, 1, 2, \dots$) luôn nằm tại độ lệch byte (Byte Offset) chính xác là: `offset = (long)index * (long)sizeof(Account)`.
 - Để xác định tổng số bản ghi hiện có trong tệp: Dịch con trỏ tệp về cuối bằng `fseek(fp, 0L, SEEK_END)`, gọi `long file_size = ftell(fp)`, suy ra tổng số bản ghi là `total_records = file_size / sizeof(Account)`.
-- **Quy tắc sống còn của chuẩn C khi dùng `"rb+"`:** Trên một luồng cập nhật (`+`), một thao tác đọc (`fread`) **không được theo sau trực tiếp** bởi một thao tác ghi (`fwrite`) (và ngược lại) nếu không có một lời gọi định vị lại con trỏ tệp (`fseek`, `fsetpos`, `rewind`) hoặc `fflush` ở giữa để đồng bộ hóa bộ đệm đọc/ghi nội bộ của `FILE*`.
+* **Quy tắc sống còn của chuẩn C khi dùng `"rb+"`:** Trên một luồng cập nhật (`+`), một thao tác đọc (`fread`) **không được theo sau trực tiếp** bởi một thao tác ghi (`fwrite`) (và ngược lại) nếu không có một lời gọi định vị lại con trỏ tệp (`fseek`, `fsetpos`, `rewind`) hoặc `fflush` ở giữa để đồng bộ hóa bộ đệm đọc/ghi nội bộ của `FILE*`.
 
 2. Cài đặt hàm cập nhật bản ghi tại chỗ (`updateAccountBalanceAt`) chuẩn công nghiệp:
 ```c

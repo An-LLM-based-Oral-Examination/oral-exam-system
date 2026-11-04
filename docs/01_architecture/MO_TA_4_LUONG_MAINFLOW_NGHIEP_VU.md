@@ -696,7 +696,7 @@ flowchart TD
     M3_CheckMagic -- "Đúng Magic Bytes" --> M3_UploadR2["Lưu ảnh lên Cloudflare R2 -> Trả về image_url & Yêu cầu nhập image_description (phục vụ Gemini Multimodal CoT)"]
     M3_UploadR2 --> M3_SelectBanks
 
-    M3_SelectBanks["Tick chọn kho lưu trữ đích: practice_questions và/hoặc exam_questions (PRACTICE_ONLY / EXAM_ONLY / SHARED)"] --> M3_CheckRubric{"Kiểm tra Barem & Đáp án mẫu: Sum(Criteria.MaxScore) == 10.00 VÀ SampleAnswer.Length >= 50?"}
+    M3_SelectBanks["Chọn kho lưu trữ đích riêng biệt (R8): practice_questions (practice) hoặc exam_questions (exam)"] --> M3_CheckRubric{"Kiểm tra Barem & Đáp án mẫu: Sum(Criteria.MaxScore) == 10.00 VÀ SampleAnswer.Length >= 50?"}
     M3_CheckRubric -- "Sai lệch (Sum != 10.0 hoặc Sample < 50 ký tự)" --> M3_Ret422(["Chặn lưu/gửi duyệt & Trả HTTP 422 Unprocessable Entity"])
     M3_CheckRubric -- "Hợp lệ (Sum == 10.00)" --> M3_OptSim{"Chạy AI Calibration Simulator?"}
     M3_OptSim -- "Có" --> M3_SimRun["POST /api/v1/questions/simulate-grading: Chấm thử câu trả lời mẫu & Tinh chỉnh lại trọng số tiêu chí"]

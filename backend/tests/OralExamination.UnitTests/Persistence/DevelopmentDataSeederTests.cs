@@ -114,7 +114,7 @@ public class DevelopmentDataSeederTests
         }
     }
 
-    [Fact(DisplayName = "3. Dữ liệu Seed cho phép chạy mượt mà Full-Session Progressive 10 câu (MF-01) và khởi tạo đề Thi thử 5 câu (MF-02) trên cả 3 môn")]
+    [Fact(DisplayName = "3. Dữ liệu Seed cho phép chạy mượt mà Full-Session Progressive 10 câu (MF-01) và khởi tạo đề Thi thử 5 câu (MF-02) trên tất cả các môn")]
     public async Task Seeded_Data_Should_Support_FullSession_10_Questions_And_StartMockExam_For_All_Three_Courses()
     {
         await using var context = CreateInMemoryContext();
@@ -128,6 +128,9 @@ public class DevelopmentDataSeederTests
             DevelopmentDataSeeder.CoursePrn231Id,
             DevelopmentDataSeeder.CourseSwd392Id,
             DevelopmentDataSeeder.CourseSwr302Id,
+            DevelopmentDataSeeder.CoursePrf192Id,
+            DevelopmentDataSeeder.CourseCsd201Id,
+            DevelopmentDataSeeder.CourseDbi202Id,
             DevelopmentDataSeeder.CourseEnt001Id,
             DevelopmentDataSeeder.CourseEnt104Id,
             DevelopmentDataSeeder.CourseEnt203Id,
@@ -359,5 +362,81 @@ public class DevelopmentDataSeederTests
         var appeal = await context.AppealRequests.FirstOrDefaultAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
         appeal.Should().NotBeNull();
         appeal!.SubmissionId.Should().NotBeNull();
+    }
+
+    [Fact(DisplayName = "6. SeedAdditionalThreeCoursesAndClosAsync khởi tạo chuẩn 1-1 FLM CLOs (9 PRF192, 8 CSD201, 7 DBI202) và đủ 186 câu hỏi (62 câu/môn = 36 Practice + 26 Exam) cô lập R8")]
+    public async Task SeedAsync_Should_Seed_24_Flm_Clos_And_186_Isolated_Questions_For_Prf192_Csd201_Dbi202()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var expectedCourses = new (Guid CourseId, string Code, int ExpectedCloCount)[]
+        {
+            (DevelopmentDataSeeder.CoursePrf192Id, "PRF192", 9),
+            (DevelopmentDataSeeder.CourseCsd201Id, "CSD201", 8),
+            (DevelopmentDataSeeder.CourseDbi202Id, "DBI202", 7)
+        };
+
+        foreach (var (courseId, code, expectedCloCount) in expectedCourses)
+        {
+            var clos = await context.CourseClos
+                .AsNoTracking()
+                .Where(c => c.CourseId == courseId && c.IsActive)
+                .OrderBy(c => c.OrderIndex)
+                .ToListAsync();
+
+            clos.Should().HaveCount(expectedCloCount, $"Học phần {code} phải có đúng {expectedCloCount} CLOs khớp 1-1 với FLM Syllabus");
+            var cloIds = clos.Select(c => c.Id).ToHashSet();
+
+            var practiceQs = await context.PracticeQuestions
+                .AsNoTracking()
+                .Where(q => q.CourseId == courseId && q.IsActive)
+                .ToListAsync();
+
+            practiceQs.Should().HaveCount(36, $"Học phần {code} phải có đúng 36 câu hỏi Kho Luyện tập (practice_questions)");
+            practiceQs.Count(q => q.Difficulty == QuestionDifficulty.Easy).Should().Be(12);
+            practiceQs.Count(q => q.Difficulty == QuestionDifficulty.Medium).Should().BeGreaterThanOrEqualTo(12);
+            practiceQs.Count(q => q.Difficulty == QuestionDifficulty.Hard).Should().BeGreaterThanOrEqualTo(10);
+
+            foreach (var pq in practiceQs)
+            {
+                pq.CloId.Should().NotBeNull($"Câu hỏi luyện tập '{pq.Title}' ({code}) phải được ánh xạ CloId 3NF");
+                cloIds.Should().Contain(pq.CloId!.Value);
+                pq.SampleAnswer.Should().NotBeNullOrWhiteSpace();
+                pq.SampleAnswer!.Length.Should().BeGreaterThanOrEqualTo(50);
+                pq.FollowUpPrompt.Should().NotBeNullOrWhiteSpace();
+            }
+
+            var examQs = await context.ExamQuestions
+                .AsNoTracking()
+                .Where(q => q.CourseId == courseId && q.IsActive)
+                .ToListAsync();
+
+            examQs.Should().HaveCount(26, $"Học phần {code} phải có đúng 26 câu hỏi Kho Thi thật (exam_questions)");
+            examQs.Count(q => q.BloomLevel == BloomLevel.Remember).Should().Be(6);
+            examQs.Count(q => q.BloomLevel == BloomLevel.Understand).Should().Be(8);
+            examQs.Count(q => q.BloomLevel == BloomLevel.Apply).Should().Be(7);
+            examQs.Count(q => q.BloomLevel == BloomLevel.Analyze).Should().Be(5);
+
+            foreach (var eq in examQs)
+            {
+                eq.CloId.Should().NotBeNull($"Câu hỏi thi thật '{eq.Title}' ({code}) phải được ánh xạ CloId 3NF");
+                cloIds.Should().Contain(eq.CloId!.Value);
+                eq.SampleAnswer.Should().NotBeNullOrWhiteSpace();
+                eq.SampleAnswer!.Length.Should().BeGreaterThanOrEqualTo(50);
+            }
+
+            // Kiểm tra cô lập R8: Không có bất kỳ câu hỏi nào trùng tiêu đề giữa 2 kho
+            var practiceTitles = practiceQs.Select(q => q.Title.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var examTitles = examQs.Select(q => q.Title.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            practiceTitles.Intersect(examTitles, StringComparer.OrdinalIgnoreCase).Should().BeEmpty(
+                $"Kho luyện tập và kho thi thật của môn {code} phải cô lập tuyệt đối theo quy tắc R8");
+
+            // Kiểm tra độ phủ CLO: Mọi CLO của môn đều có câu hỏi đánh giá
+            var coveredCloIds = practiceQs.Select(q => q.CloId!.Value)
+                .Concat(examQs.Select(q => q.CloId!.Value))
+                .ToHashSet();
+            coveredCloIds.Should().BeEquivalentTo(cloIds, $"Toàn bộ {expectedCloCount} CLOs của môn {code} đều phải có câu hỏi phủ");
+        }
     }
 }

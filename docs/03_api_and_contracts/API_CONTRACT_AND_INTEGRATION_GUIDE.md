@@ -585,7 +585,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   1. Kiểm tra dung lượng `<= 5MB` (vượt ngưỡng trả `HTTP 413 Payload Too Large`).
   2. Kiểm tra chữ ký nhị phân (Magic Bytes: `PNG` `89 50 4E 47 0D 0A 1A 0A`, `JPG/JPEG` `FF D8 FF`, `WEBP` `RIFF....WEBP`). Sai định dạng trả `HTTP 415 Unsupported Media Type`.
   3. Lưu trữ kép: Lưu bản tĩnh tại `wwwroot/uploads/questions/{yyyyMM}/{guid}.{ext}` (phục vụ qua `/uploads/questions/{yyyyMM}/{guid}.{ext}`) đồng thời đồng bộ lên Cloudflare R2 (`objectKey = questions/{yyyyMM}/{guid}.{ext}`).
-  4. **Quy tắc nghiệp vụ:** Chỉ câu hỏi biên soạn thủ công (`source == "manual"`) mới được đính kèm `imageUrl`. Khi Trưởng BM duyệt đề với `targetUsageScope: "both"`, `imageUrl` và `imageDescription` được tự động đồng bộ sang cả 2 kho `exam_questions` và `practice_questions`.
+  4. **Quy tắc nghiệp vụ:** Chỉ câu hỏi biên soạn thủ công (`source == "manual"`) mới được đính kèm `imageUrl`. Trường `imageUrl` và `imageDescription` được lưu trữ cô lập theo từng kho (`practice_questions` hoặc `exam_questions`) phục vụ Gemini Multimodal CoT Grading.
 - **Response 200 OK:**
 ```json
 {
@@ -759,7 +759,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | `selectedCloCodes` | `List<string>` | Bắt buộc (Non-null) | Ít nhất 1 CLO hợp lệ trong `course_clos` | Danh sách CLOs cần bao phủ |
 | `topics` | `List<string>` | Bắt buộc (Non-null) | Ít nhất 1 chủ đề kiến thức | Danh sách chủ đề bài học |
 | `numberOfQuestions` | `int` | Bắt buộc (Non-null) | $1 \le \text{count} \le 10$ | Số lượng câu hỏi cần sinh trong 1 mẻ |
-| `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` \| `shared` | Phạm vi sử dụng dự kiến |
+| `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` | Phạm vi sử dụng riêng biệt (kho luyện tập hoặc kho thi thật) |
 | `targetBloomLevels` | `List<string>` | Bắt buộc (Non-null) | 1-6 mức: `Remember` đến `Create` | Các bậc Bloom mục tiêu phân bổ |
 | `difficultyDistribution` | `DifficultyDistributionDto` | Bắt buộc (Non-null) | Tổng số câu `easy + medium + hard == numberOfQuestions` | Phân bổ tỷ lệ độ khó câu hỏi |
 
@@ -779,7 +779,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
     "Web API Security, JWT & RBAC Authorization"
   ],
   "numberOfQuestions": 2,
-  "usageScope": "shared",
+  "usageScope": "practice",
   "targetBloomLevels": ["Understand", "Analyze"],
   "difficultyDistribution": {
     "easy": 0,
@@ -806,7 +806,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - `difficulty` (`string`, Non-null): Độ khó (`easy`, `medium`, `hard`).
 - `bloomLevel` (`string`, Non-null): Mức Bloom (`Remember` đến `Create`).
 - `source` (`string`, Non-null): Cố định `'ai_generated'`.
-- `usageScope` (`string`, Non-null): `'practice'`, `'exam'`, hoặc `'shared'`.
+- `usageScope` (`string`, Non-null): `'practice'` hoặc `'exam'`.
 - `modelAnswer` (`string`, Non-null): Câu trả lời mẫu chuẩn mực, **bắt buộc $\ge 50$ ký tự**.
 - `keyPoints` (`List<string>`, Non-null): Danh sách các ý chính bắt buộc phải có trong câu trả lời.
 - `hasFollowUp` (`bool`, Non-null): Cờ cho phép hỏi câu phụ chuyên sâu.
@@ -843,7 +843,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "difficulty": "medium",
       "bloomLevel": "Understand",
       "source": "ai_generated",
-      "usageScope": "shared",
+      "usageScope": "practice",
       "modelAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. Nguyên lý phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp, cả hai nên phụ thuộc vào abstractions (Interface). Trong Clean Architecture, Domain và Application đóng vai trò module cấp cao khai báo các interfaces (như IApplicationDbContext, IUserRepository), trong khi tầng Infrastructure đóng vai trò module cấp thấp hiện thực hóa các interfaces đó. Nhờ cơ chế Dependency Injection trong Program.cs, luồng điều khiển phụ thuộc từ ngoài vào trong, đảm bảo tính độc lập và khả năng unit test.",
       "keyPoints": [
         "Module cấp cao không phụ thuộc module cấp thấp",
@@ -891,7 +891,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "difficulty": "hard",
       "bloomLevel": "Analyze",
       "source": "ai_generated",
-      "usageScope": "shared",
+      "usageScope": "practice",
       "modelAnswer": "Quy trình xác thực JWT Bearer trong ASP.NET Core 8 gồm 3 bước chính: Đầu tiên, Client gửi thông tin đăng nhập lên AuthController; Server xác thực qua IdP và ký phát sinh Access Token (chứa các Claims: sub, email, role) kèm hạn sử dụng ngắn (15 phút) cùng Refresh Token. Thứ hai, Middleware JwtBearerHandler giải mã, xác minh chữ ký HMAC SHA-256 hoặc RSA của token trên mỗi request và nạp ClaimsPrincipal vào HttpContext.User. Thứ ba, tầng API áp dụng AuthorizeAttribute kết hợp Roles hoặc Policies (ví dụ: department_head, lecturer) để kiểm soát quyền truy cập chi tiết tại từng Controller/Action.",
       "keyPoints": [
         "Xác thực qua IdP và phát sinh Access Token chứa Claims",
@@ -1107,14 +1107,14 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 |:---|:---|:---:|:---|:---|
 | `decision` | `string` | Bắt buộc (Non-null) | `APPROVED` \| `REJECTED` \| `NEEDS_REVISION` | Quyết định thẩm định của Trưởng Bộ Môn |
 | `reviewNotes` | `string` | Bắt buộc (Non-null) | Độ dài $\ge 10$ ký tự | Lý do nhận xét, chỉ dẫn sửa đổi hoặc căn cứ phê duyệt |
-| `targetUsageScope` | `string` | Nullable | `practice` \| `exam` \| `shared` | Phạm vi sử dụng chính thức (khi phê duyệt `APPROVED`) |
+| `targetUsageScope` | `string` | Nullable | `practice` \| `exam` | Phạm vi sử dụng chính thức khớp với kho đề của câu hỏi |
 
 - **Request Body:**
 ```json
 {
   "decision": "APPROVED",
   "reviewNotes": "Đề tài bám sát chuẩn đầu ra CLO1 và CLO3, Barem điểm phân bổ hợp lý, câu hỏi phụ phản biện có tính phân loại cao.",
-  "targetUsageScope": "shared"
+  "targetUsageScope": "exam"
 }
 ```
 
@@ -1188,10 +1188,10 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - **Endpoint:** `POST /api/v1/questions/batch-approve`
 - **Quyền:** `department_head`, `admin`
 - **Mô tả:** Trưởng bộ môn hoặc Quản trị viên thẩm định danh sách câu hỏi do Giảng viên đệ trình (hoặc do Trưởng Bộ Môn trực tiếp tạo), rà soát nội dung/tiêu chí Barem, và bấm Phê duyệt lưu hàng loạt vào CSDL trong một ACID Transaction duy nhất.
-- **Quy tắc điều phối lưu trữ theo `usageScope` (Storage Dispatching Policy):**
-  - Khi `usageScope == 'practice'`: Bản ghi được ghi vào bảng `practice_questions` (Kho tự luyện tập mở cho sinh viên ôn luyện, xem đáp án mẫu).
-  - Khi `usageScope == 'exam'`: Bản ghi được ghi vào bảng `exam_questions` (Kho đề thi bảo mật, gán `approved_by = current_user_id`, đáp án mẫu được bảo mật tuyệt đối).
-  - Khi `usageScope == 'shared'`: Bản ghi được ghi đồng thời vào cả hai bảng `practice_questions` và `exam_questions` trong cùng một Transaction, phục vụ cả luyện tập lẫn thi.
+- **Quy tắc điều phối lưu trữ theo `usageScope` (Storage Dispatching Policy — Cô lập 2 kho đề R8):**
+  - Khi `usageScope == 'practice'`: Bản ghi được ghi độc lập vào bảng `practice_questions` (Kho tự luyện tập & thi thử MF-01/MF-02 mở cho sinh viên ôn luyện theo chuẩn đầu ra CLO).
+  - Khi `usageScope == 'exam'` (hoặc `'official_exam'`): Bản ghi được ghi độc lập vào bảng `exam_questions` (Kho đề thi thật MF-04 gắn với `structure_id`, gán `approved_by = current_user_id`, đáp án mẫu được bảo mật tuyệt đối).
+  - Hệ thống từ chối các giá trị gộp (`'both'`, `'shared'`, `'all'`) nhằm bảo đảm cô lập 100% giữa hai kho câu hỏi.
 - **Quy tắc bất biến (Invariants):**
   1. Mỗi câu hỏi bắt buộc có Barem Rubric với tổng điểm $\sum \text{MaxScore}_j \equiv 10.00$đ.
   2. Mỗi câu hỏi bắt buộc có Model Answer $\ge 50$ ký tự.
@@ -1210,7 +1210,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 | `content` | `string` | Bắt buộc (Non-null) | Không rỗng | Nội dung đề bài |
 | `difficulty` | `string` | Bắt buộc (Non-null) | `easy` \| `medium` \| `hard` | Độ khó câu hỏi |
 | `bloomLevel` | `string` | Bắt buộc (Non-null) | 6 mức Bloom | Bậc nhận thức |
-| `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` \| `shared` | Phạm vi lưu kho |
+| `usageScope` | `string` | Bắt buộc (Non-null) | `practice` \| `exam` | Phạm vi lưu kho riêng biệt (R8) |
 | `source` | `string` | Bắt buộc (Non-null) | `manual` \| `ai_generated` | Nguồn gốc câu hỏi |
 | `modelAnswer` | `string` | Bắt buộc (Non-null) | **Độ dài $\ge 50$ ký tự** | Đáp án mẫu chuẩn |
 | `keyPoints` | `List<string>` | Bắt buộc (Non-null) | Tối thiểu 1 ý chính | Các luận điểm then chốt |
@@ -1228,7 +1228,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "content": "Hãy giải thích nguyên lý Dependency Inversion (DIP) và minh họa cách tổ chức các tầng trong Clean Architecture .NET để tuân thủ nguyên lý này.",
       "difficulty": "medium",
       "bloomLevel": "Understand",
-      "usageScope": "shared",
+      "usageScope": "exam",
       "source": "ai_generated",
       "modelAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. Nguyên lý phát biểu rằng các module cấp cao không nên phụ thuộc vào module cấp thấp, cả hai nên phụ thuộc vào abstractions (Interface)...",
       "keyPoints": [
@@ -1281,7 +1281,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 - `questionId` (`uuid`, Non-null): Khóa chính câu hỏi vừa tạo trong CSDL.
 - `rubricId` (`uuid`, Non-null): Khóa chính Barem Rubric tương ứng.
 - `title` (`string`, Non-null): Tiêu đề câu hỏi.
-- `usageScope` (`string`, Non-null): `'practice'`, `'exam'`, hoặc `'shared'`.
+- `usageScope` (`string`, Non-null): `'practice'` hoặc `'exam'`.
 - `source` (`string`, Non-null): `'ai_generated'` hoặc `'manual'`.
 - `status` (`string`, Non-null): Cố định `'active'`.
 - `approvedBy` (`uuid`, Non-null): User ID của cán bộ phê duyệt.
@@ -1297,7 +1297,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "questionId": "55555555-0000-0000-0000-000000000002",
       "rubricId": "44444444-0000-0000-0000-000000000002",
       "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
-      "usageScope": "shared",
+      "usageScope": "exam",
       "source": "ai_generated",
       "status": "active",
       "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
@@ -1361,126 +1361,6 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 ---
 
-#### 5b. Tra cứu danh sách câu hỏi có phân trang & lọc theo kho (`GET /api/v1/questions`)
-- **Endpoint:** `GET /api/v1/questions`
-- **Quyền:** `lecturer`, `department_head`, `admin`
-- **Query Parameters (`GetQuestionsQuery`):**
-  - `courseId` (`uuid`, tùy chọn): Lọc theo môn học.
-  - `approvalStatus` (`string`, tùy chọn): Lọc theo trạng thái duyệt (`DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`, `REJECTED`).
-  - `difficulty` (`string`, tùy chọn): `easy` | `medium` | `hard`.
-  - `bloomLevel` (`string`, tùy chọn): `Remember` | `Understand` | `Apply` | `Analyze` | `Evaluate` | `Create`.
-  - `source` (`string`, tùy chọn): `manual` | `ai_generated`.
-  - `usageScope` (`string`, tùy chọn): `"practice"` (chỉ lấy kho luyện tập `practice_questions`), `"exam"` (chỉ lấy kho thi thật `exam_questions`), hoặc `"both"` / bỏ trống (hợp nhất từ cả 2 kho, tự động khử trùng các câu hỏi `both` theo `(CourseId, RubricId, Title)`).
-  - `pageNumber` (`int`, mặc định `1`): Trang hiện tại (phân trang trực tiếp tại SQL Server-side).
-  - `pageSize` (`int`, mặc định `20`, tối đa `100`): Số bản ghi mỗi trang.
-- **Response 200 OK (`GetQuestionsResponseDto`):**
-```json
-{
-  "totalCount": 42,
-  "pageNumber": 1,
-  "pageSize": 20,
-  "items": [
-    {
-      "id": "55555555-0000-0000-0000-000000000001",
-      "courseId": "22222222-0000-0000-0000-000000000001",
-      "courseCode": "PRN231",
-      "rubricId": "44444444-0000-0000-0000-000000000001",
-      "rubricName": "Barem Vấn đáp Clean Architecture & DIP",
-      "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
-      "difficulty": "medium",
-      "bloomLevel": "Analyze",
-      "source": "manual",
-      "approvalStatus": "APPROVED",
-      "usageScope": "both",
-      "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
-      "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
-      "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
-      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
-      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
-      "cloId": "33333333-0000-0000-0000-000000000001",
-      "cloCode": "CLO1",
-      "structureId": "44444444-1111-2222-3333-444444444444",
-      "isActive": true,
-      "createdAt": "2026-10-02T10:00:00Z"
-    }
-  ]
-}
-```
-
-#### 5c. Xem chi tiết câu hỏi kèm Barem Rubric, CLO & Ma trận Đề (`GET /api/v1/questions/{id}`)
-- **Endpoint:** `GET /api/v1/questions/{id}`
-- **Quyền:** `lecturer`, `department_head`, `admin`
-- **Mô tả:** Truy xuất chi tiết câu hỏi từ kho `exam_questions` hoặc `practice_questions`, tự động nhận diện `usageScope` (`"practice"`, `"exam"`, hoặc `"both"` nếu câu hỏi được đồng bộ ở cả 2 kho) và nạp kèm chuẩn đầu ra `cloCode`, `structureId` cùng toàn bộ tiêu chí Barem Rubric 10.0đ.
-- **Response 200 OK (`QuestionDetailDto`):**
-```json
-{
-  "id": "55555555-0000-0000-0000-000000000001",
-  "courseId": "22222222-0000-0000-0000-000000000001",
-  "courseCode": "PRN231",
-  "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
-  "content": "Hãy giải thích nguyên lý Dependency Inversion (DIP) và minh họa cách áp dụng trong Clean Architecture .NET.",
-  "sampleAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. High-level modules không nên phụ thuộc vào low-level modules; cả hai phải phụ thuộc vào abstractions...",
-  "keyPoints": [
-    "High-level không phụ thuộc low-level",
-    "Cùng phụ thuộc vào abstraction (Interface)"
-  ],
-  "difficulty": "medium",
-  "bloomLevel": "Analyze",
-  "source": "manual",
-  "approvalStatus": "APPROVED",
-  "usageScope": "both",
-  "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
-  "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
-  "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
-  "hasFollowUp": true,
-  "followUpPrompt": "Nếu thay đổi EF Core sang Dapper thì tầng nào bị ảnh hưởng?",
-  "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
-  "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
-  "cloId": "33333333-0000-0000-0000-000000000001",
-  "cloCode": "CLO1",
-  "structureId": "44444444-1111-2222-3333-444444444444",
-  "isActive": true,
-  "createdAt": "2026-10-02T10:00:00Z",
-  "rubric": {
-    "id": "44444444-0000-0000-0000-000000000001",
-    "name": "Barem Vấn đáp Clean Architecture & DIP",
-    "description": "Đánh giá hiểu biết về Clean Architecture 4 tầng và nguyên lý DIP",
-    "totalMaxScore": 10.00,
-    "criteria": [
-      {
-        "id": "aaaaaaaa-0000-0000-0000-000000000001",
-        "criterionName": "Định nghĩa và bản chất nguyên lý DIP",
-        "description": "Nêu rõ high-level modules không phụ thuộc low-level modules.",
-        "maxScore": 3.00,
-        "weight": 0.30,
-        "bloomLevel": "Understand",
-        "orderIndex": 1
-      },
-      {
-        "id": "aaaaaaaa-0000-0000-0000-000000000002",
-        "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET",
-        "description": "Chỉ rõ cách Interface đặt ở Application/Domain, triển khai ở Infrastructure.",
-        "maxScore": 4.00,
-        "weight": 0.40,
-        "bloomLevel": "Apply",
-        "orderIndex": 2
-      },
-      {
-        "id": "aaaaaaaa-0000-0000-0000-000000000003",
-        "criterionName": "Lợi ích Unit Testing và Loose Coupling",
-        "description": "Khả năng mock Interface để test độc lập.",
-        "maxScore": 3.00,
-        "weight": 0.30,
-        "bloomLevel": "Analyze",
-        "orderIndex": 3
-      }
-    ]
-  }
-}
-```
-
----
-
 #### 5b. Tra cứu danh sách câu hỏi có phân trang & lọc theo kho (`GET /api/v1/questions`)
 - **Endpoint:** `GET /api/v1/questions`
 - **Quyền:** `lecturer`, `department_head`, `admin`
@@ -1490,7 +1370,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   - `difficulty` (`string`, tùy chọn): `easy` | `medium` | `hard`.
   - `bloomLevel` (`string`, tùy chọn): `Remember` | `Understand` | `Apply` | `Analyze` | `Evaluate` | `Create`.
   - `source` (`string`, tùy chọn): `manual` | `ai_generated`.
-  - `usageScope` (`string`, tùy chọn): `"practice"` (chỉ lấy kho luyện tập `practice_questions`), `"exam"` (chỉ lấy kho thi thật `exam_questions`), hoặc `"both"` / bỏ trống (hợp nhất từ cả 2 kho, tự động khử trùng các câu hỏi `both` theo `(CourseId, RubricId, Title)`).
+  - `usageScope` (`string`, tùy chọn): `"practice"` (chỉ lấy kho luyện tập `practice_questions`), `"exam"` (chỉ lấy kho thi thật `exam_questions`), hoặc bỏ trống (truy vấn danh sách câu hỏi từ cả 2 kho).
   - `pageNumber` (`int`, mặc định `1`): Trang hiện tại (phân trang trực tiếp tại SQL Server-side).
   - `pageSize` (`int`, mặc định `20`, tối đa `100`): Số bản ghi mỗi trang.
 - **Response 200 OK (`GetQuestionsResponseDto`):**
@@ -1511,7 +1391,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
       "bloomLevel": "Analyze",
       "source": "manual",
       "approvalStatus": "APPROVED",
-      "usageScope": "both",
+      "usageScope": "exam",
       "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
       "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
       "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
@@ -1530,7 +1410,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 #### 5c. Xem chi tiết câu hỏi kèm Barem Rubric, CLO & Ma trận Đề (`GET /api/v1/questions/{id}`)
 - **Endpoint:** `GET /api/v1/questions/{id}`
 - **Quyền:** `lecturer`, `department_head`, `admin`
-- **Mô tả:** Truy xuất chi tiết câu hỏi từ kho `exam_questions` hoặc `practice_questions`, tự động nhận diện `usageScope` (`"practice"`, `"exam"`, hoặc `"both"` nếu câu hỏi được đồng bộ ở cả 2 kho) và nạp kèm chuẩn đầu ra `cloCode`, `structureId` cùng toàn bộ tiêu chí Barem Rubric 10.0đ.
+- **Mô tả:** Truy xuất chi tiết câu hỏi từ kho `exam_questions` (`usageScope = "exam"`) hoặc `practice_questions` (`usageScope = "practice"`), nạp kèm chuẩn đầu ra `cloCode`, `structureId` cùng toàn bộ tiêu chí Barem Rubric 10.0đ.
 - **Response 200 OK (`QuestionDetailDto`):**
 ```json
 {
@@ -1548,7 +1428,7 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "bloomLevel": "Analyze",
   "source": "manual",
   "approvalStatus": "APPROVED",
-  "usageScope": "both",
+  "usageScope": "exam",
   "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
   "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
   "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
@@ -3307,9 +3187,9 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
 | Chức năng | Phương thức & Đường dẫn chính xác trên Backend | Ghi chú tích hợp FE |
 | :--- | :--- | :--- |
 | **Tải lên ảnh/sơ đồ câu hỏi (MF-03)** | `POST /api/v1/questions/upload-image`<br>`POST /api/v1/storage/upload-question-image` | `multipart/form-data` (`file`, `description`); kiểm tra Magic Bytes (`PNG`, `JPG/JPEG`, `WEBP` $\le 5\text{MB}$), trả `413` / `415` nếu vi phạm |
-| **Tạo câu hỏi nháp 2 kho (MF-03)** | `POST /api/v1/questions/draft` | Hỗ trợ `usageScope: "practice" \| "exam" \| "both"`, đính kèm `imageUrl` & `imageDescription` cho câu hỏi thủ công (`source == "manual"`) |
+| **Tạo câu hỏi nháp 2 kho riêng biệt (MF-03 - R8)** | `POST /api/v1/questions/draft` | Hỗ trợ `usageScope: "practice" \| "exam"` (từ chối `"both"`/`"shared"`), đính kèm `imageUrl` & `imageDescription` cho câu hỏi thủ công (`source == "manual"`) |
 | **Gửi duyệt câu hỏi (MF-03)** | `POST /api/v1/questions/batch-submit-review` | Chuyển trạng thái sang `SUBMITTED_FOR_REVIEW` |
-| **Trưởng BM duyệt đề (MF-03)** | `POST /api/v1/questions/{id}/review-decision` | Hỗ trợ `targetUsageScope: "both"`, trả `403 Forbidden` nếu người gọi không phải `department_head` / `admin` |
+| **Trưởng BM duyệt đề (MF-03)** | `POST /api/v1/questions/{id}/review-decision` | Hỗ trợ `targetUsageScope: "practice" \| "exam"` (cô lập 2 kho R8), trả `403 Forbidden` nếu người gọi không phải `department_head` / `admin` |
 | **Tạo kỳ thi & mở ca thi (MF-04)** | `POST /api/v1/official-exams/sessions`<br>`POST /api/v1/official-exams/shifts` | Hỗ trợ đồng thời cả `/api/v1/official-exams/*` và `/api/v1/officialexams/*` |
 | **Gán ghế 1–40 & IP máy trạm** | `POST /api/v1/official-exams/tickets` | Ràng buộc `seatNumber` (1–40) và `ipAddress` (`ip_address`) |
 | **Kiosk lấy vé & Check-in (MF-04)** | `GET /api/v1/official-exams/tickets/current`<br>`POST /api/v1/official-exams/tickets/{ticketId}/check-in` | Tự động đọc IP kết nối (hỗ trợ `X-Forwarded-For`), chuyển vé sang `IN_PROGRESS` |

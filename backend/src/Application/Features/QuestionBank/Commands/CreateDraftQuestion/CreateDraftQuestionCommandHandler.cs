@@ -109,11 +109,16 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             _context.Rubrics.Add(rubric);
         }
 
-        // 2. Tạo Question (hỗ trợ cả 2 kho: practice_questions, exam_questions, hoặc both)
+        // 2. Tạo Question tách biệt độc lập hoàn toàn giữa 2 kho: practice_questions và exam_questions (R8)
         // Bất biến MF-03: Mọi câu hỏi do Giảng viên tạo đều phải ở trạng thái DRAFT chờ Trưởng Bộ môn duyệt;
         // PracticeQuestion chỉ được kích hoạt (IsActive = true) khi Trưởng Bộ môn/Admin tự duyệt hoặc sau khi ReviewQuestionDecision phê duyệt.
         var keyPointsJson = JsonSerializer.Serialize(request.KeyPoints ?? new());
         var normalizedScope = (request.UsageScope ?? "exam").Trim().ToLowerInvariant();
+        if (normalizedScope is not ("practice" or "exam" or "official_exam"))
+        {
+            return Result<Guid>.Failure("Phạm vi sử dụng câu hỏi không hợp lệ. Chỉ chấp nhận 'practice' (Luyện tập & Thi thử) hoặc 'exam' (Thi thật) tách biệt.");
+        }
+
         var imageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim();
         var imageDescription = string.IsNullOrWhiteSpace(request.ImageDescription) ? null : request.ImageDescription.Trim();
 
@@ -128,8 +133,8 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         var approvalStatus = isAutoApproved ? ApprovalStatus.Approved : ApprovalStatus.Draft;
         Guid? approvedBy = isAutoApproved ? request.ApprovedBy!.Value : null;
 
-        bool createPractice = normalizedScope is "practice" or "both" or "all" or "shared";
-        bool createExam = normalizedScope is not "practice";
+        bool createPractice = normalizedScope == "practice";
+        bool createExam = !createPractice;
 
         var questionId = Guid.NewGuid();
 
