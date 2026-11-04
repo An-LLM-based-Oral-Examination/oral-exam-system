@@ -141,6 +141,12 @@ public sealed class GetQuestionsQueryHandler
                 new PagedResult<QuestionSummaryDto>(examPageItems, examCount, pageNumber, pageSize, examPages));
         }
 
+        if (!string.IsNullOrEmpty(normalizedScope))
+        {
+            return Result<PagedResult<QuestionSummaryDto>>.Failure(
+                "Phạm vi sử dụng câu hỏi không hợp lệ. Chỉ chấp nhận 'practice', 'exam' hoặc để trống.");
+        }
+
         var examItems = await examQuery
             .Select(q => new QuestionSummaryDto(
                 q.Id,
@@ -162,10 +168,7 @@ public sealed class GetQuestionsQueryHandler
             ))
             .ToListAsync(cancellationToken);
 
-        var examIds = examItems.Select(x => x.Id).ToHashSet();
-
         var practiceOnlyItems = await practiceQuery
-            .Where(q => !examIds.Contains(q.Id))
             .Select(q => new QuestionSummaryDto(
                 q.Id,
                 q.CourseId,

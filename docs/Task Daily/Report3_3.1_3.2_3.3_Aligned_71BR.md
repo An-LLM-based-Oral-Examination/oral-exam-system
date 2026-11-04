@@ -625,7 +625,7 @@ Lecturer is the report name. The database value is `lecturer`. The web client sh
 
 ### 3.3.9 Create Question
 
-**Function Description:** The Lecturer or Department Head creates a question by hand or from a generated draft. A new question is a draft. The author chooses the practice bank, the examination bank, or both.
+**Function Description:** The Lecturer or Department Head creates a question by hand or from a generated draft. A new question is a draft. The author chooses exclusively either the practice bank (`practice_questions`) or the official examination bank (`exam_questions`).
 
 **Function Trigger:** A Lecturer or Department Head saves a new question.
 
@@ -1084,7 +1084,7 @@ The following table is the approved consolidated baseline. IDs in the function s
 | BR-16 | Bài thi thử khóa nhập liệu bàn phím ở câu trả lời chính và bắt buộc thu âm qua micro. |
 | BR-17 | Bài thi thử tự động nộp khi hết giờ và hiển thị ngay bảng điểm chi tiết theo từng CLO. |
 | BR-18 | Syllabi and CLOs are imported/read from FLM and cannot be edited in OES. Admin and Department Head may create and edit OES course-management information without altering the FLM-owned syllabus or CLOs. |
-| BR-19 | Mỗi câu hỏi phải có đáp án mẫu tối thiểu 50 ký tự và được gán vào ít nhất một kho câu hỏi. |
+| BR-19 | Mỗi câu hỏi phải có đáp án mẫu tối thiểu 50 ký tự và được gán riêng biệt vào kho câu hỏi luyện tập hoặc kho câu hỏi thi thật. |
 | BR-20 | Tổng trọng số các tiêu chí trong barem của một câu hỏi phải bằng chính xác 10.0 điểm. |
 | BR-21 | Câu hỏi do Giảng viên tạo khởi đầu ở trạng thái nháp và phải gửi Trưởng Bộ môn phê duyệt. |
 | BR-22 | Chỉ Trưởng Bộ môn mới có quyền phê duyệt, yêu cầu chỉnh sửa hoặc từ chối câu hỏi. |
@@ -1126,7 +1126,7 @@ The following table is the approved consolidated baseline. IDs in the function s
 | BR-58 | Questions are classified by course, Bloom level, and CLO; no chapter field is required for this classification. |
 | BR-59 | Only authorized Lecturer and Department Head users may view questions within their assigned question-bank scope. |
 | BR-60 | Question difficulty is classified as Easy, Medium, or Hard. |
-| BR-61 | Only questions approved by Department Head become available in their approved practice and/or official-exam question pools. |
+| BR-61 | Only questions approved by Department Head become available in their designated practice or official-exam question pool. |
 | BR-62 | Department Head configures official-exam follow-up parameters independently of global practice settings; the permitted follow-up count is 1–5 with default 2. |
 | BR-63 | A Proctor is an assigned Lecturer or an externally provisioned staff member and may authenticate only through a preauthorized Google identity or university-issued username/password credentials. |
 | BR-64 | Official-exam transcript-review buffer is configured separately from the practice buffer; permitted range is 10–300 seconds with a default of 60 seconds. |

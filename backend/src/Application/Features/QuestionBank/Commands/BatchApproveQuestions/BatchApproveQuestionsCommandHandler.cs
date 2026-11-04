@@ -132,8 +132,8 @@ public sealed class BatchApproveQuestionsCommandHandler
             var normalizedSource = string.IsNullOrWhiteSpace(item.Source) ? "flm_api" : item.Source.Trim();
             var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? null : item.ImageUrl.Trim();
             var imageDescription = string.IsNullOrWhiteSpace(item.ImageDescription) ? null : item.ImageDescription.Trim();
-            var sharedQuestionId = Guid.NewGuid();
-            Guid primaryQuestionId = sharedQuestionId;
+            var questionId = Guid.NewGuid();
+            Guid primaryQuestionId = questionId;
             var savedQuestionIds = new List<Guid>();
             bool shouldSaveToPractice = normalizedScope == "practice";
             bool shouldSaveToExam = !shouldSaveToPractice;
@@ -142,7 +142,7 @@ public sealed class BatchApproveQuestionsCommandHandler
             {
                 var eq = new ExamQuestion
                 {
-                    Id = sharedQuestionId,
+                    Id = questionId,
                     CourseId = request.CourseId,
                     CloId = item.CloId,
                     StructureId = item.StructureId,
@@ -171,7 +171,7 @@ public sealed class BatchApproveQuestionsCommandHandler
             {
                 var practiceQuestion = new PracticeQuestion
                 {
-                    Id = sharedQuestionId,
+                    Id = questionId,
                     CourseId = request.CourseId,
                     CloId = item.CloId,
                     RubricId = rubric.Id,
@@ -200,7 +200,7 @@ public sealed class BatchApproveQuestionsCommandHandler
                 }
             }
 
-            primaryQuestionId = savedQuestionIds.FirstOrDefault(sharedQuestionId);
+            primaryQuestionId = savedQuestionIds.FirstOrDefault(questionId);
 
             approvedResults.Add(new ApprovedQuestionResultDto(
                 primaryQuestionId,

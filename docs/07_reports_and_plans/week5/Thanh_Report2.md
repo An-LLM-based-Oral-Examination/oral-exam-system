@@ -80,16 +80,16 @@ OES operates as a web application on desktop browsers equipped with microphones 
 | 36 | Create question manually | Lecturer, Department Head | Lecturer or Department Head manually authors an oral question prompt, Bloom level, CLO mapping, and model answer (at least 50 characters), with optional technical diagram/image attachment (`PNG/JPG/WEBP <= 5MB`) and image description for multimodal AI grading. |
 | 37 | Create 10.0-point rubric | Lecturer, Department Head | Lecturer or Department Head defines evaluation criteria and point weights whose sum strictly equals 10.0 points. |
 | 38 | Update rubric criteria | Lecturer, Department Head | Lecturer or Department Head modifies criterion descriptions and weight distributions while maintaining the 10.0-point total constraint. |
-| 39 | Select target question pools | Lecturer, Department Head | Lecturer or Department Head selects checkboxes to assign a question to the practice question pool, the official exam question pool, or both. |
+| 39 | Select target question pool | Lecturer, Department Head | Lecturer or Department Head selects whether to assign a question exclusively to the practice question pool or the official exam question pool. |
 | 40 | View and filter question bank | Lecturer, Department Head | Lecturer or Department Head searches and filters questions by course, CLO, Bloom level, target pool, and approval status. |
 | 41 | View question and rubric detail | Lecturer, Department Head | Lecturer or Department Head inspects the full prompt, model answer, 10.0-point rubric criteria, and review status of a question. |
 | 42 | Update draft or revision question | Lecturer, Department Head | Lecturer or Department Head edits a draft or revision-requested question and re-validates its 10.0-point rubric. |
 | 43 | Delete draft question | Lecturer, Department Head | Lecturer or Department Head removes an unapproved draft question from their authoring workspace. |
-| 44 | Simulate rubric grading with AI | Lecturer, Department Head | Lecturer or Department Head tests a draft question and 10.0-point rubric against a sample answer using the AI Simulator to verify scoring consistency. |
+| 44 | Simulate rubric grading with AI | Lecturer, Department Head | Lecturer, Department Head tests a draft question and 10.0-point rubric against a sample answer using the AI Simulator to verify scoring consistency. |
 | 45 | Submit single question for review | Lecturer | Lecturer submits an individual draft question and its 10.0-point rubric to the Department Head for quality review. |
 | 46 | Batch submit questions for review | Lecturer | Lecturer selects multiple draft questions and submits them in a single batch to the Department Head for approval. |
 | 47 | View pending question review queue | Department Head | Department Head views the list of questions submitted by Lecturers awaiting quality review. |
-| 48 | Approve submitted question | Department Head | Department Head approves a submitted question, publishing it into the designated practice and/or official exam banks. |
+| 48 | Approve submitted question | Department Head | Department Head approves a submitted question, publishing it into its designated practice or official exam bank. |
 | 49 | Request question revision | Department Head | Department Head marks a submitted question as needing revision and attaches specific feedback notes for the authoring Lecturer. |
 | 50 | Reject submitted question | Department Head | Department Head rejects an unsuitable question with a stated reason, excluding it from the active question banks. |
 | 51 | Batch approve submitted questions | Department Head | Department Head approves multiple reviewed questions simultaneously to publish them into the subject question banks. |
@@ -322,7 +322,7 @@ OES vận hành trên trình duyệt máy tính có trang bị micro tại các 
 | 36 | Soạn câu hỏi vấn đáp thủ công | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn tự soạn nội dung câu hỏi, chọn mức Bloom, gắn CLO, viết đáp án mẫu (tối thiểu 50 ký tự) và có thể đính kèm hình ảnh/sơ đồ kỹ thuật (`PNG/JPG/WEBP <= 5MB`) kèm mô tả phục vụ chấm điểm AI đa phương thức. |
 | 37 | Tạo barem chấm điểm 10.0 | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn thiết lập các tiêu chí chấm điểm có tổng trọng số bằng chính xác 10.0 điểm. |
 | 38 | Cập nhật tiêu chí barem 10.0 | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn chỉnh sửa nội dung và điểm số các tiêu chí trong barem đảm bảo tổng bằng 10.0 điểm. |
-| 39 | Chọn kho lưu trữ câu hỏi | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn tích chọn đưa câu hỏi vào kho luyện tập, kho thi chính thức hoặc cả hai kho. |
+| 39 | Chọn kho lưu trữ câu hỏi | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn chọn lưu trữ câu hỏi riêng biệt vào kho luyện tập (`practice_questions`) hoặc kho thi chính thức (`exam_questions`). |
 | 40 | Xem và lọc ngân hàng câu hỏi | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn tìm kiếm, lọc câu hỏi theo môn học, CLO, mức Bloom, kho lưu trữ và trạng thái duyệt. |
 | 41 | Xem chi tiết câu hỏi và barem | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn xem toàn bộ nội dung câu hỏi, đáp án mẫu, barem 10.0 điểm và trạng thái phê duyệt. |
 | 42 | Cập nhật câu hỏi nháp hoặc cần sửa | Lecturer, Department Head | Giảng viên hoặc Trưởng Bộ môn chỉnh sửa câu hỏi đang ở trạng thái bản nháp hoặc cần chỉnh sửa. |
@@ -331,7 +331,7 @@ OES vận hành trên trình duyệt máy tính có trang bị micro tại các 
 | 45 | Gửi duyệt đơn lẻ một câu hỏi | Lecturer | Giảng viên gửi một câu hỏi nháp kèm barem 10.0 điểm lên Trưởng Bộ môn thẩm định. |
 | 46 | Gửi duyệt hàng loạt câu hỏi | Lecturer | Giảng viên chọn nhiều câu hỏi nháp và gửi duyệt theo đợt lên Trưởng Bộ môn. |
 | 47 | Xem danh sách câu hỏi chờ duyệt | Department Head | Trưởng Bộ môn xem danh sách các câu hỏi và barem do giảng viên gửi lên đang chờ thẩm định. |
-| 48 | Phê duyệt câu hỏi vào ngân hàng đề | Department Head | Trưởng Bộ môn phê duyệt câu hỏi để đưa chính thức vào kho luyện tập và/hoặc kho thi thật. |
+| 48 | Phê duyệt câu hỏi vào ngân hàng đề | Department Head | Trưởng Bộ môn phê duyệt câu hỏi để đưa chính thức vào kho luyện tập hoặc kho thi thật tương ứng. |
 | 49 | Yêu cầu chỉnh sửa câu hỏi | Department Head | Trưởng Bộ môn trả câu hỏi về trạng thái yêu cầu sửa kèm nhận xét chi tiết cho giảng viên. |
 | 50 | Từ chối câu hỏi | Department Head | Trưởng Bộ môn từ chối câu hỏi không đạt yêu cầu kèm lý do cụ thể. |
 | 51 | Phê duyệt hàng loạt câu hỏi | Department Head | Trưởng Bộ môn phê duyệt cùng lúc nhiều câu hỏi đạt chuẩn vào ngân hàng đề môn học. |

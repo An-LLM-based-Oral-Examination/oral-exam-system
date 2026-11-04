@@ -64,6 +64,13 @@ public sealed class ReviewQuestionDecisionCommandHandler
             switch (request.Decision)
             {
                 case ApprovalStatus.Approved:
+                    var practiceTargetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(practiceTargetScope) && practiceTargetScope != "practice")
+                    {
+                        return Result<QuestionReviewDecisionResponseDto>.Failure(
+                            "Phạm vi sử dụng khi duyệt câu hỏi luyện tập không hợp lệ. Kho câu hỏi luyện tập ('practice') tách biệt hoàn toàn với kho đề thi thật ('exam').");
+                    }
+
                     var pqError = ValidateQuestionBeforeApprove(
                         practiceOnlyQuestion.SampleAnswer,
                         practiceOnlyQuestion.Rubric,
