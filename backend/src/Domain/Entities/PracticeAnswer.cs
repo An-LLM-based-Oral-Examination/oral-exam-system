@@ -9,6 +9,7 @@ public partial class PracticeAnswer
     public Guid SessionId { get; set; }
     public Guid QuestionId { get; set; }
     public Guid StudentId { get; set; }
+    public int OrderIndex { get; set; } = 1;
     public string AnswerText { get; set; } = null!;
     public bool IsFollowUp { get; set; } = false;
     public Guid? ParentAnswerId { get; set; }

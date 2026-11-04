@@ -94,6 +94,8 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
 
                             t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam')");
+
+                            t.HasCheckConstraint("ck_ai_evaluations_xor", "(answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL) OR (answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL) OR (answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL)");
                         });
                 });
 
@@ -332,6 +334,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<bool>("AllowSelfEnrollment")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("allow_self_enrollment");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -353,6 +361,23 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsJoinEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_join_enabled");
+
+                    b.Property<string>("JoinCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("join_code");
+
+                    b.Property<string>("JoinPasswordHash")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("join_password_hash");
+
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uuid")
                         .HasColumnName("lecturer_id");
@@ -362,6 +387,14 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(35)
                         .HasColumnName("max_students");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasDefaultValue("")
+                        .HasColumnName("name");
 
                     b.Property<Guid>("SemesterId")
                         .HasColumnType("uuid")
@@ -375,6 +408,10 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_classes_course");
+
+                    b.HasIndex("JoinCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_classes_join_code");
 
                     b.HasIndex("LecturerId")
                         .HasDatabaseName("ix_classes_lecturer");
@@ -391,12 +428,16 @@ namespace OralExamination.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000010"),
+                            AllowSelfEnrollment = true,
                             Code = "SE1801-NET",
                             CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
                             CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             IsActive = true,
+                            IsJoinEnabled = true,
+                            JoinCode = "SE1801NET",
                             LecturerId = new Guid("00000000-0000-0000-0000-000000000003"),
                             MaxStudents = 35,
+                            Name = "Lớp SE1801-NET",
                             SemesterId = new Guid("00000000-0000-0000-0000-000000000007")
                         });
                 });
@@ -418,6 +459,20 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("enrolled_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("JoinMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("assigned")
+                        .HasColumnName("join_method");
+
+                    b.Property<bool>("JoinedViaCode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("joined_via_code");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -451,6 +506,8 @@ namespace OralExamination.Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000011"),
                             ClassId = new Guid("00000000-0000-0000-0000-000000000010"),
                             EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            JoinMethod = "assigned",
+                            JoinedViaCode = false,
                             Status = "enrolled",
                             StudentId = new Guid("00000000-0000-0000-0000-000000000005")
                         },
@@ -459,6 +516,8 @@ namespace OralExamination.Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000012"),
                             ClassId = new Guid("00000000-0000-0000-0000-000000000010"),
                             EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            JoinMethod = "assigned",
+                            JoinedViaCode = false,
                             Status = "enrolled",
                             StudentId = new Guid("00000000-0000-0000-0000-000000000006")
                         });
@@ -489,6 +548,14 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(3)
                         .HasColumnName("credits");
+
+                    b.Property<Guid?>("DepartmentHeadUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_head_user_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("ExamInputMode")
                         .IsRequired()
@@ -521,6 +588,25 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(3)
                         .HasColumnName("max_mock_exams_per_day");
 
+                    b.Property<string>("MockExamBloomDistribution")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("mock_exam_bloom_distribution")
+                        .HasDefaultValueSql("'{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}'::jsonb");
+
+                    b.Property<int>("MockExamDurationMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("mock_exam_duration_minutes");
+
+                    b.Property<int>("MockExamTotalQuestions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(5)
+                        .HasColumnName("mock_exam_total_questions");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -543,6 +629,9 @@ namespace OralExamination.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_courses_code");
 
+                    b.HasIndex("DepartmentHeadUserId")
+                        .HasDatabaseName("ix_courses_department_head");
+
                     b.HasIndex("SemesterId")
                         .HasDatabaseName("ix_courses_semester");
 
@@ -553,6 +642,10 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
 
                             t.HasCheckConstraint("ck_courses_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
+
+                            t.HasCheckConstraint("ck_courses_mock_duration", "mock_exam_duration_minutes > 0");
+
+                            t.HasCheckConstraint("ck_courses_mock_questions", "mock_exam_total_questions > 0");
 
                             t.HasCheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
 
@@ -571,6 +664,9 @@ namespace OralExamination.Infrastructure.Migrations
                             IsActive = true,
                             MaxFollowUpQuestions = 2,
                             MaxMockExamsPerDay = 3,
+                            MockExamBloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}",
+                            MockExamDurationMinutes = 30,
+                            MockExamTotalQuestions = 5,
                             Name = "Building Cross-Platform Back-End Applications with .NET",
                             SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
                             TranscriptBufferSeconds = 60
@@ -586,6 +682,9 @@ namespace OralExamination.Infrastructure.Migrations
                             IsActive = true,
                             MaxFollowUpQuestions = 2,
                             MaxMockExamsPerDay = 3,
+                            MockExamBloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}",
+                            MockExamDurationMinutes = 30,
+                            MockExamTotalQuestions = 5,
                             Name = "Software Architecture and Design",
                             SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
                             TranscriptBufferSeconds = 60
@@ -701,6 +800,72 @@ namespace OralExamination.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.CourseLecturer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("AssignedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_by_user_id");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("course_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("LecturerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lecturer_user_id");
+
+                    b.Property<Guid?>("SemesterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("semester_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedByUserId");
+
+                    b.HasIndex("SemesterId");
+
+                    b.HasIndex("CourseId", "IsActive")
+                        .HasDatabaseName("ix_course_lecturers_course");
+
+                    b.HasIndex("LecturerUserId", "IsActive")
+                        .HasDatabaseName("ix_course_lecturers_lecturer");
+
+                    b.HasIndex("CourseId", "LecturerUserId", "SemesterId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_course_lecturers");
+
+                    b.ToTable("course_lecturers", (string)null);
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.DeadLetterQueue", b =>
                 {
                     b.Property<Guid>("Id")
@@ -724,9 +889,25 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<string>("FlowType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("OFFICIAL_EXAM")
+                        .HasColumnName("flow_type");
+
                     b.Property<DateTime?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("ManagedByRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("examination_officer")
+                        .HasColumnName("managed_by_role");
 
                     b.Property<DateTime?>("NextRetryAt")
                         .HasColumnType("timestamp with time zone")
@@ -737,9 +918,17 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload_json");
 
+                    b.Property<string>("ResolutionNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("resolution_notes");
+
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("resolved_at");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by_user_id");
 
                     b.Property<int>("RetryCount")
                         .ValueGeneratedOnAdd()
@@ -763,6 +952,14 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("FlowType", "Status")
+                        .HasDatabaseName("ix_dlq_flow_status");
+
+                    b.HasIndex("ManagedByRole", "Status")
+                        .HasDatabaseName("ix_dlq_managed_role");
+
                     b.HasIndex("Status", "CreatedAt")
                         .HasDatabaseName("ix_dead_letter_queues_status");
 
@@ -774,6 +971,10 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("dead_letter_queues", null, t =>
                         {
+                            t.HasCheckConstraint("ck_dlq_flow_type", "flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM')");
+
+                            t.HasCheckConstraint("ck_dlq_managed_role", "managed_by_role IN ('admin', 'examination_officer', 'lecturer')");
+
                             t.HasCheckConstraint("ck_dlq_status", "status IN ('pending', 'resolved', 'abandoned')");
                         });
                 });
@@ -861,7 +1062,7 @@ namespace OralExamination.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasDefaultValue("APPROVED")
+                        .HasDefaultValue("DRAFT")
                         .HasColumnName("approval_status");
 
                     b.Property<Guid?>("ApprovedBy")
@@ -875,6 +1076,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Understand")
                         .HasColumnName("bloom_level");
+
+                    b.Property<Guid?>("CloId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clo_id");
 
                     b.Property<string>("Content")
                         .IsRequired()
@@ -940,6 +1145,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("manual")
                         .HasColumnName("source");
 
+                    b.Property<Guid?>("StructureId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("structure_id");
+
                     b.Property<Guid?>("SubmittedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("submitted_by");
@@ -958,14 +1167,23 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("ApprovedBy")
                         .HasDatabaseName("ix_exam_questions_approved");
 
+                    b.HasIndex("CloId")
+                        .HasDatabaseName("ix_exam_questions_clo");
+
                     b.HasIndex("RubricId")
                         .HasDatabaseName("ix_exam_questions_rubric");
+
+                    b.HasIndex("StructureId")
+                        .HasDatabaseName("ix_exam_questions_structure");
 
                     b.HasIndex("SubmittedBy")
                         .HasDatabaseName("ix_exam_questions_submitted");
 
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_exam_questions_course");
+
+                    b.HasIndex("CourseId", "IsActive", "ApprovalStatus", "Difficulty")
+                        .HasDatabaseName("ix_exam_questions_active_approved");
 
                     b.ToTable("exam_questions", null, t =>
                         {
@@ -1128,6 +1346,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsSampleSet")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_sample_set");
+
                     b.Property<string>("ReviewNotes")
                         .HasColumnType("text")
                         .HasColumnName("review_notes");
@@ -1178,6 +1402,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StructureId")
                         .HasDatabaseName("ix_exam_sets_structure");
 
+                    b.HasIndex("CourseId", "IsSampleSet")
+                        .HasDatabaseName("ix_exam_sets_sample");
+
                     b.ToTable("exam_sets", null, t =>
                         {
                             t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
@@ -1190,6 +1417,7 @@ namespace OralExamination.Infrastructure.Migrations
                             CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
                             GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             IsActive = true,
+                            IsSampleSet = false,
                             SetCode = "PRN231-SET01",
                             Status = "OFFICIAL",
                             StructureId = new Guid("00000000-0000-0000-0000-000000000018")
@@ -1200,6 +1428,7 @@ namespace OralExamination.Infrastructure.Migrations
                             CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
                             GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             IsActive = true,
+                            IsSampleSet = false,
                             SetCode = "PRN231-SET02",
                             Status = "OFFICIAL",
                             StructureId = new Guid("00000000-0000-0000-0000-000000000018")
@@ -1606,6 +1835,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("SessionId")
                         .HasDatabaseName("ix_mock_exam_answers_session");
 
+                    b.HasIndex("SessionId", "OrderIndex")
+                        .HasDatabaseName("ix_mock_exam_answers_session_order");
+
                     b.ToTable("mock_exam_answers", null, t =>
                         {
                             t.HasCheckConstraint("ck_mock_answers_status", "status IN ('pending', 'answered', 'graded', 'failed')");
@@ -1724,6 +1956,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("StudentId", "StartedAt")
                         .HasDatabaseName("ix_mock_exam_sessions_student");
+
+                    b.HasIndex("StudentId", "Status", "StartedAt")
+                        .HasDatabaseName("ix_mock_exam_sessions_student_status");
 
                     b.ToTable("mock_exam_sessions", null, t =>
                         {
@@ -1859,6 +2094,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_follow_up");
 
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("order_index");
+
                     b.Property<Guid?>("ParentAnswerId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_answer_id");
@@ -1910,6 +2151,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("Status", "SubmittedAt")
                         .HasDatabaseName("ix_practice_answers_status_submitted");
 
+                    b.HasIndex("SessionId", "OrderIndex", "SubmittedAt")
+                        .HasDatabaseName("ix_practice_answers_session_order");
+
                     b.ToTable("practice_answers", null, t =>
                         {
                             t.HasCheckConstraint("ck_practice_answers_status", "status IN ('pending', 'grading', 'graded', 'failed')");
@@ -1943,6 +2187,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Understand")
                         .HasColumnName("bloom_level");
+
+                    b.Property<Guid?>("CloId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clo_id");
 
                     b.Property<string>("Content")
                         .IsRequired()
@@ -2036,6 +2284,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("ApprovedBy")
                         .HasDatabaseName("ix_practice_questions_approved");
 
+                    b.HasIndex("CloId")
+                        .HasDatabaseName("ix_practice_questions_clo");
+
                     b.HasIndex("RubricId")
                         .HasDatabaseName("ix_practice_questions_rubric");
 
@@ -2044,6 +2295,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_practice_questions_course");
+
+                    b.HasIndex("CourseId", "IsActive", "ApprovalStatus", "Difficulty")
+                        .HasDatabaseName("ix_practice_questions_active_approved");
 
                     b.ToTable("practice_questions", null, t =>
                         {
@@ -2227,6 +2481,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
 
+                    b.Property<decimal?>("TotalScore")
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("total_score");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CourseId")
@@ -2238,9 +2497,14 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StudentId", "StartedAt")
                         .HasDatabaseName("ix_practice_sessions_student");
 
+                    b.HasIndex("StudentId", "Status", "StartedAt")
+                        .HasDatabaseName("ix_practice_sessions_student_status");
+
                     b.ToTable("practice_sessions", null, t =>
                         {
                             t.HasCheckConstraint("ck_practice_sessions_mode", "practice_mode IN ('per_question', 'full_session')");
+
+                            t.HasCheckConstraint("ck_practice_sessions_score", "total_score IS NULL OR (total_score >= 0 AND total_score <= 10.00)");
 
                             t.HasCheckConstraint("ck_practice_sessions_status", "status IN ('in_progress', 'completed', 'abandoned', 'timed_out')");
                         });
@@ -3193,11 +3457,18 @@ namespace OralExamination.Infrastructure.Migrations
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Course", b =>
                 {
+                    b.HasOne("OralExamination.Domain.Entities.User", "DepartmentHeadUser")
+                        .WithMany()
+                        .HasForeignKey("DepartmentHeadUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("OralExamination.Domain.Entities.Semester", "Semester")
                         .WithMany("Courses")
                         .HasForeignKey("SemesterId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("DepartmentHeadUser");
 
                     b.Navigation("Semester");
                 });
@@ -3212,6 +3483,50 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasConstraintName("fk_course_clos_course");
 
                     b.Navigation("Course");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.CourseLecturer", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", "AssignedByUser")
+                        .WithMany()
+                        .HasForeignKey("AssignedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany("CourseLecturers")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.User", "LecturerUser")
+                        .WithMany()
+                        .HasForeignKey("LecturerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.Semester", "Semester")
+                        .WithMany()
+                        .HasForeignKey("SemesterId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AssignedByUser");
+
+                    b.Navigation("Course");
+
+                    b.Navigation("LecturerUser");
+
+                    b.Navigation("Semester");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.DeadLetterQueue", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ResolvedByUser");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamAntiCheatLog", b =>
@@ -3251,6 +3566,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("ApprovedBy")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
+                        .WithMany()
+                        .HasForeignKey("CloId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamQuestions")
                         .HasForeignKey("CourseId")
@@ -3263,6 +3583,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
+                        .WithMany()
+                        .HasForeignKey("StructureId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("OralExamination.Domain.Entities.User", "SubmittedByUser")
                         .WithMany()
                         .HasForeignKey("SubmittedBy")
@@ -3270,9 +3595,13 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.Navigation("ApprovedByUser");
 
+                    b.Navigation("Clo");
+
                     b.Navigation("Course");
 
                     b.Navigation("Rubric");
+
+                    b.Navigation("Structure");
 
                     b.Navigation("SubmittedByUser");
                 });
@@ -3567,6 +3896,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("ApprovedBy")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
+                        .WithMany()
+                        .HasForeignKey("CloId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("PracticeQuestions")
                         .HasForeignKey("CourseId")
@@ -3585,6 +3919,8 @@ namespace OralExamination.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("ApprovedByUser");
+
+                    b.Navigation("Clo");
 
                     b.Navigation("Course");
 
@@ -3711,6 +4047,8 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("Classes");
 
                     b.Navigation("CourseClos");
+
+                    b.Navigation("CourseLecturers");
 
                     b.Navigation("ExamQuestions");
 

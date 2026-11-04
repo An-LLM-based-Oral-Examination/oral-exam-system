@@ -310,9 +310,9 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
 
 
 #### Lấy danh sách môn học
-- **Endpoint:** `GET /api/v1/academic/courses`
-- **Quyền:** `student`, `lecturer`, `department_head`, `proctor`, `admin`
-- **Response 200 OK:**
+- **Endpoint:** `GET /api/v1/courses` (Alias: `GET /api/v1/academic/courses`)
+- **Quyền:** `student`, `lecturer`, `department_head`, `examination_officer`, `proctor`, `admin`
+- **Response 200 OK (`List<CourseDto>`):**
 ```json
 [
   {
@@ -320,39 +320,77 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
     "code": "PRN231",
     "name": "Building Cross-Platform Back-End Applications with .NET",
     "credits": 3,
+    "description": "Phát triển ứng dụng Backend đa nền tảng với .NET 8, RESTful Web API và Clean Architecture",
     "semesterId": "11111111-0000-0000-0000-000000000001",
+    "departmentHeadUserId": "e4c5b2a1-0001-4000-8000-000000000005",
     "hasFollowUp": true,
     "transcriptBufferSeconds": 60,
-    "maxFollowUpQuestions": 1,
+    "maxFollowUpQuestions": 2,
+    "maxMockExamsPerDay": 3,
+    "mockExamDurationMinutes": 30,
+    "mockExamTotalQuestions": 5,
+    "mockExamBloomDistribution": "{"Understand": 2, "Apply": 2, "Analyze": 1}",
+    "examInputMode": "VoiceWithTranscriptEdit",
     "isActive": true
   }
 ]
 ```
 
-#### Cập nhật cấu hình động môn học (Admin / Giảng viên / Trưởng Bộ Môn)
-- **Endpoint:** `PUT /api/v1/academic/courses/{id}/configurations`
-- **Quyền:** `admin`, `department_head`, `lecturer`
-- **Mô tả:** Cập nhật các tham số vận hành của môn học cho hệ thống luyện tập. Admin/Trưởng Bộ Môn cấu hình số lượng câu hỏi phụ tối đa cho hệ thống luyện tập MF-01 (`maxFollowUpQuestions` từ 1 đến 5 câu, mặc định 2 câu); cấu hình thời gian đệm hiệu đính phiên âm (`transcriptBufferSeconds` từ 10 đến 300 giây, mặc định 60 giây).
-- **Request Body:**
+#### Tạo mới & Cập nhật môn học (Admin — Chuỗi học thuật R5)
+- **Tạo mới:** `POST /api/v1/courses` (Alias: `POST /api/v1/admin/courses`)
+- **Cập nhật:** `PUT /api/v1/courses/{id}` (Alias: `PUT /api/v1/admin/courses/{id}`)
+- **Quyền:** `admin`
+- **Request Body (`CreateCourseRequestDto` / `UpdateCourseRequestDto`):**
 ```json
 {
-  "hasFollowUp": true,
-  "transcriptBufferSeconds": 60,
-  "maxFollowUpQuestions": 2
+  "code": "PRN231",
+  "name": "Building Cross-Platform Back-End Applications with .NET",
+  "credits": 3,
+  "description": "Phát triển ứng dụng Backend đa nền tảng với .NET 8",
+  "semesterId": "11111111-0000-0000-0000-000000000001",
+  "departmentHeadUserId": "e4c5b2a1-0001-4000-8000-000000000005",
+  "maxMockExamsPerDay": 3,
+  "mockExamDurationMinutes": 30,
+  "mockExamTotalQuestions": 5,
+  "isActive": true
 }
 ```
-- **Response 200 OK:**
+
+#### Lấy & Cập nhật cấu hình động môn học (Admin / Trưởng Bộ Môn)
+- **Lấy cấu hình:** `GET /api/v1/courses/{id}/configurations` (Alias: `GET /api/v1/courses/{id}/exam-config`)
+- **Cập nhật cấu hình:** `PUT /api/v1/courses/{id}/configurations` (Alias: `PUT /api/v1/courses/{id}/exam-config`)
+- **Quyền:** `department_head`, `admin` (Giảng viên `lecturer` bị chặn `HTTP 403 Forbidden`; riêng trường `maxMockExamsPerDay` chỉ `admin` được phép truyền cập nhật).
+- **Mô tả:** Trưởng Bộ Môn cấu hình tính năng hỏi xoáy Follow-up (`hasFollowUp`, `maxFollowUpQuestions` 1–5 câu), thời gian đệm hiệu đính (`transcriptBufferSeconds` 10–300s), phương thức làm bài (`examInputMode`) và cấu hình đề thi thử mặc định của môn học (`mockExamDurationMinutes` 5–180 phút, `mockExamTotalQuestions` 1–20 câu, `mockExamBloomDistribution`).
+- **Request Body (`UpdateCourseConfigRequestDto`):**
 ```json
 {
-  "id": "22222222-0000-0000-0000-000000000001",
-  "code": "PRN231",
   "hasFollowUp": true,
   "transcriptBufferSeconds": 60,
   "maxFollowUpQuestions": 2,
-  "updatedAt": "2026-10-10T10:00:00Z"
+  "examInputMode": "VoiceWithTranscriptEdit",
+  "mockExamDurationMinutes": 30,
+  "mockExamTotalQuestions": 5,
+  "mockExamBloomDistribution": "{"Understand": 2, "Apply": 2, "Analyze": 1}",
+  "maxMockExamsPerDay": 3
 }
 ```
-- **Response 422 Unprocessable Entity:** Nếu `transcriptBufferSeconds` không nằm trong khoảng 10–300s hoặc `maxFollowUpQuestions` không nằm trong khoảng 1–5 câu.
+- **Response 200 OK (`CourseConfigurationDto`):**
+```json
+{
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "code": "PRN231",
+  "name": "Building Cross-Platform Back-End Applications with .NET",
+  "transcriptBufferSeconds": 60,
+  "maxFollowUpQuestions": 2,
+  "hasFollowUp": true,
+  "examInputMode": "VoiceWithTranscriptEdit",
+  "maxMockExamsPerDay": 3,
+  "mockExamDurationMinutes": 30,
+  "mockExamTotalQuestions": 5,
+  "mockExamBloomDistribution": "{"Understand": 2, "Apply": 2, "Analyze": 1}"
+}
+```
+- **Response 422 Unprocessable Entity:** Nếu `transcriptBufferSeconds` ngoài khoảng 10–300s, `maxFollowUpQuestions` ngoài khoảng 1–5 câu, `mockExamDurationMinutes` ngoài khoảng 5–180 phút, hoặc `mockExamTotalQuestions` ngoài khoảng 1–20 câu.
 
 #### Quản lý lớp học & sinh viên trong lớp
 - **Endpoint:** `GET /api/v1/academic/classes?courseId={courseId}`
@@ -1318,6 +1356,246 @@ Hệ thống xác thực người dùng dựa trên JWT Bearer token chứa clai
   "status": 422,
   "detail": "Câu hỏi tại vị trí index [0] ('Phân tích nguyên lý DIP') có tổng điểm Barem Rubric là 9.50đ (lệch so với 10.00đ bắt buộc) hoặc Model Answer ngắn hơn 50 ký tự. Toàn bộ transaction phê duyệt bị hủy bỏ.",
   "instance": "/api/v1/questions/batch-approve"
+}
+```
+
+---
+
+#### 5b. Tra cứu danh sách câu hỏi có phân trang & lọc theo kho (`GET /api/v1/questions`)
+- **Endpoint:** `GET /api/v1/questions`
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Query Parameters (`GetQuestionsQuery`):**
+  - `courseId` (`uuid`, tùy chọn): Lọc theo môn học.
+  - `approvalStatus` (`string`, tùy chọn): Lọc theo trạng thái duyệt (`DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`, `REJECTED`).
+  - `difficulty` (`string`, tùy chọn): `easy` | `medium` | `hard`.
+  - `bloomLevel` (`string`, tùy chọn): `Remember` | `Understand` | `Apply` | `Analyze` | `Evaluate` | `Create`.
+  - `source` (`string`, tùy chọn): `manual` | `ai_generated`.
+  - `usageScope` (`string`, tùy chọn): `"practice"` (chỉ lấy kho luyện tập `practice_questions`), `"exam"` (chỉ lấy kho thi thật `exam_questions`), hoặc `"both"` / bỏ trống (hợp nhất từ cả 2 kho, tự động khử trùng các câu hỏi `both` theo `(CourseId, RubricId, Title)`).
+  - `pageNumber` (`int`, mặc định `1`): Trang hiện tại (phân trang trực tiếp tại SQL Server-side).
+  - `pageSize` (`int`, mặc định `20`, tối đa `100`): Số bản ghi mỗi trang.
+- **Response 200 OK (`GetQuestionsResponseDto`):**
+```json
+{
+  "totalCount": 42,
+  "pageNumber": 1,
+  "pageSize": 20,
+  "items": [
+    {
+      "id": "55555555-0000-0000-0000-000000000001",
+      "courseId": "22222222-0000-0000-0000-000000000001",
+      "courseCode": "PRN231",
+      "rubricId": "44444444-0000-0000-0000-000000000001",
+      "rubricName": "Barem Vấn đáp Clean Architecture & DIP",
+      "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
+      "difficulty": "medium",
+      "bloomLevel": "Analyze",
+      "source": "manual",
+      "approvalStatus": "APPROVED",
+      "usageScope": "both",
+      "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
+      "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
+      "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
+      "cloId": "33333333-0000-0000-0000-000000000001",
+      "cloCode": "CLO1",
+      "structureId": "44444444-1111-2222-3333-444444444444",
+      "isActive": true,
+      "createdAt": "2026-10-02T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### 5c. Xem chi tiết câu hỏi kèm Barem Rubric, CLO & Ma trận Đề (`GET /api/v1/questions/{id}`)
+- **Endpoint:** `GET /api/v1/questions/{id}`
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Mô tả:** Truy xuất chi tiết câu hỏi từ kho `exam_questions` hoặc `practice_questions`, tự động nhận diện `usageScope` (`"practice"`, `"exam"`, hoặc `"both"` nếu câu hỏi được đồng bộ ở cả 2 kho) và nạp kèm chuẩn đầu ra `cloCode`, `structureId` cùng toàn bộ tiêu chí Barem Rubric 10.0đ.
+- **Response 200 OK (`QuestionDetailDto`):**
+```json
+{
+  "id": "55555555-0000-0000-0000-000000000001",
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "courseCode": "PRN231",
+  "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
+  "content": "Hãy giải thích nguyên lý Dependency Inversion (DIP) và minh họa cách áp dụng trong Clean Architecture .NET.",
+  "sampleAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. High-level modules không nên phụ thuộc vào low-level modules; cả hai phải phụ thuộc vào abstractions...",
+  "keyPoints": [
+    "High-level không phụ thuộc low-level",
+    "Cùng phụ thuộc vào abstraction (Interface)"
+  ],
+  "difficulty": "medium",
+  "bloomLevel": "Analyze",
+  "source": "manual",
+  "approvalStatus": "APPROVED",
+  "usageScope": "both",
+  "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
+  "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
+  "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
+  "hasFollowUp": true,
+  "followUpPrompt": "Nếu thay đổi EF Core sang Dapper thì tầng nào bị ảnh hưởng?",
+  "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+  "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
+  "cloId": "33333333-0000-0000-0000-000000000001",
+  "cloCode": "CLO1",
+  "structureId": "44444444-1111-2222-3333-444444444444",
+  "isActive": true,
+  "createdAt": "2026-10-02T10:00:00Z",
+  "rubric": {
+    "id": "44444444-0000-0000-0000-000000000001",
+    "name": "Barem Vấn đáp Clean Architecture & DIP",
+    "description": "Đánh giá hiểu biết về Clean Architecture 4 tầng và nguyên lý DIP",
+    "totalMaxScore": 10.00,
+    "criteria": [
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "criterionName": "Định nghĩa và bản chất nguyên lý DIP",
+        "description": "Nêu rõ high-level modules không phụ thuộc low-level modules.",
+        "maxScore": 3.00,
+        "weight": 0.30,
+        "bloomLevel": "Understand",
+        "orderIndex": 1
+      },
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000002",
+        "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET",
+        "description": "Chỉ rõ cách Interface đặt ở Application/Domain, triển khai ở Infrastructure.",
+        "maxScore": 4.00,
+        "weight": 0.40,
+        "bloomLevel": "Apply",
+        "orderIndex": 2
+      },
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000003",
+        "criterionName": "Lợi ích Unit Testing và Loose Coupling",
+        "description": "Khả năng mock Interface để test độc lập.",
+        "maxScore": 3.00,
+        "weight": 0.30,
+        "bloomLevel": "Analyze",
+        "orderIndex": 3
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 5b. Tra cứu danh sách câu hỏi có phân trang & lọc theo kho (`GET /api/v1/questions`)
+- **Endpoint:** `GET /api/v1/questions`
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Query Parameters (`GetQuestionsQuery`):**
+  - `courseId` (`uuid`, tùy chọn): Lọc theo môn học.
+  - `approvalStatus` (`string`, tùy chọn): Lọc theo trạng thái duyệt (`DRAFT`, `SUBMITTED_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION`, `REJECTED`).
+  - `difficulty` (`string`, tùy chọn): `easy` | `medium` | `hard`.
+  - `bloomLevel` (`string`, tùy chọn): `Remember` | `Understand` | `Apply` | `Analyze` | `Evaluate` | `Create`.
+  - `source` (`string`, tùy chọn): `manual` | `ai_generated`.
+  - `usageScope` (`string`, tùy chọn): `"practice"` (chỉ lấy kho luyện tập `practice_questions`), `"exam"` (chỉ lấy kho thi thật `exam_questions`), hoặc `"both"` / bỏ trống (hợp nhất từ cả 2 kho, tự động khử trùng các câu hỏi `both` theo `(CourseId, RubricId, Title)`).
+  - `pageNumber` (`int`, mặc định `1`): Trang hiện tại (phân trang trực tiếp tại SQL Server-side).
+  - `pageSize` (`int`, mặc định `20`, tối đa `100`): Số bản ghi mỗi trang.
+- **Response 200 OK (`GetQuestionsResponseDto`):**
+```json
+{
+  "totalCount": 42,
+  "pageNumber": 1,
+  "pageSize": 20,
+  "items": [
+    {
+      "id": "55555555-0000-0000-0000-000000000001",
+      "courseId": "22222222-0000-0000-0000-000000000001",
+      "courseCode": "PRN231",
+      "rubricId": "44444444-0000-0000-0000-000000000001",
+      "rubricName": "Barem Vấn đáp Clean Architecture & DIP",
+      "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
+      "difficulty": "medium",
+      "bloomLevel": "Analyze",
+      "source": "manual",
+      "approvalStatus": "APPROVED",
+      "usageScope": "both",
+      "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
+      "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
+      "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
+      "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+      "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
+      "cloId": "33333333-0000-0000-0000-000000000001",
+      "cloCode": "CLO1",
+      "structureId": "44444444-1111-2222-3333-444444444444",
+      "isActive": true,
+      "createdAt": "2026-10-02T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### 5c. Xem chi tiết câu hỏi kèm Barem Rubric, CLO & Ma trận Đề (`GET /api/v1/questions/{id}`)
+- **Endpoint:** `GET /api/v1/questions/{id}`
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Mô tả:** Truy xuất chi tiết câu hỏi từ kho `exam_questions` hoặc `practice_questions`, tự động nhận diện `usageScope` (`"practice"`, `"exam"`, hoặc `"both"` nếu câu hỏi được đồng bộ ở cả 2 kho) và nạp kèm chuẩn đầu ra `cloCode`, `structureId` cùng toàn bộ tiêu chí Barem Rubric 10.0đ.
+- **Response 200 OK (`QuestionDetailDto`):**
+```json
+{
+  "id": "55555555-0000-0000-0000-000000000001",
+  "courseId": "22222222-0000-0000-0000-000000000001",
+  "courseCode": "PRN231",
+  "title": "Phân tích nguyên lý Dependency Inversion trong Clean Architecture",
+  "content": "Hãy giải thích nguyên lý Dependency Inversion (DIP) và minh họa cách áp dụng trong Clean Architecture .NET.",
+  "sampleAnswer": "Dependency Inversion Principle (DIP) là nguyên lý chữ D trong SOLID. High-level modules không nên phụ thuộc vào low-level modules; cả hai phải phụ thuộc vào abstractions...",
+  "keyPoints": [
+    "High-level không phụ thuộc low-level",
+    "Cùng phụ thuộc vào abstraction (Interface)"
+  ],
+  "difficulty": "medium",
+  "bloomLevel": "Analyze",
+  "source": "manual",
+  "approvalStatus": "APPROVED",
+  "usageScope": "both",
+  "submittedBy": "e4c5b2a1-0001-4000-8000-000000000002",
+  "approvedBy": "e4c5b2a1-0001-4000-8000-000000000005",
+  "reviewNotes": "Đề bài chuẩn mực, bám sát CLO1.",
+  "hasFollowUp": true,
+  "followUpPrompt": "Nếu thay đổi EF Core sang Dapper thì tầng nào bị ảnh hưởng?",
+  "imageUrl": "/uploads/questions/202610/a1b2c3d4e5f6478980123456789abcde.png",
+  "imageDescription": "Sơ đồ 4 vòng tròn đồng tâm Clean Architecture.",
+  "cloId": "33333333-0000-0000-0000-000000000001",
+  "cloCode": "CLO1",
+  "structureId": "44444444-1111-2222-3333-444444444444",
+  "isActive": true,
+  "createdAt": "2026-10-02T10:00:00Z",
+  "rubric": {
+    "id": "44444444-0000-0000-0000-000000000001",
+    "name": "Barem Vấn đáp Clean Architecture & DIP",
+    "description": "Đánh giá hiểu biết về Clean Architecture 4 tầng và nguyên lý DIP",
+    "totalMaxScore": 10.00,
+    "criteria": [
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000001",
+        "criterionName": "Định nghĩa và bản chất nguyên lý DIP",
+        "description": "Nêu rõ high-level modules không phụ thuộc low-level modules.",
+        "maxScore": 3.00,
+        "weight": 0.30,
+        "bloomLevel": "Understand",
+        "orderIndex": 1
+      },
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000002",
+        "criterionName": "Áp dụng DIP vào Clean Architecture trong .NET",
+        "description": "Chỉ rõ cách Interface đặt ở Application/Domain, triển khai ở Infrastructure.",
+        "maxScore": 4.00,
+        "weight": 0.40,
+        "bloomLevel": "Apply",
+        "orderIndex": 2
+      },
+      {
+        "id": "aaaaaaaa-0000-0000-0000-000000000003",
+        "criterionName": "Lợi ích Unit Testing và Loose Coupling",
+        "description": "Khả năng mock Interface để test độc lập.",
+        "maxScore": 3.00,
+        "weight": 0.30,
+        "bloomLevel": "Analyze",
+        "orderIndex": 3
+      }
+    ]
+  }
 }
 ```
 
@@ -3046,6 +3324,81 @@ Hộp thư thông báo trong ứng dụng phục vụ hiển thị chuông thôn
 | **Chuỗi phân cấp học thuật 4 cấp (R5)** | `PUT /api/v1/admin/courses/{id}/assign-department-head`<br>`POST /api/v1/department-head/courses/{id}/lecturers`<br>`POST /api/v1/lecturer/classes`<br>`POST /api/v1/lecturer/classes/{id}/reset-join-password`<br>`POST /api/v1/student/classes/join` | Admin gán Trưởng BM $\to$ Trưởng BM phân công nhiều GV (`course_lecturers`) $\to$ GV tạo lớp & mật khẩu $\to$ SV tự tham gia lớp |
 | **Ca thi trong lớp & TOTP 5m (R6 - MF-05)** | `POST /api/v1/lecturer/in-class-shifts`<br>`GET /api/v1/lecturer/in-class-shifts/{id}/active-password`<br>`POST /api/v1/student/in-class-shifts/{id}/join`<br>`PUT /api/v1/lecturer/in-class-shifts/{id}/submissions/{subId}/grade`<br>`POST /api/v1/lecturer/in-class-shifts/{id}/finalize-grades` | Mật khẩu 6 ký tự xoay vòng 5 phút + grace period 60s, hậu kiểm điểm thành phần & chốt One-Way Lock |
 | **Student Dashboard & Xác nhận điểm** | `GET /api/v1/student/dashboard`<br>`POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade` | Đồng bộ hạn ngạch thi thử theo múi giờ Việt Nam (GMT+7) |
+
+---
+---
+
+## 6. BẢNG TỔNG HỢP MASTER API MATRIX & HƯỚNG DẪN KẾT NỐI FRONTEND (REACT 19 VITE)
+
+### 6.1. Cấu hình Kết nối Chuẩn Cho Frontend (`.env` & Axios / SignalR)
+
+```env
+# File .env tại thư mục frontend/
+VITE_API_BASE_URL=http://localhost:5000/api/v1
+VITE_BACKEND_ORIGIN=http://localhost:5000
+VITE_GOOGLE_CLIENT_ID=<GOOGLE_OAUTH_CLIENT_ID_CUA_TRUONG>
+```
+
+#### Quy tắc Kết nối HTTP (Axios) & WebSocket (SignalR):
+1. **REST API (`Axios`):**
+   - Base URL: `${import.meta.env.VITE_API_BASE_URL}` (`http://localhost:5000/api/v1`).
+   - Đính kèm header `Authorization: Bearer ${accessToken}` trên mọi request sau khi đăng nhập.
+   - Bật `withCredentials: true` nếu cần gửi cookie, Backend đã cấu hình CORS `"AllowFrontend"` cho phép `AllowCredentials()` và expose đầy đủ các headers âm thanh (`X-STT-Confidence`, `X-STT-Provider`, `X-TTS-Provider`, `X-TTS-Voice`, `X-TTS-Rate`, `X-TTS-Fallback`, `X-TTS-Cache`).
+   - Lưu ý Middleware `MustChangePasswordMiddleware`: Nếu tài khoản trường cấp có `mustChangePassword == true`, mọi API ngoài `/api/v1/auth/change-password`, `/api/v1/auth/password-login`, `/api/v1/auth/google-login`, `/api/v1/auth/refresh-token`, `/api/v1/auth/sign-out` sẽ trả `HTTP 403 Forbidden` yêu cầu đổi mật khẩu lần đầu.
+2. **Realtime SignalR Hubs (`@microsoft/signalr`):**
+   - Backend cung cấp **2 SignalR Hubs** đều hỗ trợ xác thực JWT qua `accessTokenFactory` (tự động truyền `?access_token=<JWT>` khi nâng cấp WebSocket):
+     - **Hub 1 — Chấm điểm Luyện tập MF-01:** `http://localhost:5000/hubs/practice`
+       - Метоds Client gọi lên Server: `JoinSession(sessionId: string)`, `LeaveSession(sessionId: string)`
+       - Events Server bắn về Client: `ReceiveGradingResult(payload: PracticeAnswerResultDto)`, `ReceiveGradingError(answerId: string, error: string)`
+     - **Hub 2 — Giám sát Gian lận Phòng Lab MF-04:** `http://localhost:5000/hubs/anti-cheat`
+       - Methods Client gọi lên Server: `JoinShift(shiftId: string)`, `LeaveShift(shiftId: string)`
+       - Events Server bắn về Client: `ReceiveAntiCheatAlert(alert: ExamAntiCheatLogDto)`
+
+---
+
+### 6.2. Đặc tả API Dashboard Sinh Viên & Giảng Viên (FE-10)
+
+#### 1. Bảng điều khiển Sinh viên (`GET /api/v1/student/dashboard`)
+- **Endpoint:** `GET /api/v1/student/dashboard` (Tùy chọn cho GV/Admin xem hộ: `?studentId={guid}`)
+- **Quyền:** `student`, `lecturer`, `department_head`, `admin`
+- **Response 200 OK (`StudentDashboardDto`):**
+  - Tổng hợp số liệu luyện tập MF-01 (`totalPracticeSessions`, `completedPracticeSessions`, `averagePracticeScore`, `recentPracticeSessions`), thi thử MF-02 (`totalMockExams`, `averageMockExamScore`, `recentMockExams`), hạn ngạch thi thử hôm nay theo từng môn (`courseQuotas`), độ thông thạo tiêu chí CLO/Rubric (`criterionMasteries`), và danh sách vé thi thật phòng Lab sắp tới / đã công bố điểm (`upcomingAndRecentOfficialExams`).
+
+#### 2. Bảng điều khiển Giảng viên & Trưởng Bộ Môn (`GET /api/v1/lecturer/dashboard`)
+- **Endpoint:** `GET /api/v1/lecturer/dashboard` (Alias: `GET /api/v1/dashboard/lecturer`, hỗ trợ lọc `?courseId={guid}`)
+- **Quyền:** `lecturer`, `department_head`, `admin`
+- **Response 200 OK (`LecturerDashboardDto`):**
+  - Trả về thống kê nhanh (`pendingQuestionsCount`, `suspiciousTicketsCount`, `assignedAppealsCount`, `questionsNeedingRevisionCount`), danh sách ca thi được phân công hậu kiểm (`assignedShifts`), danh sách đơn phúc khảo được giao chấm lại (`assignedAppeals`), và danh sách câu hỏi cần chỉnh sửa (`questionsNeedingRevision` — bao gồm cả câu hỏi thuộc kho `exam_questions` lẫn kho `practice_questions` có trạng thái `NEEDS_REVISION`).
+
+---
+
+### 6.3. Bảng Tra Cứu Toàn Bộ 23 Controllers & Endpoints Trên Backend
+
+| # | Controller | HTTP Method & Route Chuẩn | Roles Được Phép | Chức Năng Nghiệp Vụ |
+| :-: | :--- | :--- | :--- | :--- |
+| 1 | `AuthController` | `POST /api/v1/auth/google-login`<br>`POST /api/v1/auth/password-login`<br>`POST /api/v1/auth/change-password`<br>`POST /api/v1/auth/refresh-token`<br>`POST /api/v1/auth/sign-out`<br>`GET /api/v1/auth/me` | Public / Authenticated | Đăng nhập kép (Google OAuth 2.0 & Tài khoản trường cấp), đổi mật khẩu lần đầu, làm mới JWT token, đăng xuất và lấy thông tin user hiện tại |
+| 2 | `SemestersController` | `GET /api/v1/semesters` (`/api/v1/academic/semesters`)<br>`POST /api/v1/semesters`<br>`PUT /api/v1/semesters/{id}` | All Roles (GET)<br>`admin` (POST/PUT) | Danh sách học kỳ, tạo mới và cập nhật học kỳ (FE-08, không xóa) |
+| 3 | `CoursesController` | `GET /api/v1/courses` (`/api/v1/academic/courses`)<br>`POST /api/v1/courses` (`/api/v1/admin/courses`)<br>`PUT /api/v1/courses/{id}`<br>`GET /api/v1/courses/{id}/configurations`<br>`PUT /api/v1/courses/{id}/configurations`<br>`GET /api/v1/courses/{id}/clos`<br>`POST /api/v1/courses/{id}/clos`<br>`PUT /api/v1/courses/{id}/clos/{cloId}`<br>`DELETE /api/v1/courses/{id}/clos/{cloId}`<br>`POST /api/v1/admin/courses/{id}/assign-department-head`<br>`POST /api/v1/department-head/courses/{id}/lecturers`<br>`GET /api/v1/courses/{id}/lecturers` | Authenticated (GET)<br>`admin` (Tạo/Sửa môn, Gán TBM, Quota)<br>`department_head,admin` (Cấu hình môn, CLOs 3NF, Phân công GV) | Quản lý môn học, cấu hình động môn học (Buffer, Follow-up, Cấu hình thi thử MF-02), quản lý chuẩn đầu ra `course_clos` 3NF và phân công giảng viên `course_lecturers` (R5) |
+| 4 | `ClassesController` | `POST /api/v1/lecturer/classes`<br>`PUT /api/v1/lecturer/classes/{id}/password`<br>`POST /api/v1/lecturer/classes/{id}/reset-password`<br>`POST /api/v1/student/classes/join`<br>`GET /api/v1/student/classes/my-classes` | `lecturer,department_head,admin` (Tạo lớp/Reset pass)<br>`student,admin` (Tham gia/Xem lớp) | Tạo lớp học phần, sinh/đổi mật khẩu lớp (`join_code`, `join_password_hash`) và sinh viên tự ghi danh vào lớp (R5) |
+| 5 | `RubricsController` | `GET /api/v1/rubrics?courseId={id}`<br>`GET /api/v1/rubrics/{id}`<br>`POST /api/v1/rubrics`<br>`PUT /api/v1/rubrics/{id}`<br>`DELETE /api/v1/rubrics/{id}` | `lecturer,department_head,admin` | Quản lý Barem Rubric chuẩn hóa $\sum = 10.00$đ và các tiêu chí con theo thang Bloom (MF-03) |
+| 6 | `QuestionsController` | `POST /api/v1/questions/upload-image`<br>`POST /api/v1/questions/generate-from-clo`<br>`POST /api/v1/questions` (`/draft`)<br>`POST /api/v1/practice/questions`<br>`POST /api/v1/official-exams/questions`<br>`POST /api/v1/questions/batch-submit-review`<br>`POST /api/v1/questions/{id}/review-decision`<br>`POST /api/v1/questions/batch-approve`<br>`GET /api/v1/questions`<br>`GET /api/v1/questions/{id}` | `lecturer,department_head,admin` (Riêng `review-decision`, `batch-approve`, `official-exams/questions`: `department_head,admin`) | Tải ảnh minh họa ($\le 5	ext{MB}$ Magic Bytes), AI sinh câu hỏi từ CLO, tạo câu hỏi 2 kho độc lập (`practice` / `exam` / `both`), gửi duyệt và Trưởng BM phê duyệt (MF-03 / R8) |
+| 7 | `ExamStructuresController` | `GET /api/v1/exam-structures`<br>`GET /api/v1/exam-structures/{id}`<br>`POST /api/v1/exam-structures`<br>`PUT /api/v1/exam-structures/{id}` | Authenticated (GET)<br>`department_head,admin` (POST/PUT) | Quản lý ma trận cấu trúc đề thi mẫu (`exam_structures`, `slot_definitions`, phân bổ Bloom) |
+| 8 | `PracticeController` | `POST /api/v1/practice/sessions`<br>`GET /api/v1/practice/sessions/{id}`<br>`POST /api/v1/practice/sessions/{id}/next-question`<br>`POST /api/v1/practice/sessions/{id}/answers`<br>`POST /api/v1/practice/sessions/{id}/batch-answers` (`/batch-submit`)<br>`POST /api/v1/practice/sessions/{id}/complete`<br>`GET /api/v1/practice/student/history` | `student,lecturer,department_head,admin` | Luồng Luyện tập tương tác tự do MF-01: Per-Question On-Demand (Anti-3-Consecutive, Follow-up khi điểm 4.0–8.0) & Full-Session Progressive (3–10 câu), Timeout 5 phút (`410 Gone`) |
+| 9 | `MockExamsController` | `GET /api/v1/mock-exams/quota`<br>`POST /api/v1/mock-exams/sessions` (`/start`)<br>`GET /api/v1/mock-exams/sessions/{id}`<br>`POST /api/v1/mock-exams/sessions/{id}/answers`<br>`POST /api/v1/mock-exams/sessions/{id}/submit`<br>`GET /api/v1/mock-exams/history`<br>`GET /api/v1/mock-exams/history/{sessionId}` | `student,lecturer,department_head,admin` | Luồng Thi thử bấm giờ có hạn ngạch MF-02: Kiểm tra hạn ngạch ngày (`429`), bốc đề từ `practice_questions`, trả lời Voice-First (Zero R2), chấm tức thì trả Scorecard |
+| 10 | `OfficialExamsController` | `GET /api/v1/official-exams/sessions`<br>`POST /api/v1/official-exams/sessions`<br>`PUT /api/v1/official-exams/sessions/{id}/follow-up-config`<br>`POST /api/v1/official-exams/shifts`<br>`POST /api/v1/official-exams/shifts/{id}/publish-exam`<br>`POST /api/v1/official-exams/tickets`<br>`GET /api/v1/official-exams/shifts/{shiftId}/audit-evidence`<br>`PUT /api/v1/official-exams/tickets/{ticketId}/audit-score`<br>`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`<br>`GET /api/v1/official-exams/shifts/{shiftId}/export-excel`<br>`GET /api/v1/official-exams/shifts/{shiftId}/export-pdf`<br>`POST /api/v1/official-exams/anti-cheat/log` | `examination_officer,admin` (Kỳ thi/Ca thi/Mở đề/Publish điểm)<br>`department_head,admin` (Cấu hình Follow-up thi thật)<br>`lecturer,department_head,admin` (Evidence Panel & Sửa điểm) | Quản lý kỳ thi, ca thi phòng Lab, phát đề không trùng, hậu kiểm Evidence Panel, công bố điểm kích hoạt `OneWayLockInterceptor` (`403`) và xuất Excel/PDF ký số (MF-04) |
+| 11 | `OfficialExamCheckInController` | `GET /api/v1/official-exams/tickets/current`<br>`POST /api/v1/official-exams/tickets/{ticketId}/check-in` | `student,proctor,examination_officer,admin` | Máy trạm Kiosk lấy vé thi hiện tại và Check-in khóa địa chỉ `ip_address` máy trạm (MF-04) |
+| 12 | `OfficialExamSubmissionsController` | `POST /api/v1/official-exams/tickets/{ticketId}/audio-upload-authorizations`<br>`PUT /api/v1/official-exams/tickets/{ticketId}/audio`<br>`PUT /api/v1/official-exams/tickets/{ticketId}/submission`<br>`GET /api/v1/official-exams/tickets/{ticketId}/submission` | `student,proctor,lecturer,department_head,examination_officer,admin` | Cấp Presigned URL tải audio `STT_MSSV.webm` lên Cloudflare R2, niêm phong SHA-256 và nộp bài Persist-First $< 100$ms (MF-04) |
+| 13 | `ProctorController` | `GET /api/v1/proctor/shifts/{id}/attendance`<br>`POST /api/v1/proctor/shifts/{id}/attendance`<br>`POST /api/v1/proctor/shifts/{id}/violations` | `proctor,admin` | Giám thị phòng Lab điểm danh ghế 1–40 đối chiếu thẻ SV/CCCD và ghi biên bản vi phạm vào `exam_anti_cheat_logs` (R4) |
+| 14 | `AppealsController` | `POST /api/v1/student/appeals` (`/api/v1/appeals`)<br>`GET /api/v1/appeals`<br>`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`<br>`POST /api/v1/department-head/appeals/{id}/assign-lecturer`<br>`PUT /api/v1/lecturer/appeals/{id}/regrade`<br>`POST /api/v1/department-head/appeals/{id}/decision` | `student` (Bước 1)<br>`examination_officer` (Bước 2)<br>`department_head` (Bước 3 & 5)<br>`lecturer` (Bước 4)<br>`admin` (All) | Quy trình Phúc khảo nội bộ 5 bước chuẩn mực (R7), mở ngoại lệ có kiểm soát cho `OneWayLockInterceptor` khi Trưởng BM phê duyệt `APPROVED` |
+| 15 | `DeadLetterQueueController` | `GET /api/v1/admin/dlq/tasks`<br>`POST /api/v1/admin/dlq/tasks/{id}/replay`<br>`GET /api/v1/examination-officer/dlq/tasks`<br>`POST /api/v1/examination-officer/dlq/tasks/{id}/replay` | `admin` (DLQ MF-01/02)<br>`examination_officer,admin` (DLQ MF-04) | Giám sát và kích hoạt chấm bù (Replay) hàng đợi lỗi DLQ phân tách độc lập theo luồng nghiệp vụ (R2) |
+| 16 | `AdminController` | `GET /api/v1/admin/users`<br>`PUT /api/v1/admin/users/{id}/status`<br>`PUT /api/v1/admin/users/{id}/role`<br>`GET /api/v1/admin/system-configs`<br>`PUT /api/v1/admin/system-configs/{key}`<br>`GET /api/v1/admin/audit-logs` | `admin` | Quản trị người dùng (FE-09: khóa/mở, gán role 6 vai trò), cấu hình tham số hệ thống `system_configs` và tra cứu nhật ký kiểm toán `audit_logs` |
+| 17 | `StudentController` | `GET /api/v1/student/dashboard`<br>`GET /api/v1/student/official-exams/{ticketId}/grade`<br>`POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade` | `student,admin` (Dashboard & Grade hỗ trợ GV/TBM xem) | Bảng điều khiển học tập sinh viên (FE-10), xem bảng điểm thi thật sau công bố và xác nhận điểm `ACKNOWLEDGED` |
+| 18 | `LecturerController` | `GET /api/v1/lecturer/dashboard` (`/api/v1/dashboard/lecturer`) | `lecturer,department_head,admin` | Bảng điều khiển giảng viên & Trưởng Bộ Môn: tổng hợp câu hỏi chờ duyệt, câu hỏi cần sửa (`NEEDS_REVISION` cả 2 kho), ca thi hậu kiểm và đơn phúc khảo |
+| 19 | `NotificationsController` | `GET /api/v1/notifications`<br>`PUT /api/v1/notifications/{id}/read`<br>`PUT /api/v1/notifications/read-all` | Authenticated (All 6 Roles) | Hộp thư thông báo chuông trong ứng dụng (FE-11) cho 5 sự kiện nghiệp vụ |
+| 20 | `SpeechController` | `GET /api/v1/speech/voices`<br>`POST /api/v1/speech/tts` (`GET /api/v1/speech/tts`)<br>`POST /api/v1/speech/stt` | Public (`AllowAnonymous`) | Tổng hợp giọng đọc Giám khảo AI (TTS 3 tầng dự phòng) và nhận diện giọng nói sinh viên (Resilient STT Gemini + Cloudflare Whisper) |
+| 21 | `StorageController` | `POST /api/v1/storage/upload-audio`<br>`POST /api/v1/storage/upload-question-image` | `student,lecturer,department_head,admin` | Stream âm thanh bóc băng nhanh cho màn hình đệm MF-01 và alias tải ảnh câu hỏi MF-03 |
+| 22 | `FlmController` | `GET /api/v1/courses/{courseId}/flm` | `lecturer,department_head,examination_officer,admin` | Alias tương thích ngược tra cứu danh mục CLO môn học |
+| 23 | `VerificationController` | `GET /api/v1/verification/grades/{certificateHash}` | Public (`AllowAnonymous`) | Xác thực công khai chữ ký số SHA-256 trên báo cáo bảng điểm PDF qua mã QR |
 
 ---
 *(Hợp đồng giao diện API Contract này là tài liệu pháp lý kỹ thuật bất biến giữa Frontend và Backend, bảo đảm tính toàn vẹn 100% khi tích hợp hệ thống).*

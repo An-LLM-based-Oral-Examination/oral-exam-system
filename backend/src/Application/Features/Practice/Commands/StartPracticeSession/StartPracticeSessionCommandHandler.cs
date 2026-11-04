@@ -4,6 +4,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -115,7 +116,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         var diffSet = normalizedDifficulties.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lightweightCandidates = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -209,7 +210,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
         var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -315,7 +316,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
         var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 

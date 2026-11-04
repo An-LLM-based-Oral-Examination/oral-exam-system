@@ -27,7 +27,23 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            query = query.Where(q => q.Status == request.Status);
+            var normalizedStatus = request.Status.Trim().ToLowerInvariant();
+            query = query.Where(q => q.Status.ToLower() == normalizedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.FlowType))
+        {
+            query = query.Where(q => q.FlowType == request.FlowType);
+        }
+
+        if (request.FlowTypes != null && request.FlowTypes.Count > 0)
+        {
+            query = query.Where(q => request.FlowTypes.Contains(q.FlowType));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ManagedByRole))
+        {
+            query = query.Where(q => q.ManagedByRole == request.ManagedByRole);
         }
 
         var tasks = await query
@@ -40,6 +56,10 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
                 ErrorMessage = q.ErrorMessage,
                 RetryCount = q.RetryCount,
                 Status = q.Status,
+                FlowType = q.FlowType,
+                ManagedByRole = q.ManagedByRole,
+                ResolvedByUserId = q.ResolvedByUserId,
+                ResolutionNotes = q.ResolutionNotes,
                 CreatedAt = q.CreatedAt,
                 ResolvedAt = q.ResolvedAt
             })

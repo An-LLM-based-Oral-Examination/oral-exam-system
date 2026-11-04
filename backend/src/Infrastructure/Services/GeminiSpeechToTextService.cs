@@ -25,11 +25,11 @@ public class GeminiSpeechToTextService
 
     private static readonly string[] FallbackSttUrls =
     [
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        DefaultGeminiSttUrl,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()

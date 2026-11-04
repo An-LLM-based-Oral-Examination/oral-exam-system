@@ -6,7 +6,7 @@ using OralExamination.Application.Features.Courses.DTOs;
 namespace OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
 
 /// <summary>
-/// CQRS Command cập nhật cấu hình thời gian đệm và số câu hỏi phụ cho môn học.
+/// CQRS Command cập nhật cấu hình thời gian đệm, số câu hỏi phụ và tham số thi thử cho môn học.
 /// </summary>
 public sealed record UpdateCourseConfigurationCommand(
     Guid CourseId,
@@ -17,5 +17,8 @@ public sealed record UpdateCourseConfigurationCommand(
 ) : IRequest<Result<CourseConfigurationDto>>
 {
     public int? MaxMockExamsPerDay { get; init; }
+    public int? MockExamDurationMinutes { get; init; }
+    public int? MockExamTotalQuestions { get; init; }
+    public string? MockExamBloomDistribution { get; init; }
     public string? ActorRole { get; init; }
 }

@@ -7,6 +7,7 @@ public partial class PracticeQuestion
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CourseId { get; set; }
+    public Guid? CloId { get; set; }
     public Guid RubricId { get; set; }
     public string Title { get; set; } = null!;
     public string Content { get; set; } = null!;
@@ -27,6 +28,7 @@ public partial class PracticeQuestion
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual Course Course { get; set; } = null!;
+    public virtual CourseClo? Clo { get; set; }
     public virtual Rubric Rubric { get; set; } = null!;
     public virtual User? ApprovedByUser { get; set; }
     public virtual User? SubmittedByUser { get; set; }

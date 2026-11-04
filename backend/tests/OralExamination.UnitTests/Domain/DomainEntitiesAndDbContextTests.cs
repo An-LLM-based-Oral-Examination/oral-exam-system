@@ -28,13 +28,13 @@ public class DomainEntitiesAndDbContextTests
     }
 
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 33 thực thể trong Model")]
-    public void DbContext_Must_Contain_Exactly_33_Entity_Types()
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 34 thực thể trong Model")]
+    public void DbContext_Must_Contain_Exactly_34_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(33, "durable official grading adds grading_jobs, course_clos and exam_anti_cheat_logs tables");
+        entityTypes.Should().HaveCount(34, "academic hierarchy adds course_lecturers 3NF relation table");
 
         var expectedEntities = new[]
         {
@@ -43,6 +43,7 @@ public class DomainEntitiesAndDbContextTests
             typeof(Semester),
             typeof(Course),
             typeof(CourseClo),
+            typeof(CourseLecturer),
             typeof(Class),
             typeof(ClassEnrollment),
             typeof(Rubric),
@@ -80,7 +81,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 30 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 34 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -91,6 +92,7 @@ public class DomainEntitiesAndDbContextTests
             (typeof(RefreshToken), "refresh_tokens"),
             (typeof(Semester), "semesters"),
             (typeof(Course), "courses"),
+            (typeof(CourseLecturer), "course_lecturers"),
             (typeof(Class), "classes"),
             (typeof(ClassEnrollment), "class_enrollments"),
             (typeof(Rubric), "rubrics"),
@@ -159,6 +161,11 @@ public class DomainEntitiesAndDbContextTests
         var submissionType = context.Model.FindEntityType(typeof(ExamQuestionSubmission))!;
         var subUnique = submissionType.GetIndexes().FirstOrDefault(i => i.IsUnique && i.Properties.Count == 2);
         subUnique.Should().NotBeNull("Mỗi vé thi chỉ có 1 bản nộp duy nhất cho mỗi câu hỏi");
+
+        // 6. course_lecturers (course_id, lecturer_user_id, semester_id)
+        var clType = context.Model.FindEntityType(typeof(CourseLecturer))!;
+        var clUnique = clType.GetIndexes().FirstOrDefault(i => i.IsUnique && i.Properties.Count == 3);
+        clUnique.Should().NotBeNull("Mỗi giảng viên chỉ được phân công 1 lần cho mỗi môn học trong học kỳ");
     }
 
     [Fact(DisplayName = "4. Ràng buộc Check Constraints trong EF Core Code-First DbContext cho Rubric 10.0 và Quota thi thử động UsedCount >= 0")]
@@ -191,17 +198,25 @@ public class DomainEntitiesAndDbContextTests
         ticketCheck.Should().NotBeNull("StudentExamTicket phải có Check Constraint ck_tickets_seat");
         ticketCheck!.Sql.Should().Be("seat_number >= 1 AND seat_number <= 40");
 
-        // 5. DeadLetterQueue status check
+        // 5. DeadLetterQueue status, flow_type and managed_by_role check constraints
         var dlqType = model.FindEntityType(typeof(DeadLetterQueue))!;
         var dlqCheck = dlqType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_dlq_status");
         dlqCheck.Should().NotBeNull("DeadLetterQueue phải có Check Constraint ck_dlq_status");
         dlqCheck!.Sql.Should().Be("status IN ('pending', 'resolved', 'abandoned')");
 
-        // 6. Toàn bộ 42 Check Constraints từ 30 bảng phải được cấu hình đầy đủ với SQL biểu thức hợp lệ
+        var dlqFlowCheck = dlqType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_dlq_flow_type");
+        dlqFlowCheck.Should().NotBeNull("DeadLetterQueue phải có Check Constraint ck_dlq_flow_type");
+        dlqFlowCheck!.Sql.Should().Be("flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM')");
+
+        var dlqRoleCheck = dlqType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_dlq_managed_role");
+        dlqRoleCheck.Should().NotBeNull("DeadLetterQueue phải có Check Constraint ck_dlq_managed_role");
+        dlqRoleCheck!.Sql.Should().Be("managed_by_role IN ('admin', 'examination_officer', 'lecturer')");
+
+        // 6. Toàn bộ Check Constraints từ các bảng phải được cấu hình đầy đủ với SQL biểu thức hợp lệ
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(49, "grading_jobs adds status and non-negative attempt constraints, plus 5 new constraints for course clos, anti-cheat, exam sets, practice questions");
+        allCheckConstraints.Count.Should().Be(55, "grading_jobs adds status and non-negative attempt constraints, plus 5 constraints for course clos, anti-cheat, exam sets, practice questions, 2 constraints for DLQ flow_type/managed_by_role, and 4 constraints for courses mock exam config, practice_sessions.total_score, and ai_evaluations XOR");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
@@ -677,9 +692,35 @@ public class DomainEntitiesAndDbContextTests
         // 6. Composite indexes cho MockExamSession và AuditLog
         var msEntity = context.Model.FindEntityType(typeof(MockExamSession))!;
         msEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_mock_exam_sessions_status_expires").Should().NotBeNull();
+        msEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_mock_exam_sessions_student_status").Should().NotBeNull();
 
         var alEntity = context.Model.FindEntityType(typeof(AuditLog))!;
         alEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_audit_logs_user_action_entity").Should().NotBeNull();
+
+        // 7. Các cột 3NF mới (PracticeSession.TotalScore, PracticeAnswer.OrderIndex, Course mock exam configs) & ESR Indexes
+        var psTotalScoreProp = psEntity.FindProperty(nameof(PracticeSession.TotalScore));
+        psTotalScoreProp.Should().NotBeNull("PracticeSession phải có cột TotalScore chuẩn 3NF");
+        psTotalScoreProp!.GetColumnName().Should().Be("total_score");
+        psEntity.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_practice_sessions_score").Should().NotBeNull();
+        context.Model.FindEntityType(typeof(PracticeSession))!.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_practice_sessions_student_status").Should().NotBeNull();
+
+        var paOrderProp = paEntity.FindProperty(nameof(PracticeAnswer.OrderIndex));
+        paOrderProp.Should().NotBeNull("PracticeAnswer phải có cột OrderIndex tường minh thay vì encode vào Guid");
+        paOrderProp!.GetColumnName().Should().Be("order_index");
+        paEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_practice_answers_session_order").Should().NotBeNull();
+
+        var courseEntity = model.FindEntityType(typeof(Course))!;
+        courseEntity.FindProperty(nameof(Course.Description))!.GetColumnName().Should().Be("description");
+        courseEntity.FindProperty(nameof(Course.MockExamDurationMinutes))!.GetColumnName().Should().Be("mock_exam_duration_minutes");
+        courseEntity.FindProperty(nameof(Course.MockExamTotalQuestions))!.GetColumnName().Should().Be("mock_exam_total_questions");
+        courseEntity.FindProperty(nameof(Course.MockExamBloomDistribution))!.GetColumnName().Should().Be("mock_exam_bloom_distribution");
+        courseEntity.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_courses_mock_duration").Should().NotBeNull();
+        courseEntity.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_courses_mock_questions").Should().NotBeNull();
+
+        aiEvalType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_ai_evaluations_xor").Should().NotBeNull();
+        mockAnswerEntity.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_mock_exam_answers_session_order").Should().NotBeNull();
+        context.Model.FindEntityType(typeof(PracticeQuestion))!.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_practice_questions_active_approved").Should().NotBeNull();
+        context.Model.FindEntityType(typeof(ExamQuestion))!.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_exam_questions_active_approved").Should().NotBeNull();
     }
 }
 

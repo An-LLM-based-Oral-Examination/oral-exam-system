@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
+using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -69,7 +70,16 @@ public class NewMainFlowsBusinessRulesTests
         var course = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", SemesterId = Guid.NewGuid() };
         var student = new User { Id = Guid.NewGuid(), Email = "student@fpt.edu.vn", FullName = "Student A", Role = "student" };
         var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Basic Rubric" };
-        var question = new PracticeQuestion { Id = Guid.NewGuid(), CourseId = course.Id, RubricId = rubric.Id, Title = "Q1", Content = "Content", IsActive = true };
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Q1",
+            Content = "Content",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
         context.Courses.Add(course);
         context.Users.Add(student);
         context.Rubrics.Add(rubric);
@@ -93,7 +103,16 @@ public class NewMainFlowsBusinessRulesTests
         var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = ".NET", SemesterId = Guid.NewGuid() };
         var student = new User { Id = Guid.NewGuid(), Email = "student_full@fpt.edu.vn", FullName = "Student B", Role = "student" };
         var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Basic Rubric" };
-        var question = new PracticeQuestion { Id = Guid.NewGuid(), CourseId = course.Id, RubricId = rubric.Id, Title = "Q1", Content = "Content", IsActive = true };
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Q1",
+            Content = "Content",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
         context.Courses.Add(course);
         context.Users.Add(student);
         context.Rubrics.Add(rubric);
@@ -183,6 +202,165 @@ public class NewMainFlowsBusinessRulesTests
         savedSession.TranscriptBufferSeconds.Should().Be(90);
         savedSession.CreatedByUser.Should().NotBeNull();
         savedSession.CreatedByUser!.Role.Should().Be("department_head");
+    }
+
+    #endregion
+
+    #region R8: Chặn Bốc Đề Câu Hỏi Luyện Tập Chưa Phê Duyệt (MF-01 & MF-02)
+
+    [Theory(DisplayName = "R8-01: PracticeQuestion ở trạng thái DRAFT hoặc REJECTED (dù IsActive = true) KHÔNG bị bốc vào phiên Luyện tập")]
+    [InlineData(ApprovalStatus.Draft)]
+    [InlineData(ApprovalStatus.Rejected)]
+    public async Task StartPracticeSession_Should_Not_Pick_Unapproved_PracticeQuestion_Even_When_IsActive_Is_True(string unapprovedStatus)
+    {
+        using var context = CreateDbContext();
+        var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = ".NET", SemesterId = Guid.NewGuid(), IsActive = true };
+        var student = new User { Id = Guid.NewGuid(), Email = "stu_r8_practice@fpt.edu.vn", FullName = "Student R8", Role = "student", IsActive = true };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Rubric R8", TotalMaxScore = 10.0m, IsActive = true };
+
+        var unapprovedQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = $"Câu hỏi {unapprovedStatus}",
+            Content = "Nội dung câu hỏi chưa được phê duyệt",
+            Difficulty = "medium",
+            ApprovalStatus = unapprovedStatus,
+            IsActive = true
+        };
+
+        context.Courses.Add(course);
+        context.Users.Add(student);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(unapprovedQuestion);
+        await context.SaveChangesAsync();
+
+        var handler = new StartPracticeSessionCommandHandler(context);
+        var command = new StartPracticeSessionCommand(
+            StudentId: student.Id,
+            CourseId: course.Id,
+            Difficulty: "medium",
+            QuestionCount: 1,
+            IsFullSession: false);
+
+        var resultWhenOnlyUnapproved = await handler.Handle(command, CancellationToken.None);
+        resultWhenOnlyUnapproved.IsSuccess.Should().BeFalse(
+            $"câu hỏi đang ở trạng thái {unapprovedStatus} tuyệt đối không được phép bốc vào phiên luyện tập dù IsActive = true");
+
+        // Thêm 1 câu APPROVED -> Hệ thống chỉ được phép bốc đúng câu APPROVED
+        var approvedQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Câu hỏi APPROVED",
+            Content = "Nội dung câu hỏi đã được Trưởng BM phê duyệt",
+            Difficulty = "medium",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(approvedQuestion);
+        await context.SaveChangesAsync();
+
+        var resultWithApproved = await handler.Handle(command, CancellationToken.None);
+        resultWithApproved.IsSuccess.Should().BeTrue();
+        resultWithApproved.Value!.Questions.Should().ContainSingle();
+        resultWithApproved.Value.Questions[0].QuestionId.Should().Be(approvedQuestion.Id);
+    }
+
+    [Theory(DisplayName = "R8-02: PracticeQuestion ở trạng thái DRAFT hoặc REJECTED (dù IsActive = true) KHÔNG bị bốc vào phiên Thi thử")]
+    [InlineData(ApprovalStatus.Draft)]
+    [InlineData(ApprovalStatus.Rejected)]
+    public async Task StartMockExam_Should_Not_Pick_Unapproved_PracticeQuestion_Even_When_IsActive_Is_True(string unapprovedStatus)
+    {
+        using var context = CreateDbContext();
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWD392",
+            Name = "Software Architecture",
+            SemesterId = Guid.NewGuid(),
+            MaxMockExamsPerDay = 3,
+            IsActive = true
+        };
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "stu_r8_mock@fpt.edu.vn",
+            FullName = "Student Mock R8",
+            Role = "student",
+            IsActive = true
+        };
+        var structure = new ExamStructure
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            CreatedBy = student.Id,
+            Name = "Cấu trúc thi thử 1 câu",
+            TotalQuestions = 1,
+            DurationMinutes = 15,
+            BloomDistribution = "{\"Understand\": 1}",
+            IsActive = true
+        };
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Rubric Mock R8",
+            TotalMaxScore = 10.0m,
+            IsActive = true
+        };
+        var unapprovedQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = $"Câu hỏi thi thử {unapprovedStatus}",
+            Content = "Nội dung câu hỏi chưa được phê duyệt",
+            Difficulty = "medium",
+            BloomLevel = "Understand",
+            ApprovalStatus = unapprovedStatus,
+            IsActive = true
+        };
+
+        context.Courses.Add(course);
+        context.Users.Add(student);
+        context.ExamStructures.Add(structure);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(unapprovedQuestion);
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var command = new StartMockExamCommand(
+            CourseId: course.Id,
+            StudentId: student.Id,
+            HasFollowUp: false);
+
+        var resultWhenOnlyUnapproved = await handler.Handle(command, CancellationToken.None);
+        resultWhenOnlyUnapproved.IsSuccess.Should().BeFalse(
+            $"câu hỏi đang ở trạng thái {unapprovedStatus} tuyệt đối không được phép bốc vào đề thi thử dù IsActive = true");
+
+        // Thêm 1 câu APPROVED -> Hệ thống bốc đúng câu APPROVED
+        var approvedQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Câu hỏi thi thử APPROVED",
+            Content = "Nội dung câu hỏi đã được Trưởng BM phê duyệt",
+            Difficulty = "medium",
+            BloomLevel = "Understand",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(approvedQuestion);
+        await context.SaveChangesAsync();
+
+        var resultWithApproved = await handler.Handle(command, CancellationToken.None);
+        resultWithApproved.IsSuccess.Should().BeTrue();
+        resultWithApproved.Value!.Questions.Should().ContainSingle();
+        resultWithApproved.Value.Questions[0].Id.Should().Be(approvedQuestion.Id);
     }
 
     #endregion

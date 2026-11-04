@@ -26,8 +26,21 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(origin => true)
-              .AllowAnyHeader()
+        var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? (builder.Configuration["CORS_ALLOWED_ORIGINS"]?
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                ?? Array.Empty<string>());
+
+        if (configuredOrigins.Length > 0)
+        {
+            policy.WithOrigins(configuredOrigins);
+        }
+        else
+        {
+            policy.SetIsOriginAllowed(origin => true);
+        }
+
+        policy.AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()
               .WithExposedHeaders("X-STT-Confidence", "X-STT-Provider", "X-TTS-Provider", "X-TTS-Voice", "X-TTS-Rate", "X-TTS-Fallback", "X-TTS-Cache");
@@ -132,7 +145,16 @@ static async Task ApplyMigrationsAsync(WebApplication app)
                     "PostgreSQL container on port 5432 is offline; running with seeded In-Memory database for uninterrupted live operation.");
             }
 
-            await DevelopmentDataSeeder.SeedAsync(context);
+            var seedConfig = app.Configuration["Database:EnableDevelopmentSeed"]
+                ?? app.Configuration["DATABASE_ENABLE_DEVELOPMENT_SEED"];
+            var shouldSeed = string.IsNullOrWhiteSpace(seedConfig)
+                ? (app.Environment.IsDevelopment() || !bool.TryParse(seedConfig, out _))
+                : (bool.TryParse(seedConfig, out var parsedSeed) && parsedSeed);
+
+            if (shouldSeed)
+            {
+                await DevelopmentDataSeeder.SeedAsync(context);
+            }
 
             logger.LogInformation("Database schema and development seed data applied successfully.");
             return;

@@ -201,6 +201,8 @@ Lấy toàn bộ dữ liệu phiên luyện tập, danh sách câu hỏi, câu t
     "transcriptBufferSeconds": 60,
     "startedAt": "2026-10-07T07:00:00Z",
     "endedAt": null,
+    "totalScore": 6.5,
+    "selectedDifficulties": ["easy", "medium"],
     "questions": [
       {
         "questionId": "11111111-2222-3333-4444-555555555555",
@@ -219,8 +221,10 @@ Lấy toàn bộ dữ liệu phiên luyện tập, danh sách câu hỏi, câu t
         "answerId": "c3d4e5f6-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
         "questionId": "11111111-2222-3333-4444-555555555555",
         "answerText": "Nguyên lý DIP phát biểu rằng các module cấp cao không nên phụ thuộc trực tiếp vào module cấp thấp...",
+        "orderIndex": 1,
         "isFollowUp": false,
         "parentAnswerId": null,
+        "followUpIndex": 0,
         "status": "graded",
         "submittedAt": "2026-10-07T07:02:15Z",
         "totalScore": 6.5,

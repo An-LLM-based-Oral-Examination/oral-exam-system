@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.Practice.Commands.CompletePracticeSession;
@@ -24,6 +25,7 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
     {
         var session = await _context.PracticeSessions
             .Include(s => s.Answers)
+                .ThenInclude(a => a.AiEvaluations)
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null || session.StudentId != request.StudentId)
@@ -56,11 +58,15 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
                 var now = DateTime.UtcNow;
                 foreach (var missingQid in missingQuestionIds)
                 {
+                    var selectedIdx = session.SelectedQuestionIds.IndexOf(missingQid);
+                    var orderIndex = selectedIdx >= 0 ? selectedIdx + 1 : session.Answers.Count + 1;
+
                     var skippedAnswer = new PracticeAnswer
                     {
                         SessionId = session.Id,
                         QuestionId = missingQid,
                         StudentId = session.StudentId,
+                        OrderIndex = orderIndex,
                         AnswerText = string.Empty,
                         IsFollowUp = false,
                         ParentAnswerId = null,
@@ -93,6 +99,7 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
                         }
                     }
 
+                    skippedAnswer.AiEvaluations.Add(eval);
                     session.Answers.Add(skippedAnswer);
                     _context.PracticeAnswers.Add(skippedAnswer);
                     _context.AiEvaluations.Add(eval);
@@ -104,8 +111,10 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
 
         if (session.Status == "completed")
         {
-            if (hasAddedSkippedAnswers)
+            var computed = PracticeSessionTimeoutHelper.ComputeSessionTotalScore(session, session.Answers);
+            if (hasAddedSkippedAnswers || session.TotalScore != computed)
             {
+                session.TotalScore = computed;
                 await _context.SaveChangesAsync(cancellationToken);
             }
 
@@ -114,6 +123,7 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
 
         session.Status = "completed";
         session.CompletedAt = DateTime.UtcNow;
+        session.TotalScore = PracticeSessionTimeoutHelper.ComputeSessionTotalScore(session, session.Answers);
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -211,12 +211,16 @@ erDiagram
 | `code` | `varchar(20)` | NOT NULL, UNIQUE | Mã môn học chuẩn (PRN231, SWD392...) |
 | `name` | `varchar(200)` | NOT NULL | Tên môn học đầy đủ |
 | `credits` | `int` | NOT NULL, CHECK `credits > 0` | Số tín chỉ của môn học |
-| `semester_id` | `uuid` | FK `semesters(id)` ON DELETE RESTRICT | Học kỳ áp dụng |
-| `department_head_id` | `uuid` | NOT NULL, FK `users(id)` ON DELETE RESTRICT | Trưởng Bộ Môn chịu trách nhiệm chuyên môn môn học do Admin chỉ định (R5) |
+| `description` | `text` | NULLABLE | Mô tả chi tiết nội dung và mục tiêu học phần |
+| `semester_id` | `uuid` | NULLABLE, FK `semesters(id)` ON DELETE SET NULL | Học kỳ áp dụng |
+| `department_head_user_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Trưởng Bộ Môn chịu trách nhiệm chuyên môn môn học do Admin chỉ định (R5) |
 | `has_follow_up` | `boolean` | NOT NULL, Default `false` | Cờ bật/tắt hỏi xoáy Follow-up cho môn thi do Trưởng Bộ Môn cấu hình (R3) |
 | `transcript_buffer_seconds` | `int` | NOT NULL, Default `60`, CHECK `transcript_buffer_seconds BETWEEN 10 AND 300` | Thời gian đệm hiệu đính phiên âm theo môn (10–300s, mặc định 60s) |
-| `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 1 AND 5` | Số câu hỏi phụ Follow-up tối đa do Admin cấu hình cho hệ thống luyện tập MF-01 (1–5 câu, mặc định 2 câu) |
+| `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 1 AND 5` | Số câu hỏi phụ Follow-up tối đa (1–5 câu, mặc định 2 câu) |
 | `max_mock_exams_per_day` | `int` | NOT NULL, Default `3`, CHECK `max_mock_exams_per_day >= 1` | Hạn ngạch thi thử tối đa trong ngày do Admin cấu hình theo môn |
+| `mock_exam_duration_minutes` | `int` | NOT NULL, Default `30`, CHECK `mock_exam_duration_minutes BETWEEN 5 AND 180` | Thời lượng làm bài thi thử mặc định của môn học (phút) do Trưởng Bộ Môn cấu hình (MF-02) |
+| `mock_exam_total_questions` | `int` | NOT NULL, Default `5`, CHECK `mock_exam_total_questions BETWEEN 1 AND 20` | Tổng số câu hỏi mặc định của ca thi thử theo môn học do Trưởng Bộ Môn cấu hình (MF-02) |
+| `mock_exam_bloom_distribution` | `jsonb` | NOT NULL, Default `'{}'::jsonb` | Phân bổ tỷ lệ mức độ nhận thức Bloom cho đề thi thử theo môn học (MF-02) |
 | `allow_transcript_edit` | `boolean` | NOT NULL, Default `true` | Cho phép mở màn hình đệm sửa transcript sau khi phát biểu qua micro |
 | `exam_input_mode` | `varchar(30)` | NOT NULL, Default `'VoiceWithTranscriptEdit'`, CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) | Phương thức trả lời bài thi theo môn (`VoiceOnly`: chỉ mic, khóa phím; `VoiceWithTranscriptEdit`: nói mic + mở đệm sửa transcript) |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hoạt động |
@@ -304,6 +308,7 @@ erDiagram
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính câu hỏi luyện tập |
 | `course_id` | `uuid` | FK `courses(id)` ON DELETE CASCADE | Môn học trực thuộc |
 | `rubric_id` | `uuid` | FK `rubrics(id)` ON DELETE RESTRICT | Barem đánh giá tương ứng |
+| `clo_id` | `uuid` | NULLABLE, FK `course_clos(id)` ON DELETE SET NULL | Chuẩn đầu ra học phần (CLO 3NF) liên kết trực tiếp với câu hỏi luyện tập |
 | `title` | `varchar(300)` | NOT NULL | Tiêu đề câu hỏi |
 | `content` | `text` | NOT NULL | Nội dung đề bài |
 | `sample_answer` | `text` | NULLABLE | Câu trả lời mẫu chuẩn mực (Model Answer >= 50 ký tự) hiển thị cho sinh viên học tập |
@@ -334,6 +339,8 @@ erDiagram
 | `status` | `varchar(20)` | NOT NULL, Default `'in_progress'`, CHECK in (`'in_progress'`, `'completed'`, `'abandoned'`, `'timed_out'`) | Trạng thái phiên: đang làm, đã hoàn thành, bỏ dở, hoặc quá hạn timeout không tương tác |
 | `last_activity_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tương tác gần nhất của sinh viên (tạo phiên, bốc câu tiếp theo `POST /next-question`, nộp câu trả lời), phục vụ kiểm soát Lazy Timeout 5 phút không tương tác |
 | `selected_difficulties` | `jsonb` | NOT NULL, Default `'[]'::jsonb` | Mảng JSON lưu trữ tổ hợp mức độ khó sinh viên đã chọn (ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "medium", "hard"]`) phục vụ thuật toán bốc đề On-Demand chặn 3 câu liên tiếp cùng mức |
+| `total_score` | `numeric(4,2)` | NULLABLE, CHECK `total_score IS NULL OR (total_score >= 0.00 AND total_score <= 10.00)` | Điểm trung bình tổng kết của phiên luyện tập (lưu trữ trực tiếp chuẩn 3NF giúp truy vấn lịch sử $O(1)$) |
+| `total_score` | `numeric(4,2)` | NULLABLE, CHECK `total_score IS NULL OR (total_score >= 0.00 AND total_score <= 10.00)` | Điểm trung bình tổng kết của phiên luyện tập (lưu trữ trực tiếp chuẩn 3NF giúp truy vấn lịch sử $O(1)$) |
 
 #### Bảng `practice_answers`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
@@ -343,8 +350,11 @@ erDiagram
 | `question_id` | `uuid` | FK `practice_questions(id)` ON DELETE RESTRICT | Câu hỏi được trả lời |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp bài |
 | `answer_text` | `text` | NOT NULL | Văn bản câu trả lời sau Buffer (mặc định 60s cho MF-01 hoặc theo cấu hình môn) |
+| `order_index` | `int` | NOT NULL, Default `1`, CHECK `order_index >= 1` | Thứ tự câu hỏi trong phiên luyện tập (phục vụ thuật toán Anti-3-Consecutive và hiển thị lịch sử) |
 | `is_follow_up` | `boolean` | NOT NULL, Default `false` | Có phải câu trả lời cho câu hỏi xoáy A2 |
-| `parent_answer_id` | `uuid` | FK `practice_answers(id)` ON DELETE SET NULL | Liên kết câu trả lời gốc nếu là câu phụ |
+| `parent_answer_id` | `uuid` | NULLABLE, FK `practice_answers(id)` ON DELETE SET NULL | Liên kết câu trả lời gốc nếu là câu phụ |
+| `follow_up_index` | `int` | NOT NULL, Default `0`, CHECK `follow_up_index >= 0 AND follow_up_index <= 5` | Thứ tự lượt hỏi phụ (0 = câu chính, 1..5 = câu hỏi phụ đào sâu) |
+| `follow_up_prompt` | `text` | NULLABLE | Nội dung câu hỏi phụ được hỏi tại lượt này |
 | `status` | `varchar(20)` | NOT NULL, CHECK in (`pending`, `grading`, `graded`, `failed`) | Trạng thái chấm điểm |
 | `submitted_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm nộp bài |
 
@@ -359,7 +369,9 @@ erDiagram
 | `feedback` | `text` | NOT NULL | Nhận xét sư phạm tổng thể |
 | `confidence_score` | `numeric(3,2)` | NOT NULL, CHECK `confidence_score >= 0.00 AND confidence_score <= 1.00` | Hệ số tin cậy của AI |
 | `cot_trace` | `text` | NOT NULL | Chuỗi tư duy suy luận Chain-of-Thought 3 bước của Gemini phục vụ Evidence Panel |
+| `follow_up_prompt` | `text` | NULLABLE | Câu hỏi phụ tiếp theo do AI sinh động từ câu trả lời của sinh viên (nếu có) |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm đánh giá |
+| (CHECK XOR) | `ck_ai_evaluations_xor` | CHECK `(practice_answer_id IS NOT NULL)::int + (mock_exam_answer_id IS NOT NULL)::int + (submission_id IS NOT NULL)::int = 1` | **Ràng buộc 3NF XOR:** Mỗi bản ghi đánh giá AI chỉ thuộc về duy nhất 1 trong 3 luồng (MF-01, MF-02 hoặc MF-04) |
 
 #### Bảng `ai_evaluation_details`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
@@ -476,6 +488,8 @@ erDiagram
 | `submitted_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Giảng viên thiết kế và đệ trình câu hỏi |
 | `approved_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Trưởng Bộ Môn thẩm định & phê duyệt chính thức đưa vào kho thi |
 | `review_notes` | `text` | NULLABLE | Ghi chú thẩm định, căn cứ phê duyệt của Trưởng Bộ Môn |
+| `clo_id` | `uuid` | NULLABLE, FK `course_clos(id)` ON DELETE SET NULL | Chuẩn đầu ra học phần (CLO 3NF) liên kết với câu hỏi thi |
+| `structure_id` | `uuid` | NULLABLE, FK `exam_structures(id)` ON DELETE SET NULL | Ma trận cấu trúc đề thi mẫu của Trưởng Bộ Môn mà câu hỏi bám sát (R8) |
 | `image_url` | `varchar(1000)` | NULLABLE | URL hình ảnh / sơ đồ bảo mật đính kèm câu hỏi thi (UML, ERD, Kiến trúc, UI) trên Cloudflare R2 |
 | `image_description` | `text` | NULLABLE | Mô tả chi tiết hình ảnh phục vụ AI Gemini Multimodal đối chiếu CoT và hậu kiểm phúc khảo |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái hoạt động |
@@ -617,7 +631,7 @@ erDiagram
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi cách ly hàng đợi lỗi |
 | `task_type` | `varchar(50)` | NOT NULL | Loại tác vụ nền gặp sự cố (ví dụ: `eval_grading`, `stt_transcription`) |
-| `flow_type` | `varchar(32)` | NOT NULL, Default `'OFFICIAL_EXAM'`, CHECK in (`'PRACTICE_MOCK'`, `'OFFICIAL_EXAM'`) | Phân định luồng nghiệp vụ: `PRACTICE_MOCK` (Luyện tập/Thi thử) hoặc `OFFICIAL_EXAM` (Thi thật phòng Lab) (R2) |
+| `flow_type` | `varchar(20)` | NOT NULL, Default `'PRACTICE'`, CHECK in (`'PRACTICE'`, `'MOCK_EXAM'`, `'OFFICIAL_EXAM'`) | Phân định luồng nghiệp vụ: `PRACTICE` (MF-01), `MOCK_EXAM` (MF-02) do Admin quản lý; `OFFICIAL_EXAM` (MF-04) do Cán bộ Khảo thí quản lý (R2) |
 | `managed_by_role` | `varchar(32)` | NOT NULL, Default `'examination_officer'`, CHECK in (`'admin'`, `'examination_officer'`) | Vai trò quản trị & kích hoạt replay: `admin` quản lý luồng Practice/Mock; `examination_officer` quản lý luồng Official Exam; Trưởng Bộ Môn tuyệt đối KHÔNG can thiệp (R2) |
 | `payload_json` | `jsonb` | NOT NULL | Toàn bộ dữ liệu payload đầu vào của tác vụ dạng JSON để phục vụ replay |
 | `error_message` | `text` | NOT NULL | Thông điệp lỗi chi tiết từ AI/STT (HTTP 429, Timeout, Circuit Breaker) |
@@ -768,6 +782,18 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_in_class_submissions_shift` | `in_class_exam_submissions` | `(in_class_shift_id, student_id)` | Composite B-Tree | Lọc bài nộp ca thi tại lớp cho Giảng viên hậu kiểm và lên điểm (R6). |
 | `ix_system_configs_key` | `system_configs` | `(key)` UNIQUE | Unique B-Tree | Tra cứu tham số cấu hình hệ thống tức thì (< 2ms). |
 | `idx_notifications_user_read` | `notifications` | `(user_id, is_read, created_at DESC)` | Composite B-Tree | Lọc nhanh danh sách thông báo chưa đọc của người dùng trên thanh thông báo chuông (FE-11). |
+| `ix_practice_sessions_student_started` | `practice_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử luyện tập của sinh viên trên Student Portal và Dashboard ($O(\log N)$ không cần Filesort). |
+| `ix_mock_exam_sessions_student_started` | `mock_exam_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử thi thử có phân trang theo sinh viên và môn học. |
+| `ix_practice_questions_review_queue` | `practice_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt đề của Trưởng Bộ Môn và danh sách câu hỏi `NEEDS_REVISION` trên Lecturer Dashboard. |
+| `ix_exam_questions_review_queue` | `exam_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt câu hỏi thi thật MF-03/MF-04 theo môn học, trạng thái và giảng viên đệ trình. |
+| `ix_practice_answers_session_order` | `practice_answers` | `(session_id, is_follow_up, order_index)` | ESR Composite B-Tree | Truy xuất tức thì các câu trả lời chính/phụ theo đúng thứ tự câu hỏi trong phiên luyện tập. |
+| `ix_courses_dept_head` | `courses` | `(department_head_user_id)` | B-Tree | Tra cứu nhanh các môn học do một Trưởng Bộ Môn phụ trách trong chuỗi phân cấp học thuật R5. |
+| `ix_practice_sessions_student_started` | `practice_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử luyện tập của sinh viên trên Student Portal và Dashboard ($O(\log N)$ không cần Filesort). |
+| `ix_mock_exam_sessions_student_started` | `mock_exam_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử thi thử có phân trang theo sinh viên và môn học. |
+| `ix_practice_questions_review_queue` | `practice_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt đề của Trưởng Bộ Môn và danh sách câu hỏi `NEEDS_REVISION` trên Lecturer Dashboard. |
+| `ix_exam_questions_review_queue` | `exam_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt câu hỏi thi thật MF-03/MF-04 theo môn học, trạng thái và giảng viên đệ trình. |
+| `ix_practice_answers_session_order` | `practice_answers` | `(session_id, is_follow_up, order_index)` | ESR Composite B-Tree | Truy xuất tức thì các câu trả lời chính/phụ theo đúng thứ tự câu hỏi trong phiên luyện tập. |
+| `ix_courses_dept_head` | `courses` | `(department_head_user_id)` | B-Tree | Tra cứu nhanh các môn học do một Trưởng Bộ Môn phụ trách trong chuỗi phân cấp học thuật R5. |
 
 ### 4.2. Cơ Chế Điều Phối Lưu Trữ Phạm Vi Câu Hỏi (Storage Dispatching Policy)
 Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questions` (Kho mở) và `exam_questions` (Kho bảo mật), tham số `usageScope` trong API `POST /api/v1/questions/batch-approve` được điều phối lưu trữ như sau:

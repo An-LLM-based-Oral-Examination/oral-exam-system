@@ -7,6 +7,11 @@ public partial class Class
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Code { get; set; } = null!;
+    public string Name { get; set; } = string.Empty;
+    public string JoinCode { get; set; } = string.Empty;
+    public string? JoinPasswordHash { get; set; }
+    public bool IsJoinEnabled { get; set; } = true;
+    public bool AllowSelfEnrollment { get; set; } = true;
     public Guid CourseId { get; set; }
     public Guid SemesterId { get; set; }
     public Guid? LecturerId { get; set; }

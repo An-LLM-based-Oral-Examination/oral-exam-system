@@ -26,6 +26,78 @@ public static class PracticeSessionTimeoutHelper
             : 5;
     }
 
+    public static decimal? ComputeSessionTotalScore(
+        PracticeSession session,
+        ICollection<PracticeAnswer>? answersOverride = null)
+    {
+        var answers = answersOverride ?? session.Answers ?? Array.Empty<PracticeAnswer>();
+        bool hasPendingAnswers = answers.Any(a =>
+            string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase));
+
+        if (hasPendingAnswers)
+        {
+            return null;
+        }
+
+        var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
+        var isCompleted = string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase);
+        var distinctMainCount = answers
+            .Where(a => !a.IsFollowUp)
+            .Select(a => a.QuestionId)
+            .Distinct()
+            .Count();
+        var totalQuestions = Math.Max(session.SelectedQuestionIds.Count, distinctMainCount);
+
+        var mainScores = answers
+            .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+            .GroupBy(a => a.QuestionId)
+            .Select(g =>
+            {
+                var mainAnswerEval = g
+                    .Where(a => !a.IsFollowUp)
+                    .SelectMany(a => a.AiEvaluations)
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .FirstOrDefault();
+                var followUpEvals = g
+                    .Where(a => a.IsFollowUp)
+                    .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                    .Where(e => e != null)
+                    .Cast<AiEvaluation>()
+                    .ToList();
+
+                return FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainAnswerEval, followUpEvals);
+            })
+            .ToList();
+
+        if (isFullSession && isCompleted && totalQuestions > 0)
+        {
+            if (mainScores.Count > 0)
+            {
+                return Math.Clamp(
+                    Math.Round(mainScores.Sum() / totalQuestions, 2, MidpointRounding.AwayFromZero),
+                    0.0m,
+                    10.0m);
+            }
+
+            return session.SelectedQuestionIds.Count > 0 ? 0.0m : null;
+        }
+
+        var fallbackScores = mainScores.Count > 0
+            ? mainScores
+            : answers
+                .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
+                .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
+                .ToList();
+
+        return fallbackScores.Count > 0
+            ? Math.Clamp(
+                Math.Round(fallbackScores.Average(), 2, MidpointRounding.AwayFromZero),
+                0.0m,
+                10.0m)
+            : null;
+    }
+
     public static async Task<bool> PopulateMissingFullSessionAnswersAsync(
         IApplicationDbContext context,
         PracticeSession session,
@@ -73,11 +145,15 @@ public static class PracticeSessionTimeoutHelper
 
         foreach (var missingQid in missingQuestionIds)
         {
+            var selectedIdx = session.SelectedQuestionIds.IndexOf(missingQid);
+            var orderIndex = selectedIdx >= 0 ? selectedIdx + 1 : session.Answers.Count + 1;
+
             var skippedAnswer = new PracticeAnswer
             {
                 SessionId = session.Id,
                 QuestionId = missingQid,
                 StudentId = session.StudentId,
+                OrderIndex = orderIndex,
                 AnswerText = string.Empty,
                 IsFollowUp = false,
                 ParentAnswerId = null,
@@ -152,6 +228,32 @@ public static class PracticeSessionTimeoutHelper
             if (addedSkipped)
             {
                 changed = true;
+            }
+
+            if (changed || !session.TotalScore.HasValue)
+            {
+                var allSessionAnswers = await context.PracticeAnswers
+                    .AsNoTracking()
+                    .Include(a => a.AiEvaluations)
+                    .Where(a => a.SessionId == session.Id)
+                    .ToListAsync(cancellationToken);
+                if (session.Answers != null)
+                {
+                    foreach (var localAns in session.Answers)
+                    {
+                        if (allSessionAnswers.All(a => a.Id != localAns.Id))
+                        {
+                            allSessionAnswers.Add(localAns);
+                        }
+                    }
+                }
+
+                var computedScore = ComputeSessionTotalScore(session, allSessionAnswers);
+                if (session.TotalScore != computedScore)
+                {
+                    session.TotalScore = computedScore;
+                    changed = true;
+                }
             }
         }
 

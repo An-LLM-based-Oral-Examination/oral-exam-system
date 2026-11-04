@@ -14,17 +14,19 @@ using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail;
 
-/// <summary>
-/// Handler tra cứu chi tiết một bài thi thử trong quá khứ kèm Bảng điểm Scorecard (MF-02 - FE-02).
-/// Tái tạo đầy đủ cấu trúc câu hỏi, câu trả lời, nhận xét và điểm tiêu chí Rubric theo CLO.
-/// </summary>
-public sealed class GetMockExamSessionDetailQueryHandler(
-    IApplicationDbContext context,
-    IAiGradingService? aiGradingService = null
-) : IRequestHandler<GetMockExamSessionDetailQuery, Result<MockExamScorecardDto>>
+public sealed class GetMockExamSessionDetailQueryHandler
+    : IRequestHandler<GetMockExamSessionDetailQuery, Result<MockExamScorecardDto>>
 {
-    private readonly IApplicationDbContext _context = context;
-    private readonly IAiGradingService? _aiGradingService = aiGradingService;
+    private readonly IApplicationDbContext _context;
+    private readonly IAiGradingService? _aiGradingService;
+
+    public GetMockExamSessionDetailQueryHandler(
+        IApplicationDbContext context,
+        IAiGradingService? aiGradingService = null)
+    {
+        _context = context;
+        _aiGradingService = aiGradingService;
+    }
 
     public async Task<Result<MockExamScorecardDto>> Handle(
         GetMockExamSessionDetailQuery request,
@@ -35,11 +37,15 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             .Include(s => s.Course)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.Question)
+                    .ThenInclude(pq => pq.Clo)
+            .Include(s => s.Answers)
+                .ThenInclude(a => a.Question)
                     .ThenInclude(pq => pq.Rubric)
                         .ThenInclude(r => r.Criteria)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
                     .ThenInclude(e => e.Details)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
@@ -77,7 +83,6 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             }
         }
 
-        // Giữ đúng thứ tự đề thi; follow-up đi sau câu chính. Bỏ slot phụ pending chưa trả lời.
         var orderedAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
         var questionScores = new List<MockExamQuestionScoreDto>();
         bool isOverdue = session.SubmittedAt.HasValue && session.SubmittedAt.Value > session.ExpiresAt.AddSeconds(10);
@@ -151,7 +156,8 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 ImageDescription: a.IsFollowUp ? null : q.ImageDescription,
                 IsFollowUp: a.IsFollowUp,
                 AnswerId: a.Id,
-                ParentAnswerId: a.ParentAnswerId
+                ParentAnswerId: a.ParentAnswerId,
+                CloCode: q.Clo?.CloCode
             ));
         }
 
@@ -163,12 +169,18 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                 .FirstOrDefaultAsync(es => es.Id == session.ExamSetId, cancellationToken)
             : null;
 
-        int expectedTotalQuestions = examSet?.Structure?.TotalQuestions ?? 0;
+        int structureTotalQuestions = examSet?.Structure?.TotalQuestions ?? 0;
+        int expectedTotalQuestions = structureTotalQuestions > 0
+            ? structureTotalQuestions
+            : (mainAnswers.Count == 0 && session.Course is { MockExamTotalQuestions: > 0 }
+                ? session.Course.MockExamTotalQuestions
+                : 0);
         if (mainAnswers.Count == 0 && expectedTotalQuestions > 0)
         {
             var existingQuestionIds = mainAnswers.Select(a => a.QuestionId).ToHashSet();
             var missingCandidates = await _context.PracticeQuestions
                 .AsNoTracking()
+                .Include(pq => pq.Clo)
                 .Include(pq => pq.Rubric)
                     .ThenInclude(r => r.Criteria)
                 .Where(pq => pq.CourseId == session.CourseId && pq.IsActive && !existingQuestionIds.Contains(pq.Id))
@@ -210,7 +222,8 @@ public sealed class GetMockExamSessionDetailQueryHandler(
                     ImageDescription: missingQ.ImageDescription,
                     IsFollowUp: false,
                     AnswerId: null,
-                    ParentAnswerId: null
+                    ParentAnswerId: null,
+                    CloCode: missingQ.Clo?.CloCode
                 ));
             }
         }
@@ -229,28 +242,30 @@ public sealed class GetMockExamSessionDetailQueryHandler(
             _ => "Yếu"
         };
 
+        int totalQuestions = expectedTotalQuestions > 0
+            ? Math.Max(expectedTotalQuestions, mainScores.Count)
+            : mainScores.Count;
+        int answeredQuestions = mainScores.Count(q => !string.IsNullOrWhiteSpace(q.Transcript));
         int durationMinutes = session.ExpiresAt > session.StartedAt
             ? (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes)
             : 30;
 
-        int answeredQuestions = mainAnswers.Count(a => !string.IsNullOrWhiteSpace(a.AnswerText));
-
-        var response = new MockExamScorecardDto(
+        var scorecard = new MockExamScorecardDto(
             SessionId: session.Id,
             CourseId: session.CourseId,
             CourseCode: session.Course?.Code ?? string.Empty,
             CourseName: session.Course?.Name ?? string.Empty,
             TotalScore: totalScore,
             Classification: classification,
-            TotalQuestions: mainScores.Count,
+            TotalQuestions: totalQuestions,
             AnsweredQuestions: answeredQuestions,
             DurationMinutes: durationMinutes,
             IsOverdue: isOverdue,
             StartedAt: session.StartedAt,
-            SubmittedAt: session.SubmittedAt ?? session.ExpiresAt,
+            SubmittedAt: session.SubmittedAt ?? session.StartedAt,
             Questions: questionScores
         );
 
-        return Result<MockExamScorecardDto>.Success(response);
+        return Result<MockExamScorecardDto>.Success(scorecard);
     }
 }

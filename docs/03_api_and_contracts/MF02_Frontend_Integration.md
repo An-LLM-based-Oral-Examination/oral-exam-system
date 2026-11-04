@@ -207,7 +207,13 @@ Sinh viên thu âm bằng micro, gửi file âm thanh lên để Whisper AI bóc
     "questionId": "771bfa3c-535c-4c6e-9844-48b0a99ff521",
     "transcript": "Clean Architecture có 4 tầng chính: Domain chứa entities, Application điều phối use case, Infrastructure giao tiếp CSDL bên ngoài, và Presentation là API. Mọi phụ thuộc bắt buộc hướng vào trong.",
     "status": "answered",
-    "answeredAt": "2026-10-13T07:15:30Z"
+    "answeredAt": "2026-10-13T07:15:30Z",
+    "isFollowUp": false,
+    "parentAnswerId": null,
+    "followUpIndex": 0,
+    "needsFollowUp": false,
+    "followUpPrompt": null,
+    "remainingFollowUps": 0
   }
   ```
 * **Lưu ý đặc biệt cho Frontend:**

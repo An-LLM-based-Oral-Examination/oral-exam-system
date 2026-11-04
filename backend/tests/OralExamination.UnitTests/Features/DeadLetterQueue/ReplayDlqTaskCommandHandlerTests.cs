@@ -242,5 +242,186 @@ public class ReplayDlqTaskCommandHandlerTests
         var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
         updatedDlq!.Status.Should().Be("resolved");
         updatedDlq.ResolvedAt.Should().NotBeNull();
+        updatedDlq.NextRetryAt.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "6. ReplayDlqTaskCommand: Tác vụ MockExamGrading khôi phục MockExamSession về submitted và đánh dấu DLQ resolved")]
+    public async Task Handle_WhenMockExamGradingTask_ResetsMockExamSessionStatusToSubmitted()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var sessionId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = sessionId,
+            StudentId = studentId,
+            CourseId = courseId,
+            Status = "in_progress",
+            StartedAt = DateTime.UtcNow.AddMinutes(-30),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+            TotalScore = 5.0m
+        };
+        context.MockExamSessions.Add(session);
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "MockExamGrading",
+            FlowType = "MOCK_EXAM",
+            ManagedByRole = "admin",
+            CorrelationId = sessionId,
+            PayloadJson = JsonSerializer.Serialize(new { SessionId = sessionId, StudentId = studentId }),
+            ErrorMessage = "Transient Gemini error",
+            RetryCount = 1,
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, Guid.NewGuid(), "admin"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        var updatedSession = await context.MockExamSessions.FindAsync(sessionId);
+        updatedSession!.Status.Should().Be("submitted");
+        updatedSession.TotalScore.Should().BeNull();
+
+        var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        updatedDlq!.Status.Should().Be("resolved");
+        updatedDlq.ResolvedAt.Should().NotBeNull();
+        updatedDlq.NextRetryAt.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "7. ReplayDlqTaskCommand: Replay tác vụ Practice với role admin thành công")]
+    public async Task Handle_WhenPracticeTask_WithAdminRole_Succeeds()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var answerId = Guid.NewGuid();
+        var gradingTask = new GradingTask { AnswerId = answerId };
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "PRACTICE",
+            ManagedByRole = "admin",
+            PayloadJson = JsonSerializer.Serialize(gradingTask),
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "admin"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "8. ReplayDlqTaskCommand: Replay tác vụ Practice hoặc MockExam với role khác admin bị từ chối FORBIDDEN")]
+    public async Task Handle_WhenPracticeOrMockTask_WithNonAdminRole_ReturnsForbiddenFailure()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "PRACTICE",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act - Thử bằng role examination_officer hoặc lecturer
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "examination_officer"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("FORBIDDEN");
+        result.Error.Should().Contain("Quản trị viên (Admin)");
+    }
+
+    [Fact(DisplayName = "9. ReplayDlqTaskCommand: Replay tác vụ OfficialExam với role khác examination_officer bị từ chối FORBIDDEN")]
+    public async Task Handle_WhenOfficialExamTask_WithNonExamOfficerRole_ReturnsForbiddenFailure()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "OFFICIAL_EXAM",
+            ManagedByRole = "examination_officer",
+            PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(Guid.NewGuid(), Guid.NewGuid())),
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act - Thử bằng role admin
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "admin"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("FORBIDDEN");
+        result.Error.Should().Contain("Cán bộ Khảo thí");
+    }
+
+    [Fact(DisplayName = "10. ReplayDlqTaskCommand: Ghi nhận ResolvedByUserId khi người dùng thực hiện replay")]
+    public async Task Handle_WhenActorUserIdProvided_RecordsResolvedByUserId()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var actorUserId = Guid.NewGuid();
+        var answerId = Guid.NewGuid();
+        var gradingTask = new GradingTask { AnswerId = answerId };
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "PRACTICE",
+            ManagedByRole = "admin",
+            PayloadJson = JsonSerializer.Serialize(gradingTask),
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorUserId: actorUserId, ActorRole: "admin"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        updatedDlq!.ResolvedByUserId.Should().Be(actorUserId);
     }
 }

@@ -123,4 +123,102 @@ public class GetDlqTasksQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
     }
+
+    [Fact(DisplayName = "4. GetDlqTasksQuery: Lọc chính xác các tác vụ DLQ theo FlowType và FlowTypes")]
+    public async Task Handle_WithFlowTypeFilter_ReturnsFilteredTasks()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var practiceTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "PRACTICE",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        var mockTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "MockExamGrading",
+            FlowType = "MOCK_EXAM",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Error",
+            Status = "pending"
+        };
+        var officialTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "OFFICIAL_EXAM",
+            ManagedByRole = "examination_officer",
+            PayloadJson = "{}",
+            ErrorMessage = "Error",
+            Status = "pending"
+        };
+
+        context.DeadLetterQueues.AddRange(practiceTask, mockTask, officialTask);
+        await context.SaveChangesAsync();
+
+        var handler = new GetDlqTasksQueryHandler(context);
+
+        // Act 1: FlowTypes list contains PRACTICE and MOCK_EXAM
+        var resultAdminFlows = await handler.Handle(new GetDlqTasksQuery(FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM" }), CancellationToken.None);
+
+        // Assert 1
+        resultAdminFlows.IsSuccess.Should().BeTrue();
+        resultAdminFlows.Value.Should().HaveCount(2);
+        resultAdminFlows.Value.Select(x => x.FlowType).Should().Contain(new[] { "PRACTICE", "MOCK_EXAM" });
+
+        // Act 2: FlowType = OFFICIAL_EXAM
+        var resultOfficial = await handler.Handle(new GetDlqTasksQuery(FlowType: "OFFICIAL_EXAM"), CancellationToken.None);
+
+        // Assert 2
+        resultOfficial.IsSuccess.Should().BeTrue();
+        resultOfficial.Value.Should().HaveCount(1);
+        resultOfficial.Value[0].FlowType.Should().Be("OFFICIAL_EXAM");
+    }
+
+    [Fact(DisplayName = "5. GetDlqTasksQuery: Lọc chính xác các tác vụ DLQ theo ManagedByRole")]
+    public async Task Handle_WithManagedByRoleFilter_ReturnsFilteredTasks()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var adminTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "PRACTICE",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+        var examOfficerTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "OFFICIAL_EXAM",
+            ManagedByRole = "examination_officer",
+            PayloadJson = "{}",
+            ErrorMessage = "Timeout",
+            Status = "pending"
+        };
+
+        context.DeadLetterQueues.AddRange(adminTask, examOfficerTask);
+        await context.SaveChangesAsync();
+
+        var handler = new GetDlqTasksQueryHandler(context);
+
+        // Act
+        var result = await handler.Handle(new GetDlqTasksQuery(ManagedByRole: "examination_officer"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(1);
+        result.Value[0].ManagedByRole.Should().Be("examination_officer");
+    }
 }

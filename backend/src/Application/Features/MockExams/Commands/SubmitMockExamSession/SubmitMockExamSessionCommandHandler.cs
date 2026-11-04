@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -58,8 +59,12 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     .ThenInclude(pq => pq.Rubric)
                         .ThenInclude(r => r.Criteria)
             .Include(s => s.Answers)
+                .ThenInclude(a => a.Question)
+                    .ThenInclude(pq => pq.Clo)
+            .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
                     .ThenInclude(e => e.Details)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
@@ -154,7 +159,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     a.IsFollowUp ? null : q.ImageDescription,
                     a.IsFollowUp,
                     a.Id,
-                    a.ParentAnswerId
+                    a.ParentAnswerId,
+                    q.Clo?.CloCode
                 );
 
                 return (a, emptyQuestionScore, (AiEvaluation?)null);
@@ -226,7 +232,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                     a.IsFollowUp ? null : q.ImageDescription,
                     a.IsFollowUp,
                     a.Id,
-                    a.ParentAnswerId
+                    a.ParentAnswerId,
+                    q.Clo?.CloCode
                 );
 
                 return (a, cachedQuestionScoreDto, (AiEvaluation?)existingEval);
@@ -499,7 +506,8 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 a.IsFollowUp ? null : q.ImageDescription,
                 a.IsFollowUp,
                 a.Id,
-                a.ParentAnswerId
+                a.ParentAnswerId,
+                q.Clo?.CloCode
             );
 
             var aiEvaluation = new AiEvaluation
@@ -572,12 +580,52 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 .Select(r => (a: r.a, score: r.score!, eval: r.eval))
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
             // Persist First: Giữ nguyên trạng thái "submitted" và thời điểm SubmittedAt để bảo toàn bài làm của sinh viên,
             // cho phép hệ thống chấm điểm bù tự động (Background Worker / Lazy Recovery) ngay khi AI phục hồi.
             session.Status = "submitted";
             session.SubmittedAt = submittedAt;
+
+            var now = DateTime.UtcNow;
+            var existingDlq = await _context.DeadLetterQueues
+                .FirstOrDefaultAsync(q => q.CorrelationId == session.Id && q.Status == "pending", CancellationToken.None);
+
+            if (existingDlq != null)
+            {
+                existingDlq.RetryCount++;
+                existingDlq.LastAttemptAt = now;
+                existingDlq.ErrorMessage = ex.Message;
+                if (existingDlq.RetryCount >= 9)
+                {
+                    existingDlq.Status = "abandoned";
+                    existingDlq.NextRetryAt = null;
+                }
+                else
+                {
+                    existingDlq.Status = "pending";
+                    existingDlq.NextRetryAt = now.AddMinutes(5);
+                }
+            }
+            else
+            {
+                var dlqEntry = new OralExamination.Domain.Entities.DeadLetterQueue
+                {
+                    TaskType = "MockExamGrading",
+                    CorrelationId = session.Id,
+                    FlowType = "MOCK_EXAM",
+                    ManagedByRole = "admin",
+                    PayloadJson = JsonSerializer.Serialize(new { SessionId = session.Id, StudentId = session.StudentId }),
+                    ErrorMessage = ex.Message,
+                    RetryCount = 1,
+                    Status = "pending",
+                    NextRetryAt = now.AddMinutes(5),
+                    LastAttemptAt = now,
+                    CreatedAt = now
+                };
+                _context.DeadLetterQueues.Add(dlqEntry);
+            }
+
             await _context.SaveChangesAsync(CancellationToken.None);
             throw;
         }
@@ -782,6 +830,18 @@ public sealed class SubmitMockExamSessionCommandHandler(
         session.TotalScore = totalScore;
         session.Status = "graded";
         session.SubmittedAt = submittedAt;
+
+        var nowForDlq = DateTime.UtcNow;
+        var pendingDlqEntries = await _context.DeadLetterQueues
+            .Where(q => q.CorrelationId == session.Id && q.Status == "pending")
+            .ToListAsync(cancellationToken);
+        foreach (var dlq in pendingDlqEntries)
+        {
+            dlq.Status = "resolved";
+            dlq.ResolvedAt = nowForDlq;
+            dlq.NextRetryAt = null;
+            dlq.ResolutionNotes ??= "Auto-resolved after successful mock exam grading.";
+        }
 
         foreach (var r in results)
         {

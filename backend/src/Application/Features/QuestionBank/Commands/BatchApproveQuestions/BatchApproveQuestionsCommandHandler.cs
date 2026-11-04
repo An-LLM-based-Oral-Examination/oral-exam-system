@@ -118,43 +118,28 @@ public sealed class BatchApproveQuestionsCommandHandler
 
             _context.Rubrics.Add(rubric);
 
-            var keyPointsJson = JsonSerializer.Serialize(item.KeyPoints ?? new List<string>());
+            var keyPointsJson = JsonSerializer.Deserialize<List<string>>(
+                JsonSerializer.Serialize(item.KeyPoints ?? new List<string>())) is var kpList
+                ? JsonSerializer.Serialize(kpList)
+                : "[]";
             var normalizedScope = (item.UsageScope ?? "exam").Trim().ToLowerInvariant();
             var normalizedSource = string.IsNullOrWhiteSpace(item.Source) ? "flm_api" : item.Source.Trim();
             var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? null : item.ImageUrl.Trim();
             var imageDescription = string.IsNullOrWhiteSpace(item.ImageDescription) ? null : item.ImageDescription.Trim();
             var sharedQuestionId = Guid.NewGuid();
             Guid primaryQuestionId = sharedQuestionId;
+            var savedQuestionIds = new List<Guid>();
+            bool shouldSaveToPractice = normalizedScope is "practice" or "shared" or "both" or "all";
+            bool shouldSaveToExam = normalizedScope is not "practice";
 
-            if (normalizedScope == "practice")
-            {
-                var pq = new PracticeQuestion
-                {
-                    Id = sharedQuestionId,
-                    CourseId = request.CourseId,
-                    RubricId = rubric.Id,
-                    Rubric = rubric,
-                    Title = item.Title.Trim(),
-                    Content = item.Content.Trim(),
-                    SampleAnswer = item.ModelAnswer.Trim(),
-                    KeyPoints = keyPointsJson,
-                    Difficulty = string.IsNullOrWhiteSpace(item.Difficulty) ? "medium" : item.Difficulty.Trim().ToLowerInvariant(),
-                    BloomLevel = string.IsNullOrWhiteSpace(item.BloomLevel) ? "Understand" : item.BloomLevel.Trim(),
-                    HasFollowUp = item.HasFollowUp,
-                    FollowUpPrompt = item.FollowUpPrompt,
-                    ImageUrl = imageUrl,
-                    ImageDescription = imageDescription,
-                    IsActive = true,
-                    CreatedAt = now
-                };
-                _context.PracticeQuestions.Add(pq);
-            }
-            else
+            if (shouldSaveToExam)
             {
                 var eq = new ExamQuestion
                 {
                     Id = sharedQuestionId,
                     CourseId = request.CourseId,
+                    CloId = item.CloId,
+                    StructureId = item.StructureId,
                     RubricId = rubric.Id,
                     Rubric = rubric,
                     Title = item.Title.Trim(),
@@ -173,31 +158,43 @@ public sealed class BatchApproveQuestionsCommandHandler
                     CreatedAt = now
                 };
                 _context.ExamQuestions.Add(eq);
+                savedQuestionIds.Add(eq.Id);
+            }
 
-                if (normalizedScope is "shared" or "both" or "all")
+            if (shouldSaveToPractice)
+            {
+                var practiceQuestion = new PracticeQuestion
                 {
-                    var pq = new PracticeQuestion
-                    {
-                        Id = sharedQuestionId,
-                        CourseId = request.CourseId,
-                        RubricId = rubric.Id,
-                        Rubric = rubric,
-                        Title = item.Title.Trim(),
-                        Content = item.Content.Trim(),
-                        SampleAnswer = item.ModelAnswer.Trim(),
-                        KeyPoints = keyPointsJson,
-                        Difficulty = string.IsNullOrWhiteSpace(item.Difficulty) ? "medium" : item.Difficulty.Trim().ToLowerInvariant(),
-                        BloomLevel = string.IsNullOrWhiteSpace(item.BloomLevel) ? "Understand" : item.BloomLevel.Trim(),
-                        HasFollowUp = item.HasFollowUp,
-                        FollowUpPrompt = item.FollowUpPrompt,
-                        ImageUrl = imageUrl,
-                        ImageDescription = imageDescription,
-                        IsActive = true,
-                        CreatedAt = now
-                    };
-                    _context.PracticeQuestions.Add(pq);
+                    Id = sharedQuestionId,
+                    CourseId = request.CourseId,
+                    CloId = item.CloId,
+                    RubricId = rubric.Id,
+                    Rubric = rubric,
+                    Title = item.Title.Trim(),
+                    Content = item.Content.Trim(),
+                    SampleAnswer = item.ModelAnswer.Trim(),
+                    KeyPoints = keyPointsJson,
+                    Difficulty = string.IsNullOrWhiteSpace(item.Difficulty) ? "medium" : item.Difficulty.Trim().ToLowerInvariant(),
+                    BloomLevel = string.IsNullOrWhiteSpace(item.BloomLevel) ? "Understand" : item.BloomLevel.Trim(),
+                    HasFollowUp = item.HasFollowUp,
+                    FollowUpPrompt = item.FollowUpPrompt,
+                    ImageUrl = imageUrl,
+                    ImageDescription = imageDescription,
+                    Source = normalizedSource,
+                    ApprovalStatus = ApprovalStatus.Approved,
+                    ApprovedBy = request.ApproverUserId,
+                    SubmittedBy = request.ApproverUserId,
+                    IsActive = true,
+                    CreatedAt = now
+                };
+                _context.PracticeQuestions.Add(practiceQuestion);
+                if (!shouldSaveToExam)
+                {
+                    savedQuestionIds.Add(practiceQuestion.Id);
                 }
             }
+
+            primaryQuestionId = savedQuestionIds.FirstOrDefault(sharedQuestionId);
 
             approvedResults.Add(new ApprovedQuestionResultDto(
                 primaryQuestionId,

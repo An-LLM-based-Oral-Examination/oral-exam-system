@@ -12,7 +12,8 @@ public record MockExamCriterionScoreDto(
     string? BloomLevel,
     decimal MaxScore,
     decimal Score,
-    string? Comment
+    string? Comment,
+    string? CloCode = null
 );
 
 /// <summary>
@@ -34,7 +35,8 @@ public record MockExamQuestionScoreDto(
     string? ImageDescription = null,
     bool IsFollowUp = false,
     Guid? AnswerId = null,
-    Guid? ParentAnswerId = null
+    Guid? ParentAnswerId = null,
+    string? CloCode = null
 );
 
 /// <summary>
@@ -53,5 +55,6 @@ public record MockExamScorecardDto(
     bool IsOverdue,
     DateTime StartedAt,
     DateTime SubmittedAt,
-    List<MockExamQuestionScoreDto> Questions
+    List<MockExamQuestionScoreDto> Questions,
+    string? CloCode = null
 );

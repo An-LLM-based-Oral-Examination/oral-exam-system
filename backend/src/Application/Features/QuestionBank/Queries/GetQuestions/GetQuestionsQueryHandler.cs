@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,38 +25,123 @@ public sealed class GetQuestionsQueryHandler
         GetQuestionsQuery request,
         CancellationToken cancellationToken)
     {
-        var query = _context.ExamQuestions
+        var examQuery = _context.ExamQuestions
+            .Include(q => q.Course)
+            .Include(q => q.Rubric)
+            .AsNoTracking()
+            .AsQueryable();
+
+        var practiceQuery = _context.PracticeQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
             .AsNoTracking()
             .AsQueryable();
 
         if (request.CourseId.HasValue)
-            query = query.Where(q => q.CourseId == request.CourseId.Value);
+        {
+            examQuery = examQuery.Where(q => q.CourseId == request.CourseId.Value);
+            practiceQuery = practiceQuery.Where(q => q.CourseId == request.CourseId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.ApprovalStatus))
-            query = query.Where(q => q.ApprovalStatus == request.ApprovalStatus);
+        {
+            examQuery = examQuery.Where(q => q.ApprovalStatus == request.ApprovalStatus);
+            practiceQuery = practiceQuery.Where(q => q.ApprovalStatus == request.ApprovalStatus);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Difficulty))
-            query = query.Where(q => q.Difficulty == request.Difficulty);
+        {
+            examQuery = examQuery.Where(q => q.Difficulty == request.Difficulty);
+            practiceQuery = practiceQuery.Where(q => q.Difficulty == request.Difficulty);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.BloomLevel))
-            query = query.Where(q => q.BloomLevel == request.BloomLevel);
+        {
+            examQuery = examQuery.Where(q => q.BloomLevel == request.BloomLevel);
+            practiceQuery = practiceQuery.Where(q => q.BloomLevel == request.BloomLevel);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Source))
-            query = query.Where(q => q.Source == request.Source);
+        {
+            examQuery = examQuery.Where(q => q.Source == request.Source);
+            practiceQuery = practiceQuery.Where(q => q.Source == request.Source);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
-            query = query.Where(q => q.Title.Contains(request.Search) || q.Content.Contains(request.Search));
+        {
+            examQuery = examQuery.Where(q => q.Title.Contains(request.Search) || q.Content.Contains(request.Search));
+            practiceQuery = practiceQuery.Where(q => q.Title.Contains(request.Search) || q.Content.Contains(request.Search));
+        }
 
-        var totalCount = await query.CountAsync(cancellationToken);
         var pageNumber = Math.Max(1, request.PageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var normalizedScope = (request.UsageScope ?? string.Empty).Trim().ToLowerInvariant();
 
-        var items = await query
-            .OrderByDescending(q => q.CreatedAt)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        if (normalizedScope == "practice")
+        {
+            var practiceCount = await practiceQuery.CountAsync(cancellationToken);
+            var practicePageItems = await practiceQuery
+                .OrderByDescending(q => q.CreatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(q => new QuestionSummaryDto(
+                    q.Id,
+                    q.CourseId,
+                    q.Course.Code,
+                    q.Title,
+                    q.Difficulty,
+                    q.BloomLevel,
+                    q.Source,
+                    q.ApprovalStatus,
+                    q.SubmittedBy,
+                    q.ApprovedBy,
+                    q.CreatedAt,
+                    q.Rubric.TotalMaxScore,
+                    q.ImageUrl,
+                    q.ImageDescription,
+                    q.CloId,
+                    null
+                ))
+                .ToListAsync(cancellationToken);
+
+            var practicePages = (int)Math.Ceiling(practiceCount / (double)pageSize);
+            return Result<PagedResult<QuestionSummaryDto>>.Success(
+                new PagedResult<QuestionSummaryDto>(practicePageItems, practiceCount, pageNumber, pageSize, practicePages));
+        }
+
+        if (normalizedScope is "exam" or "official_exam")
+        {
+            var examCount = await examQuery.CountAsync(cancellationToken);
+            var examPageItems = await examQuery
+                .OrderByDescending(q => q.CreatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(q => new QuestionSummaryDto(
+                    q.Id,
+                    q.CourseId,
+                    q.Course.Code,
+                    q.Title,
+                    q.Difficulty,
+                    q.BloomLevel,
+                    q.Source,
+                    q.ApprovalStatus,
+                    q.SubmittedBy,
+                    q.ApprovedBy,
+                    q.CreatedAt,
+                    q.Rubric.TotalMaxScore,
+                    q.ImageUrl,
+                    q.ImageDescription,
+                    q.CloId,
+                    q.StructureId
+                ))
+                .ToListAsync(cancellationToken);
+
+            var examPages = (int)Math.Ceiling(examCount / (double)pageSize);
+            return Result<PagedResult<QuestionSummaryDto>>.Success(
+                new PagedResult<QuestionSummaryDto>(examPageItems, examCount, pageNumber, pageSize, examPages));
+        }
+
+        var examItems = await examQuery
             .Select(q => new QuestionSummaryDto(
                 q.Id,
                 q.CourseId,
@@ -70,9 +156,47 @@ public sealed class GetQuestionsQueryHandler
                 q.CreatedAt,
                 q.Rubric.TotalMaxScore,
                 q.ImageUrl,
-                q.ImageDescription
+                q.ImageDescription,
+                q.CloId,
+                q.StructureId
             ))
             .ToListAsync(cancellationToken);
+
+        var examIds = examItems.Select(x => x.Id).ToHashSet();
+
+        var practiceOnlyItems = await practiceQuery
+            .Where(q => !examIds.Contains(q.Id))
+            .Select(q => new QuestionSummaryDto(
+                q.Id,
+                q.CourseId,
+                q.Course.Code,
+                q.Title,
+                q.Difficulty,
+                q.BloomLevel,
+                q.Source,
+                q.ApprovalStatus,
+                q.SubmittedBy,
+                q.ApprovedBy,
+                q.CreatedAt,
+                q.Rubric.TotalMaxScore,
+                q.ImageUrl,
+                q.ImageDescription,
+                q.CloId,
+                null
+            ))
+            .ToListAsync(cancellationToken);
+
+        var combined = examItems
+            .Concat(practiceOnlyItems)
+            .OrderByDescending(q => q.CreatedAt)
+            .ToList();
+
+        var totalCount = combined.Count;
+
+        var items = combined
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
         var result = new PagedResult<QuestionSummaryDto>(items, totalCount, pageNumber, pageSize, totalPages);

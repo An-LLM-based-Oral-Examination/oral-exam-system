@@ -30,6 +30,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                 .ThenInclude(a => a.AiEvaluations)
                     .ThenInclude(e => e.Details)
                         .ThenInclude(d => d.Criterion)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
@@ -53,7 +54,10 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
         var sessionAnswers = session.Answers ?? Array.Empty<Domain.Entities.PracticeAnswer>();
 
         var orderedQuestionIds = new List<Guid>(session.SelectedQuestionIds);
-        foreach (var answeredQid in sessionAnswers.OrderBy(a => a.SubmittedAt).Select(a => a.QuestionId))
+        foreach (var answeredQid in sessionAnswers
+                     .OrderBy(a => a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue)
+                     .ThenBy(a => a.SubmittedAt)
+                     .Select(a => a.QuestionId))
         {
             if (answeredQid != Guid.Empty && !orderedQuestionIds.Contains(answeredQid))
             {
@@ -139,7 +143,9 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
             : 2;
 
         var answerDtos = sessionAnswers
-            .OrderBy(a => a.SubmittedAt)
+            .OrderBy(a => a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue)
+            .ThenBy(a => a.IsFollowUp ? 1 : 0)
+            .ThenBy(a => a.SubmittedAt)
             .Select(a =>
             {
                 var evaluation = a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();

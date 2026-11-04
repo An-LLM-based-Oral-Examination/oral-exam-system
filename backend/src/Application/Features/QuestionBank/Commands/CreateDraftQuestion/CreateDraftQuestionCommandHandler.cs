@@ -128,36 +128,46 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         var approvalStatus = isAutoApproved ? ApprovalStatus.Approved : ApprovalStatus.Draft;
         Guid? approvedBy = isAutoApproved ? request.ApprovedBy!.Value : null;
 
-        var questionId = Guid.NewGuid();
-        var eq = new ExamQuestion
-        {
-            Id = questionId,
-            CourseId = request.CourseId,
-            RubricId = rubric.Id,
-            Rubric = rubric,
-            Title = request.Title,
-            Content = request.Content,
-            SampleAnswer = request.SampleAnswer,
-            KeyPoints = keyPointsJson,
-            Difficulty = request.Difficulty,
-            BloomLevel = request.BloomLevel,
-            Source = request.Source ?? "manual",
-            ApprovalStatus = approvalStatus,
-            ApprovedBy = approvedBy,
-            SubmittedBy = request.LecturerId,
-            ImageUrl = imageUrl,
-            ImageDescription = imageDescription,
-            IsActive = normalizedScope != "practice",
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.ExamQuestions.Add(eq);
+        bool createPractice = normalizedScope is "practice" or "both" or "all" or "shared";
+        bool createExam = normalizedScope is not "practice";
 
-        if (normalizedScope is "practice" or "both" or "all" or "shared")
+        var questionId = Guid.NewGuid();
+
+        if (createExam)
+        {
+            var eq = new ExamQuestion
+            {
+                Id = questionId,
+                CourseId = request.CourseId,
+                CloId = request.CloId,
+                StructureId = request.StructureId,
+                RubricId = rubric.Id,
+                Rubric = rubric,
+                Title = request.Title,
+                Content = request.Content,
+                SampleAnswer = request.SampleAnswer,
+                KeyPoints = keyPointsJson,
+                Difficulty = request.Difficulty,
+                BloomLevel = request.BloomLevel,
+                Source = request.Source ?? "manual",
+                ApprovalStatus = approvalStatus,
+                ApprovedBy = approvedBy,
+                SubmittedBy = request.LecturerId,
+                ImageUrl = imageUrl,
+                ImageDescription = imageDescription,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.ExamQuestions.Add(eq);
+        }
+
+        if (createPractice)
         {
             var pq = new PracticeQuestion
             {
                 Id = questionId,
                 CourseId = request.CourseId,
+                CloId = request.CloId,
                 RubricId = rubric.Id,
                 Rubric = rubric,
                 Title = request.Title,
@@ -170,6 +180,10 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 FollowUpPrompt = request.FollowUpPrompt,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
+                Source = request.Source ?? "manual",
+                ApprovalStatus = approvalStatus,
+                ApprovedBy = approvedBy,
+                SubmittedBy = request.LecturerId,
                 IsActive = isAutoApproved,
                 CreatedAt = DateTime.UtcNow
             };

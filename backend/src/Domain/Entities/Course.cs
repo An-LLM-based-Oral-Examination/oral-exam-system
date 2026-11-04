@@ -9,17 +9,24 @@ public partial class Course
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Code { get; set; } = null!;
     public string Name { get; set; } = null!;
+    public string? Description { get; set; }
     public int Credits { get; set; } = 3;
     public Guid SemesterId { get; set; }
     public bool HasFollowUp { get; set; } = false;
     public int TranscriptBufferSeconds { get; set; } = 60;
     public int MaxFollowUpQuestions { get; set; } = 2;
     public int MaxMockExamsPerDay { get; set; } = 3;
+    public int MockExamDurationMinutes { get; set; } = 30;
+    public int MockExamTotalQuestions { get; set; } = 5;
+    public string MockExamBloomDistribution { get; set; } = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}";
     public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
+    public Guid? DepartmentHeadUserId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public virtual User? DepartmentHeadUser { get; set; }
     public virtual Semester Semester { get; set; } = null!;
+    public virtual ICollection<CourseLecturer> CourseLecturers { get; set; } = new List<CourseLecturer>();
     public virtual ICollection<Class> Classes { get; set; } = new List<Class>();
     public virtual ICollection<Rubric> Rubrics { get; set; } = new List<Rubric>();
     public virtual ICollection<PracticeQuestion> PracticeQuestions { get; set; } = new List<PracticeQuestion>();

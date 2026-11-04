@@ -19,7 +19,11 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is missing.");
 
-        var usePostgres = IsPostgresEndpointReachable(connectionString);
+        var allowInMemoryFallback = bool.TryParse(
+            configuration["Database:AllowInMemoryFallback"] ?? configuration["DATABASE_ALLOW_IN_MEMORY_FALLBACK"],
+            out var parsedAllowFallback) && parsedAllowFallback;
+
+        var usePostgres = !allowInMemoryFallback || IsPostgresEndpointReachable(connectionString);
 
         services.AddScoped<OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor>();
 

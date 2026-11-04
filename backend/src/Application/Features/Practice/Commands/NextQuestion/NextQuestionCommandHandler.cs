@@ -4,6 +4,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -91,7 +92,7 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         // 5. Pha 1: Truy vấn danh sách (Id, Difficulty) nhẹ của môn học trên Index, không kéo toàn bộ Content/Rubric/Criteria lên RAM
         var allCourseQuestionMeta = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == session.CourseId && q.IsActive)
+            .Where(q => q.CourseId == session.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 

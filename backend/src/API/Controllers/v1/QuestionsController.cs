@@ -33,17 +33,12 @@ public class QuestionsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User?.FindFirst("sub")?.Value;
+        var claim = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User?.FindFirstValue("sub");
 
         if (Guid.TryParse(claim, out var id))
         {
             return id;
-        }
-
-        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
-        {
-            return headerId;
         }
 
         return Guid.Empty;
@@ -153,7 +148,13 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> CreateDraftQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var lecturerId = currentUserId != Guid.Empty ? currentUserId : (request.LecturerId ?? Guid.Empty);
+        var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
+        var lecturerId = currentUserId != Guid.Empty
+            ? (isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty ? request.LecturerId.Value : currentUserId)
+            : (request.LecturerId ?? Guid.Empty);
+        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
+            ? null
+            : request.ApprovedBy;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
@@ -170,9 +171,11 @@ public class QuestionsController : ControllerBase
             request.FollowUpPrompt,
             request.Rubric!,
             request.RubricId,
-            request.ApprovedBy,
+            approvedBy,
             request.ImageUrl,
-            request.ImageDescription
+            request.ImageDescription,
+            request.CloId,
+            request.StructureId
         );
 
         var result = await _sender.Send(command);
@@ -191,7 +194,13 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> CreatePracticeQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var lecturerId = currentUserId != Guid.Empty ? currentUserId : (request.LecturerId ?? Guid.Empty);
+        var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
+        var lecturerId = currentUserId != Guid.Empty
+            ? (isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty ? request.LecturerId.Value : currentUserId)
+            : (request.LecturerId ?? Guid.Empty);
+        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
+            ? null
+            : request.ApprovedBy;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
@@ -208,9 +217,11 @@ public class QuestionsController : ControllerBase
             request.FollowUpPrompt,
             request.Rubric!,
             request.RubricId,
-            request.ApprovedBy,
+            approvedBy,
             request.ImageUrl,
-            request.ImageDescription
+            request.ImageDescription,
+            request.CloId,
+            request.StructureId
         );
 
         var result = await _sender.Send(command);
@@ -250,7 +261,9 @@ public class QuestionsController : ControllerBase
             request.RubricId,
             approvedBy,
             request.ImageUrl,
-            request.ImageDescription
+            request.ImageDescription,
+            request.CloId,
+            request.StructureId
         );
 
         var result = await _sender.Send(command);

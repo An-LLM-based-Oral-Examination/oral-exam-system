@@ -48,7 +48,7 @@ public class SemestersController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin,department_head")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreateSemester(
         [FromBody] SaveSemesterRequest request,
         CancellationToken cancellationToken = default)
@@ -67,7 +67,7 @@ public class SemestersController(ISender sender) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "admin,department_head")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> UpdateSemester(
         [FromRoute] Guid id,
         [FromBody] SaveSemesterRequest request,
@@ -92,9 +92,10 @@ public class SemestersController(ISender sender) : ControllerBase
         [FromQuery] Guid? courseId = null,
         [FromQuery] Guid? semesterId = null,
         [FromQuery] bool? isActive = null,
+        [FromQuery] Guid? lecturerId = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetAcademicClassesQuery(courseId, semesterId, isActive), cancellationToken);
+        var result = await _sender.Send(new GetAcademicClassesQuery(courseId, semesterId, isActive, lecturerId), cancellationToken);
         return Ok(result.Value);
     }
 

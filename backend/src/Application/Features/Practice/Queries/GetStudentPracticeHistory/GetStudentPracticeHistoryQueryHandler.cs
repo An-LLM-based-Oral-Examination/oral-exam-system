@@ -46,6 +46,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 .ThenInclude(a => a.AiEvaluations)
                     .ThenInclude(e => e.Details)
                         .ThenInclude(d => d.Criterion)
+            .AsSplitQuery()
             .Where(s => s.StudentId == request.StudentId)
             .OrderByDescending(s => s.StartedAt)
             .ThenByDescending(s => s.Id)
@@ -54,9 +55,6 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
         var result = sessions.Select(s =>
         {
             var answers = s.Answers ?? new List<PracticeAnswer>();
-            var isFullSession = string.Equals(s.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
-            var isCompleted = string.Equals(s.Status, "completed", StringComparison.OrdinalIgnoreCase);
-
             var plannedQuestionCount = s.SelectedQuestionIds.Count;
             var distinctMainQuestionIds = answers
                 .Where(a => !a.IsFollowUp)
@@ -71,61 +69,7 @@ public sealed class GetStudentPracticeHistoryQueryHandler : IRequestHandler<GetS
                 .Count();
             var totalQuestions = Math.Max(plannedQuestionCount, answeredMainCount);
 
-            var mainScores = answers
-                .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
-                .GroupBy(a => a.QuestionId)
-                .Select(g =>
-                {
-                    var mainAnswerEval = g
-                        .Where(a => !a.IsFollowUp)
-                        .SelectMany(a => a.AiEvaluations)
-                        .OrderByDescending(e => e.EvaluatedAt)
-                        .FirstOrDefault();
-                    var followUpEvals = g
-                        .Where(a => a.IsFollowUp)
-                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
-                        .Where(e => e != null)
-                        .Cast<AiEvaluation>()
-                        .ToList();
-
-                    return FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainAnswerEval, followUpEvals);
-                })
-                .ToList();
-
-            bool hasPendingAnswers = answers.Any(a =>
-                string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase));
-
-            decimal? avgScore = null;
-            if (isFullSession && isCompleted && totalQuestions > 0)
-            {
-                if (hasPendingAnswers)
-                {
-                    avgScore = null;
-                }
-                else if (mainScores.Count > 0)
-                {
-                    avgScore = Math.Round(mainScores.Sum() / totalQuestions, 2, MidpointRounding.AwayFromZero);
-                }
-                else
-                {
-                    avgScore = 0.0m;
-                }
-            }
-            else if (!hasPendingAnswers)
-            {
-                var fallbackScores = mainScores.Count > 0
-                    ? mainScores
-                    : answers
-                        .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
-                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).First().TotalScore)
-                        .ToList();
-
-                if (fallbackScores.Count > 0)
-                {
-                    avgScore = Math.Round(fallbackScores.Average(), 2, MidpointRounding.AwayFromZero);
-                }
-            }
+            var avgScore = s.TotalScore ?? PracticeSessionTimeoutHelper.ComputeSessionTotalScore(s, answers);
 
             return new PracticeHistoryItemDto
             {

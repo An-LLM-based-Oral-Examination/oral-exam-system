@@ -60,11 +60,13 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
         var now = DateTime.UtcNow;
         var entries = await context.DeadLetterQueues
-            .Where(entry => (entry.TaskType == "OfficialExamGrading" || entry.TaskType == "PracticeGrading") &&
+            .Where(entry => (entry.TaskType == "OfficialExamGrading" || entry.TaskType == "PracticeGrading" || entry.TaskType == "MockExamGrading") &&
                 entry.Status == "pending" && entry.NextRetryAt != null && entry.NextRetryAt <= now)
             .OrderBy(entry => entry.NextRetryAt)
             .Take(50)
             .ToListAsync(cancellationToken);
+
+        var dueMockSessionIds = new HashSet<Guid>();
 
         foreach (var entry in entries)
         {
@@ -88,6 +90,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 catch (JsonException exception)
                 {
                     entry.Status = "abandoned";
+                    entry.NextRetryAt = null;
                     entry.LastAttemptAt = now;
                     entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
                     continue;
@@ -96,6 +99,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 if (practiceTask is null)
                 {
                     entry.Status = "abandoned";
+                    entry.NextRetryAt = null;
                     entry.LastAttemptAt = now;
                     entry.ErrorMessage = "Invalid DLQ payload: Deserialized task is null.";
                     continue;
@@ -107,6 +111,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 {
                     entry.Status = answer?.Status == "graded" ? "resolved" : "abandoned";
                     entry.ResolvedAt = now;
+                    entry.NextRetryAt = null;
                     entry.LastAttemptAt = now;
                     continue;
                 }
@@ -120,7 +125,43 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 answer.Status = "pending";
                 entry.Status = "resolved";
                 entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
                 entry.LastAttemptAt = now;
+                continue;
+            }
+
+            if (string.Equals(entry.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase))
+            {
+                if (entry.RetryCount >= 9)
+                {
+                    entry.Status = "abandoned";
+                    entry.NextRetryAt = null;
+                    entry.LastAttemptAt = now;
+                    continue;
+                }
+
+                Guid sessionId = entry.CorrelationId ?? Guid.Empty;
+                var session = sessionId != Guid.Empty
+                    ? await context.MockExamSessions.FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken)
+                    : null;
+
+                var isSessionGraded = session != null &&
+                    (string.Equals(session.Status, "graded", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                     session.TotalScore.HasValue);
+                if (session == null || isSessionGraded)
+                {
+                    entry.Status = isSessionGraded ? "resolved" : "abandoned";
+                    entry.ResolvedAt = now;
+                    entry.NextRetryAt = null;
+                    entry.LastAttemptAt = now;
+                    continue;
+                }
+
+                session.Status = "submitted";
+                entry.LastAttemptAt = now;
+                entry.NextRetryAt = now.AddMinutes(5);
+                dueMockSessionIds.Add(session.Id);
                 continue;
             }
 
@@ -132,6 +173,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             catch (JsonException exception)
             {
                 entry.Status = "abandoned";
+                entry.NextRetryAt = null;
                 entry.LastAttemptAt = now;
                 entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
                 continue;
@@ -144,6 +186,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             {
                 entry.Status = job?.Status == "completed" ? "resolved" : "abandoned";
                 entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
                 entry.LastAttemptAt = now;
                 continue;
             }
@@ -160,18 +203,20 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             }
             entry.Status = "resolved";
             entry.ResolvedAt = now;
+            entry.NextRetryAt = null;
             entry.LastAttemptAt = now;
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        await RecoverInterruptedPracticeAndMockSessionsAsync(scope.ServiceProvider, context, now, cancellationToken);
+        await RecoverInterruptedPracticeAndMockSessionsAsync(scope.ServiceProvider, context, now, dueMockSessionIds, cancellationToken);
     }
 
     private async Task RecoverInterruptedPracticeAndMockSessionsAsync(
         IServiceProvider serviceProvider,
         OralExamDbContext context,
         DateTime now,
+        HashSet<Guid> dueMockSessionIds,
         CancellationToken cancellationToken)
     {
         // 1. Khôi phục các câu trả lời Luyện tập (MF-01) bị treo ở trạng thái "pending" quá 2 phút (do sập mạng / restart tiến trình)
@@ -215,11 +260,26 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             return;
         }
 
+        var backoffMockSessionIds = await context.DeadLetterQueues
+            .AsNoTracking()
+            .Where(q => q.Status == "pending" &&
+                        q.TaskType == "MockExamGrading" &&
+                        q.CorrelationId != null &&
+                        q.NextRetryAt != null &&
+                        q.NextRetryAt > now)
+            .Select(q => q.CorrelationId!.Value)
+            .ToListAsync(cancellationToken);
+
+        var excludedSessionIds = backoffMockSessionIds
+            .Where(id => !dueMockSessionIds.Contains(id))
+            .ToHashSet();
+
         var interruptedMockSessions = await context.MockExamSessions
             .AsNoTracking()
             .Where(s =>
-                (s.Status == "in_progress" && now > s.ExpiresAt.AddSeconds(15)) ||
-                (s.Status == "submitted" && s.TotalScore == null))
+                !excludedSessionIds.Contains(s.Id) &&
+                ((s.Status == "in_progress" && now > s.ExpiresAt.AddSeconds(15)) ||
+                 (s.Status == "submitted" && s.TotalScore == null)))
             .OrderBy(s => s.ExpiresAt)
             .Take(10)
             .ToListAsync(cancellationToken);

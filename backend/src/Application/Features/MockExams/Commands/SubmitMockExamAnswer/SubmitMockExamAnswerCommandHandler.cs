@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -23,8 +22,6 @@ namespace OralExamination.Application.Features.MockExams.Commands.SubmitMockExam
 public sealed class SubmitMockExamAnswerCommandHandler
     : IRequestHandler<SubmitMockExamAnswerCommand, Result<SubmitMockExamAnswerResponse>>
 {
-    private static readonly ConcurrentDictionary<Guid, string> VoiceTranscriptBaselines = new();
-
     private readonly IApplicationDbContext _context;
     private readonly ISpeechToTextService _speechToTextService;
     private readonly IAiGradingService? _aiGradingService;
@@ -315,56 +312,22 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
     public static void ClearVoiceBaselines(IEnumerable<Guid> answerIds)
     {
-        if (answerIds == null)
-        {
-            return;
-        }
-
-        foreach (var id in answerIds)
-        {
-            if (id != Guid.Empty)
-            {
-                VoiceTranscriptBaselines.TryRemove(id, out _);
-            }
-        }
     }
 
     private static void LockVoiceBaseline(MockExamAnswer targetAnswer, string voiceTranscript)
     {
-        var cleanBaseline = voiceTranscript.Trim();
-        targetAnswer.InitialVoiceTranscript = cleanBaseline;
-        if (targetAnswer.Id != Guid.Empty)
-        {
-            VoiceTranscriptBaselines[targetAnswer.Id] = cleanBaseline;
-        }
+        targetAnswer.InitialVoiceTranscript = voiceTranscript.Trim();
     }
 
     private static string ResolveImmutableVoiceBaseline(MockExamAnswer targetAnswer)
     {
         if (!string.IsNullOrWhiteSpace(targetAnswer.InitialVoiceTranscript))
         {
-            var initial = targetAnswer.InitialVoiceTranscript.Trim();
-            if (targetAnswer.Id != Guid.Empty)
-            {
-                VoiceTranscriptBaselines.TryAdd(targetAnswer.Id, initial);
-            }
-            return initial;
-        }
-
-        if (targetAnswer.Id != Guid.Empty &&
-            VoiceTranscriptBaselines.TryGetValue(targetAnswer.Id, out var cachedBaseline) &&
-            !string.IsNullOrWhiteSpace(cachedBaseline))
-        {
-            targetAnswer.InitialVoiceTranscript = cachedBaseline;
-            return cachedBaseline;
+            return targetAnswer.InitialVoiceTranscript.Trim();
         }
 
         var fallbackBaseline = targetAnswer.AnswerText!.Trim();
         targetAnswer.InitialVoiceTranscript = fallbackBaseline;
-        if (targetAnswer.Id != Guid.Empty)
-        {
-            VoiceTranscriptBaselines.TryAdd(targetAnswer.Id, fallbackBaseline);
-        }
         return fallbackBaseline;
     }
 

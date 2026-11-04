@@ -22,19 +22,21 @@ public sealed class CreateCourseCloCommandHandler : IRequestHandler<CreateCourse
 
     public async Task<Result<CourseCloDto>> Handle(CreateCourseCloCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !string.Equals(request.ActorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(request.ActorRole, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(request.ActorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+        var (actorRole, actorUserId) = ParseActorRoleAndId(request.ActorRole);
+
+        if (!string.IsNullOrWhiteSpace(actorRole) &&
+            !string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(actorRole, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase))
         {
-            return Result<CourseCloDto>.Failure("FORBIDDEN: Chỉ có Trưởng bộ môn, Cán bộ khảo thí hoặc Admin mới có quyền tạo CLO môn học.");
+            return Result<CourseCloDto>.Failure("FORBIDDEN: Chỉ có Trưởng bộ môn hoặc Admin mới có quyền tạo CLO môn học.");
         }
 
-        var courseExists = await _context.Courses
+        var course = await _context.Courses
             .AsNoTracking()
-            .AnyAsync(c => c.Id == request.CourseId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
 
-        if (!courseExists)
+        if (course == null)
         {
             return Result<CourseCloDto>.Failure("Môn học không tồn tại trong hệ thống.");
         }
@@ -47,6 +49,20 @@ public sealed class CreateCourseCloCommandHandler : IRequestHandler<CreateCourse
         if (codeExists)
         {
             return Result<CourseCloDto>.Failure($"Mã chuẩn đầu ra '{normalizedCode}' đã tồn tại trong môn học này.");
+        }
+
+        if (string.Equals(actorRole, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CourseCloDto>.Failure("FORBIDDEN: Chỉ có Trưởng bộ môn hoặc Admin mới có quyền tạo CLO môn học.");
+        }
+
+        if (string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
+            course.DepartmentHeadUserId.HasValue &&
+            actorUserId.HasValue &&
+            actorUserId.Value != Guid.Empty &&
+            course.DepartmentHeadUserId.Value != actorUserId.Value)
+        {
+            return Result<CourseCloDto>.Failure("FORBIDDEN: Trưởng bộ môn chỉ được quản lý CLO của môn học do mình phụ trách.");
         }
 
         var clo = new CourseClo
@@ -77,5 +93,26 @@ public sealed class CreateCourseCloCommandHandler : IRequestHandler<CreateCourse
         };
 
         return Result<CourseCloDto>.Success(dto);
+    }
+
+    private static (string? Role, Guid? UserId) ParseActorRoleAndId(string? rawActorRole)
+    {
+        if (string.IsNullOrWhiteSpace(rawActorRole))
+        {
+            return (null, null);
+        }
+
+        var separatorIndex = rawActorRole.IndexOf(':');
+        if (separatorIndex > 0)
+        {
+            var rolePart = rawActorRole[..separatorIndex].Trim();
+            var idPart = rawActorRole[(separatorIndex + 1)..].Trim();
+            if (Guid.TryParse(idPart, out var parsedId) && parsedId != Guid.Empty)
+            {
+                return (rolePart, parsedId);
+            }
+        }
+
+        return (rawActorRole.Trim(), null);
     }
 }

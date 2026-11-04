@@ -30,6 +30,7 @@ public sealed class ResumeMockExamSessionQueryHandler(
                 .ThenInclude(a => a.Question!)
                     .ThenInclude(q => q.Rubric!)
                         .ThenInclude(r => r.Criteria)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session is null)

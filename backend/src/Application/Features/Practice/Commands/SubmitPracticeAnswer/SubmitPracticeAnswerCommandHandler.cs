@@ -4,6 +4,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -74,25 +75,52 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
         {
             if (request.ParentAnswerId.HasValue && request.ParentAnswerId.Value != Guid.Empty)
             {
-                var parentCot = await _context.AiEvaluations
+                var parentEval = await _context.AiEvaluations
                     .AsNoTracking()
                     .Where(e => e.PracticeAnswerId == request.ParentAnswerId.Value)
                     .OrderByDescending(e => e.EvaluatedAt)
-                    .Select(e => e.CotTrace)
                     .FirstOrDefaultAsync(cancellationToken);
-                resolvedPromptText = FollowUpPromptBuilder.TryExtractFollowUpFromCot(parentCot);
+                resolvedPromptText = FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt(parentEval);
             }
 
             if (string.IsNullOrWhiteSpace(resolvedPromptText))
             {
-                var latestPriorCot = await _context.PracticeAnswers
+                var latestPriorEval = await _context.PracticeAnswers
                     .AsNoTracking()
                     .Where(a => a.SessionId == request.SessionId && a.QuestionId == request.QuestionId)
                     .OrderByDescending(a => a.SubmittedAt)
                     .SelectMany(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
-                    .Select(e => e.CotTrace)
                     .FirstOrDefaultAsync(cancellationToken);
-                resolvedPromptText = FollowUpPromptBuilder.TryExtractFollowUpFromCot(latestPriorCot);
+                resolvedPromptText = FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt(latestPriorEval);
+            }
+        }
+
+        int orderIndex = 1;
+        var idxInSelected = session.SelectedQuestionIds.IndexOf(request.QuestionId);
+        if (idxInSelected >= 0)
+        {
+            orderIndex = idxInSelected + 1;
+        }
+        else
+        {
+            var existingOrderForQuestion = await _context.PracticeAnswers
+                .AsNoTracking()
+                .Where(a => a.SessionId == request.SessionId && a.QuestionId == request.QuestionId)
+                .Select(a => (int?)a.OrderIndex)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingOrderForQuestion is > 0)
+            {
+                orderIndex = existingOrderForQuestion.Value;
+            }
+            else
+            {
+                var existingDistinctQuestions = await _context.PracticeAnswers
+                    .AsNoTracking()
+                    .Where(a => a.SessionId == request.SessionId)
+                    .Select(a => a.QuestionId)
+                    .Distinct()
+                    .CountAsync(cancellationToken);
+                orderIndex = existingDistinctQuestions + 1;
             }
         }
 
@@ -101,6 +129,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             SessionId = request.SessionId,
             QuestionId = request.QuestionId,
             StudentId = request.StudentId,
+            OrderIndex = orderIndex,
             AnswerText = request.AnswerText,
             IsFollowUp = request.IsFollowUp,
             ParentAnswerId = request.ParentAnswerId,
@@ -111,6 +140,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
 
         _context.PracticeAnswers.Add(answer);
         session.LastActivityAt = DateTime.UtcNow;
+        session.TotalScore = null;
         await _context.SaveChangesAsync(cancellationToken); // Tiêu chí: Lưu cực nhanh < 100ms
 
         // 3. Đẩy vào Hàng đợi BoundedChannel để chấm ngầm

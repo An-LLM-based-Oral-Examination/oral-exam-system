@@ -14,7 +14,8 @@ namespace OralExamination.Application.Features.Semesters.Queries.GetAcademicClas
 public sealed record GetAcademicClassesQuery(
     Guid? CourseId = null,
     Guid? SemesterId = null,
-    bool? IsActive = null) : IRequest<Result<List<AcademicClassItemDto>>>;
+    bool? IsActive = null,
+    Guid? LecturerId = null) : IRequest<Result<List<AcademicClassItemDto>>>;
 
 public sealed class GetAcademicClassesQueryHandler
     : IRequestHandler<GetAcademicClassesQuery, Result<List<AcademicClassItemDto>>>
@@ -52,12 +53,18 @@ public sealed class GetAcademicClassesQueryHandler
             query = query.Where(c => c.IsActive == request.IsActive.Value);
         }
 
+        if (request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty)
+        {
+            query = query.Where(c => c.LecturerId == request.LecturerId.Value);
+        }
+
         var items = await query
             .OrderBy(c => c.Code)
             .Select(c => new AcademicClassItemDto
             {
                 Id = c.Id,
                 Code = c.Code,
+                Name = c.Name,
                 CourseId = c.CourseId,
                 CourseCode = c.Course != null ? c.Course.Code : string.Empty,
                 CourseName = c.Course != null ? c.Course.Name : string.Empty,
@@ -68,7 +75,10 @@ public sealed class GetAcademicClassesQueryHandler
                 MaxStudents = c.MaxStudents,
                 EnrolledStudentsCount = c.Enrollments.Count,
                 IsActive = c.IsActive,
-                CreatedAt = c.CreatedAt
+                CreatedAt = c.CreatedAt,
+                JoinCode = c.JoinCode,
+                IsJoinEnabled = c.IsJoinEnabled,
+                HasPassword = c.JoinPasswordHash != null && c.JoinPasswordHash != string.Empty
             })
             .ToListAsync(cancellationToken);
 

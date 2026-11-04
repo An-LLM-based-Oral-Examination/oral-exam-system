@@ -21,6 +21,7 @@ public partial class PracticeSession
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = "in_progress";
+    public decimal? TotalScore { get; set; }
     public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
     public string SelectedDifficulties { get; set; } = "[]";
     public string SelectedQuestionIdsJson { get; set; } = "[]";

@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
 
 namespace OralExamination.Application.Features.DeadLetterQueue.Commands.ReplayDlqTask;
 
@@ -13,13 +14,16 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly IGradingQueueChannel _gradingQueueChannel;
+    private readonly IAiGradingService? _aiGradingService;
 
     public ReplayDlqTaskCommandHandler(
         IApplicationDbContext context,
-        IGradingQueueChannel gradingQueueChannel)
+        IGradingQueueChannel gradingQueueChannel,
+        IAiGradingService? aiGradingService = null)
     {
         _context = context;
         _gradingQueueChannel = gradingQueueChannel;
+        _aiGradingService = aiGradingService;
     }
 
     public async Task<Result<Unit>> Handle(ReplayDlqTaskCommand request, CancellationToken cancellationToken)
@@ -37,12 +41,42 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Tác vụ DLQ đã được giải quyết (resolved) trước đó.");
         }
 
+        var isPracticeOrMockTask =
+            string.Equals(dlqItem.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "PRACTICE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase);
+
+        var isOfficialTask = !isPracticeOrMockTask && (
+            string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "OFFICIAL_EXAM", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.ManagedByRole, "examination_officer", StringComparison.OrdinalIgnoreCase));
+
+        if (request.ActorRole != null)
+        {
+            if (isPracticeOrMockTask && !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Quản trị viên (Admin) mới có quyền replay tác vụ Luyện tập hoặc Thi thử.");
+            }
+
+            if (isOfficialTask && !string.Equals(request.ActorRole, "examination_officer", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Cán bộ Khảo thí (Examination Officer) mới có quyền replay tác vụ Thi thật.");
+            }
+        }
+
         var options = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         };
 
         var now = DateTime.UtcNow;
+
+        if (request.ActorUserId.HasValue)
+        {
+            dlqItem.ResolvedByUserId = request.ActorUserId.Value;
+        }
 
         if (string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase))
         {
@@ -86,6 +120,83 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
 
             dlqItem.Status = "resolved";
             dlqItem.ResolvedAt = now;
+            dlqItem.NextRetryAt = null;
+            dlqItem.LastAttemptAt = now;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result<Unit>.Success(Unit.Value);
+        }
+
+        if (string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase))
+        {
+            Guid sessionId = Guid.Empty;
+            Guid studentId = Guid.Empty;
+            try
+            {
+                using var doc = JsonDocument.Parse(dlqItem.PayloadJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("SessionId", out var sidProp) || root.TryGetProperty("sessionId", out sidProp))
+                {
+                    sidProp.TryGetGuid(out sessionId);
+                }
+                if (root.TryGetProperty("StudentId", out var stidProp) || root.TryGetProperty("studentId", out stidProp))
+                {
+                    stidProp.TryGetGuid(out studentId);
+                }
+            }
+            catch
+            {
+                if (dlqItem.CorrelationId.HasValue)
+                {
+                    sessionId = dlqItem.CorrelationId.Value;
+                }
+            }
+
+            if (sessionId == Guid.Empty && dlqItem.CorrelationId.HasValue)
+            {
+                sessionId = dlqItem.CorrelationId.Value;
+            }
+
+            if (sessionId == Guid.Empty)
+            {
+                return Result<Unit>.Failure("Dữ liệu tác vụ MockExamGrading không chứa SessionId hợp lệ.");
+            }
+
+            var session = await _context.MockExamSessions
+                .FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
+
+            if (session == null)
+            {
+                return Result<Unit>.Failure("Không tìm thấy MockExamSession tương ứng với tác vụ DLQ này.");
+            }
+
+            if (!string.Equals(session.Status, "graded", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                session.Status = "submitted";
+                session.TotalScore = null;
+
+                if (_aiGradingService != null)
+                {
+                    try
+                    {
+                        var submitHandler = new SubmitMockExamSessionCommandHandler(_context, _aiGradingService);
+                        await submitHandler.Handle(new SubmitMockExamSessionCommand(session.Id, session.StudentId), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        dlqItem.LastAttemptAt = now;
+                        dlqItem.ErrorMessage = ex.Message;
+                        await _context.SaveChangesAsync(cancellationToken);
+                        return Result<Unit>.Failure($"Replay chấm thi thử thất bại: {ex.Message}");
+                    }
+                }
+            }
+
+            dlqItem.Status = "resolved";
+            dlqItem.ResolvedAt = now;
+            dlqItem.NextRetryAt = null;
             dlqItem.LastAttemptAt = now;
 
             await _context.SaveChangesAsync(cancellationToken);
@@ -107,15 +218,13 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Dữ liệu tác vụ sau khi giải mã là rỗng (null).");
         }
 
-        // Đẩy tác vụ vào hàng đợi RAM IGradingQueueChannel để worker tiếp tục xử lý chấm bù
         await _gradingQueueChannel.EnqueueAsync(gradingTask, cancellationToken);
 
-        // Đánh dấu bản ghi DLQ là resolved
         dlqItem.Status = "resolved";
         dlqItem.ResolvedAt = now;
+        dlqItem.NextRetryAt = null;
         dlqItem.LastAttemptAt = now;
 
-        // Nếu có PracticeAnswer tương ứng, khôi phục trạng thái về pending
         if (gradingTask.AnswerId != Guid.Empty)
         {
             var answer = await _context.PracticeAnswers

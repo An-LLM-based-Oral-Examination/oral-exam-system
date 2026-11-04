@@ -36,6 +36,9 @@ public sealed class GetCourseConfigurationQueryHandler : IRequestHandler<GetCour
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,
             MaxFollowUpQuestions = course.MaxFollowUpQuestions,
             MaxMockExamsPerDay = course.MaxMockExamsPerDay,
+            MockExamDurationMinutes = course.MockExamDurationMinutes,
+            MockExamTotalQuestions = course.MockExamTotalQuestions,
+            MockExamBloomDistribution = course.MockExamBloomDistribution,
             HasFollowUp = course.HasFollowUp,
             ExamInputMode = course.ExamInputMode,
             IsActive = course.IsActive

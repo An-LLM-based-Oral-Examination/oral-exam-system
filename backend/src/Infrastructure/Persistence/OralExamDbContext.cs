@@ -21,6 +21,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<Semester> Semesters { get; set; }
     public virtual DbSet<Course> Courses { get; set; }
     public virtual DbSet<CourseClo> CourseClos { get; set; }
+    public virtual DbSet<CourseLecturer> CourseLecturers { get; set; } = null!;
     public virtual DbSet<Class> Classes { get; set; }
     public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
     public virtual DbSet<Rubric> Rubrics { get; set; }
@@ -307,6 +308,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 t.HasCheckConstraint("ck_courses_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
                 t.HasCheckConstraint("ck_courses_max_follow_up", "max_follow_up_questions >= 1 AND max_follow_up_questions <= 5");
                 t.HasCheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
+                t.HasCheckConstraint("ck_courses_mock_duration", "mock_exam_duration_minutes > 0");
+                t.HasCheckConstraint("ck_courses_mock_questions", "mock_exam_total_questions > 0");
                 t.HasCheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
             });
             entity.HasKey(e => e.Id);
@@ -315,12 +318,22 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.Code).IsUnique().HasDatabaseName("ix_courses_code");
             entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_courses_semester");
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Credits).HasColumnName("credits").HasDefaultValue(3);
             entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
+            entity.Property(e => e.DepartmentHeadUserId).HasColumnName("department_head_user_id");
+            entity.HasIndex(e => e.DepartmentHeadUserId).HasDatabaseName("ix_courses_department_head");
             entity.Property(e => e.HasFollowUp).HasColumnName("has_follow_up").HasDefaultValue(false);
             entity.Property(e => e.TranscriptBufferSeconds).HasColumnName("transcript_buffer_seconds").HasDefaultValue(60);
             entity.Property(e => e.MaxFollowUpQuestions).HasColumnName("max_follow_up_questions").HasDefaultValue(2);
             entity.Property(e => e.MaxMockExamsPerDay).HasColumnName("max_mock_exams_per_day").HasDefaultValue(3);
+            entity.Property(e => e.MockExamDurationMinutes).HasColumnName("mock_exam_duration_minutes").HasDefaultValue(30);
+            entity.Property(e => e.MockExamTotalQuestions).HasColumnName("mock_exam_total_questions").HasDefaultValue(5);
+            entity.Property(e => e.MockExamBloomDistribution)
+                .HasColumnName("mock_exam_bloom_distribution")
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}'::jsonb")
+                .IsRequired();
             entity.Property(e => e.ExamInputMode)
                 .HasColumnName("exam_input_mode")
                 .HasMaxLength(30)
@@ -328,6 +341,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .IsRequired();
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(d => d.DepartmentHeadUser)
+                .WithMany()
+                .HasForeignKey(d => d.DepartmentHeadUserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.Semester)
                 .WithMany(p => p.Courses)
@@ -442,6 +460,46 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             );
         });
 
+        // 3c. course_lecturers (R5 Academic Hierarchy)
+        modelBuilder.Entity<CourseLecturer>(entity =>
+        {
+            entity.ToTable("course_lecturers");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.LecturerUserId).HasColumnName("lecturer_user_id").IsRequired();
+            entity.Property(e => e.AssignedByUserId).HasColumnName("assigned_by_user_id").IsRequired();
+            entity.Property(e => e.SemesterId).HasColumnName("semester_id");
+            entity.Property(e => e.AssignedAt).HasColumnName("assigned_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(e => new { e.CourseId, e.IsActive }).HasDatabaseName("ix_course_lecturers_course");
+            entity.HasIndex(e => new { e.LecturerUserId, e.IsActive }).HasDatabaseName("ix_course_lecturers_lecturer");
+            entity.HasIndex(e => new { e.CourseId, e.LecturerUserId, e.SemesterId }).IsUnique().HasDatabaseName("uq_course_lecturers");
+
+            entity.HasOne(d => d.Course)
+                .WithMany(p => p.CourseLecturers)
+                .HasForeignKey(d => d.CourseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.LecturerUser)
+                .WithMany()
+                .HasForeignKey(d => d.LecturerUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.AssignedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Semester)
+                .WithMany()
+                .HasForeignKey(d => d.SemesterId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // 4. classes
         modelBuilder.Entity<Class>(entity =>
         {
@@ -452,7 +510,13 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(150).HasDefaultValue("").IsRequired();
+            entity.Property(e => e.JoinCode).HasColumnName("join_code").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.JoinPasswordHash).HasColumnName("join_password_hash").HasMaxLength(256);
+            entity.Property(e => e.IsJoinEnabled).HasColumnName("is_join_enabled").HasDefaultValue(true);
+            entity.Property(e => e.AllowSelfEnrollment).HasColumnName("allow_self_enrollment").HasDefaultValue(true);
             entity.HasIndex(e => e.Code).IsUnique().HasDatabaseName("ix_classes_code");
+            entity.HasIndex(e => e.JoinCode).IsUnique().HasDatabaseName("ix_classes_join_code");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_classes_course");
             entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_classes_semester");
             entity.HasIndex(e => e.LecturerId).HasDatabaseName("ix_classes_lecturer");
@@ -482,6 +546,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 Id = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                 Code = "SE1801-NET",
+                Name = "Lớp SE1801-NET",
+                JoinCode = "SE1801NET",
+                JoinPasswordHash = null,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
                 SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
                 LecturerId = Guid.Parse("00000000-0000-0000-0000-000000000003"),
@@ -504,6 +573,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
             entity.Property(e => e.EnrolledAt).HasColumnName("enrolled_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("enrolled");
+            entity.Property(e => e.JoinedViaCode).HasColumnName("joined_via_code").HasDefaultValue(false);
+            entity.Property(e => e.JoinMethod).HasColumnName("join_method").HasMaxLength(30).HasDefaultValue("assigned").IsRequired();
             entity.HasIndex(e => e.StudentId).HasDatabaseName("ix_class_enrollments_student");
             entity.HasIndex(e => new { e.ClassId, e.StudentId }).IsUnique().HasDatabaseName("uq_class_enrollments");
 
@@ -523,6 +594,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000011"),
                     ClassId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                     StudentId = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                    JoinedViaCode = false,
+                    JoinMethod = "assigned",
                     Status = "enrolled",
                     EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -531,6 +604,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Id = Guid.Parse("00000000-0000-0000-0000-000000000012"),
                     ClassId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                     StudentId = Guid.Parse("00000000-0000-0000-0000-000000000006"),
+                    JoinedViaCode = false,
+                    JoinMethod = "assigned",
                     Status = "enrolled",
                     EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 });
@@ -646,6 +721,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.CloId).HasColumnName("clo_id");
             entity.Property(e => e.RubricId).HasColumnName("rubric_id").IsRequired();
             entity.Property(e => e.Title).HasColumnName("title").HasMaxLength(300).IsRequired();
             entity.Property(e => e.Content).HasColumnName("content").IsRequired();
@@ -657,16 +733,18 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FollowUpPrompt).HasColumnName("follow_up_prompt");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
             entity.Property(e => e.ImageDescription).HasColumnName("image_description");
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_practice_questions_course");
+            entity.HasIndex(e => e.RubricId).HasDatabaseName("ix_practice_questions_rubric");
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("APPROVED").IsRequired();
             entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual").IsRequired();
             entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
-            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_practice_questions_course");
-            entity.HasIndex(e => e.RubricId).HasDatabaseName("ix_practice_questions_rubric");
+            entity.HasIndex(e => e.CloId).HasDatabaseName("ix_practice_questions_clo");
             entity.HasIndex(e => e.ApprovalStatus).HasDatabaseName("ix_practice_questions_approval_status");
+            entity.HasIndex(e => new { e.CourseId, e.IsActive, e.ApprovalStatus, e.Difficulty }).HasDatabaseName("ix_practice_questions_active_approved");
             entity.HasIndex(e => e.ApprovedBy).HasDatabaseName("ix_practice_questions_approved");
             entity.HasIndex(e => e.SubmittedBy).HasDatabaseName("ix_practice_questions_submitted");
 
@@ -689,6 +767,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .WithMany(p => p.PracticeQuestions)
                 .HasForeignKey(d => d.RubricId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Clo)
+                .WithMany()
+                .HasForeignKey(d => d.CloId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasData(
                 new PracticeQuestion
@@ -800,6 +883,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.CloId).HasColumnName("clo_id");
+            entity.Property(e => e.StructureId).HasColumnName("structure_id");
             entity.Property(e => e.RubricId).HasColumnName("rubric_id").IsRequired();
             entity.Property(e => e.Title).HasColumnName("title").HasMaxLength(300).IsRequired();
             entity.Property(e => e.Content).HasColumnName("content").IsRequired();
@@ -814,18 +899,16 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(1000);
             entity.Property(e => e.ImageDescription).HasColumnName("image_description");
-            entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("APPROVED").IsRequired();
-            entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual").IsRequired();
-            entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
-            entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
-            entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.CourseId, e.Difficulty, e.IsActive }).HasDatabaseName("ix_exam_questions_course");
             entity.HasIndex(e => e.RubricId).HasDatabaseName("ix_exam_questions_rubric");
             entity.HasIndex(e => e.ApprovedBy).HasDatabaseName("ix_exam_questions_approved");
             entity.HasIndex(e => e.ApprovalStatus).HasDatabaseName("ix_exam_questions_approval_status");
+            entity.HasIndex(e => new { e.CourseId, e.IsActive, e.ApprovalStatus, e.Difficulty }).HasDatabaseName("ix_exam_questions_active_approved");
             entity.HasIndex(e => e.SubmittedBy).HasDatabaseName("ix_exam_questions_submitted");
+            entity.HasIndex(e => e.CloId).HasDatabaseName("ix_exam_questions_clo");
+            entity.HasIndex(e => e.StructureId).HasDatabaseName("ix_exam_questions_structure");
 
             entity.HasOne(d => d.Course)
                 .WithMany(p => p.ExamQuestions)
@@ -845,6 +928,16 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.SubmittedByUser)
                 .WithMany()
                 .HasForeignKey(d => d.SubmittedBy)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.Clo)
+                .WithMany()
+                .HasForeignKey(d => d.CloId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.Structure)
+                .WithMany()
+                .HasForeignKey(d => d.StructureId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasData(new ExamQuestion
@@ -873,6 +966,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 t.HasCheckConstraint("ck_practice_sessions_mode", "practice_mode IN ('per_question', 'full_session')");
                 t.HasCheckConstraint("ck_practice_sessions_status", "status IN ('in_progress', 'completed', 'abandoned', 'timed_out')");
+                t.HasCheckConstraint("ck_practice_sessions_score", "total_score IS NULL OR (total_score >= 0 AND total_score <= 10.00)");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
@@ -882,10 +976,12 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.StartedAt).HasColumnName("started_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.CompletedAt).HasColumnName("completed_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("in_progress");
+            entity.Property(e => e.TotalScore).HasColumnName("total_score").HasPrecision(4, 2);
             entity.Property(e => e.LastActivityAt).HasColumnName("last_activity_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.SelectedDifficulties).HasColumnName("selected_difficulties").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
             entity.Property(e => e.SelectedQuestionIdsJson).HasColumnName("selected_question_ids").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
             entity.HasIndex(e => new { e.StudentId, e.StartedAt }).HasDatabaseName("ix_practice_sessions_student");
+            entity.HasIndex(e => new { e.StudentId, e.Status, e.StartedAt }).HasDatabaseName("ix_practice_sessions_student_status");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_practice_sessions_course");
             entity.HasIndex(e => new { e.Status, e.LastActivityAt }).HasDatabaseName("ix_practice_sessions_last_activity");
 
@@ -912,6 +1008,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
             entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
             entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
+            entity.Property(e => e.OrderIndex).HasColumnName("order_index").HasDefaultValue(1);
             entity.Property(e => e.AnswerText).HasColumnName("answer_text").IsRequired();
             entity.Property(e => e.IsFollowUp).HasColumnName("is_follow_up").HasDefaultValue(false);
             entity.Property(e => e.ParentAnswerId).HasColumnName("parent_answer_id");
@@ -919,6 +1016,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.SessionId).HasDatabaseName("ix_practice_answers_session");
+            entity.HasIndex(e => new { e.SessionId, e.OrderIndex, e.SubmittedAt }).HasDatabaseName("ix_practice_answers_session_order");
             entity.HasIndex(e => e.QuestionId).HasDatabaseName("ix_practice_answers_question");
             entity.HasIndex(e => e.StudentId).HasDatabaseName("ix_practice_answers_student");
             entity.HasIndex(e => e.ParentAnswerId).HasDatabaseName("ix_practice_answers_parent");
@@ -952,6 +1050,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam')");
                 t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
+                t.HasCheckConstraint("ck_ai_evaluations_xor",
+                    "(answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL) OR " +
+                    "(answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL) OR " +
+                    "(answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL)");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
@@ -1086,6 +1188,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
             entity.Property(e => e.HandedOverAt).HasColumnName("handed_over_at");
             entity.Property(e => e.GeneratedAt).HasColumnName("generated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.IsSampleSet).HasColumnName("is_sample_set").HasDefaultValue(false);
             entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
 
             entity.HasIndex(e => e.StructureId).HasDatabaseName("ix_exam_sets_structure");
@@ -1094,6 +1197,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.CreatedBy).HasDatabaseName("ix_exam_sets_creator");
             entity.HasIndex(e => e.ApprovedBy).HasDatabaseName("ix_exam_sets_approver");
             entity.HasIndex(e => e.Status).HasDatabaseName("ix_exam_sets_status");
+            entity.HasIndex(e => new { e.CourseId, e.IsSampleSet }).HasDatabaseName("ix_exam_sets_sample");
 
             entity.HasOne(d => d.Structure)
                 .WithMany(p => p.ExamSets)
@@ -1222,6 +1326,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("in_progress");
             entity.Property(e => e.TotalScore).HasColumnName("total_score").HasPrecision(4, 2);
             entity.HasIndex(e => new { e.StudentId, e.StartedAt }).HasDatabaseName("ix_mock_exam_sessions_student");
+            entity.HasIndex(e => new { e.StudentId, e.Status, e.StartedAt }).HasDatabaseName("ix_mock_exam_sessions_student_status");
             entity.HasIndex(e => e.ExamSetId).HasDatabaseName("ix_mock_exam_sessions_set");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_mock_exam_sessions_course");
             entity.HasIndex(e => new { e.Status, e.ExpiresAt }).HasDatabaseName("ix_mock_exam_sessions_status_expires");
@@ -1263,6 +1368,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ParentAnswerId).HasColumnName("parent_answer_id");
             entity.Property(e => e.PromptText).HasColumnName("prompt_text");
             entity.HasIndex(e => e.SessionId).HasDatabaseName("ix_mock_exam_answers_session");
+            entity.HasIndex(e => new { e.SessionId, e.OrderIndex }).HasDatabaseName("ix_mock_exam_answers_session_order");
             entity.HasIndex(e => e.QuestionId).HasDatabaseName("ix_mock_exam_answers_question");
             entity.HasIndex(e => e.ParentAnswerId).HasDatabaseName("ix_mock_exam_answers_parent");
 
@@ -1648,6 +1754,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.ToTable("dead_letter_queues", t =>
             {
                 t.HasCheckConstraint("ck_dlq_status", "status IN ('pending', 'resolved', 'abandoned')");
+                t.HasCheckConstraint("ck_dlq_flow_type", "flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM')");
+                t.HasCheckConstraint("ck_dlq_managed_role", "managed_by_role IN ('admin', 'examination_officer', 'lecturer')");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
@@ -1657,6 +1765,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ErrorMessage).HasColumnName("error_message").IsRequired();
             entity.Property(e => e.RetryCount).HasColumnName("retry_count").HasDefaultValue(0);
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending");
+            entity.Property(e => e.FlowType).HasColumnName("flow_type").HasMaxLength(30).IsRequired().HasDefaultValue("OFFICIAL_EXAM");
+            entity.Property(e => e.ManagedByRole).HasColumnName("managed_by_role").HasMaxLength(30).IsRequired().HasDefaultValue("examination_officer");
+            entity.Property(e => e.ResolvedByUserId).HasColumnName("resolved_by_user_id");
+            entity.Property(e => e.ResolutionNotes).HasColumnName("resolution_notes");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.NextRetryAt).HasColumnName("next_retry_at");
             entity.Property(e => e.LastAttemptAt).HasColumnName("last_attempt_at");
@@ -1664,6 +1776,13 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => new { e.Status, e.CreatedAt }).HasDatabaseName("ix_dead_letter_queues_status");
             entity.HasIndex(e => new { e.Status, e.NextRetryAt }).HasDatabaseName("ix_dead_letter_queues_retry");
             entity.HasIndex(e => new { e.TaskType, e.CorrelationId, e.Status }).HasDatabaseName("ix_dead_letter_queues_correlation");
+            entity.HasIndex(e => new { e.FlowType, e.Status }).HasDatabaseName("ix_dlq_flow_status");
+            entity.HasIndex(e => new { e.ManagedByRole, e.Status }).HasDatabaseName("ix_dlq_managed_role");
+
+            entity.HasOne(e => e.ResolvedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.ResolvedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // 27. audit_logs

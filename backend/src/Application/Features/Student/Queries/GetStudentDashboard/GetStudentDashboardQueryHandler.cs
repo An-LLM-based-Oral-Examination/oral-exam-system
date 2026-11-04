@@ -77,58 +77,10 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         foreach (var session in practiceSessions)
         {
             var answers = session.Answers ?? new List<PracticeAnswer>();
-            var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
-            var isCompleted = string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase);
-
-            var distinctMainCount = answers
-                .Where(a => !a.IsFollowUp)
-                .Select(a => a.QuestionId)
-                .Distinct()
-                .Count();
-            var plannedCount = Math.Max(session.SelectedQuestionIds.Count, distinctMainCount);
-
-            var mainScores = answers
-                .Where(a => a.AiEvaluations != null && a.AiEvaluations.Any())
-                .GroupBy(a => a.QuestionId)
-                .Select(g =>
-                {
-                    var mainAnswerEval = g
-                        .Where(a => !a.IsFollowUp)
-                        .SelectMany(a => a.AiEvaluations)
-                        .OrderByDescending(e => e.EvaluatedAt)
-                        .FirstOrDefault();
-                    var followUpEvals = g
-                        .Where(a => a.IsFollowUp)
-                        .Select(a => a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
-                        .Where(e => e != null)
-                        .Cast<AiEvaluation>()
-                        .ToList();
-
-                    return FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainAnswerEval, followUpEvals);
-                })
-                .ToList();
-
-            bool hasPendingAnswers = answers.Any(a =>
-                string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase));
-
-            if (isFullSession && isCompleted && plannedCount > 0)
+            var resolvedScore = session.TotalScore ?? PracticeSessionTimeoutHelper.ComputeSessionTotalScore(session, answers);
+            if (resolvedScore.HasValue)
             {
-                if (!hasPendingAnswers)
-                {
-                    if (mainScores.Count > 0)
-                    {
-                        practiceSessionScores.Add(mainScores.Sum() / plannedCount);
-                    }
-                    else if (session.SelectedQuestionIds.Count > 0)
-                    {
-                        practiceSessionScores.Add(0.0m);
-                    }
-                }
-            }
-            else if (!hasPendingAnswers && mainScores.Count > 0)
-            {
-                practiceSessionScores.Add(mainScores.Average());
+                practiceSessionScores.Add(resolvedScore.Value);
             }
         }
 
@@ -383,35 +335,5 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             CriterionMastery = criterionMastery,
             OfficialExamTickets = officialExamDtos
         });
-    }
-}
-
-internal static class QueryableSplitExtensions
-{
-    public static IQueryable<TEntity> AsSplitQuery<TEntity>(this IQueryable<TEntity> source) where TEntity : class
-    {
-        try
-        {
-            var relationalExtType = Type.GetType("Microsoft.EntityFrameworkCore.RelationalQueryableExtensions, Microsoft.EntityFrameworkCore.Relational");
-            if (relationalExtType != null)
-            {
-                var method = relationalExtType.GetMethod("AsSplitQuery", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                if (method != null)
-                {
-                    var genericMethod = method.MakeGenericMethod(typeof(TEntity));
-                    var result = genericMethod.Invoke(null, [source]);
-                    if (result is IQueryable<TEntity> queryable)
-                    {
-                        return queryable;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Fallback gracefully
-        }
-
-        return source;
     }
 }

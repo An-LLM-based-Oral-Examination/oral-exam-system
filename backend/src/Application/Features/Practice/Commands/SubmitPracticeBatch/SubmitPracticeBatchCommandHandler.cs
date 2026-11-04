@@ -136,14 +136,19 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         var skippedEvaluations = new List<AiEvaluation>();
         var pendingQueuePairs = new List<(GradingTask Task, PracticeAnswer Answer)>();
 
-        foreach (var answerDto in deduplicatedAnswers)
+        for (int i = 0; i < deduplicatedAnswers.Count; i++)
         {
+            var answerDto = deduplicatedAnswers[i];
             var isSkipped = string.IsNullOrWhiteSpace(answerDto.AnswerText);
+            var selectedIdx = session.SelectedQuestionIds.IndexOf(answerDto.QuestionId);
+            var orderIndex = selectedIdx >= 0 ? selectedIdx + 1 : i + 1;
+
             var answer = new PracticeAnswer
             {
                 SessionId = request.SessionId,
                 QuestionId = answerDto.QuestionId,
                 StudentId = request.StudentId,
+                OrderIndex = orderIndex,
                 AnswerText = isSkipped ? string.Empty : answerDto.AnswerText.Trim(),
                 IsFollowUp = false,
                 ParentAnswerId = null,
@@ -205,6 +210,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         session.Status = "completed";
         session.CompletedAt = DateTime.UtcNow;
         session.LastActivityAt = DateTime.UtcNow;
+        session.TotalScore = pendingQueuePairs.Count == 0 ? 0.0m : null;
 
         // 4. Bulk Insert & Save
         _context.PracticeAnswers.AddRange(answers);

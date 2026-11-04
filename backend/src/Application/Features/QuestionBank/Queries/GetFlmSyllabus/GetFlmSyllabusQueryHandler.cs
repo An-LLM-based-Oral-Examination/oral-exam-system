@@ -48,7 +48,28 @@ public sealed class GetFlmSyllabusQueryHandler
             ? dbClos.Select(c => new FlmCloDto(c.CloCode, c.Description, c.BloomLevel)).ToList()
             : new List<FlmCloDto> { new("CLO1", $"Chuẩn đầu ra học phần {course.Code}", "Understand") };
 
-        var baseTopics = BuildStandardTopics(course.Code);
+        var allTopics = new List<FlmTopicDto>();
+        int nextSession = 1;
+
+        if (dbClos.Count > 0)
+        {
+            foreach (var clo in dbClos)
+            {
+                allTopics.Add(new FlmTopicDto(
+                    $"topic-{nextSession:D2}",
+                    nextSession,
+                    $"{clo.CloCode}: {clo.Description}",
+                    new List<string> { clo.CloCode }
+                ));
+                nextSession++;
+            }
+        }
+        else
+        {
+            var baseTopics = BuildStandardTopics(course.Code);
+            allTopics.AddRange(baseTopics);
+            nextSession = allTopics.Count + 1;
+        }
 
         var questionTitles = await _context.ExamQuestions
             .AsNoTracking()
@@ -57,9 +78,6 @@ public sealed class GetFlmSyllabusQueryHandler
             .Select(q => new { q.Title, q.BloomLevel })
             .Take(10)
             .ToListAsync(cancellationToken);
-
-        var allTopics = new List<FlmTopicDto>(baseTopics);
-        int nextSession = allTopics.Count + 1;
 
         foreach (var q in questionTitles)
         {
@@ -121,7 +139,6 @@ public sealed class GetFlmSyllabusQueryHandler
 
         return Result<FlmSyllabusResponseDto>.Success(response);
     }
-
 
     private static List<FlmTopicDto> BuildStandardTopics(string courseCode)
     {

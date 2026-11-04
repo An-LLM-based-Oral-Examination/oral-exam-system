@@ -9,6 +9,8 @@ public partial class ClassEnrollment
     public Guid StudentId { get; set; }
     public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
     public string Status { get; set; } = "enrolled";
+    public bool JoinedViaCode { get; set; }
+    public string JoinMethod { get; set; } = "assigned";
 
     public virtual Class Class { get; set; } = null!;
     public virtual User Student { get; set; } = null!;

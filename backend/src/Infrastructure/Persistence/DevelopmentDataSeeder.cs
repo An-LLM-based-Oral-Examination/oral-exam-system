@@ -352,6 +352,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Building Cross-Platform Back-End Applications with .NET",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -367,6 +368,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Software Architecture and Design",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -382,6 +384,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Software Requirements",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -397,6 +400,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Preparation 1",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -412,6 +416,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Preparation 2",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -427,6 +432,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Intermediate 1",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -442,6 +448,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Intermediate 2",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -457,6 +464,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Advanced 1",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -472,6 +480,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "English Advanced 2",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -497,11 +506,48 @@ public static partial class DevelopmentDataSeeder
             {
                 existing.Name = target.Name;
                 existing.Credits = target.Credits;
+                existing.DepartmentHeadUserId = DepartmentHeadUserId;
                 existing.HasFollowUp = true;
                 existing.TranscriptBufferSeconds = existing.TranscriptBufferSeconds >= 10 ? existing.TranscriptBufferSeconds : 60;
                 existing.MaxFollowUpQuestions = existing.MaxFollowUpQuestions >= 1 ? existing.MaxFollowUpQuestions : 2;
                 existing.MaxMockExamsPerDay = 3;
                 existing.IsActive = true;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        var allSeededCourses = await context.Courses.ToListAsync(cancellationToken);
+        var existingCourseLecturers = await context.CourseLecturers.ToListAsync(cancellationToken);
+
+        foreach (var target in targetCourses)
+        {
+            var actualCourse = allSeededCourses.FirstOrDefault(c =>
+                c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
+            if (actualCourse == null) continue;
+
+            var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                cl.CourseId == actualCourse.Id && cl.LecturerUserId == LecturerUserId);
+
+            if (existingAssignment == null)
+            {
+                context.CourseLecturers.Add(new CourseLecturer
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = actualCourse.Id,
+                    LecturerUserId = LecturerUserId,
+                    AssignedByUserId = DepartmentHeadUserId,
+                    SemesterId = semesterId,
+                    AssignedAt = SeedTimestampUtc,
+                    IsActive = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                });
+            }
+            else
+            {
+                existingAssignment.IsActive = true;
+                existingAssignment.UpdatedAt = SeedTimestampUtc;
             }
         }
 
@@ -3203,6 +3249,8 @@ public static partial class DevelopmentDataSeeder
 
         foreach (var q in allQuestions)
         {
+            q.ApprovalStatus = ApprovalStatus.Approved;
+            q.IsActive = true;
             if (!existingQuestionIds.Contains(q.Id))
             {
                 context.PracticeQuestions.Add(q);
@@ -3219,6 +3267,8 @@ public static partial class DevelopmentDataSeeder
                     existingQ.FollowUpPrompt = q.FollowUpPrompt;
                     existingQ.ImageUrl = q.ImageUrl;
                     existingQ.ImageDescription = q.ImageDescription;
+                    existingQ.ApprovalStatus = ApprovalStatus.Approved;
+                    existingQ.IsActive = true;
                 }
             }
         }
@@ -3252,6 +3302,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassPrn231Id,
                 Code = "SE1801-NET",
+                Name = "Lớp SE1801-NET",
+                JoinCode = "SE1801NET",
                 CourseId = prnCourse.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3263,6 +3315,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassSwd392Id,
                 Code = "SE1801-SWD",
+                Name = "Lớp SE1801-SWD",
+                JoinCode = "SE1801SWD",
                 CourseId = swdCourse.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3274,6 +3328,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassSwr302Id,
                 Code = "SE1801-SWR",
+                Name = "Lớp SE1801-SWR",
+                JoinCode = "SE1801SWR",
                 CourseId = swrCourse.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3285,6 +3341,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt001Id,
                 Code = "SE1801-ENT001",
+                Name = "Lớp SE1801-ENT001",
+                JoinCode = "SE1801ENT001",
                 CourseId = ent001Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3296,6 +3354,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt104Id,
                 Code = "SE1801-ENT104",
+                Name = "Lớp SE1801-ENT104",
+                JoinCode = "SE1801ENT104",
                 CourseId = ent104Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3307,6 +3367,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt203Id,
                 Code = "SE1801-ENT203",
+                Name = "Lớp SE1801-ENT203",
+                JoinCode = "SE1801ENT203",
                 CourseId = ent203Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3318,6 +3380,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt303Id,
                 Code = "SE1801-ENT303",
+                Name = "Lớp SE1801-ENT303",
+                JoinCode = "SE1801ENT303",
                 CourseId = ent303Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3329,6 +3393,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt403Id,
                 Code = "SE1801-ENT403",
+                Name = "Lớp SE1801-ENT403",
+                JoinCode = "SE1801ENT403",
                 CourseId = ent403Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3340,6 +3406,8 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = ClassEnt503Id,
                 Code = "SE1801-ENT503",
+                Name = "Lớp SE1801-ENT503",
+                JoinCode = "SE1801ENT503",
                 CourseId = ent503Course.Id,
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
@@ -3352,6 +3420,9 @@ public static partial class DevelopmentDataSeeder
         var existingClasses = await context.Classes.ToListAsync(cancellationToken);
         foreach (var cls in targetClasses)
         {
+            cls.Name = $"Lớp {cls.Code}";
+            cls.JoinCode = cls.Code.Replace("-", "").ToUpperInvariant();
+
             var existing = existingClasses.FirstOrDefault(c => c.Id == cls.Id || c.Code == cls.Code);
             if (existing == null)
             {
@@ -3360,6 +3431,14 @@ public static partial class DevelopmentDataSeeder
             else
             {
                 existing.IsActive = true;
+                if (string.IsNullOrWhiteSpace(existing.JoinCode))
+                {
+                    existing.JoinCode = cls.JoinCode;
+                }
+                if (string.IsNullOrWhiteSpace(existing.Name))
+                {
+                    existing.Name = cls.Name;
+                }
             }
         }
         await context.SaveChangesAsync(cancellationToken);
@@ -3569,20 +3648,7 @@ public static partial class DevelopmentDataSeeder
     {
         var sessionId = Guid.NewGuid();
         var completedAt = startedAt.AddMinutes(15);
-
-        var session = new PracticeSession
-        {
-            Id = sessionId,
-            StudentId = studentId,
-            CourseId = courseId,
-            PracticeMode = practiceMode,
-            SelectedDifficulties = selectedDifficultiesJson,
-            StartedAt = startedAt,
-            CompletedAt = completedAt,
-            LastActivityAt = completedAt,
-            Status = PracticeSessionStatus.Completed
-        };
-        context.PracticeSessions.Add(session);
+        var actualQuestionScores = new List<decimal>();
 
         for (int i = 0; i < questions.Count; i++)
         {
@@ -3591,12 +3657,18 @@ public static partial class DevelopmentDataSeeder
             var answerId = Guid.NewGuid();
             var submittedAt = startedAt.AddMinutes((i + 1) * 4);
 
+            var evalId = Guid.NewGuid();
+            var details = BuildEvaluationDetails(evalId, criteria, totalScore);
+            var evaluatedScore = details.Sum(d => d.Score);
+            actualQuestionScores.Add(evaluatedScore);
+
             var answer = new PracticeAnswer
             {
                 Id = answerId,
                 SessionId = sessionId,
                 QuestionId = q.Id,
                 StudentId = studentId,
+                OrderIndex = i + 1,
                 AnswerText = !string.IsNullOrWhiteSpace(q.SampleAnswer)
                     ? $"{q.SampleAnswer} Ngoài ra, trong thực tế triển khai dự án em luôn áp dụng kiểm thử tự động để xác minh tính đúng đắn."
                     : "Em trình bày đầy đủ các khái niệm cốt lõi, nguyên lý thiết kế và ví dụ thực tiễn theo đúng chuẩn kiến trúc.",
@@ -3607,9 +3679,6 @@ public static partial class DevelopmentDataSeeder
             };
             context.PracticeAnswers.Add(answer);
 
-            var evalId = Guid.NewGuid();
-            var details = BuildEvaluationDetails(evalId, criteria, totalScore);
-
             var evaluation = new AiEvaluation
             {
                 Id = evalId,
@@ -3617,7 +3686,7 @@ public static partial class DevelopmentDataSeeder
                 PracticeAnswerId = answerId,
                 ExamSubmissionId = null,
                 MockExamAnswerId = null,
-                TotalScore = details.Sum(d => d.Score),
+                TotalScore = evaluatedScore,
                 Feedback = $"Câu trả lời nắm vững trọng tâm câu hỏi \"{q.Title}\", giải thích rõ bản chất kỹ thuật và liên hệ tốt với thực tiễn.",
                 ConfidenceScore = 0.94m,
                 CotTrace = $"Phân tích câu trả lời cho \"{q.Title}\": Đạt đầy đủ các ý chính trong KeyPoints, lập luận mạch lạc theo chuẩn CLO.",
@@ -3626,6 +3695,26 @@ public static partial class DevelopmentDataSeeder
             };
             context.AiEvaluations.Add(evaluation);
         }
+
+        var avgSessionScore = actualQuestionScores.Count > 0
+            ? Math.Round(actualQuestionScores.Average(), 2, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+
+        var session = new PracticeSession
+        {
+            Id = sessionId,
+            StudentId = studentId,
+            CourseId = courseId,
+            PracticeMode = practiceMode,
+            SelectedDifficulties = selectedDifficultiesJson,
+            SelectedQuestionIdsJson = System.Text.Json.JsonSerializer.Serialize(questions.Select(q => q.Id).ToList()),
+            StartedAt = startedAt,
+            CompletedAt = completedAt,
+            LastActivityAt = completedAt,
+            Status = PracticeSessionStatus.Completed,
+            TotalScore = avgSessionScore
+        };
+        context.PracticeSessions.Add(session);
     }
 
     private static void CreateGradedMockExamSession(
@@ -3676,7 +3765,7 @@ public static partial class DevelopmentDataSeeder
             var evaluation = new AiEvaluation
             {
                 Id = evalId,
-                AnswerType = "practice",
+                AnswerType = "mock_exam",
                 PracticeAnswerId = null,
                 ExamSubmissionId = null,
                 MockExamAnswerId = answerId,

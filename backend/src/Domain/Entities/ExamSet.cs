@@ -18,6 +18,7 @@ public partial class ExamSet
     public DateTime? ApprovedAt { get; set; }
     public DateTime? HandedOverAt { get; set; }
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+    public bool IsSampleSet { get; set; } = false;
     public bool IsActive { get; set; } = true;
 
     public virtual ExamStructure Structure { get; set; } = null!;

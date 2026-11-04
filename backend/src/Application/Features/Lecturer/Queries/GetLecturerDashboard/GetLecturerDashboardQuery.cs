@@ -157,7 +157,7 @@ public sealed class GetLecturerDashboardQueryHandler
                 q.ApprovalStatus == ApprovalStatus.NeedsRevision)
             : examQuestionsQuery.Where(q => q.ApprovalStatus == ApprovalStatus.NeedsRevision);
 
-        var questionsNeedingRevision = await revisionQuery
+        var examRevisions = await revisionQuery
             .OrderByDescending(q => q.CreatedAt)
             .ThenByDescending(q => q.Id)
             .Take(20)
@@ -174,6 +174,40 @@ public sealed class GetLecturerDashboardQueryHandler
                 CreatedAt = q.CreatedAt
             })
             .ToListAsync(cancellationToken);
+
+        var practiceRevisionFilter = isDeptHeadOrAdmin
+            ? practiceQuestionsQuery.Where(q =>
+                q.ApprovalStatus == ApprovalStatus.SubmittedForReview ||
+                q.ApprovalStatus == ApprovalStatus.NeedsRevision)
+            : practiceQuestionsQuery.Where(q =>
+                (q.SubmittedBy == user.Id || q.SubmittedBy == null) &&
+                q.ApprovalStatus == ApprovalStatus.NeedsRevision);
+
+        var practiceRevisions = await practiceRevisionFilter
+            .OrderByDescending(q => q.CreatedAt)
+            .ThenByDescending(q => q.Id)
+            .Take(20)
+            .Select(q => new QuestionRevisionItemDto
+            {
+                QuestionId = q.Id,
+                CourseId = q.CourseId,
+                CourseCode = q.Course != null ? q.Course.Code : string.Empty,
+                Title = q.Title,
+                Difficulty = q.Difficulty,
+                BloomLevel = q.BloomLevel,
+                ApprovalStatus = q.ApprovalStatus,
+                ReviewNotes = q.ReviewNotes,
+                CreatedAt = q.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        var examRevisionIds = examRevisions.Select(r => r.QuestionId).ToHashSet();
+        var questionsNeedingRevision = examRevisions
+            .Concat(practiceRevisions.Where(r => !examRevisionIds.Contains(r.QuestionId)))
+            .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.QuestionId)
+            .Take(20)
+            .ToList();
 
         // Ca thi cần hậu kiểm — dùng Projection nhẹ thay vì Include 4 tầng kéo TranscriptWhisper/CotTrace/TimestampsWhisper
         var shiftsBaseQuery = _context.RealExamSessionShifts

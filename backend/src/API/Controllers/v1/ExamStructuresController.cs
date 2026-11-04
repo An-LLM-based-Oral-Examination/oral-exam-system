@@ -26,20 +26,12 @@ public class ExamStructuresController(ISender sender) : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User?.FindFirst("sub")?.Value;
+        var claim = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User?.FindFirstValue("sub");
 
         if (Guid.TryParse(claim, out var id) && id != Guid.Empty)
         {
             return id;
-        }
-
-        if (Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
-            Guid.TryParse(headerVal, out var headerId) &&
-            headerId != Guid.Empty)
-        {
-            return headerId;
         }
 
         return Guid.Empty;

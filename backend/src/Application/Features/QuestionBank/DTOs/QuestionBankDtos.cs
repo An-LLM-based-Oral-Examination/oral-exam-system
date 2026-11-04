@@ -100,7 +100,9 @@ public sealed record QuestionSummaryDto(
     DateTime CreatedAt,
     decimal TotalRubricScore,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    Guid? CloId = null,
+    Guid? StructureId = null
 );
 
 public sealed record QuestionDetailDto(
@@ -125,7 +127,11 @@ public sealed record QuestionDetailDto(
     DateTime CreatedAt,
     RubricDetailDto Rubric,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    Guid? CloId = null,
+    string? CloCode = null,
+    Guid? StructureId = null,
+    string? UsageScope = null
 );
 
 public sealed record RubricDetailDto(
@@ -193,7 +199,9 @@ public sealed record CreateDraftQuestionRequestDto(
     Guid? RubricId = null,
     Guid? ApprovedBy = null,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    Guid? CloId = null,
+    Guid? StructureId = null
 );
 
 public sealed record BatchSubmitQuestionsForReviewRequestDto(
@@ -272,7 +280,9 @@ public sealed record ApprovedQuestionItemDto(
     string? FollowUpPrompt,
     RubricDraftDto Rubric,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    Guid? CloId = null,
+    Guid? StructureId = null
 );
 
 public sealed record ApprovedQuestionResultDto(

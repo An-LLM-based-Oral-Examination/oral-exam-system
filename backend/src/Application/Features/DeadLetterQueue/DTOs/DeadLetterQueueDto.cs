@@ -10,6 +10,10 @@ public class DeadLetterQueueDto
     public string ErrorMessage { get; set; } = string.Empty;
     public int RetryCount { get; set; }
     public string Status { get; set; } = string.Empty;
+    public string FlowType { get; set; } = string.Empty;
+    public string ManagedByRole { get; set; } = string.Empty;
+    public Guid? ResolvedByUserId { get; set; }
+    public string? ResolutionNotes { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
 }

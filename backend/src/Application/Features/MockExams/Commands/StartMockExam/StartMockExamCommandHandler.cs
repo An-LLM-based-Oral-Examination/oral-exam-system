@@ -11,6 +11,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 
@@ -53,7 +54,13 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             return Result<StartMockExamResponse>.Failure($"QUOTA_EXCEEDED:Bạn đã sử dụng hết hạn ngạch thi thử trong ngày ({maxDailyQuota}/{maxDailyQuota} lượt) cho môn học này.");
         }
 
-        // 3. Tra cứu ExamStructure mới nhất của môn học (nếu chưa có cấu trúc đề, khởi tạo và lưu cấu trúc mặc định để đảm bảo khóa ngoại FK exam_sets -> exam_structures)
+        var defaultTotalQuestions = course.MockExamTotalQuestions > 0 ? course.MockExamTotalQuestions : 5;
+        var defaultDurationMinutes = course.MockExamDurationMinutes > 0 ? course.MockExamDurationMinutes : 30;
+        var defaultBloomDistribution = !string.IsNullOrWhiteSpace(course.MockExamBloomDistribution)
+            ? course.MockExamBloomDistribution
+            : "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}";
+
+        // 3. Tra cứu ExamStructure mới nhất của môn học (nếu chưa có cấu trúc đề, khởi tạo theo cấu hình thi thử trên bảng courses)
         var structure = await _context.ExamStructures
             .AsNoTracking()
             .Where(s => s.CourseId == request.CourseId && s.IsActive)
@@ -62,7 +69,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         if (structure == null)
         {
-            var creatorId = await _context.Users
+            var creatorId = course.DepartmentHeadUserId ?? await _context.Users
                 .AsNoTracking()
                 .Where(u => u.IsActive && (u.Role == "department_head" || u.Role == "admin" || u.Id == request.StudentId))
                 .OrderBy(u => u.Role == "department_head" ? 0 : u.Role == "admin" ? 1 : 2)
@@ -80,24 +87,27 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 CourseId = request.CourseId,
                 CreatedBy = creatorId,
                 Name = $"Cấu trúc mặc định - {course.Code}",
-                TotalQuestions = 5,
-                DurationMinutes = 30,
-                BloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}",
+                TotalQuestions = defaultTotalQuestions,
+                DurationMinutes = defaultDurationMinutes,
+                BloomDistribution = defaultBloomDistribution,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
             _context.ExamStructures.Add(structure);
         }
 
-        var targetTotalQuestions = structure.TotalQuestions > 0 ? structure.TotalQuestions : 5;
+        var targetTotalQuestions = structure.TotalQuestions > 0 ? structure.TotalQuestions : defaultTotalQuestions;
 
         // 4. Giải mã cấu trúc ma trận Bloom
         Dictionary<string, int>? bloomDict = null;
         try
         {
-            if (!string.IsNullOrWhiteSpace(structure.BloomDistribution))
+            var bloomSource = !string.IsNullOrWhiteSpace(structure.BloomDistribution) && structure.BloomDistribution != "{}"
+                ? structure.BloomDistribution
+                : defaultBloomDistribution;
+            if (!string.IsNullOrWhiteSpace(bloomSource))
             {
-                bloomDict = JsonSerializer.Deserialize<Dictionary<string, int>>(structure.BloomDistribution, new JsonSerializerOptions
+                bloomDict = JsonSerializer.Deserialize<Dictionary<string, int>>(bloomSource, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -123,7 +133,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             .AsNoTracking()
             // Pha 1: Tải danh sách câu hỏi ứng viên (chưa nạp sâu Rubric.Criteria của toàn bộ kho)
             // Pha 2 bên dưới sẽ nạp Rubric.Criteria cho đúng các câu được chọn
-            .Where(q => q.CourseId == request.CourseId && q.IsActive)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
             .ToListAsync(cancellationToken);
 
         if (allAvailableQuestions.Count < targetTotalQuestions)
@@ -213,9 +223,9 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         }
 
         // 8. Tính toán thời lượng làm bài
-        // Không Follow-up: thời lượng từ structure (mặc định 30 phút).
+        // Không Follow-up: thời lượng từ structure / course (mặc định 30 phút).
         // Có Follow-up: cộng thêm 15 phút (tối thiểu 45 phút).
-        var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : 30;
+        var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
         var durationMinutes = request.HasFollowUp ? Math.Max(45, baseDuration + 15) : baseDuration;
         var startedAt = DateTime.UtcNow;
         var expiresAt = startedAt.AddMinutes(durationMinutes);

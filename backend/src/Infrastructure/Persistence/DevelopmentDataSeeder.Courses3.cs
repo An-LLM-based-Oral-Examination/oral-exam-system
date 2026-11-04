@@ -118,6 +118,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Programming Fundamentals",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -133,6 +134,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Data Structures and Algorithms",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -148,6 +150,7 @@ public static partial class DevelopmentDataSeeder
                 Name = "Introduction to Databases",
                 Credits = 3,
                 SemesterId = semesterId,
+                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -158,12 +161,55 @@ public static partial class DevelopmentDataSeeder
             }
         };
 
-        var existingCodes = (await context.Courses.Select(c => c.Code).ToListAsync(cancellationToken)).ToHashSet();
+        var existingCourses = await context.Courses.ToListAsync(cancellationToken);
         foreach (var course in courses)
         {
-            if (!existingCodes.Contains(course.Code))
+            var existing = existingCourses.FirstOrDefault(c =>
+                c.Id == course.Id || string.Equals(c.Code, course.Code, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
             {
                 context.Courses.Add(course);
+            }
+            else
+            {
+                existing.DepartmentHeadUserId = DepartmentHeadUserId;
+                existing.IsActive = true;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        var allSeededCourses = await context.Courses.ToListAsync(cancellationToken);
+        var existingCourseLecturers = await context.CourseLecturers.ToListAsync(cancellationToken);
+
+        foreach (var course in courses)
+        {
+            var actualCourse = allSeededCourses.FirstOrDefault(c =>
+                c.Id == course.Id || string.Equals(c.Code, course.Code, StringComparison.OrdinalIgnoreCase));
+            if (actualCourse == null) continue;
+
+            var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                cl.CourseId == actualCourse.Id && cl.LecturerUserId == LecturerUserId);
+
+            if (existingAssignment == null)
+            {
+                context.CourseLecturers.Add(new CourseLecturer
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = actualCourse.Id,
+                    LecturerUserId = LecturerUserId,
+                    AssignedByUserId = DepartmentHeadUserId,
+                    SemesterId = semesterId,
+                    AssignedAt = SeedTimestampUtc,
+                    IsActive = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                });
+            }
+            else
+            {
+                existingAssignment.IsActive = true;
+                existingAssignment.UpdatedAt = SeedTimestampUtc;
             }
         }
 
@@ -969,9 +1015,20 @@ public static partial class DevelopmentDataSeeder
 
         foreach (var q in questions)
         {
+            q.ApprovalStatus = ApprovalStatus.Approved;
+            q.IsActive = true;
             if (!existingQuestions.Contains(q.Id))
             {
                 context.PracticeQuestions.Add(q);
+            }
+            else
+            {
+                var existingQ = await context.PracticeQuestions.FindAsync(new object[] { q.Id }, cancellationToken);
+                if (existingQ != null)
+                {
+                    existingQ.ApprovalStatus = ApprovalStatus.Approved;
+                    existingQ.IsActive = true;
+                }
             }
         }
 
@@ -980,7 +1037,7 @@ public static partial class DevelopmentDataSeeder
 
     private static async Task EnsureAdditionalClassesAndEnrollmentsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
-        var existingClasses = (await context.Classes.Select(c => c.Id).ToListAsync(cancellationToken)).ToHashSet();
+        var existingClasses = await context.Classes.ToListAsync(cancellationToken);
         var semester = await context.Semesters.FirstOrDefaultAsync(cancellationToken);
         var semesterId = semester?.Id ?? Guid.Parse("00000000-0000-0000-0000-000000000001");
 
@@ -991,6 +1048,8 @@ public static partial class DevelopmentDataSeeder
                 Id = ClassPrf192Id,
                 CourseId = CoursePrf192Id,
                 Code = "SE1804-PRF",
+                Name = "Lớp SE1804-PRF",
+                JoinCode = "SE1804PRF",
                 SemesterId = semesterId,
                 LecturerId = LecturerUserId,
                 MaxStudents = 40,
@@ -1002,6 +1061,8 @@ public static partial class DevelopmentDataSeeder
                 Id = ClassCsd201Id,
                 CourseId = CourseCsd201Id,
                 Code = "SE1805-CSD",
+                Name = "Lớp SE1805-CSD",
+                JoinCode = "SE1805CSD",
                 SemesterId = semesterId,
                 LecturerId = LecturerUserId,
                 MaxStudents = 40,
@@ -1013,6 +1074,8 @@ public static partial class DevelopmentDataSeeder
                 Id = ClassDbi202Id,
                 CourseId = CourseDbi202Id,
                 Code = "SE1806-DBI",
+                Name = "Lớp SE1806-DBI",
+                JoinCode = "SE1806DBI",
                 SemesterId = semesterId,
                 LecturerId = LecturerUserId,
                 MaxStudents = 40,
@@ -1023,9 +1086,25 @@ public static partial class DevelopmentDataSeeder
 
         foreach (var cls in classes)
         {
-            if (!existingClasses.Contains(cls.Id))
+            cls.Name = $"Lớp {cls.Code}";
+            cls.JoinCode = cls.Code.Replace("-", "").ToUpperInvariant();
+
+            var existing = existingClasses.FirstOrDefault(c => c.Id == cls.Id || c.Code == cls.Code);
+            if (existing == null)
             {
                 context.Classes.Add(cls);
+            }
+            else
+            {
+                existing.IsActive = true;
+                if (string.IsNullOrWhiteSpace(existing.JoinCode))
+                {
+                    existing.JoinCode = cls.JoinCode;
+                }
+                if (string.IsNullOrWhiteSpace(existing.Name))
+                {
+                    existing.Name = cls.Name;
+                }
             }
         }
         await context.SaveChangesAsync(cancellationToken);

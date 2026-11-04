@@ -19,6 +19,7 @@ public sealed record AcademicClassItemDto
 {
     public Guid Id { get; init; }
     public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
     public Guid CourseId { get; init; }
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;
@@ -30,4 +31,7 @@ public sealed record AcademicClassItemDto
     public int EnrolledStudentsCount { get; init; }
     public bool IsActive { get; init; }
     public DateTime CreatedAt { get; init; }
+    public string JoinCode { get; init; } = string.Empty;
+    public bool IsJoinEnabled { get; init; } = true;
+    public bool HasPassword { get; init; } = false;
 }

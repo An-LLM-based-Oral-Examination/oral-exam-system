@@ -104,6 +104,8 @@ public class GradingQueueWorker : BackgroundService
                             {
                                 TaskType = "PracticeGrading",
                                 CorrelationId = task.AnswerId,
+                                FlowType = "PRACTICE",
+                                ManagedByRole = "admin",
                                 PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
                                 ErrorMessage = ex.Message,
                                 RetryCount = 3,
@@ -593,6 +595,29 @@ public class GradingQueueWorker : BackgroundService
             {
                 answer.PromptText = answeredFollowUpPrompt;
             }
+            answer.AiEvaluations.Add(evaluation);
+        }
+
+        var sessionEntity = await dbContext.PracticeSessions
+            .Include(s => s.Answers)
+                .ThenInclude(a => a.AiEvaluations)
+            .FirstOrDefaultAsync(s => s.Id == gradingTask.SessionId, cancellationToken);
+        if (sessionEntity != null)
+        {
+            sessionEntity.TotalScore = OralExamination.Application.Features.Practice.Common.PracticeSessionTimeoutHelper
+                .ComputeSessionTotalScore(sessionEntity, sessionEntity.Answers);
+        }
+
+        var nowForDlq = DateTime.UtcNow;
+        var pendingDlqEntries = await dbContext.DeadLetterQueues
+            .Where(q => q.CorrelationId == gradingTask.AnswerId && q.Status == "pending")
+            .ToListAsync(cancellationToken);
+        foreach (var dlq in pendingDlqEntries)
+        {
+            dlq.Status = "resolved";
+            dlq.ResolvedAt = nowForDlq;
+            dlq.NextRetryAt = null;
+            dlq.ResolutionNotes ??= "Auto-resolved after successful practice answer grading.";
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

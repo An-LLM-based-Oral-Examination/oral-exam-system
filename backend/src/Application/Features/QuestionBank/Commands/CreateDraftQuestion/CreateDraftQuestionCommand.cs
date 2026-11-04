@@ -23,5 +23,7 @@ public sealed record CreateDraftQuestionCommand(
     Guid? RubricId = null,
     Guid? ApprovedBy = null,
     string? ImageUrl = null,
-    string? ImageDescription = null
+    string? ImageDescription = null,
+    Guid? CloId = null,
+    Guid? StructureId = null
 ) : IRequest<Result<Guid>>;

@@ -69,12 +69,22 @@ public sealed class CreateRubricCommandHandler
         int order = 1;
         foreach (var c in request.Criteria)
         {
+            var normalizedWeight = c.Weight;
+            if (normalizedWeight > 1.00m)
+            {
+                normalizedWeight = Math.Round(normalizedWeight / 100m, 2);
+            }
+            if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
+            {
+                normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 2), 0.01m, 1.00m);
+            }
+
             rubric.Criteria.Add(new RubricCriterion
             {
                 CriterionName = c.CriterionName.Trim(),
                 Description = c.Description,
                 MaxScore = c.MaxScore,
-                Weight = c.Weight,
+                Weight = normalizedWeight,
                 BloomLevel = c.BloomLevel,
                 OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : order,
                 CreatedAt = now

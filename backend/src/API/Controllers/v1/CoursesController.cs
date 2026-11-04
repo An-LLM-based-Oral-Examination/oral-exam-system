@@ -1,9 +1,17 @@
 using System;
+using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignDepartmentHead;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignLecturersToCourse;
+using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.GetCourseLecturers;
+using OralExamination.Application.Features.Courses.Commands.CreateCourse;
+using OralExamination.Application.Features.Courses.Commands.UpdateCourse;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
 using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguration;
@@ -11,7 +19,7 @@ using OralExamination.Application.Features.Courses.Queries.GetCourseConfiguratio
 namespace API.Controllers.v1;
 
 /// <summary>
-/// Controller quản trị cấu hình môn học (Dynamic Configurations) do Trưởng Bộ Môn / Admin thiết lập.
+/// Controller quản trị môn học và cấu hình môn học (Dynamic Configurations) do Trưởng Bộ Môn / Admin thiết lập.
 /// </summary>
 [ApiController]
 [Route("api/v1/courses")]
@@ -50,6 +58,70 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
+    /// Quản trị viên (Admin) tạo mới môn học trong chuỗi phân cấp học thuật R5.
+    /// </summary>
+    [Authorize(Roles = "admin")]
+    [HttpPost]
+    [HttpPost("/api/v1/admin/courses")]
+    public async Task<IActionResult> CreateCourse(
+        [FromBody] CreateCourseRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new CreateCourseCommand(
+            request.Code,
+            request.Name,
+            request.Credits,
+            request.Description,
+            request.DepartmentHeadUserId,
+            request.MaxMockExamsPerDay,
+            request.MockExamDurationMinutes,
+            request.MockExamTotalQuestions,
+            request.IsActive,
+            request.SemesterId);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return MapCourseProblem(result.Error);
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// Quản trị viên (Admin) cập nhật thông tin môn học trong chuỗi phân cấp học thuật R5.
+    /// </summary>
+    [Authorize(Roles = "admin")]
+    [HttpPut("{id:guid}")]
+    [HttpPut("/api/v1/admin/courses/{id:guid}")]
+    public async Task<IActionResult> UpdateCourse(
+        Guid id,
+        [FromBody] UpdateCourseRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new UpdateCourseCommand(
+            id,
+            request.Code,
+            request.Name,
+            request.Credits,
+            request.Description,
+            request.DepartmentHeadUserId,
+            request.MaxMockExamsPerDay,
+            request.MockExamDurationMinutes,
+            request.MockExamTotalQuestions,
+            request.IsActive,
+            request.SemesterId);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return MapCourseProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Cập nhật cấu hình động của môn học (Mở quyền cho Trưởng Bộ Môn / Admin).
     /// Trưởng Bộ Môn cấu hình tính năng hỏi chuyên sâu, thời gian đệm và cấu trúc đề.
     /// Riêng hạn ngạch thi thử (MaxMockExamsPerDay) chỉ được phép cấu hình bởi Quản trị viên (Admin).
@@ -82,11 +154,7 @@ public class CoursesController : ControllerBase
             });
         }
 
-        var actorRole = User?.IsInRole("admin") == true
-            ? "admin"
-            : (User?.IsInRole("department_head") == true
-                ? "department_head"
-                : (User?.IsInRole("lecturer") == true ? "lecturer" : null));
+        var actorRole = GetActorRoleWithId();
 
         var command = new UpdateCourseConfigurationCommand(
             id,
@@ -97,6 +165,9 @@ public class CoursesController : ControllerBase
         )
         {
             MaxMockExamsPerDay = request.MaxMockExamsPerDay,
+            MockExamDurationMinutes = request.MockExamDurationMinutes,
+            MockExamTotalQuestions = request.MockExamTotalQuestions,
+            MockExamBloomDistribution = request.MockExamBloomDistribution,
             ActorRole = actorRole
         };
 
@@ -174,13 +245,13 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
-    /// Tạo mới Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// Tạo mới Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Admin).
     /// </summary>
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head,admin")]
     [HttpPost("{id:guid}/clos")]
     public async Task<IActionResult> CreateCourseClo(Guid id, [FromBody] CreateCourseCloRequest request)
     {
-        var actorRole = GetActorRole();
+        var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.CreateCourseClo.CreateCourseCloCommand(
             id,
             request.CloCode,
@@ -192,6 +263,17 @@ public class CoursesController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -205,13 +287,13 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
-    /// Cập nhật Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// Cập nhật Chuẩn đầu ra (CLO) cho môn học (Trưởng bộ môn / Admin).
     /// </summary>
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head,admin")]
     [HttpPut("{id:guid}/clos/{cloId:guid}")]
     public async Task<IActionResult> UpdateCourseClo(Guid id, Guid cloId, [FromBody] UpdateCourseCloRequest request)
     {
-        var actorRole = GetActorRole();
+        var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.UpdateCourseClo.UpdateCourseCloCommand(
             id,
             cloId,
@@ -225,6 +307,17 @@ public class CoursesController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -238,18 +331,29 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
-    /// Xóa Chuẩn đầu ra (CLO) của môn học (Trưởng bộ môn / Khảo thí / Admin).
+    /// Xóa Chuẩn đầu ra (CLO) của môn học (Trưởng bộ môn / Admin).
     /// </summary>
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head,admin")]
     [HttpDelete("{id:guid}/clos/{cloId:guid}")]
     public async Task<IActionResult> DeleteCourseClo(Guid id, Guid cloId)
     {
-        var actorRole = GetActorRole();
+        var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.DeleteCourseClo.DeleteCourseCloCommand(id, cloId, actorRole);
         var result = await _sender.Send(command);
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -262,6 +366,155 @@ public class CoursesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Gán Trưởng bộ môn phụ trách môn học (Admin).
+    /// </summary>
+    [Authorize(Roles = "admin")]
+    [HttpPost("/api/v1/admin/courses/{id:guid}/assign-department-head")]
+    [HttpPost("{id:guid}/assign-department-head")]
+    public async Task<IActionResult> AssignDepartmentHead(Guid id, [FromBody] AssignDepartmentHeadRequest request)
+    {
+        var actorRole = GetActorRole();
+        var command = new AssignDepartmentHeadCommand(id, request.DepartmentHeadUserId, actorRole);
+        var result = await _sender.Send(command);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.Contains("Không tìm thấy môn học", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Unprocessable Entity",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Phân công danh sách giảng viên phụ trách môn học (Trưởng bộ môn / Admin).
+    /// </summary>
+    [Authorize(Roles = "department_head,admin")]
+    [HttpPost("/api/v1/department-head/courses/{id:guid}/lecturers")]
+    [HttpPost("{id:guid}/lecturers")]
+    public async Task<IActionResult> AssignLecturers(Guid id, [FromBody] AssignLecturersToCourseRequest request)
+    {
+        var actorRole = GetActorRole();
+        var currentUserId = GetCurrentUserId();
+
+        var command = new AssignLecturersToCourseCommand(
+            id,
+            request.LecturerUserIds,
+            currentUserId,
+            request.SemesterId,
+            actorRole);
+
+        var result = await _sender.Send(command);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.Contains("Không tìm thấy", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Unprocessable Entity",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Lấy danh sách giảng viên phụ trách môn học (Mọi role đã đăng nhập).
+    /// </summary>
+    [HttpGet("{id:guid}/lecturers")]
+    public async Task<IActionResult> GetLecturers(Guid id)
+    {
+        var query = new GetCourseLecturersQuery(id);
+        var result = await _sender.Send(query);
+
+        if (!result.IsSuccess)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Not Found",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    private IActionResult MapCourseProblem(string error)
+    {
+        var statusCode = error switch
+        {
+            var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
+            var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+            var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
+            _ => StatusCodes.Status422UnprocessableEntity
+        };
+
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status403Forbidden => "Forbidden",
+                StatusCodes.Status404NotFound => "Not Found",
+                StatusCodes.Status409Conflict => "Conflict",
+                _ => "Unprocessable Entity"
+            },
+            Detail = error,
+            Type = "https://tools.ietf.org/html/rfc7807"
+        });
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var claimValue = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User?.FindFirstValue("sub");
+
+        return Guid.TryParse(claimValue, out var claimId) ? claimId : Guid.Empty;
+    }
+
     private string? GetActorRole()
     {
         if (User?.IsInRole("admin") == true) return "admin";
@@ -271,5 +524,17 @@ public class CoursesController : ControllerBase
         if (User?.IsInRole("proctor") == true) return "proctor";
         if (User?.IsInRole("student") == true) return "student";
         return null;
+    }
+
+    private string? GetActorRoleWithId()
+    {
+        var role = GetActorRole();
+        var userId = GetCurrentUserId();
+        if (string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase) && userId != Guid.Empty)
+        {
+            return $"department_head:{userId}";
+        }
+
+        return role;
     }
 }
