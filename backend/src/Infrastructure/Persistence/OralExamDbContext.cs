@@ -19,7 +19,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<User> Users { get; set; }
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
     public virtual DbSet<Semester> Semesters { get; set; }
+    public virtual DbSet<AcademicProgram> AcademicPrograms { get; set; }
     public virtual DbSet<Course> Courses { get; set; }
+    public virtual DbSet<CourseOffering> CourseOfferings { get; set; }
     public virtual DbSet<CourseClo> CourseClos { get; set; }
     public virtual DbSet<CourseLecturer> CourseLecturers { get; set; } = null!;
     public virtual DbSet<Class> Classes { get; set; }
@@ -270,7 +272,39 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // 2. semesters
+        // 2. academic_programs
+        modelBuilder.Entity<AcademicProgram>(entity =>
+        {
+            entity.ToTable("academic_programs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
+            entity.HasIndex(e => e.Code).IsUnique().HasDatabaseName("ix_academic_programs_code");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.DepartmentHeadUserId).HasColumnName("department_head_user_id");
+            entity.HasIndex(e => e.DepartmentHeadUserId).HasDatabaseName("ix_academic_programs_department_head");
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.DepartmentHeadUser)
+                .WithMany()
+                .HasForeignKey(e => e.DepartmentHeadUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(new AcademicProgram
+            {
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000010"),
+                Code = "SE",
+                Name = "Software Engineering",
+                DepartmentHeadUserId = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                IsActive = true,
+                CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
+        });
+
+        // 2b. semesters
         modelBuilder.Entity<Semester>(entity =>
         {
             entity.ToTable("semesters", t =>
@@ -320,6 +354,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Credits).HasColumnName("credits").HasDefaultValue(3);
+            entity.Property(e => e.AcademicProgramId).HasColumnName("academic_program_id");
+            entity.HasIndex(e => e.AcademicProgramId).HasDatabaseName("ix_courses_academic_program");
             entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
             entity.Property(e => e.DepartmentHeadUserId).HasColumnName("department_head_user_id");
             entity.HasIndex(e => e.DepartmentHeadUserId).HasDatabaseName("ix_courses_department_head");
@@ -347,6 +383,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.DepartmentHeadUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(d => d.AcademicProgram)
+                .WithMany(p => p.Courses)
+                .HasForeignKey(d => d.AcademicProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(d => d.Semester)
                 .WithMany(p => p.Courses)
                 .HasForeignKey(d => d.SemesterId)
@@ -359,7 +400,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Code = "PRN231",
                     Name = "Building Cross-Platform Back-End Applications with .NET",
                     Credits = 3,
+                    AcademicProgramId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                     SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    DepartmentHeadUserId = Guid.Parse("00000000-0000-0000-0000-000000000002"),
                     HasFollowUp = true,
                     TranscriptBufferSeconds = 60,
                     MaxFollowUpQuestions = 2,
@@ -374,7 +417,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     Code = "SWD392",
                     Name = "Software Architecture and Design",
                     Credits = 3,
+                    AcademicProgramId = Guid.Parse("00000000-0000-0000-0000-000000000010"),
                     SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    DepartmentHeadUserId = Guid.Parse("00000000-0000-0000-0000-000000000002"),
                     HasFollowUp = true,
                     TranscriptBufferSeconds = 60,
                     MaxFollowUpQuestions = 2,
@@ -382,6 +427,54 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     ExamInputMode = "VoiceWithTranscriptEdit",
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                });
+        });
+
+        // 3a. course_offerings
+        modelBuilder.Entity<CourseOffering>(entity =>
+        {
+            entity.ToTable("course_offerings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
+            entity.Property(e => e.IsEnabled).HasColumnName("is_enabled").HasDefaultValue(true).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(e => new { e.CourseId, e.SemesterId })
+                .IsUnique()
+                .HasDatabaseName("uq_course_offerings_course_semester");
+            entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_course_offerings_semester");
+
+            entity.HasOne(e => e.Course)
+                .WithMany(c => c.CourseOfferings)
+                .HasForeignKey(e => e.CourseId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Semester)
+                .WithMany(s => s.CourseOfferings)
+                .HasForeignKey(e => e.SemesterId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasData(
+                new CourseOffering
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
+                    SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    IsEnabled = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new CourseOffering
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000012"),
+                    CourseId = Guid.Parse("00000000-0000-0000-0000-000000000009"),
+                    SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                    IsEnabled = true,
+                    CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                    UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)
                 });
         });
 
@@ -467,6 +560,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.CourseOfferingId).HasColumnName("course_offering_id");
             entity.Property(e => e.LecturerUserId).HasColumnName("lecturer_user_id").IsRequired();
             entity.Property(e => e.AssignedByUserId).HasColumnName("assigned_by_user_id").IsRequired();
             entity.Property(e => e.SemesterId).HasColumnName("semester_id");
@@ -478,11 +572,19 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => new { e.CourseId, e.IsActive }).HasDatabaseName("ix_course_lecturers_course");
             entity.HasIndex(e => new { e.LecturerUserId, e.IsActive }).HasDatabaseName("ix_course_lecturers_lecturer");
             entity.HasIndex(e => new { e.CourseId, e.LecturerUserId, e.SemesterId }).IsUnique().HasDatabaseName("uq_course_lecturers");
+            entity.HasIndex(e => new { e.CourseOfferingId, e.LecturerUserId })
+                .IsUnique()
+                .HasDatabaseName("uq_course_offering_lecturers");
 
             entity.HasOne(d => d.Course)
                 .WithMany(p => p.CourseLecturers)
                 .HasForeignKey(d => d.CourseId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.CourseOffering)
+                .WithMany(o => o.LecturerAssignments)
+                .HasForeignKey(d => d.CourseOfferingId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.LecturerUser)
                 .WithMany()
@@ -520,7 +622,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_classes_course");
             entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_classes_semester");
             entity.HasIndex(e => e.LecturerId).HasDatabaseName("ix_classes_lecturer");
+            entity.HasIndex(e => e.CourseOfferingId).HasDatabaseName("ix_classes_course_offering");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
+            entity.Property(e => e.CourseOfferingId).HasColumnName("course_offering_id");
             entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
             entity.Property(e => e.LecturerId).HasColumnName("lecturer_id");
             entity.Property(e => e.MaxStudents).HasColumnName("max_students").HasDefaultValue(35);
@@ -535,6 +639,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.Semester)
                 .WithMany(p => p.Classes)
                 .HasForeignKey(d => d.SemesterId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.CourseOffering)
+                .WithMany(o => o.Classes)
+                .HasForeignKey(d => d.CourseOfferingId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.Lecturer)
@@ -553,6 +662,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 AllowSelfEnrollment = true,
                 CourseId = Guid.Parse("00000000-0000-0000-0000-000000000008"),
                 SemesterId = Guid.Parse("00000000-0000-0000-0000-000000000007"),
+                CourseOfferingId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
                 LecturerId = Guid.Parse("00000000-0000-0000-0000-000000000003"),
                 MaxStudents = 35,
                 IsActive = true,

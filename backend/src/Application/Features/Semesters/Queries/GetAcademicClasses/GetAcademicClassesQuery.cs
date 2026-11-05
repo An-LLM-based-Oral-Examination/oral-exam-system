@@ -69,6 +69,7 @@ public sealed class GetAcademicClassesQueryHandler
                 CourseCode = c.Course != null ? c.Course.Code : string.Empty,
                 CourseName = c.Course != null ? c.Course.Name : string.Empty,
                 SemesterId = c.SemesterId,
+                CourseOfferingId = c.CourseOfferingId,
                 SemesterCode = c.Semester != null ? c.Semester.Code : string.Empty,
                 LecturerId = c.LecturerId,
                 LecturerName = c.Lecturer != null ? c.Lecturer.FullName : null,

@@ -39,7 +39,8 @@ public class GetCourseLecturersQueryHandler(IApplicationDbContext context)
                 cl.AssignedAt,
                 cl.IsActive,
                 cl.SemesterId,
-                cl.Semester != null ? cl.Semester.Code : null))
+                cl.Semester != null ? cl.Semester.Code : null,
+                cl.CourseOfferingId))
             .ToListAsync(cancellationToken);
 
         return Result<List<CourseLecturerDto>>.Success(lecturers);

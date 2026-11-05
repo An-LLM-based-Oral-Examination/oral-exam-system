@@ -11,6 +11,7 @@ public partial class Course
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public int Credits { get; set; } = 3;
+    public Guid? AcademicProgramId { get; set; }
     public Guid SemesterId { get; set; }
     public bool HasFollowUp { get; set; } = false;
     public int TranscriptBufferSeconds { get; set; } = 60;
@@ -25,7 +26,9 @@ public partial class Course
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual User? DepartmentHeadUser { get; set; }
+    public virtual AcademicProgram? AcademicProgram { get; set; }
     public virtual Semester Semester { get; set; } = null!;
+    public virtual ICollection<CourseOffering> CourseOfferings { get; set; } = new List<CourseOffering>();
     public virtual ICollection<CourseLecturer> CourseLecturers { get; set; } = new List<CourseLecturer>();
     public virtual ICollection<Class> Classes { get; set; } = new List<Class>();
     public virtual ICollection<Rubric> Rubrics { get; set; } = new List<Rubric>();

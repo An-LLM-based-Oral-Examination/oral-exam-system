@@ -68,6 +68,25 @@ public sealed class CreateSemesterCommandHandler
 
         _context.Semesters.Add(semester);
 
+        var activeCourseIds = await _context.Courses
+            .AsNoTracking()
+            .Where(course => course.IsActive)
+            .Select(course => course.Id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var courseId in activeCourseIds)
+        {
+            _context.CourseOfferings.Add(new CourseOffering
+            {
+                Id = Guid.NewGuid(),
+                CourseId = courseId,
+                SemesterId = semester.Id,
+                IsEnabled = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
         _context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
@@ -89,7 +108,7 @@ public sealed class CreateSemesterCommandHandler
             StartDate = semester.StartDate,
             EndDate = semester.EndDate,
             IsActive = semester.IsActive,
-            CoursesCount = 0,
+            CoursesCount = activeCourseIds.Count,
             ClassesCount = 0,
             CreatedAt = semester.CreatedAt
         });

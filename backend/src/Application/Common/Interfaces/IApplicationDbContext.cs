@@ -12,7 +12,9 @@ public interface IApplicationDbContext
     DbSet<User> Users { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Semester> Semesters { get; }
+    DbSet<AcademicProgram> AcademicPrograms { get; }
     DbSet<Course> Courses { get; }
+    DbSet<CourseOffering> CourseOfferings { get; }
     DbSet<CourseClo> CourseClos { get; }
     DbSet<CourseLecturer> CourseLecturers { get; }
     DbSet<Class> Classes { get; }

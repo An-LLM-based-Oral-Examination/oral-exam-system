@@ -24,6 +24,7 @@ public sealed record AcademicClassItemDto
     public string CourseCode { get; init; } = string.Empty;
     public string CourseName { get; init; } = string.Empty;
     public Guid SemesterId { get; init; }
+    public Guid? CourseOfferingId { get; init; }
     public string SemesterCode { get; init; } = string.Empty;
     public Guid? LecturerId { get; init; }
     public string? LecturerName { get; init; }

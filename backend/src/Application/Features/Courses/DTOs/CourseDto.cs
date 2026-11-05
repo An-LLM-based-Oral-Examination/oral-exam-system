@@ -12,6 +12,7 @@ public sealed class CourseDto
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public int Credits { get; set; }
+    public Guid? AcademicProgramId { get; set; }
     public Guid SemesterId { get; set; }
     public Guid? DepartmentHeadUserId { get; set; }
     public int TranscriptBufferSeconds { get; set; }

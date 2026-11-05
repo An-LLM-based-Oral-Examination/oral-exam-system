@@ -5,6 +5,7 @@ using FluentAssertions;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -303,5 +304,27 @@ public class CleanArchitectureRulesTests
             var resolved = scope.ServiceProvider.GetService(interfaceType);
             resolved.Should().NotBeNull($"MediatR Handler {handlerType.Name} phải giải quyết được toàn bộ dependencies trong DI container");
         }
+    }
+
+    [Fact(DisplayName = "12. CourseOffering phải khóa duy nhất Course-Semester và không cascade delete dữ liệu lịch sử")]
+    public void CourseOffering_Must_Enforce_Unique_Course_Semester_And_Restrict_Delete()
+    {
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var context = new OralExamDbContext(options);
+
+        var entityType = context.Model.FindEntityType(typeof(CourseOffering));
+        entityType.Should().NotBeNull();
+
+        var uniqueIndex = entityType!.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { nameof(CourseOffering.CourseId), nameof(CourseOffering.SemesterId) }));
+        uniqueIndex.Should().NotBeNull("mỗi môn chỉ được có một offering trong một học kỳ");
+
+        entityType.GetForeignKeys()
+            .Should().OnlyContain(foreignKey => foreignKey.DeleteBehavior == DeleteBehavior.Restrict,
+                "xóa course hoặc semester không được cascade làm mất lịch sử offering");
     }
 }

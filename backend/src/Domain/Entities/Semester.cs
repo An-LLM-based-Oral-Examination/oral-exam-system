@@ -14,5 +14,6 @@ public partial class Semester
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual ICollection<Course> Courses { get; set; } = new List<Course>();
+    public virtual ICollection<CourseOffering> CourseOfferings { get; set; } = new List<CourseOffering>();
     public virtual ICollection<Class> Classes { get; set; } = new List<Class>();
 }
