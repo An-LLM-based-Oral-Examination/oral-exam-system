@@ -31,17 +31,19 @@ public class JoinClassCommandHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.StudentId, cancellationToken);
 
-        if (student is not null)
+        if (student is null)
         {
-            if (!student.IsActive)
-            {
-                return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Tài khoản sinh viên đang bị khóa hoặc vô hiệu hóa.");
-            }
+            return Result<JoinClassResponseDto>.Failure("NOT_FOUND: Không tìm thấy sinh viên.");
+        }
 
-            if (!string.Equals(student.Role, "student", StringComparison.OrdinalIgnoreCase))
-            {
-                return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Chỉ tài khoản có vai trò Sinh viên mới được phép tham gia lớp học phần.");
-            }
+        if (!student.IsActive)
+        {
+            return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Tài khoản sinh viên đang bị khóa hoặc vô hiệu hóa.");
+        }
+
+        if (!string.Equals(student.Role, "student", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Chỉ tài khoản có vai trò Sinh viên mới được phép tham gia lớp học phần.");
         }
 
         var normalizedJoinCode = request.JoinCode.Trim().ToUpperInvariant();
@@ -50,6 +52,7 @@ public class JoinClassCommandHandler(
             .Include(c => c.Course)
             .Include(c => c.Semester)
             .Include(c => c.Lecturer)
+            .Include(c => c.CourseOffering)
             .FirstOrDefaultAsync(c => c.JoinCode.ToUpper() == normalizedJoinCode, cancellationToken);
 
         if (targetClass is null)
@@ -60,6 +63,13 @@ public class JoinClassCommandHandler(
         if (!targetClass.IsActive)
         {
             return Result<JoinClassResponseDto>.Failure("Lớp học đã bị vô hiệu hóa.");
+        }
+
+        if (targetClass.CourseOfferingId.HasValue &&
+            (targetClass.CourseOffering is null || !targetClass.CourseOffering.IsEnabled || !targetClass.Course.IsActive))
+        {
+            return Result<JoinClassResponseDto>.Failure(
+                "JOIN_DISABLED: Course offering của lớp hiện đang bị vô hiệu hóa.");
         }
 
         // Kiểm tra is_join_enabled
@@ -133,6 +143,17 @@ public class JoinClassCommandHandler(
             context.ClassEnrollments.Add(newEnrollment);
         }
 
+        context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.StudentId,
+            Action = "CLASS_JOINED",
+            EntityName = "classes",
+            EntityId = targetClass.Id,
+            NewValues = $"JoinMethod={joinMethod}",
+            CreatedAt = enrolledAt
+        });
+
         await context.SaveChangesAsync(cancellationToken);
 
         var response = new JoinClassResponseDto(
@@ -148,7 +169,8 @@ public class JoinClassCommandHandler(
             targetClass.Lecturer?.FullName,
             enrolledAt,
             "enrolled",
-            joinMethod);
+            joinMethod,
+            targetClass.CourseOfferingId);
 
         return Result<JoinClassResponseDto>.Success(response);
     }

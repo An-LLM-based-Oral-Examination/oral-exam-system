@@ -46,6 +46,7 @@ public sealed class UpdateSemesterCommandHandler
         }
 
         var semester = await _context.Semesters
+            .Include(s => s.CourseOfferings)
             .Include(s => s.Courses)
             .Include(s => s.Classes)
             .FirstOrDefaultAsync(s => s.Id == request.SemesterId, cancellationToken);
@@ -95,7 +96,9 @@ public sealed class UpdateSemesterCommandHandler
             StartDate = semester.StartDate,
             EndDate = semester.EndDate,
             IsActive = semester.IsActive,
-            CoursesCount = semester.Courses.Count,
+            CoursesCount = semester.CourseOfferings.Count != 0
+                ? semester.CourseOfferings.Count(o => o.IsEnabled)
+                : semester.Courses.Count,
             ClassesCount = semester.Classes.Count,
             CreatedAt = semester.CreatedAt
         });

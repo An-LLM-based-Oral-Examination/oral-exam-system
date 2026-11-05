@@ -44,7 +44,9 @@ public sealed class GetSemestersQueryHandler
                 StartDate = s.StartDate,
                 EndDate = s.EndDate,
                 IsActive = s.IsActive,
-                CoursesCount = s.Courses.Count,
+                CoursesCount = s.CourseOfferings.Any()
+                    ? s.CourseOfferings.Count(o => o.IsEnabled)
+                    : s.Courses.Count,
                 ClassesCount = s.Classes.Count,
                 CreatedAt = s.CreatedAt
             })

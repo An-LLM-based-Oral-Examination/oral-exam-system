@@ -6,6 +6,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.AcademicCatalog.Commands.SyncSemesterCourseOfferings;
+using OralExamination.Application.Features.AcademicCatalog.Queries.GetSemesterCourseCatalog;
 using OralExamination.Application.Features.Semesters.Commands.CreateSemester;
 using OralExamination.Application.Features.Semesters.Commands.UpdateSemester;
 using OralExamination.Application.Features.Semesters.Queries.GetAcademicClasses;
@@ -86,6 +88,44 @@ public class SemestersController(ISender sender) : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpGet("{id:guid}/course-offerings")]
+    [Authorize(Roles = "admin,department_head")]
+    public async Task<IActionResult> GetCourseOfferings(
+        [FromRoute] Guid id,
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new GetSemesterCourseCatalogQuery(id, includeInactive),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return SemesterProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPut("{id:guid}/course-offerings")]
+    [Authorize(Roles = "admin")]
+    public async Task<IActionResult> SyncCourseOfferings(
+        [FromRoute] Guid id,
+        [FromBody] SyncSemesterCourseOfferingsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new SyncSemesterCourseOfferingsCommand(GetCurrentUserId(), id, request.SelectedCourseIds),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return SemesterProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
     [HttpGet("/api/v1/academic/classes")]
     [HttpGet("classes")]
     public async Task<IActionResult> GetAcademicClasses(
@@ -130,4 +170,9 @@ public sealed record SaveSemesterRequest
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
     public bool IsActive { get; init; } = true;
+}
+
+public sealed record SyncSemesterCourseOfferingsRequest
+{
+    public IReadOnlyCollection<Guid> SelectedCourseIds { get; init; } = Array.Empty<Guid>();
 }

@@ -48,7 +48,8 @@ public class GetStudentMyClassesQueryHandler(IApplicationDbContext context)
                 e.Class.Lecturer != null ? e.Class.Lecturer.FullName : null,
                 e.EnrolledAt,
                 e.Status,
-                e.JoinMethod))
+                e.JoinMethod,
+                e.Class.CourseOfferingId))
             .ToListAsync(cancellationToken);
 
         return Result<List<StudentClassDto>>.Success(classes);

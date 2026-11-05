@@ -16,4 +16,6 @@ public record CreateClassCommand(
     int MaxStudents = 35,
     bool AllowSelfEnrollment = true,
     bool IsJoinEnabled = true,
-    string? ActorRole = null) : IRequest<Result<CreateClassResponseDto>>;
+    string? ActorRole = null,
+    Guid? CourseOfferingId = null,
+    Guid? ActorUserId = null) : IRequest<Result<CreateClassResponseDto>>;

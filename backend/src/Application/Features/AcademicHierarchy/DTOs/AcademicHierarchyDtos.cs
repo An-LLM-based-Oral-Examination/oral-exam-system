@@ -47,7 +47,32 @@ public record CourseLecturerDto(
     DateTime AssignedAt,
     bool IsActive,
     Guid? SemesterId,
-    string? SemesterCode);
+    string? SemesterCode,
+    Guid? CourseOfferingId = null);
+
+public sealed record SyncCourseOfferingLecturersRequest(
+    IReadOnlyCollection<Guid> LecturerUserIds);
+
+public sealed record SyncCourseOfferingLecturersResponseDto(
+    Guid CourseOfferingId,
+    Guid CourseId,
+    string CourseCode,
+    Guid SemesterId,
+    string SemesterCode,
+    int AssignedCount,
+    int DisabledCount,
+    IReadOnlyList<CourseLecturerDto> Lecturers);
+
+public sealed record LecturerCourseOfferingDto(
+    Guid CourseOfferingId,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    DateTime AssignedAt,
+    bool IsAssignmentActive,
+    bool IsOfferingEnabled);
 
 /// <summary>
 /// DTO yêu cầu tạo lớp học phần mới (Giảng viên).
@@ -60,6 +85,17 @@ public record CreateClassRequest(
     Guid? LecturerId = null,
     string? JoinCode = null,
     string? Password = null,
+    int MaxStudents = 35,
+    bool AllowSelfEnrollment = true,
+    bool IsJoinEnabled = true,
+    Guid? CourseOfferingId = null);
+
+public sealed record CreateCourseOfferingClassRequest(
+    string Code,
+    string Name,
+    string Password,
+    Guid? LecturerId = null,
+    string? JoinCode = null,
     int MaxStudents = 35,
     bool AllowSelfEnrollment = true,
     bool IsJoinEnabled = true);
@@ -83,7 +119,8 @@ public record CreateClassResponseDto(
     bool HasPassword,
     bool IsJoinEnabled,
     bool AllowSelfEnrollment,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    Guid? CourseOfferingId = null);
 
 /// <summary>
 /// DTO yêu cầu sinh viên tham gia lớp học phần bằng mã và mật khẩu.
@@ -108,7 +145,8 @@ public record JoinClassResponseDto(
     string? LecturerName,
     DateTime EnrolledAt,
     string Status,
-    string JoinMethod);
+    string JoinMethod,
+    Guid? CourseOfferingId = null);
 
 /// <summary>
 /// DTO thông tin lớp học của sinh viên.
@@ -126,4 +164,5 @@ public record StudentClassDto(
     string? LecturerName,
     DateTime EnrolledAt,
     string Status,
-    string JoinMethod);
+    string JoinMethod,
+    Guid? CourseOfferingId = null);

@@ -28,20 +28,23 @@ public class DomainEntitiesAndDbContextTests
     }
 
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 34 thực thể trong Model")]
-    public void DbContext_Must_Contain_Exactly_34_Entity_Types()
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 36 thực thể trong Model")]
+    public void DbContext_Must_Contain_Exactly_36_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(34, "academic hierarchy adds course_lecturers 3NF relation table");
+        entityTypes.Should().HaveCount(36,
+            "academic catalog adds academic_programs and course_offerings relation tables");
 
         var expectedEntities = new[]
         {
             typeof(User),
             typeof(RefreshToken),
             typeof(Semester),
+            typeof(AcademicProgram),
             typeof(Course),
+            typeof(CourseOffering),
             typeof(CourseClo),
             typeof(CourseLecturer),
             typeof(Class),
@@ -81,7 +84,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 34 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 36 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -91,7 +94,9 @@ public class DomainEntitiesAndDbContextTests
             (typeof(User), "users"),
             (typeof(RefreshToken), "refresh_tokens"),
             (typeof(Semester), "semesters"),
+            (typeof(AcademicProgram), "academic_programs"),
             (typeof(Course), "courses"),
+            (typeof(CourseOffering), "course_offerings"),
             (typeof(CourseLecturer), "course_lecturers"),
             (typeof(Class), "classes"),
             (typeof(ClassEnrollment), "class_enrollments"),
@@ -166,6 +171,16 @@ public class DomainEntitiesAndDbContextTests
         var clType = context.Model.FindEntityType(typeof(CourseLecturer))!;
         var clUnique = clType.GetIndexes().FirstOrDefault(i => i.IsUnique && i.Properties.Count == 3);
         clUnique.Should().NotBeNull("Mỗi giảng viên chỉ được phân công 1 lần cho mỗi môn học trong học kỳ");
+
+        var offeringLecturerUnique = clType.GetIndexes().SingleOrDefault(i =>
+            i.IsUnique &&
+            i.Properties.Select(p => p.Name).SequenceEqual(new[]
+            {
+                nameof(CourseLecturer.CourseOfferingId),
+                nameof(CourseLecturer.LecturerUserId)
+            }));
+        offeringLecturerUnique.Should().NotBeNull(
+            "mỗi giảng viên chỉ có một assignment trong cùng course offering");
     }
 
     [Fact(DisplayName = "4. Ràng buộc Check Constraints trong EF Core Code-First DbContext cho Rubric 10.0 và Quota thi thử động UsedCount >= 0")]
@@ -292,6 +307,16 @@ public class DomainEntitiesAndDbContextTests
         var submissionsNav = ticketType.FindNavigation(nameof(StudentExamTicket.Submissions));
         submissionsNav.Should().NotBeNull();
         submissionsNav!.IsCollection.Should().BeTrue();
+
+        var classOfferingForeignKey = context.Model.FindEntityType(typeof(Class))!
+            .GetForeignKeys()
+            .Single(fk => fk.Properties.Single().Name == nameof(Class.CourseOfferingId));
+        classOfferingForeignKey.DeleteBehavior.Should().Be(DeleteBehavior.Restrict);
+
+        var lecturerOfferingForeignKey = context.Model.FindEntityType(typeof(CourseLecturer))!
+            .GetForeignKeys()
+            .Single(fk => fk.Properties.Single().Name == nameof(CourseLecturer.CourseOfferingId));
+        lecturerOfferingForeignKey.DeleteBehavior.Should().Be(DeleteBehavior.Restrict);
     }
 
     [Fact(DisplayName = "7. Dữ liệu mẫu (Seed Data) trong EF Core Code-First sử dụng 100% UUID hợp lệ theo chuẩn RFC 4122")]

@@ -71,7 +71,9 @@ public class ClassesController(ISender sender) : ControllerBase
             request.MaxStudents,
             request.AllowSelfEnrollment,
             request.IsJoinEnabled,
-            effectiveActorRole);
+            effectiveActorRole,
+            request.CourseOfferingId,
+            currentUserId);
 
         var result = await _sender.Send(command, cancellationToken);
 
@@ -106,6 +108,69 @@ public class ClassesController(ISender sender) : ControllerBase
                 Detail = result.Error,
                 Type = "https://tools.ietf.org/html/rfc7807"
             });
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPost("lecturer/course-offerings/{courseOfferingId:guid}/classes")]
+    [Authorize(Roles = "lecturer,admin,department_head")]
+    public async Task<IActionResult> CreateCourseOfferingClass(
+        [FromRoute] Guid courseOfferingId,
+        [FromBody] CreateCourseOfferingClassRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        if (string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase) &&
+            request.LecturerId is { } requestedLecturerId &&
+            requestedLecturerId != Guid.Empty &&
+            requestedLecturerId != currentUserId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = "FORBIDDEN: Giảng viên không được tạo lớp mạo danh giảng viên khác.",
+                Type = "https://oralexam.fpt.edu.vn/errors/class-forbidden"
+            });
+        }
+
+        var lecturerId = string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase)
+            ? currentUserId
+            : request.LecturerId ?? currentUserId;
+        var effectiveActorRole = string.Equals(actorRole, "department_head", StringComparison.OrdinalIgnoreCase)
+            ? $"department_head:{currentUserId}"
+            : actorRole;
+
+        var result = await _sender.Send(new CreateClassCommand(
+            request.Code,
+            request.Name,
+            Guid.Empty,
+            Guid.Empty,
+            lecturerId,
+            request.JoinCode,
+            request.Password,
+            request.MaxStudents,
+            request.AllowSelfEnrollment,
+            request.IsJoinEnabled,
+            effectiveActorRole,
+            courseOfferingId,
+            currentUserId), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.Error switch
+            {
+                var error when error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) =>
+                    StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", error)),
+                var error when error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) =>
+                    NotFound(ClassProblem(404, "Not Found", error)),
+                var error when error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
+                    Conflict(ClassProblem(409, "Conflict", error)),
+                _ => UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", result.Error))
+            };
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
@@ -325,4 +390,12 @@ public class ClassesController(ISender sender) : ControllerBase
         if (User?.IsInRole("student") == true) return "student";
         return null;
     }
+
+    private static ProblemDetails ClassProblem(int status, string title, string detail) => new()
+    {
+        Status = status,
+        Title = title,
+        Detail = detail,
+        Type = $"https://oralexam.fpt.edu.vn/errors/class-{status}"
+    };
 }
