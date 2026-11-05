@@ -75,14 +75,20 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            cd /opt/oralexam
+            COMPOSE_FILE="docker-compose.prod.yml"
+            if [ ! -f "$COMPOSE_FILE" ]; then
+              COMPOSE_FILE="docker-compose.yml"
+            fi
+
             echo "=== 1. Logging into GitHub Container Registry ==="
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
             echo "=== 2. Pulling Latest Production Images ==="
-            docker compose -f docker-compose.prod.yml pull
+            docker compose -f "$COMPOSE_FILE" pull
 
             echo "=== 3. Starting Production Containers in Background ==="
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
             echo "=== 4. Pruning Dangling Docker Images ==="
             docker image prune -f
