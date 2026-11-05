@@ -25,4 +25,5 @@ public partial class Class
     public virtual CourseOffering? CourseOffering { get; set; }
     public virtual User? Lecturer { get; set; }
     public virtual ICollection<ClassEnrollment> Enrollments { get; set; } = new List<ClassEnrollment>();
+    public virtual ICollection<InClassExamShift> InClassExamShifts { get; set; } = new List<InClassExamShift>();
 }

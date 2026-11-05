@@ -125,6 +125,14 @@ public class SixRolesRbacTests
             Role = UserRole.Proctor,
             IsActive = true
         };
+        var examiner = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "giangvien@fe.edu.vn",
+            FullName = "Giảng viên Chấm thi",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
         var course = new Course
         {
             Id = Guid.NewGuid(),
@@ -142,7 +150,7 @@ public class SixRolesRbacTests
             CreatedBy = examOfficer.Id
         };
 
-        context.Users.AddRange(examOfficer, proctor);
+        context.Users.AddRange(examOfficer, proctor, examiner);
         context.Courses.Add(course);
         context.OfficialExamSessions.Add(session);
         await context.SaveChangesAsync();
@@ -155,13 +163,15 @@ public class SixRolesRbacTests
             "AL-L201",
             DateTime.UtcNow.AddHours(2),
             DateTime.UtcNow.AddHours(4),
-            proctor.Id);
+            proctor.Id,
+            examiner.Id);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ShiftName.Should().Be("Ca 1 - Phòng Lab AL-L201");
         result.Value.RoomLab.Should().Be("AL-L201");
+        result.Value.ExaminerUserId.Should().Be(examiner.Id);
     }
 
     [Fact(DisplayName = "RBAC-05: Vai trò không được phép mở ca thi sẽ bị từ chối (Forbidden)")]
@@ -199,6 +209,7 @@ public class SixRolesRbacTests
             "AL-L201",
             DateTime.UtcNow.AddHours(2),
             DateTime.UtcNow.AddHours(4),
+            Guid.NewGuid(),
             Guid.NewGuid());
 
         var result = await handler.Handle(command, CancellationToken.None);

@@ -30,6 +30,14 @@ public sealed class OpenExamShiftCommandValidator : AbstractValidator<OpenExamSh
             .NotEmpty()
             .WithMessage("Người coi thi không được để trống.");
 
+        RuleFor(command => command.ExaminerUserId)
+            .NotEmpty()
+            .WithMessage("Giảng viên chấm thi không được để trống.");
+
+        RuleFor(command => command.ExaminerUserId)
+            .NotEqual(command => command.ProctorUserId)
+            .WithMessage("Giảng viên chấm thi không được trùng với người coi thi.");
+
         RuleFor(command => command.EndTime)
             .GreaterThan(command => command.StartTime)
             .WithMessage("Giờ kết thúc phải sau giờ bắt đầu.");

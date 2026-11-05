@@ -123,11 +123,12 @@ public record CreateClassResponseDto(
     Guid? CourseOfferingId = null);
 
 /// <summary>
-/// DTO yêu cầu sinh viên tham gia lớp học phần bằng mã và mật khẩu.
+/// DTO yêu cầu sinh viên tham gia lớp học phần bằng mã (JoinCode hoặc ClassId) và mật khẩu.
 /// </summary>
 public record JoinClassRequest(
-    string JoinCode,
-    string? Password = null);
+    string? JoinCode = null,
+    string? Password = null,
+    Guid? ClassId = null);
 
 /// <summary>
 /// DTO phản hồi sinh viên tham gia lớp học phần.
@@ -166,3 +167,107 @@ public record StudentClassDto(
     string Status,
     string JoinMethod,
     Guid? CourseOfferingId = null);
+
+/// <summary>
+/// DTO hiển thị kết quả tìm kiếm lớp học đang mở cho sinh viên tìm và bấm tham gia.
+/// </summary>
+public sealed record ClassDirectoryItemDto(
+    Guid ClassId,
+    string ClassCode,
+    string ClassName,
+    string JoinCode,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    Guid? CourseOfferingId,
+    Guid? LecturerId,
+    string? LecturerName,
+    int EnrolledCount,
+    int MaxStudents,
+    bool RequiresPassword,
+    bool IsJoinEnabled,
+    bool AllowSelfEnrollment,
+    bool IsActive,
+    bool IsAlreadyEnrolled,
+    bool CanJoin,
+    DateTime CreatedAt);
+
+/// <summary>
+/// DTO hiển thị danh sách lớp học do Giảng viên phụ trách.
+/// </summary>
+public sealed record LecturerClassItemDto(
+    Guid ClassId,
+    string Code,
+    string Name,
+    string JoinCode,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    Guid? CourseOfferingId,
+    Guid? LecturerId,
+    string? LecturerName,
+    int EnrolledCount,
+    int MaxStudents,
+    int ShiftsCount,
+    bool HasPassword,
+    bool IsJoinEnabled,
+    bool AllowSelfEnrollment,
+    bool IsActive,
+    DateTime CreatedAt);
+
+/// <summary>
+/// DTO thông tin sinh viên ghi danh trong lớp (hiển thị cho Giảng viên / TBM / Admin).
+/// </summary>
+public sealed record ClassEnrolledStudentDto(
+    Guid StudentId,
+    string FullName,
+    string Email,
+    string? StudentCode,
+    DateTime EnrolledAt,
+    string Status,
+    string JoinMethod);
+
+/// <summary>
+/// DTO tóm tắt ca kiểm tra vấn đáp trong lớp học.
+/// </summary>
+public sealed record ClassInClassShiftSummaryDto(
+    Guid ShiftId,
+    string ShiftName,
+    DateTime StartTime,
+    DateTime EndTime,
+    string Status,
+    bool IsLocked,
+    int ParticipantsCount,
+    int SubmissionsCount,
+    DateTime CreatedAt);
+
+/// <summary>
+/// DTO chi tiết lớp học phần (kèm danh sách bài kiểm tra và danh sách sinh viên).
+/// </summary>
+public sealed record ClassDetailDto(
+    Guid ClassId,
+    string Code,
+    string Name,
+    string JoinCode,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    Guid? CourseOfferingId,
+    Guid? LecturerId,
+    string? LecturerName,
+    int EnrolledCount,
+    int MaxStudents,
+    bool HasPassword,
+    bool IsJoinEnabled,
+    bool AllowSelfEnrollment,
+    bool IsActive,
+    bool IsAlreadyEnrolled,
+    DateTime CreatedAt,
+    IReadOnlyList<ClassInClassShiftSummaryDto> Shifts,
+    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents);

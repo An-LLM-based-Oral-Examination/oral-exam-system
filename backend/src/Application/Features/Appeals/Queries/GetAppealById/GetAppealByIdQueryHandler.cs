@@ -40,7 +40,7 @@ public sealed class GetAppealByIdQueryHandler : IRequestHandler<GetAppealByIdQue
             {
                 "student" => appeal.StudentId == request.RequesterId.Value,
                 "lecturer" => appeal.AssignedTo == request.RequesterId.Value,
-                "department_head" or "admin" => true,
+                "department_head" or "examination_officer" or "admin" => true,
                 _ => false
             };
             if (!canView)

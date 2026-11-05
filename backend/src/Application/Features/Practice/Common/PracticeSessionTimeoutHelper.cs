@@ -164,6 +164,7 @@ public static class PracticeSessionTimeoutHelper
             var eval = new AiEvaluation
             {
                 AnswerType = "practice",
+                StudentId = session.StudentId,
                 PracticeAnswerId = skippedAnswer.Id,
                 TotalScore = 0.0m,
                 ConfidenceScore = 1.0m,
@@ -200,7 +201,8 @@ public static class PracticeSessionTimeoutHelper
         IApplicationDbContext context,
         PracticeSession session,
         int timeoutMinutes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool saveChanges = true)
     {
         if (DateTime.UtcNow - session.LastActivityAt <= TimeSpan.FromMinutes(timeoutMinutes))
         {
@@ -257,7 +259,7 @@ public static class PracticeSessionTimeoutHelper
             }
         }
 
-        if (changed)
+        if (changed && saveChanges)
         {
             await context.SaveChangesAsync(cancellationToken);
         }

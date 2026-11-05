@@ -45,19 +45,48 @@ public class PracticeHub : Hub<IPracticeClient>
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == parsedSessionId);
 
-            if (session == null)
+            if (session != null)
             {
-                throw new HubException("NOT_FOUND: Phiên luyện tập không tồn tại.");
+                if (!isElevatedRole && session.StudentId != currentUserId)
+                {
+                    throw new HubException("FORBIDDEN: Bạn không có quyền tham gia phiên luyện tập của sinh viên khác.");
+                }
             }
-
-            if (!isElevatedRole && session.StudentId != currentUserId)
+            else
             {
-                throw new HubException("FORBIDDEN: Bạn không có quyền tham gia phiên luyện tập của sinh viên khác.");
+                var inClassShift = await _context.InClassExamShifts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Id == parsedSessionId);
+
+                if (inClassShift == null)
+                {
+                    throw new HubException("NOT_FOUND: Phiên luyện tập hoặc ca thi trong lớp không tồn tại.");
+                }
+
+                if (!isElevatedRole)
+                {
+                    var isParticipantOrEnrolled = await _context.InClassShiftParticipants
+                        .AsNoTracking()
+                        .AnyAsync(p => p.ShiftId == parsedSessionId && p.StudentId == currentUserId)
+                        || await _context.ClassEnrollments
+                            .AsNoTracking()
+                            .AnyAsync(e => e.ClassId == inClassShift.ClassId && e.StudentId == currentUserId);
+
+                    if (!isParticipantOrEnrolled)
+                    {
+                        throw new HubException("FORBIDDEN: Bạn không thuộc lớp học phần hoặc ca thi trong lớp này.");
+                    }
+                }
             }
         }
 
         await Groups.AddToGroupAsync(Context!.ConnectionId, $"session_{parsedSessionId:D}");
     }
+
+    /// <summary>
+    /// Alias cho phép Frontend tham gia nhóm ca thi trong lớp (MF-05) để nhận điểm realtime.
+    /// </summary>
+    public Task JoinShift(string shiftId) => JoinSession(shiftId);
 
     /// <summary>
     /// Cho phép Frontend rời nhóm phiên luyện tập khi kết thúc hoặc chuyển trang.
@@ -69,4 +98,9 @@ public class PracticeHub : Hub<IPracticeClient>
             : $"session_{sessionId}";
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
     }
+
+    /// <summary>
+    /// Alias cho phép Frontend rời nhóm ca thi trong lớp (MF-05).
+    /// </summary>
+    public Task LeaveShift(string shiftId) => LeaveSession(shiftId);
 }

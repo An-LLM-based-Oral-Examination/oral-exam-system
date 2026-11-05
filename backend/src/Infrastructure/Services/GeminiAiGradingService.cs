@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using System;
@@ -97,20 +99,64 @@ public class GeminiAiGradingService : IAiGradingService
         "em quên rồi"
     ];
 
+    private static readonly SemaphoreSlim AiGradingBulkhead = new(24, 24);
+    private static int _roundRobinKeyCounter;
+
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey; private readonly IReadOnlyList<string> _candidateApiKeys;
+    private readonly ILogger<GeminiAiGradingService> _logger;
+    private readonly string _apiKey;
+    private readonly IReadOnlyList<string> _candidateApiKeys;
     private readonly string _apiUrl;
     private readonly string _cloudflareAccountId;
     private readonly string _cloudflareApiToken;
 
-    public GeminiAiGradingService(HttpClient httpClient, IConfiguration configuration)
+    public GeminiAiGradingService(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<GeminiAiGradingService>? logger = null)
     {
         _httpClient = httpClient;
+        _logger = logger ?? NullLogger<GeminiAiGradingService>.Instance;
         _apiKey = configuration["Gemini:ApiKey"]
             ?? configuration["Gemini__ApiKey"]
             ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
             ?? string.Empty;
-        var fallbackKey = configuration["Gemini:FallbackApiKey"] ?? configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; _candidateApiKeys = new[] { _apiKey.Trim(), fallbackKey.Trim() }.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToList(); _apiUrl = configuration["Gemini:ApiUrl"]
+        var fallbackKey = configuration["Gemini:FallbackApiKey"]
+            ?? configuration["Gemini__FallbackApiKey"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY")
+            ?? string.Empty;
+        var rawKeyPool = configuration["Gemini:ApiKeys"]
+            ?? configuration["Gemini__ApiKeys"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEYS")
+            ?? string.Empty;
+        var pooledKeys = rawKeyPool
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var baseKeys = new[] { _apiKey.Trim(), fallbackKey.Trim() }
+            .Concat(pooledKeys)
+            .Where(k => !string.IsNullOrWhiteSpace(k) &&
+                        !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) &&
+                        !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (baseKeys.Count > 1)
+        {
+            var rotatedKeys = new List<string>(baseKeys.Count);
+            var startIdx = (int)(unchecked((uint)Interlocked.Increment(ref _roundRobinKeyCounter)) % (uint)baseKeys.Count);
+            for (var i = 0; i < baseKeys.Count; i++)
+            {
+                rotatedKeys.Add(baseKeys[(startIdx + i) % baseKeys.Count]);
+            }
+
+            _candidateApiKeys = rotatedKeys;
+        }
+        else
+        {
+            _candidateApiKeys = baseKeys;
+        }
+
+        _apiUrl = configuration["Gemini:ApiUrl"]
             ?? configuration["Gemini__ApiUrl"]
             ?? Environment.GetEnvironmentVariable("GEMINI_API_URL")
             ?? DefaultGeminiApiUrl;
@@ -386,12 +432,20 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
 
-                using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUrl)
+                await AiGradingBulkhead.WaitAsync(timeoutCts.Token);
+                try
                 {
-                    Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
-                };
-                requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
-                response = await _httpClient.SendAsync(requestMessage, timeoutCts.Token);
+                    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUrl)
+                    {
+                        Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
+                    };
+                    requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
+                    response = await _httpClient.SendAsync(requestMessage, timeoutCts.Token);
+                }
+                finally
+                {
+                    AiGradingBulkhead.Release();
+                }
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -399,6 +453,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 }
 
                 lastError = $"Gemini API HTTP Error {response.StatusCode}: {await response.Content.ReadAsStringAsync(cancellationToken)}";
+                _logger.LogWarning("Gemini API call returned non-success code {StatusCode} on {TargetUrl}: {Error}", response.StatusCode, targetUrl, lastError);
 
                 if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests
                     or System.Net.HttpStatusCode.RequestTimeout
@@ -417,16 +472,19 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 lastError = $"Gemini API request timed out after 12s ({targetUrl}).";
+                _logger.LogWarning("Gemini API request timed out after 12s on {TargetUrl}.", targetUrl);
             }
             catch (HttpRequestException ex)
             {
                 lastTransientStatusCode ??= ex.StatusCode;
                 lastError = $"Gemini API network error ({targetUrl}): {ex.Message}";
+                _logger.LogError(ex, "Gemini API network error on {TargetUrl}: {Message}", targetUrl, ex.Message);
             }
         }
 
         if (response == null || !response.IsSuccessStatusCode)
         {
+            _logger.LogWarning("Gemini API candidate URLs exhausted. Attempting fallback to Cloudflare Llama. LastError: {LastError}", lastError);
             var cfFallback = await TryGradeWithCloudflareLlamaAsync(prompt, request, cancellationToken);
             if (cfFallback != null)
             {
@@ -706,9 +764,21 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             };
             reqMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _cloudflareApiToken);
 
-            var resp = await _httpClient.SendAsync(reqMsg, timeoutCts.Token);
+            await AiGradingBulkhead.WaitAsync(timeoutCts.Token);
+            HttpResponseMessage resp;
+            try
+            {
+                resp = await _httpClient.SendAsync(reqMsg, timeoutCts.Token);
+            }
+            finally
+            {
+                AiGradingBulkhead.Release();
+            }
+
             if (!resp.IsSuccessStatusCode)
             {
+                var cfErr = await resp.Content.ReadAsStringAsync(timeoutCts.Token);
+                _logger.LogWarning("Cloudflare Llama grading fallback failed with status {StatusCode}: {Error}", resp.StatusCode, cfErr);
                 return null;
             }
 
@@ -742,8 +812,9 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
             return ParseCleanAiGradingJson(rawContent);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected exception in Cloudflare Llama fallback: {Message}", ex.Message);
             return null;
         }
     }

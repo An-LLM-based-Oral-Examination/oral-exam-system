@@ -6,10 +6,12 @@ namespace OralExamination.Domain.Entities;
 public partial class AiEvaluation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string AnswerType { get; set; } = null!; // "practice" | "mock_exam" | "exam"
+    public string AnswerType { get; set; } = null!; // "practice" | "mock_exam" | "exam" | "in_class"
+    public Guid? StudentId { get; set; }
     public Guid? PracticeAnswerId { get; set; }
     public Guid? ExamSubmissionId { get; set; }
     public Guid? MockExamAnswerId { get; set; }
+    public Guid? InClassSubmissionId { get; set; }
     public decimal TotalScore { get; set; }
     public string? Feedback { get; set; }
     public decimal? ConfidenceScore { get; set; }
@@ -17,8 +19,10 @@ public partial class AiEvaluation
     public string? FollowUpPrompt { get; set; }
     public DateTime EvaluatedAt { get; set; } = DateTime.UtcNow;
 
+    public virtual User? Student { get; set; }
     public virtual PracticeAnswer? PracticeAnswer { get; set; }
     public virtual ExamQuestionSubmission? ExamSubmission { get; set; }
     public virtual MockExamAnswer? MockExamAnswer { get; set; }
+    public virtual InClassExamSubmission? InClassSubmission { get; set; }
     public virtual ICollection<AiEvaluationDetail> Details { get; set; } = new List<AiEvaluationDetail>();
 }

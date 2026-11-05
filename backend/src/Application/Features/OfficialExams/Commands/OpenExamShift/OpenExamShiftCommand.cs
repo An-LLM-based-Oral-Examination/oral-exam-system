@@ -11,4 +11,5 @@ public sealed record OpenExamShiftCommand(
     string? RoomLab,
     DateTime StartTime,
     DateTime EndTime,
-    Guid ProctorUserId) : IRequest<Result<ExamShiftResponse>>;
+    Guid ProctorUserId,
+    Guid ExaminerUserId) : IRequest<Result<ExamShiftResponse>>;

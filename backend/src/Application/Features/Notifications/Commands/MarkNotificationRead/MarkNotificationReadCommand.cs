@@ -32,29 +32,27 @@ public sealed class MarkNotificationReadCommandHandler
             return Result<bool>.Failure("VALIDATION: UserId và NotificationId không được để trống.");
         }
 
-        var alreadyMarked = await _context.AuditLogs
-            .AnyAsync(
-                a => a.UserId == request.UserId &&
-                     a.Action == "NOTIFICATION_READ" &&
-                     a.EntityId == request.NotificationId,
-                cancellationToken);
+        var notification = await _context.Notifications
+            .FirstOrDefaultAsync(n => n.Id == request.NotificationId, cancellationToken);
 
-        if (!alreadyMarked)
+        if (notification is null)
         {
-            _context.AuditLogs.Add(new AuditLog
-            {
-                Id = Guid.NewGuid(),
-                UserId = request.UserId,
-                Action = "NOTIFICATION_READ",
-                EntityName = "notifications",
-                EntityId = request.NotificationId,
-                NewValues = "is_read=true",
-                CreatedAt = DateTime.UtcNow
-            });
+            return Result<bool>.Failure("NOT_FOUND: Không tìm thấy thông báo trong hệ thống.");
+        }
 
+        if (notification.UserId != request.UserId)
+        {
+            return Result<bool>.Failure("FORBIDDEN: Bạn không có quyền truy cập thông báo này.");
+        }
+
+        if (!notification.IsRead)
+        {
+            notification.IsRead = true;
+            notification.ReadAt = DateTime.UtcNow;
             await _context.SaveChangesAsync(cancellationToken);
         }
 
         return Result<bool>.Success(true);
     }
 }
+

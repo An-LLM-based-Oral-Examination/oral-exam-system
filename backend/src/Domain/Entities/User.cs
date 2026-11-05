@@ -31,4 +31,8 @@ public partial class User
     public virtual ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public virtual ICollection<ExamAntiCheatLog> AntiCheatLogs { get; set; } = new List<ExamAntiCheatLog>();
+    public virtual ICollection<InClassExamShift> InstructedInClassShifts { get; set; } = new List<InClassExamShift>();
+    public virtual ICollection<InClassShiftParticipant> InClassShiftParticipations { get; set; } = new List<InClassShiftParticipant>();
+    public virtual ICollection<InClassExamSubmission> InClassExamSubmissions { get; set; } = new List<InClassExamSubmission>();
+    public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

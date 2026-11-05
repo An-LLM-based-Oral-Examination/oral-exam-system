@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
@@ -18,11 +21,11 @@ public sealed class AssignAppealLecturerCommandHandler
         AssignAppealLecturerCommand request,
         CancellationToken cancellationToken)
     {
-        var departmentHead = await _context.Users.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == request.DepartmentHeadId, cancellationToken);
-        if (departmentHead is null || !departmentHead.IsActive || departmentHead.Role != UserRole.DepartmentHead)
+        var assigner = await _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.AssignerId, cancellationToken);
+        if (assigner is null || !assigner.IsActive || (assigner.Role != UserRole.ExaminationOfficer && assigner.Role != UserRole.Admin))
         {
-            return Result<AppealResponseDto>.Failure("Chỉ Trưởng bộ môn đang hoạt động mới được phân công giảng viên chấm phúc khảo.");
+            return Result<AppealResponseDto>.Failure("Chỉ Cán bộ Khảo thí hoặc Quản trị viên đang hoạt động mới được phân công giảng viên chấm phúc khảo.");
         }
 
         var lecturer = await _context.Users.AsNoTracking()
@@ -46,8 +49,15 @@ public sealed class AssignAppealLecturerCommandHandler
             return Result<AppealResponseDto>.Failure("Chỉ đơn phúc khảo đang ở trạng thái PENDING mới được phân công.");
         }
 
+        // Ràng buộc độc lập: Giảng viên chấm lại bắt buộc không được trùng với Giám khảo đã chấm lần đầu (shift.ExaminerUserId)
+        if (appeal.Ticket?.Shift?.ExaminerUserId.HasValue == true &&
+            appeal.Ticket.Shift.ExaminerUserId.Value == lecturer.Id)
+        {
+            return Result<AppealResponseDto>.Failure("Giảng viên được phân công chấm lại không được trùng với Giám khảo đã chấm thi ban đầu của ca thi này.");
+        }
+
         appeal.AssignedTo = lecturer.Id;
-        appeal.ReviewedBy = departmentHead.Id;
+        appeal.ReviewedBy = assigner.Id;
         appeal.Status = AppealStatus.InReview;
         appeal.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
@@ -66,8 +76,8 @@ public sealed class AssignAppealLecturerCommandHandler
             Status = appeal.Status,
             AssignedTo = lecturer.Id,
             AssignedToName = lecturer.FullName,
-            ReviewedBy = departmentHead.Id,
-            ReviewedByName = departmentHead.FullName,
+            ReviewedBy = assigner.Id,
+            ReviewedByName = assigner.FullName,
             OriginalScore = appeal.OriginalScore,
             CreatedAt = appeal.CreatedAt,
             UpdatedAt = appeal.UpdatedAt

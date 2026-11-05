@@ -147,7 +147,14 @@ public sealed class GetQuestionsQueryHandler
                 "Phạm vi sử dụng câu hỏi không hợp lệ. Chỉ chấp nhận 'practice', 'exam' hoặc để trống.");
         }
 
+        var examTotalCount = await examQuery.CountAsync(cancellationToken);
+        var practiceTotalCount = await practiceQuery.CountAsync(cancellationToken);
+        var totalCount = examTotalCount + practiceTotalCount;
+        var windowLimit = pageNumber * pageSize;
+
         var examItems = await examQuery
+            .OrderByDescending(q => q.CreatedAt)
+            .Take(windowLimit)
             .Select(q => new QuestionSummaryDto(
                 q.Id,
                 q.CourseId,
@@ -169,6 +176,8 @@ public sealed class GetQuestionsQueryHandler
             .ToListAsync(cancellationToken);
 
         var practiceOnlyItems = await practiceQuery
+            .OrderByDescending(q => q.CreatedAt)
+            .Take(windowLimit)
             .Select(q => new QuestionSummaryDto(
                 q.Id,
                 q.CourseId,
@@ -189,14 +198,9 @@ public sealed class GetQuestionsQueryHandler
             ))
             .ToListAsync(cancellationToken);
 
-        var combined = examItems
+        var items = examItems
             .Concat(practiceOnlyItems)
             .OrderByDescending(q => q.CreatedAt)
-            .ToList();
-
-        var totalCount = combined.Count;
-
-        var items = combined
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToList();

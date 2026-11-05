@@ -7,5 +7,6 @@ namespace OralExamination.Application.Features.AcademicHierarchy.Commands.JoinCl
 
 public record JoinClassCommand(
     Guid StudentId,
-    string JoinCode,
-    string? Password = null) : IRequest<Result<JoinClassResponseDto>>;
+    string? JoinCode,
+    string? Password = null,
+    Guid? ClassId = null) : IRequest<Result<JoinClassResponseDto>>;

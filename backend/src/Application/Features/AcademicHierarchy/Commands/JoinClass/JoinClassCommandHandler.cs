@@ -46,14 +46,38 @@ public class JoinClassCommandHandler(
             return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Chỉ tài khoản có vai trò Sinh viên mới được phép tham gia lớp học phần.");
         }
 
-        var normalizedJoinCode = request.JoinCode.Trim().ToUpperInvariant();
+        Class? targetClass;
+        if (request.ClassId.HasValue && request.ClassId.Value != Guid.Empty)
+        {
+            targetClass = await context.Classes
+                .Include(c => c.Course)
+                .Include(c => c.Semester)
+                .Include(c => c.Lecturer)
+                .Include(c => c.CourseOffering)
+                .FirstOrDefaultAsync(c => c.Id == request.ClassId.Value, cancellationToken);
 
-        var targetClass = await context.Classes
-            .Include(c => c.Course)
-            .Include(c => c.Semester)
-            .Include(c => c.Lecturer)
-            .Include(c => c.CourseOffering)
-            .FirstOrDefaultAsync(c => c.JoinCode.ToUpper() == normalizedJoinCode, cancellationToken);
+            if (targetClass is not null && !string.IsNullOrWhiteSpace(request.JoinCode))
+            {
+                var trimmedCode = request.JoinCode.Trim();
+                if (!string.Equals(targetClass.JoinCode, trimmedCode, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(targetClass.Code, trimmedCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<JoinClassResponseDto>.Failure("NOT_FOUND: Mã tham gia lớp không khớp với lớp học đã chọn.");
+                }
+            }
+        }
+        else
+        {
+            var normalizedJoinCode = (request.JoinCode ?? string.Empty).Trim().ToUpperInvariant();
+            targetClass = await context.Classes
+                .Include(c => c.Course)
+                .Include(c => c.Semester)
+                .Include(c => c.Lecturer)
+                .Include(c => c.CourseOffering)
+                .FirstOrDefaultAsync(
+                    c => c.JoinCode.ToUpper() == normalizedJoinCode || c.Code.ToUpper() == normalizedJoinCode,
+                    cancellationToken);
+        }
 
         if (targetClass is null)
         {

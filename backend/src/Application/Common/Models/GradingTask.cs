@@ -13,4 +13,7 @@ public class GradingTask
     public Guid? ParentAnswerId { get; set; }
     public bool IsFullSession { get; set; }
     public string ConnectionId { get; set; } = string.Empty; // For SignalR realtime callback
+    public Guid? InClassSubmissionId { get; set; }
+    public string TaskType { get; set; } = "Practice";
 }
+

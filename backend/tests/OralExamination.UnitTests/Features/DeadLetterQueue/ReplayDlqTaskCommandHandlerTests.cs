@@ -424,4 +424,113 @@ public class ReplayDlqTaskCommandHandlerTests
         var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
         updatedDlq!.ResolvedByUserId.Should().Be(actorUserId);
     }
+
+    [Fact(DisplayName = "11. ReplayDlqTaskCommand: InClassGrading đẩy tác vụ vào GradingQueueChannel, cập nhật InClassExamSubmission về SUBMITTED và giải quyết DLQ")]
+    public async Task Handle_WhenInClassGrading_EnqueuesTask_UpdatesSubmissionStatus_AndResolvesDlq()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var submissionId = Guid.NewGuid();
+        var shiftId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        var submission = new InClassExamSubmission
+        {
+            Id = submissionId,
+            ShiftId = shiftId,
+            StudentId = studentId,
+            QuestionId = questionId,
+            Transcript = "Kiến trúc Clean Architecture gồm 4 tầng độc lập.",
+            Status = "SUBMITTED",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+        context.InClassExamSubmissions.Add(submission);
+
+        var gradingTask = new GradingTask
+        {
+            AnswerId = submissionId,
+            SessionId = shiftId,
+            QuestionId = questionId,
+            StudentId = studentId,
+            AnswerText = submission.Transcript,
+            InClassSubmissionId = submissionId
+        };
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "InClassGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "lecturer",
+            CorrelationId = submissionId,
+            PayloadJson = JsonSerializer.Serialize(gradingTask),
+            ErrorMessage = "Gemini API HTTP 429 Too Many Requests",
+            Status = "pending",
+            RetryCount = 3,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        queueChannelMock
+            .Setup(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act - Replay bởi lecturer
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "lecturer"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeTrue();
+
+        // 1. Kiểm tra EnqueueAsync được gọi đúng task
+        queueChannelMock.Verify(q => q.EnqueueAsync(
+            It.Is<GradingTask>(t => t.InClassSubmissionId == submissionId && t.AnswerText == submission.Transcript),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        // 2. Kiểm tra submission được cập nhật Status = "SUBMITTED"
+        var updatedSubmission = await context.InClassExamSubmissions.FindAsync(submissionId);
+        updatedSubmission!.Status.Should().Be("SUBMITTED");
+
+        // 3. Kiểm tra DLQ được giải quyết
+        var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        updatedDlq!.Status.Should().Be("resolved");
+        updatedDlq.ResolvedAt.Should().NotBeNull();
+        updatedDlq.NextRetryAt.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "12. ReplayDlqTaskCommand: InClassGrading chặn vai trò không hợp lệ (ví dụ examination_officer hoặc student) trả về FORBIDDEN")]
+    public async Task Handle_WhenInClassGrading_UnauthorizedRole_ReturnsForbidden()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var submissionId = Guid.NewGuid();
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "InClassGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "lecturer",
+            CorrelationId = submissionId,
+            PayloadJson = "{}",
+            ErrorMessage = "Network error",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        // Act - Role examination_officer cố replay ca thi trong lớp
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "examination_officer"), CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("FORBIDDEN: Chỉ có Giảng viên hoặc Quản trị viên mới có quyền replay tác vụ Ca thi trong lớp.");
+    }
 }

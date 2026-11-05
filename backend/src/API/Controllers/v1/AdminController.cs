@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.Admin.Commands.CreateUser;
 using OralExamination.Application.Features.Admin.Commands.UpdateSystemConfig;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserRole;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserStatus;
@@ -49,6 +50,29 @@ public class AdminController(ISender sender) : ControllerBase
     {
         var result = await _sender.Send(new GetUsersQuery(search, role, isActive, page, pageSize), cancellationToken);
         return Ok(result.Value);
+    }
+
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser(
+        [FromBody] CreateUserRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _sender.Send(new CreateUserCommand(
+            adminId,
+            request.Email,
+            request.FullName,
+            request.Password,
+            request.Role,
+            request.StudentCode,
+            request.Department), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return AdminProblem(result.Error);
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
     [HttpPut("users/{id:guid}/status")]
@@ -165,3 +189,12 @@ public sealed record UpdateSystemConfigRequest
     public string Value { get; init; } = string.Empty;
     public string? Description { get; init; }
 }
+
+public sealed record CreateUserRequest(
+    string Email,
+    string FullName,
+    string Password,
+    string Role,
+    string? StudentCode = null,
+    string? Department = null);
+

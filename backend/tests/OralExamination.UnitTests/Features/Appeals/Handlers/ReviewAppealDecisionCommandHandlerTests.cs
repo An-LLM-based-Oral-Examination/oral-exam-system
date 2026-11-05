@@ -41,7 +41,7 @@ public class ReviewAppealDecisionCommandHandlerTests
             Id = Guid.NewGuid(),
             Email = "depthead.review@fpt.edu.vn",
             FullName = "TS. Trưởng Bộ Môn Xét Duyệt",
-            Role = UserRole.DepartmentHead,
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 
@@ -273,31 +273,54 @@ public class ReviewAppealDecisionCommandHandlerTests
         result.Error.Should().Contain("không có quyền thẩm định");
     }
 
-    [Fact(DisplayName = "BE-12: Trưởng bộ môn phân công giảng viên và chuyển đơn sang IN_REVIEW")]
+    [Fact(DisplayName = "BE-12: Cán bộ khảo thí phân công giảng viên và chuyển đơn sang IN_REVIEW")]
     public async Task AssignLecturer_Should_Move_Pending_Appeal_To_InReview()
     {
         using var context = CreateDbContext();
-        var (_, departmentHead, lecturer, _, _, appeal) = await SeedDataAsync(context);
+        var (_, _, lecturer, _, _, appeal) = await SeedDataAsync(context);
+
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.assign@fpt.edu.vn",
+            FullName = "Cán bộ Khảo thí Phân công",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
 
         var handler = new AssignAppealLecturerCommandHandler(context);
         var result = await handler.Handle(
-            new AssignAppealLecturerCommand(appeal.Id, departmentHead.Id, lecturer.Id),
+            new AssignAppealLecturerCommand(appeal.Id, officer.Id, lecturer.Id),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Status.Should().Be(AppealStatus.InReview);
         result.Value.AssignedTo.Should().Be(lecturer.Id);
-        appeal.ReviewedBy.Should().Be(departmentHead.Id);
+        appeal.ReviewedBy.Should().Be(officer.Id);
     }
 
     [Fact(DisplayName = "BE-12: Chỉ giảng viên được phân công mới cập nhật được điểm chấm lại")]
     public async Task Regrade_Should_Update_Score_Only_For_Assigned_Lecturer()
     {
         using var context = CreateDbContext();
-        var (_, departmentHead, lecturer, _, submission, appeal) = await SeedDataAsync(context);
+        var (_, _, lecturer, _, submission, appeal) = await SeedDataAsync(context);
+
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.regrade@fpt.edu.vn",
+            FullName = "Cán bộ Khảo thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
+
         var assignHandler = new AssignAppealLecturerCommandHandler(context);
         await assignHandler.Handle(
-            new AssignAppealLecturerCommand(appeal.Id, departmentHead.Id, lecturer.Id),
+            new AssignAppealLecturerCommand(appeal.Id, officer.Id, lecturer.Id),
             CancellationToken.None);
 
         var otherLecturer = new User
@@ -323,11 +346,19 @@ public class ReviewAppealDecisionCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Status.Should().Be(AppealStatus.Approved);
+        result.Value!.Status.Should().Be(AppealStatus.InReview);
+        result.Value.ProposedScore.Should().Be(8.25m);
+
+        // Khảo thí phê duyệt quyết định mới cập nhật FinalScore
+        var reviewHandler = new ReviewAppealDecisionCommandHandler(context);
+        var reviewResult = await reviewHandler.Handle(
+            new ReviewAppealDecisionCommand(appeal.Id, officer.Id, AppealStatus.Approved, 8.25m, "Khảo thí duyệt"),
+            CancellationToken.None);
+        reviewResult.IsSuccess.Should().BeTrue();
         submission.FinalScore.Should().Be(8.25m);
     }
 
-    [Fact(DisplayName = "R2: Chấm lại đơn phúc khảo toàn vé (SubmissionId == null, không có LecturerAudit) vượt qua OneWayLockInterceptor và cập nhật FinalScore")]
+    [Fact(DisplayName = "R2: Chấm lại đơn phúc khảo toàn vé (SubmissionId == null, không có LecturerAudit) và Khảo thí duyệt mở OneWayLockInterceptor")]
     public async Task Regrade_WholeTicketAppeal_Without_LecturerAudit_Should_Update_Submissions_Under_OneWayLock()
     {
         var dbName = Guid.NewGuid().ToString();
@@ -338,19 +369,31 @@ public class ReviewAppealDecisionCommandHandlerTests
         Guid appealId;
         Guid lecturerId;
         Guid submissionId;
+        Guid officerId;
 
         using (var seedContext = new OralExamDbContext(seedOptions))
         {
-            var (_, deptHead, lecturer, ticket, submission, appeal) = await SeedDataAsync(seedContext);
+            var (_, _, lecturer, ticket, submission, appeal) = await SeedDataAsync(seedContext);
+            var officer = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = "officer.wholeticket@fpt.edu.vn",
+                FullName = "Cán bộ Khảo thí",
+                Role = UserRole.ExaminationOfficer,
+                IsActive = true
+            };
+            seedContext.Users.Add(officer);
+
             appeal.SubmissionId = null; // Đơn phúc khảo toàn vé thi (Nhóm 2 tin cậy cao, không có LecturerAudit)
             appeal.Status = AppealStatus.InReview;
             appeal.AssignedTo = lecturer.Id;
-            appeal.ReviewedBy = deptHead.Id;
+            appeal.ReviewedBy = officer.Id;
             await seedContext.SaveChangesAsync();
 
             appealId = appeal.Id;
             lecturerId = lecturer.Id;
             submissionId = submission.Id;
+            officerId = officer.Id;
         }
 
         var lockedOptions = new DbContextOptionsBuilder<OralExamDbContext>()
@@ -365,18 +408,35 @@ public class ReviewAppealDecisionCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Status.Should().Be(AppealStatus.Approved);
+        result.Value!.Status.Should().Be(AppealStatus.InReview);
         result.Value.ProposedScore.Should().Be(8.75m);
+
+        // Khảo thí phê duyệt
+        var reviewHandler = new ReviewAppealDecisionCommandHandler(activeContext);
+        var reviewResult = await reviewHandler.Handle(
+            new ReviewAppealDecisionCommand(appealId, officerId, AppealStatus.Approved, 8.75m, "Khảo thí phê duyệt kết quả"),
+            CancellationToken.None);
+        reviewResult.IsSuccess.Should().BeTrue();
 
         var updatedSubmission = await activeContext.ExamQuestionSubmissions.FindAsync(submissionId);
         updatedSubmission!.FinalScore.Should().Be(8.75m);
     }
 
-    [Fact(DisplayName = "R3: Chấm lại đơn phúc khảo 1 câu đơn lẻ trên vé thi nhiều câu sẽ tính lại trung bình cộng cho LecturerAudit.AuditedScore")]
+    [Fact(DisplayName = "R3: Chấm lại đơn phúc khảo 1 câu đơn lẻ và Khảo thí duyệt sẽ tính lại trung bình cộng cho LecturerAudit.AuditedScore")]
     public async Task Regrade_SingleSubmissionAppeal_On_MultiQuestionTicket_Should_Recalculate_Average_AuditedScore()
     {
         using var context = CreateDbContext();
-        var (_, deptHead, lecturer, ticket, sub1, appeal) = await SeedDataAsync(context);
+        var (_, _, lecturer, ticket, sub1, appeal) = await SeedDataAsync(context);
+
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.multi@fpt.edu.vn",
+            FullName = "Cán bộ Khảo thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(officer);
 
         var sub2 = new ExamQuestionSubmission
         {
@@ -404,16 +464,25 @@ public class ReviewAppealDecisionCommandHandlerTests
 
         appeal.Status = AppealStatus.InReview;
         appeal.AssignedTo = lecturer.Id;
-        appeal.ReviewedBy = deptHead.Id;
+        appeal.ReviewedBy = officer.Id;
         await context.SaveChangesAsync();
 
         var handler = new RegradeAppealCommandHandler(context);
-        // Phúc khảo câu 1 từ 5.0 lên 7.0 -> trung bình vé thi phải là (7.0 + 8.0) / 2 = 7.50
+        // Phúc khảo câu 1 từ 5.0 lên 7.0 -> Giảng viên đề xuất 7.0
         var result = await handler.Handle(
-            new RegradeAppealCommand(appeal.Id, lecturer.Id, 7.0m, "Đã nghe lại câu 1 và nâng điểm câu 1 lên 7.0."),
+            new RegradeAppealCommand(appeal.Id, lecturer.Id, 7.0m, "Đã nghe lại câu 1 và đề xuất nâng điểm câu 1 lên 7.0."),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.ProposedScore.Should().Be(7.0m);
+
+        // Khảo thí phê duyệt -> trung bình vé thi phải là (7.0 + 8.0) / 2 = 7.50
+        var reviewHandler = new ReviewAppealDecisionCommandHandler(context);
+        var reviewResult = await reviewHandler.Handle(
+            new ReviewAppealDecisionCommand(appeal.Id, officer.Id, AppealStatus.Approved, 7.0m, "Phê duyệt nâng điểm"),
+            CancellationToken.None);
+        reviewResult.IsSuccess.Should().BeTrue();
+
         sub1.FinalScore.Should().Be(7.0m);
         sub2.FinalScore.Should().Be(8.0m);
         audit.AuditedScore.Should().Be(7.50m);

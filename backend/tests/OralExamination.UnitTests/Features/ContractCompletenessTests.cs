@@ -905,6 +905,18 @@ public class ContractCompletenessTests
         db.Users.Add(student);
         db.RealExamSessionShifts.Add(shift);
         db.StudentExamTickets.Add(ticket);
+        db.Notifications.Add(new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = student.Id,
+            Title = "Lịch thi vấn đáp chính thức",
+            Message = "Bạn đã được phân ghế số 8 tại LAB-101 (Ca Sáng).",
+            Type = "EXAM_SCHEDULE_PUBLISHED",
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow.AddHours(-2),
+            RelatedEntityName = "student_exam_tickets",
+            RelatedEntityId = ticket.Id
+        });
         await db.SaveChangesAsync();
 
         var handler = new OralExamination.Application.Features.Notifications.Queries.GetNotifications.GetNotificationsQueryHandler(db);
@@ -1030,12 +1042,12 @@ public class ContractCompletenessTests
         var reviewAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.ReviewAppeal))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        reviewAttr.Roles.Should().Be("department_head,admin");
+        reviewAttr.Roles.Should().Be("examination_officer,admin");
 
         var assignAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.AssignLecturer))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        assignAttr.Roles.Should().Be("department_head");
+        assignAttr.Roles.Should().Be("examination_officer,admin");
 
         var regradeAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.Regrade))!,

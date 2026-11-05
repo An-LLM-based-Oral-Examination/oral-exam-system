@@ -52,6 +52,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<GradingJob> GradingJobs { get; set; }
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
     public virtual DbSet<SystemConfig> SystemConfigs { get; set; } = null!;
+    public virtual DbSet<InClassExamShift> InClassExamShifts { get; set; } = null!;
+    public virtual DbSet<InClassShiftPassword> InClassShiftPasswords { get; set; } = null!;
+    public virtual DbSet<InClassShiftParticipant> InClassShiftParticipants { get; set; } = null!;
+    public virtual DbSet<InClassExamSubmission> InClassExamSubmissions { get; set; } = null!;
+    public virtual DbSet<Notification> Notifications { get; set; } = null!;
 
     private static readonly JsonSerializerOptions JsonbSerializerOptions = new()
     {
@@ -623,6 +628,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_classes_semester");
             entity.HasIndex(e => e.LecturerId).HasDatabaseName("ix_classes_lecturer");
             entity.HasIndex(e => e.CourseOfferingId).HasDatabaseName("ix_classes_course_offering");
+            entity.HasIndex(e => new { e.IsActive, e.SemesterId, e.CourseId, e.CreatedAt })
+                .HasDatabaseName("ix_classes_active_semester_course_created");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
             entity.Property(e => e.CourseOfferingId).HasColumnName("course_offering_id");
             entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
@@ -989,6 +996,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 t.HasCheckConstraint("ck_exam_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
                 t.HasCheckConstraint("ck_exam_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
+                t.HasCheckConstraint("ck_exam_questions_approval_status", "approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
@@ -1158,31 +1166,41 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("ai_evaluations", t =>
             {
-                t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam')");
+                t.HasCheckConstraint("ck_ai_evaluations_type", "answer_type IN ('practice', 'mock_exam', 'exam', 'in_class')");
                 t.HasCheckConstraint("ck_ai_evaluations_score", "total_score >= 0 AND total_score <= 10.00");
                 t.HasCheckConstraint("ck_ai_evaluations_xor",
-                    "(answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL) OR " +
-                    "(answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL) OR " +
-                    "(answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL)");
+                    "(answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR " +
+                    "(answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR " +
+                    "(answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND in_class_submission_id IS NULL) OR " +
+                    "(answer_type = 'in_class' AND in_class_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL)");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.AnswerType).HasColumnName("answer_type").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
             entity.Property(e => e.PracticeAnswerId).HasColumnName("practice_answer_id");
             entity.Property(e => e.ExamSubmissionId).HasColumnName("exam_submission_id");
             entity.Property(e => e.MockExamAnswerId).HasColumnName("mock_exam_answer_id");
+            entity.Property(e => e.InClassSubmissionId).HasColumnName("in_class_submission_id");
             entity.Property(e => e.TotalScore).HasColumnName("total_score").HasPrecision(4, 2).IsRequired();
             entity.Property(e => e.Feedback).HasColumnName("feedback");
             entity.Property(e => e.ConfidenceScore).HasColumnName("confidence_score").HasPrecision(3, 2);
             entity.Property(e => e.CotTrace).HasColumnName("cot_trace");
             entity.Property(e => e.FollowUpPrompt).HasColumnName("follow_up_prompt");
             entity.Property(e => e.EvaluatedAt).HasColumnName("evaluated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => e.StudentId).HasDatabaseName("ix_ai_evaluations_student");
             entity.HasIndex(e => e.PracticeAnswerId).HasDatabaseName("ix_ai_evaluations_practice_answer");
             entity.HasIndex(e => e.ExamSubmissionId)
                 .IsUnique()
                 .HasFilter("exam_submission_id IS NOT NULL")
                 .HasDatabaseName("uq_ai_evaluations_exam_submission");
             entity.HasIndex(e => e.MockExamAnswerId).HasDatabaseName("ix_ai_evaluations_mock_exam_answer");
+            entity.HasIndex(e => e.InClassSubmissionId).HasDatabaseName("ix_ai_evaluations_in_class_submission");
+
+            entity.HasOne(d => d.Student)
+                .WithMany()
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(d => d.PracticeAnswer)
                 .WithMany(p => p.AiEvaluations)
@@ -1197,6 +1215,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.MockExamAnswer)
                 .WithMany(p => p.AiEvaluations)
                 .HasForeignKey(d => d.MockExamAnswerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.InClassSubmission)
+                .WithMany(p => p.AiEvaluations)
+                .HasForeignKey(d => d.InClassSubmissionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -2059,6 +2082,225 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                     UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             );
+        });
+
+        // 30. in_class_exam_shifts
+        modelBuilder.Entity<InClassExamShift>(entity =>
+        {
+            entity.ToTable("in_class_exam_shifts", t =>
+            {
+                t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_time", "end_time >= start_time");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_pool_mode", "question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_total_questions", "total_questions_per_student >= 1 AND total_questions_per_student <= 10");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_max_followup", "max_follow_up_questions >= 0 AND max_follow_up_questions <= 5");
+            });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ClassId).HasColumnName("class_id").IsRequired();
+            entity.Property(e => e.LecturerId).HasColumnName("lecturer_id").IsRequired();
+            entity.Property(e => e.ShiftName).HasColumnName("shift_name").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.QuestionPoolMode).HasColumnName("question_pool_mode").HasMaxLength(30).HasDefaultValue("ALL_COURSE_BANK").IsRequired();
+            entity.Property(e => e.SelectedQuestionIdsJson).HasColumnName("selected_question_ids").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
+            entity.Property(e => e.TotalQuestionsPerStudent).HasColumnName("total_questions_per_student").HasDefaultValue(1).IsRequired();
+            entity.Property(e => e.HasFollowUp).HasColumnName("has_follow_up").HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.MaxFollowUpQuestions).HasColumnName("max_follow_up_questions").HasDefaultValue(2).IsRequired();
+            entity.Property(e => e.IsAutoPublishGrades).HasColumnName("is_auto_publish_grades").HasDefaultValue(true).IsRequired();
+            entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
+            entity.Property(e => e.EndTime).HasColumnName("end_time").IsRequired();
+            entity.Property(e => e.TotpSecretKey).HasColumnName("totp_secret_key").HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED").IsRequired();
+            entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.FinalizedAt).HasColumnName("finalized_at");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            // ESR Index: Equality (ClassId, Status) -> Sort (CreatedAt DESC)
+            entity.HasIndex(e => new { e.ClassId, e.Status, e.CreatedAt })
+                .HasDatabaseName("ix_in_class_exam_shifts_class_status_created");
+
+            entity.HasIndex(e => e.LecturerId)
+                .HasDatabaseName("ix_in_class_exam_shifts_lecturer");
+
+            entity.HasOne(d => d.Class)
+                .WithMany(p => p.InClassExamShifts)
+                .HasForeignKey(d => d.ClassId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.Lecturer)
+                .WithMany(p => p.InstructedInClassShifts)
+                .HasForeignKey(d => d.LecturerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // 31. in_class_shift_passwords
+        modelBuilder.Entity<InClassShiftPassword>(entity =>
+        {
+            entity.ToTable("in_class_shift_passwords");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ShiftId).HasColumnName("shift_id").IsRequired();
+            entity.Property(e => e.PlainCode).HasColumnName("plain_code").HasMaxLength(10).IsRequired();
+            entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.ValidFrom).HasColumnName("valid_from").IsRequired();
+            entity.Property(e => e.ValidTo).HasColumnName("valid_to").IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Unique constraint chống ghi đúp mã OTP trong cùng một cửa sổ 5 phút khi giảng viên/dashboard polling đồng thời
+            entity.HasIndex(e => new { e.ShiftId, e.ValidFrom })
+                .IsUnique()
+                .HasDatabaseName("uq_in_class_shift_passwords_shift_valid_from");
+
+            // ESR Index: Equality (ShiftId) -> Range (ValidFrom, ValidTo)
+            entity.HasIndex(e => new { e.ShiftId, e.ValidFrom, e.ValidTo })
+                .HasDatabaseName("ix_in_class_shift_passwords_shift_valid");
+
+            entity.HasOne(d => d.Shift)
+                .WithMany(p => p.Passwords)
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // 32. in_class_shift_participants
+        modelBuilder.Entity<InClassShiftParticipant>(entity =>
+        {
+            entity.ToTable("in_class_shift_participants", t =>
+            {
+                t.HasCheckConstraint("ck_in_class_shift_participants_status", "status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+            });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ShiftId).HasColumnName("shift_id").IsRequired();
+            entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
+            entity.Property(e => e.AssignedQuestionId).HasColumnName("assigned_question_id");
+            entity.Property(e => e.AssignedQuestionIdsJson).HasColumnName("assigned_question_ids").HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
+            entity.Property(e => e.TotalAiScore).HasColumnName("total_ai_score").HasPrecision(4, 2);
+            entity.Property(e => e.TotalFinalScore).HasColumnName("total_final_score").HasPrecision(4, 2);
+            entity.Property(e => e.JoinedAt).HasColumnName("joined_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("JOINED").IsRequired();
+
+            // Unique constraint on (ShiftId, StudentId)
+            entity.HasIndex(e => new { e.ShiftId, e.StudentId })
+                .IsUnique()
+                .HasDatabaseName("uq_in_class_shift_participants_shift_student");
+
+            // ESR Index: Equality (StudentId, ShiftId)
+            entity.HasIndex(e => new { e.StudentId, e.ShiftId })
+                .HasDatabaseName("ix_in_class_shift_participants_student");
+
+            entity.HasIndex(e => e.AssignedQuestionId)
+                .HasDatabaseName("ix_in_class_shift_participants_assigned_question");
+
+            entity.HasOne(d => d.Shift)
+                .WithMany(p => p.Participants)
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.Student)
+                .WithMany(p => p.InClassShiftParticipations)
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.AssignedQuestion)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedQuestionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // 33. in_class_exam_submissions
+        modelBuilder.Entity<InClassExamSubmission>(entity =>
+        {
+            entity.ToTable("in_class_exam_submissions", t =>
+            {
+                t.HasCheckConstraint("ck_in_class_exam_submissions_status", "status IN ('SUBMITTED', 'AI_GRADED', 'AUDITED')");
+                t.HasCheckConstraint("ck_in_class_exam_submissions_followup_index", "follow_up_index >= 0 AND follow_up_index <= 5");
+            });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ShiftId).HasColumnName("shift_id").IsRequired();
+            entity.Property(e => e.StudentId).HasColumnName("student_id").IsRequired();
+            entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
+            entity.Property(e => e.IsFollowUp).HasColumnName("is_follow_up").HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.ParentSubmissionId).HasColumnName("parent_submission_id");
+            entity.Property(e => e.FollowUpIndex).HasColumnName("follow_up_index").HasDefaultValue(0).IsRequired();
+            entity.Property(e => e.FollowUpPrompt).HasColumnName("follow_up_prompt");
+            entity.Property(e => e.Transcript).HasColumnName("transcript").IsRequired();
+            entity.Property(e => e.AiScore).HasColumnName("ai_score").HasPrecision(4, 2);
+            entity.Property(e => e.AiConfidenceScore).HasColumnName("ai_confidence_score").HasPrecision(3, 2);
+            entity.Property(e => e.CotTrace).HasColumnName("cot_trace");
+            entity.Property(e => e.AiFeedback).HasColumnName("ai_feedback");
+            entity.Property(e => e.FinalScore).HasColumnName("final_score").HasPrecision(4, 2);
+            entity.Property(e => e.LecturerNotes).HasColumnName("lecturer_notes");
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SUBMITTED").IsRequired();
+            entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.GradedAt).HasColumnName("graded_at");
+
+            // Unique constraint trên (ShiftId, StudentId, QuestionId, FollowUpIndex) hỗ trợ làm N câu hỏi + follow-up nhưng chống nộp đúp cùng 1 lượt
+            entity.HasIndex(e => new { e.ShiftId, e.StudentId, e.QuestionId, e.FollowUpIndex })
+                .IsUnique()
+                .HasDatabaseName("uq_in_class_exam_submissions_shift_student");
+
+            // ESR Index: Equality (ShiftId, StudentId) -> Sort (SubmittedAt DESC)
+            entity.HasIndex(e => new { e.ShiftId, e.StudentId, e.SubmittedAt })
+                .HasDatabaseName("ix_in_class_exam_submissions_shift_student");
+
+            // ESR Index: Equality (StudentId) -> Sort (SubmittedAt DESC)
+            entity.HasIndex(e => new { e.StudentId, e.SubmittedAt })
+                .HasDatabaseName("ix_in_class_exam_submissions_student");
+
+            entity.HasIndex(e => e.QuestionId)
+                .HasDatabaseName("ix_in_class_exam_submissions_question");
+
+            entity.HasIndex(e => e.ParentSubmissionId)
+                .HasDatabaseName("ix_in_class_exam_submissions_parent");
+
+            entity.HasOne(d => d.Shift)
+                .WithMany(p => p.Submissions)
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.Student)
+                .WithMany(p => p.InClassExamSubmissions)
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(d => d.Question)
+                .WithMany()
+                .HasForeignKey(d => d.QuestionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.ParentSubmission)
+                .WithMany()
+                .HasForeignKey(d => d.ParentSubmissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // 34. notifications
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("notifications");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.UserId).HasColumnName("user_id").IsRequired();
+            entity.Property(e => e.Title).HasColumnName("title").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Message).HasColumnName("message").IsRequired();
+            entity.Property(e => e.Type).HasColumnName("type").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.IsRead).HasColumnName("is_read").HasDefaultValue(false).IsRequired();
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.ReadAt).HasColumnName("read_at");
+            entity.Property(e => e.RelatedEntityName).HasColumnName("related_entity_name").HasMaxLength(100);
+            entity.Property(e => e.RelatedEntityId).HasColumnName("related_entity_id");
+            entity.Property(e => e.MetadataJson).HasColumnName("metadata_json");
+
+            // ESR Index: Equality (UserId, IsRead) -> Sort (CreatedAt DESC)
+            entity.HasIndex(e => new { e.UserId, e.IsRead, e.CreatedAt })
+                .HasDatabaseName("IX_notifications_user_id_is_read_created_at");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.Notifications)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

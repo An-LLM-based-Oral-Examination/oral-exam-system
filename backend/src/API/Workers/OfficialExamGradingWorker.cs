@@ -23,39 +23,62 @@ public sealed class OfficialExamGradingWorker : BackgroundService
     private readonly IOfficialExamGradingQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OfficialExamGradingWorker> _logger;
+    private readonly int _maxDegreeOfParallelism;
 
     public OfficialExamGradingWorker(
         IOfficialExamGradingQueue queue,
         IServiceScopeFactory scopeFactory,
-        ILogger<OfficialExamGradingWorker> logger)
+        ILogger<OfficialExamGradingWorker> logger,
+        IConfiguration? configuration = null)
     {
         _queue = queue;
         _scopeFactory = scopeFactory;
         _logger = logger;
+
+        var configuredConcurrency = configuration?["OfficialExamGradingQueue:MaxDegreeOfParallelism"]
+            ?? configuration?["GradingQueue:MaxDegreeOfParallelism"]
+            ?? Environment.GetEnvironmentVariable("OFFICIAL_EXAM_GRADING_MAX_DEGREE_OF_PARALLELISM")
+            ?? Environment.GetEnvironmentVariable("GRADING_QUEUE_MAX_DEGREE_OF_PARALLELISM");
+        _maxDegreeOfParallelism = int.TryParse(configuredConcurrency, out var parsedConcurrency)
+            ? Math.Clamp(parsedConcurrency, 1, 32)
+            : 12;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation(
+            "OfficialExamGradingWorker đã khởi động ở chế độ song song đa luồng (MaxDegreeOfParallelism = {MaxDegree}).",
+            _maxDegreeOfParallelism);
+
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = _maxDegreeOfParallelism,
+            CancellationToken = stoppingToken
+        };
+
         try
         {
-            await foreach (var task in _queue.ReadAllAsync(stoppingToken))
-            {
-                try
+            await Parallel.ForEachAsync(
+                _queue.ReadAllAsync(stoppingToken),
+                parallelOptions,
+                async (task, ct) =>
                 {
-                    await ProcessAsync(task, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch (Exception exception)
-                {
-                    _logger.LogError(exception,
-                        "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
-                        task.SubmissionId);
-                    await MarkFailedAsync(task, exception, CancellationToken.None);
-                }
-            }
+                    try
+                    {
+                        await ProcessAsync(task, ct);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        // Graceful shutdown
+                    }
+                    catch (Exception exception)
+                    {
+                        _logger.LogError(exception,
+                            "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
+                            task.SubmissionId);
+                        await MarkFailedAsync(task, exception, CancellationToken.None);
+                    }
+                });
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -79,6 +102,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         }
 
         var submission = await context.ExamQuestionSubmissions
+            .Include(item => item.Ticket)
             .Include(item => item.ExamQuestion)
                 .ThenInclude(question => question.Course)
             .Include(item => item.ExamQuestion)
@@ -118,6 +142,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             context.AiEvaluations.Add(new AiEvaluation
             {
                 AnswerType = "exam",
+                StudentId = submission.Ticket?.StudentId,
                 ExamSubmissionId = submission.Id,
                 TotalScore = 0m,
                 ConfidenceScore = 1.00m,
@@ -188,6 +213,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         context.AiEvaluations.Add(new AiEvaluation
         {
             AnswerType = "exam",
+            StudentId = submission.Ticket?.StudentId,
             ExamSubmissionId = submission.Id,
             TotalScore = score,
             ConfidenceScore = result.ConfidenceScore,

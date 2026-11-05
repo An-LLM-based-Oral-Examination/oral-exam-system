@@ -186,19 +186,35 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
             }
         }
 
-        if (candidateTicketIds.Count == 0)
+        if (candidateTicketIds.Count > 0)
         {
-            return;
+            var ticketIds = candidateTicketIds.ToList();
+            var hasLockedTicket = context.Set<StudentExamTicket>()
+                .AsNoTracking()
+                .Any(ticket => ticketIds.Contains(ticket.Id) && ticket.IsLocked);
+
+            if (hasLockedTicket)
+            {
+                throw CreateLockException("official exam grade aggregate");
+            }
         }
 
-        var ticketIds = candidateTicketIds.ToList();
-        var hasLockedTicket = context.Set<StudentExamTicket>()
-            .AsNoTracking()
-            .Any(ticket => ticketIds.Contains(ticket.Id) && ticket.IsLocked);
+        var modifiedInClassSubmissionShiftIds = context.ChangeTracker.Entries<InClassExamSubmission>()
+            .Where(IsModifiedOrDeleted)
+            .Select(entry => entry.Entity.ShiftId)
+            .Distinct()
+            .ToList();
 
-        if (hasLockedTicket)
+        if (modifiedInClassSubmissionShiftIds.Count > 0)
         {
-            throw CreateLockException("official exam grade aggregate");
+            var hasLockedInClassShift = context.Set<InClassExamShift>()
+                .AsNoTracking()
+                .Any(shift => modifiedInClassSubmissionShiftIds.Contains(shift.Id) && shift.IsLocked);
+
+            if (hasLockedInClassShift)
+            {
+                throw CreateLockException("in-class exam grade aggregate");
+            }
         }
     }
 

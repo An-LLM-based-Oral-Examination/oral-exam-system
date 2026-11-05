@@ -1,3 +1,4 @@
+using System;
 using MediatR;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
@@ -6,5 +7,9 @@ namespace OralExamination.Application.Features.Appeals.Commands.AssignAppealLect
 
 public sealed record AssignAppealLecturerCommand(
     Guid AppealId,
-    Guid DepartmentHeadId,
-    Guid LecturerId) : IRequest<Result<AppealResponseDto>>;
+    Guid AssignerId,
+    Guid LecturerId) : IRequest<Result<AppealResponseDto>>
+{
+    // Backwards compatibility property for existing tests
+    public Guid DepartmentHeadId => AssignerId;
+}

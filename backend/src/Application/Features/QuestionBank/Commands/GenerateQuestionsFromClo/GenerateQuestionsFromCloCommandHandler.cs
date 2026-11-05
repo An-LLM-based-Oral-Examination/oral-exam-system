@@ -51,6 +51,35 @@ public sealed class GenerateQuestionsFromCloCommandHandler
                 "Chỉ Giảng viên ('lecturer'), Trưởng Bộ Môn ('department_head') hoặc Quản trị viên mới được kích hoạt AI sinh câu hỏi.");
         }
 
+        // Kiểm tra phân công môn học nếu môn học đã được thiết lập phân công giảng viên / trưởng bộ môn
+        if (user.Role == UserRole.Lecturer)
+        {
+            bool courseHasLecturerAssignments = await _context.CourseLecturers
+                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive, cancellationToken);
+
+            if (courseHasLecturerAssignments)
+            {
+                bool isAssigned = await _context.CourseLecturers
+                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == user.Id && cl.IsActive, cancellationToken)
+                    || await _context.Classes
+                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == user.Id && c.IsActive, cancellationToken);
+
+                if (!isAssigned)
+                {
+                    return Result<GenerateQuestionsFromCloResponseDto>.Failure(
+                        "Giảng viên chưa được phân công phụ trách môn học này nên không được phép sinh câu hỏi.");
+                }
+            }
+        }
+        else if (user.Role == UserRole.DepartmentHead && course.DepartmentHeadUserId.HasValue && course.DepartmentHeadUserId.Value != Guid.Empty)
+        {
+            if (course.DepartmentHeadUserId.Value != user.Id)
+            {
+                return Result<GenerateQuestionsFromCloResponseDto>.Failure(
+                    "Trưởng bộ môn không phụ trách môn học này nên không được phép sinh câu hỏi.");
+            }
+        }
+
         // 3. Truy vấn Chuẩn đầu ra thực tế từ database (Bảng course_clos 3NF)
         var closInDb = await _context.CourseClos
             .AsNoTracking()

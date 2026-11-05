@@ -11,12 +11,10 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Appeals.Commands.RegradeAppeal;
 
-public sealed class RegradeAppealCommandHandler
+public sealed class RegradeAppealCommandHandler(IApplicationDbContext context)
     : IRequestHandler<RegradeAppealCommand, Result<AppealResponseDto>>
 {
-    private readonly IApplicationDbContext _context;
-
-    public RegradeAppealCommandHandler(IApplicationDbContext context) => _context = context;
+    private readonly IApplicationDbContext _context = context;
 
     public async Task<Result<AppealResponseDto>> Handle(
         RegradeAppealCommand request,
@@ -48,64 +46,11 @@ public sealed class RegradeAppealCommandHandler
             return Result<AppealResponseDto>.Failure("Giảng viên hiện tại không phải người được phân công chấm lại đơn này.");
         }
 
-        var ticketSubmissions = await _context.ExamQuestionSubmissions
-            .Where(s => s.TicketId == appeal.TicketId)
-            .ToListAsync(cancellationToken);
-
-        var submission = appeal.SubmissionId.HasValue
-            ? ticketSubmissions.FirstOrDefault(s => s.Id == appeal.SubmissionId.Value)
-            : null;
-
-        var audit = await _context.LecturerAudits
-            .FirstOrDefaultAsync(a => a.TicketId == appeal.TicketId, cancellationToken);
-
-        if (submission is null && audit is null && (appeal.SubmissionId.HasValue || ticketSubmissions.Count == 0))
-        {
-            return Result<AppealResponseDto>.Failure("Không tìm thấy dữ liệu điểm thuộc vé thi để cập nhật phúc khảo.");
-        }
-
-        appeal.Decision = AppealStatus.Approved;
-        appeal.Status = AppealStatus.Approved;
+        // Quy định R2: Giảng viên chấm lại chỉ nhập ProposedScore và ReviewNotes.
+        // TUYỆT ĐỐI KHÔNG tự ý set Approved và KHÔNG tự ý ghi đè LecturerAudit.AuditedScore.
         appeal.ProposedScore = request.NewScore;
         appeal.ReviewNotes = request.ReviewNotes.Trim();
-        appeal.ResolvedAt = DateTime.UtcNow;
-        appeal.UpdatedAt = appeal.ResolvedAt.Value;
-
-        if (submission is not null)
-        {
-            submission.FinalScore = request.NewScore;
-            foreach (var sibling in ticketSubmissions.Where(s => s.Id != submission.Id))
-            {
-                sibling.FinalScore ??= sibling.AiScore;
-            }
-        }
-        else if (!appeal.SubmissionId.HasValue && ticketSubmissions.Count > 0)
-        {
-            foreach (var sub in ticketSubmissions)
-            {
-                sub.FinalScore = request.NewScore;
-            }
-        }
-
-        if (audit is not null)
-        {
-            if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
-            {
-                var hasAnyScore = ticketSubmissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue);
-                audit.AuditedScore = hasAnyScore
-                    ? Math.Round(
-                        ticketSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticketSubmissions.Count,
-                        2,
-                        MidpointRounding.AwayFromZero)
-                    : request.NewScore;
-            }
-            else
-            {
-                audit.AuditedScore = request.NewScore;
-            }
-
-            audit.OverrideReason = request.ReviewNotes.Trim();
-        }
+        appeal.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 

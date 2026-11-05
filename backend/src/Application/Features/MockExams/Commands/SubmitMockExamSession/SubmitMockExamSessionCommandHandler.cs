@@ -514,6 +514,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
             {
                 Id = evalId,
                 AnswerType = "mock_exam",
+                StudentId = session.StudentId,
                 PracticeAnswerId = null,
                 ExamSubmissionId = null,
                 MockExamAnswerId = a.Id,
@@ -877,9 +878,6 @@ public sealed class SubmitMockExamSessionCommandHandler(
             SubmittedAt: session.SubmittedAt.Value,
             Questions: results.Select(r => r.score).ToList()
         );
-
-        SubmitMockExamAnswer.SubmitMockExamAnswerCommandHandler.ClearVoiceBaselines(
-            session.Answers.Select(a => a.Id));
 
         return Result<MockExamScorecardDto>.Success(scorecard);
     }

@@ -36,11 +36,11 @@
   - [5.1. Sơ Đồ Mạng & Containerization Topology (Mermaid)](#phan-51)
   - [5.2. Bảng Phân Bổ Cổng Mạng, Vùng Cách Ly & Chính Sách Tường Lửa](#phan-52)
   - [5.3. Cấu Hình Reverse Proxy & Docker Compose Chuẩn Mực](#phan-53)
-- [Phần 6: Luồng Dữ Liệu Tương Tác Của 4 Core Main Flows & Bộ Quy Tắc Follow-up Kép](#phan-6)
-  - [6.1. Sơ Đồ Tổng Quan Luồng Dữ Liệu 4 Main Flows (Mermaid)](#phan-61)
-  - [6.2. Ma Trận So Sánh Toàn Diện 4 Core Main Flows](#phan-62)
+- [Phần 6: Luồng Dữ Liệu Tương Tác Của 5 Main Flows (MF-01 → MF-05) & Bộ Quy Tắc Follow-up Kép](#phan-6)
+  - [6.1. Sơ Đồ Tổng Quan Luồng Dữ Liệu 5 Main Flows (Mermaid)](#phan-61)
+  - [6.2. Ma Trận So Sánh Toàn Diện 5 Main Flows](#phan-62)
   - [6.3. Đặc Tả Chuyên Sâu Cơ Chế followup_id & Bộ Quy Tắc Kích Hoạt Follow-up Kép](#phan-63)
-  - [6.4. Sơ Đồ Chi Tiết Từng Luồng Nghiệp Vụ (Flowchart TD Độc Lập)](#phan-64)
+  - [6.4. Đặc Tả Chi Tiết Từng Luồng Nghiệp Vụ, Phân Làn Trách Nhiệm & Sơ Đồ Thuật Toán (MF-01 → MF-04)](#phan-64)
   - [6.5. Sơ Đồ Tuần Tự Tương Tác Chi Tiết 4 Core Main Flows (Sequence Diagrams)](#phan-65)
     - [6.5.1. MF-01: Luyện Tập Vấn Đáp Tự Do (Interactive Practice)](#phan-651)
     - [6.5.2. MF-02: Thi Thử Vấn Đáp Bấm Giờ (Timed Mock Exam)](#phan-652)
@@ -48,7 +48,7 @@
     - [6.5.4. MF-04: Thi Thật Phòng Lab & Thẩm Định Điểm (Official Lab Exam & Audit)](#phan-654)
   - [6.6. Xử Lý 4 Cạnh Biên Nghiệp Vụ Đặc Thù (Edge-Cases Resolution)](#phan-66)
   - [6.7. Luồng Nghiệp Vụ Bổ Trợ: Phân Cấp Học Thuật 4 Tầng (Academic Hierarchy - R5)](#phan-67)
-  - [6.8. Luồng Nghiệp Vụ Bổ Trợ: Ca Thi Vấn Đáp Tại Lớp & Mật Khẩu Xoay Vòng Động (In-Class Exam Shifts & TOTP - R6)](#phan-68)
+  - [6.8. Luồng Nghiệp Vụ MF-05: Ca Thi Vấn Đáp Tại Lớp & Mật Khẩu Xoay Vòng Động (In-Class Exam Shifts & TOTP - R6)](#phan-68)
 - [Phần 7: Kiến Trúc Phòng Thủ 4 Tầng Chịu Tải & Chống Mất Dữ Liệu (Zero Data Loss)](#phan-7)
   - [7.1. Sơ Đồ Cơ Chế Phòng Thủ 4 Tầng Liên Hoàn (Mermaid)](#phan-71)
   - [7.2. Phân Tích Kỹ Thuật Từng Tầng Chống Chịu Sự Cố](#phan-72)
@@ -81,7 +81,7 @@ Bảng dưới đây là **Cam kết Kỹ thuật Bất biến (Non-Negotiable S
 | 2 | **Backend API Port** | `5000` (Internal) | Nginx chuyển hướng toàn bộ `/api/v1/*` và nâng cấp giao thức WebSocket `/hubs/*` sang ASP.NET Core 8 Kestrel Server. | `HTTP 200` / `202` / `WSS` |
 | 3 | **Database Port** | `5432` (Internal) | Cổng nội bộ PostgreSQL 16 trong Docker network `oralexam-net`. **CẤM TUYỆT ĐỐI mở ra Internet**. Chỉ Backend truy cập qua Connection Pool. | Npgsql TCP Pool |
 | 4 | **Hạn ngạch thi thử (MF-02)** | `Cấu hình theo môn do Admin thiết lập (max_mock_exams_per_day)` | Admin cấu hình số lượt thi thử tối đa trong ngày cho từng môn học (`max_mock_exams_per_day`, không khóa cứng K=3). Trưởng Bộ Môn cấu hình cấu trúc đề thi thử, ma trận Bloom và thời lượng. Vượt hạn ngạch bị chặn bởi `PostgreSqlQuotaService` để chống lãng phí quota AI và ép ôn tập sâu. | `HTTP 429 Too Many Requests` |
-| 5 | **Khóa điểm 1 chiều (MF-04)** | `is_locked = true` | Sau khi Giám khảo hoàn tất hậu kiểm bài thi, Cán bộ Khảo thí bấm Publish Điểm (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`). `OneWayLockInterceptor` chặn 100% lệnh `UPDATE`/`DELETE` ở mức CSDL. Ngoại lệ hợp lệ duy nhất: Khi có đơn Phúc khảo nội bộ (`AppealRequest`) được Trưởng Bộ Môn giao cho Giảng viên chấm lại, Giảng viên được phân công mới có quyền cập nhật điểm phúc khảo kèm lý do. | `HTTP 403 Forbidden` |
+| 5 | **Khóa điểm 1 chiều (MF-04)** | `is_locked = true` | Sau khi Giám khảo hoàn tất hậu kiểm bài thi, Cán bộ Khảo thí bấm Publish Điểm (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`). `OneWayLockInterceptor` chặn 100% lệnh `UPDATE`/`DELETE` ở mức CSDL. Ngoại lệ hợp lệ duy nhất: Khi có đơn Phúc khảo nội bộ (`AppealRequest`) được Cán bộ Khảo thí phân công Giảng viên chấm lại (định mức <= 24 bài/GV, độc lập) và Cán bộ Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock cập nhật điểm chính thức. | `HTTP 403 Forbidden` |
 | 6 | **Ràng buộc Barem Rubric & Phê duyệt (MF-03)** | $\sum \text{Tiêu chí} \equiv 10.0\text{đ}$ & Duyệt Bộ Môn | Client Guard khóa nút Lưu/Gửi duyệt; AI sinh câu hỏi, rubric và sample answer từ chuẩn đầu ra CLO quản lý trong `course_clos` (3NF); Giảng viên tùy chỉnh đề bài, tick kho (`practice_questions` và/hoặc `exam_questions`) và barem 10.0đ rồi gửi Bộ Môn (`SUBMITTED_FOR_REVIEW`); Trưởng Bộ Môn thẩm định đối chiếu trùng câu hỏi và Phê duyệt (`OFFICIAL`) / Yêu cầu sửa (`NEEDS_REVISION`) / Từ chối (`REJECTED`). Khi đủ số lượng bộ đề yêu cầu, Trưởng BM bấm chuyển giao `HANDED_OVER` cho Khảo thí. FluentValidation chặn lưu nếu lệch 10.0đ. | `HTTP 422 Unprocessable` |
 | 7 | **Dung lượng Bounded Channel** | `1,000 slots` | Hàng đợi bộ nhớ RAM trung chuyển giữa tiếp nhận bài và Worker chấm điểm (`BoundedChannelFullMode.Wait`). Chống tràn RAM (OOM). | Backpressure Control |
 | 8 | **Chính sách Polly Retry** | `2s → 4s → 8s` | Tự động thử lại cuộc gọi Gemini AI khi gặp sự cố chập chờn mạng hoặc quá tải API (HTTP 429/503), tối đa 3 lần với hệ số mũ. | Exponential Backoff |
@@ -91,29 +91,53 @@ Bảng dưới đây là **Cam kết Kỹ thuật Bất biến (Non-Negotiable S
 | 12 | **Quy tắc Follow-up MF-02 & MF-04** | `MF-02: SV tự chọn; MF-04: 100% Trưởng BM cấu hình môn thi (1-5 câu, mặc định 2)` | MF-02: Sinh viên chủ động tự chọn Có/Không Follow-up trước khi thi thử; nếu có, AI hỏi chuyên sâu ngữ cảnh ([Needs Follow-up]) theo nội dung, KHÔNG theo điểm; thời lượng ca thi có follow-up dài hơn do Trưởng BM cấu hình; không lưu audio. MF-04: 100% quyền Trưởng Bộ Môn cấu hình Follow-up môn thi trong kỳ thi (`has_follow_up`, 1–5 câu, mặc định 2 câu); Cán bộ Khảo thí tuyệt đối KHÔNG có quyền cấu hình follow-up; Cán bộ Khảo thí chỉ quản lý tạo kỳ thi, ca thi (phòng lab ghi trên ca thi) và ExamInputMode. | Student Choice (MF-02) / Dept Head Config (MF-04) |
 | 13 | **Instant Feedback Thi Thử (MF-02)** | `Scorecard chi tiết & History` | Sau khi nộp bài thi thử, AI trả về Scorecard chi tiết từng câu (Điểm Rubric, Strengths, Weaknesses, Suggestions) tại màn hình kết quả và lưu vĩnh viễn vào `mock_exam_sessions` phục vụ tra cứu Lịch sử thi. Nguồn đề rút từ kho `practice_questions`. Khi hết giờ tự động nộp bài (câu chưa làm tính là bỏ trống, không chấm). | `HTTP 200 OK` |
 | 14 | **Phương thức làm bài Kiosk (MF-04)** | `ExamInputMode` | Cấu hình cấp môn trong kỳ thi gồm 2 phương thức: `VoiceOnly` (khóa cứng 100% phím Kiosk, chỉ dùng mic) và `VoiceWithTranscriptEdit` (mở đệm sửa từ theo `transcript_buffer_seconds` 10-300s, mặc định 60s do Admin cấu hình). Loại bỏ hoàn toàn `VoiceAndTextInput` khỏi scope hệ thống. | Kiosk Hardware Guard |
-| 15 | **AI Chấm Ngầm, Publish Điểm & Phúc Khảo Nội Bộ (MF-04)** | Kiosk khóa an toàn, Publish, Internal Appeal | Nộp bài Kiosk khóa màn hình lưu an toàn < 100ms; AI chấm ngầm (đầu vào chỉ là transcript) chuyển Giám khảo hậu kiểm; Khảo thí Publish điểm khi 100% sinh viên có điểm, kích hoạt One-Way Lock; Xuất báo cáo điểm thi FPT cả 2 định dạng Excel (.xlsx) và PDF có chữ ký số; Sinh viên xem điểm Student Portal & nộp đơn phúc khảo nội bộ `AppealRequest` trực tiếp trên hệ thống; Quy trình phúc khảo 5 bước chuẩn mực: (1) SV nộp đơn -> (2) Cán bộ Khảo thí tiếp nhận & thẩm tra tính hợp lệ -> (3) Khảo thí chuyển tiếp Trưởng Bộ Môn -> (4) Trưởng Bộ Môn phân công Giảng viên vào chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`) và Giảng viên nộp điểm tái thẩm định -> (5) Trưởng Bộ Môn phê duyệt quyết định điểm cuối cùng mở đường One-Way Lock cập nhật điểm. | `HTTP 200 OK` |
+| 15 | **AI Chấm Ngầm, Publish Điểm & Phúc Khảo Nội Bộ (MF-04)** | Kiosk khóa an toàn, Publish, Internal Appeal | Nộp bài Kiosk khóa màn hình lưu an toàn < 100ms; AI chấm ngầm (đầu vào chỉ là transcript) chuyển Giám khảo hậu kiểm; Khảo thí Publish điểm khi 100% sinh viên có điểm, kích hoạt One-Way Lock; Xuất báo cáo điểm thi FPT cả 2 định dạng Excel (.xlsx) và PDF có chữ ký số; Sinh viên xem điểm Student Portal & nộp đơn phúc khảo nội bộ `AppealRequest` trực tiếp trên hệ thống; Quy trình phúc khảo 5 bước chuẩn mực (R2/R7): (1) SV nộp đơn trên Student Portal (POST /api/v1/student/appeals) -> (2) Thông báo in-app gửi đồng thời đến Cán bộ Khảo thí và Trưởng BM; Khảo thí tiếp nhận & thẩm tra -> (3) Cán bộ Khảo thí xem trước thuật toán đề xuất phân bổ tự động và phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV, loại trừ Giám khảo ca thi) qua POST .../assign-lecturer hoặc POST .../batch-assign -> (4) Giảng viên được phân công chấm lại độc lập trên Evidence Panel, nhập đề xuất điểm và giải trình (PUT /api/v1/lecturer/appeals/{id}/regrade) -> (5) Cán bộ Khảo thí thẩm định & phê duyệt quyết định cuối cùng (POST /api/v1/examination-officer/appeals/{id}/decision) mở đường One-Way Lock cập nhật điểm chính thức. | `HTTP 200 OK` |
 | 16 | **Chốt chặn AI Doubt Guard & Evidence Panel (MF-04)** | `conf < 0.70 OR is_suspicious` | Cổng Hậu kiểm Giám khảo cung cấp Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT) và tự động chia 2 nhóm: Nhóm 1 Đáng nghi ngờ (`conf < 0.70` hoặc `is_suspicious == true`), Giám khảo bắt buộc đối soát Evidence Panel, nghe Waveform Player và chỉnh điểm; Nhóm 2 Độ tin cậy cao, Giám khảo rà soát nhanh. | Doubt Guard Priority Queue |
 | 17 | **Timeout Không Tương Tác MF-01 (Inactivity Timeout)** | `5 phút (SessionInactivityTimeoutMinutes = 5)` | Quản lý thời gian timeout không tương tác của phiên luyện tập MF-01 qua system_configs. Cập nhật last_activity_at sau mỗi tương tác (tạo phiên, nộp câu trả lời, lấy câu tiếp theo). Quá 5 phút không tương tác, hệ thống tự động kết thúc phiên an toàn (status = 'completed'), bảo toàn 100% điểm các câu đã làm (Full-Session tính các câu chưa làm là 0 điểm). Mọi request tiếp theo trả về HTTP 410 Gone (Session Timed Out). | `HTTP 410 Gone` |
 | 18 | **Hình ảnh đính kèm câu hỏi thủ công & Chấm điểm Đa phương thức (Multimodal Image Support)** | `PNG/JPG/WEBP <= 5MB, Magic Bytes, Manual-Only, R2 questions/{yyyyMM}/` | Chỉ câu hỏi do Giảng viên/Trưởng BM tạo thủ công (`source == 'manual'`) mới được phép đính kèm hình ảnh/sơ đồ kỹ thuật (UML, ERD, Clean Architecture, UI Mockup) qua `POST /api/v1/questions/upload-image` hoặc `POST /api/v1/storage/upload-question-image`. Hệ thống kiểm tra nhị phân Magic Bytes (`PNG`, `JPG/JPEG`, `WEBP`), giới hạn $\le 5\text{MB}$, lưu vào `wwwroot/uploads/questions/{yyyyMM}/` và Cloudflare R2 (`questions/{yyyyMM}/`), ghi nhận `image_url` & `image_description` trên cả `exam_questions` và `practice_questions`. Khi chấm điểm (MF-01, MF-02, MF-04), `GeminiAiGradingService` tự động giải mã ảnh thành Base64 (`inline_data: { mime_type, data }`) kèm mô tả ngữ cảnh hình ảnh vào payload cùng transcript sinh viên để thực hiện suy luận đối chiếu thị giác (Multimodal CoT Grading). | `HTTP 200` / `413` / `415` |
 
 ### <a id="phan-13"></a>1.3. Ma Trận Ngăn Xếp Công Nghệ Đa Ngôn Ngữ (Polyglot Tech Stack)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      ENTERPRISE POLYGLOT TECH STACK                         │
-├───────────────────┬─────────────────────────────────────────────────────────┤
-│ Frontend Web App  │ React 19 (Vite) · TypeScript 5.5 Strict · Tailwind v4   │
-│ Client State & UI │ Zustand · shadcn/ui · Lucide Icons · Canvas Wavesurfer  │
-│ Backend Service   │ .NET 8 Web API · C# 12 · Clean Architecture 4 Tầng      │
-│ Orchestration CQRS│ MediatR 12 · FluentValidation 11 · Polly 8 Resilience   │
-│ Database & ORM    │ PostgreSQL 16 · Entity Framework Core 8 (Npgsql)        │
-│ In-Memory Channel │ System.Threading.Channels (1,000 capacity BoundedQueue) │
-│ Real-Time Engine  │ ASP.NET Core SignalR Core Hubs (/hubs/practice)         │
-│ AI & LLM Cluster  │ Google Gemini 1.5 Flash (CoT 3 bước) & Gemini 1.5 Pro   │
-│ Speech & Voice    │ Web Speech API (Client) · OpenAI Whisper Large-v3 (GPU) │
-│ Object Storage    │ Cloudflare R2 (S3 API Compatible Zero-Egress Storage)   │
-│ Security & Proxy  │ Nginx 1.25 Alpine · Cloudflare WAF/DDoS · OAuth PKCE    │
-└───────────────────┴─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Presentation_Tier ["1. Tầng Trình Diễn & Giao Diện (Presentation & Client Tier)"]
+        direction LR
+        FE_Core["Frontend Web App<br><b>React 19 (Vite)</b><br>TypeScript 5.5 Strict · Tailwind CSS v4"]
+        FE_UI["Client State & Rich UI<br><b>Zustand · shadcn/ui</b><br>Lucide Icons · Canvas WaveSurfer"]
+        FE_Voice["Client Speech Engine<br><b>Web Speech API</b><br>Độ trễ cực thấp (&lt; 0.5s STT/TTS)"]
+    end
+
+    subgraph Backend_Tier ["2. Tầng Dịch Vụ Cốt Lõi (Core Backend Service Tier)"]
+        direction LR
+        BE_Core["Clean Architecture 4 Tầng<br><b>.NET 8 Web API (C# 12)</b><br>Kestrel Server (Port 5000)"]
+        BE_CQRS["Orchestration & Validation<br><b>MediatR 12 (CQRS)</b><br>FluentValidation 11 · Polly 8"]
+        BE_Queue["In-Memory Bounded Channel<br><b>System.Threading.Channels</b><br>1,000 Slots RAM Backpressure"]
+        BE_Realtime["Real-Time Engine<br><b>ASP.NET Core SignalR</b><br>/hubs/practice · /hubs/anti-cheat"]
+    end
+
+    subgraph Data_Tier ["3. Tầng Dữ Liệu & Lưu Trữ (Data Persistence & Storage Tier)"]
+        direction LR
+        DB_Relational[("PostgreSQL 16 (Port 5432)<br><b>Entity Framework Core 8</b><br>38 Bảng chuẩn 3NF · Npgsql Pool")]
+        Storage_R2[("Cloudflare R2 Object Storage<br><b>S3 API Compatible</b><br>Zero-Egress · STT_MSSV.webm")]
+    end
+
+    subgraph AI_Tier ["4. Cụm Trí Tuệ Nhân Tạo & Xử Lý Tiếng Nói (AI & Speech Intelligence)"]
+        direction LR
+        AI_LLM["Google Gemini AI Cluster<br><b>Gemini 1.5 Flash (CoT Rubric)</b><br>Gemini 1.5 Pro (Multimodal Lab)"]
+        AI_STT["Server Speech-to-Text<br><b>OpenAI Whisper Large-v3</b><br>Word Timestamps · GPU Acceleration"]
+    end
+
+    subgraph Security_Tier ["5. Ranh Giới Bảo Mật & Ingress (Security & Network Ingress)"]
+        direction LR
+        Sec_Ingress["Ingress Reverse Proxy<br><b>Nginx 1.25 Alpine</b><br>SSL Offload · HSTS · Route Split"]
+        Sec_WAF["Edge Security & DDoS<br><b>Cloudflare Anycast WAF</b><br>TLS 1.3 · Rate Limiting"]
+        Sec_Auth["Xác Thực Kép (Dual Auth)<br><b>Google OAuth 2.0 PKCE</b><br>Tài khoản trường cấp (Change-Password)"]
+    end
+
+    Security_Tier --> Presentation_Tier
+    Presentation_Tier --> Backend_Tier
+    Backend_Tier --> Data_Tier
+    Backend_Tier --> AI_Tier
 ```
 
 ---
@@ -128,9 +152,9 @@ Sơ đồ mô hình hóa toàn diện các tác nhân con người, ranh giới 
 flowchart TD
     subgraph Human_Actors ["Tác Nhân Người Dùng (Google OAuth 2.0 & Tài khoản Nhà trường cấp)"]
         Student["Sinh viên SE (ACT-01 / student)<br>• Luyện tập tự do (MF-01) & Thi thử bấm giờ (MF-02)<br>• Tham gia Lớp học bằng mật khẩu lớp & Thi trong lớp bằng OTP xoay vòng 5m (R6)<br>• Thi Kiosk phòng Lab (MF-04) & Nộp đơn phúc khảo cho Khảo thí (R7)"]
-        Instructor["Giảng viên / Giám khảo (ACT-02 / lecturer)<br>• Nhận phân công dạy môn từ Trưởng BM (course_lecturers)<br>• Tạo Lớp học & phát sinh mật khẩu lớp (join_password_hash)<br>• Tạo Ca thi trong lớp (OTP xoay vòng 5m + grace 30-60s) & Hậu kiểm điểm thành phần<br>• Soạn đề: luồng luyện tập độc lập; luồng thi thật bám sát đề thi mẫu Trưởng BM ban hành<br>• Hậu kiểm bài thi Evidence Panel & Chấm lại phúc khảo khi Trưởng BM giao (MF-04)"]
-        DeptHead["Trưởng Bộ Môn (ACT-04 / department_head)<br>• Quản lý môn học, CLOs (course_clos 3NF) & Phân công nhiều GV dạy môn (course_lecturers)<br>• Thẩm định duyệt đề OFFICIAL -> HANDED_OVER & Ban hành ma trận cấu trúc đề thi mẫu<br>• 100% thẩm quyền cấu hình Follow-up thi thật (has_follow_up, 1-5 câu)<br>• Tiếp nhận đơn phúc khảo từ Khảo thí chuyển sang, phân công GV chấm lại & Duyệt quyết định"]
-        ExamOfficer["Cán bộ Khảo thí (ACT-05 / examination_officer)<br>• Tạo kỳ thi, ca/phòng thi & import DSSV<br>• Phát đề không trùng (uq_tickets_shift_exam_set) & Mở xuất bản đề ca thi<br>• Công bố điểm One-Way Lock & xuất báo cáo Excel/PDF ký số<br>• Tiếp nhận & thẩm tra đơn phúc khảo từ SV rồi chuyển giao Trưởng BM (R7)<br>• Giám sát & Kích hoạt replay thủ công Dead-Letter Queue (DLQ) cho thi thật MF-04 (R2)"]
+        Instructor["Giảng viên / Giám khảo (ACT-02 / lecturer)<br>• Nhận phân công dạy môn từ Trưởng BM (course_lecturers)<br>• Tạo Lớp học & phát sinh mật khẩu lớp (join_password_hash)<br>• Tạo Ca thi trong lớp (OTP xoay vòng 5m + grace 30-60s) & Hậu kiểm điểm thành phần<br>• Soạn đề: luồng luyện tập độc lập; luồng thi thật bám sát đề thi mẫu Trưởng BM ban hành<br>• Hậu kiểm bài thi Evidence Panel & Chấm lại phúc khảo khi Cán bộ Khảo thí phân công (định mức <= 24 bài/GV, độc lập với Giám khảo ca ban đầu) (MF-04)"]
+        DeptHead["Trưởng Bộ Môn (ACT-04 / department_head)<br>• Quản lý môn học, CLOs (course_clos 3NF) & Phân công nhiều GV dạy môn (course_lecturers)<br>• Thẩm định duyệt đề OFFICIAL -> HANDED_OVER & Ban hành ma trận cấu trúc đề thi mẫu<br>• 100% thẩm quyền cấu hình Follow-up thi thật (has_follow_up, 1-5 câu)<br>• Tiếp nhận thông báo in-app khi có đơn phúc khảo để theo dõi chuyên môn học thuật môn học; Cắt bỏ quyền can thiệp DLQ và quyền trực tiếp phân công/phê duyệt phúc khảo"]
+        ExamOfficer["Cán bộ Khảo thí (ACT-05 / examination_officer)<br>• Tạo kỳ thi, ca/phòng thi (phân công cả examiner_user_id & proctor_user_id) & import DSSV<br>• Phát đề không trùng (uq_tickets_shift_exam_set) & Mở xuất bản đề ca thi<br>• Công bố điểm One-Way Lock & xuất báo cáo Excel/PDF ký số<br>• Tiếp nhận & thẩm tra đơn phúc khảo từ SV, phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV, loại trừ Giám khảo ca ban đầu), thẩm định & phê duyệt quyết định phúc khảo cuối cùng mở One-Way Lock cập nhật điểm (R2/R7)<br>• Giám sát & Kích hoạt replay thủ công Dead-Letter Queue (DLQ) cho thi thật MF-04 (R2)"]
         Proctor["Giám thị coi thi (ACT-06 / proctor)<br>• Điểm danh đối chiếu thẻ SV/CCCD (SeatNumber 1-40) & kiểm tra ip_address máy trạm<br>• Báo cáo vi phạm an ninh phòng thi vào exam_anti_cheat_logs<br>• (Cắt bỏ toàn bộ quyền mở ca, unseal IP, reset máy hay import danh sách)"]
         Admin["Quản trị viên Hệ thống (ACT-03 / admin)<br>• Quản trị người dùng, khóa/mở & gán role RBAC (Google OAuth & Tài khoản trường cấp)<br>• Quản lý chuỗi đào tạo: Tạo học kỳ (Semester) -> Tạo môn học (Course) -> Gán Trưởng BM (department_head_user_id)<br>• Cấu hình hệ thống MF-01 & Quota thi thử theo môn (max_mock_exams_per_day)<br>• Giám sát & Kích hoạt replay Dead-Letter Queue (DLQ) cho luồng MF-01 & MF-02"]
     end
@@ -224,9 +248,9 @@ flowchart TD
         subgraph C_Actors ["Tác Nhân Người Dùng (Google OAuth 2.0 & Tài khoản Trường cấp)"]
             direction LR
             Actor_SV["Sinh viên SE (ACT-01 / student)<br>• MF-01: Luyện tập tự do (On-Demand & Progressive)<br>• MF-02: Thi thử tính giờ (Quota theo môn)<br>• Tham gia Lớp học bằng mật khẩu lớp & Thi trong lớp bằng OTP xoay vòng 5m (R6)<br>• MF-04: Thi vấn đáp phòng Lab Kiosk & Nộp đơn phúc khảo cho Khảo thí (R7)"]
-            Actor_GV["Giảng viên (ACT-02 / lecturer)<br>• Nhận phân công dạy môn từ Trưởng BM (course_lecturers)<br>• Tạo Lớp học & phát sinh mật khẩu lớp (join_password_hash)<br>• Tạo Ca thi trong lớp (OTP xoay vòng 5m + grace 30-60s) & Hậu kiểm điểm thành phần<br>• MF-03: Soạn đề: luồng luyện tập độc lập; luồng thi thật bám sát đề thi mẫu Trưởng BM<br>• MF-04: Hậu kiểm Evidence Panel & Chấm lại phúc khảo khi được phân công"]
-            Actor_DeptHead["Trưởng Bộ Môn (ACT-04 / department_head)<br>• Quản lý môn học, CLOs & Phân công nhiều GV dạy môn (course_lecturers)<br>• 100% thẩm quyền cấu hình Follow-up thi thật (has_follow_up, 1-5 câu)<br>• MF-03: Thẩm định duyệt đề OFFICIAL -> HANDED_OVER & Ban hành ma trận cấu trúc đề mẫu<br>• MF-04: Tiếp nhận đơn phúc khảo từ Khảo thí chuyển sang, phân công GV chấm lại & Duyệt quyết định"]
-            Actor_ExamOfficer["Cán bộ Khảo thí (ACT-05 / examination_officer)<br>• MF-04: Tiếp nhận đề HANDED_OVER, lập kỳ thi, ca thi & import DSSV<br>• MF-04: Phân bổ đề không trùng (uq_tickets_shift_exam_set) & Mở xuất bản đề ca thi<br>• MF-04: Công bố điểm (PublishGrades) One-Way Lock & xuất báo cáo Excel/PDF<br>• MF-04: Tiếp nhận & thẩm tra đơn phúc khảo từ SV rồi chuyển giao Trưởng BM (R7)<br>• MF-04: Giám sát & Kích hoạt replay thủ công Dead-Letter Queue (DLQ) cho thi thật (R2)"]
+            Actor_GV["Giảng viên (ACT-02 / lecturer)<br>• Nhận phân công dạy môn từ Trưởng BM (course_lecturers)<br>• Tạo Lớp học & phát sinh mật khẩu lớp (join_password_hash)<br>• Tạo Ca thi trong lớp (OTP xoay vòng 5m + grace 30-60s) & Hậu kiểm điểm thành phần<br>• MF-03: Soạn đề: luồng luyện tập độc lập; luồng thi thật bám sát đề thi mẫu Trưởng BM<br>• MF-04: Hậu kiểm Evidence Panel & Chấm lại phúc khảo khi Cán bộ Khảo thí phân công (định mức <= 24 bài/GV, độc lập với Giám khảo ca ban đầu)"]
+            Actor_DeptHead["Trưởng Bộ Môn (ACT-04 / department_head)<br>• Quản lý môn học, CLOs & Phân công nhiều GV dạy môn (course_lecturers)<br>• 100% thẩm quyền cấu hình Follow-up thi thật (has_follow_up, 1-5 câu)<br>• MF-03: Thẩm định duyệt đề OFFICIAL -> HANDED_OVER & Ban hành ma trận cấu trúc đề mẫu<br>• MF-04: Tiếp nhận thông báo in-app khi có đơn phúc khảo để theo dõi chuyên môn học thuật môn học; Cắt bỏ quyền can thiệp DLQ và quyền trực tiếp phân công/phê duyệt phúc khảo"]
+            Actor_ExamOfficer["Cán bộ Khảo thí (ACT-05 / examination_officer)<br>• MF-04: Tiếp nhận đề HANDED_OVER, lập kỳ thi, ca thi (phân công cả examiner_user_id & proctor_user_id) & import DSSV<br>• MF-04: Phân bổ đề không trùng (uq_tickets_shift_exam_set) & Mở xuất bản đề ca thi<br>• MF-04: Công bố điểm (PublishGrades) One-Way Lock & xuất báo cáo Excel/PDF<br>• MF-04: Tiếp nhận & thẩm tra đơn phúc khảo từ SV, phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV, loại trừ Giám khảo ca ban đầu), thẩm định & phê duyệt quyết định phúc khảo cuối cùng mở One-Way Lock cập nhật điểm (R2/R7)<br>• MF-04: Giám sát & Kích hoạt replay thủ công Dead-Letter Queue (DLQ) cho thi thật (R2)"]
             Actor_Proctor["Cán bộ Coi thi / Giám thị (ACT-06 / proctor)<br>• MF-04: Điểm danh thí sinh theo STT ca thi (SeatNumber 1-40) & đối chiếu CCCD/Thẻ SV<br>• MF-04: Báo cáo vi phạm an ninh phòng thi vào exam_anti_cheat_logs<br>• (Cắt bỏ toàn bộ quyền mở ca, unseal IP, reset máy hay import danh sách)"]
             Actor_Admin["Quản trị viên (ACT-03 / admin)<br>• Quản trị người dùng (Google & Tài khoản trường cấp), phân quyền 6 roles<br>• Quản lý chuỗi đào tạo: Tạo học kỳ (Semester) -> Tạo môn học (Course) -> Gán Trưởng BM (department_head_user_id)<br>• Cấu hình hệ thống MF-01 & Quota thi thử theo môn MF-02<br>• Giám sát & Kích hoạt replay Dead-Letter Queue (DLQ) cho luồng MF-01 & MF-02"]
         end
@@ -273,7 +297,7 @@ flowchart TD
         subgraph BE_Resilience ["Cơ Chế Chịu Tải RAM & Background Workers (Zero Data Loss)"]
             direction LR
             RAM_Queue["System.Threading.Channels Bounded Channel<br>• Dung lượng hàng đợi: 1,000 slots trong RAM<br>• Cơ chế Backpressure: BoundedChannelFullMode.Wait<br>• Phân tách Ingestion & Worker chống tràn bộ nhớ"]
-            Worker_Grading["GradingQueueWorker (IHostedService Background Worker)<br>• Rút task tuần tự, điều phối Whisper STT & Gemini AI<br>• Polly Retry Policy: Exponential Backoff 2s -> 4s -> 8s (Max 3)<br>• Cập nhật điểm & thông báo hoàn tất qua SignalR"]
+            Worker_Grading["GradingQueueWorker & OfficialExamGradingWorker (Background Workers)<br>• Xử lý song song đa luồng (Parallel.ForEachAsync, MaxDegreeOfParallelism = 12)<br>• Polly Retry Policy: Exponential Backoff 2s -> 4s -> 8s (Max 3)<br>• Cập nhật điểm & thông báo hoàn tất qua SignalR"]
             Worker_DLQ["DlqReplayWorker (Background Recovery Worker)<br>• Định kỳ 5 phút quét bảng dead_letter_queues<br>• Tự động kích hoạt chấm bù, cách ly bài hỏng nặng"]
         end
     end
@@ -315,7 +339,8 @@ flowchart TD
     Actor_SV -->|Truy cập tự luyện & thi thử| FE_Student
     Actor_SV -->|Ngồi đúng STT máy thi Lab| FE_KioskLockdown
     Actor_GV -->|Soạn đề, chạy Simulator & Hậu kiểm| FE_Student
-    Actor_DeptHead -->|Duyệt đề, cấu hình ca thi & Tiếp nhận phúc khảo| FE_Student
+    Actor_DeptHead -->|Duyệt đề, cấu hình Follow-up & Giám sát học thuật| FE_Student
+    Actor_ExamOfficer -->|Mở ca thi, xuất bản đề, công bố điểm & Xử lý phúc khảo| FE_Student
     Actor_Admin -->|Giám sát hệ thống & Audit Logs| FE_Student
 
     FE_Student -->|HTTPS REST & WSS Traffic| Edge_Cloudflare
@@ -366,7 +391,7 @@ Tầng trình diễn được xây dựng trên nền tảng **React 19 (Vite)**
    - **Question & Rubric Studio (MF-03):** Thiết kế cấu trúc câu hỏi và phân rã Barem Rubric thành danh sách tiêu chí $C_1, C_2, \dots, C_k$ với ràng buộc tổng trọng số $\sum \text{Tiêu chí} \equiv 10.0\text{đ}$ (sai lệch chặn HTTP 422).
    - **AI Simulator Modal:** Cho phép cán bộ chuyên môn nhập câu trả lời giả định để kiểm tra độ nhạy và tính nghiêm ngặt của barem trước khi phát hành đề.
    - **Lecturer Audit Portal & Evidence Panel (MF-04):** Màn hình hậu kiểm song song dành cho Giảng viên chấm thi (`examiner`), cung cấp **Evidence Panel** (AudioURL Cloudflare R2, Transcript Whisper gốc, và chuỗi suy luận AI Chain-of-Thought), hiển thị file ghi âm trên **Waveform Player** hỗ trợ tua tốc độ (1.0x, 1.25x, 1.5x) và nhấp chuột trực tiếp vào mốc thời gian (timestamp) để nghe đúng đoạn phát ngôn nghi vấn.
-   - **Phân hệ Thẩm định Phúc khảo Nội bộ (Department Head Appeals - MF-04):** Trưởng Bộ Môn tiếp nhận danh sách `AppealRequest` từ sinh viên trên Student Portal và phân công một Giảng viên vào chấm lại (`PUT /api/v1/appeals/{id}/assign-lecturer`). Giảng viên được phân công rà soát Evidence Panel và file ghi âm trên Waveform Player để chấm lại và nộp kết quả kèm giải trình; Trưởng Bộ Môn xem xét phê duyệt (`APPROVED`) cập nhật điểm chính thức hoặc bác bỏ (`REJECTED`) giữ nguyên điểm.
+   - **Phân hệ Thẩm định Phúc khảo Nội bộ (Internal Appeal Workflow - MF-04):** Cán bộ Khảo thí tiếp nhận danh sách `AppealRequest` từ sinh viên trên Student Portal, xem trước đề xuất phân bổ tự động (`propose-allocation`, định mức <= 24 bài/GV, loại trừ Giám khảo ca thi ban đầu) và phân công Giảng viên độc lập vào chấm lại (`POST /api/v1/examination-officer/appeals/{id}/assign-lecturer` hoặc `POST .../batch-assign`). Thông báo in-app đồng thời gửi đến Trưởng Bộ Môn để theo dõi chuyên môn học thuật. Giảng viên được phân công rà soát Evidence Panel và file ghi âm trên Waveform Player để đề xuất điểm mới kèm giải trình; Cán bộ Khảo thí xem xét phê duyệt (`APPROVED`) cập nhật điểm chính thức qua ngoại lệ One-Way Lock hoặc bác bỏ (`REJECTED`) giữ nguyên điểm.
 
 3. **Phân hệ Cán bộ Khảo thí & Cán bộ Coi thi (Examination Officer & Proctor Workflows - MF-04):**
    - **Quản lý Kỳ thi & Ca thi (Cán bộ Khảo thí):** Cán bộ Khảo thí (`examination_officer`) tiếp nhận các gói đề thi ở trạng thái `HANDED_OVER`, tạo kỳ thi chính thức (`OfficialExamSession`), khởi tạo các ca thi (`RealExamSessionShift`: phòng lab, kíp thi, phân công giám thị `proctor_id`, giảng viên thẩm định `examiner_user_id`).
@@ -386,7 +411,7 @@ Tầng trình diễn được xây dựng trên nền tảng **React 19 (Vite)**
    - **Xử lý Biên & Phòng Vệ Kiosk (Lockdown & Reconnect):**
      - *Duy trì Màn hình Khóa:* Máy Kiosk giữ nguyên màn hình khóa an toàn (`isKioskLocked = true`) cho đến khi Cán bộ Khảo thí phát lệnh đóng ca thi hoặc chuyển sang ca thi kế tiếp. Cán bộ coi thi (`proctor`) tuyệt đối CẤM đóng ca thi hoặc reset máy trạm.
      - *Khôi phục Kết nối Mạng:* Trường hợp mất mạng cục bộ, vé thi đã được lưu trạng thái `SUBMITTED` tại CSDL kèm mã băm SHA-256; khi có mạng lại, Kiosk gọi `GET /api/v1/official-exams/tickets/{id}` để khôi phục trạng thái khóa an toàn tức thì.
-     - *Hậu kiểm Phân loại 2 Nhóm & Công bố Điểm:* Bài thi được phân loại: Nhóm 1 (Cần xem lại/Fail/Nghi ngờ: `is_suspicious == true`, `confidence_score < 0.70`, hoặc fail/điểm liệt) được Giảng viên thẩm định kỹ lưỡng trên Evidence Panel, nghe Waveform Player và sửa điểm có lý do (`override_reason`). Nhóm 2 (Tin cậy cao) được rà soát nhanh. Sau khi 100% sinh viên có điểm, Cán bộ Khảo thí / Giảng viên bấm **"Công Bố Điểm"** (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`), kích hoạt One-Way Lock (`is_locked = true`, HTTP 403). Sinh viên xem điểm trên Student Portal; nếu có nguyện vọng phúc khảo, sinh viên gửi đơn trực tuyến tạo `AppealRequest` để Trưởng Bộ Môn giao Giảng viên chấm lại.
+     - *Hậu kiểm Phân loại 2 Nhóm & Công bố Điểm:* Bài thi được phân loại: Nhóm 1 (Cần xem lại/Fail/Nghi ngờ: `is_suspicious == true`, `confidence_score < 0.70`, hoặc fail/điểm liệt) được Giảng viên thẩm định kỹ lưỡng trên Evidence Panel, nghe Waveform Player và sửa điểm có lý do (`override_reason`). Nhóm 2 (Tin cậy cao) được rà soát nhanh. Sau khi 100% sinh viên có điểm, Cán bộ Khảo thí / Giảng viên bấm **"Công Bố Điểm"** (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`), kích hoạt One-Way Lock (`is_locked = true`, HTTP 403). Sinh viên xem điểm trên Student Portal; nếu có nguyện vọng phúc khảo, sinh viên gửi đơn trực tuyến tạo `AppealRequest` để Cán bộ Khảo thí phân công Giảng viên độc lập chấm lại (định mức <= 24 bài/GV) và Cán bộ Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock.
 
 #### 3.2.2. Tầng 2: Cổng Kết Nối, Định Tuyến & Bảo Mật (Ingress Gateway & Auth Tier)
 1. **Cloudflare Edge Network:** Hoạt động tại lớp ngoài cùng qua mạng lưới Anycast toàn cầu, cung cấp khả năng chống tấn công từ chối dịch vụ (DDoS Protection) ở cả Layer 3/4 và Layer 7. Tích hợp bộ quy tắc Web Application Firewall (WAF) ngăn chặn các lỗ hổng OWASP Top 10 và quản lý SSL/TLS 1.3 tự động.
@@ -418,22 +443,22 @@ Vận hành tại cổng nội bộ `5000`, triển khai theo kiến trúc 4 t�
    - Khởi tạo qua thư viện chuẩn `System.Threading.Channels` với dung lượng **1,000 slots**.
    - Cấu hình chế độ đẩy `BoundedChannelFullMode.Wait` tạo cơ chế áp lực ngược (Backpressure), đảm bảo máy chủ không bị tràn bộ nhớ khi toàn bộ phòng lab cùng nộp bài một lúc.
 4. **Hệ thống Tiến trình Chạy nền (Background Hosted Services):**
-   - `GradingQueueWorker`: Đọc tuần tự các task chấm điểm từ Channel, gọi bóc băng Whisper và chấm điểm Gemini kèm chiến lược thử lại tự động Polly.
+   - `GradingQueueWorker` & `OfficialExamGradingWorker`: Xử lý song song đa luồng (`Parallel.ForEachAsync`, `MaxDegreeOfParallelism = 12`) đọc các task chấm điểm từ `BoundedChannel` (1,000 slots RAM), gọi bóc băng Whisper và chấm điểm Gemini kèm chiến lược thử lại tự động Polly và cách ly DLQ 5 phút.
    - `DlqReplayWorker`: Chạy nền định kỳ mỗi 5 phút, quét các bản ghi gặp sự cố quá tải mạng để thực hiện chấm bù tự động.
 
 #### 3.2.4. Tầng 4: Tầng Dữ Liệu & Lưu Trữ Bền Vững (Data Persistence & Cloud Storage)
 1. **Hệ Quản Trị Cơ Sở Dữ Liệu PostgreSQL 16 (Port 5432 Internal):**
-   - Chuẩn hóa Bậc 3 (**3NF**), cấu trúc thành **38 bảng thực thể chuẩn hóa cốt lõi** phân bổ trong 7 Bounded Contexts và cụm hạ tầng chịu lỗi (trong đó 34 `DbSet` thuộc Phân hệ 1–6 & Hạ tầng đã hiện thực hóa trực tiếp trong `OralExamDbContext` của EF Core 8, cùng 4 bảng Phân hệ 7 `in_class_*` cho luồng mở rộng R6):
+   - Chuẩn hóa Bậc 3 (**3NF**), cấu trúc thành **38 bảng thực thể chuẩn hóa cốt lõi** phân bổ trong 7 Bounded Contexts và cụm hạ tầng chịu lỗi (đã hiện thực hóa 100% trong `OralExamDbContext` của EF Core 8 với 64 Check Constraints, Warm Connection Pool `MinPoolSize = 10, MaxPoolSize = 200` và Migrations; toàn bộ 7 phân hệ Backend đều đạt trạng thái hoàn tất 100% với 1,462/1,462 tests PASS):
       - **Phân hệ 1 (Identity & RBAC - 2 bảng):** `users` (Định danh UUID duy nhất, xác thực kép Dual Auth qua Google OAuth 2.0 hoặc tài khoản `username`/`password` do Nhà trường cấp với BCrypt hash, 6 vai trò: `admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`), `refresh_tokens`.
      - **Phân hệ 2 (Academic & Cohorts - R5 - 6 bảng):** `semesters`, `courses`, `course_clos`, `course_lecturers`, `classes`, `class_enrollments` (Quản trị học kỳ FA26, môn học PRN231 có `department_head_user_id` & cấu hình thi thử/follow-up, chuẩn đầu ra `course_clos`, bảng phân công nhiều giảng viên `course_lecturers`, lớp học có mật khẩu tham gia và sinh viên ghi danh).
      - **Phân hệ 3 (Rubric & Assessment - MF-03 - 2 bảng):** `rubrics`, `rubric_criteria` (Barem đánh giá bắt buộc `CHECK (total_max_score = 10.00)` và các tiêu chí gắn với 6 bậc Bloom).
      - **Phân hệ 4 (Practice Module - MF-01 - 5 bảng):** `practice_questions`, `practice_sessions`, `practice_answers`, `ai_evaluations`, `ai_evaluation_details` (Kho câu hỏi tự luyện mở, phiên làm bài, câu trả lời, liên kết câu hỏi phụ `parent_answer_id`, và bảng điểm chi tiết AI).
       - **Phân hệ 5 (Mock Exam Module - MF-02 - 6 bảng):** `exam_structures`, `exam_sets`, `exam_set_questions`, `mock_exam_quotas`, `mock_exam_sessions`, `mock_exam_answers` (Ma trận cấu trúc Bloom do Trưởng BM cấu hình, bộ đề bốc ngẫu nhiên, hạn ngạch ngày theo môn `max_mock_exams_per_day` do Admin cấu hình, và đo lường thời gian thi Master Timer).
-      - **Phân hệ 6 (Official Lab Exam, Audit & Appeals - MF-04 - 9 bảng):** `exam_questions`, `official_exam_sessions`, `real_exam_session_shifts`, `student_exam_tickets`, `exam_question_submissions`, `exam_anti_cheat_logs`, `lecturer_audits`, `lecturer_audit_details`, `appeal_requests` (Kho câu hỏi thi bảo mật cần `approved_by`, ca thi phòng Lab ghi trực tiếp phòng thi trên ca, 40 vé máy trạm Kiosk, nộp bài âm thanh R2 + SHA-256, nhật ký vi phạm an ninh phòng thi `exam_anti_cheat_logs`, và cổng thẩm định sửa điểm bắt buộc giải trình `override_reason`, kèm quy trình phúc khảo 5 bước qua bảng `appeal_requests`: Khảo thí tiếp nhận & thẩm tra hợp lệ $\to$ chuyển giao Trưởng BM $\to$ Trưởng BM phân công Giảng viên chấm lại $\to$ Giảng viên chấm lại nộp giải trình $\to$ Trưởng BM thẩm định & phê duyệt quyết định cuối cùng).
-      - **Phân hệ Chịu Lỗi, Cấu Hình & Thông Báo (4 bảng):** `dead_letter_queues` (Cứu hộ Zero Data Loss sau 3 lần retry; phân định rõ ràng trách nhiệm quản lý: Quản trị viên `admin` giám sát và kích hoạt replay cho luồng Luyện tập MF-01 và Thi thử MF-02, Cán bộ Khảo thí `examination_officer` giám sát và kích hoạt replay cho bài thi thật phòng Lab MF-04; Trưởng BM không can thiệp DLQ), `audit_logs` (Nhật ký không thể chối bỏ lưu vết mọi thao tác can thiệp dữ liệu), `system_configs` (Cấu hình động hệ thống: Min/Max Practice Questions, TranscriptBufferSeconds, SessionInactivityTimeoutMinutes = 5 phút), `notifications` (Hộp thư thông báo trong hệ thống).
+      - **Phân hệ 6 (Official Lab Exam, Audit & Appeals - MF-04 - 9 bảng):** `exam_questions`, `official_exam_sessions`, `real_exam_session_shifts`, `student_exam_tickets`, `exam_question_submissions`, `exam_anti_cheat_logs`, `lecturer_audits`, `lecturer_audit_details`, `appeal_requests` (Kho câu hỏi thi bảo mật cần `approved_by`, ca thi phòng Lab ghi trực tiếp phòng thi trên ca, 40 vé máy trạm Kiosk, nộp bài âm thanh R2 + SHA-256, nhật ký vi phạm an ninh phòng thi `exam_anti_cheat_logs`, và cổng thẩm định sửa điểm bắt buộc giải trình `override_reason`, kèm quy trình phúc khảo nội bộ qua bảng `appeal_requests` (R2/R7): Khảo thí tiếp nhận & thẩm tra hợp lệ, thông báo in-app gửi đồng thời tới Khảo thí và Trưởng BM $\to$ Khảo thí phân công Giảng viên chấm lại độc lập (định mức $\le 24$ bài/GV, loại trừ Giám khảo ca thi) $\to$ Giảng viên chấm lại nộp đề xuất điểm và giải trình trên Evidence Panel $\to$ Khảo thí thẩm định & phê duyệt quyết định cuối cùng mở ngoại lệ One-Way Lock cập nhật điểm chính thức).
+      - **Phân hệ Chịu Lỗi, Cấu Hình & Thông Báo (4 bảng):** `dead_letter_queues` (Cứu hộ Zero Data Loss sau 3 lần retry; phân định rõ ràng trách nhiệm quản lý: Quản trị viên `admin` giám sát và kích hoạt replay cho luồng Luyện tập MF-01 và Thi thử MF-02, Cán bộ Khảo thí `examination_officer` giám sát và kích hoạt replay cho bài thi thật phòng Lab MF-04; Trưởng BM không can thiệp DLQ), `audit_logs` (Nhật ký không thể chối bỏ lưu vết mọi thao tác can thiệp dữ liệu), `system_configs` (Cấu hình động hệ thống: Min/Max Practice Questions, TranscriptBufferSeconds, SessionInactivityTimeoutMinutes = 5 phút), `notifications` (Hộp thư thông báo trong hệ thống, thực thể chuẩn 3NF độc lập với chỉ mục ESR `IX_notifications_user_id_is_read_created_at` trên `(user_id, is_read, created_at DESC)`, giải phóng `audit_logs` khỏi hành vi nhồi trạng thái đọc thông báo).
       - **Phân hệ 7 (In-Class Exam Shifts & Rotating TOTP - MF-05 / R6 - 4 bảng):** `in_class_exam_shifts`, `in_class_shift_passwords`, `in_class_shift_participants`, `in_class_exam_submissions` (Ca thi vấn đáp tại lớp do Giảng viên mở với mật khẩu 6 ký tự xoay vòng 5 phút kèm grace period 30–60s).
-      - **Tổng cộng 38 bảng chuẩn hóa 3NF:** $2 + 6 + 2 + 5 + 6 + 9 + 4 + 4 = \mathbf{38\text{ bảng thực thể nghiệp vụ}}$ (34 `DbSet` hiện hành trong `OralExamDbContext` + 4 bảng ca thi tại lớp MF-05).
-     - **OneWayLockInterceptor (Bảo vệ pháp lý điểm thi):** Can thiệp vào pipeline `SaveChanges` của EF Core. Khi bản ghi có cờ `is_locked = true`, interceptor sẽ hủy bỏ ngay lập tức và ném ngoại lệ `ScoreSheetLockedException`, tương ứng với mã lỗi **`HTTP 403 Forbidden`**. Không một ai (kể cả Giảng viên hay Admin) có thể cập nhật hoặc xóa dữ liệu điểm số sau khi đã khóa sổ. Ngoại lệ hợp lệ duy nhất: Khi có đơn Phúc khảo nội bộ (`AppealRequest`) được Trưởng Bộ Môn giao cho Giảng viên chấm lại, Giảng viên được phân công mới có quyền cập nhật điểm phúc khảo kèm lý do giải trình.
+      - **Tổng cộng 38 bảng chuẩn hóa 3NF:** $2 + 6 + 2 + 5 + 6 + 9 + 4 + 4 = \mathbf{38\text{ bảng thực thể nghiệp vụ}}$ (đã hiện thực hóa 100% trong `OralExamDbContext` và các bản Migrations của EF Core 8).
+     - **OneWayLockInterceptor (Bảo vệ pháp lý điểm thi):** Can thiệp vào pipeline `SaveChanges` của EF Core. Khi bản ghi có cờ `is_locked = true`, interceptor sẽ hủy bỏ ngay lập tức và ném ngoại lệ `ScoreSheetLockedException`, tương ứng với mã lỗi **`HTTP 403 Forbidden`**. Không một ai (kể cả Giảng viên hay Admin) có thể cập nhật hoặc xóa dữ liệu điểm số sau khi đã khóa sổ. Ngoại lệ hợp lệ duy nhất: Khi có đơn Phúc khảo nội bộ (`AppealRequest`) được Cán bộ Khảo thí phân công Giảng viên chấm lại (định mức $\le 24$ bài/GV, độc lập) và Cán bộ Khảo thí phê duyệt quyết định chấm lại, hệ thống mở ngoại lệ cho phép cập nhật điểm chính thức của sinh viên.
     - **AuditTrailInterceptor:** Tự động ghi lại toàn bộ lịch sử can thiệp điểm thi của Giảng viên (Điểm AI cũ, Điểm mới thay đổi, Lý do giải trình bắt buộc `override_reason`, Thời điểm thực hiện) vào bảng `audit_logs`.
 2. **Lưu Trữ Đối Tượng Đám Mây Cloudflare R2 (S3-Compatible Zero-Egress):**
    - Bucket: `oralexam-lab-audio`.
@@ -656,9 +681,9 @@ server {
 
 ---
 
-## <a id="phan-6"></a>🔄 PHẦN 6: LUỒNG DỮ LIỆU TƯƠNG TÁC CỦA 4 CORE MAIN FLOWS & BỘ QUY TẮC FOLLOW-UP KÉP
+## <a id="phan-6"></a>🔄 PHẦN 6: LUỒNG DỮ LIỆU TƯƠNG TÁC CỦA 5 MAIN FLOWS (MF-01 → MF-05) & BỘ QUY TẮC FOLLOW-UP KÉP
 
-### <a id="phan-61"></a>6.1. Sơ Đồ Tổng Quan Luồng Dữ Liệu 4 Main Flows (Mermaid)
+### <a id="phan-61"></a>6.1. Sơ Đồ Tổng Quan Luồng Dữ Liệu 5 Main Flows (Mermaid)
 
 ```mermaid
 flowchart TD
@@ -705,8 +730,21 @@ flowchart TD
         M4_P2["Làm bài thi viva theo ExamInputMode, ghi nhật ký exam_anti_cheat_logs<br>Upload 2 bước WebM STT_MSSV.webm lên R2 kèm SHA-256"]
         M4_P3["Nộp bài: Persist SUBMITTED < 100ms, Kiosk khóa an toàn (không điểm liền)<br>Gemini 1.5 Pro chấm ngầm Rubric 10.0 qua BoundedChannel 1,000 slots"]
         M4_P4["Giảng viên hậu kiểm Evidence Panel & Waveform Player<br>Phân loại 2 nhóm: Nghi ngờ (conf < 0.70 / suspicious) vs Tin cậy cao"]
-        M4_Lock["Khảo thí / Giảng viên Publish Điểm (100% SV có điểm) -> One-Way Lock (is_locked=true)<br>SV xem điểm Student Portal, nộp AppealRequest -> Trưởng BM giao GV chấm lại"]
+        M4_Lock["Cán bộ Khảo thí Publish Điểm (100% SV có điểm) -> One-Way Lock (is_locked=true)<br>SV xem điểm Student Portal, nộp AppealRequest -> Khảo thí thẩm tra, phân công GV chấm lại (<= 24 bài/GV) & duyệt quyết định cuối cùng"]
         M4_P0 --> M4_P1 --> M4_P2 --> M4_P3 --> M4_P4 --> M4_Lock
+    end
+
+    subgraph MF05_Box ["MF-05: Ca Thi Trong Lớp, Đề Anti-Collision & Chấm Song Song (In-Class Formative Exam Shifts - R6)"]
+        direction TB
+        M5_Start["GV tạo ca thi: Đặt tên shift_name, chọn Pool Mode (ALL_COURSE_BANK / SELECTED_POOL)<br>Cấu hình tổng câu hỏi N (1..10), chọn Có/Không Follow-up (1..5 câu)"]
+        M5_OTP["TotpPasswordEngine sinh mã OTP 6 ký tự xoay vòng 5 phút + Grace 30-60s chiếu bảng<br>Lưu in_class_shift_passwords 3NF (không dùng RAM tạm)"]
+        M5_Join["Sinh viên nhập OTP hợp lệ -> Hệ thống bốc đề Anti-Collision:<br>Ưu tiên N câu hỏi có tần suất xuất hiện thấp nhất trong ca thi"]
+        M5_Speak["Sinh viên trả lời viva qua micro/STT (+ Follow-up nếu ca bật cờ)<br>Nộp bài: Persist-First &lt; 100ms vào in_class_exam_submissions (status = SUBMITTED)"]
+        M5_Queue["Đẩy task vào BoundedChannel (1,000 slots RAM)<br>GradingQueueWorker xử lý song song đa luồng (MaxDegreeOfParallelism = 12)"]
+        M5_GradePublish["Gemini 1.5 Flash CoT chấm Barem 10.0 -> Tự động Publish Điểm Song Song Thời Gian Thực<br>Đẩy điểm & nhận xét qua SignalR ngay lập tức (SV & GV xem tức thì, không chờ cả lớp)"]
+        M5_Review["GV mở Dashboard xem lại bài nộp, transcript & điểm AI<br>Có quyền điều chỉnh điểm kèm lý do (status = AUDITED)"]
+        M5_Lock["GV bấm Chốt Bảng Điểm (finalize-grades) -> Kích hoạt One-Way Lock (FINALIZED & LOCKED)"]
+        M5_Start --> M5_OTP --> M5_Join --> M5_Speak --> M5_Queue --> M5_GradePublish --> M5_Review --> M5_Lock
     end
 
     subgraph Core_Shared_Data ["Tài Nguyên Dữ Liệu Dùng Chung (Shared Kernel)"]
@@ -722,9 +760,11 @@ flowchart TD
     Shared_QB -.->|Cung cấp câu hỏi tự luyện practice_questions| M1_Start
     Shared_QB -.->|Bốc đề thi thử từ practice_questions| M2_Quota
     Shared_QB -.->|Cấp đề ca thi phòng Lab exam_questions| M4_P0
+    Shared_QB -.->|Cung cấp câu hỏi thi trên lớp| M5_Start
 
     M1_Queue --> Shared_Queue
     M4_P3 --> Shared_Queue
+    M5_Speak --> Shared_Queue
     Shared_Queue --> Shared_AI
 
     M4_P2 -->|Lưu trữ file âm thanh| Shared_Audio
@@ -733,20 +773,21 @@ flowchart TD
     M1_AI --> Shared_DB
     M2_Scorecard --> Shared_DB
     M4_Lock --> Shared_DB
+    M5_Lock --> Shared_DB
 ```
 
-### <a id="phan-62"></a>6.2. Ma Trận So Sánh Toàn Diện 4 Core Main Flows
+### <a id="phan-62"></a>6.2. Ma Trận So Sánh Toàn Diện 5 Main Flows (MF-01 → MF-05)
 
-| Tiêu chí so sánh | MF-01: Luyện tập tự do | MF-02: Thi thử bấm giờ | MF-03: Ngân hàng đề, CLO & Đóng gói Đề | MF-04: Thi thật phòng Lab, Công bố điểm & Phúc khảo |
-|:---|:---|:---|:---|:---|
-| **Tác nhân chính** | Sinh viên SE (`ACT-01 / student`) | Sinh viên SE (`ACT-01 / student`) | Giảng viên (`ACT-02 / lecturer`) & Trưởng Bộ Môn (`ACT-04 / department_head`) | Khảo thí (`ACT-05 / examination_officer`), Giám thị (`ACT-06 / proctor`), Giảng viên (`ACT-02`), Sinh viên (`ACT-01`), Trưởng Bộ Môn (`ACT-04`) |
-| **Mục tiêu sư phạm** | Formative Assessment (Rèn luyện phản xạ) | Mock Pressure (Tập dượt áp lực thời gian) | Governance & Accreditation (Chuẩn hóa CLOs & Bộ đề thi) | Summative Assessment (Đánh giá học phần lấy điểm chính thức) |
-| **Cơ chế kiểm soát** | Per-Question: On-Demand chọn đơn/tổ hợp mức độ, không ép số câu, thuật toán Anti-3-Consecutive (tối đa 2 câu cùng mức trong 3 câu liên tiếp). Full-Session: Progressive 3-10 câu do Admin cấu hình (MinMixedPracticeQuestions=3, MaxMixedPracticeQuestions=10), chia đều Dễ -> TB -> Khó, KHÔNG có follow-up. Inactivity Timeout 5 phút (SessionInactivityTimeoutMinutes=5), HTTP 410 Gone, bảo toàn điểm. DLQ do Admin quản lý. | Daily Quota Guard (hạn ngạch theo môn `max_mock_exams_per_day` do Admin cấu hình); Voice-First Gate; Instant Feedback Scorecard & Lịch sử thi (kho `practice_questions`). DLQ do Admin quản lý. | Quản lý CLOs trực tiếp (`course_clos` 3NF); Phân tách 2 luồng: Luyện tập/thi thử độc lập vs Thi thật bám sát ma trận đề mẫu Trưởng BM ban hành; Giảng viên AI Gen từ CLO (`POST /generate-from-clo`) hoặc soạn thủ công kèm ảnh $\le 5$MB; Barem $\sum \equiv 10.0$đ; Model Answer $\ge 50$ ký tự; Cảnh báo trùng lặp `isFlagged = true`; Trưởng Bộ Môn duyệt (`APPROVED`, `NEEDS_REVISION`, `REJECTED`); Blueprint `slot_definitions` & đóng gói bộ đề `exam_sets` (`DRAFT` $\to$ `SUBMITTED_FOR_REVIEW` $\to$ `OFFICIAL` $\to$ `HANDED_OVER`) | Kiosk Lockdown, Hardware Mic-Check 30s ($\ge 60$dB), `ip_address`, Nhật ký chống gian lận `exam_anti_cheat_logs`, Upload 2 bước audio R2, Kiosk khóa an toàn, AI Chấm ngầm BoundedChannel 1,000 slots, Hậu kiểm 2 nhóm Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT), Khảo thí Publish Điểm khi 100% SV có điểm, One-Way Lock (`is_locked = true`), Phúc khảo qua Khảo thí tiếp nhận -> Trưởng BM giao GV chấm lại -> Trưởng BM duyệt; DLQ do Khảo thí quản lý |
-| **Xử lý âm thanh** | Web Speech STT/TTS (dưới 0.5s) | Voice-First Gate (Bắt buộc nói) | Text-based Barem & Audio Preview | Whisper Large-v3 STT bóc băng có timestamps JSON |
-| **Lưu trữ âm thanh** | Không lưu trữ (tối ưu chi phí) | Không lưu trữ (tối ưu chi phí) | Không áp dụng | Cloudflare R2 (`STT_MSSV.webm`) kèm SHA-256 niêm phong |
-| **Mô hình AI** | Gemini 1.5 Flash (CoT 3 bước) | Gemini 1.5 Flash (Dual-Path) | Gemini 1.5 Flash (Sinh từ CLO & AI Simulator) | Gemini 1.5 Pro (Chấm ngầm toàn bộ bài thi & Doubt Guard phân loại bài nghi ngờ) |
-| **Quy tắc Follow-up** | **Admin cấu hình (1–5 câu, mặc định 2 câu); [Per-Question] kích hoạt khi $4.0 \le \text{Score} \le 8.0$, [Full-Session] KHÔNG có** | **Sinh viên chủ động tự chọn Có/Không Follow-up; AI hỏi theo ngữ cảnh [Needs Follow-up]** | Không áp dụng | **100% Trưởng Bộ Môn cấu hình cho môn/ca thi thật (1–5 câu, mặc định 2 câu); AI hỏi theo ngữ cảnh [Needs Follow-up]** |
-| **Tính năng độc bản** | Màn hình đệm sửa Code-Switching (cấu hình động `transcript_buffer_seconds`, 10-300s, mặc định 60s); Admin cấu hình số câu follow-up hệ thống (1–5 câu, mặc định 2 câu); DLQ do Admin quản lý | Nguồn đề kho `practice_questions`, Sinh viên tự chọn Có/Không Follow-up trước khi thi, Instant Feedback Scorecard chi tiết từng câu theo Rubric và lưu Lịch sử thi; DLQ do Admin quản lý | Quản lý CLOs môn học 3NF; Gemini sinh đề theo CLO; Barem 10.0; Model Answer; Cảnh báo trùng lặp `isFlagged = true`; AI Calibration Simulator; Blueprint `slot_definitions` (JSONB); Đóng gói đề `exam_sets` chuẩn vòng đời `DRAFT` $\to$ `HANDED_OVER` cho Khảo thí | Khảo thí lập kỳ thi, ca thi, phân bổ đề không trùng (`uq_tickets_shift_exam_set`), xuất bản đề; Giám thị điểm danh STT 1-40 & báo cáo vi phạm an ninh; Kiosk Safe Lock Notice, AI Chấm ngầm, Evidence Panel Waveform Player, Khảo thí Publish Điểm một lần duy nhất khi 100% sinh viên có điểm, One-Way Lock, Phúc khảo 5 bước qua Khảo thí thẩm tra & DLQ do Khảo thí quản lý |
+| Tiêu chí so sánh | MF-01: Luyện tập tự do | MF-02: Thi thử bấm giờ | MF-03: Ngân hàng đề, CLO & Đóng gói Đề | MF-04: Thi thật phòng Lab, Công bố điểm & Phúc khảo | MF-05: Ca thi trong lớp & OTP 5 phút (R6) |
+|:---|:---|:---|:---|:---|:---|
+| **Tác nhân chính** | Sinh viên SE (`ACT-01 / student`) | Sinh viên SE (`ACT-01 / student`) | Giảng viên (`ACT-02 / lecturer`) & Trưởng Bộ Môn (`ACT-04 / department_head`) | Khảo thí (`ACT-05 / examination_officer`), Giám thị (`ACT-06 / proctor`), Giảng viên (`ACT-02`), Sinh viên (`ACT-01`), Trưởng Bộ Môn (`ACT-04`) | Giảng viên đứng lớp (`ACT-02 / lecturer`), Sinh viên (`ACT-01 / student`), Trưởng Bộ Môn (`ACT-04` giám sát) |
+| **Mục tiêu sư phạm** | Formative Assessment (Rèn luyện phản xạ) | Mock Pressure (Tập dượt áp lực thời gian) | Governance & Accreditation (Chuẩn hóa CLOs & Bộ đề thi) | Summative Assessment (Đánh giá học phần lấy điểm chính thức) | Formative Assessment (Đánh giá quá trình: Quiz / Progress Test trực tiếp tại lớp) |
+| **Cơ chế kiểm soát** | Per-Question: On-Demand chọn đơn/tổ hợp mức độ, không ép số câu, thuật toán Anti-3-Consecutive (tối đa 2 câu cùng mức trong 3 câu liên tiếp). Full-Session: Progressive 3-10 câu do Admin cấu hình (MinMixedPracticeQuestions=3, MaxMixedPracticeQuestions=10), chia đều Dễ -> TB -> Khó, KHÔNG có follow-up. Inactivity Timeout 5 phút (SessionInactivityTimeoutMinutes=5), HTTP 410 Gone, bảo toàn điểm. DLQ do Admin quản lý. | Daily Quota Guard (hạn ngạch theo môn `max_mock_exams_per_day` do Admin cấu hình); Voice-First Gate; Instant Feedback Scorecard & Lịch sử thi (kho `practice_questions`). DLQ do Admin quản lý. | Quản lý CLOs trực tiếp (`course_clos` 3NF); Phân tách 2 luồng: Luyện tập/thi thử độc lập vs Thi thật bám sát ma trận đề mẫu Trưởng BM ban hành; Giảng viên AI Gen từ CLO (`POST /generate-from-clo`) hoặc soạn thủ công kèm ảnh $\le 5$MB; Barem $\sum \equiv 10.0$đ; Model Answer $\ge 50$ ký tự; Cảnh báo trùng lặp `isFlagged = true`; Trưởng Bộ Môn duyệt (`APPROVED`, `NEEDS_REVISION`, `REJECTED`); Blueprint `slot_definitions` & đóng gói bộ đề `exam_sets` (`DRAFT` $\to$ `SUBMITTED_FOR_REVIEW` $\to$ `OFFICIAL` $\to$ `HANDED_OVER`) | Kiosk Lockdown, Hardware Mic-Check 30s ($\ge 60$dB), `ip_address`, Nhật ký chống gian lận `exam_anti_cheat_logs`, Upload 2 bước audio R2, Kiosk khóa an toàn, AI Chấm ngầm BoundedChannel 1,000 slots, Hậu kiểm 2 nhóm Evidence Panel (AudioURL, Transcript Whisper gốc, AI CoT), Khảo thí Publish Điểm khi 100% SV có điểm, One-Way Lock (`is_locked = true`), Phúc khảo 5 bước qua Khảo thí tiếp nhận & thẩm tra -> Khảo thí phân công GV chấm lại (<= 24 bài/GV, độc lập) -> GV chấm lại trên Evidence Panel -> Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock; DLQ do Khảo thí quản lý | GV đặt tên bài kiểm tra `shift_name`, chọn Pool Mode (`ALL_COURSE_BANK` / `SELECTED_POOL`), cấu hình tổng số câu hỏi $N$ (1..10) & chọn Có/Không Follow-up (1..5 câu); Mật khẩu OTP 6 ký tự số tự động xoay vòng mỗi 5 phút (300s) + Grace Period 30–60s chiếu máy chiếu lớp; Thuật toán Anti-Collision tự động bốc $N$ câu hỏi có tần suất xuất hiện thấp nhất trong ca thi; Nộp bài không lưu audio R2; Hàng đợi BoundedChannel chấm song song đa luồng (`MaxDegreeOfParallelism = 12`); Tự động Publish điểm song song tức thì qua SignalR cho SV & GV xem ngay; Giảng viên xem lại bài làm, transcript và điều chỉnh điểm thành phần trước khi chốt bảng điểm One-Way Lock (`is_grade_finalized = true`, `status = 'FINALIZED'`) |
+| **Xử lý âm thanh** | Web Speech STT/TTS (dưới 0.5s) | Voice-First Gate (Bắt buộc nói) | Text-based Barem & Audio Preview | Whisper Large-v3 STT bóc băng có timestamps JSON | Web Speech STT/TTS hoặc gõ hiệu đính transcript |
+| **Lưu trữ âm thanh** | Không lưu trữ (tối ưu chi phí) | Không lưu trữ (tối ưu chi phí) | Không áp dụng | Cloudflare R2 (`STT_MSSV.webm`) kèm SHA-256 niêm phong | Không lưu trữ audio R2 (tối ưu chi phí hạ tầng) |
+| **Mô hình AI** | Gemini 1.5 Flash (CoT 3 bước) | Gemini 1.5 Flash (Dual-Path) | Gemini 1.5 Flash (Sinh từ CLO & AI Simulator) | Gemini 1.5 Pro (Chấm ngầm toàn bộ bài thi & Doubt Guard phân loại bài nghi ngờ) | Gemini 1.5 Flash (CoT Rubric môn học) |
+| **Quy tắc Follow-up** | **Admin cấu hình (1–5 câu, mặc định 2 câu); [Per-Question] kích hoạt khi $4.0 \le \text{Score} \le 8.0$, [Full-Session] KHÔNG có** | **Sinh viên chủ động tự chọn Có/Không Follow-up; AI hỏi theo ngữ cảnh [Needs Follow-up]** | Không áp dụng | **100% Trưởng Bộ Môn cấu hình cho môn/ca thi thật (1–5 câu, mặc định 2 câu); AI hỏi theo ngữ cảnh [Needs Follow-up]** | **Giảng viên chủ động chọn Có/Không Follow-up (`has_follow_up`: true/false) khi tạo ca thi tại lớp; Cấu hình 1–5 câu hỏi phụ (mặc định 2 câu khi bật); AI phát vấn theo ngữ cảnh bài nói [Needs Follow-up]; Không lưu audio R2** |
+| **Tính năng độc bản** | Màn hình đệm sửa Code-Switching (cấu hình động `transcript_buffer_seconds`, 10-300s, mặc định 60s); Admin cấu hình số câu follow-up hệ thống (1–5 câu, mặc định 2 câu); DLQ do Admin quản lý | Nguồn đề kho `practice_questions`, Sinh viên tự chọn Có/Không Follow-up trước khi thi, Instant Feedback Scorecard chi tiết từng câu theo Rubric và lưu Lịch sử thi; DLQ do Admin quản lý | Quản lý CLOs môn học 3NF; Gemini sinh đề theo CLO; Barem 10.0; Model Answer; Cảnh báo trùng lặp `isFlagged = true`; AI Calibration Simulator; Blueprint `slot_definitions` (JSONB); Đóng gói đề `exam_sets` chuẩn vòng đời `DRAFT` $\to$ `HANDED_OVER` cho Khảo thí | Khảo thí lập kỳ thi, ca thi, phân bổ đề không trùng (`uq_tickets_shift_exam_set`), xuất bản đề; Giám thị điểm danh STT 1-40 & báo cáo vi phạm an ninh; Kiosk Safe Lock Notice, AI Chấm ngầm, Evidence Panel Waveform Player, Khảo thí Publish Điểm một lần duy nhất khi 100% sinh viên có điểm, One-Way Lock, Phúc khảo 5 bước qua Khảo thí thẩm tra & DLQ do Khảo thí quản lý | Mật khẩu TOTP xoay vòng 5 phút + Grace Period 30–60s; 2 Pool Modes (`ALL_COURSE_BANK` / `SELECTED_POOL`); Bốc đề ngẫu nhiên Anti-Collision chống trùng lặp giữa các sinh viên trong lớp; Hàng đợi chấm song song đa luồng `MaxDegreeOfParallelism = 12`; Publish điểm song song theo thời gian thực (Real-time Parallel Grade Publishing) không chờ nộp hết; Zero R2 audio storage; One-Way Lock chốt bảng điểm quá trình |
 
 ### <a id="phan-63"></a>6.3. Đặc Tả Chuyên Sâu Cơ Chế Follow-up & Bộ Quy Tắc Kích Hoạt Follow-up Chuẩn Hóa
 
@@ -756,6 +797,7 @@ flowchart TD
   - Trong **MF-01 (Luyện tập)**: Thực hiện qua cơ chế **Self-Referencing** trong bảng `practice_answers`. Câu trả lời phụ lưu bản ghi riêng trong `practice_answers` với `is_follow_up = true`, `parent_answer_id` liên kết về `id` của câu trả lời gốc (`practice_answers.id`). Câu hỏi luyện tập trong `practice_questions` chứa gợi ý `follow_up_prompt`. Kết quả chấm AI lưu vào `ai_evaluations` trỏ `practice_answer_id`.
   - Trong **MF-02 (Thi thử)**: Lưu câu trả lời trong bảng `mock_exam_answers`. Lưu cờ tùy chọn của sinh viên tại `mock_exam_sessions.has_follow_up`. Khi sinh viên chọn Có Follow-up, AI phân tích trực tiếp ngữ cảnh câu nói (`[Needs Follow-up]`) để phát vấn câu hỏi phụ.
   - Trong **MF-04 (Thi thật)**: Kiểm tra cấu hình Follow-up do Trưởng Bộ Môn thiết lập cho Môn thi / Ca thi thật: `has_follow_up = true` và `max_follow_up_questions` (1–5 câu, mặc định 2 câu). Thẩm quyền cấu hình Follow-up thi thật thuộc 100% về Trưởng Bộ Môn (Khảo thí không được phép can thiệp). Bản nộp âm thanh lưu tại `exam_question_submissions` ghi nhận trọn vẹn âm thanh của cả câu gốc và câu phụ vào file `STT_MSSV.webm` trên Cloudflare R2 kèm mã băm SHA-256. Bóc băng Whisper lưu transcript và timestamps tại `transcript_whisper` và `timestamps_whisper`.
+  - Trong **MF-05 (Ca thi trong lớp)**: Giảng viên cấu hình trực tiếp trên `in_class_exam_shifts`: cờ `has_follow_up` (`true`/`false`) và số câu hỏi phụ tối đa `max_follow_up_questions` (1–5 câu, mặc định 2 câu khi bật, hoặc 0 khi tắt). Khi bật, AI phân tích trực tiếp ngữ cảnh câu trả lời của sinh viên (`[Needs Follow-up]`) để phát vấn câu hỏi phụ đào sâu. Bài làm lưu vào `in_class_exam_submissions` bao gồm cả câu chính và câu phụ, **hoàn toàn KHÔNG lưu audio lên Cloudflare R2** để tối ưu chi phí hạ tầng.
 
 #### 2. Bộ Quy Tắc Kích Hoạt Follow-up Chuẩn Hóa (R1, R2, R4):
 - 🎯 **Đối với Luồng 1 — Luyện tập tự do (MF-01):**
@@ -786,27 +828,72 @@ flowchart TD
     - Trưởng Bộ Môn có thẩm quyền duy nhất quyết định môn thi đó có hỏi Follow-up hay không (`has_follow_up`) và cấu hình số lượng câu hỏi follow-up (`max_follow_up_questions` từ 1–5 câu, mặc định 2 câu) áp dụng cho ca thi/đề thi thật.
     - Cán bộ Khảo thí (`examination_officer`) chịu trách nhiệm tổ chức hành chính ca thi (phòng lab, kíp thi, phân công giám thị `proctor`, mở xuất bản đề thi), **tuyệt đối không được phép can thiệp vào cấu hình follow-up học thuật**.
   - **Quy tắc hỏi phụ:** Kích hoạt khi đề thi/môn thi trong kỳ thi được Trưởng Bộ Môn bật `has_follow_up = true` VÀ AI phát hiện câu trả lời của thí sinh có luận điểm cần đào sâu phản biện trong văn bản transcript (`[Needs Follow-up]`), tối đa 1–5 câu (mặc định 2 câu) do Trưởng Bộ Môn thiết lập. Không phụ thuộc điểm số.
+- 🏫 **Đối với Luồng 5 — Ca thi trong lớp & Mật khẩu xoay vòng 5 phút (MF-05 / R6):**
+  - **100% Thẩm Quyền Cấu Hình Follow-up Thuộc Về Giảng Viên Phụ Trách Lớp (`lecturer`):**
+    - Khi khởi tạo ca thi trên lớp (`POST /api/v1/lecturer/classes/{classId}/in-class-shifts`), Giảng viên chủ động lựa chọn **Có hoặc Không Follow-up (`has_follow_up`: `true` / `false`)**.
+    - Nếu bật `has_follow_up = true`, Giảng viên tùy chọn cấu hình số lượng câu hỏi phụ tối đa trên mỗi câu chính (`max_follow_up_questions` từ **1 đến 5 câu**, mặc định **2 câu**). Nếu chọn không follow-up (`has_follow_up = false`), hệ thống gán `max_follow_up_questions = 0`.
+    - Sinh viên, Cán bộ Khảo thí và Trưởng Bộ Môn không được can thiệp vào cấu hình này của Giảng viên đứng lớp.
+  - **Quy tắc kích hoạt câu hỏi phụ:**
+    - Kích hoạt khi ca thi được Giảng viên bật `has_follow_up = true` VÀ AI phân tích văn bản transcript của sinh viên phát hiện nội dung có luận điểm cần đào sâu ngữ cảnh (`[Needs Follow-up]`), tối đa 1–5 câu (mặc định 2 câu do Giảng viên thiết lập).
+    - Hệ thống phát vấn câu hỏi phụ trực tiếp qua Web Speech TTS hoặc giao diện text, sinh viên trả lời bổ sung trước khi hoàn thành câu hỏi.
+    - **Không lưu trữ file âm thanh lên Cloudflare R2**: Toàn bộ quá trình trả lời câu hỏi phụ chỉ lưu transcript và đánh giá AI trong CSDL nội bộ để tối ưu chi phí lưu trữ đám mây.
 
 ---
 
-### <a id="phan-64"></a>6.4. Sơ Đồ Chi Tiết Từng Luồng Nghiệp Vụ (Detailed Activity & Flowchart Diagrams)
+### <a id="phan-64"></a>6.4. Đặc Tả Chi Tiết Từng Luồng Nghiệp Vụ, Phân Làn Trách Nhiệm & Sơ Đồ Thuật Toán (MF-01 $\to$ MF-04)
 
-> Toàn bộ sơ đồ hoạt động liên làn (OMG UML 2.5 Swimlane Activity Diagrams) và lưu đồ thuật toán chuyên sâu (Backend Algorithmic Flowcharts) dưới đây được chuẩn hóa và đồng bộ 100% với bộ 5 tệp sơ đồ `.drawio` tại [`docs/05_diagrams/`](../05_diagrams/) (Master file: `CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`) và tài liệu đặc tả chi tiết [`MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md`](MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md). Mỗi luồng nghiệp vụ được phân tách rõ ràng thành 3 phần:
-> - **Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram):** Phân chia làn trách nhiệm chặt chẽ giữa Thí sinh, Giao diện Client, Backend API, Worker hàng đợi, Giám thị / Giảng viên và Trưởng Bộ Môn theo đúng chuẩn OMG UML 2.5.
-> - **Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart):** Bóc tách chi tiết từng bước thuật toán, rẽ nhánh điều kiện bảo vệ (guards), mã HTTP phản hồi và xử lý ngoại lệ Zero Data Loss.
-> - **Phần C — Vòng Đời Trạng Thái (State Machine Diagram):** Định nghĩa tường minh các trạng thái thực thể trong CSDL từ khi khởi tạo đến khi niêm phong kết thúc.
+> Toàn bộ đặc tả chi tiết 4 luồng nghiệp vụ cốt lõi (`MF-01..MF-04`), phân làn trách nhiệm (Swimlanes), bảng giải nghĩa từng bước quy trình (Node Glossary), sơ đồ hoạt động liên làn (OMG UML 2.5 Swimlane Activity Diagrams), lưu đồ thuật toán chuyên sâu (Backend Algorithmic Flowcharts) và vòng đời trạng thái (State Machine Diagrams) được hợp nhất trực tiếp dưới đây và đồng bộ 100% với bộ 5 tệp sơ đồ `.drawio` tại [`docs/05_diagrams/`](../05_diagrams/) (Master file: [`CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio`](../05_diagrams/CAPSTONE_FA26SE166_4_MAINFLOWS_ACTIVITY_DIAGRAMS.drawio)). Mỗi luồng nghiệp vụ được trình bày thống nhất gồm 6 mục:
+> - **Mục 1 — Mục Tiêu Nghiệp Vụ & Danh Mục Tính Năng Cốt Lõi:** Đặc tả chi tiết các chế độ vận hành, quy tắc cấu hình động, ranh giới dữ liệu 3NF và chốt chặn kỹ thuật.
+> - **Mục 2 — Phân Làn Trách Nhiệm (Swimlanes):** Phân định rõ trách nhiệm của từng vai trò (`student`, `lecturer`, `proctor`, `examination_officer`, `department_head`, `admin`) và từng tầng hệ thống (React 19 UI, .NET 8 API/Hub, Gemini AI Worker).
+> - **Mục 3 — Diễn Giải Quy Trình Theo Từng Bước (Tên Đỉnh : Mục Đích):** Giải thích tường minh ý nghĩa nghiệp vụ và kỹ thuật của từng đỉnh hành động và nút quyết định trên sơ đồ.
+> - **Mục 4 (Phần A) — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram):** Biểu diễn luồng tương tác liên làn theo chuẩn OMG UML 2.5.
+> - **Mục 5 (Phần B) — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart):** Bóc tách chi tiết từng bước thuật toán, rẽ nhánh điều kiện bảo vệ (guards), mã HTTP phản hồi và xử lý ngoại lệ Zero Data Loss.
+> - **Mục 6 (Phần C) — Vòng Đời Trạng Thái (State Machine Diagram):** Định nghĩa tường minh các trạng thái thực thể trong CSDL từ khi khởi tạo đến khi hoàn tất/niêm phong kết thúc.
 
 #### <a id="phan-641"></a>6.4.1. MF-01: Luyện Tập Tương Tác Tự Do (Interactive Practice)
 
-##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-01)
-* **Chế độ Upfront:** Sinh viên chọn 1 trong 2 chế độ ngay từ đầu:
-  - `[Per-Question On-Demand]`: Chọn đơn hoặc bất kỳ tổ hợp mức độ (`easy`, `medium`, `hard`). Cấp câu 1 khi tạo phiên, sau đó gọi `POST /api/v1/practice/sessions/{id}/next-question` On-Demand để bốc câu tiếp theo (không ép chốt trước tổng số câu). Áp dụng **thuật toán Anti-3-Consecutive**: tối đa 2 câu cùng mức độ trong chuỗi 3 câu liên tiếp; loại trừ câu đã làm (`Id NOT IN (...)`). Kích hoạt câu hỏi chuyên sâu đào sâu (A2) khi $4.0 \le \text{Score} \le 8.0$ (tối đa 1–5 câu do Admin cấu hình qua `system_configs`, mặc định 2 câu).
-  - `[Full-Session Progressive]`: Nhập số lượng 3–10 câu (`MinMixedPracticeQuestions = 3`, `MaxMixedPracticeQuestions = 10`), hệ thống tự động chia đều số câu cho 3 mức Dễ $\to$ Trung bình $\to$ Khó bốc trọn gói và phát vấn tăng dần (nếu thiếu câu trả `HTTP 400 Bad Request`). **TUYỆT ĐỐI KHÔNG có follow-up**. Nộp từng câu hoặc nộp trọn gói qua `POST /batch-answers`.
-* **Inactivity Timeout 5 phút:** Quản lý qua `SessionInactivityTimeoutMinutes = 5`, cập nhật `last_activity_at = NOW()`. Quá 5 phút không tương tác, tự động hoàn tất an toàn (`status = "completed"`), bảo toàn 100% điểm các câu đã làm (Full-Session tính các câu chưa làm 0đ). Thao tác tiếp theo trả **HTTP 410 Gone**.
-* **Đệm hiệu đính Code-Switching:** Màn hình đệm 10–300s (mặc định 60s do Admin cấu hình qua `TranscriptBufferSeconds`) để sửa thuật ngữ SE tiếng Anh. **KHÔNG lưu audio**, chỉ lưu transcript vào `practice_answers`.
-* **Phòng thủ 4 tầng Zero Data Loss:** Tầng 1 Persist-First ghi CSDL `PENDING` ($< 100$ms) $\to$ Tầng 2 BoundedChannel 1,000 slots RAM $\to$ Tầng 3 Gemini 1.5 Flash chấm Rubric 10.0đ (Polly Retry 2-4-8s) $\to$ Tầng 4 DLQ `dead_letter_queues` chấm bù sau 5 phút.
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_diagrams/MF01_Interactive_Practice.drawio) (4 Phân làn, 43 đỉnh, 48 cạnh, 5 nút kết thúc)
 
-##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 43 Đỉnh)
+##### 1. Mục Tiêu Nghiệp Vụ & Danh Mục Tính Năng Cốt Lõi (MF-01)
+Giúp sinh viên chủ động luyện phản xạ thi vấn đáp 1-1 với trợ lý ảo AI (Google Gemini 1.5 Flash). Hệ thống hỗ trợ linh hoạt cả hai phương thức trả lời (nói qua micro hoặc gõ phím), cung cấp màn hình đệm do Admin cấu hình (`transcript_buffer_seconds`, từ 10–300s, mặc định 60s) để sinh viên sửa lỗi nhận diện thuật ngữ CNTT tiếng Anh (*Code-Switching*), và trao quyền chọn chế độ làm bài linh hoạt ngay từ đầu:
+- **Luyện từng câu theo yêu cầu [Per-Question On-Demand]:** Sinh viên chọn mức độ đơn lẻ (Dễ, Trung bình, Khó) HOẶC bất kỳ tổ hợp nào (ví dụ: `["easy", "medium"]`, `["easy", "hard"]`, `["medium", "hard"]`, `["easy", "medium", "hard"]`). Phiên luyện tập cấp câu hỏi đầu tiên (Câu 1) khi bắt đầu, sau đó sinh viên trả lời và gọi API lấy câu tiếp theo theo nhu cầu (On-Demand qua `POST /api/v1/practice/sessions/{id}/next-question`), không bắt buộc chốt trước số lượng câu hỏi. Áp dụng **thuật toán ngẫu nhiên có ràng buộc (Anti-3-Consecutive)**: trong bất kỳ chuỗi 3 câu hỏi chính liên tiếp nào, tối đa chỉ có 2 câu chung mức độ (khi 2 câu liền trước cùng độ khó, lần bốc tiếp theo bắt buộc chuyển sang mức khác trong danh sách đã chọn). Không lặp lại câu hỏi sinh viên đã làm trong phiên (`Id NOT IN (...)`). Sau mỗi câu trả lời, kích hoạt câu hỏi chuyên sâu đào sâu (A2) khi điểm số thuộc khoảng ranh giới $4.0 \le \text{Score} \le 8.0$ theo cấu hình hệ thống của Admin (`max_follow_up_questions`, từ 1–5 câu, mặc định 2 câu; nếu điểm $< 4.0$ hoặc $> 8.0$ thì mở Scorecard ngay).
+- **Luyện trọn gói theo tiến trình [Full-Session Progressive]:** Sinh viên nhập số lượng câu hỏi muốn làm từ 3 đến 10 câu (ràng buộc bởi `MinMixedPracticeQuestions = 3` và `MaxMixedPracticeQuestions = 10` do Admin cấu hình trong `system_configs`). Hệ thống tự động chia theo tiến trình từ Dễ đến Khó: chia đều số câu cho 3 mức (Dễ, Trung bình, Khó), bốc trọn gói toàn bộ câu hỏi ngay khi khởi tạo phiên và sắp xếp thứ tự phát vấn tăng dần từ Dễ $\to$ Trung bình $\to$ Khó (nếu kho đề không đủ câu cho bất kỳ mức nào, trả `HTTP 400 Bad Request` tiếng Việt rõ ràng, không tạo phiên rác). Chế độ này trả lời liền mạch không bị ngắt quãng, **TUYỆT ĐỐI KHÔNG có câu hỏi follow-up**, hỗ trợ nộp từng câu hoặc nộp trọn gói qua `batch-answers` để AI chấm tổng thể và trả bảng điểm tổng kết.
+- **Cơ chế Timeout 5 phút không tương tác (Session Inactivity Timeout):** Cấu hình động qua bảng `system_configs` (`SessionInactivityTimeoutMinutes = 5`, mặc định 5 phút). Hệ thống cập nhật thời điểm `last_activity_at` (TIMESTAMPTZ) sau mỗi tương tác của sinh viên (khởi tạo phiên, lấy câu tiếp theo, nộp câu trả lời). Áp dụng cho cả 2 chế độ: nếu sinh viên không có bất kỳ tương tác nào trong hơn 5 phút, hệ thống tự động kết thúc phiên an toàn (`status = "completed"`), bảo toàn 100% dữ liệu và điểm số các câu đã làm (với Full-Session: các câu chưa làm tính là bỏ trống 0 điểm). Mọi thao tác gọi API tiếp theo sẽ nhận mã lỗi **HTTP 410 Gone** (Session Timed Out).
+- **Lưu trữ & Lịch sử:** Luyện tập **KHÔNG lưu audio**, chỉ lưu bản transcript đã sửa vào `practice_answers`. Sinh viên xem lại lịch sử luyện tập trên Student Portal (FE-02) cùng màn hình với lịch sử thi thử.
+
+##### 2. Bốn Phân Làn Trách Nhiệm (4 Swimlanes) (MF-01)
+1. **Lane 1: Student (Sinh viên)**:
+   - Chọn môn, chế độ làm bài (`[Per-Question On-Demand]` chọn đơn/tổ hợp độ khó, cấp câu 1 và lấy tiếp On-Demand không ép chốt trước số câu; hoặc `[Full-Session Progressive]` 3–10 câu chia đều Dễ $\to$ Khó) $\to$ Trả lời bằng giọng nói hoặc gõ phím $\to$ Rà soát và chỉnh sửa transcript trên màn hình đệm do Admin cấu hình (`transcript_buffer_seconds`, mặc định 60s) $\to$ Bấm xác nhận nộp $\to$ Xem bảng điểm Scorecard $\to$ Quyết định trả lời câu hỏi chuyên sâu đào sâu (nếu chọn `[Per-Question]`, tối đa theo cấu hình Admin `max_follow_up_questions`, 1–5 câu, mặc định 2 câu) hoặc gọi lấy câu mới On-Demand / kết thúc phiên. Chú ý tương tác trong vòng 5 phút để tránh Inactivity Timeout.
+2. **Lane 2: React 19 Client UI & Audio/STT Engine (Giao diện Web & Xử lý Âm thanh)**:
+   - Đọc to câu hỏi bằng Web Speech TTS $\to$ Thu âm và nhận diện giọng nói STT thời gian thực $\to$ Mở màn hình đệm kèm đồng hồ đếm ngược (do Admin cấu hình chung qua `system_configs` `TranscriptBufferSeconds`, từ 10–300s, mặc định 60s) $\to$ Điều hướng câu hỏi tiếp theo $\to$ Mở modal Scorecard và TTS đọc nhận xét phản hồi; hiển thị thông báo và scorecard bảo toàn điểm khi nhận HTTP 410 Gone.
+3. **Lane 3: .NET 8 Backend API & PracticeHub (Backend API & Hàng đợi Chịu lỗi)**:
+   - Tiếp nhận khởi tạo phiên, quản lý `last_activity_at`, bốc câu 1 cho Per-Question hoặc chia đều 3–10 câu cho Full-Session $\to$ Xử lý `POST /next-question` On-Demand với thuật toán Anti-3-Consecutive $\to$ Kiểm tra Lazy Inactivity Timeout (5 phút quá hạn tự hoàn tất phiên an toàn và trả HTTP 410 Gone) $\to$ Lưu bài nộp tức thì xuống PostgreSQL với `status = 'PENDING'` ($< 100$ms) $\to$ Đẩy task vào hàng đợi in-memory BoundedChannel (1000 slots) $\to$ Điều phối Polly Retry ($2^n$) và Dead-Letter Queue (DLQ) chấm bù $\to$ Cập nhật điểm chính thức và phát realtime qua SignalR PracticeHub.
+4. **Lane 4: Gemini AI Grading & Worker Queue (Dịch vụ Chấm điểm AI)**:
+   - Gemini 1.5 Flash phân tích câu trả lời theo barem Rubric 10.0 qua chuỗi suy luận CoT $\to$ Ép khuôn đầu ra JSON Schema $\to$ Trả về vector điểm tiêu chí, nhận xét định tính và sinh câu hỏi chuyên sâu đào sâu (trong chế độ `[Per-Question]`).
+
+##### 3. Diễn Giải Quy Trình Theo Từng Bước (Tên : Mục Đích) (MF-01)
+* **Start Practice (`INIT`)**: Khởi đầu quy trình luyện tập vấn đáp từ trang môn học.
+* **Select Subject & Config Upfront (`A01`)**: Sinh viên chọn Môn học và chế độ làm bài Upfront (`[Per-Question]` chọn mức độ, hoặc `[Full-Session Progressive]` chọn 3–10 câu).
+* **Initialize Practice Session (`A02`)**: Giao diện gửi request khởi tạo phiên lên Backend và kết nối SignalR `/hubs/practice`.
+* **Query Question Pool (`A03`)**: Backend truy vấn kho câu hỏi `practice_questions`, thiết lập `last_activity_at = NOW()`.
+* **Pool Sufficient? (`D01`)**: Kiểm tra kho câu hỏi: nếu thiếu câu cho Full-Session $\to$ trả `HTTP 400 Bad Request` (`A04`) và kết thúc luồng (`F01`); nếu đủ $\to$ nạp câu hỏi (`A05`).
+* **Display Question Card & TTS (`A05`)**: Hiển thị thẻ câu hỏi trên màn hình và đọc to qua Web Speech TTS.
+* **Input Modality? (`D02`)**: Sinh viên lựa chọn phát biểu qua Micro (`A06`) hoặc gõ phím trực tiếp (`M01`).
+* **Transcribe Stream Realtime (`A08`)**: Web Speech STT nhận diện tức thì dưới 0.5s không lưu file âm thanh.
+* **Review Transcript Buffer (`A09`)**: Màn hình đệm 10–300s (mặc định 60s) cho phép rà soát và chỉnh sửa thuật ngữ CNTT tiếng Anh (Code-Switching).
+* **Confirm Submission (`A10`)**: Sinh viên xác nhận nộp câu trả lời.
+* **Session Mode? (`D03`)**: Phân nhánh: nếu `[Full-Session]` $\to$ lưu tạm vào state client (`A11`); nếu `[Per-Question]` $\to$ Persist-First ghi DB trạng thái `PENDING` dưới 100ms (`A12`).
+* **Questions Done? (`D04`)**: Kiểm tra tiến độ Full-Session: nếu còn câu $\to$ chuyển câu tiếp theo (`A05`); nếu hết câu $\to$ nộp toàn bài batch-answers (`A26`).
+* **Enqueue EvaluationTask (`A13`)**: Đưa tác vụ chấm vào BoundedChannel 1,000 slots RAM (`FullMode.Wait`).
+* **Polly Status? (`D05`)**: Worker gọi Gemini 1.5 Flash: nếu retry thất bại quá 3 lần $\to$ cách ly DLQ (`A15`) và kết thúc nhánh (`F02`); nếu thành công $\to$ chấm Rubric CoT (`A16`).
+* **Save GRADED Status (`A17`)**: Cập nhật điểm vào CSDL và phát sự kiện qua SignalR `/hubs/practice`.
+* **Score in 4.0-8.0? (`D06`)**: Kiểm tra điều kiện câu hỏi phụ ở Per-Question: nếu điểm $4.0 \le \text{Score} \le 8.0$ $\to$ gợi ý câu hỏi đào sâu A2 (`A18`); nếu ngoài khoảng $\to$ mở Scorecard (`A19`).
+* **Accept A2? (`D07`)**: Sinh viên chọn chấp nhận đào sâu $\to$ quay lại trả lời (`A05`); nếu từ chối $\to$ mở Scorecard (`A19`).
+* **Next Step? (`D08`)**: Sau khi xem Scorecard (`A20`), sinh viên chọn lấy câu tiếp theo $\to$ kiểm tra Inactivity Timeout (`D09`); hoặc bấm hoàn tất phiên (`A25`) $\to$ kết thúc toàn bộ (`F04`).
+* **Inactive > 5m? (`D09`)**: Kiểm tra thời gian không tương tác: nếu quá 5 phút $\to$ tự động đóng phiên, trả `HTTP 410 Gone` (`A23`) và kết thúc luồng (`F03`); nếu trong hạn 5 phút $\to$ bốc câu tiếp theo theo luật Anti-3-Consecutive (`A24`) $\to$ quay lại phát vấn (`A05`).
+* **Save Batch Results & Summary (`A27`, `A28`, `A29`)**: Với Full-Session, lưu điểm tổng thể, hiển thị phân tích năng lực và kết thúc tại `F05`.
+
+##### 4. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 43 Đỉnh)
 
 ```mermaid
 flowchart TD
@@ -915,7 +1002,7 @@ flowchart TD
     A29 --> F05
 ```
 
-##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+##### 5. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
 
 ```mermaid
 flowchart TD
@@ -964,7 +1051,7 @@ flowchart TD
     M1_EvalFU -- "Không thỏa mãn" --> M1_BroadcastDone(["Lưu ai_evaluations & Bắn SignalR Scorecard hoàn chỉnh"])
 ```
 
-##### 4. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
+##### 6. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
 
 ```mermaid
 stateDiagram-v2
@@ -989,14 +1076,45 @@ stateDiagram-v2
 
 #### <a id="phan-642"></a>6.4.2. MF-02: Thi Thử Vấn Đáp Bấm Giờ (Timed Mock Exam)
 
-##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-02)
-* **Hạn ngạch thi thử (Daily Quota Guard):** Admin cấu hình số lượt thi tối đa theo môn trong ngày (`max_mock_exams_per_day`), không khóa cứng K=3. Khi `used_attempts >= max_mock_exams_per_day`, trả ngay **HTTP 429 Too Many Requests**, khóa nút thi thử và điều hướng sang MF-01.
-* **Cấu trúc đề & Phân bổ Bloom:** Trưởng Bộ Môn cấu hình cấu trúc đề thi thử (ExamStructure: thời lượng phút, tổng số câu, tỷ lệ Bloom) theo từng môn học. Nguồn đề rút từ kho `practice_questions` (cô lập 100% với kho `exam_questions` của MF-04).
-* **Chế độ Follow-up tự chọn:** Sinh viên chỉ chọn môn học và chủ động chọn `Có Follow-up` hoặc `Không Follow-up` (không chọn topic hay độ khó). Nếu chọn có follow-up, AI phân tích ngữ cảnh bài nói để đào sâu (`[Needs Follow-up]`), không phụ thuộc điểm số; thời lượng ca thi có follow-up dài hơn do Trưởng BM cấu hình.
-* **Voice-First Gate & Đồng hồ kép:** Bắt buộc micro, khóa cứng 100% ô gõ phím. Server Master Timer (chống sửa giờ máy trạm) chạy song song với Client Countdown Timer. Hết giờ (`00:00`) tự động nộp bài: **câu chưa làm tính là bỏ trống, không chấm**. **KHÔNG lưu audio**, chỉ lưu transcript vào `mock_exam_answers`.
-* **Dual-Path Grading & Instant Scorecard:** Fast-Path ($< 10$s) chấm tức thì qua Gemini 1.5 Flash hoặc Async Fallback qua BoundedChannel 1,000 slots. Trả Instant Feedback Scorecard chi tiết từng tiêu chí Rubric theo CLO tại màn hình kết quả và lưu vĩnh viễn vào `mock_exam_sessions` phục vụ tra cứu Lịch sử thi (FE-02).
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_diagrams/MF02_Timed_Mock_Exam.drawio) (4 Phân làn, 45 đỉnh, 50 cạnh, 3 nút kết thúc)
 
-##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 45 Đỉnh)
+##### 1. Mục Tiêu Nghiệp Vụ & Danh Mục Tính Năng Cốt Lõi (MF-02)
+Mô phỏng áp lực phòng thi vấn đáp chính thức có giới hạn thời gian nghiêm ngặt. Áp dụng hai chốt chặn cốt lõi: **Daily Quota Guard** (hạn ngạch thi thử tối đa trong ngày do Admin cấu hình theo môn `max_mock_exams_per_day` để chống lạm dụng token AI, không khóa cứng K=3; Trưởng Bộ Môn cấu hình cấu trúc đề, Bloom và thời lượng) và **Voice-First Gate** (bắt buộc phải phát biểu qua micro, khóa cứng ô nhập liệu văn bản nhằm rèn luyện phản xạ phát âm thực tế dưới áp lực thời gian). Đặc biệt, hệ thống cung cấp **Instant Feedback Scorecard chi tiết** (Điểm từng tiêu chí Rubric, ưu điểm, thiếu sót kiến thức, gợi ý cải thiện) ngay tại màn hình kết quả và lưu trữ vĩnh viễn trong mục **Lịch sử thi** (`Exam History`) để phục vụ ôn tập cá nhân hóa.
+
+##### 2. Bốn Phân Làn Trách Nhiệm (4 Swimlanes) (MF-02)
+1. **Lane 1: Student (Sinh viên)**:
+   - Chọn môn thi thử $\to$ Chủ động tự chọn chế độ: Có Follow-up hoặc Không Follow-up $\to$ Xác nhận thông báo nếu đã hết lượt $\to$ Phát biểu qua micro $\to$ Chỉnh sửa từ vựng trên ô đệm $\to$ Bấm lưu từng câu $\to$ Bấm nộp bài thi $\to$ Xem Instant Feedback Scorecard chi tiết (tiêu chí Rubric, ưu điểm, lỗ hổng kiến thức, gợi ý cải thiện) hoặc xem lại bất cứ lúc nào trong Lịch sử thi.
+2. **Lane 2: React 19 Client UI & Voice-First Gate (Giao diện Web & Đồng hồ Đếm ngược)**:
+   - Kiểm tra hạn ngạch $\to$ Bật đồng hồ đếm ngược $\to$ Hiển thị câu hỏi và khóa ô gõ phím $\to$ Bóc băng giọng nói STT $\to$ Mở khóa ô đệm sau khi nói $\to$ Tự động thu bài khi hết giờ (`00:00`) $\to$ Gửi bài nộp $\to$ Mở modal hiển thị Instant Feedback Scorecard chi tiết kèm biểu đồ năng lực.
+3. **Lane 3: .NET 8 Backend API & Quota Handler (Backend & Đồng hồ Chủ Server)**:
+   - Truy vấn hạn ngạch trong PostgreSQL $\to$ Trừ 1 lượt thi và bốc ngẫu nhiên $N$ câu hỏi từ kho `practice_questions` $\to$ Kích hoạt Server Master Timer (chống gian lận sửa giờ máy trạm) $\to$ Lưu bài nộp `PENDING` $\to$ Điều phối chấm nhanh Fast-Path hoặc đưa vào hàng đợi nền Async Fallback $\to$ Lưu trữ kết quả và Scorecard vào bảng `mock_exam_sessions` phục vụ tra cứu Lịch sử thi.
+4. **Lane 4: Gemini AI Grading Engine (Dịch vụ Chấm điểm AI)**:
+   - Gemini 1.5 Flash chấm toàn bộ $N$ câu trả lời theo Barem Rubric 10.0 qua chuỗi CoT và trả về điểm số tổng hợp kèm vector điểm tiêu chí, phân tích ưu điểm (strengths), thiếu sót kiến thức (weaknesses) và gợi ý cải thiện hành động (actionable suggestions) cho từng câu.
+
+##### 3. Diễn Giải Quy Trình Theo Từng Bước (Tên : Mục Đích) (MF-02)
+* **Start Mock Exam (`M_INIT`)**: Khởi đầu quy trình thi thử vấn đáp bấm giờ.
+* **Select Subject & Follow-up Mode (`M01`)**: Sinh viên chọn môn học và chủ động chọn Có/Không Follow-up (AI hỏi chuyên sâu theo ngữ cảnh, không chọn topic/độ khó).
+* **Request Daily Quota Check (`M02`)**: Gửi yêu cầu kiểm tra hạn ngạch thi thử trong ngày lên Backend API.
+* **Check Daily Quota Limit (`M03`)**: Backend truy vấn hạn ngạch kiểm tra đối chiếu `Course.MaxMockExamsPerDay`.
+* **Quota Available? (`MD01`)**: Phân nhánh: nếu hết hạn ngạch $\to$ hiển thị cảnh báo giới hạn lượt thi (`Display Quota Limit Alert` - `M04`), sinh viên xác nhận chuyển sang luyện tập (`Confirm Alert & Switch to Practice` - `M06`) và kết thúc luồng (`MF01`); nếu còn lượt $\to$ trừ 1 lượt và bốc đề (`Deduct Quota & Fetch Question Set` - `M07`).
+* **Fork Timers (`FORK_TIMERS`)**: Kích hoạt thanh đồng bộ song song khởi chạy đồng thời `Start Countdown Timer` (`M09`) và `Start Server Master Timer` (`M08`).
+* **Join Timers (`JOIN_TIMERS`)**: Hội tụ đồng bộ đồng hồ thi.
+* **Display Question & Lock Text Input (`M10`)**: Hiển thị câu hỏi và khóa cứng 100% bàn phím (Voice-First Gate), bắt buộc phải trả lời qua micro.
+* **Speak Voice Answer (`M11`)**: Sinh viên phát biểu câu trả lời qua micro tai nghe.
+* **Transcribe Voice Stream (`M12`)**: Web Speech STT bóc băng thời gian thực dưới 0.5s không lưu file âm thanh.
+* **Unlock Transcript Edit Buffer & Edit Technical Terms (`M13`, `M14`)**: Mở khóa ô đệm trong 10–300s (mặc định 60s) để sinh viên sửa lỗi Code-Switching.
+* **Confirm & Save Answer Transcript (`M15`)**: Ghi nhận câu trả lời vào `mock_exam_answers`.
+* **Has Follow-up? (`MD02`)**: Nếu sinh viên chọn Có Follow-up $\to$ phân tích ngữ cảnh (`Evaluate Answer Context` - `M16`); nếu Không $\to$ chuyển sang kiểm tra tiến độ (`MD05`).
+* **AI Needs Follow-up? (`MD03`)**: Nếu AI phát hiện luận điểm cần đào sâu $\to$ phát câu hỏi phụ (`Play Follow-up Question Audio` - `M17`), sinh viên trả lời micro (`Speak Follow-up Answer` - `M18`), bóc băng (`Transcribe Follow-up Stream` - `M19`), sửa đệm (`Unlock Follow-up Edit Buffer` - `M20`, `Edit & Confirm Follow-up Transcript` - `M21`); nếu đã rõ ý $\to$ bỏ qua.
+* **Follow-up < Max? (`MD04`)**: Đảm bảo số câu hỏi phụ không vượt quá giới hạn Trưởng BM cấu hình $\to$ hội tụ tại `M_MERGE_DONE`.
+* **Exam Progress? (`MD05`)**: Nếu còn câu $\to$ chuyển câu tiếp theo; nếu hết câu $\to$ sinh viên chủ động nộp bài (`Submit Mock Exam` - `M22`); nếu hết giờ $\to$ tự động thu bài khi chạm 00:00 (`Auto-Submit Exam on Timeout` - `M23`). **Câu chưa làm tính là bỏ trống, không chấm**.
+* **Send Exam Submission (`M24`)**: Client gửi gói bài nộp lên Backend.
+* **Save Pending Exam Submission (`M25`)**: Lưu DB trạng thái `PENDING` trong $< 100$ms, trả `HTTP 202 Accepted`.
+* **System Load? (`MD06`)**: Điều phối tải:
+  - Nhánh Fast-Path ($< 10$s): Chấm tức thì theo Rubric (`Grade Answers by Rubric` - `M26`) $\to$ lưu điểm và phát SignalR (`Save Graded Results & Broadcast` - `M27`) $\to$ hiển thị bảng điểm CLO (`Display Instant CLO Scorecard` - `M28`) $\to$ sinh viên xem điểm (`Review CLO Scorecard & History` - `M29`) $\to$ kết thúc toàn bộ (`MF02_FINAL`).
+  - Nhánh Async Fallback (Khi tải cao): Đẩy vào hàng đợi chấm ngầm (`Enqueue Background Grading Task` - `M30`) $\to$ hiện thông báo chấm nền (`Display Async Grading Notice` - `M31`) $\to$ sinh viên xác nhận thoát (`Acknowledge Notice & Exit` - `M32`) $\to$ kết thúc nhánh (`MF02_ASYNC`).
+
+##### 4. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 4 Phân Làn, 45 Đỉnh)
 
 ```mermaid
 flowchart TD
@@ -1109,7 +1227,7 @@ flowchart TD
     M32 --> MF02_ASYNC
 ```
 
-##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+##### 5. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
 
 ```mermaid
 flowchart TD
@@ -1148,7 +1266,7 @@ flowchart TD
     M2_QueueGrade --> M2_SaveHistory(["UPDATE mock_exam_sessions (status = completed) & Lưu vĩnh viễn vào Lịch sử thi (GET /api/v1/mock-exams/history)"])
 ```
 
-##### 4. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
+##### 6. Phần C — Vòng Đời Trạng Thái (State Machine Diagram)
 
 ```mermaid
 stateDiagram-v2
@@ -1173,22 +1291,53 @@ stateDiagram-v2
 
 ---
 
-#### <a id="phan-643"></a>6.4.3. MF-03: Quản Lý Ngân Hàng Câu Hỏi & Barem Rubric 10.0 (Question Studio)
+#### <a id="phan-643"></a>6.4.3. MF-03: Quản Lý Ngân Hàng Câu Hỏi, Chuẩn Đầu Ra CLO & Đóng Gói Bộ Đề ExamSets (Question Studio)
 
-##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-03)
-* **Hai phương thức khởi tạo:**
-  1. *Sinh câu hỏi từ CLO môn học (`course_clos` 3NF):* Giảng viên và Trưởng BM lấy danh sách chuẩn đầu ra từ kho `course_clos`, cấu hình Bloom 1-6 & độ khó $\to$ Gemini 1.5 Flash tự động sinh Đề bài, Barem Rubric $\sum \equiv 10.0$đ và Model Answer $\ge 50$ ký tự (`POST /api/v1/questions/generate-from-clo`) $\to$ Giảng viên xem trước (Preview) và tùy chỉnh theo barem riêng.
-  2. *Soạn câu hỏi thủ công (`source == "manual"`):* Hỗ trợ đính kèm ảnh/sơ đồ kỹ thuật (PNG/JPG/WEBP $\le 5$MB). Kiểm tra nhị phân Magic Bytes (`HTTP 413 Payload Too Large` nếu $> 5$MB, `HTTP 415 Unsupported Media Type` nếu sai định dạng), stream lên Cloudflare R2 qua `POST /api/v1/questions/upload-image`, lưu `image_url` và bắt buộc nhập `image_description` để phục vụ chấm Gemini Multimodal CoT.
-* **Cảnh báo trùng lặp tự động & Tick chọn 2 kho:** Hệ thống tự động so khớp độ tương đồng ngữ nghĩa; nếu phát hiện trùng lặp vượt ngưỡng cho phép, hệ thống tự động gắn cờ cảnh báo `isFlagged = true` để phục vụ hậu kiểm. Giảng viên tick chọn lưu vào `practice_questions` (cho MF-01, MF-02) và/hoặc `exam_questions` (cô lập tuyệt đối cho MF-04).
-* **Barem Rubric chuẩn hóa:** $\sum \text{MaxScore}_j \equiv 10.0$đ và Model Answer $\ge 50$ ký tự. Client Guard cảnh báo đỏ và khóa nút; Backend FluentValidation chặn `HTTP 422 Unprocessable Entity` nếu vi phạm. Hỗ trợ chạy AI Calibration Simulator để hiệu chuẩn trọng số tiêu chí.
-* **Quy trình Duyệt đề Bộ Môn & Đóng gói ExamSets:** Giảng viên gửi duyệt (`POST /api/v1/questions/batch-submit-review`) $\to$ `SUBMITTED_FOR_REVIEW`. **Trưởng Bộ Môn (`department_head`) là người duy nhất có thẩm quyền phê duyệt**:
-  - Rà soát các câu hỏi bị gắn cờ trùng lặp `isFlagged = true`.
-  - `APPROVED`: Phê duyệt chính thức, ACID commit vào kho câu hỏi mục tiêu.
-  - `NEEDS_REVISION`: Yêu cầu sửa kèm `review_notes` $\ge 10$ ký tự, trả về Giảng viên chỉnh sửa.
-  - `REJECTED`: Từ chối kèm lý do, loại bỏ hẳn khỏi ngân hàng đề.
-  - Sau khi duyệt câu hỏi, Trưởng Bộ Môn định nghĩa khung `exam_structures` với `slot_definitions` (JSONB) và `required_set_count`, đóng gói các bộ đề `exam_sets` (`DRAFT` $\to$ `SUBMITTED_FOR_REVIEW` $\to$ `OFFICIAL` $\to$ `HANDED_OVER`) và bàn giao cho Cán bộ Khảo thí.
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_diagrams/MF03_Question_Bank_Rubric.drawio) (5 Phân làn tách riêng GV và Trưởng BM, 60 đỉnh, 68 cạnh, 2 nút kết thúc)
 
-##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, 60 Đỉnh)
+##### 1. Mục Tiêu Nghiệp Vụ & Danh Mục Tính Năng Cốt Lõi (MF-03)
+Cung cấp công cụ chuyên biệt cho **Giảng viên (`lecturer`)** và **Trưởng Bộ Môn (`department_head`)** thiết kế, quản lý ngân hàng câu hỏi vấn đáp và barem chấm điểm Rubric theo **chuẩn thang điểm 10.0 bắt buộc ($\sum \equiv 10.0$đ)**.
+
+Đặc biệt, hệ thống hỗ trợ hai phương thức khởi tạo:
+1. **Sinh câu hỏi tự động từ Chuẩn đầu ra môn học (`course_clos` 3NF):** Chuẩn hóa danh mục CLO trực tiếp trong cơ sở dữ liệu hệ thống qua bảng `course_clos` (3NF), loại bỏ hoàn toàn việc phụ thuộc API ngoại vi FLM. Giảng viên và Trưởng BM chọn môn học và chuẩn đầu ra CLO, cấu hình mức Bloom (1-6), độ khó và số lượng câu $\to$ Gemini 1.5 Flash tự động sinh Đề bài, Barem Rubric $\sum \equiv 10.0$đ và Model Answer $\ge 50$ ký tự qua endpoint `POST /api/v1/questions/generate-from-clo`. Giảng viên xem trước (Preview), tùy biến theo barem riêng và kiểm thử độ nhạy qua AI Calibration Simulator.
+2. **Soạn câu hỏi thủ công (`source == "manual"`):** Hỗ trợ đính kèm sơ đồ kỹ thuật (UML, ERD, Kiến trúc Clean Architecture, UI Mockup) định dạng `PNG/JPG/WEBP` $\le 5$MB. Hệ thống kiểm tra chữ ký Magic Bytes chặt chẽ (chặn `HTTP 413 Payload Too Large` nếu $> 5$MB, `HTTP 415 Unsupported Media Type` nếu sai định dạng), stream trực tiếp lên Cloudflare R2 qua `POST /api/v1/questions/upload-image`, lưu `image_url` và bắt buộc nhập `image_description` để Gemini 1.5 Flash chấm đa phương thức (Multimodal CoT) chuẩn xác.
+
+* **Phân tách Ngân hàng Câu hỏi & Mục đích sinh đề (R8):**
+  - **Kho câu hỏi Luyện tập & Thi thử (`practice_questions`):** Được sinh độc lập theo từng chuẩn đầu ra CLO môn học (`course_clos`) hoặc soạn thủ công để phục vụ sinh viên tự luyện tập (MF-01) và thi thử (MF-02), không bắt buộc phải khớp cứng với cấu trúc đề thi chính thức.
+  - **Kho câu hỏi Thi thật (`exam_questions`):** Bắt buộc phải được sinh và tổ chức tuân thủ nghiêm ngặt theo ma trận cấu trúc đề thi mẫu (`exam_structures`, `slot_definitions`, `course_clos`) do Trưởng Bộ Môn ban hành để bảo đảm tính chuẩn hóa học thuật và công bằng tuyệt đối cho kỳ thi tập trung phòng Lab (MF-04).
+* **Kiểm soát Trùng lặp Ngữ nghĩa:** Hệ thống tự động so khớp độ tương đồng ngữ nghĩa đối với các câu hỏi trong ngân hàng; nếu phát hiện câu hỏi tương đồng vượt ngưỡng cho phép, hệ thống tự động gắn cờ cảnh báo `isFlagged = true` để hỗ trợ Trưởng Bộ Môn rà soát chống trùng lặp đề thi.
+* **Tick chọn 2 kho câu hỏi:** Giảng viên tick chọn lưu vào `practice_questions` (phục vụ MF-01 và MF-02) và/hoặc `exam_questions` (cô lập tuyệt đối cho MF-04). Sau khi hoàn thiện, Giảng viên ấn **Gửi lên cho Bộ Môn (`POST /api/v1/questions/batch-submit-review`)**, chuyển trạng thái sang `SUBMITTED_FOR_REVIEW`.
+* **Quy trình Phê duyệt & Đóng gói Bộ đề (ExamSets):** **Trưởng Bộ Môn (`department_head`)** là người duy nhất có thẩm quyền thẩm định và ra quyết định: Phê duyệt (`APPROVED` - kích hoạt trong ngân hàng đề), Yêu cầu sửa (`NEEDS_REVISION` kèm `review_notes` $\ge 10$ ký tự trả về Giảng viên sửa), hoặc Từ chối loại bỏ (`REJECTED` kèm `review_notes`). Sau khi duyệt câu hỏi, Trưởng Bộ Môn định nghĩa ma trận đề `exam_structures` với `slot_definitions` (JSONB) và `required_set_count`, đóng gói các bộ đề `exam_sets` (`DRAFT` $\to$ `SUBMITTED_FOR_REVIEW` $\to$ `OFFICIAL` $\to$ `HANDED_OVER`) và bàn giao chính thức cho Cán bộ Khảo thí (`examination_officer`).
+
+##### 2. Năm Phân Làn Trách Nhiệm (5 Swimlanes) (MF-03)
+1. **Lane 1: Lecturer (Question Author - Giảng viên Tác giả đề)**:
+   - Truy cập Question Studio, chọn phương thức khởi tạo (tra cứu catalog, sửa câu hỏi cũ/bị yêu cầu sửa, soạn thủ công đính kèm ảnh kỹ thuật $\le 5$MB, hoặc sinh tự động từ CLO môn học) $\to$ Thiết kế tiêu chí Rubric chuẩn $\sum \equiv 10.0$đ, Model Answer $\ge 50$ ký tự $\to$ Tick chọn 2 kho (`practice_questions` / `exam_questions`) $\to$ Chạy AI Simulator thử nghiệm độ nhạy $\to$ Bấm "Gửi lên cho Bộ Môn" (`POST /batch-submit-review`). Nhận thông báo chỉnh sửa khi Trưởng BM yêu cầu `NEEDS_REVISION`.
+2. **Lane 2: Question & Rubric Studio UI (Giao diện Studio Quản trị & Preview)**:
+   - Render giao diện danh mục câu hỏi, form biên soạn, modal xem trước Preview Studio và cây chuẩn đầu ra CLOs từ CSDL 3NF $\to$ Real-time Client Guard tính tổng điểm: tính $\sum \text{MaxScore}_j$, hiển thị cảnh báo đỏ và khóa cứng nút Lưu/Gửi duyệt nếu lệch 10.0đ hoặc Model Answer $< 50$ ký tự $\to$ Hiển thị kết quả AI Simulator $\to$ Hiển thị thông báo phê duyệt thành công.
+3. **Lane 3: .NET 8 Backend API & R2 (Cổng Kiểm định Backend & Lưu Trữ)**:
+   - Xác thực quyền RBAC qua JWT Claims $\to$ Cung cấp endpoint trích xuất chuẩn đầu ra `course_clos` (3NF) $\to$ Tiếp nhận upload ảnh kỹ thuật (kiểm tra Magic Bytes PNG/JPG/WEBP $\le 5$MB, trả HTTP 413/415) và stream lên Cloudflare R2 $\to$ Kiểm tra độ tương đồng ngữ nghĩa và gắn cờ `isFlagged = true` nếu trùng lặp $\to$ Thẩm định độc lập tổng điểm $\sum = 10.0$đ và Model Answer $\ge 50$ ký tự qua FluentValidation (chặn HTTP 422 nếu vi phạm) $\to$ ACID Transaction ghi nhận Questions, Rubrics, RubricCriteria và AuditLog vào PostgreSQL $\to$ Cập nhật trạng thái duyệt đề và vô hiệu hóa cache khi được phê duyệt.
+4. **Lane 4: Gemini AI Generator & Simulator (Dịch vụ AI Sinh Đề & Hiệu Chuẩn)**:
+   - Gemini 1.5 Flash phân tích dữ liệu CLO từ `course_clos`, tự động sinh câu hỏi, barem rubric $\sum = 10.0$đ và Model Answer $\ge 50$ ký tự $\to$ Chấm thử nghiệm câu trả lời giả định trong AI Calibration Simulator để giúp Giảng viên hiệu chuẩn trọng số tiêu chí.
+5. **Lane 5: Department Head (Approver - Trưởng Bộ Môn Phê duyệt)**:
+   - Mở Cổng Thẩm Định (Approval Studio), xem danh sách câu hỏi `SUBMITTED_FOR_REVIEW`, rà soát các câu hỏi bị gắn cờ trùng lặp `isFlagged = true` $\to$ Đối chiếu đề bài, ảnh sơ đồ kỹ thuật, Model Answer và Barem 10.0đ với chuẩn đầu ra CLO $\to$ Ra quyết định thẩm định (`POST /questions/{id}/review-decision`): Phê duyệt chính thức (`APPROVED`), Yêu cầu chỉnh sửa (`NEEDS_REVISION` kèm `review_notes`), hoặc Từ chối loại hẳn (`REJECTED` kèm `review_notes`) $\to$ Đóng gói bộ đề `exam_sets` đạt chuẩn `OFFICIAL` và bàn giao `HANDED_OVER` cho Khảo thí.
+
+##### 3. Diễn Giải Quy Trình Theo Từng Bước (Tên : Mục Đích) (MF-03)
+* **Access Studio (`Q01`, `Q02`, `Q03`, `Q04`)**: Giảng viên truy cập Question Studio, hệ thống xác thực RBAC claims và render không gian làm việc.
+* **Select Authoring Mode? (`D_AuthorMode`)**: Lựa chọn 1 trong 4 nhánh tác vụ:
+  - *Nhánh 1 [Browse / Filter]:* Lọc catalog theo môn, Bloom, độ khó, trạng thái duyệt (`Q_Browse_Filter` $\to$ `Q_Browse_Query` $\to$ `Q_Browse_Render`).
+  - *Nhánh 2 [Edit Existing]:* Chọn câu hỏi cần sửa (`Q_Edit_Select` $\to$ `Q_Edit_Fetch` $\to$ `Q_Edit_Form`).
+  - *Nhánh 3 [Manual Authoring]:* Soạn đề bài, tick chọn 2 kho (`Q_Man_Start`), kiểm tra đính kèm ảnh (`D_Man_Image`). Nếu có ảnh $\to$ kiểm tra Magic Bytes $\le 5$MB, upload R2 (`Q_Man_Upload`, `Obj_R2_Image`), gắn `image_url` và bắt buộc nhập `image_description` (`Q_Man_Attach`).
+  - *Nhánh 4 [Generate from Course CLO]:* Chọn môn và lấy chuẩn đầu ra CLO từ bảng `course_clos` 3NF (`Q_CLO_Req`, `Q_CLO_Fetch`, `Q_CLO_RenderTree`) $\to$ cấu hình tham số (`Q_CLO_Config`) $\to$ gửi yêu cầu sinh đề (`Q_CLO_Dispatch`) $\to$ Gemini 1.5 Flash sinh câu hỏi, Rubric 10.0 và Model Answer (`Q_CLO_AIGen`) $\to$ mở Draft Preview Studio (`Q_CLO_Preview`) $\to$ Giảng viên tùy chỉnh Barem và tick chọn 2 kho (`Q_CLO_Customize`).
+* **Calculate & Check Rubric Sum (`Q_Rubric_Calc`, `D_Rubric_Sum`)**: Client Guard tính $\sum \text{MaxScore}_j$: nếu lệch 10.0đ $\to$ cảnh báo đỏ, khóa nút gửi duyệt (`Q_Rubric_Warn`) và yêu cầu sửa lại (`Q_Rubric_Adjust`); nếu chuẩn 10.0đ $\to$ mở khóa.
+* **Run AI Simulator? (`D_Simulator`)**: Tùy chọn chạy AI Calibration Simulator: nhập câu trả lời giả định (`Q_Sim_Input`) $\to$ Gemini chấm thử và trích xuất CoT (`Q_Sim_Dispatch`, `Q_Sim_AI`) $\to$ hiển thị Scorecard (`Q_Sim_Show`) $\to$ đánh giá Barem (`D_Sim_Check`).
+* **Submit to Department Head (`Q_Submit_Review`)**: Giảng viên bấm nút gửi duyệt Bộ Môn qua `POST /batch-submit-review`.
+* **Duplicate Check & Backend FluentValidation (`Q_Dup_Check`, `Q_Val_Backend`, `D_Val_Backend`)**: Backend so khớp độ tương đồng ngữ nghĩa (gắn `isFlagged = true` nếu trùng lặp) và kiểm tra độc lập $\sum \equiv 10.0$đ cùng Model Answer $\ge 50$ ký tự: nếu vi phạm $\to$ chặn trả `HTTP 422 Unprocessable Entity` (`Q_Val_422`); nếu hợp lệ $\to$ lưu CSDL trạng thái `SUBMITTED_FOR_REVIEW` (`Q_Persist_Review`, `Obj_State_Review`).
+* **Department Head Decision (`Q_Dept_Open`, `Q_Dept_Inspect`, `D_Dept_Decision`)**: Trưởng Bộ Môn mở Approval Studio thẩm định và rà soát cờ cảnh báo trùng lặp:
+  - *Nhánh NEEDS_REVISION:* Nhập `review_notes` $\ge 10$ ký tự (`Q_Dept_Revise`) $\to$ lưu CSDL (`Q_DB_Revise`) $\to$ thông báo phản hồi về cho Giảng viên (`Q_UI_Revise`) $\to$ Giảng viên mở lại form sửa (`Q_Lec_Revise`).
+  - *Nhánh REJECTED:* Nhập lý do (`Q_Dept_Reject`) $\to$ cập nhật CSDL loại khỏi ngân hàng đề (`Q_DB_Reject`) $\to$ kết thúc luồng (`End_Reject`).
+  - *Nhánh APPROVED:* Bấm phê duyệt (`Q_Dept_Approve`) $\to$ ACID Transaction commit câu hỏi vào kho đã tick (`practice_questions` / `exam_questions`), xóa cache (`Q_DB_Approve`, `Obj_State_Approved`) $\to$ hiển thị banner thành công (`Q_Sync_UI`) $\to$ xem catalog đã cập nhật (`Q_Catalog_View`) $\to$ kết thúc toàn bộ (`Q_End_Final`).
+
+##### 4. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, 60 Đỉnh)
 
 ```mermaid
 flowchart TD
@@ -1339,7 +1488,7 @@ flowchart TD
     Q_Catalog_View --> Q_End_Final
 ```
 
-##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+##### 5. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
 
 ```mermaid
 flowchart TD
@@ -1377,7 +1526,7 @@ flowchart TD
     M3_HeadReview -- "decision == 'APPROVED'" --> M3_ToApp(["Cập nhật status = APPROVED -> Kích hoạt chính thức trong kho practice_questions / exam_questions"])
 ```
 
-##### 4. Phần C — Vòng Đời Trạng Thái Câu Hỏi Ngân Hàng Đề (Question State Machine)
+##### 6. Phần C — Vòng Đời Trạng Thái Câu Hỏi Ngân Hàng Đề (Question State Machine)
 
 ```mermaid
 stateDiagram-v2
@@ -1397,239 +1546,154 @@ stateDiagram-v2
 
 #### <a id="phan-644"></a>6.4.4. MF-04: Thi Thật Phòng Lab Kiosk, Công Bố Điểm & Phúc Khảo Nội Bộ (Lab Exam & Audit)
 
-##### 1. Tóm Tắt Nghiệp Vụ & Chốt Chặn Kỹ Thuật (MF-04)
-* **Pha 0 - Quản trị kỳ thi & ca thi (Cán bộ Khảo thí `examination_officer`):**
-  - Tiếp nhận các bộ đề thi đã được Trưởng Bộ Môn phê duyệt và bàn giao (`HANDED_OVER`).
-  - Khởi tạo Kỳ thi chính thức (`OfficialExamSession`), gán môn thi, liên kết cấu trúc đề `exam_structures`.
-* **Pha 0 - Quản trị kỳ thi & ca thi (Cán bộ Khảo thí `examination_officer` & Trưởng BM `department_head`):**
-  - Trưởng Bộ Môn nắm 100% thẩm quyền cấu hình câu hỏi tiếp nối Follow-up (`has_follow_up`, `max_follow_up_questions` 1–5 câu, mặc định 2 câu) áp dụng cho môn/ca thi thật (R3).
-  - Cán bộ Khảo thí tiếp nhận các bộ đề thi đã được Trưởng Bộ Môn phê duyệt và bàn giao (`HANDED_OVER`).
-  - Cán bộ Khảo thí khởi tạo Kỳ thi chính thức (`OfficialExamSession`), gán môn thi, liên kết cấu trúc đề `exam_structures`.
-  - Cán bộ Khảo thí khởi tạo các Ca thi (`RealExamSessionShift`: phòng lab, kíp thi, phân công Cán bộ coi thi `proctor_id`, Giảng viên hậu kiểm `examiner_user_id`), cấu hình `ExamInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`) kèm `TranscriptBufferSeconds` (10–300s).
-  - Cán bộ Khảo thí phân bổ đề thi không trùng lặp cho thí sinh trong ca qua chỉ mục duy nhất `uq_tickets_shift_exam_set` (`shift_id`, `exam_set_id`).
-  - Cán bộ Khảo thí mở xuất bản đề ca thi (`is_exam_published = true` qua `POST /api/v1/official-exams/shifts/{id}/publish-exam`).
-* **An ninh phòng thi & Điểm danh (Cán bộ Coi thi `proctor` - Giới hạn phạm vi R4):**
-  - Điểm danh đối chiếu CCCD / Thẻ sinh viên, gán vị trí máy SeatNumber 1–40 và kiểm tra chéo qua cột `ip_address` (cấm `workstation_ip`).
-  - Giám thị CHỈ có quyền điểm danh thí sinh và báo cáo vi phạm phòng thi vào nhật ký chống gian lận `exam_anti_cheat_logs` với 4 mức độ (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
-  - CẮT BỎ TOÀN BỘ QUYỀN HẠN DƯ THỪA CỦA GIÁM THỊ: Cấm mở ca thi, cấm đóng ca thi, cấm mở khóa xuất bản đề, cấm gỡ niêm phong IP máy trạm, cấm reset máy trạm, cấm import danh sách sinh viên, cấm xem điểm hay sửa điểm.
-  - Hardware Mic-Check 30s đạt $\ge 60$dB (nếu mic hỏng, Giám thị lập biên bản kỹ thuật báo Khảo thí điều chuyển máy trạm dự phòng).
-* **Niêm phong Audio R2 2 Bước & Persist-First < 100ms:**
-  - Kiosk ghi âm WebM/Opus tên bất biến `STT_MSSV.webm` (vd: `01_SE170123.webm`).
-  - Bước 1: Gọi `POST /api/v1/official-exams/tickets/{ticketId}/questions/{questionId}/audio-upload-authorizations` nhận Presigned PUT URL và Auth Token.
-  - Bước 2: Tải file trực tiếp lên Cloudflare R2, sau đó gọi `PUT /api/v1/official-exams/tickets/{ticketId}/questions/{questionId}/audio` gửi kèm mã băm SHA-256 và `audio_duration_seconds` để niêm phong.
-  - Persist-First ghi nhận bài nộp vào CSDL trạng thái `SUBMITTED` trong $< 100$ms.
-* **Kiosk khóa an toàn — Tuyệt đối 0% điểm liền, 0% khiếu nại tại chỗ:** Sau khi nộp bài, Kiosk khóa màn hình báo đã lưu an toàn, thí sinh ký biên bản giấy và ra về. Đẩy task vào RAM BoundedChannel 1,000 slots (`FullMode.Wait`) để Gemini 1.5 Pro chấm ngầm Rubric 10.0 (chỉ nhận transcript input). Polly Retry 3 lần (2-4-8s) và DLQ 5m do Cán bộ Khảo thí giám sát & chủ động replay (Trưởng BM không can thiệp DLQ - R2).
-* **Chốt chặn AI Doubt Guard & Hậu kiểm Giảng viên (`examiner`):** Tự động chia 2 nhóm:
-  - *Nhóm 1 (Đáng nghi ngờ / Fail):* `is_suspicious == true` HOẶC `confidence_score < 0.70` HOẶC điểm liệt. Giảng viên **BẮT BUỘC** đối soát Evidence Panel (AudioURL R2, Transcript Whisper gốc, AI CoT), nghe lại Waveform Player (1.0x–1.5x) và sửa điểm kèm lý do giải trình bắt buộc `override_reason` $\ge 10$ ký tự.
-  - *Nhóm 2 (Độ tin cậy cao):* Giảng viên rà soát nhanh.
-* **Công Bố Điểm (Publish Grades) & One-Way Lock:** Chỉ khi **100% sinh viên trong ca thi đã có điểm hoàn chỉnh**, Cán bộ Khảo thí / Giảng viên mới bấm "Công Bố Điểm" 1 lần duy nhất (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`). Hệ thống cập nhật `PUBLISHED` $\to$ `LOCKED` (`is_locked = true`), `OneWayLockInterceptor` chặn 100% lệnh `UPDATE`/`DELETE` trái phép (**HTTP 403 Forbidden**). Đồng thời xuất file Bảng điểm Khảo thí FPT cả định dạng Excel (.xlsx) và PDF có chữ ký số.
-* **Xem điểm tại nhà & Quy trình Phúc khảo Nội bộ 5 Bước (R7):** Sinh viên xem điểm trên Student Portal; đồng ý thì bấm Xác nhận nhận điểm (`ACKNOWLEDGED` qua `POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade`). Nếu không đồng ý:
-  1. *Sinh viên nộp đơn phúc khảo:* `POST /api/v1/student/appeals` (status = `SUBMITTED_TO_EXAM_OFFICE`).
-  2. *Khảo thí tiếp nhận & thẩm tra tính hợp lệ:* Kiểm tra hạn nộp, trạng thái điểm, ghi chú và chuyển giao Trưởng BM (`POST /api/v1/examination-officer/appeals/{id}/forward-to-head`, status = `FORWARDED_TO_DEPT_HEAD`).
-  3. *Trưởng BM phân công Giảng viên chấm lại:* `POST /api/v1/department-head/appeals/{id}/assign-lecturer` (status = `ASSIGNED_TO_LECTURER`).
-  4. *Giảng viên chấm lại độc lập trên Evidence Panel:* `PUT /api/v1/lecturer/appeals/{id}/regrade` (status = `REGRADED_BY_LECTURER`).
-  5. *Trưởng BM thẩm định & phê duyệt quyết định:* `POST /api/v1/department-head/appeals/{id}/decision` (`APPROVED`/`REJECTED`). One-Way Lock mở đường ngoại lệ cập nhật điểm chính thức.
+* **Tài nguyên trực quan:** [Tệp sơ đồ Draw.io](../05_diagrams/MF04_Lab_Exam_Audit.drawio) (5 Phân làn tách riêng Thí sinh, Kiosk, Worker, GV/Giám thị, Trưởng BM; 84 đỉnh, 94 cạnh, 2 nút kết thúc)
 
-##### 2. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, 84 Đỉnh)
+##### 1. Mục Tiêu Nghiệp Vụ & Danh Mục Tính Năng Cốt Lõi (MF-04)
+Tổ chức kỳ thi vấn đáp kết thúc môn chính thức tại phòng máy lab có kiểm soát an ninh nghiêm ngặt kiểu IELTS. Quy trình xuất phát từ **Pha 0: Cán bộ Khảo thí (`examination_officer`) tiếp nhận các gói đề thi `HANDED_OVER`, khởi tạo kỳ thi (`OfficialExamSession`), gán môn thi, liên kết `exam_structures`, khởi tạo các ca thi (`RealExamSessionShift`: phòng lab, kíp thi, phân công giám thị `proctor_id`, giảng viên thẩm định `examiner_user_id`), thực hiện phân bổ đề thi không trùng lặp cho thí sinh (`uq_tickets_shift_exam_set`), áp dụng cấu hình Follow-up do Trưởng Bộ Môn thiết lập 100% (`has_follow_up`, `max_follow_up_questions` 1–5 câu, mặc định 2 câu; Khảo thí CẤM tự ý cấu hình follow-up), thiết lập `ExamInputMode` (`VoiceOnly`, `VoiceWithTranscriptEdit`), `TranscriptBufferSeconds` (10–300s) và mở xuất bản đề ca thi (`is_exam_published = true`)**. Trong phòng thi lab áp dụng các chốt chặn: **Fullscreen Kiosk Lockdown chống gian lận (blur > 3 lần đình chỉ)**, **nhật ký chống gian lận thời gian thực (`exam_anti_cheat_logs`)**, **kiểm tra micro phần cứng 30s $\ge 60$dB**, **cấu hình phương thức làm bài theo môn học `ExamInputMode` (`VoiceOnly` khóa cứng 100% bàn phím, `VoiceWithTranscriptEdit` mở đệm sửa transcript)**, **hỏi câu chuyên sâu theo ngữ cảnh khi môn thi bật cờ (1–5 câu do Trưởng Bộ Môn nắm 100% thẩm quyền cấu hình theo môn/đề thi, mặc định 2 câu)**, **quy trình upload audio 2 bước bảo mật lên Cloudflare R2 định danh bất biến `STT_MSSV.webm` kèm mã băm SHA-256 niêm phong**.
+
+Đặc biệt, quy trình chấm điểm, hậu kiểm và công bố điểm được thiết kế chuẩn mực theo đúng quy chế Khảo thí Đại học FPT:
+1. **Thi xong Kiosk KHÔNG CÓ ĐIỂM LIỀN (No Immediate Score):** Sau khi kết thúc thời gian thi hoặc bấm nộp bài, Kiosk TUYỆT ĐỐI KHÔNG hiện điểm và không cho khiếu nại tại phòng thi. Máy trạm Kiosk khóa màn hình và hiển thị thông báo: *"Bài thi đã được ghi nhận và niêm phong an toàn. Kết quả sẽ do Giảng viên thẩm định và công bố trên hệ thống."* Thí sinh ký biên bản nộp bài giấy và ra về (về nhà).
+2. **AI chấm điểm ngầm & Sinh viên phải đợi Giảng viên chấm hết bài nghi ngờ hoặc fail:** Đầu vào chấm điểm của AI chỉ là bản *transcript* nhận từ hệ thống (sau bóc băng Whisper STT hoặc sau khi chỉnh sửa qua màn hình đệm nếu môn cho phép). AI (Gemini 1.5 Pro) thực hiện chấm điểm ngầm toàn bộ bài thi theo Barem Rubric 10.0, trích xuất chuỗi suy luận CoT (`ai_chain_of_thought`) và tính toán `confidence_score` kèm cờ `is_suspicious`. Hệ thống tự động phân loại kết quả thành 2 nhóm:
+   - *Nhóm 1 (Cần xem lại / Fail / Đáng nghi ngờ):* Các bài có `is_suspicious == true`, `confidence_score < 0.70` (audio ồn, nói ngập ngừng, CoT mâu thuẫn, điểm ranh giới) hoặc bài thi bị fail/điểm liệt. **Sinh viên bắt buộc phải đợi Giảng viên rà soát và chấm lại toàn bộ các bài trong nhóm này**. Giảng viên mở Evidence Panel (AudioURL R2, Transcript Whisper gốc, AI CoT), nghe lại trên Waveform Player (tua theo timestamp citations, 1.0x–1.5x) để chấm và điều chỉnh lại điểm kèm lý do giải trình bắt buộc (`override_reason`).
+   - *Nhóm 2 (Độ tin cậy cao):* Các bài AI chấm chuẩn xác (`confidence_score >= 0.70` và `is_suspicious == false`), giảng viên rà soát nhanh đối chiếu Evidence Panel.
+3. **Sau khi Giảng viên xử lý có điểm đầy đủ mới gửi điểm về cho sinh viên (Publish Grades):** Chỉ sau khi Giảng viên đã xử lý dứt điểm tất cả bài thi nghi ngờ hoặc fail và đảm bảo **100% sinh viên trong ca thi đã có điểm hoàn chỉnh**, Cán bộ Khảo thí / Giảng viên mới bấm nút **"Công Bố Điểm" (`Publish Grades`)** (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`) một lần duy nhất. Lúc này hệ thống mới giải phóng điểm gửi về cho sinh viên, cập nhật trạng thái ca thi và vé thi thành `PUBLISHED` và kích hoạt One-Way Lock (`LOCKED`, `is_locked = true`, từ chối mọi lệnh sửa trái phép bằng `HTTP 403 Forbidden`). Đồng thời xuất file Bảng điểm Khảo thí FPT cả định dạng Excel (.xlsx) và PDF có chữ ký số cho Phòng Khảo thí.
+4. **Sinh viên ở nhà nhận điểm & Phúc khảo nội bộ (Quy trình 5 bước chuẩn mực - R2/R7):** Sinh viên ở nhà đăng nhập Student Portal trên hệ thống của mình để xem bảng điểm chính thức do Cán bộ Khảo thí công bố (tổng điểm, điểm chi tiết rubric, nhận xét). Nếu đồng ý, sinh viên xác nhận nhận điểm (`ACKNOWLEDGED` qua `POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade`). Nếu có nhu cầu phúc khảo, sinh viên nộp đơn trực tiếp ở phần Phúc khảo trong hệ thống (`POST /api/v1/student/appeals`). Quy trình xử lý gồm 5 bước nghiêm ngặt:
+   - **Bước 1 (Sinh viên):** Nộp đơn khiếu nại điểm thi kèm lý do chi tiết (`AppealRequest`, trạng thái `SUBMITTED_TO_EXAM_OFFICE`).
+   - **Bước 2 (Khảo thí & Trưởng BM):** Cả Cán bộ Khảo thí và Trưởng Bộ Môn nhận thông báo in-app; Cán bộ Khảo thí tiếp nhận đơn, kiểm tra tính hợp lệ về thời hạn và quy chế thi.
+   - **Bước 3 (Cán bộ Khảo thí):** Xem trước thuật toán đề xuất phân bổ tự động (`GET /api/v1/examination-officer/appeals/propose-allocation`) với định mức tối đa 24 bài/GV (chia đều nếu tổng vượt quá, loại trừ 100% Giám khảo chấm ban đầu `examiner_user_id`) và thực hiện phân công Giảng viên chấm lại (`POST .../batch-assign` hoặc `POST .../assign-lecturer`, `status = ASSIGNED_TO_LECTURER`).
+   - **Bước 4 (Giảng viên được phân công):** Mở Evidence Panel (nghe lại Audio R2, rà soát transcript và CoT), thực hiện tái thẩm định điểm số, đề xuất điểm mới và nộp báo cáo giải trình (`PUT /api/v1/lecturer/appeals/{id}/regrade`, `status = REGRADED_BY_LECTURER`).
+   - **Bước 5 (Cán bộ Khảo thí):** Thẩm định kết quả tái chấm của Giảng viên và ra quyết định phê duyệt cuối cùng (`POST /api/v1/examination-officer/appeals/{id}/decision`: APPROVED | REJECTED). Quyết định phê duyệt kích hoạt ngoại lệ hợp lệ mở đường One-Way Lock cập nhật điểm số chính thức vào vé thi và khóa lại DB an toàn.
+
+##### 2. Năm Phân Làn Trách Nhiệm (5 Swimlanes) (MF-04)
+1. **Lane 1: Student (Examinee - Thí sinh)**:
+   - Ngồi đúng máy thi theo STT (SeatNumber 1-40) $\to$ Chạy Mic-Check 30s $\ge 60$dB $\to$ Chờ lệnh mở đề $\to$ Trả lời viva qua micro (kèm câu hỏi phụ ngữ cảnh 1-5 câu do Trưởng BM cấu hình nếu có) $\to$ Xác nhận nộp bài $\to$ Màn hình Kiosk khóa an toàn, ký biên bản giấy ra về (0% điểm liền, 0% khiếu nại tại chỗ) $\to$ Xem điểm tại nhà trên Student Portal $\to$ Bấm Xác nhận nhận điểm (`ACKNOWLEDGED`) hoặc Nộp đơn phúc khảo nội bộ (`POST /api/v1/appeals`).
+2. **Lane 2: Lab Workstation Kiosk (Máy trạm Phòng Lab Kiosk Lockdown & R2 Seal)**:
+   - Xác thực SeatNumber 1-40 và kiểm tra chéo địa chỉ IP máy trạm qua trường thống nhất `ip_address` (theo quy chuẩn ip_address) $\to$ Kích hoạt Fullscreen Kiosk Lockdown (chặn F11, F12, DevTools, Alt+Tab, chuột phải, blur > 3 lần đình chỉ thi) $\to$ Gửi sự kiện vi phạm thời gian thực về `POST /api/v1/official-exams/anti-cheat/log` lưu bảng `exam_anti_cheat_logs` $\to$ Đo cường độ micro 30s $\ge 60$dB $\to$ Bật Kiosk Countdown Timer $\to$ TTS đọc câu hỏi từ kho cô lập `exam_questions` $\to$ Thu âm WebM/Opus và bóc băng transcript $\to$ Đóng gói âm thanh chuẩn `STT_MSSV.webm` (vd: `01_SE170123.webm`) $\to$ Upload 2 bước lên Cloudflare R2 (lấy Presigned URL rồi gọi PUT audio niêm phong kèm SHA-256) $\to$ Gửi gói bài nộp lên Backend $\to$ Khóa an toàn máy trạm tức thì.
+3. **Lane 3: .NET 8 Backend API & Worker (Hạ tầng Backend, BoundedChannel & AI Worker)**:
+   - Khởi tạo ca thi trong CSDL (`SCHEDULED`, gắn trước IP, Roster & phân bổ đề không trùng `uq_tickets_shift_exam_set`) $\to$ Broadcast tín hiệu mở ca thi đồng loạt qua SignalR (`IN_PROGRESS`) $\to$ Bật Server Master Timer (đồng hồ chủ tuyệt đối) $\to$ Persist-First tiếp nhận bài nộp dưới 100ms trạng thái `SUBMITTED` lưu SHA-256 R2 $\to$ Đẩy task vào RAM BoundedChannel 1,000 slots (`FullMode.Wait`) $\to$ Background Worker rút task, điều phối Polly Retry 3 lần (2s, 4s, 8s) và cách ly DLQ 5m khi sự cố (Cán bộ Khảo thí giám sát & kích hoạt replay đối với MF-04) $\to$ Gọi Gemini 1.5 Pro chấm ngầm Rubric 10.0, tính CoT và `confidence_score` (`AI_GRADED`) $\to$ AI Doubt Guard phân loại 2 nhóm bài thi $\to$ Lưu kết quả hậu kiểm (`AUDITED`) $\to$ Kiểm tra Atomic Gate 100% sinh viên có điểm $\to$ Kích hoạt One-Way Lock (`PUBLISHED` $\to$ `LOCKED`, HTTP 403) $\to$ Xuất báo cáo Khảo thí Excel (.xlsx) + PDF ký số $\to$ Mở đường ngoại lệ cho Giảng viên chấm lại phúc khảo cập nhật CSDL sau khi Cán bộ Khảo thí phê duyệt quyết định cuối cùng.
+4. **Lane 4: Proctor & Examiner (Cán bộ Coi thi & Giảng viên Chấm thi/Hậu kiểm)**:
+   - **Cán bộ Coi thi (`proctor`):** Mở Proctor Console, điểm danh Thẻ SV/CCCD, đối chiếu SeatNumber 1-40 và kiểm tra chéo `ip_address` máy trạm $\to$ Ghi nhận biên bản phòng thi và báo Khảo thí nếu mic $< 60$dB $\to$ Giám sát nhật ký chống gian lận `exam_anti_cheat_logs` thời gian thực. Cắt bỏ 100% quyền mở/đóng ca thi, đổi máy, can thiệp IP hay phân bổ đề (R4).
+   - **Giảng viên Chấm thi (`examiner`):** Mở Cổng Hậu Kiểm (Lecturer Audit Portal) $\to$ Ưu tiên xử lý Nhóm 1 (Đáng nghi ngờ / Fail): đối chiếu Evidence Panel (AudioURL R2, Transcript Whisper gốc, AI CoT), nghe lại trên Waveform Player (tua theo citations, 1.0x-1.5x) $\to$ Sửa điểm bắt buộc nhập giải trình `override_reason` $\ge 10$ ký tự $\to$ Rà soát nhanh Nhóm 2 (Độ tin cậy cao) $\to$ Khi được Cán bộ Khảo thí phân công (định mức <= 24 bài/GV, độc lập với Giám khảo ca thi ban đầu), chấm lại bài phúc khảo trên Evidence Panel và đề xuất điểm mới kèm giải trình.
+5. **Lane 5: Examination Officer & Dept Head (Cán bộ Khảo thí & Trưởng Bộ Môn)**:
+   - **Cán bộ Khảo thí (`examination_officer`):** Tiếp nhận gói đề thi `HANDED_OVER`, khởi tạo Kỳ thi (`OfficialExamSession`), gán môn học $\to$ Khởi tạo ca thi (`RealExamSessionShift`: phòng lab, kíp thi, phân công giám thị, giảng viên thẩm định) $\to$ Phân bổ đề thi không trùng lặp (`uq_tickets_shift_exam_set`) $\to$ Cấu hình `ExamInputMode`, `TranscriptBufferSeconds` và mở xuất bản đề ca thi (`is_exam_published = true`) $\to$ Phát lệnh mở ca thi và đóng ca thi phòng lab $\to$ Xử lý đổi máy trạm dự phòng (gỡ niêm phong và cập nhật `ip_address` máy mới) khi có sự cố phần cứng $\to$ Quản lý và kích hoạt Replay Dead-Letter Queue (DLQ) cho ca thi MF-04 (R2) $\to$ Thực hiện "Công Bố Điểm" ca thi (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`) kích hoạt One-Way Lock $\to$ Tiếp nhận đơn phúc khảo, xem trước đề xuất phân bổ tự động và phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV, loại trừ Giám khảo ca thi) $\to$ Phê duyệt quyết định phúc khảo cuối cùng mở One-Way Lock cập nhật điểm chính thức (R2/R7). Tuyệt đối CẤM quyền cấu hình follow-up (R3).
+   - **Trưởng Bộ Môn (`department_head`):** 100% quyền cấu hình Follow-up cho môn thi trong kỳ thi (`has_follow_up`, 1-5 câu, mặc định 2 câu) (R3) $\to$ Tiếp nhận thông báo in-app khi có đơn phúc khảo để theo dõi chuyên môn học thuật môn học; không trực tiếp phân công hay phê duyệt phúc khảo (thẩm quyền thuộc Cán bộ Khảo thí R2). Tuyệt đối KHÔNG can thiệp vào DLQ (R2).
+
+##### 3. Diễn Giải Quy Trình Theo Từng Bước (Tên : Mục Đích) (MF-04)
+* **Create Exam Session & Shifts (`E01`, `E02`, `E03`)**: Khảo thí tạo kỳ thi, gán môn, thiết lập ca thi phòng lab, kíp thi, phân bổ đề không trùng (`uq_tickets_shift_exam_set`), ExamInputMode và xuất bản đề ca thi. Trưởng Bộ Môn cấu hình Follow-up (1-5 câu) cho môn thi trong kỳ thi.
+* **Initialize Shift in DB (`E04`, `Obj_Shift_Scheduled`)**: Backend khởi tạo ca thi, tạo vé thi trạng thái `SCHEDULED`, binding trước địa chỉ `ip_address` máy trạm và gán `exam_set_id`.
+* **Check-in & Seat Assignment (`E05`, `E06`, `E07`, `E08`)**: Giám thị điểm danh đối chiếu thẻ SV/CCCD, kiểm tra số máy SeatNumber 1-40. Thí sinh đăng nhập MSSV, Kiosk xác thực chéo `ip_address`.
+* **Fullscreen Kiosk Lockdown & Anti-Cheat (`E09`)**: Kích hoạt chế độ phòng thi an ninh cao: chặn F11, F12, DevTools, Alt+Tab, Windows, chuột phải; mất focus `window.onblur` quá 3 lần lập tức đình chỉ thi. Ghi nhận vi phạm về `exam_anti_cheat_logs`.
+* **Mic-Check 30s Hardware Gate (`E10`, `E11`, `D_Mic_Check`)**: Thí sinh đọc đoạn văn mẫu trong 30 giây: nếu micro $< 60$dB $\to$ Giám thị báo Cán bộ Khảo thí can thiệp đổi sang máy trạm dự phòng (`E_Backup_Station`, `E_Student_Move`), Khảo thí cập nhật `ip_address` mới và kiểm tra lại; nếu $\ge 60$dB $\to$ chuyển sang trạng thái chờ lệnh (`E_Wait_Start`).
+* **Broadcast Start Shift (`E12`, `E13`)**: Cán bộ Khảo thí phát lệnh mở đề đồng bộ cả phòng qua SignalR, cập nhật vé thi thành `IN_PROGRESS`.
+* **Fork Timers & Join Timers (`Fork_Timers`, `E14_ServerTimer`, `E14_KioskTimer`, `Join_Timers`)**: Khởi chạy đồng hồ kép song song (Server Master Timer và Kiosk Countdown Timer), hội tụ an toàn qua thanh Join Bar trước khi vào khối quyết định chế độ thi.
+* **ExamInputMode Decision (`D_InputMode`)**: Phân nhánh theo cấu hình: nếu `VoiceOnly` $\to$ khóa phím 100% (`E_Mode_Voice`); nếu `VoiceWithTranscriptEdit` $\to$ mở đệm sửa transcript (`E_Mode_Buffer`).
+* **TTS Plays Question & Student Answers (`E15`, `E16`, `E17`)**: Web Speech TTS phát âm thanh câu hỏi từ kho `exam_questions`, thí sinh trả lời vào micro, Kiosk thu âm WebM/Opus và bóc băng transcript.
+* **Contextual Follow-up Loop (`D_Shift_Followup`, `E_AI_QuickEval`, `D_Need_Followup`, `E_Gen_Followup`, `E_Play_Followup`, `E_Speak_Followup`, `E_Rec_Followup`, `D_Followup_Limit`)**: Nếu môn thi bật cờ Follow-up do Trưởng BM cấu hình, AI đánh giá nhanh ngữ cảnh bài nói để sinh câu hỏi phụ đào sâu luận điểm (1-5 câu, mặc định 2 câu).
+* **Package Audio, 2-Step R2 Upload & SHA-256 Hash Seal (`E18`, `E19`, `E20`)**: Đóng gói file ghi âm tên bất biến `STT_MSSV.webm`, xin Presigned URL rồi upload lên Cloudflare R2, gửi mã băm mật mã SHA-256 và `audio_duration_seconds` niêm phong pháp lý.
+* **Exam Progress & Submission (`D_Exam_Progress`, `E_Student_Confirm`, `E_Auto_Submit`, `E21`)**: Thí sinh xác nhận nộp bài hoặc AutoSubmitGuard tự động thu bài khi hết giờ `00:00`.
+* **Persist-First Ingestion < 100ms (`E22`, `Obj_Ticket_Submitted`)**: Backend ghi nhận bài nộp vào CSDL, cập nhật vé thi thành `SUBMITTED` dưới 100ms lưu kèm SHA-256 audio R2.
+* **Fork Post Submit (`Fork_Post_Submit`)**: Tách 2 luồng song song:
+  - Luồng 1 (Phòng thi): Kiosk khóa màn hình an toàn, thông báo bài đã lưu an toàn, tuyệt đối 0% điểm liền và 0% khiếu nại tại chỗ (`E23_Kiosk_Lock`) $\to$ thí sinh ký biên bản nộp bài giấy và ra về (`E24_Student_Leave`) $\to$ kết thúc nhánh phòng thi (`FlowEnd_Lab`).
+  - Luồng 2 (Chấm ngầm): Đẩy task vào RAM BoundedChannel 1,000 slots (`E25_Enqueue`) $\to$ Background Worker rút task, điều phối Polly Retry 3 lần (`E26_Polly_Worker`). Nếu lỗi $\to$ cách ly DLQ (`E_DLQ_Isolate`, `E_DLQ_Replay` do Cán bộ Khảo thí giám sát & replay); nếu thành công $\to$ Gemini 1.5 Pro chấm ngầm Rubric 10.0, tính CoT và `confidence_score` (`E_Gemini_Grading`) $\to$ cập nhật trạng thái `AI_GRADED` (`E27_Save_AI_Graded`, `Obj_Ticket_AiGraded`).
+* **Lecturer Audit & AI Doubt Guard (`E28_Close_Shift`, `E29_Open_Audit`, `E30_AI_Doubt`, `D_Audit_Group`)**: Cán bộ Khảo thí đóng ca thi, Giảng viên mở Cổng Hậu Kiểm. AI Doubt Guard phân loại 2 nhóm:
+  - *Nhóm 1 (Đáng nghi ngờ / Fail):* Giảng viên bắt buộc nghe lại trên Waveform Player (1.0x-1.5x) với timestamp citations và AI CoT (`E_Audit_Group1`), sửa điểm bắt buộc nhập `override_reason` $\ge 10$ ký tự (`E_Audit_Override`).
+  - *Nhóm 2 (Độ tin cậy cao):* Rà soát nhanh tổng quan (`E_Audit_FastTrack`).
+  - Cập nhật trạng thái toàn bộ ca thi thành `AUDITED` (`E_Audit_Save`, `Obj_Shift_Audited`).
+* **Publish Grades & One-Way Lock (`E31_Publish`, `E32_Validate_100`, `E33_OneWayLock`, `Obj_Shift_Locked`, `E34_Export_Reports`)**: Khi 100% sinh viên đã có điểm, Cán bộ Khảo thí bấm "Công Bố Điểm" 1 lần duy nhất $\to$ kích hoạt One-Way Lock (`PUBLISHED` $\to$ `LOCKED`, `is_locked = true`, chặn HTTP 403) $\to$ xuất báo cáo Khảo thí FPT cả file Excel (.xlsx) và PDF có chữ ký số.
+* **Student View & Internal Appeal (`E35_Student_Portal`, `D_Student_Appeal`, `E_Ack_Grade`, `E_Submit_Appeal`, `E_EO_Validate`, `E_EO_Assign`, `E_Lec_Regrade`, `E_EO_Decision`, `E_Appeal_DB`, `E_Student_ReAck`, `E_End_Final`)**: Sinh viên ở nhà xem điểm trên Student Portal. Nếu đồng ý $\to$ xác nhận `ACKNOWLEDGED`. Nếu phúc khảo $\to$ nộp đơn `AppealRequest` trực tiếp trên hệ thống $\to$ Cán bộ Khảo thí tiếp nhận & thẩm tra tính hợp lệ về thời hạn và quy chế (hệ thống tự động phát thông báo in-app cho Trưởng Bộ Môn để theo dõi chuyên môn học thuật) $\to$ Cán bộ Khảo thí xem đề xuất phân bổ tối ưu $\le 24$ bài/GV và phân công Giảng viên chấm lại độc lập (loại trừ 100% Giám khảo ca ban đầu) $\to$ Giảng viên chấm lại trên Evidence Panel nộp đề xuất điểm và biên bản giải trình $\ge 10$ ký tự $\to$ Cán bộ Khảo thí thẩm định & phê duyệt quyết định cuối cùng (`APPROVED` / `REJECTED`); nếu `APPROVED`, mở đường ngoại lệ hợp lệ duy nhất qua One-Way Lock cập nhật điểm chính thức vào vé thi, xuất báo cáo Excel/PDF ký số và kết thúc quy trình tại `E_End_Final`.
+
+##### 4. Phần A — Sơ Đồ Hoạt Động Liên Làn (OMG UML 2.5 Swimlane Activity Diagram - 5 Phân Làn Tách Biệt, Tinh Gọn 25 Đỉnh)
 
 ```mermaid
 flowchart TD
-    subgraph Lane1 ["Lane 1: Student (Examinee)"]
-        E07(["Student Takes Assigned Seat (1-40) & Signs in with Student ID"])
-        E10(["Run 30s Microphone Hardware Test (Read Calibration Passage)"])
-        E_Student_Move(["Student Moves to Backup Station"])
-        E16(["Student Speaks Viva Answer into Headset Mic"])
-        E_Speak_Followup(["Student Speaks Follow-up Answer"])
-        E_Student_Confirm(["Student Confirms Final Submission"])
-        E24_Student_Leave(["Sign Paper Attendance Sheet & Leave Exam Room Safely"])
-        FlowEnd_Lab((⊗))
-        E35_Student_Portal(["Student at Home Views Official Grade & CLO Scorecard on Portal"])
-        D_Student_Appeal{"Student Grade Decision?"}
-        E_Ack_Grade(["Acknowledge Grade (POST /acknowledge-grade -> ACKNOWLEDGED)"])
-        E_Submit_Appeal(["Submit AppealRequest on Student Portal (POST /api/v1/appeals)"])
-        E_Student_ReAck(["Student Views Updated Grade on Portal & Acknowledges"])
-        E_End_Final(((◉)))
+    %% ==========================================
+    %% 5 PHÂN LÀN TRÁCH NHIỆM (5 SWIMLANES)
+    %% ==========================================
+
+    subgraph Lane_EO ["Phân Làn 1: Cán Bộ Khảo Thí (Examination Officer)"]
+        EO_CreateShift(["1. Khởi tạo Ca thi phòng Lab, phân công Giám thị & Giám khảo, xuất bản đề"])
+        EO_StartShift(["2. Phát lệnh mở ca thi đồng loạt cả phòng qua SignalR"])
+        EO_PublishGrades(["3. Bấm 'Công Bố Điểm' 1 lần duy nhất khi 100% SV có điểm (kích hoạt One-Way Lock)"])
+        EO_ValidateAppeal(["4. Tiếp nhận & Thẩm tra đơn phúc khảo (Phát thông báo in-app cho Trưởng BM)"])
+        EO_AssignLecturer(["5. Xem đề xuất tự động & Phân công GV chấm lại độc lập (&le; 24 bài/GV, trừ Giám khảo cũ)"])
+        EO_ApproveDecision(["6. Thẩm định & Phê duyệt quyết định phúc khảo (APPROVED mở One-Way Lock / REJECTED)"])
     end
 
-    subgraph Lane2 ["Lane 2: Lab Workstation Kiosk"]
-        E08(["Kiosk Validates SeatNumber & Checks ip_address Binding"])
-        E09(["Enforce Fullscreen Lockdown (Block Alt+Tab/Win/DevTools; Blur>3 Suspend)"])
-        E11(["Measure Audio Input Level (Target Peak >= 60dB)"])
-        D_Mic_Check{"Hardware Mic >= 60dB?"}
-        E_Wait_Start(["Wait for Synchronized Shift Exam Start Signal"])
-        Fork_Timers["═════ FORK BAR (Khởi chạy đồng hồ chủ và Kiosk) ═════"]
-        E14_KioskTimer(["Start Kiosk Synchronized Countdown Timer"])
-        Join_Timers["═════ JOIN BAR (Hội tụ đồng bộ đồng hồ thi) ═════"]
-        D_InputMode{"ExamInputMode?"}
-        E_Mode_Voice(["Lock Keyboard 100% (Microphone Only)"])
-        E_Mode_Buffer(["Enable TranscriptBufferSeconds (10-300s, default 60s)"])
-        M_Mode{"◇"}
-        E15(["TTS Plays Question Audio (from isolated exam_questions pool)"])
-        E17(["Record Audio Stream (WebM/Opus) & Transcribe Stream"])
-        D_Shift_Followup{"Shift has_follow_up Enabled?"}
-        E_Play_Followup(["TTS Plays Follow-up Question Audio"])
-        E_Rec_Followup(["Record & Transcribe Follow-up"])
-        D_Followup_Limit{"Follow-up Count < Limit?"}
-        M_Followup_Done{"◇"}
-        E18(["Package Complete Audio: STT_MSSV.webm (e.g., 01_SE170123.webm)"])
-        E19(["Compute Cryptographic SHA-256 Hash Seal at Kiosk"])
-        E20(["Direct Upload STT_MSSV.webm to Cloudflare R2 via Presigned URL"])
-        D_Exam_Progress{"More Questions or Timeout?"}
-        E_Auto_Submit(["Auto-Submit Guard: Force Lock Micro & Auto-Submit"])
-        M_Submit{"◇"}
-        E21(["Dispatch Submission (R2 Audio URL + SHA-256 Seal + Transcripts)"])
-        Fork_Post_Submit["═════ FORK BAR (Tách nhánh: Khóa Kiosk vs Worker chấm ngầm) ═════"]
-        E23_Kiosk_Lock(["Lock Kiosk Safely: Submission Sealed (0% Instant Score, 0% Appeal)"])
+    subgraph Lane_Proctor ["Phân Làn 2: Giám Thị Phòng Lab (Proctor)"]
+        P_CheckIn(["7. Điểm danh Thẻ SV/CCCD, đối chiếu SeatNumber 1-40 & kiểm tra ip_address"])
+        P_MonitorAntiCheat(["8. Giám sát an ninh phòng thi & ghi nhận vi phạm vào exam_anti_cheat_logs"])
     end
 
-    subgraph Lane3 ["Lane 3: .NET 8 Backend API & Worker"]
-        E04(["Initialize Shift in DB (Tickets: SCHEDULED, Pre-bind IP & Roster)"])
-        Obj_Shift_Scheduled["[Shift & Tickets: SCHEDULED | IP Pre-bound]"]
-        E13(["SignalR Broadcasts Shift Start & Updates Tickets = IN_PROGRESS"])
-        E14_ServerTimer(["Start Server Master Timer (Anti-Tampering Absolute Clock)"])
-        E_AI_QuickEval(["AI Quick Context Evaluation on Answer Quality"])
-        D_Need_Followup{"Needs Follow-up?"}
-        E_Gen_Followup(["Generate Contextual Follow-up Question"])
-        E22(["Persist-First (< 100ms): Save Submissions & Ticket = SUBMITTED"])
-        Obj_Ticket_Submitted["[Ticket Status = SUBMITTED | SHA-256 Sealed]"]
-        E25_Enqueue(["Enqueue EvaluationTask into BoundedChannel (1,000 slots RAM)"])
-        E26_Polly_Worker(["Background Worker Rinses Task & Runs Polly Retry (3x: 2s, 4s, 8s)"])
-        D_Polly_Status{"AI Service Status?"}
-        E_DLQ_Isolate(["Isolate into Dead-Letter Queue with PENDING_RETRY"])
-        E_Gemini_Grading(["Gemini 1.5 Pro Grades Transcript via Rubric 10.0 & Computes CoT"])
-        E27_Save_AI_Graded(["Update DB: Save Criteria Scores, CoT & Ticket = AI_GRADED"])
-        Obj_Ticket_AiGraded["[Ticket Status = AI_GRADED]"]
-        E30_AI_Doubt(["AI Doubt Guard Classifies Shift Submissions into 2 Groups"])
-        E_Audit_Save(["Update DB Ticket Status = AUDITED & Save lecturer_audits"])
-        Obj_Shift_Audited["[All Tickets in Shift: AUDITED]"]
-        E32_Validate_100(["Backend Atomic Gate: Verify 100% Shift Tickets have FinalScore"])
-        E33_OneWayLock(["Enforce One-Way Lock: Status = PUBLISHED -> LOCKED (HTTP 403)"])
-        Obj_Shift_Locked["[Shift & Tickets: PUBLISHED & LOCKED | OneWayLock Active]"]
-        E34_Export_Reports(["Export Official Shift Reports (FPT Excel .xlsx & Signed PDF)"])
-        E_Appeal_DB(["OneWayLock Authorized Exception: Update DB & Write AuditLog"])
-        E_DLQ_Replay(["DlqReplayWorker Auto-Retry 5m OR Exam Officer Manual Replay (R2)"])
+    subgraph Lane_Student ["Phân Làn 3: Thí Sinh (Student)"]
+        S_MicLockdown(["9. Đăng nhập MSSV, vượt qua Mic-Check 30s (&ge; 60dB) & Kiosk Fullscreen Lockdown"])
+        S_VivaExam(["10. Trả lời vấn đáp qua Micro (kèm câu hỏi phụ ngữ cảnh nếu ca thi bật cờ)"])
+        S_Submit(["11. Xác nhận nộp bài (Kiosk khóa an toàn, ký biên bản giấy ra về, 0% điểm liền)"])
+        S_ViewPortal(["12. Xem điểm chính thức & CLO Scorecard tại nhà trên Student Portal"])
+        S_Decision{"13. Đồng ý điểm số?"}
+        S_AckGrade(["14. Xác nhận nhận điểm (POST /acknowledge-grade -> ACKNOWLEDGED)"])
+        S_SubmitAppeal(["15. Nộp đơn AppealRequest trên Student Portal kèm lý do"])
+        S_End(((16. Kết thúc quy trình)))
     end
 
-    subgraph Lane4 ["Lane 4: Proctor & Lecturer (Audit)"]
-        E05(["Proctor Checks Attendance: Match ID/CCCD with Assigned Seat 1-40"])
-        E06(["Proctor Reports Exam Room Violations into exam_anti_cheat_logs (R4)"])
-        E12(["Exam Officer Publishes Shift Exam (POST /publish-exam)"])
-        E28_Close_Shift(["Exam Officer Closes Exam Shift after Candidates Vacate"])
-        E29_Open_Audit(["Lecturer Opens Lecturer Audit Portal (Filter Shift & Seat 1-40)"])
-        D_Audit_Group{"AI Doubt Classification?"}
-        E_Audit_Group1(["Listen STT_MSSV.webm on Waveform Player with Citations & AI CoT"])
-        E_Audit_Override(["Override Score with Mandatory override_reason (>= 10 chars)"])
-        E_Audit_FastTrack(["Fast-Track Overview & Confirm AI Suggested Scores"])
-        M_Audit_Done{"◇"}
-        E31_Publish(["Lecturer Clicks Công Bố Điểm Once (POST /publish-grades)"])
-        E_Lec_Regrade(["Assigned Lecturer Regrades on Evidence Panel & Submits Reason"])
+    subgraph Lane_Worker ["Phân Làn 4: Hạ Tầng Backend API & AI Worker / DLQ"]
+        W_R2Upload(["17. Upload audio STT_MSSV.webm niêm phong SHA-256 lên Cloudflare R2"])
+        W_PersistFirst(["18. Persist-First (&lt; 100ms): Lưu exam_question_submissions (status = SUBMITTED)"])
+        W_BoundedChannel(["19. Đẩy task vào BoundedChannel (1,000 slots RAM, FullMode.Wait)"])
+        W_GeminiGrading(["20. Worker gọi Gemini 1.5 Pro chấm Rubric 10.0 + CoT (Polly Retry 2-4-8s, DLQ 5m)"])
+        W_DoubtGuard(["21. AI Doubt Guard phân loại: Nhóm 1 (Nghi ngờ/Fail/Conf &lt; 0.70) vs Nhóm 2 (Tin cậy cao)"])
+        W_OneWayLock(["22. Kích hoạt One-Way Lock (is_locked = true, chặn UPDATE/DELETE bằng HTTP 403)"])
+        W_UpdateAppeal(["23. Ngoại lệ One-Way Lock: Cập nhật điểm chính thức sau khi Khảo thí duyệt đơn"])
     end
 
-    subgraph Lane5 ["Lane 5: Department Head (Config & Appeal)"]
-        E01((●))
-        E02(["Create OfficialExamSession & Assign Courses"])
-        E03(["Dept Head 100% Configures Follow-up 1-5; Exam Officer Configures Lab Shifts"])
-        E_Dept_Assign(["Department Head Assigns Lecturer (POST /assign-lecturer)"])
-        E_Dept_Decision(["Department Head Reviews & Approves Regrade Decision (APPROVED / REJECTED)"])
+    subgraph Lane_Examiner ["Phân Làn 5: Giám Khảo Chấm Thi & GV Phúc Khảo (Examiner)"]
+        Ex_OpenAudit(["24. Mở Evidence Panel: Đối chiếu Audio R2, Transcript Whisper gốc & AI CoT"])
+        Ex_AuditOverride(["25. Bắt buộc nghe Waveform Player Nhóm 1, sửa điểm kèm override_reason &ge; 10 ký tự"])
+        Ex_RegradeAppeal(["26. Giảng viên được phân công chấm lại độc lập trên Evidence Panel, nộp đề xuất điểm"])
     end
 
-    E01 --> E02
-    E02 --> E03
-    E03 --> E04
-    E04 --> Obj_Shift_Scheduled
-    Obj_Shift_Scheduled --> E05
-    E05 --> E06
-    E06 --> E07
-    E07 --> E08
-    E08 --> E09
-    E09 --> E10
-    E10 --> E11
-    E11 --> D_Mic_Check
-    D_Mic_Check -->|"[Mic Level < 60dB (Failed)]"| E_Backup_Station
-    D_Mic_Check -->|"[Mic Level >= 60dB (Passed)]"| E_Wait_Start
-    E_Backup_Station --> E_Student_Move
-    E_Student_Move --> E08
-    E_Wait_Start --> E12
-    E12 --> E13
-    E13 --> Fork_Timers
-    Fork_Timers --> E14_ServerTimer
-    Fork_Timers --> E14_KioskTimer
-    E14_KioskTimer --> Join_Timers
-    E14_ServerTimer --> Join_Timers
-    Join_Timers --> D_InputMode
-    D_InputMode -->|"[VoiceOnly Mode]"| E_Mode_Voice
-    D_InputMode -->|"[VoiceWithTranscriptEdit Mode]"| E_Mode_Buffer
-    E_Mode_Voice --> M_Mode
-    E_Mode_Buffer --> M_Mode
-    M_Mode --> E15
-    E15 --> E16
-    E16 --> E17
-    E17 --> D_Shift_Followup
-    D_Shift_Followup -->|"[Follow-up Enabled]"| E_AI_QuickEval
-    D_Shift_Followup -->|"[No Follow-up]"| M_Followup_Done
-    E_AI_QuickEval --> D_Need_Followup
-    D_Need_Followup -->|"[Needs Follow-up]"| E_Gen_Followup
-    D_Need_Followup -->|"[Good Answer - No Follow-up]"| M_Followup_Done
-    E_Gen_Followup --> E_Play_Followup
-    E_Play_Followup --> E_Speak_Followup
-    E_Speak_Followup --> E_Rec_Followup
-    E_Rec_Followup --> D_Followup_Limit
-    D_Followup_Limit -->|"[Count < Limit]"| M_Followup_Done
-    D_Followup_Limit -->|"[Count >= Limit]"| M_Followup_Done
-    M_Followup_Done --> E18
-    E18 --> E19
-    E19 --> E20
-    E20 --> D_Exam_Progress
-    D_Exam_Progress -->|"[More Questions]"| E15
-    D_Exam_Progress -->|"[All Questions Done]"| E_Student_Confirm
-    D_Exam_Progress -->|"[Timeout 00:00]"| E_Auto_Submit
-    E_Student_Confirm --> M_Submit
-    E_Auto_Submit --> M_Submit
-    M_Submit --> E21
-    E21 --> E22
-    E22 --> Obj_Ticket_Submitted
-    Obj_Ticket_Submitted --> Fork_Post_Submit
-    Fork_Post_Submit --> E23_Kiosk_Lock
-    Fork_Post_Submit --> E25_Enqueue
-    E23_Kiosk_Lock --> E24_Student_Leave
-    E24_Student_Leave --> FlowEnd_Lab
-    E25_Enqueue --> E26_Polly_Worker
-    E26_Polly_Worker --> D_Polly_Status
-    D_Polly_Status -->|"[Polly Retry Failed > 3]"| E_DLQ_Isolate
-    D_Polly_Status -->|"[Polly Success]"| E_Gemini_Grading
-    E_DLQ_Isolate --> E_DLQ_Replay
-    E_DLQ_Replay --> E25_Enqueue
-    E_Gemini_Grading --> E27_Save_AI_Graded
-    E27_Save_AI_Graded --> Obj_Ticket_AiGraded
-    Obj_Ticket_AiGraded --> E30_AI_Doubt
-    E28_Close_Shift --> E29_Open_Audit
-    E29_Open_Audit --> D_Audit_Group
-    E30_AI_Doubt --> D_Audit_Group
-    D_Audit_Group -->|"[Group 1: Suspicious / Fail / Conf < 0.70]"| E_Audit_Group1
-    D_Audit_Group -->|"[Group 2: High Confidence (Conf >= 0.70)]"| E_Audit_FastTrack
-    E_Audit_Group1 --> E_Audit_Override
-    E_Audit_Override --> E_Audit_Save
-    E_Audit_FastTrack --> E_Audit_Save
-    E_Audit_Save --> M_Audit_Done
-    M_Audit_Done --> Obj_Shift_Audited
-    Obj_Shift_Audited --> E31_Publish
-    E31_Publish --> E32_Validate_100
-    E32_Validate_100 --> E33_OneWayLock
-    E33_OneWayLock --> Obj_Shift_Locked
-    Obj_Shift_Locked --> E34_Export_Reports
-    Obj_Shift_Locked --> E35_Student_Portal
-    E35_Student_Portal --> D_Student_Appeal
-    D_Student_Appeal -->|"[Agree with Grade]"| E_Ack_Grade
-    D_Student_Appeal -->|"[Submit Appeal]"| E_Submit_Appeal
-    E_Submit_Appeal --> E_Dept_Assign
-    E_Dept_Assign --> E_Lec_Regrade
-    E_Lec_Regrade --> E_Appeal_DB
-    E_Appeal_DB --> E_Student_ReAck
-    E_Ack_Grade --> E_End_Final
-    E_Student_ReAck --> E_End_Final
+    %% ==========================================
+    %% ĐIỀU PHỐI LUỒNG TƯƠNG TÁC XUYÊN PHÂN LÀN
+    %% ==========================================
+
+    %% Pha 1: Chuẩn bị & Vào phòng thi
+    EO_CreateShift --> P_CheckIn
+    P_CheckIn --> S_MicLockdown
+    S_MicLockdown -.->|Ghi nhận an ninh| P_MonitorAntiCheat
+    S_MicLockdown --> EO_StartShift
+
+    %% Pha 2: Thi vấn đáp & Nộp bài
+    EO_StartShift --> S_VivaExam
+    S_VivaExam --> S_Submit
+    S_Submit --> W_R2Upload
+    W_R2Upload --> W_PersistFirst
+
+    %% Pha 3: Chấm ngầm Zero Data Loss & Phân loại
+    W_PersistFirst --> W_BoundedChannel
+    W_BoundedChannel --> W_GeminiGrading
+    W_GeminiGrading --> W_DoubtGuard
+
+    %% Pha 4: Hậu kiểm Giám khảo & Công bố điểm One-Way Lock
+    W_DoubtGuard --> Ex_OpenAudit
+    Ex_OpenAudit --> Ex_AuditOverride
+    Ex_AuditOverride --> EO_PublishGrades
+    EO_PublishGrades --> W_OneWayLock
+    W_OneWayLock --> S_ViewPortal
+
+    %% Pha 5: Xem điểm tại nhà & Phúc khảo nội bộ 5 bước
+    S_ViewPortal --> S_Decision
+    S_Decision -->|Đồng ý điểm| S_AckGrade
+    S_AckGrade --> S_End
+    S_Decision -->|Khiếu nại điểm| S_SubmitAppeal
+    S_SubmitAppeal --> EO_ValidateAppeal
+    EO_ValidateAppeal --> EO_AssignLecturer
+    EO_AssignLecturer --> Ex_RegradeAppeal
+    Ex_RegradeAppeal --> EO_ApproveDecision
+    EO_ApproveDecision -->|Chấp thuận| W_UpdateAppeal
+    W_UpdateAppeal --> S_End
+    EO_ApproveDecision -->|Bác bỏ| S_End
 ```
 
-##### 3. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
+##### 5. Phần B — Lưu Đồ Thuật Toán Chuyên Sâu (Algorithmic Flowchart)
 
 ```mermaid
 flowchart TD
@@ -1677,13 +1741,13 @@ flowchart TD
     M4_Publish --> M4_PortalView{"Sinh viên xem điểm trên Student Portal: Đồng ý kết quả?"}
     M4_PortalView -- "Đồng ý" --> M4_Ack(["POST /api/v1/student/official-exams/{ticketId}/acknowledge-grade -> ACKNOWLEDGED"])
     M4_PortalView -- "Không đồng ý (Phúc khảo)" --> M4_Step1Appeal["Bước 1: SV gửi POST /api/v1/student/appeals tạo AppealRequest (status = SUBMITTED_TO_EXAM_OFFICE)"]
-    M4_Step1Appeal --> M4_Step2Forward["Bước 2: Khảo thí thẩm tra hợp lệ & chuyển tiếp Trưởng BM qua POST /forward-to-head (status = FORWARDED_TO_DEPT_HEAD)"]
-    M4_Step2Forward --> M4_Step3Assign["Bước 3: Trưởng BM gọi POST /assign-lecturer giao GV chấm lại (status = ASSIGNED_TO_LECTURER)"]
-    M4_Step3Assign --> M4_Step4Regrade["Bước 4: GV được giao gọi PUT /regrade trên Evidence Panel (status = REGRADED_BY_LECTURER, OneWayLock mở chốt hợp lệ)"]
-    M4_Step4Regrade --> M4_Step5Decision["Bước 5: Trưởng BM gọi POST /decision (APPROVED / REJECTED) -> Cập nhật điểm chính thức & Khóa lại One-Way Lock"]
+    M4_Step1Appeal --> M4_Step2Forward["Bước 2: Thông báo in-app gửi đồng thời Khảo thí & Trưởng BM; Khảo thí thẩm tra đơn hợp lệ"]
+    M4_Step2Forward --> M4_Step3Assign["Bước 3: Khảo thí xem đề xuất phân bổ (<= 24 bài/GV, độc lập) & phân công GV chấm lại qua POST /assign-lecturer (status = ASSIGNED_TO_LECTURER)"]
+    M4_Step3Assign --> M4_Step4Regrade["Bước 4: GV được giao gọi PUT /regrade trên Evidence Panel đề xuất điểm (status = REGRADED_BY_LECTURER)"]
+    M4_Step4Regrade --> M4_Step5Decision["Bước 5: Khảo thí gọi POST /decision (APPROVED / REJECTED) -> Cập nhật điểm chính thức & Khóa lại One-Way Lock"]
 ```
 
-##### 4. Phần C — Vòng Đời 7 Trạng Thái Vé Thi Viết HOA Bất Biến & Vòng Đời Phúc Khảo (Ticket State Machine)
+##### 6. Phần C — Vòng Đời 7 Trạng Thái Vé Thi Viết HOA Bất Biến & Vòng Đời Phúc Khảo (Ticket State Machine)
 
 ```mermaid
 stateDiagram-v2
@@ -1699,10 +1763,9 @@ stateDiagram-v2
         [*] --> GRADE_FINALIZED: Bảng điểm niêm phong & Xuất Excel (.xlsx) + PDF ký số
         GRADE_FINALIZED --> ACKNOWLEDGED: Sinh viên bấm Xác nhận đồng ý điểm (POST /acknowledge-grade)
         GRADE_FINALIZED --> APPEAL_SUBMITTED: Sinh viên nộp đơn phúc khảo lên Khảo thí (POST /api/v1/student/appeals)
-        APPEAL_SUBMITTED --> APPEAL_FORWARDED: Khảo thí thẩm tra & chuyển giao Trưởng BM (POST /forward-to-head)
-        APPEAL_FORWARDED --> APPEAL_ASSIGNED: Trưởng BM phân công Giảng viên chấm lại (POST /assign-lecturer)
-        APPEAL_ASSIGNED --> APPEAL_REGRADED: Giảng viên chấm lại qua Evidence Panel (PUT /regrade - Bypass hợp lệ OneWayLockInterceptor)
-        APPEAL_REGRADED --> APPEAL_RESOLVED: Trưởng BM phê duyệt kết quả phúc khảo (POST /decision: APPROVED / REJECTED)
+        APPEAL_SUBMITTED --> APPEAL_ASSIGNED: Khảo thí thẩm tra & phân công Giảng viên chấm lại (<= 24 bài/GV, độc lập)
+        APPEAL_ASSIGNED --> APPEAL_REGRADED: Giảng viên chấm lại qua Evidence Panel (PUT /regrade)
+        APPEAL_REGRADED --> APPEAL_RESOLVED: Khảo thí phê duyệt kết quả phúc khảo (POST /decision: APPROVED / REJECTED)
         APPEAL_RESOLVED --> GRADE_FINALIZED: Cập nhật điểm phúc khảo chính thức & Khóa lại One-Way Lock
     }
 ```
@@ -2112,17 +2175,16 @@ sequenceDiagram
             API->>DB: INSERT INTO appeal_requests (status='SUBMITTED_TO_EXAM_OFFICE')
             API-->>Portal: HTTP 201 Created (Đơn gửi Cán bộ Khảo thí tiếp nhận)
             Portal-->>SV: Thông báo: "Đã nộp đơn phúc khảo thành công. Cán bộ Khảo thí sẽ tiếp nhận và thẩm tra hồ sơ."
-            Note over EO,DH: BƯỚC 2: KHẢO THÍ THẨM TRA HỢP LỆ & CHUYỂN GIAO TRƯỞNG BỘ MÔN
-            EO->>API: POST /api/v1/examination-officer/appeals/{id}/forward-to-head (Notes)
-            API->>DB: UPDATE appeal_requests SET status='FORWARDED_TO_DEPT_HEAD'
-            Note over DH,GV: BƯỚC 3 & 4: TRƯỞNG BỘ MÔN PHÂN CÔNG GIẢNG VIÊN CHẤM LẠI
-            DH->>API: POST /api/v1/department-head/appeals/{id}/assign-lecturer (AssignedLecturerId)
+            Note over EO,DH: BƯỚC 2: THÔNG BÁO IN-APP GỬI ĐỒNG THỜI KHẢO THÍ VÀ TRƯỞNG BỘ MÔN
+            Note over EO,GV: BƯỚC 3: CÁN BỘ KHẢO THÍ PHÂN CÔNG GIẢNG VIÊN CHẤM LẠI ĐỘC LẬP (ĐỊNH MỨC <= 24 BÀI/GV)
+            EO->>API: GET /api/v1/examination-officer/appeals/propose-allocation & POST /batch-assign
             API->>DB: UPDATE appeal_requests SET assigned_lecturer_id=assigned_lecturer_id, status='ASSIGNED_TO_LECTURER'
-            GV->>API: PUT /api/v1/lecturer/appeals/{id}/regrade (Chấm lại trên Evidence Panel, mở đường hợp lệ OneWayLockInterceptor)
+            Note over GV,API: BƯỚC 4: GIẢNG VIÊN CHẤM LẠI TRÊN EVIDENCE PANEL & ĐỀ XUẤT ĐIỂM
+            GV->>API: PUT /api/v1/lecturer/appeals/{id}/regrade (ProposedScore, ReviewNotes)
             API->>DB: UPDATE appeal_requests SET status='REGRADED_BY_LECTURER'
-            Note over DH,DB: BƯỚC 5: TRƯỞNG BỘ MÔN PHÊ DUYỆT QUYẾT ĐỊNH & CẬP NHẬT ĐIỂM
-            DH->>API: POST /api/v1/department-head/appeals/{id}/decision (APPROVED | REJECTED)
-            API->>DB: UPDATE appeal_requests SET status='APPROVED' & Cập nhật điểm chính thức vào vé thi
+            Note over EO,DB: BƯỚC 5: CÁN BỘ KHẢO THÍ PHÊ DUYỆT QUYẾT ĐỊNH & CẬP NHẬT ĐIỂM
+            EO->>API: POST /api/v1/examination-officer/appeals/{id}/decision (APPROVED | REJECTED)
+            API->>DB: UPDATE appeal_requests SET status='APPROVED', decision='APPROVED' & Cập nhật điểm chính thức vào vé thi (Mở ngoại lệ OneWayLock)
         end
     end
 ```
@@ -2183,69 +2245,224 @@ flowchart TD
 3. **Giảng Viên (Tầng 3):** Chỉ những Giảng viên được Trưởng BM phân công trong `course_lecturers` mới có quyền tạo Lớp học (`classes`) thuộc môn học đó. Mỗi lớp học sinh một `join_code` duy nhất và mật khẩu tham gia được băm an toàn (`join_password_hash`). Giảng viên có toàn quyền cấp lại hoặc đặt lại mật khẩu lớp khi cần.
 4. **Sinh Viên (Tầng 4):** Sinh viên sử dụng mã lớp (`join_code`) và nhập đúng mật khẩu để ghi danh vào lớp (`class_enrollments`). Hệ thống ghi nhận trạng thái tham gia, bảo đảm quyền riêng tư và cô lập dữ liệu giữa các lớp học phần.
 
-### <a id="phan-68"></a>6.8. Luồng Nghiệp Vụ Bổ Trợ: Ca Thi Vấn Đáp Tại Lớp & Mật Khẩu Xoay Vòng Động (In-Class Exam Shifts & TOTP - R6)
+### <a id="phan-68"></a>6.8. Luồng Nghiệp Vụ Bổ Trợ MF-05: Ca Thi Vấn Đáp Tại Lớp, Đề Anti-Collision & Chấm Song Song (In-Class Formative Exam Shifts & TOTP - R6)
 
-Bên cạnh kỳ thi tập trung phòng Lab (MF-04 do Khảo thí chủ trì), hệ thống hỗ trợ Giảng viên tổ chức các ca thi vấn đáp định kỳ trực tiếp trên lớp (In-Class Exam Shifts) phục vụ đánh giá tiến trình (Progress Assessment / Assignment / On-going Oral Exam):
+Bên cạnh kỳ thi tập trung phòng Lab (MF-04 do Cán bộ Khảo thí chủ trì), hệ thống hỗ trợ Giảng viên tổ chức các ca thi vấn đáp định kỳ trực tiếp trên lớp học được phân công (`classes`) phục vụ kiểm tra đánh giá quá trình (Progress Test / Assignment / Quiz vấn đáp lấy điểm thành phần).
+
+#### 1. Bốn Cấu Hình Cốt Lõi Khi Giảng Viên Khởi Tạo Ca Thi Tại Lớp:
+1. **Đặt tên bài kiểm tra:** Trường `shift_name` (VARCHAR(150), bắt buộc) và `description` (TEXT, tùy chọn) giúp sinh viên và giảng viên dễ dàng nhận diện bài kiểm tra theo tuần hoặc chủ đề bài học (ví dụ: *"Kiểm tra Quá trình Tuần 4 - Clean Architecture & EF Core"*).
+2. **Chế độ nguồn đề để sinh viên tự bốc đề (`question_pool_mode`):** Hỗ trợ linh hoạt 2 chế độ:
+   - `ALL_COURSE_BANK`: Hệ thống tự động bốc ngẫu nhiên $N$ câu hỏi từ toàn bộ ngân hàng câu hỏi luyện tập của môn học (`practice_questions` đã được Trưởng Bộ Môn phê duyệt `status = 'APPROVED'` và `is_active = true`).
+   - `SELECTED_POOL`: Giảng viên chủ động lọc hoặc khoanh vùng trước một danh sách câu hỏi cụ thể (`question_ids` từ kho `practice_questions` đã duyệt của môn học), hệ thống sẽ bốc ngẫu nhiên $N$ câu từ danh sách khoanh vùng này cho từng sinh viên.
+   - **Thuật toán phân bổ đề Anti-Collision & Bốc đề 2 pha nhẹ RAM (`EnterInClassShiftCommandHandler`):** Khi sinh viên nhập OTP tham gia ca thi, hệ thống thực hiện bốc đề 2 pha: **Pha 1** chỉ truy vấn ID (`Select(q => q.Id)`) và mảng ID đã cấp trong ca để tính toán tần suất $O(K)$ xuất hiện thấp nhất (LFA) kết hợp xáo trộn ngẫu nhiên CSPRNG mà không nạp nội dung đề bài/rubric vào RAM; **Pha 2** chỉ nạp đầy đủ nội dung của đúng $N$ câu hỏi đã chọn cho sinh viên đó. Nhờ đó, các sinh viên ngồi cạnh nhau nhận được các câu hỏi khác biệt, triệt tiêu nguy cơ trao đổi bài và giảm 90% tải bộ nhớ RAM.
+3. **Tổng số câu hỏi mỗi sinh viên phải làm (`total_questions_per_student`):** Giảng viên ấn định số lượng câu hỏi chính $N$ cho mỗi sinh viên (từ `1` đến `10` câu, mặc định `2` hoặc `3` câu). Bảng `in_class_shift_participants` ghi nhận danh sách câu hỏi được gán (`assigned_question_ids` và `assigned_question_id`), và bảng `in_class_exam_submissions` lưu bài làm của từng câu hỏi với ràng buộc `UNIQUE (shift_id, student_id, question_id, follow_up_index)`.
+4. **Cấu hình Câu hỏi phụ Follow-up (`has_follow_up` & `max_follow_up_questions`):**
+   - Giảng viên được toàn quyền quyết định bật hoặc tắt câu hỏi phụ (`has_follow_up`: `true` / `false`) ngay lúc tạo bài kiểm tra trên lớp.
+   - Nếu bật `has_follow_up = true`, Giảng viên tùy chọn số lượng câu hỏi phụ tối đa trên mỗi câu chính (`max_follow_up_questions`: từ `1` đến `5` câu, mặc định `2` câu). Nếu chọn không follow-up (`has_follow_up = false`), hệ thống gán `max_follow_up_questions = 0`.
+   - Khi bật, AI Gemini phân tích trực tiếp ngữ cảnh bài nói của sinh viên (`[Needs Follow-up]`) để phát vấn câu hỏi phụ đào sâu. Toàn bộ câu trả lời được lưu trong CSDL nội bộ, **hoàn toàn KHÔNG lưu audio lên Cloudflare R2** để tiết kiệm chi phí hạ tầng.
+
+#### 2. Mật Khẩu Tự Động Xoay Vòng 5 Phút (TOTP Engine) & Bảo Vệ Phòng Thi Vật Lý:
+- Để chống sinh viên ở ngoài lớp vào thi hộ, hệ thống áp dụng cơ chế mật khẩu xoay vòng động theo thời gian (TOTP 6 ký tự số/chữ).
+- Mã OTP tự động thay đổi mỗi **5 phút (300 giây)** một lần và chiếu trực tiếp lên máy chiếu lớp học.
+- Bảng `in_class_shift_passwords` chuẩn 3NF lưu trữ lịch sử: `valid_from`, `valid_to` và khoảng thời gian ân hạn (`grace_until`) thêm **30–60 giây** để chống rớt mạng hoặc trễ mạng khi sinh viên bấm tham gia ở những giây cuối.
+- Tuyệt đối lưu trữ trạng thái cửa sổ TOTP trong CSDL chuẩn 3NF, không sử dụng bộ nhớ RAM tạm thời (`[NotMapped]` / Static Dictionary) để bảo đảm tính nhất quán khi scale ngang máy chủ.
+
+#### 3. Hàng Đợi Chấm Song Song Đa Luồng (Worker x12) & Publish Điểm Song Song Theo Thời Gian Thực (Zero Bottleneck):
+- **Persist-First Ingestion (< 100ms):** Khi sinh viên bấm nộp bài, Backend ghi ngay bản ghi vào `in_class_exam_submissions` với trạng thái `SUBMITTED` trong $< 100$ms và trả về mã `HTTP 202 Accepted`.
+- **Hàng đợi BoundedChannel & Đa luồng x12:** Backend đẩy ngay `GradingTask` (`TaskType = "InClass"`) vào hàng đợi bộ nhớ `BoundedChannel<GradingTask>` (1,000 slots RAM, `BoundedChannelFullMode.Wait`). Cả hai tiến trình nền `OfficialExamGradingWorker` (thi thật) và `GradingQueueWorker` (luyện tập, thi thử, ca thi lớp) đều được cấu hình xử lý song song đa luồng bất đồng bộ qua **`Parallel.ForEachAsync`** với **`MaxDegreeOfParallelism = 12`**, gọi đồng thời Gemini 1.5 Flash/Pro chấm Barem Rubric 10.0 (kèm Polly Retry 3 lần: 2s, 4s, 8s $\to$ DLQ 5m nếu lỗi). Khi cả lớp 40–120 sinh viên nộp bài cùng lúc, hệ thống giải phóng hàng đợi chỉ trong vài chục giây mà không hề bị nghẽn cổ chai.
+- **Publish Điểm Song Song Theo Thời Gian Thực (Parallel Real-time Grade Publishing):** Ngay khi Worker hoàn tất chấm bài của bất kỳ sinh viên nào (`status = 'AI_GRADED'`), hệ thống **tự động Publish và đẩy điểm + nhận xét chi tiết song song theo thời gian thực** (qua SignalR Hub `/hubs/practice`) cho cả Sinh viên và Dashboard Giảng viên. Cả hai phía đều thấy kết quả ngay lập tức mà **không phải chờ cả lớp nộp bài xong**.
+- **Hậu kiểm & Khóa 1 chiều (One-Way Lock):** Giảng viên có quyền rà soát danh sách bài nộp, nghe/đọc transcript và điều chỉnh điểm thành phần (`final_score` kèm `lecturer_comment` $\to$ `status = 'AUDITED'`). Khi hoàn tất, Giảng viên bấm **"Chốt Bảng Điểm Ca Thi"** (`POST /api/v1/lecturer/in-class-shifts/{shiftId}/finalize-grades` $\to$ `status = 'FINALIZED'`, `is_locked = true`), kích hoạt cơ chế One-Way Lock khóa vĩnh viễn bảng điểm quá trình thành phần (mọi thao tác sửa/xóa trái phép bị chặn bởi mã `HTTP 403 Forbidden`).
+- **Tối ưu Bảng Điều Khiển Sinh Viên & Bộ Dữ Liệu Khởi Tạo FLM:**
+  - `GetStudentDashboardQueryHandler`: Batch `SaveChangesAsync` 1 lần duy nhất trong toàn luồng, truy vấn `AiEvaluationDetails` trực tiếp qua `d.Evaluation.StudentId` ($O(\log N)$) tận dụng chỉ mục `ix_ai_evaluations_student`.
+  - Bộ Seeder chuẩn FLM: Đã nạp đầy đủ dữ liệu chuẩn hóa của 3 môn học FLM (`PRF192`, `CSD201`, `DBI202`) cùng 90 câu hỏi chuẩn bám sát ma trận CLO 3NF và barem rubric 10.0đ.
+
+#### 4. Bộ 3 Sơ Đồ Kiến Trúc Hoàn Chỉnh Cho MF-05
+
+##### Sơ Đồ 1: Lưu Đồ Thuật Toán Toàn Diện MF-05 (Algorithmic Flowchart)
+
+```mermaid
+flowchart TD
+    subgraph Phase1_Config ["Pha 1: Giảng Viên Cấu Hình & Khởi Tạo Ca Thi Tại Lớp"]
+        direction TB
+        C1["GV nhập Tên bài kiểm tra (shift_name: VARCHAR 150) & Mô tả"]
+        C2{"Chọn Chế độ Nguồn Đề<br>(question_pool_mode)?"}
+        C2A["ALL_COURSE_BANK:<br>Tự động bốc từ toàn bộ kho practice_questions đã APPROVED"]
+        C2B["SELECTED_POOL:<br>GV khoanh vùng danh sách question_ids cụ thể từ kho môn học"]
+        C3["GV cấu hình Tổng số câu hỏi mỗi SV phải làm (total_questions_per_student: 1..10, mặc định 2..3)"]
+        C4{"Cấu hình Câu hỏi phụ<br>(has_follow_up)?"}
+        C4_Yes["Bật has_follow_up = true<br>Chọn max_follow_up_questions (1..5, mặc định 2)"]
+        C4_No["Tắt has_follow_up = false<br>(max_follow_up_questions = 0)"]
+        C5["Lưu in_class_exam_shifts (status = 'DRAFT' -> 'OPEN')"]
+
+        C1 --> C2
+        C2 -->|ALL_COURSE_BANK| C2A
+        C2 -->|SELECTED_POOL| C2B
+        C2A --> C3
+        C2B --> C3
+        C3 --> C4
+        C4 -->|Có Follow-up| C4_Yes --> C5
+        C4 -->|Không Follow-up| C4_No --> C5
+    end
+
+    subgraph Phase2_Join ["Pha 2: Mật Khẩu TOTP Xoay Vòng & Sinh Viên Vào Ca"]
+        direction TB
+        T1["TotpPasswordEngine sinh mã OTP ngẫu nhiên 6 ký tự"]
+        T2["Lưu in_class_shift_passwords 3NF (valid_from, valid_to 5 phút, grace_until +30..60s)"]
+        T3["Chiếu OTP xoay vòng lên màn hình máy chiếu lớp học"]
+        T4["SV hiện diện tại lớp nhập OTP tham gia ca thi (POST /join)"]
+        T5{"Kiểm tra mã OTP trong CSDL 3NF?"}
+        T5_Fail["Từ chối truy cập (HTTP 400 / 403)"]
+        T5_Pass["Xác thực hợp lệ -> Ghi nhận in_class_shift_participants (status = 'JOINED')"]
+        T6["Thuật toán Anti-Collision: Bốc N câu hỏi có tần suất xuất hiện thấp nhất trong ca thi"]
+        T7["Lưu danh sách câu hỏi được gán & Cấp đề thi về Client cho SV"]
+
+        T1 --> T2 --> T3 --> T4 --> T5
+        T5 -->|Không hợp lệ / Hết hạn| T5_Fail
+        T5 -->|Hợp lệ| T5_Pass --> T6 --> T7
+    end
+
+    subgraph Phase3_Exam ["Pha 3: Làm Bài, Chấm Song Song & Publish Điểm Tức Thì"]
+        direction TB
+        E1["SV trả lời câu hỏi chính qua Micro / Web Speech STT hoặc hiệu đính text"]
+        E2{"Ca thi có bật has_follow_up?"}
+        E2_Yes["AI phân tích ngữ cảnh câu trả lời chính -> Phát vấn câu hỏi phụ đào sâu"]
+        E2_Speak["SV trả lời câu hỏi phụ (tối đa 1..5 câu do GV cấu hình)"]
+        E2_No["Bỏ qua câu hỏi phụ"]
+        E3["Nộp bài: Persist-First &lt; 100ms lưu in_class_exam_submissions (status = 'SUBMITTED')"]
+        E4["Đẩy ngay GradingTask vào BoundedChannel (1,000 slots RAM, FullMode.Wait)"]
+        E5["GradingQueueWorker xử lý song song đa luồng (MaxDegreeOfParallelism = 12)"]
+        E6["Worker gọi Gemini 1.5 Flash CoT chấm Barem 10.0 (Polly Retry 2-4-8s -> DLQ 5m)"]
+        E7["Lưu điểm ai_score, ai_feedback vào DB (status = 'AI_GRADED')"]
+        E8["Publish Điểm Song Song Thời Gian Thực qua SignalR Hub (/hubs/practice)"]
+        E9["SV & GV Dashboard nhận điểm + nhận xét tức thì (Không phải chờ cả lớp nộp xong)"]
+
+        E1 --> E2
+        E2 -->|has_follow_up = true| E2_Yes --> E2_Speak --> E3
+        E2 -->|has_follow_up = false| E2_No --> E3
+        E3 --> E4 --> E5 --> E6 --> E7 --> E8 --> E9
+    end
+
+    subgraph Phase4_Audit ["Pha 4: Giảng Viên Hậu Kiểm & Chốt Sổ Điểm Quá Trình"]
+        direction TB
+        A1["GV mở Dashboard Ca Thi: Xem danh sách bài nộp, transcript & điểm AI"]
+        A2{"GV có điều chỉnh điểm?"}
+        A2_Yes["GV nhập final_score kèm lecturer_comment (status = 'AUDITED')"]
+        A2_No["Giữ nguyên điểm AI gợi ý làm điểm chính thức"]
+        A3["GV bấm Chốt Bảng Điểm Ca Thi (POST /finalize-grades)"]
+        A4["Cập nhật in_class_exam_shifts (status = 'FINALIZED', is_locked = true)"]
+        A5["One-Way Lock khóa bảng điểm quá trình thành phần (HTTP 403 nếu sửa trái phép)"]
+
+        A1 --> A2
+        A2 -->|Có điều chỉnh| A2_Yes --> A3
+        A2 -->|Giữ nguyên| A2_No --> A3
+        A3 --> A4 --> A5
+    end
+
+    Phase1_Config --> Phase2_Join
+    Phase2_Join --> Phase3_Exam
+    Phase3_Exam --> Phase4_Audit
+```
+
+##### Sơ Đồ 2: Sơ Đồ Tuần Tự Tương Tác Giữa Các Tác Nhân & Hệ Thống (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor L as Giảng Viên (Lecturer)
     actor S as Sinh Viên (Student)
+    participant Web as Frontend Web Portal (React 19)
     participant API as InClassShiftController (.NET 8)
     participant TOTP as TotpPasswordEngine
-    participant DB as PostgreSQL 16 (3NF)
+    participant DB as PostgreSQL 16 (38 Bảng 3NF)
     participant CH as BoundedChannel (1000 slots)
-    participant AI as Gemini 1.5 Flash Worker
+    participant W as Parallel Grading Worker (x12)
+    participant Hub as SignalR Hub (/hubs/practice)
+    participant AI as Gemini 1.5 Flash API
 
-    Note over L,API: 1. Khởi tạo ca thi tại lớp
-    L->>API: POST /api/v1/lecturer/classes/{classId}/in-class-shifts (Tên ca, thời lượng, câu hỏi)
-    API->>DB: Tạo in_class_exam_shifts (status = DRAFT / OPEN)
-    API-->>L: HTTP 201 Created (Shift Info)
+    %% 1. Cấu hình & Khởi tạo ca thi
+    Note over L,DB: 1. Giảng viên cấu hình & khởi tạo ca thi tại lớp
+    L->>Web: Nhập Tên, Mô tả, pool_mode, total_questions_per_student, has_follow_up
+    Web->>API: POST /api/v1/lecturer/classes/{classId}/in-class-shifts
+    API->>DB: INSERT in_class_exam_shifts (shift_name, pool_mode, total_q, follow_up, status='OPEN')
+    API-->>Web: HTTP 201 Created (Shift Info)
 
-    Note over L,TOTP: 2. Kích hoạt mật khẩu xoay vòng động (TOTP)
-    loop Mỗi chu kỳ 5 phút
-        TOTP->>TOTP: Sinh mật khẩu ngẫu nhiên 6 ký tự
-        TOTP->>DB: Lưu in_class_shift_passwords (valid_from, valid_to, grace_until +30..60s)
-        TOTP-->>L: Hiển thị mật khẩu xoay vòng trên Dashboard máy chiếu
+    %% 2. Mật khẩu TOTP xoay vòng
+    Note over L,TOTP: 2. Kích hoạt mật khẩu xoay vòng động 5 phút (TOTP)
+    loop Mỗi chu kỳ 5 phút (300s)
+        TOTP->>TOTP: Sinh mã OTP ngẫu nhiên 6 ký tự
+        TOTP->>DB: INSERT in_class_shift_passwords (valid_from, valid_to, grace_until +30..60s)
+        TOTP-->>Web: Hiển thị OTP xoay vòng trên Dashboard máy chiếu
     end
 
-    Note over S,API: 3. Sinh viên vào ca thi
-    S->>API: POST /api/v1/student/in-class-shifts/{shiftId}/join (Nhập mật khẩu hiện tại)
-    API->>DB: Kiểm tra mật khẩu (hợp lệ trong window hoặc grace period 30-60s)
-    API->>DB: Ghi nhận in_class_shift_participants (status = JOINED)
-    API-->>S: HTTP 200 OK (Cấp đề thi tại lớp)
+    %% 3. Sinh viên vào ca thi & Anti-Collision
+    Note over S,DB: 3. Sinh viên nhập OTP & Tự bốc đề Anti-Collision
+    S->>Web: Nhập mã OTP hiển thị trên bảng
+    Web->>API: POST /api/v1/student/in-class-shifts/{shiftId}/join
+    API->>DB: Verify OTP trong cửa sổ hiệu lực hoặc grace period 30..60s
+    API->>DB: INSERT in_class_shift_participants (status = 'JOINED')
+    API->>DB: Chạy thuật toán Anti-Collision bốc N câu hỏi có tần suất thấp nhất trong ca
+    API->>DB: Lưu assigned_question_ids cho sinh viên
+    API-->>Web: HTTP 200 OK (Danh sách N câu hỏi được giao)
 
-    Note over S,CH: 4. Trả lời & Nộp bài thi tại lớp
-    S->>API: POST /api/v1/student/in-class-shifts/{shiftId}/submit (Transcript câu trả lời)
-    API->>DB: Ghi nhận in_class_exam_submissions (Persist First < 100ms)
-    API->>CH: Đẩy EvaluationTask vào BoundedChannel
-    API-->>S: HTTP 202 Accepted (Đã nộp bài thành công)
+    %% 4. Trả lời & Nộp bài
+    Note over S,CH: 4. Trả lời (Kèm Follow-up nếu bật) & Persist-First < 100ms
+    S->>Web: Trả lời câu chính (Micro/STT hoặc text) + Follow-up (nếu có)
+    Web->>API: POST /api/v1/student/in-class-shifts/{shiftId}/submissions
+    API->>DB: INSERT in_class_exam_submissions (status = 'SUBMITTED', Persist-First < 100ms)
+    API->>CH: Đẩy GradingTask vào BoundedChannel (1,000 slots RAM)
+    API-->>Web: HTTP 202 Accepted (Đã ghi nhận bài nộp)
 
-    Note over CH,AI: 5. AI chấm tự động ngầm
-    CH->>AI: Worker đọc task, gọi Gemini 1.5 Flash CoT Grading
-    AI->>DB: Cập nhật ai_score, ai_feedback vào in_class_exam_submissions
+    %% 5. Chấm song song & Publish điểm thời gian thực
+    Note over CH,Hub: 5. Hàng đợi chấm song song đa luồng (x12) & Publish điểm tức thì
+    CH->>W: Worker (1 trong 12 luồng) rút GradingTask
+    W->>AI: Gọi Gemini 1.5 Flash CoT chấm Barem Rubric 10.0 (Polly Retry 2-4-8s)
+    AI-->>W: JSON Scorecard (criteria_scores, ai_score, ai_feedback)
+    W->>DB: Cập nhật ai_score, ai_feedback, status = 'AI_GRADED'
+    W->>Hub: Broadcast sự kiện "InClassGradePublished" (submissionId, score, feedback)
+    Hub-->>Web: Push điểm & nhận xét song song theo thời gian thực
+    Note over S,L: Cả Sinh Viên và Giảng Viên thấy điểm tức thì, không chờ cả lớp!
 
-    Note over L,DB: 6. Giảng viên hậu kiểm & Thẩm định điểm
-    L->>API: GET /api/v1/lecturer/in-class-shifts/{shiftId}/submissions
-    API-->>L: Danh sách bài nộp kèm điểm AI gợi ý
-    L->>API: PUT /api/v1/lecturer/in-class-shifts/{shiftId}/submissions/{id}/grade (final_score, feedback)
-    API->>DB: Cập nhật final_score, lecturer_comment, audited_at
-    L->>API: POST /api/v1/lecturer/in-class-shifts/{shiftId}/finalize (Khóa bảng điểm ca thi)
-    API->>DB: Cập nhật in_class_exam_shifts (status = FINALIZED)
-    API-->>L: HTTP 200 OK (Bảng điểm lớp hoàn tất)
+    %% 6. Giảng viên hậu kiểm & Chốt bảng điểm
+    Note over L,DB: 6. Giảng viên hậu kiểm & Chốt bảng điểm (One-Way Lock)
+    L->>Web: Xem danh sách bài nộp, transcript & điểm AI trên Dashboard
+    opt Giảng viên điều chỉnh điểm
+        L->>Web: Nhập điểm mới & lý do điều chỉnh
+        Web->>API: PUT /api/v1/lecturer/in-class-shifts/{shiftId}/submissions/{id}/grade
+        API->>DB: Cập nhật final_score, lecturer_comment, status = 'AUDITED'
+    end
+    L->>Web: Bấm "Chốt Bảng Điểm Ca Thi" (Finalize Grades)
+    Web->>API: POST /api/v1/lecturer/in-class-shifts/{shiftId}/finalize-grades
+    API->>DB: UPDATE in_class_exam_shifts (status = 'FINALIZED', is_locked = true)
+    API-->>Web: HTTP 200 OK (Bảng điểm đã được khóa 1 chiều an toàn)
 ```
 
-#### Quy tắc kiến trúc Ca thi tại lớp & Mật khẩu xoay vòng (R6):
-1. **Phân quyền độc lập:** Giảng viên phụ trách lớp toàn quyền tạo, mở ca, cấu hình đề từ kho câu hỏi môn học và đóng ca thi tại lớp (`in_class_exam_shifts`). Khảo thí và Trưởng BM không can thiệp vào ca thi nội bộ này.
-2. **Bảo mật phòng thi vật lý bằng TOTP:** Để chống sinh viên bên ngoài phòng học vào thi hộ, hệ thống áp dụng cơ chế mật khẩu xoay vòng động theo thời gian:
-   - Mật khẩu gồm 6 ký tự số/chữ cái ngẫu nhiên thay đổi mỗi **5 phút** một lần.
-   - Bảng `in_class_shift_passwords` lưu trữ lịch sử: `valid_from`, `valid_to` và khoảng thời gian gia hạn ân hạn (`grace_until`) thêm **30–60 giây** để chống rớt mạng / độ trễ mạng khi sinh viên bấm tham gia ở giây cuối.
-   - Tuyệt đối lưu trữ trạng thái cửa sổ TOTP trong CSDL chuẩn 3NF, không sử dụng bộ nhớ RAM tạm thời (`[NotMapped]` / Static Dictionary) để bảo đảm tính nhất quán khi scale ngang máy chủ.
-3. **Pipeline chấm ngầm & Thẩm định điểm:**
-   - Bài nộp sinh viên ghi đĩa tức thời Persist-First vào `in_class_exam_submissions` ($< 100\text{ms}$).
-   - Đưa vào `BoundedChannel<EvaluationTask>` (1,000 slots) chấm tự động qua Gemini 1.5 Flash CoT.
-   - Giao diện Giảng viên cho phép rà soát điểm AI gợi ý, điều chỉnh điểm (`final_score`) và ghi chú nhận xét trước khi bấm Hoàn tất / Khóa bảng điểm (`FINALIZED`).
+##### Sơ Đồ 3: Cỗ Máy Trạng Thái Vòng Đời Ca Thi & Bài Nộp (State Machine Diagram)
+
+```mermaid
+stateDiagram-v2
+    [*] --> InClassShiftLifecycle
+
+    state InClassShiftLifecycle {
+        [*] --> DRAFT : Giảng viên tạo ca thi, cấu hình tên, pool_mode, total_q, follow_up
+        DRAFT --> OPEN : Mở ca thi, kích hoạt TOTP Engine xoay vòng 5 phút + Grace 30-60s
+        OPEN --> CLOSED : Hết giờ thi hoặc Giảng viên đóng nhận bài nộp mới
+        CLOSED --> FINALIZED : Giảng viên hoàn tất hậu kiểm, bấm Chốt Bảng Điểm
+        FINALIZED --> LOCKED : One-Way Lock kích hoạt (is_locked = true, chặn UPDATE/DELETE HTTP 403)
+        LOCKED --> [*]
+    }
+
+    state InClassSubmissionLifecycle {
+        [*] --> SUBMITTED : Sinh viên nộp bài, Persist-First < 100ms, đẩy vào BoundedChannel
+        SUBMITTED --> PENDING_RETRY : Gọi AI thất bại sau 3 lần retry Polly (HTTP 429/503/Timeout)
+        PENDING_RETRY --> SUBMITTED : DlqReplayWorker tự động quét và nạp lại task sau 5 phút
+        SUBMITTED --> AI_GRADED : Parallel Worker x12 gọi Gemini Flash chấm xong Rubric 10.0
+        AI_GRADED --> PUBLISHED_REALTIME : Hệ thống tự động push điểm song song qua SignalR cho SV & GV
+        PUBLISHED_REALTIME --> AUDITED : Giảng viên xem lại bài làm và điều chỉnh điểm thành phần
+        PUBLISHED_REALTIME --> LOCKED_GRADE : Giảng viên chốt bảng điểm (giữ nguyên điểm AI)
+        AUDITED --> LOCKED_GRADE : Giảng viên chốt bảng điểm (lấy điểm điều chỉnh)
+        LOCKED_GRADE --> [*]
+    }
+```
 
 ---
 
@@ -2333,34 +2550,41 @@ flowchart TD
 
 ### <a id="phan-81"></a>8.1. Ma Trận Cổng Mạng & Ranh Giới Phân Vùng Bảo Mật
 
-```
-[Public Internet / WAN / Lab PC VLAN]
-                 │  HTTPS 443 / HTTP 80 (TLS 1.3 / WSS)
-                 ▼
-     ┌───────────────────────┐
-     │ Cloudflare Anycast WAF│  <-- DDoS Filter, Rate Limit
-     └───────────┬───────────┘
-                 │  Reverse Proxy Proxy-Pass
-                 ▼
-     ┌───────────────────────┐
-     │  Nginx Ingress (Host) │  <-- SSL Offloading, HSTS, Route Split
-     └─────┬───────────┬─────┘
-           │ :3000     │ :5000 (REST & WSS)
-           ▼           ▼
-┌──────────────────┐ ┌───────────────────────────────────────────────┐
-│ oralexam-frontend│ │              oralexam-backend                 │
-│ (React 19 Vite)  │ │ (.NET 8 Clean Architecture - Kestrel Server)  │
-└──────────────────┘ └───────┬───────────────────────────────┬───────┘
-                             │ :5432 (Npgsql TCP Pool)       │ :443 (Outbound)
-                             ▼                               ▼
-                 ┌───────────────────────┐       ┌───────────────────────┐
-                 │   oralexam-postgres   │       │   External Cloud:     │
-                 │   (PostgreSQL 16)     │       │   • Gemini 1.5 Flash  │
-                 │   CẤM MỞ RA NGOÀI!    │       │   • Gemini 1.5 Pro    │
-                 └───────────────────────┘       │   • Whisper STT       │
-                                                 │   • Cloudflare R2     │
-                                                 │   • Google OAuth PKCE │
-                                                 └───────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Zone_Public ["Phân Vùng Công Cộng & Phòng Lab (Public Internet & Lab VLAN)"]
+        direction LR
+        Client_Home["Sinh viên tại nhà / Giảng viên<br>(Web Browser WAN)"]
+        Client_Lab["Máy trạm Kiosk Phòng Lab<br>(Lab PC VLAN Isolated)"]
+    end
+
+    subgraph Zone_Edge ["Phân Vùng An Ninh Biên (Cloudflare Anycast Edge)"]
+        CF_WAF["Cloudflare Anycast WAF / DDoS Filter<br>• Anycast DNS · TLS 1.3 Termination<br>• Rate Limiting & Bot Management"]
+    end
+
+    subgraph Zone_Ingress ["Phân Vùng Ingress Host (VPS 103.90.226.9)"]
+        Nginx["Nginx 1.25 Ingress Reverse Proxy<br>• Cổng công khai: TCP 80 (HTTP) & 443 (HTTPS)<br>• SSL Offloading (Let's Encrypt / Cloudflare Origin)<br>• HTTP/2, HSTS & WebSocket Upgrade Support"]
+    end
+
+    subgraph Zone_AppNet ["Phân Vùng Mạng Nội Bộ Docker (Docker Network: oralexam-net)"]
+        Frontend["oralexam-frontend<br>• Cổng nội bộ: TCP 3000 (HTTP)<br>• React 19 Vite SPA · Static Assets"]
+        Backend["oralexam-backend<br>• Cổng nội bộ: TCP 5000 (HTTP / WSS)<br>• ASP.NET Core 8 Kestrel API<br>• SignalR Hubs (/hubs/practice, /hubs/anti-cheat)"]
+    end
+
+    subgraph Zone_Isolated ["Phân Vùng Dữ Liệu Cách Ly & Đám Mây Ngoại Vi (Isolated Tier)"]
+        Postgres[("oralexam-postgres<br>• Cổng nội bộ: TCP 5432 (Npgsql Pool)<br>• PostgreSQL 16 (38 Bảng chuẩn 3NF)<br>• ⚠️ CẤM MỞ RA NGOÀI INTERNET!")]
+        ExternalCloud["Dịch Vụ Đám Mây Ngoại Vi (Outbound HTTPS 443)<br>• Google Gemini 1.5 Flash / Pro API<br>• OpenAI Whisper Large-v3 STT Engine<br>• Cloudflare R2 (S3 API Presigned Upload)<br>• Google OAuth 2.0 PKCE Provider"]
+    end
+
+    Client_Home -->|HTTPS 443 / WSS| CF_WAF
+    Client_Lab -->|HTTPS 443 / WSS| CF_WAF
+    CF_WAF -->|Proxy-Pass HTTPS / TLS 1.3| Nginx
+
+    Nginx -->|Proxy Pass / (Static & Routes)| Frontend
+    Nginx -->|Proxy Pass /api/v1/* & /hubs/*| Backend
+
+    Backend -->|Npgsql TCP Pool :5432 (Internal Only)| Postgres
+    Backend -->|HTTPS Outbound :443 (TLS Encrypted)| ExternalCloud
 ```
 
 ### <a id="phan-811"></a>8.1.1. Ma Trận Phân Quyền Vai Trò Người Dùng (RBAC Authorization Matrix - 6 Vai Trò)
@@ -2392,20 +2616,20 @@ Hệ thống thiết lập cơ chế phân quyền Role-Based Access Control (RB
 | **MF-04:** Hậu kiểm Evidence Panel & sửa điểm có lý do (`override_reason`) | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
 | **MF-04:** Công bố điểm ca thi (Publish Grades) kích hoạt One-Way Lock | ❌ | **✅** | ❌ | **✅** | ❌ | **✅** |
 | **MF-04:** Sinh viên xem điểm Student Portal & Nộp đơn phúc khảo (`AppealRequest`) | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **MF-04:** Khảo thí tiếp nhận & thẩm tra hợp lệ đơn phúc khảo rồi chuyển Trưởng BM | ❌ | ❌ | ❌ | **✅** | ❌ | **✅** |
-| **MF-04:** Trưởng BM phân công GV chấm lại & Phê duyệt quyết định phúc khảo | ❌ | ❌ | **✅** | ❌ | ❌ | **✅** |
-| **MF-04:** Giảng viên chấm lại bài phúc khảo trên Evidence Panel | ❌ | **✅ (GV được giao)** | **✅** | ❌ | ❌ | ❌ |
+| **MF-04:** Khảo thí phân công GV chấm lại (định mức <= 24 bài/GV) & Phê duyệt quyết định phúc khảo mở One-Way Lock | ❌ | ❌ | ❌ | **✅** | ❌ | **✅** |
+| **MF-04:** Trưởng BM nhận thông báo in-app đơn phúc khảo theo dõi học thuật | ❌ | ❌ | **✅** | **✅** | ❌ | **✅** |
+| **MF-04:** Giảng viên chấm lại bài phúc khảo trên Evidence Panel | ❌ | **✅ (GV được giao)** | ❌ | ❌ | ❌ | ❌ |
 | **DLQ:** Giám sát & Replay Dead-Letter Queue MF-01 & MF-02 | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
 | **DLQ:** Giám sát & Replay Dead-Letter Queue MF-04 thi thật | ❌ | ❌ | ❌ | **✅** | ❌ | ❌ |
 | Quản trị hệ thống, người dùng, cấu hình MF-01/02 & Audit Logs | ❌ | ❌ | ❌ | ❌ | ❌ | **✅** |
 
 > [!IMPORTANT]
 > **Quy trình Phân quyền Tác chiến Chuẩn hóa 6 Vai Trò (R2–R8):**
-> 1. **Quyền hạn Giảng viên (`lecturer`):** Nhận phân công giảng dạy môn học từ Trưởng BM (`course_lecturers`); Tạo Lớp học phần thuộc môn được giao và sinh/reset mật khẩu lớp (`join_password_hash`); Tổ chức Ca thi trong lớp (`in_class_exam_shifts`), kích hoạt mật khẩu OTP tự động xoay vòng 5 phút (kèm grace period 30–60s), hậu kiểm bài làm và điều chỉnh điểm thành phần trước khi chốt bảng điểm; Soạn đề (tách độc lập kho luyện tập `practice_questions` và bám sát đề thi mẫu cho kho `exam_questions`); Chấm lại bài thi phúc khảo khi được Trưởng BM phân công.
-> 2. **Thẩm quyền của Trưởng Bộ Môn (`department_head`):** Quản trị môn học và danh mục CLO 3NF; Phân công nhiều Giảng viên vào môn học (`course_lecturers`); Nắm 100% thẩm quyền cấu hình câu hỏi tiếp nối Follow-up thi thật (`has_follow_up`, 1–5 câu); Thẩm định và duyệt đề thi (`APPROVED`, `NEEDS_REVISION`, `REJECTED`); Ban hành ma trận cấu trúc đề thi mẫu; Tiếp nhận đơn phúc khảo từ Khảo thí chuyển sang, phân công Giảng viên chấm lại và thẩm định phê duyệt quyết định phúc khảo cuối cùng. **Cắt bỏ hoàn toàn quyền quản lý DLQ.**
-> 3. **Thẩm quyền của Cán bộ Khảo thí (`examination_officer`):** Tiếp nhận gói đề `HANDED_OVER`, tạo kỳ thi (`OfficialExamSession`), tạo ca thi (`RealExamSessionShift`), thực hiện phân bổ đề không trùng lặp cho thí sinh trong ca (`uq_tickets_shift_exam_set`), mở xuất bản đề ca thi (`is_exam_published = true`), và thực hiện **"Công Bố Điểm"** (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`) kích hoạt One-Way Lock; Tiếp nhận và thẩm tra hồ sơ đơn phúc khảo từ sinh viên rồi chuyển giao cho Trưởng BM; Giám sát và kích hoạt replay Dead-Letter Queue (DLQ) cho bài thi thật MF-04. **Cắt bỏ thẩm quyền cấu hình Follow-up.**
-> 4. **Thẩm quyền của Cán bộ Coi thi / Giám thị (`proctor`):** Giới hạn nghiêm ngặt trong 2 nhiệm vụ: (1) Điểm danh thí sinh theo STT ca thi (SeatNumber 1–40) đối chiếu thẻ SV/CCCD và kiểm tra `ip_address`; (2) Báo cáo các hành vi vi phạm an ninh phòng thi vào `exam_anti_cheat_logs`. **Tuyệt đối cấm Proctor mở ca thi, đóng ca thi, gỡ niêm phong IP, reset máy trạm, import danh sách thí sinh, hay can thiệp điểm số.**
-> 5. **Quy trình Phúc khảo Nội bộ 5 Bước (MF-04):** Sau khi công bố điểm, sinh viên nộp đơn `AppealRequest` trực tuyến $\to$ Cán bộ Khảo thí tiếp nhận đầu mối, kiểm tra tính hợp lệ và chuyển tiếp cho Trưởng Bộ Môn $\to$ Trưởng Bộ Môn phân công một Giảng viên chấm độc lập lần 2 $\to$ Giảng viên chấm lại trên Evidence Panel và gửi đề xuất điểm kèm biên bản $\to$ Trưởng Bộ Môn thẩm định phê duyệt quyết định (APPROVED / REJECTED), mở chốt One-Way Lock cập nhật điểm chính thức.
+> 1. **Quyền hạn Giảng viên (`lecturer`):** Nhận phân công giảng dạy môn học từ Trưởng BM (`course_lecturers`); Tạo Lớp học phần thuộc môn được giao và sinh/reset mật khẩu lớp (`join_password_hash`); Tổ chức Ca thi trong lớp (`in_class_exam_shifts`), kích hoạt mật khẩu OTP tự động xoay vòng 5 phút (kèm grace period 30–60s), hậu kiểm bài làm và điều chỉnh điểm thành phần trước khi chốt bảng điểm; Soạn đề (tách độc lập kho luyện tập `practice_questions` và bám sát đề thi mẫu cho kho `exam_questions`); Chấm lại bài thi phúc khảo khi được Cán bộ Khảo thí phân công (định mức <= 24 bài/GV, độc lập với Giám khảo ca thi ban đầu).
+> 2. **Thẩm quyền của Trưởng Bộ Môn (`department_head`):** Quản trị môn học và danh mục CLO 3NF; Phân công nhiều Giảng viên vào môn học (`course_lecturers`); Nắm 100% thẩm quyền cấu hình câu hỏi tiếp nối Follow-up thi thật (`has_follow_up`, 1–5 câu); Thẩm định và duyệt đề thi (`APPROVED`, `NEEDS_REVISION`, `REJECTED`); Ban hành ma trận cấu trúc đề thi mẫu; Nhận thông báo in-app khi có đơn phúc khảo để theo dõi chuyên môn học thuật môn học. **Cắt bỏ hoàn toàn quyền quản lý DLQ và quyền phân công/phê duyệt phúc khảo.**
+> 3. **Thẩm quyền của Cán bộ Khảo thí (`examination_officer`):** Tiếp nhận gói đề `HANDED_OVER`, tạo kỳ thi (`OfficialExamSession`), tạo ca thi (`RealExamSessionShift`: phòng lab, kíp thi, phân bổ cả Giám thị `proctor_user_id` và Giám khảo `examiner_user_id`), thực hiện phân bổ đề không trùng lặp cho thí sinh trong ca (`uq_tickets_shift_exam_set`), mở xuất bản đề ca thi (`is_exam_published = true`), và thực hiện **"Công Bố Điểm"** (`POST /api/v1/official-exams/shifts/{shiftId}/publish-grades`) kích hoạt One-Way Lock; Tiếp nhận đơn phúc khảo, xem trước đề xuất phân bổ tự động và phân công Giảng viên chấm lại độc lập (định mức $\le 24$ bài/GV, loại trừ Giám khảo ca thi ban đầu) và phê duyệt quyết định phúc khảo cuối cùng (`APPROVED`/`REJECTED`) mở One-Way Lock cập nhật điểm chính thức; Giám sát và kích hoạt replay Dead-Letter Queue (DLQ) cho bài thi thật MF-04. **Cắt bỏ thẩm quyền cấu hình Follow-up.**
+> 4. **Thẩm quyền của Cán bộ Coi thi / Giám thị (`proctor`):** Giới hạn nghiêm ngặt trong 2 nhiệm vụ: (1) Điểm danh thí sinh theo STT ca thi (SeatNumber 1–40) đối chiếu thẻ SV/CCCD; (2) Báo cáo các hành vi vi phạm an ninh phòng thi vào `exam_anti_cheat_logs` qua `POST /api/v1/proctor/shifts/{shiftId}/violations` và SignalR Hub. **Tuyệt đối cấm Proctor mở ca thi, đóng ca thi, gỡ niêm phong IP máy trạm, đổi IP máy trạm, đình chỉ gán điểm 0đ vào `LecturerAudit`, reset máy trạm, import danh sách thí sinh, hay can thiệp điểm số.**
+> 5. **Quy trình Phúc khảo Nội bộ 5 Bước (MF-04):** Sau khi công bố điểm, sinh viên nộp đơn `AppealRequest` trực tuyến $\to$ Thông báo in-app gửi đồng thời tới Cán bộ Khảo thí và Trưởng Bộ Môn $\to$ Cán bộ Khảo thí tiếp nhận, xem trước thuật toán đề xuất phân bổ tự động và phân công Giảng viên chấm độc lập lần 2 (định mức $\le 24$ bài/GV, loại trừ Giám khảo chấm ban đầu) $\to$ Giảng viên chấm lại trên Evidence Panel và gửi đề xuất điểm kèm biên bản giải trình $\to$ Cán bộ Khảo thí thẩm định phê duyệt quyết định (APPROVED / REJECTED), mở chốt One-Way Lock cập nhật điểm chính thức.
 
 ### <a id="phan-82"></a>8.2. Danh Mục Mã Lỗi Chuẩn Hóa RFC 7807 (ProblemDetails Matrix)
 
@@ -2451,4 +2675,3 @@ Nhóm phát triển cam kết các chỉ số hiệu năng kỹ thuật định 
 
 ---
 *Tài liệu kiến trúc hệ thống chính thức duy nhất (Single Source of Truth) phục vụ báo cáo Hội đồng chấm tốt nghiệp Đồ án Capstone FA26SE166 — Khoa Kỹ Thuật Phần Mềm — Đại học FPT TP.HCM (FPT SG).*
-

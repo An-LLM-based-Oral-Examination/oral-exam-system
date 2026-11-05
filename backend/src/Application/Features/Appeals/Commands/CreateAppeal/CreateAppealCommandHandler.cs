@@ -69,9 +69,11 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
         }
 
-        // Đơn phải được tiếp nhận bởi đúng Trưởng bộ môn đang hoạt động.
+        // Đơn phải được tiếp nhận bởi Cán bộ Khảo thí đang hoạt động (R2/R7); fallback về Trưởng bộ môn nếu dữ liệu test chỉ seed Trưởng BM.
         var assignedUser = await _context.Users
-            .FirstOrDefaultAsync(u => u.Role == UserRole.DepartmentHead && u.IsActive, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Role == UserRole.ExaminationOfficer && u.IsActive, cancellationToken)
+            ?? await _context.Users
+                .FirstOrDefaultAsync(u => u.Role == UserRole.DepartmentHead && u.IsActive, cancellationToken);
 
         if (assignedUser == null)
         {
@@ -123,6 +125,53 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         };
 
         _context.AppealRequests.Add(appeal);
+
+        // Tạo thông báo in-app cho Cán bộ Khảo thí và Trưởng Bộ Môn (Yêu cầu R2)
+        var studentCode = ticket.Student?.StudentCode ?? "N/A";
+        var studentName = ticket.Student?.FullName ?? "N/A";
+        var sessionTitle = ticket.Shift?.Session?.Title ?? "Kỳ thi";
+
+        var examOfficers = await _context.Users.AsNoTracking()
+            .Where(u => u.Role == UserRole.ExaminationOfficer && u.IsActive)
+            .ToListAsync(cancellationToken);
+
+        foreach (var officer in examOfficers)
+        {
+            _context.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = officer.Id,
+                Title = "Đơn phúc khảo mới",
+                Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho kỳ thi \"{sessionTitle}\". Lý do: {appeal.Reason}",
+                Type = "APPEAL_SUBMITTED",
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow,
+                RelatedEntityName = "AppealRequest",
+                RelatedEntityId = appeal.Id
+            });
+        }
+
+        Course? course = null;
+        if (ticket.Shift?.Session != null)
+        {
+            course = await _context.Courses.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == ticket.Shift.Session.CourseId, cancellationToken);
+        }
+
+        var deptHeadTargetId = course?.DepartmentHeadUserId ?? assignedUser.Id;
+        _context.Notifications.Add(new Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = deptHeadTargetId,
+            Title = "Đơn phúc khảo mới",
+            Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho môn \"{course?.Name ?? sessionTitle}\". Lý do: {appeal.Reason}",
+            Type = "APPEAL_SUBMITTED",
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow,
+            RelatedEntityName = "AppealRequest",
+            RelatedEntityId = appeal.Id
+        });
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new AppealResponseDto

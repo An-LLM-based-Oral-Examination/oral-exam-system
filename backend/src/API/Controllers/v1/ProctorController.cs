@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.Proctor.Commands.RecordProctorViolation;
 using OralExamination.Application.Features.Proctor.Commands.SuspendExamTicket;
 using OralExamination.Application.Features.Proctor.Commands.UpdateTicketAttendance;
 using OralExamination.Application.Features.Proctor.Queries.GetShiftAttendance;
@@ -16,7 +17,7 @@ namespace API.Controllers.v1;
 /// Controller phục vụ Giám thị Coi thi Phòng Lab Kiosk 40 máy trạm (BE-V10 / FE-P01):
 /// - Giám sát sơ đồ 40 ghế ca thi thời gian thực
 /// - Điểm danh xác nhận thẻ SV/CCCD mở vé thi
-/// - Đình chỉ vé thi vi phạm quy chế Kiosk Lockdown (blur > 3 lần, mở DevTools, gian lận)
+/// - Ghi nhận biên bản vi phạm quy chế Kiosk Lockdown vào exam_anti_cheat_logs
 /// </summary>
 [ApiController]
 [Route("api/v1/proctor")]
@@ -35,7 +36,7 @@ public class ProctorController(ISender sender) : ControllerBase
             return id;
         }
 
-        if (Request?.Headers != null &&
+        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null &&
             Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
             Guid.TryParse(headerVal, out var headerId) &&
             headerId != Guid.Empty)
@@ -61,6 +62,16 @@ public class ProctorController(ISender sender) : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpPost("shifts/{shiftId:guid}/attendance")]
+    public async Task<IActionResult> UpdateShiftAttendance(
+        [FromRoute] Guid shiftId,
+        [FromBody] UpdateTicketAttendanceRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var ticketId = request?.TicketId ?? Guid.Empty;
+        return await UpdateAttendance(ticketId, request, cancellationToken);
+    }
+
     [HttpPut("tickets/{ticketId:guid}/attendance")]
     [HttpPost("tickets/{ticketId:guid}/check-in")]
     public async Task<IActionResult> UpdateAttendance(
@@ -80,7 +91,8 @@ public class ProctorController(ISender sender) : ControllerBase
                 ticketId,
                 request?.IsPresent ?? true,
                 request?.IpAddress,
-                request?.Note),
+                request?.Note,
+                request?.SeatNumber),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -92,7 +104,7 @@ public class ProctorController(ISender sender) : ControllerBase
     }
 
     [HttpPost("tickets/{ticketId:guid}/suspend")]
-    [Authorize(Roles = "proctor,lecturer,department_head,admin,student")]
+    [Authorize(Roles = "examination_officer,admin")]
     public async Task<IActionResult> SuspendTicket(
         [FromRoute] Guid ticketId,
         [FromBody] SuspendExamTicketRequest request,
@@ -114,6 +126,38 @@ public class ProctorController(ISender sender) : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    [HttpPost("shifts/{shiftId:guid}/violations")]
+    [Authorize(Roles = "proctor,admin")]
+    public async Task<IActionResult> RecordViolation(
+        [FromRoute] Guid shiftId,
+        [FromBody] RecordProctorViolationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new RecordProctorViolationCommand(
+                actorId,
+                shiftId,
+                request.TicketId,
+                request.StudentId,
+                request.EventType,
+                request.Severity,
+                request.Details),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return ProctorProblem(result.Error);
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
     private IActionResult ProctorProblem(string error)
@@ -144,13 +188,24 @@ public class ProctorController(ISender sender) : ControllerBase
 
 public sealed record UpdateTicketAttendanceRequest
 {
+    public Guid? TicketId { get; init; }
     public bool IsPresent { get; init; } = true;
     public string? IpAddress { get; init; }
     public string? Note { get; init; }
+    public int? SeatNumber { get; init; }
 }
 
 public sealed record SuspendExamTicketRequest
 {
     public string Reason { get; init; } = string.Empty;
     public int? BlurViolationCount { get; init; }
+}
+
+public sealed record RecordProctorViolationRequest
+{
+    public Guid? TicketId { get; init; }
+    public Guid? StudentId { get; init; }
+    public string EventType { get; init; } = string.Empty;
+    public string Severity { get; init; } = string.Empty;
+    public string Details { get; init; } = string.Empty;
 }

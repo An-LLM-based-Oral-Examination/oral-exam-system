@@ -24,6 +24,10 @@ public static class DependencyInjection
             out var parsedAllowFallback) && parsedAllowFallback;
 
         var usePostgres = !allowInMemoryFallback || IsPostgresEndpointReachable(connectionString);
+        if (usePostgres)
+        {
+            connectionString = EnsureHighConcurrencyPostgresPool(connectionString);
+        }
 
         services.AddScoped<OralExamination.Infrastructure.Persistence.Interceptors.OneWayLockInterceptor>();
 
@@ -63,6 +67,34 @@ public static class DependencyInjection
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
 
         return services;
+    }
+
+    private static string EnsureHighConcurrencyPostgresPool(string connectionString)
+    {
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(connectionString);
+            if (builder.MaxPoolSize < 200)
+            {
+                builder.MaxPoolSize = 200;
+            }
+
+            if (builder.MinPoolSize < 10)
+            {
+                builder.MinPoolSize = 10;
+            }
+
+            if (builder.ConnectionIdleLifetime == 300)
+            {
+                builder.ConnectionIdleLifetime = 60;
+            }
+
+            return builder.ConnectionString;
+        }
+        catch
+        {
+            return connectionString;
+        }
     }
 
     private static bool IsPostgresEndpointReachable(string connectionString)
