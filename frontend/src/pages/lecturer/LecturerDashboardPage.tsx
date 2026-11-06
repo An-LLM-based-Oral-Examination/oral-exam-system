@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -204,25 +205,33 @@ export function LecturerDashboardPage() {
             </div>
 
             <p className="text-xs font-semibold tracking-[0.09em] text-[#BDE8F5] uppercase">
-              MF-03 · MF-04
+              MF-03 · MF-05 · MF-04
             </p>
             <h1 className="mt-2 max-w-2xl text-[clamp(1.65rem,3.2vw,2.55rem)] leading-[1.1] font-bold tracking-[-0.045em] text-white">
               {getGreeting(now.getHours())},{' '}
               <span className="text-[#BDE8F5]">{user?.fullName ?? 'Giảng viên'}</span>
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80">
-              Biên soạn câu hỏi theo Barem Rubric 10.0, gửi Trưởng Bộ môn thẩm định và hậu kiểm bằng
-              chứng trước khi công bố điểm chính thức.
+              Soạn câu hỏi luyện tập, mở ca vấn đáp trên lớp (OTP 5 phút), rồi hậu kiểm bằng chứng
+              trước khi công bố điểm chính thức.
             </p>
 
-            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
+            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
               <Link
-                to="/question-bank/create"
+                to="/question-bank"
+                state={{ openCreate: true }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
               >
                 <FilePenLine className="size-4" aria-hidden="true" />
-                Soạn câu hỏi mới
+                Tạo câu hỏi luyện tập
                 <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Link>
+              <Link
+                to="/in-class-shifts"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cfdaea] bg-white/80 px-4 text-sm font-bold text-[#314968] backdrop-blur-md transition hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+              >
+                <UsersRound className="size-4 text-[#1C4D8D]" aria-hidden="true" />
+                Ca thi trên lớp
               </Link>
               <Link
                 to="/lecturer/audit"

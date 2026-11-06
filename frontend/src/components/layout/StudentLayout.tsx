@@ -25,7 +25,7 @@ export function StudentLayout() {
       >
         <StudentHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
 
-        <main className="px-4 py-5 sm:px-6 sm:py-6 xl:px-8">
+        <main className="px-4 py-5 sm:px-6 sm:py-5 xl:px-8">
           <div className="mx-auto w-full max-w-[1380px]">
             <Outlet />
           </div>

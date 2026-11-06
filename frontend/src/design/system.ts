@@ -24,9 +24,9 @@ export const ds = {
     'mt-3 text-[clamp(1.6rem,3vw,2.35rem)] leading-[1.08] font-bold tracking-[-0.045em] text-white',
   bannerText: 'mt-2 max-w-[640px] text-sm leading-relaxed text-white/80',
   section:
-    'overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_1px_0_#fff_inset,0_16px_40px_rgba(15,40,84,0.08)]',
+    'overflow-hidden rounded-2xl border border-[#4988C4]/30 bg-white shadow-[0_1px_0_#fff_inset,0_8px_16px_rgba(15,40,84,0.16)]',
   sectionHeader:
-    'border-b border-[#4988C4] bg-[linear-gradient(180deg,#D7F1F8_0%,#F4FBFD_100%)] px-5 py-3 sm:px-6',
+    'border-b border-[#4988C4]/30 bg-[linear-gradient(180deg,#CCE9F6_0%,#F4FBFD_100%)] px-5 py-3 sm:px-6',
   sectionTitleRow: 'flex items-center gap-2.5',
   sectionIconWrap:
     'flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#4988C4]/22 text-[#1C4D8D]',

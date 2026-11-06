@@ -145,10 +145,10 @@ export function LoginPage() {
   }, [loginWithGoogle, navigate])
 
   return (
-    <main className="login-page-shell min-h-dvh w-full bg-[#7868ef] p-0.5">
-      <div className="grid min-h-[calc(100dvh-4px)] overflow-hidden rounded-[7px] bg-[#FFFFFF] lg:grid-cols-[58%_42%]">
+    <main className="login-page-shell h-dvh w-full overflow-hidden bg-[#7868ef] p-0.5">
+      <div className="grid h-full min-h-0 overflow-hidden rounded-[7px] bg-[#FFFFFF] lg:grid-cols-[58%_42%]">
         <section
-          className="relative hidden min-h-[calc(100dvh-4px)] overflow-hidden bg-[#071426] lg:block"
+          className="relative hidden h-full min-h-0 overflow-hidden bg-[#071426] lg:block"
           aria-label="Giới thiệu hệ thống luyện thi vấn đáp"
         >
           <div
@@ -164,15 +164,15 @@ export function LoginPage() {
             <LoginThreeScene />
           </Suspense>
 
-          <div className="login-hero-copy pointer-events-none absolute top-[6.5%] left-[7.5%] z-10 max-w-[560px] pr-8">
+          <div className="login-hero-copy pointer-events-none absolute top-[6.5%] left-[7.5%] right-[4%] z-10">
             <div className="login-hero-badge mb-5 inline-flex items-center gap-2 rounded-full border border-[#3d8ccc]/25 bg-[#0b2744]/70 px-3 py-1.5 text-xs font-semibold tracking-[0.12em] text-[#87dffc] uppercase shadow-[0_0_18px_rgba(56,189,248,0.08)] backdrop-blur-md">
               <span className="h-1.5 w-1.5 rounded-full bg-[#50e1ff] shadow-[0_0_9px_#50e1ff]" />
               AI-powered oral examination
             </div>
 
-            <h1 className="text-[clamp(2.75rem,4.25vw,4.5rem)] leading-[0.94] font-bold tracking-[-0.055em] text-white">
-              Practice. Speak.
-              <span className="block bg-gradient-to-r from-[#64d8ff] to-[#9ebeff] bg-clip-text text-transparent">
+            <h1 className="text-[clamp(1.85rem,3.2vw,3.4rem)] leading-none font-bold tracking-[-0.045em] whitespace-nowrap text-white">
+              Practice. Speak.{' '}
+              <span className="bg-gradient-to-r from-[#64d8ff] to-[#9ebeff] bg-clip-text text-transparent">
                 Improve.
               </span>
             </h1>
@@ -216,8 +216,8 @@ export function LoginPage() {
           </div>
         </section>
 
-        <section className="relative flex min-h-[calc(100dvh-4px)] flex-col overflow-y-auto bg-[linear-gradient(145deg,#ffffff_0%,#f8fafe_58%,#f3f6fb_100%)]">
-          <header className="login-header flex shrink-0 items-start justify-between gap-4 px-6 pt-5 sm:px-10 sm:pt-7">
+        <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(145deg,#ffffff_0%,#f8fafe_58%,#f3f6fb_100%)]">
+          <header className="login-header flex shrink-0 items-start justify-between gap-3 px-6 pt-3 sm:px-8 sm:pt-4">
             <p className="pt-1 text-xs font-semibold tracking-[0.1em] text-[#70819a] uppercase">
               Department portal
             </p>
@@ -239,10 +239,10 @@ export function LoginPage() {
             </div>
           </header>
 
-          <div className="login-form-region flex flex-1 items-center justify-center px-6 py-8 sm:px-10">
+          <div className="login-form-region flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-2 sm:px-8">
             <div className="w-full max-w-[410px]">
-              <div className="login-form-intro mb-7 text-center">
-                <div className="login-logo relative mx-auto mb-4 flex size-[104px] items-center justify-center">
+              <div className="login-form-intro mb-4 text-center">
+                <div className="login-logo relative mx-auto mb-2 flex size-16 items-center justify-center">
                   <img
                     src={universityTechLogo}
                     alt="University Tech"
@@ -258,7 +258,7 @@ export function LoginPage() {
                 </p>
               </div>
 
-              <form onSubmit={handlePasswordLogin} className="space-y-3.5" noValidate>
+              <form onSubmit={handlePasswordLogin} className="space-y-2.5" noValidate>
                 <div>
                   <label htmlFor="login-username" className="mb-1.5 block text-xs font-bold text-[#30415f]">
                     Username
@@ -276,7 +276,7 @@ export function LoginPage() {
                       }}
                       autoComplete="username"
                       placeholder="Nhập username của bạn"
-                      className="login-input min-h-11 w-full rounded-xl border border-[#cbd8ea] bg-white px-3.5 py-2.5 pl-10 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      className="login-input min-h-10 w-full rounded-xl border border-[#cbd8ea] bg-white px-3.5 py-2 pl-10 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
                       disabled={isLoading}
                       required
                     />
@@ -300,7 +300,7 @@ export function LoginPage() {
                       }}
                       autoComplete="current-password"
                       placeholder="Nhập mật khẩu"
-                      className="login-password-input min-h-11 w-full rounded-xl border border-[#cbd8ea] bg-white px-11 py-2.5 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      className="login-password-input min-h-10 w-full rounded-xl border border-[#cbd8ea] bg-white px-11 py-2 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
                       disabled={isLoading}
                       required
                     />
@@ -318,7 +318,7 @@ export function LoginPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="login-submit inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1c5fc4] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(28,95,196,0.22)] transition hover:-translate-y-0.5 hover:bg-[#164b9d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
+                  className="login-submit inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#1c5fc4] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(28,95,196,0.22)] transition hover:-translate-y-0.5 hover:bg-[#164b9d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
                 >
                   {isLoading ? (
                     <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -329,14 +329,14 @@ export function LoginPage() {
                 </button>
               </form>
 
-              <div className="my-5 flex items-center gap-3" aria-hidden="true">
+              <div className="login-divider my-3 flex items-center gap-3" aria-hidden="true">
                 <span className="h-px flex-1 bg-[#e3eaf3]" />
                 <span className="text-[11px] font-semibold text-[#96a2b3]">HOẶC</span>
                 <span className="h-px flex-1 bg-[#e3eaf3]" />
               </div>
 
-              <div className="rounded-xl border border-[#4988C4]/45 bg-white/80 p-3.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
-                <div className="mb-2.5 flex items-center justify-between gap-3">
+              <div className="login-google rounded-xl border border-[#4988C4]/45 bg-white/80 p-2.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
+                <div className="mb-2 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-[#253653]">Đăng nhập bằng Google</p>
                     <p className="mt-0.5 text-xs text-[#7b8ba1]">Xác thực OAuth 2.0 theo tài khoản đã được cấp quyền.</p>
@@ -365,7 +365,7 @@ export function LoginPage() {
                 </div>
               )}
 
-              <div className="login-security mt-5 border-t border-[#e5eaf1] pt-4 text-center">
+              <div className="login-security mt-3 border-t border-[#e5eaf1] pt-3 text-center">
                 <p className="flex items-center justify-center gap-1.5 text-xs text-[#8794a7]">
                   <ShieldCheck className="size-3.5 text-[#6984b3]" />
                   Tài khoản được bảo vệ bằng xác thực phiên an toàn.
@@ -378,7 +378,7 @@ export function LoginPage() {
             </div>
           </div>
 
-          <footer className="login-footer shrink-0 px-6 pb-5 text-center text-xs text-[#9aa6b6] sm:px-10 sm:pb-7">
+          <footer className="login-footer shrink-0 px-6 pb-3 text-center text-xs text-[#9aa6b6] sm:px-8 sm:pb-4">
             <div className="login-footer-divider mb-3 h-px bg-[#e8ecf2]" />© 2026 Faculty of
             Computer Science & Engineering. All rights reserved.
           </footer>

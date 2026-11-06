@@ -35,7 +35,7 @@ export function AppLayout() {
         <main
           id="instructor-main-content"
           tabIndex={-1}
-          className="px-4 py-5 focus:outline-none sm:px-6 sm:py-6 xl:px-8"
+          className="px-4 py-5 focus:outline-none sm:px-6 sm:py-5 xl:px-8"
         >
           <div className="mx-auto w-full max-w-[1380px]">
             <Outlet />

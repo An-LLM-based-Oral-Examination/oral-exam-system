@@ -83,7 +83,7 @@ export function StudentSidebar({
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4 py-4">
+        <div className="flex h-[77px] shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4">
           <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white">
             <img
               src={universityTechLogo}

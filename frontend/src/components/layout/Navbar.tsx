@@ -2,10 +2,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOpenCheck,
   ClipboardCheck,
-  FilePlus2,
   LayoutDashboard,
   LogOut,
   Menu,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,8 +16,9 @@ interface NavbarProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard': { label: 'Tổng quan', icon: LayoutDashboard },
-  '/question-bank': { label: 'Ngân hàng đề & Rubric', icon: BookOpenCheck },
-  '/question-bank/create': { label: 'Tạo câu hỏi & Rubric', icon: FilePlus2 },
+  '/question-bank': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
+  '/question-bank/create': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
+  '/in-class-shifts': { label: 'Ca thi trên lớp', icon: UsersRound },
   '/lecturer/audit': { label: 'Hậu kiểm & công bố điểm', icon: ClipboardCheck },
 }
 
@@ -40,7 +41,11 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const page = PAGE_META[location.pathname] ?? { label: 'Cổng giảng viên', icon: LayoutDashboard }
+  const page =
+    PAGE_META[location.pathname] ??
+    (location.pathname.startsWith('/in-class-shifts')
+      ? { label: 'Ca thi trên lớp', icon: UsersRound }
+      : { label: 'Cổng giảng viên', icon: LayoutDashboard })
   const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()
   const roleLabel =
@@ -57,8 +62,8 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white px-4 pt-4 pb-3 sm:px-6 xl:px-8">
-      <div className="flex h-16 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
+    <header className="sticky top-0 z-30 flex h-[77px] items-stretch bg-white px-4 py-2 sm:px-6 xl:px-8">
+      <div className="flex min-h-0 w-full flex-1 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"

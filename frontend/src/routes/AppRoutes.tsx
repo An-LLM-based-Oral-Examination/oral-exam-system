@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { StudentLayout } from '@/components/layout/StudentLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
@@ -56,6 +56,16 @@ const DeadLetterQueuePage = lazy(() =>
     default: module.DeadLetterQueuePage,
   })),
 )
+const InClassShiftHubPage = lazy(() =>
+  import('@/pages/lecturer/InClassShiftHubPage').then((module) => ({
+    default: module.InClassShiftHubPage,
+  })),
+)
+const InClassShiftResultsPage = lazy(() =>
+  import('@/pages/lecturer/InClassShiftResultsPage').then((module) => ({
+    default: module.InClassShiftResultsPage,
+  })),
+)
 
 function InstructorPageFallback() {
   return (
@@ -66,6 +76,12 @@ function InstructorPageFallback() {
       </span>
     </div>
   )
+}
+
+function InClassLiveRedirect() {
+  const { shiftId = '' } = useParams()
+  if (!shiftId) return <Navigate to="/in-class-shifts" replace />
+  return <Navigate to={`/in-class-shifts/${shiftId}/results`} replace />
 }
 
 export const AppRoutes: React.FC = () => {
@@ -107,11 +123,18 @@ export const AppRoutes: React.FC = () => {
               <Route path="/dashboard" element={<LecturerDashboardPage />} />
               <Route path="/question-bank" element={<QuestionStudioPage />} />
               <Route path="/question-bank/create" element={<CreateQuestionPage />} />
+              <Route path="/in-class-shifts" element={<InClassShiftHubPage />} />
+              <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
               <Route path="/lecturer/audit" element={<AuditEvidencePage />} />
               <Route path="/official-exams/manage" element={<OfficialExamManagementPage />} />
               <Route path="/appeals" element={<AppealManagementPage />} />
             </Route>
           </Route>
+          {/* Legacy live URL → bảng điểm (chiếu mã giờ là popup) */}
+          <Route
+            path="/in-class-shifts/:shiftId/live"
+            element={<InClassLiveRedirect />}
+          />
         </Route>
 
         {/* Proctor portal: attendance, seat monitor and Kiosk suspension. */}

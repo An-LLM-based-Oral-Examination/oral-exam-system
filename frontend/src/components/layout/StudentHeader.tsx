@@ -54,8 +54,8 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white px-4 pt-4 pb-3 sm:px-6 xl:px-8">
-      <div className="flex h-16 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
+    <header className="sticky top-0 z-30 flex h-[77px] items-stretch bg-white px-4 py-2 sm:px-6 xl:px-8">
+      <div className="flex min-h-0 w-full flex-1 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
