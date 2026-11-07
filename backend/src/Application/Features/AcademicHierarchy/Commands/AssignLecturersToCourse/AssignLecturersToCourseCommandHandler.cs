@@ -31,6 +31,7 @@ public class AssignLecturersToCourseCommandHandler(
 
         var course = await context.Courses
             .Include(c => c.Semester)
+            .Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
 
         if (course is null)
@@ -45,6 +46,15 @@ public class AssignLecturersToCourseCommandHandler(
         if (semester is null)
         {
             return Result<AssignLecturersToCourseResponseDto>.Failure("Không tìm thấy học kỳ được chỉ định.");
+        }
+
+        var courseOffering = await context.CourseOfferings
+            .FirstOrDefaultAsync(o => o.CourseId == course.Id && o.SemesterId == targetSemesterId, cancellationToken);
+
+        if (courseOffering is not null && !courseOffering.IsEnabled)
+        {
+            return Result<AssignLecturersToCourseResponseDto>.Failure(
+                "VALIDATION: Course offering đang bị vô hiệu hóa.");
         }
 
         var assigningUser = await context.Users
@@ -72,7 +82,8 @@ public class AssignLecturersToCourseCommandHandler(
                     "FORBIDDEN: Chỉ có Trưởng bộ môn hoặc Admin mới có quyền phân công giảng viên.");
             }
 
-            if (course.DepartmentHeadUserId.HasValue && course.DepartmentHeadUserId.Value != request.AssignedByUserId)
+            var owningDepartmentHeadId = course.AcademicProgram?.DepartmentHeadUserId ?? course.DepartmentHeadUserId;
+            if (owningDepartmentHeadId.HasValue && owningDepartmentHeadId.Value != request.AssignedByUserId)
             {
                 return Result<AssignLecturersToCourseResponseDto>.Failure(
                     "FORBIDDEN: Trưởng bộ môn chỉ được phép phân công giảng viên cho môn học do mình quản lý.");
@@ -107,7 +118,10 @@ public class AssignLecturersToCourseCommandHandler(
         }
 
         var existingAssignments = await context.CourseLecturers
-            .Where(cl => cl.CourseId == request.CourseId && uniqueLecturerIds.Contains(cl.LecturerUserId) && cl.SemesterId == targetSemesterId)
+            .Where(cl => cl.CourseId == request.CourseId &&
+                         uniqueLecturerIds.Contains(cl.LecturerUserId) &&
+                         cl.SemesterId == targetSemesterId &&
+                         (courseOffering == null || cl.CourseOfferingId == null || cl.CourseOfferingId == courseOffering.Id))
             .ToListAsync(cancellationToken);
 
         var resultDtos = new List<CourseLecturerDto>();
@@ -119,6 +133,7 @@ public class AssignLecturersToCourseCommandHandler(
             if (existing is not null)
             {
                 existing.IsActive = true;
+                existing.CourseOfferingId = courseOffering?.Id;
                 existing.UpdatedAt = now;
                 existing.AssignedByUserId = request.AssignedByUserId;
 
@@ -130,7 +145,8 @@ public class AssignLecturersToCourseCommandHandler(
                     existing.AssignedAt,
                     existing.IsActive,
                     existing.SemesterId,
-                    semester.Code));
+                    semester.Code,
+                    courseOffering?.Id));
             }
             else
             {
@@ -138,6 +154,7 @@ public class AssignLecturersToCourseCommandHandler(
                 {
                     Id = Guid.NewGuid(),
                     CourseId = request.CourseId,
+                    CourseOfferingId = courseOffering?.Id,
                     LecturerUserId = user.Id,
                     AssignedByUserId = request.AssignedByUserId,
                     SemesterId = targetSemesterId,
@@ -157,7 +174,8 @@ public class AssignLecturersToCourseCommandHandler(
                     now,
                     true,
                     targetSemesterId,
-                    semester.Code));
+                    semester.Code,
+                    courseOffering?.Id));
             }
         }
 

@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import type { UserRole } from '@/types/auth.types'
@@ -44,43 +45,49 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     end: true,
   },
   {
+    label: 'Lớp của tôi',
+    path: '/lecturer/classes',
+    icon: UsersRound,
+    roles: ['Instructor'],
+  },
+  {
     label: 'Câu hỏi luyện tập',
     path: '/question-bank',
     icon: BookOpenCheck,
     end: true,
   },
   {
-    label: 'Ca thi trên lớp',
+    label: 'Ca kiểm tra',
     path: '/in-class-shifts',
     icon: UsersRound,
     roles: ['Instructor', 'DepartmentHead', 'Admin'],
   },
   {
-    label: 'Hậu kiểm & công bố',
+    label: 'Hậu kiểm điểm',
     path: '/lecturer/audit',
     icon: ClipboardCheck,
     roles: ['Instructor', 'DepartmentHead'],
   },
   {
-    label: 'MF-04 Official Exams',
+    label: 'Kỳ thi chính thức',
     path: '/official-exams/manage',
     icon: TicketCheck,
     roles: ['DepartmentHead', 'Admin'],
   },
   {
-    label: 'Internal Appeals',
+    label: 'Phúc khảo',
     path: '/appeals',
     icon: UserRoundCheck,
     roles: ['Instructor', 'DepartmentHead', 'Admin'],
   },
   {
-    label: 'Proctor Attendance',
+    label: 'Điểm danh',
     path: '/proctor/attendance',
     icon: ShieldCheck,
     roles: ['Proctor', 'Instructor', 'DepartmentHead', 'Admin'],
   },
   {
-    label: 'AI Grading DLQ',
+    label: 'Lỗi chấm AI',
     path: '/dlq',
     icon: ServerCog,
     roles: ['DepartmentHead', 'Admin'],
@@ -95,16 +102,15 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
   useEffect(() => {
     if (!mobileOpen) return
 
-    const previousOverflow = document.body.style.overflow
+    const unlock = lockBodyScroll()
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onMobileClose()
     }
 
-    document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      unlock()
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [mobileOpen, onMobileClose])
@@ -130,11 +136,11 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
         )}
       >
         <div className="flex h-[77px] shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4">
-          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white">
+          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white p-0.5">
             <img
               src={universityTechLogo}
               alt="University Tech"
-              className="size-full object-cover"
+              className="size-full object-contain"
               draggable={false}
             />
           </div>
@@ -158,7 +164,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-5">
           <p
             className={cn(
               'mb-2 px-3 text-xs font-bold tracking-[0.15em] text-[#1C4D8D] uppercase',

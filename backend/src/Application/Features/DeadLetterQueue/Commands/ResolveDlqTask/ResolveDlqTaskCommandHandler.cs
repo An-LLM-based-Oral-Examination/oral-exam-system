@@ -27,14 +27,18 @@ public class ResolveDlqTaskCommandHandler : IRequestHandler<ResolveDlqTaskComman
             return Result<Unit>.Failure("Không tìm thấy tác vụ DLQ với Id đã cho.");
         }
 
-        var isPracticeOrMockTask =
+        var isInClassTask =
+            string.Equals(dlqItem.TaskType, "InClassGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "IN_CLASS_EXAM", StringComparison.OrdinalIgnoreCase);
+
+        var isPracticeOrMockTask = !isInClassTask && (
             string.Equals(dlqItem.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "PRACTICE", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase);
+            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase));
 
-        var isOfficialTask = !isPracticeOrMockTask && (
+        var isOfficialTask = !isInClassTask && !isPracticeOrMockTask && (
             string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "OFFICIAL_EXAM", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.ManagedByRole, "examination_officer", StringComparison.OrdinalIgnoreCase));
@@ -49,6 +53,13 @@ public class ResolveDlqTaskCommandHandler : IRequestHandler<ResolveDlqTaskComman
             if (isOfficialTask && !string.Equals(request.ActorRole, "examination_officer", StringComparison.OrdinalIgnoreCase))
             {
                 return Result<Unit>.Failure("FORBIDDEN: Chỉ có Cán bộ Khảo thí (Examination Officer) mới có quyền xử lý tác vụ Thi thật.");
+            }
+
+            if (isInClassTask &&
+                !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.ActorRole, "lecturer", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Giảng viên hoặc Quản trị viên mới có quyền xử lý tác vụ Ca thi trong lớp.");
             }
         }
 

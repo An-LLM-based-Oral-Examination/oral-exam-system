@@ -44,20 +44,23 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
         var reviewer = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == request.ReviewerId, cancellationToken);
 
-        if (reviewer == null || (reviewer.Role != UserRole.DepartmentHead && reviewer.Role != UserRole.Admin))
+        // Chỉ Cán bộ Khảo thí hoặc Quản trị viên mới có thẩm quyền phê duyệt quyết định phúc khảo cuối cùng (R2/R7)
+        if (reviewer == null || (reviewer.Role != UserRole.ExaminationOfficer && reviewer.Role != UserRole.Admin))
         {
-            return Result<AppealResponseDto>.Failure("Người dùng không có quyền thẩm định đơn phúc khảo (yêu cầu Trưởng Bộ Môn hoặc Quản trị viên).");
+            return Result<AppealResponseDto>.Failure("Người dùng không có quyền thẩm định đơn phúc khảo (yêu cầu Cán bộ Khảo thí hoặc Quản trị viên).");
         }
+
+        var effectiveProposedScore = request.ProposedScore ?? appeal.ProposedScore;
 
         appeal.ReviewedBy = request.ReviewerId;
         appeal.Decision = request.Decision;
         appeal.ReviewNotes = request.ReviewNotes.Trim();
-        appeal.ProposedScore = request.ProposedScore;
+        appeal.ProposedScore = effectiveProposedScore;
         appeal.Status = request.Decision;
         appeal.ResolvedAt = DateTime.UtcNow;
         appeal.UpdatedAt = DateTime.UtcNow;
 
-        if (request.Decision == AppealStatus.Approved && request.ProposedScore.HasValue)
+        if (request.Decision == AppealStatus.Approved && effectiveProposedScore.HasValue)
         {
             var ticketSubmissions = await _context.ExamQuestionSubmissions
                 .Where(s => s.TicketId == appeal.TicketId)
@@ -68,7 +71,7 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 var submission = ticketSubmissions.FirstOrDefault(s => s.Id == appeal.SubmissionId.Value);
                 if (submission != null)
                 {
-                    submission.FinalScore = request.ProposedScore.Value;
+                    submission.FinalScore = effectiveProposedScore.Value;
                     foreach (var sibling in ticketSubmissions.Where(s => s.Id != submission.Id))
                     {
                         sibling.FinalScore ??= sibling.AiScore;
@@ -79,7 +82,7 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
             {
                 foreach (var sub in ticketSubmissions)
                 {
-                    sub.FinalScore = request.ProposedScore.Value;
+                    sub.FinalScore = effectiveProposedScore.Value;
                 }
             }
 
@@ -96,11 +99,11 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                             ticketSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticketSubmissions.Count,
                             2,
                             MidpointRounding.AwayFromZero)
-                        : request.ProposedScore.Value;
+                        : effectiveProposedScore.Value;
                 }
                 else
                 {
-                    audit.AuditedScore = request.ProposedScore.Value;
+                    audit.AuditedScore = effectiveProposedScore.Value;
                 }
             }
         }

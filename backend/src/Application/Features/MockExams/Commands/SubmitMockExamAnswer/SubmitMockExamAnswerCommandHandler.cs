@@ -310,10 +310,6 @@ public sealed class SubmitMockExamAnswerCommandHandler
         return Result<string>.Failure("File âm thanh không hợp lệ hoặc không có dữ liệu.");
     }
 
-    public static void ClearVoiceBaselines(IEnumerable<Guid> answerIds)
-    {
-    }
-
     private static void LockVoiceBaseline(MockExamAnswer targetAnswer, string voiceTranscript)
     {
         targetAnswer.InitialVoiceTranscript = voiceTranscript.Trim();
@@ -843,6 +839,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     {
                         Id = evalId,
                         AnswerType = "mock_exam",
+                        StudentId = session.StudentId,
                         PracticeAnswerId = null,
                         ExamSubmissionId = null,
                         MockExamAnswerId = justAnswered.Id,

@@ -12,7 +12,9 @@ public interface IApplicationDbContext
     DbSet<User> Users { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Semester> Semesters { get; }
+    DbSet<AcademicProgram> AcademicPrograms { get; }
     DbSet<Course> Courses { get; }
+    DbSet<CourseOffering> CourseOfferings { get; }
     DbSet<CourseClo> CourseClos { get; }
     DbSet<CourseLecturer> CourseLecturers { get; }
     DbSet<Class> Classes { get; }
@@ -43,6 +45,11 @@ public interface IApplicationDbContext
     DbSet<GradingJob> GradingJobs { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<SystemConfig> SystemConfigs { get; }
+    DbSet<InClassExamShift> InClassExamShifts { get; }
+    DbSet<InClassShiftPassword> InClassShiftPasswords { get; }
+    DbSet<InClassShiftParticipant> InClassShiftParticipants { get; }
+    DbSet<InClassExamSubmission> InClassExamSubmissions { get; }
+    DbSet<Notification> Notifications { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

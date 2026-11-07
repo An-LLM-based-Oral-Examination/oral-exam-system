@@ -1,32 +1,28 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowRight,
   BookOpenCheck,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
-  FileClock,
   FilePenLine,
+  GraduationCap,
+  Mic,
   RefreshCw,
   ScanSearch,
-  ShieldCheck,
-  Sparkles,
   TriangleAlert,
+  Users,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { classService } from '@/services/class.service'
 import { questionService } from '@/services/question.service'
+import type { LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
 import type { QuestionSummary } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/common/EmptyState'
+import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 
 const LecturerOverviewThreeScene = lazy(() =>
@@ -40,7 +36,8 @@ interface DashboardMetric {
   value: number
   helper: string
   icon: LucideIcon
-  tone: string
+  iconClassName: string
+  cardClassName: string
 }
 
 function getErrorMessage(error: unknown) {
@@ -61,6 +58,44 @@ function isOwnedByUser(question: QuestionSummary, userId: string | undefined) {
   return Boolean(userId && question.submittedBy?.toLowerCase() === userId.toLowerCase())
 }
 
+const COURSE_CODE_TONES = [
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#be185d]/30 bg-[#fff0f6] text-[#be185d]',
+]
+
+function courseToneIndex(code: string) {
+  let hash = 0
+  for (let index = 0; index < code.length; index += 1) hash = (hash * 31 + code.charCodeAt(index)) >>> 0
+  return hash
+}
+
+function courseCodeTone(code: string) {
+  return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
+}
+
+function dateKey(value: string) {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
+  if (!year || !month || !day) return null
+  return year * 10000 + month * 100 + day
+}
+
+function pickCurrentSemester(semesters: SemesterOption[]) {
+  const today = new Date()
+  const todayKey = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate()
+  const covering = semesters.filter((item) => {
+    const start = dateKey(item.startDate)
+    const end = dateKey(item.endDate)
+    return start !== null && end !== null && todayKey >= start && todayKey <= end
+  })
+  return covering.find((item) => item.isActive) ?? covering[0] ?? semesters.find((item) => item.isActive) ?? semesters[0]
+}
+
 function getGreeting(hour: number) {
   if (hour >= 5 && hour < 12) return 'Chào buổi sáng'
   if (hour >= 12 && hour < 18) return 'Chào buổi chiều'
@@ -70,6 +105,10 @@ function getGreeting(hour: number) {
 export function LecturerDashboardPage() {
   const { user } = useAuth()
   const [questions, setQuestions] = useState<QuestionSummary[]>([])
+  const [offerings, setOfferings] = useState<LecturerCourseOffering[]>([])
+  const [classes, setClasses] = useState<ManagedClass[]>([])
+  const [semester, setSemester] = useState<SemesterOption | null>(null)
+  const [semesterCode, setSemesterCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -81,6 +120,21 @@ export function LecturerDashboardPage() {
       setIsLoading(true)
       setError('')
       try {
+        const [offeringResult, semesterResult, classResult] = await Promise.all([
+          classService.listMyOfferings().catch(() => [] as LecturerCourseOffering[]),
+          classService.listSemesters().catch(() => [] as SemesterOption[]),
+          classService.listLecturerClasses().catch(() => [] as ManagedClass[]),
+        ])
+        const current = pickCurrentSemester(semesterResult)
+        const currentId = current?.id ?? offeringResult[0]?.semesterId ?? ''
+        const currentCode = current?.code || offeringResult.find((item) => item.semesterId === currentId)?.semesterCode || ''
+        if (isActive) {
+          setSemester(current ?? null)
+          setSemesterCode(currentCode)
+          setOfferings(offeringResult.filter((item) => item.semesterId === currentId))
+          setClasses(classResult.filter((item) => item.semesterId === currentId))
+        }
+
         const firstPage = await questionService.getQuestions({ pageNumber: 1, pageSize: 100 })
         const remainingPages = Array.from(
           { length: Math.max(firstPage.totalPages - 1, 0) },
@@ -117,158 +171,89 @@ export function LecturerDashboardPage() {
     }
   }, [reloadKey, user?.id, user?.role])
 
+  const assignedCourses = useMemo(() => {
+    const map = new Map<string, LecturerCourseOffering>()
+    for (const item of offerings) {
+      if (item.courseId && !map.has(item.courseId)) map.set(item.courseId, item)
+    }
+    return [...map.values()]
+  }, [offerings])
+
   const metrics = useMemo<DashboardMetric[]>(
     () => [
       {
-        label: 'Bản nháp đang biên soạn',
-        value: countStatus(questions, 'DRAFT'),
-        helper: 'Có thể chọn và gửi duyệt theo môn',
-        icon: FilePenLine,
-        tone: 'bg-[#4988C4]/16 text-[#1C4D8D]',
+        label: 'Môn phân công',
+        value: assignedCourses.length,
+        helper: semesterCode ? `Kỳ ${semesterCode}` : 'Kỳ hiện tại',
+        icon: GraduationCap,
+        iconClassName: 'bg-[#1C4D8D] text-white',
+        cardClassName: 'border-[#88b2de]/55 bg-[linear-gradient(145deg,#e9f5fc_0%,#cae3f5_100%)] shadow-[0_14px_28px_rgba(28,77,141,0.18)]',
       },
       {
-        label: 'Đang chờ Bộ môn duyệt',
-        value: countStatus(questions, 'SUBMITTED_FOR_REVIEW'),
-        helper: 'Theo dõi phản hồi trước khi sử dụng',
-        icon: FileClock,
-        tone: 'bg-[#fff6e5] text-[#a66c12]',
+        label: 'Lớp phụ trách',
+        value: classes.length,
+        helper: 'Lớp đã mở trong kỳ này',
+        icon: UsersRound,
+        iconClassName: 'bg-[#c26a12] text-white',
+        cardClassName: 'border-[#edca8c]/55 bg-[linear-gradient(145deg,#fff4e2_0%,#f9dcac_100%)] shadow-[0_14px_28px_rgba(194,106,18,0.16)]',
       },
       {
-        label: 'Cần chỉnh sửa',
-        value: countStatus(questions, 'NEEDS_REVISION'),
-        helper: 'Ưu tiên xử lý góp ý đã nhận',
-        icon: TriangleAlert,
-        tone: 'bg-[#fff0f1] text-[#b8404b]',
+        label: 'Sinh viên',
+        value: classes.reduce((total, item) => total + item.enrolledCount, 0),
+        helper: 'Đang theo học các lớp',
+        icon: Users,
+        iconClassName: 'bg-[#6d4cc4] text-white',
+        cardClassName: 'border-[#c4afe8]/55 bg-[linear-gradient(145deg,#f2eafc_0%,#ddcef7_100%)] shadow-[0_14px_28px_rgba(109,76,196,0.16)]',
       },
       {
-        label: 'Đã được phê duyệt',
+        label: 'Câu đã duyệt',
         value: countStatus(questions, 'APPROVED'),
-        helper: 'Sẵn sàng trong ngân hàng đề chính thức',
+        helper: 'Sẵn sàng đưa vào ca thi',
         icon: CheckCircle2,
-        tone: 'bg-[#ecfaf5] text-[#168367]',
+        iconClassName: 'bg-[#16836a] text-white',
+        cardClassName: 'border-[#82cfad]/55 bg-[linear-gradient(145deg,#e8f7f1_0%,#c6ebd9_100%)] shadow-[0_14px_28px_rgba(22,131,106,0.16)]',
       },
     ],
-    [questions],
+    [assignedCourses.length, classes, questions, semesterCode],
   )
-
-  const handleHeroPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2
-    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2
-    event.currentTarget.style.setProperty('--lecturer-scene-x', `${x * 7}px`)
-    event.currentTarget.style.setProperty('--lecturer-scene-y', `${y * 5}px`)
-    event.currentTarget.style.setProperty('--lecturer-grid-x', `${x * -3}px`)
-    event.currentTarget.style.setProperty('--lecturer-grid-y', `${y * -2}px`)
-  }
-
-  const resetHeroParallax = (event: ReactPointerEvent<HTMLElement>) => {
-    event.currentTarget.style.setProperty('--lecturer-scene-x', '0px')
-    event.currentTarget.style.setProperty('--lecturer-scene-y', '0px')
-    event.currentTarget.style.setProperty('--lecturer-grid-x', '0px')
-    event.currentTarget.style.setProperty('--lecturer-grid-y', '0px')
-  }
 
   const now = new Date()
 
   return (
     <div className={ds.page}>
-      <section
-        className={ds.banner}
-        onPointerMove={handleHeroPointerMove}
-        onPointerLeave={resetHeroParallax}
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70 transition-transform duration-300 ease-out motion-reduce:transform-none"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            transform:
-              'translate3d(var(--lecturer-grid-x, 0px), var(--lecturer-grid-y, 0px), 0) scale(1.03)',
-          }}
-        />
-        <div className="pointer-events-none absolute -top-28 -right-20 size-80 rounded-full bg-[#57dcff]/12 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 left-[34%] size-80 rounded-full bg-[#7357ff]/9 blur-3xl" />
-
-        <div className="relative grid min-h-[320px] lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-          <div className="relative z-10 flex flex-col justify-center px-5 py-7 sm:px-7 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-2.5 py-1 text-white">
-                <Sparkles className="size-3" aria-hidden="true" />
-                Không gian giảng viên
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-[#25856e]">
-                <span className="size-1.5 rounded-full bg-[#35c992]" />
-                Rubric Studio sẵn sàng
-              </span>
-            </div>
-
-            <p className="text-xs font-semibold tracking-[0.09em] text-[#BDE8F5] uppercase">
-              MF-03 · MF-05 · MF-04
-            </p>
-            <h1 className="mt-2 max-w-2xl text-[clamp(1.65rem,3.2vw,2.55rem)] leading-[1.1] font-bold tracking-[-0.045em] text-white">
-              {getGreeting(now.getHours())},{' '}
-              <span className="text-[#BDE8F5]">{user?.fullName ?? 'Giảng viên'}</span>
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/80">
-              Soạn câu hỏi luyện tập, mở ca vấn đáp trên lớp (OTP 5 phút), rồi hậu kiểm bằng chứng
-              trước khi công bố điểm chính thức.
-            </p>
-
-            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-              <Link
-                to="/question-bank"
-                state={{ openCreate: true }}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <FilePenLine className="size-4" aria-hidden="true" />
-                Tạo câu hỏi luyện tập
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </Link>
-              <Link
-                to="/in-class-shifts"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cfdaea] bg-white/80 px-4 text-sm font-bold text-[#314968] backdrop-blur-md transition hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <UsersRound className="size-4 text-[#1C4D8D]" aria-hidden="true" />
-                Ca thi trên lớp
-              </Link>
-              <Link
-                to="/lecturer/audit"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#cfdaea] bg-white/80 px-4 text-sm font-bold text-[#314968] backdrop-blur-md transition hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-              >
-                <ScanSearch className="size-4 text-[#1C4D8D]" aria-hidden="true" />
-                Mở cổng hậu kiểm
-              </Link>
-            </div>
-          </div>
-
-          <div className="relative min-h-[250px] overflow-hidden lg:min-h-full">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(76,206,245,0.16),transparent_50%)]" />
-            <div
-              className="absolute inset-[-7%] transition-transform duration-200 ease-out motion-reduce:transform-none"
-              style={{
-                transform:
-                  'translate3d(var(--lecturer-scene-x, 0px), var(--lecturer-scene-y, 0px), 0)',
-              }}
-            >
-              <Suspense
-                fallback={
-                  <div className="flex size-full items-center justify-center" aria-hidden="true">
-                    <div className="size-28 animate-pulse rounded-3xl border border-[#7cdff4]/40 bg-[#dffaff]/30 motion-reduce:animate-none" />
-                  </div>
-                }
-              >
-                <LecturerOverviewThreeScene />
-              </Suspense>
-            </div>
-            <div className="pointer-events-none absolute right-5 bottom-4 hidden items-center gap-2 rounded-full border border-[#4988C4]/45 bg-white/76 px-3 py-1.5 text-xs font-semibold text-[#5b6b84] shadow-sm backdrop-blur-md sm:flex">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#38cfa0] motion-reduce:animate-none" />
-              Rubric 10.0 → Hậu kiểm
-            </div>
-          </div>
-        </div>
-      </section>
+      <PageBanner
+        icon={GraduationCap}
+        eyebrow={`Học kỳ ${semester?.name || semesterCode || 'hiện tại'}`}
+        title={
+          <>
+            {getGreeting(now.getHours())},{' '}
+            <span className="text-[#BDE8F5]">{user?.fullName ?? 'Giảng viên'}</span>
+          </>
+        }
+        description="Soạn câu hỏi luyện tập, mở ca vấn đáp trên lớp (OTP 5 phút), rồi hậu kiểm bằng chứng trước khi công bố điểm chính thức."
+        extras={
+          <>
+            <BannerFact icon={FilePenLine}>Soạn câu hỏi luyện tập</BannerFact>
+            <BannerFact icon={Mic} tone="green">
+              Mở ca vấn đáp trên lớp
+            </BannerFact>
+            <BannerFact icon={ScanSearch} tone="violet">
+              Hậu kiểm bằng chứng
+            </BannerFact>
+          </>
+        }
+        scene={
+          <Suspense
+            fallback={
+              <div className="flex size-full items-center justify-center" aria-hidden="true">
+                <div className="size-28 animate-pulse rounded-3xl border border-[#7cdff4]/40 bg-[#dffaff]/30 motion-reduce:animate-none" />
+              </div>
+            }
+          >
+            <LecturerOverviewThreeScene />
+          </Suspense>
+        }
+      />
 
       {error && (
         <div
@@ -282,7 +267,7 @@ export function LecturerDashboardPage() {
           <button
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[#e4bfc4] bg-white px-3 text-xs font-bold text-[#963743] transition hover:bg-[#fff0f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b8404b]"
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[#e4bfc4] bg-white px-3 text-xs font-bold text-[#963743] transition duration-200 hover:-translate-y-0.5 hover:bg-[#fff0f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b8404b] motion-reduce:transform-none"
           >
             <RefreshCw className="size-3.5" aria-hidden="true" />
             Thử lại
@@ -290,121 +275,154 @@ export function LecturerDashboardPage() {
         </div>
       )}
 
-      <section
-        aria-label="Tình trạng ngân hàng câu hỏi"
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        {metrics.map(({ label, value, helper, icon: Icon, tone }) => (
-          <article
-            key={label}
-            className="group rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)] transition duration-200 hover:-translate-y-0.5 hover:border-[#4988C4]/45 hover:shadow-[0_12px_32px_rgba(31,61,105,0.08)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium text-[#5b6b84]">{label}</p>
-                <strong
-                  className={cn(
-                    'mt-3 block text-[1.7rem] font-bold tracking-[-0.045em] text-[#0F2854]',
-                    isLoading && 'animate-pulse text-[#a8b4c4] motion-reduce:animate-none',
-                  )}
-                >
-                  {isLoading ? '—' : String(value).padStart(2, '0')}
-                </strong>
-              </div>
-              <span className={cn('flex size-9 items-center justify-center rounded-xl', tone)}>
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
+      <section aria-label="Tóm tắt giảng dạy" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map(({ label, value, helper, icon: Icon, iconClassName, cardClassName }) => (
+          <article key={label} className={cn('flex items-center gap-4 rounded-2xl border px-4 py-4', cardClassName)}>
+            <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-2xl', iconClassName)}>
+              <Icon className="size-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">{label}</p>
+              <strong className={cn('mt-0.5 block text-[1.65rem] leading-none font-black tracking-[-0.04em] text-[#0F2854]', isLoading && 'animate-pulse motion-reduce:animate-none')}>
+                {isLoading ? '…' : String(value).padStart(2, '0')}
+              </strong>
+              <p className="mt-1 truncate text-xs font-semibold text-[#5b6b84]">{helper}</p>
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-[#5b6b84]">{helper}</p>
           </article>
         ))}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.28fr)_minmax(300px,0.72fr)]">
-        <article className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_8px_30px_rgba(31,61,105,0.05)]">
-          <div className="flex items-center justify-between border-b border-[#e8edf4] px-5 py-4">
-            <div>
-              <p className="text-xs font-bold tracking-[0.09em] text-[#56759d] uppercase">
-                Không gian nghiệp vụ
-              </p>
-              <h2 className="mt-1 text-base font-bold text-[#0F2854] sm:text-lg">Công việc của giảng viên</h2>
+      <section className={ds.section}>
+        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}>
+          <div className={ds.sectionHeading}>
+            <div className={ds.sectionTitleRow}>
+              <span className={ds.sectionIconWrap}>
+                <GraduationCap className={ds.sectionIcon} aria-hidden="true" />
+              </span>
+              <h2 className={ds.sectionTitle}>Môn được phân công</h2>
+              <span className={ds.sectionBadge}>
+                {isLoading ? '…' : `${assignedCourses.length} môn`}
+              </span>
             </div>
-            <span className="rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-xs font-bold text-[#3562c8]">
-              2 Main Flows
+            <p className={ds.sectionHint}>
+              Môn được phân công trong {semester?.name || semesterCode || 'kỳ hiện tại'}
+            </p>
+          </div>
+          <Link to="/lecturer/classes" className={ds.outlineButton}>
+            Quản lý lớp
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+        <div className={ds.sectionBody}>
+          {isLoading ? (
+            <p className="text-sm font-semibold text-[#5b6b84]">Đang tải môn được phân công...</p>
+          ) : assignedCourses.length === 0 ? (
+            <EmptyState
+              icon={GraduationCap}
+              title="Chưa có môn được phân công"
+              description={`Chưa có môn trong kỳ ${semesterCode || 'hiện tại'}. Liên hệ Trưởng Bộ môn nếu thiếu phân công.`}
+            />
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+              {assignedCourses.map((course) => {
+                const courseClasses = classes.filter((item) => item.courseCode === course.courseCode)
+                const studentCount = courseClasses.reduce((total, item) => total + item.enrolledCount, 0)
+                return (
+                  <li
+                    key={course.courseOfferingId}
+                    className={cn(
+                      'group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 transition duration-200',
+                      'bg-[linear-gradient(180deg,#EAF5FB_0%,#F8FBFD_22%,#FFFFFF_48%,#FFFFFF_100%)]',
+                      'hover:-translate-y-0.5 hover:border-[#4988C4] hover:bg-[linear-gradient(180deg,#DCEFFA_0%,#F4FBFD_24%,#F8FBFD_52%,#F8FBFD_100%)] hover:shadow-[0_14px_28px_rgba(15,40,84,0.16)]',
+                      ds.panelShadow,
+                    )}
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-x-0 top-0 h-14 overflow-hidden rounded-t-[21px]"
+                      aria-hidden="true"
+                    >
+                      <div className="absolute inset-x-6 top-0 h-10 bg-[radial-gradient(ellipse_at_top,rgba(73,136,196,0.18)_0%,rgba(189,232,245,0.12)_42%,transparent_72%)]" />
+                      <div className={ds.softCardAccentLine} />
+                    </div>
+                    <div className="relative flex h-full flex-1 flex-col p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={cn(
+                            'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
+                            courseCodeTone(course.courseCode),
+                          )}
+                        >
+                          {course.courseCode}
+                        </span>
+                        <span className={ds.infoChip}>{course.semesterCode}</span>
+                      </div>
+                      <h3 className="mt-3 line-clamp-2 text-base leading-snug font-bold text-[#0F2854] sm:text-[17px]">
+                        {course.courseName}
+                      </h3>
+                      <p className="mt-1.5 line-clamp-2 text-xs font-semibold text-[#5b6b84]">
+                        {courseClasses.length > 0
+                          ? courseClasses
+                              .map((item) => item.code || item.name)
+                              .filter(Boolean)
+                              .join(' · ')
+                          : 'Chưa mở lớp'}
+                      </p>
+                      <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                        <span className={ds.infoChip}>
+                          <UsersRound className="size-3.5" aria-hidden="true" />
+                          {courseClasses.length} lớp
+                        </span>
+                        <span className={ds.infoChip}>
+                          <Users className="size-3.5" aria-hidden="true" />
+                          {studentCount} sinh viên
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section aria-label="Lối tắt" className="grid gap-3 sm:grid-cols-3">
+        <Link to="/lecturer/classes" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#74a3d3]/55 bg-[linear-gradient(145deg,#f7fbfe_0%,#d7ebf8_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
+          <span className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#1C4D8D] text-white">
+              <UsersRound className="size-4" aria-hidden="true" />
             </span>
-          </div>
-
-          <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
-            <Link
-              to="/question-bank"
-              className="group rounded-2xl border border-[#4988C4]/45 bg-[#fbfcff] p-4 transition hover:-translate-y-0.5 hover:border-[#afc5ec] hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
-                  <BookOpenCheck className="size-[18px]" aria-hidden="true" />
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 font-mono text-xs font-bold text-[#50709a] shadow-sm">
-                  MF-03
-                </span>
-              </div>
-              <h3 className="mt-4 text-sm font-bold text-[#0F2854]">Ngân hàng đề & Rubric</h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-[#6d7d92]">
-                Tạo thủ công hoặc dùng AI/FLM, chuẩn hóa Rubric 10.0 và gửi Trưởng Bộ môn phê duyệt.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#1C4D8D]">
-                Mở ngân hàng đề
-                <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-
-            <Link
-              to="/lecturer/audit"
-              className="group rounded-2xl border border-[#4988C4]/45 bg-[#fbfcff] p-4 transition hover:-translate-y-0.5 hover:border-[#c2b9ee] hover:bg-[#faf8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#6458cf]">
-                  <ClipboardCheck className="size-[18px]" aria-hidden="true" />
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 font-mono text-xs font-bold text-[#6b5fa5] shadow-sm">
-                  MF-04
-                </span>
-              </div>
-              <h3 className="mt-4 text-sm font-bold text-[#0F2854]">Hậu kiểm & công bố điểm</h3>
-              <p className="mt-1.5 text-xs leading-relaxed text-[#6d7d92]">
-                Ưu tiên bài nghi ngờ, đối chiếu audio và transcript trước khi công bố điểm toàn ca.
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#5c55c5]">
-                Mở cổng hậu kiểm
-                <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-          </div>
-        </article>
-
-        <aside className="rounded-2xl border border-[#4988C4]/45 bg-[#0b1d38] p-5 text-white shadow-[0_14px_36px_rgba(9,30,62,0.16)]">
-          <div className="flex items-center gap-2 text-xs font-bold tracking-[0.08em] text-[#80e4ee] uppercase">
-            <ShieldCheck className="size-4" aria-hidden="true" />
-            Cổng kiểm soát
-          </div>
-          <h2 className="mt-3 text-base font-bold tracking-[-0.025em] sm:text-lg">Trước khi công bố điểm</h2>
-          <ol className="mt-4 space-y-3">
-            {[
-              'Rà soát toàn bộ bài được đánh dấu nghi ngờ hoặc confidence dưới 0.70.',
-              'Đối chiếu Audio R2, transcript Whisper và bằng chứng chấm theo rubric.',
-              'Chỉ công bố khi 100% thí sinh đã có điểm hoàn chỉnh.',
-            ].map((item, index) => (
-              <li key={item} className="flex gap-3 text-xs leading-relaxed text-[#c2d0e4]">
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-[#3f5b80] bg-[#112b4d] font-mono text-xs font-bold text-[#74dce8]">
-                  {index + 1}
-                </span>
-                {item}
-              </li>
-            ))}
-          </ol>
-          <p className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-[#93a9c5]">
-            Sau khi công bố, One-Way Lock chặn mọi thao tác cập nhật hoặc xóa điểm.
-          </p>
-        </aside>
+            <span>
+              <span className="block text-sm font-bold text-[#0F2854]">Lớp của tôi</span>
+              <span className="mt-0.5 block text-xs text-[#5b6b84]">Mở lớp và sĩ số</span>
+            </span>
+          </span>
+          <ChevronRight className="size-4 text-[#1C4D8D] transition group-hover:translate-x-0.5" />
+        </Link>
+        <Link to="/question-bank" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#b29ce6]/55 bg-[linear-gradient(145deg,#faf7fe_0%,#e7defb_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
+          <span className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#6d4cc4] text-white">
+              <BookOpenCheck className="size-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi luyện tập</span>
+              <span className="mt-0.5 block text-xs text-[#5b6b84]">Soạn câu và gửi duyệt</span>
+            </span>
+          </span>
+          <ChevronRight className="size-4 text-[#6d4cc4] transition group-hover:translate-x-0.5" />
+        </Link>
+        <Link to="/in-class-shifts" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#67c09b]/55 bg-[linear-gradient(145deg,#f4fbf8_0%,#d7f3e6_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
+          <span className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[#16836a] text-white">
+              <CalendarDays className="size-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block text-sm font-bold text-[#0F2854]">Ca kiểm tra</span>
+              <span className="mt-0.5 block text-xs text-[#5b6b84]">Tạo ca và chiếu mã</span>
+            </span>
+          </span>
+          <ChevronRight className="size-4 text-[#16836a] transition group-hover:translate-x-0.5" />
+        </Link>
       </section>
     </div>
   )

@@ -4,7 +4,7 @@ This standalone Section 3 working document follows the approved 71-rule Section 
 
 ## 3.1 System Functional Overview
 
-The system supports university-provisioned access across six distinct RBAC roles: Student, Admin, Lecturer, Department Head, Examination Officer, and Proctor. Student functions cover interactive practice, timed mock exams, in-class oral shifts with rotating 5-minute passwords, official kiosk exams, and post-publication appeals. Admin manages accounts, the 4-tier academic hierarchy (semesters, courses, and Department Head assignments), mock exam quotas, global practice configurations, and Dead-Letter Queue (DLQ) recovery for practice and mock exam flows. Lecturer manages assigned classes and in-class exam shifts, authors dual-track questions (practice/mock questions from CLOs vs. official exam questions aligned with Department Head structures) with 10.0-point Rubrics, audits official exam submissions via the Evidence Panel, and performs independent appeal regrades. Department Head assigns Lecturers to courses, manages 3NF course CLOs and exam structures, approves questions and official exam sets, exclusively configures official exam follow-up rules (1–5 questions, default 2), assigns appeal regrades, and approves final appeal decisions (without intervening in DLQ operations). Examination Officer organizes official exam sessions and shifts, assigns non-duplicate exam sets, publishes shifts, publishes final grades under a One-Way Lock, exports digitally signed Excel/PDF reports, screens student appeal requests before forwarding to the Department Head, and supervises DLQ recovery for official exams. Proctor strictly performs seat check-in (seats 1–40 with student ID/national ID verification) and logs anti-cheat security violations during lab shifts.
+The system supports university-provisioned access across six distinct RBAC roles: Student, Admin, Lecturer, Department Head, Examination Officer, and Proctor. Student functions cover interactive practice, timed mock exams, in-class oral shifts with rotating 5-minute passwords (auto-drawing $N$ anti-collision questions from the approved question pool, answering main and optional follow-up questions, and receiving parallel real-time published scores), official kiosk exams, and post-publication appeals. Admin manages accounts, the 4-tier academic hierarchy (semesters, courses, and Department Head assignments), mock exam quotas, global practice configurations, and Dead-Letter Queue (DLQ) recovery for practice and mock exam flows. Lecturer manages assigned classes and in-class exam shifts (configuring shift name, question pool mode `ALL_COURSE_BANK` or `SELECTED_POOL`, total questions per student 1–10, follow-up toggle `has_follow_up` with 1–5 follow-up questions, 5-minute rotating OTP with 60s grace period, parallel x12 background grading with real-time parallel grade publishing, and final One-Way Lock grade finalization), authors dual-track questions (practice/mock questions from CLOs vs. official exam questions aligned with Department Head structures) with 10.0-point Rubrics, audits official exam submissions via the Evidence Panel, and performs independent appeal regrades. Department Head assigns Lecturers to courses, manages 3NF course CLOs and exam structures, approves questions and official exam sets, exclusively configures official exam follow-up rules (1–5 questions, default 2), and receives in-app notifications on student appeals to monitor academic quality (without intervening in DLQ operations or directly assigning/approving appeals). Examination Officer organizes official exam sessions and shifts (simultaneously assigning both the Examiner Lecturer and Proctor), assigns non-duplicate exam sets, publishes shifts, publishes final grades under a One-Way Lock, exports digitally signed Excel/PDF reports, receives and validates student appeal requests, assigns independent Lecturers for appeal regrades (capped at $\le 24$ submissions per Lecturer, excluding the original shift Examiner), approves or rejects final appeal decisions to unlock and update official grades, and supervises DLQ recovery for official exams. Proctor strictly performs seat check-in (seats 1–40 with student ID/national ID verification) and logs anti-cheat security violations during lab shifts.
 
 ## Common Functions (separate from Section 3.1)
 
@@ -334,7 +334,7 @@ User in this section means Student. Proctor functions appear at the end of this 
 
 ### 3.2.32 Create Appeal
 
-**Function Description:** On the student portal, the student submits an appeal for a published grade. The appeal is sent to the Department Head. The kiosk has no appeal action.
+**Function Description:** On the student portal, the student submits an appeal for a published grade. The appeal is sent to the Examination Officer (with an in-app notification also delivered to the Department Head for academic quality monitoring). The kiosk has no appeal action.
 
 **Function Trigger:** The student submits an appeal for a published grade on the student portal.
 
@@ -925,7 +925,7 @@ Lecturer is the report name. The database value is `lecturer`. The web client sh
 
 ### 3.3.46 Lock Grade
 
-**Function Description:** A published grade is protected from ordinary edits. An appeal assigned by the Department Head enables the assigned Lecturer to submit an independent regrade through the appeal workflow; the published grade is not replaced until Department Head verification.
+**Function Description:** A published grade is protected from ordinary edits. An appeal assigned by the Examination Officer enables the assigned Lecturer (capped at $\le 24$ submissions per Lecturer, excluding the original shift Examiner) to submit an independent regrade through the appeal workflow; the published grade is not replaced until Examination Officer final decision approval.
 
 **Function Trigger:** A grade has just been published.
 
@@ -933,15 +933,15 @@ Lecturer is the report name. The database value is `lecturer`. The web client sh
 
 ### 3.3.47 Assign Appeal
 
-**Function Description:** The Department Head receives a Student appeal and assigns it to a Lecturer other than the Lecturer who verified the original official-exam grade. The assigned Lecturer is responsible for an independent regrade.
+**Function Description:** The Examination Officer receives a Student appeal and assigns it to an independent Lecturer other than the Lecturer who verified the original official-exam grade (`regrade_lecturer_id != shift.examiner_user_id`), subject to a standard cap of $\le 24$ submissions per Lecturer (if total appeals $N > \text{Lecturers} \times 24$, distributed evenly; if $N \le \text{Lecturers} \times 24$, capped at 24 per Lecturer with manual load adjustment so no Lecturer is assigned too few leftover submissions). The assigned Lecturer is responsible for an independent regrade.
 
-**Function Trigger:** The Department Head opens a received Student appeal and assigns a Lecturer to regrade it.
+**Function Trigger:** The Examination Officer opens received Student appeals and assigns a Lecturer (individually or via auto-proposed batch allocation) to regrade them.
 
 **Business Rules:** BR-34, BR-71
 
 ### 3.3.48 Regrade Appeal
 
-**Function Description:** The Lecturer assigned by the Department Head reviews the original LLM grading result (score, evaluation and supporting evidence), as well as the first Lecturer’s verification where available. The assigned Lecturer then independently evaluates and regrades the submission. The result is forwarded for Department Head verification; it is not published as final directly by the regrading Lecturer.
+**Function Description:** The Lecturer assigned by the Examination Officer reviews the original LLM grading result (score, evaluation and supporting evidence), as well as the first Lecturer’s verification where available. The assigned Lecturer then independently evaluates and regrades the submission. The result is forwarded to the Examination Officer for final decision approval; it is not published as final directly by the regrading Lecturer.
 
 **Function Trigger:** The Lecturer assigned to an appeal submits the new grade.
 
@@ -949,25 +949,25 @@ Lecturer is the report name. The database value is `lecturer`. The web client sh
 
 ### 3.3.49 Export Grade To Excel
 
-**Function Description:** The Lecturer exports the shift grade report as an Excel file in the FPT examination-office layout.
+**Function Description:** The Examination Officer or Lecturer exports the shift grade report as an Excel file in the FPT examination-office layout.
 
-**Function Trigger:** The Lecturer exports a shift grade report to Excel.
+**Function Trigger:** The Examination Officer or Lecturer exports a shift grade report to Excel.
 
 **Business Rules:** BR-35
 
 ### 3.3.50 Export Grade To PDF
 
-**Function Description:** The Lecturer exports the shift grade report as a PDF with a digital signature.
+**Function Description:** The Examination Officer or Lecturer exports the shift grade report as a PDF with a digital signature.
 
-**Function Trigger:** The Lecturer exports a shift grade report to PDF.
+**Function Trigger:** The Examination Officer or Lecturer exports a shift grade report to PDF.
 
 **Business Rules:** BR-35
 
 ### 3.3.51 Get Appeals
 
-**Function Description:** Department Head sees the appeals to assign. The assigned Lecturer sees the appeals assigned to that Lecturer.
+**Function Description:** Examination Officer sees the appeals to validate, assign, and approve. Department Head receives notifications to monitor academic quality. The assigned Lecturer sees the appeals assigned to that Lecturer.
 
-**Function Trigger:** The Department Head or an assigned Lecturer opens the appeal list.
+**Function Trigger:** The Examination Officer, Department Head, or an assigned Lecturer opens the appeal list.
 
 **Business Rules:** BR-34
 
@@ -1043,18 +1043,18 @@ Lecturer is the report name. The database value is `lecturer`. The web client sh
 
 ### 3.3.60 Verify Appeal Regrade
 
-**Function Description:** The Department Head reviews the independent regrade submitted by a Lecturer other than the original verifier. Department Head verification is required before the appeal outcome can be published as the official result. Department Head subsequently performs the separate Publish Appeal Result action.
+**Function Description:** The Examination Officer reviews the independent regrade submitted by a Lecturer other than the original verifier. Examination Officer verification and approval are required before the appeal outcome can be published as the official result.
 
-**Function Trigger:** The Department Head opens a completed appeal regrade and confirms the reviewed outcome.
+**Function Trigger:** The Examination Officer opens a completed appeal regrade and confirms the reviewed outcome.
 
 **Business Rules:** BR-34, BR-71
 
 
 ### 3.3.61 Publish Appeal Result
 
-**Function Description:** Department Head publishes the official appeal result only after reviewing and verifying the independently regraded result. The assigned Lecturer cannot publish an appeal result.
+**Function Description:** Examination Officer approves/rejects the final appeal decision (`APPROVED` / `REJECTED`) after reviewing and verifying the independently regraded result, opening the sole `OneWayLockInterceptor` exception to update the official grade. The assigned Lecturer cannot publish an appeal result.
 
-**Function Trigger:** Department Head selects Publish for an appeal whose independent regrade has been verified by Department Head.
+**Function Trigger:** Examination Officer approves or rejects the final decision for an appeal whose independent regrade has been completed.
 
 **Business Rules:** BR-34, BR-71
 
@@ -1066,7 +1066,7 @@ The following table is the approved consolidated baseline. IDs in the function s
 
 | ID | Rule Definition |
 |:---:|---|
-| BR-01 | Accounts for all five roles are provisioned or authorized by the university. Students are issued username/password credentials; Google sign-in is permitted only for accounts whose email identity has been provisioned/authorized. No unknown Google email automatically creates a Student account. |
+| BR-01 | Accounts for all six roles (Student, Admin, Lecturer, Department Head, Examination Officer, and Proctor) are provisioned or authorized by the university. Students are issued username/password credentials; Google sign-in is permitted only for accounts whose email identity has been provisioned/authorized. No unknown Google email automatically creates a Student account. |
 | BR-02 | An account’s role is determined from the stored account record. The system does not offer public self-registration or permit the client to select its own role. |
 | BR-03 | Người dùng có tài khoản do nhà trường cấp chỉ được đổi mật khẩu mới sau khi xác nhận đúng mật khẩu hiện tại. |
 | BR-04 | Chỉ Admin mới có quyền đổi vai trò hoặc khóa tài khoản, và không thể tự khóa tài khoản của chính mình. |
@@ -1088,7 +1088,7 @@ The following table is the approved consolidated baseline. IDs in the function s
 | BR-20 | Tổng trọng số các tiêu chí trong barem của một câu hỏi phải bằng chính xác 10.0 điểm. |
 | BR-21 | Câu hỏi do Giảng viên tạo khởi đầu ở trạng thái nháp và phải gửi Trưởng Bộ môn phê duyệt. |
 | BR-22 | Chỉ Trưởng Bộ môn mới có quyền phê duyệt, yêu cầu chỉnh sửa hoặc từ chối câu hỏi. |
-| BR-23 | Only Department Head can create official examination events, lab shifts, and official exam rules. A Lecturer may manage, conduct, and grade only assigned examinations within the permissions of the assigned role. |
+| BR-23 | Examination Officer creates official examination events and lab shifts (simultaneously assigning both the Examiner Lecturer and Proctor). Department Head exclusively configures official exam follow-up rules (1–5 questions, default 2). A Lecturer may manage, conduct, and grade only assigned examinations within the permissions of the assigned role. |
 | BR-24 | Mỗi thí sinh được xếp một số ghế (1–40) gắn với IP máy trạm phòng Lab và phải được Giám thị điểm danh. |
 | BR-25 | Vé thi chính thức chuyển tuần tự qua 7 trạng thái: SCHEDULED, IN_PROGRESS, SUBMITTED, AI_GRADED, AUDITED, PUBLISHED, và LOCKED. |
 | BR-26 | Thí sinh phải vượt qua bước kiểm tra micro 30 giây đạt tối thiểu 60 dB trước khi vào phòng thi Kiosk. |
@@ -1097,17 +1097,17 @@ The following table is the approved consolidated baseline. IDs in the function s
 | BR-29 | Máy trạm Kiosk khóa màn hình ngay sau khi nộp bài và tuyệt đối không hiển thị điểm liền hay khiếu nại tại chỗ. |
 | BR-30 | Bài thi chính thức chấm AI xong được chia thành Nhóm 1 (nghi ngờ hoặc độ tin cậy dưới 0.70) và Nhóm 2 (tin cậy cao) để hậu kiểm. |
 | BR-31 | Giảng viên bắt buộc nhập lý do giải trình mỗi khi chỉnh sửa điểm do AI chấm. |
-| BR-32 | A Lecturer may publish initial official-exam shift grades only after Lecturer verification of 100% of submitted exams in that shift. This rule does not authorize publication of an appeal result. |
+| BR-32 | Examination Officer or Lecturer may publish initial official-exam shift grades only after Lecturer verification of 100% of submitted exams in that shift. This rule does not authorize publication of an appeal result. |
 | BR-33 | Công bố điểm ca thi sẽ kích hoạt khóa một chiều, chặn mọi thao tác sửa hoặc xóa điểm trái phép. |
-| BR-34 | A Student submits an appeal to Department Head, who must assign a Lecturer different from the original grade verifier. The assigned Lecturer independently regrades after reviewing the LLM score, comments, and any original Lecturer verification. Department Head then verifies the appeal outcome and personally publishes the official appeal result. |
+| BR-34 | A Student submits an appeal to Examination Officer (with in-app notification to Department Head for academic quality monitoring). Examination Officer assigns an independent Lecturer different from the original grade verifier (capped at $\le 24$ submissions per Lecturer; distributed evenly if total appeals exceed $\text{Lecturers} \times 24$, or load-balanced with manual adjustment otherwise). The assigned Lecturer independently regrades after reviewing the LLM score, comments, and original Lecturer verification. Examination Officer then verifies and approves/rejects the final appeal outcome, unlocking the One-Way Lock to update the official grade. |
 | BR-35 | Bảng điểm xuất ra Excel và PDF có chữ ký số luôn kèm mã băm công khai để xác thực tính toàn vẹn. |
 | BR-36 | Học kỳ phải có ngày bắt đầu/kết thúc hợp lệ và chỉ được Admin cập nhật, tuyệt đối không được xóa. |
-| BR-37 | Admin and Department Head may create and edit OES course-management details. Admin configures course-specific daily mock quotas. Lecturer may not create or edit courses. Only Department Head configures official exam rules, shifts, and mock-paper structure, Bloom distribution, and duration. |
+| BR-37 | Admin and Department Head may create and edit OES course-management details. Admin configures course-specific daily mock quotas. Lecturer may not create or edit courses. Department Head configures official exam follow-up rules, mock-paper structure, Bloom distribution, and duration; Examination Officer configures official exam sessions and lab shifts. |
 | BR-38 | Mỗi sinh viên chỉ được ghi danh vào tối đa một lớp học phần của cùng một môn trong một học kỳ. |
 | BR-39 | Admin configures global practice parameters, including follow-up count (1–5; default 2), full-session question count (3–10), transcript buffer (10–300 seconds; default 60 seconds), and inactivity timeout (default 5 minutes). |
 | BR-40 | Tham số luyện tập mới chỉ áp dụng cho các phiên tạo mới và không ảnh hưởng tới phiên đang diễn ra. |
 | BR-41 | Nếu việc chấm AI tự động thất bại sau 3 lần thử, bài nộp của sinh viên vẫn được giữ nguyên và chuyển vào hàng đợi lỗi (DLQ) để xử lý chấm bù. |
-| BR-42 | After grading fails three attempts, the stored submission remains recoverable in the DLQ. An automatic retry is scheduled after 5 minutes; Department Head may also initiate manual replay. |
+| BR-42 | After grading fails three attempts, the stored submission remains recoverable in the DLQ. An automatic retry is scheduled after 5 minutes; Admin (for practice/mock exams) and Examination Officer (for official exams) may also initiate manual replay. |
 | BR-43 | Việc chạy lại tác vụ từ DLQ sẽ không ghi đè nếu bài thi đó đã được chấm điểm thành công. |
 | BR-44 | Mọi thao tác nhạy cảm (đăng nhập, đổi vai trò, sửa điểm, công bố điểm, đổi cấu hình) đều được ghi vào nhật ký kiểm toán. |
 | BR-45 | Nhật ký kiểm toán chỉ được phép đọc, không một ai kể cả Admin được quyền sửa hoặc xóa. |
@@ -1136,4 +1136,4 @@ The following table is the approved consolidated baseline. IDs in the function s
 | BR-68 | Department Head inherits Lecturer permissions, except where a specific function is restricted by a higher-priority explicit role rule; Lecturer has no course create/edit permission. |
 | BR-69 | Authorized Lecturer and Department Head users may create and update classes for their permitted courses and semesters. |
 | BR-70 | Authorized Lecturer and Department Head users may maintain enrollment rosters of classes within their scope. |
-| BR-71 | An appeal outcome may be officially published only by Department Head after Department Head verification of the independent regrade. |
+| BR-71 | An appeal outcome may be officially published only by Examination Officer after Examination Officer verification and approval of the independent regrade. |

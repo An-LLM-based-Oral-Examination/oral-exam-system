@@ -1,6 +1,6 @@
 /** MF-05 / R6 — Ca thi vấn đáp trên lớp (điểm thành phần). */
 
-export type InClassShiftStatus = 'ACTIVE' | 'CLOSED' | 'FINALIZED'
+export type InClassShiftStatus = 'SCHEDULED' | 'ACTIVE' | 'CLOSED' | 'FINALIZED'
 
 export type InClassSubmissionStatus =
   | 'JOINED'
@@ -12,6 +12,7 @@ export type InClassSubmissionStatus =
 export interface LecturerClassOption {
   id: string
   name: string
+  courseId?: string
   courseCode: string
   courseName: string
   studentCount?: number
@@ -23,26 +24,41 @@ export interface InClassShift {
   className: string
   courseCode: string
   title: string
+  description: string
   status: InClassShiftStatus
+  startTime: string
   durationMinutes: number
+  examDurationMinutes: number | null
   questionCount: number
   hasFollowUp: boolean
+  maxFollowUpQuestions: number
+  questionPoolMode: InClassQuestionPoolMode
   passwordRotationSeconds: number
   gracePeriodSeconds: number
   joinedCount: number
   submittedCount: number
   createdAt: string
   finalizedAt?: string | null
+  endTime?: string | null
+  /** Trạng thái tham gia của SV hiện tại: JOINED | IN_PROGRESS | SUBMITTED | ... */
+  myParticipationStatus?: string | null
 }
+
+export type InClassQuestionPoolMode = 'ALL_COURSE_BANK' | 'SELECTED_POOL'
 
 export interface CreateInClassShiftRequest {
   classId: string
-  title: string
-  durationMinutes: number
-  questionCount: number
+  shiftName: string
+  startTime: string
+  endTime: string
+  description?: string
+  questionPoolMode: InClassQuestionPoolMode
+  selectedQuestionIds?: string[]
+  totalQuestionsPerStudent: number
   hasFollowUp: boolean
-  passwordRotationSeconds: number
-  gracePeriodSeconds: number
+  maxFollowUpQuestions: number
+  isAutoPublishGrades: boolean
+  examDurationMinutes: number
 }
 
 export interface ActiveTotpPassword {
@@ -80,6 +96,7 @@ export interface InClassSubmission {
   shiftId: string
   studentId: string
   studentCode: string
+  studentEmail?: string | null
   studentName: string
   status: InClassSubmissionStatus
   aiScore: number | null
@@ -100,7 +117,26 @@ export interface GradeInClassSubmissionRequest {
 
 export interface GradeInClassAnswerRequest {
   lecturerScore: number
-  lecturerComment: string
+  lecturerComment?: string
+}
+
+export interface StudentExamQuestion {
+  questionId: string
+  title: string
+  content: string
+}
+
+export interface StudentExamResult {
+  submissionId: string
+  questionId: string
+  title: string
+  content: string
+  transcript: string
+  aiScore: number | null
+  aiFeedback: string | null
+  finalScore: number | null
+  lecturerNotes: string | null
+  status: string
 }
 
 export interface FinalizeInClassGradesResponse {

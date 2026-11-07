@@ -31,6 +31,38 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head" && lecturer.Role != "admin"))
             return Result<Guid>.Failure("Người dùng không có quyền biên soạn câu hỏi.");
 
+        if (lecturer.Role == "lecturer")
+        {
+            bool courseHasLecturerAssignments = await _context.CourseLecturers
+                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive, cancellationToken);
+
+            if (courseHasLecturerAssignments)
+            {
+                bool isAssigned = await _context.CourseLecturers
+                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturer.Id && cl.IsActive, cancellationToken)
+                    || await _context.Classes
+                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == lecturer.Id && c.IsActive, cancellationToken);
+
+                if (!isAssigned)
+                {
+                    return Result<Guid>.Failure("Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+                }
+            }
+        }
+        else if (lecturer.Role == "department_head")
+        {
+            var deptHeadId = await _context.Courses
+                .AsNoTracking()
+                .Where(c => c.Id == request.CourseId)
+                .Select(c => c.DepartmentHeadUserId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (deptHeadId.HasValue && deptHeadId.Value != Guid.Empty && deptHeadId.Value != lecturer.Id)
+            {
+                return Result<Guid>.Failure("Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+            }
+        }
+
         var normalizedSource = (request.Source ?? "manual").Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(request.ImageUrl) && normalizedSource != "manual")
         {

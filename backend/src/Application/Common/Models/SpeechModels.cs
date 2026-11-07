@@ -334,7 +334,7 @@ public static class TranscriptHelper
 
         var activeSegments = VerifiedServerTranscripts
             .Where(kvp => now - kvp.Value <= VerifiedTranscriptTtl &&
-                          kvp.Key.Length >= 4 &&
+                          kvp.Key.Length >= 20 && kvp.Key.Length >= (int)Math.Ceiling(normalized.Length * 0.85) &&
                           normalized.Contains(kvp.Key, StringComparison.Ordinal))
             .Select(kvp => kvp.Key)
             .OrderByDescending(k => k.Length)

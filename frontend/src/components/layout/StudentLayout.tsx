@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { resetBodyScrollLock } from '@/design/bodyScrollLock'
 import { StudentHeader } from './StudentHeader'
 import { StudentSidebar } from './StudentSidebar'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,10 @@ import { cn } from '@/lib/utils'
 export function StudentLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    resetBodyScrollLock()
+  }, [])
 
   return (
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Entities;
@@ -29,18 +30,23 @@ public sealed class MarkAllNotificationsReadCommandHandler
             return Result<bool>.Failure("VALIDATION: UserId không được để trống.");
         }
 
-        _context.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            UserId = request.UserId,
-            Action = "NOTIFICATION_READ_ALL",
-            EntityName = "notifications",
-            EntityId = request.UserId,
-            NewValues = "all_read=true",
-            CreatedAt = DateTime.UtcNow
-        });
+        var unreadNotifications = await _context.Notifications
+            .Where(n => n.UserId == request.UserId && !n.IsRead)
+            .ToListAsync(cancellationToken);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        if (unreadNotifications.Count > 0)
+        {
+            var now = DateTime.UtcNow;
+            foreach (var notification in unreadNotifications)
+            {
+                notification.IsRead = true;
+                notification.ReadAt = now;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
         return Result<bool>.Success(true);
     }
 }
+

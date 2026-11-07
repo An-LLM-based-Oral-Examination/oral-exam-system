@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   AlertCircle,
+  Clock3,
+  KeyRound,
   LoaderCircle,
+  Presentation,
   RefreshCw,
   Shield,
+  UsersRound,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
+import { overlay } from '@/design/system'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { ActiveTotpPassword, InClassShift } from '@/types/inClassShift.types'
 
@@ -19,6 +25,7 @@ function getErrorMessage(error: unknown) {
   return 'Không thể tải mã OTP.'
 }
 
+/** Popup chiếu mã OTP cho sinh viên vào ca. */
 export function InClassShiftProjectorDialog({
   open,
   shiftId,
@@ -41,6 +48,7 @@ export function InClassShiftProjectorDialog({
       setOtp(password)
       setError('')
     } catch (loadError) {
+      setOtp(null)
       setError(getErrorMessage(loadError))
     }
   }, [shiftId])
@@ -75,14 +83,13 @@ export function InClassShiftProjectorDialog({
 
   useEffect(() => {
     if (!open) return
-    const previous = document.body.style.overflow
+    const unlock = lockBodyScroll()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
-    document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
     return () => {
-      document.body.style.overflow = previous
+      unlock()
       window.removeEventListener('keydown', onKey)
     }
   }, [open, onClose])
@@ -110,7 +117,7 @@ export function InClassShiftProjectorDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[#0F2854]/55 p-0 backdrop-blur-[3px] sm:items-center sm:p-5"
+      className={cn(overlay.scrim, overlay.z.modal, 'bg-[#0F2854]/55')}
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose()
@@ -120,30 +127,48 @@ export function InClassShiftProjectorDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Chiếu mã OTP ca thi"
-        className="flex max-h-[min(92dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[#4988C4]/45 bg-[linear-gradient(160deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white shadow-[0_28px_80px_rgba(15,40,84,0.35)] sm:rounded-3xl"
+        className="flex max-h-[min(92dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[#82aedb]/55 bg-[linear-gradient(160deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white shadow-[0_28px_80px_rgba(15,40,84,0.35)] sm:rounded-3xl"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-white/15 px-5 py-4 sm:px-6">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold tracking-[0.12em] text-[#BDE8F5] uppercase">
-              MF-05 · Chiếu mã vào lớp
-            </p>
-            <h2 className="mt-1 truncate text-lg font-bold tracking-[-0.02em]">
-              {shift?.title ?? 'Ca thi trên lớp'}
-            </h2>
-            <p className="mt-0.5 text-xs text-white/70">
-              {shift
-                ? `${shift.className} · ${shift.courseCode} · xoay mỗi ${Math.round(rotationTotal / 60)} phút`
-                : 'Đang tải...'}
-            </p>
+        <header className="shrink-0 border-b border-white/15 px-5 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+                <Presentation className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold tracking-[0.1em] text-[#BDE8F5] uppercase">
+                  Chiếu mã vào lớp
+                </p>
+                <h2 className="mt-0.5 truncate text-xl font-bold tracking-[-0.03em]">
+                  {shift?.title ?? 'Ca thi trên lớp'}
+                </h2>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Đóng"
+              onClick={onClose}
+              className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/10 text-white transition hover:bg-white/20"
+            >
+              <X className="size-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            aria-label="Đóng"
-            onClick={onClose}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/10 text-white transition hover:bg-white/20"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90">
+              <UsersRound className="size-3.5 shrink-0 text-[#BDE8F5]" aria-hidden="true" />
+              <span className="truncate">
+                {shift ? `${shift.className}${shift.courseCode ? ` · ${shift.courseCode}` : ''}` : 'Đang tải lớp...'}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90">
+              <Clock3 className="size-3.5 shrink-0 text-[#BDE8F5]" aria-hidden="true" />
+              Xoay mỗi {Math.round(rotationTotal / 60)} phút
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90">
+              <KeyRound className="size-3.5 shrink-0 text-[#BDE8F5]" aria-hidden="true" />
+              6 ký tự
+            </span>
+          </div>
         </header>
 
         <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-8 sm:px-8 sm:py-10">
@@ -225,20 +250,11 @@ export function InClassShiftProjectorDialog({
           )}
         </div>
 
-        <footer className="flex flex-col gap-2 border-t border-white/15 bg-black/15 px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
-          <button
-            type="button"
-            onClick={() => void refreshPassword()}
-            disabled={loading}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-bold text-white transition hover:bg-white/18 disabled:opacity-50"
-          >
-            <RefreshCw className="size-3.5" />
-            Làm mới mã
-          </button>
+        <footer className="flex justify-end border-t border-white/15 bg-black/15 px-5 py-3 sm:px-6">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#0F2854] transition hover:bg-[#BDE8F5]"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#0F2854] transition duration-200 hover:-translate-y-0.5 hover:bg-[#BDE8F5] motion-reduce:transform-none"
           >
             Đóng
           </button>

@@ -16,10 +16,13 @@ interface NavbarProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard': { label: 'Tổng quan', icon: LayoutDashboard },
+  '/lecturer/classes': { label: 'Lớp của tôi', icon: UsersRound },
   '/question-bank': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/question-bank/create': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
-  '/in-class-shifts': { label: 'Ca thi trên lớp', icon: UsersRound },
-  '/lecturer/audit': { label: 'Hậu kiểm & công bố điểm', icon: ClipboardCheck },
+  '/in-class-shifts': { label: 'Ca kiểm tra', icon: UsersRound },
+  '/lecturer/audit': { label: 'Hậu kiểm điểm', icon: ClipboardCheck },
+  '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
+  '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
 }
 
 function getInitials(fullName: string) {
@@ -44,7 +47,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const page =
     PAGE_META[location.pathname] ??
     (location.pathname.startsWith('/in-class-shifts')
-      ? { label: 'Ca thi trên lớp', icon: UsersRound }
+      ? { label: 'Ca kiểm tra', icon: UsersRound }
       : { label: 'Cổng giảng viên', icon: LayoutDashboard })
   const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()

@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
+import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { toast } from '@/components/common/toastStore'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
+import { cn } from '@/lib/utils'
 import { checkTranscriptRevision } from '@/lib/transcriptGuards'
 import { Clock, CheckCircle, Edit3 } from 'lucide-react'
 
@@ -51,14 +55,15 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
   }, [isSubmitting, onConfirmSubmit])
 
   useEffect(() => {
-    if (errorMessage) hasSubmittedRef.current = false
+    if (!errorMessage) return
+    hasSubmittedRef.current = false
+    toast.error(errorMessage)
   }, [errorMessage])
 
   useEffect(() => {
     const previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockBodyScroll()
     transcriptElementRef.current?.focus()
 
     const handleDialogKeyboard = (event: KeyboardEvent) => {
@@ -93,7 +98,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
     window.addEventListener('keydown', handleDialogKeyboard)
     return () => {
       window.removeEventListener('keydown', handleDialogKeyboard)
-      document.body.style.overflow = previousBodyOverflow
+      unlock()
       previouslyFocusedElement?.focus()
     }
   }, [onCancel])
@@ -183,7 +188,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
         aria-describedby="buffer-screen-description"
         className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[22px] border border-white/70 bg-white shadow-[0_32px_90px_rgba(2,18,45,0.34)] sm:max-h-[calc(100dvh-3rem)]"
       >
-        <CardHeader className="shrink-0 space-y-0 border-b border-[#e7edf6] bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_100%)] p-4 sm:p-6">
+        <CardHeader className="shrink-0 space-y-0 border-b border-[#82aedb]/55 bg-[linear-gradient(135deg,#f8fbff_0%,#edf4ff_100%)] p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-[0_8px_20px_rgba(36,94,234,0.24)] sm:size-11">
@@ -217,7 +222,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                   ? 'border-rose-200 bg-rose-50 text-rose-700'
                   : timeLeft <= safeDuration / 3
                     ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-[#cddcff] bg-white text-[#1C4D8D]'
+                    : 'border-[#82aedb]/55 bg-white text-[#1C4D8D]'
               }`}
             >
               <Clock
@@ -268,17 +273,25 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
             </span>
           </div>
 
-          <div className="rounded-2xl border border-[#dce5f2] bg-[#4988C4]/16 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus-within:border-[#7fa4ff] focus-within:ring-3 focus-within:ring-[#1C4D8D]/10">
+          <div
+            className={cn(
+              'rounded-2xl border border-[#82aedb]/55 bg-[#4988C4]/16 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus-within:border-[#7fa4ff] focus-within:ring-3 focus-within:ring-[#1C4D8D]/10',
+              validationMessage && cn(fieldInvalidClass, 'focus-within:border-[#c2415b] focus-within:ring-[#c2415b]/25'),
+            )}
+          >
             <textarea
               ref={transcriptElementRef}
               id="practice-transcript-editor"
-              aria-invalid={Boolean(validationMessage || errorMessage)}
+              aria-invalid={validationMessage ? true : undefined}
               aria-describedby={
-                validationMessage || errorMessage
+                validationMessage
                   ? 'practice-transcript-help practice-transcript-error'
                   : 'practice-transcript-help'
               }
-              className="min-h-44 w-full resize-y rounded-xl border-0 bg-white p-3.5 text-sm leading-6 text-[#24344c] shadow-sm outline-none placeholder:text-[#a1adbd] disabled:cursor-wait disabled:bg-[#f6f8fb] sm:min-h-56 sm:p-4"
+              className={cn(
+                'min-h-44 w-full resize-y rounded-xl border-0 bg-white p-3.5 text-sm leading-6 text-[#24344c] shadow-sm outline-none placeholder:text-[#a1adbd] disabled:cursor-wait disabled:bg-[#f6f8fb] sm:min-h-56 sm:p-4',
+                validationMessage && 'ring-1 ring-[#c2415b]',
+              )}
               value={transcript}
               onChange={(event) => {
                 setTranscript(event.target.value)
@@ -298,7 +311,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
 
           <div
             id="practice-transcript-help"
-            className="flex items-start gap-2.5 rounded-xl border border-[#d8e5f8] bg-[#4988C4]/16 px-3.5 py-3 text-sm leading-relaxed text-[#536a8a]"
+            className="flex items-start gap-2.5 rounded-xl border border-[#82aedb]/55 bg-[#4988C4]/16 px-3.5 py-3 text-sm leading-relaxed text-[#536a8a]"
           >
             <CheckCircle className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
             <span>
@@ -307,25 +320,21 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
             </span>
           </div>
 
-          {(validationMessage || errorMessage) && (
-            <p
-              id="practice-transcript-error"
-              className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-xs font-semibold text-rose-700"
-              role="alert"
-            >
-              {validationMessage || errorMessage}
-            </p>
+          {validationMessage && (
+            <div id="practice-transcript-error" role="alert" className="-mt-2">
+              <FieldError message={validationMessage} />
+            </div>
           )}
         </CardContent>
 
-        <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#e7edf6] bg-[#4988C4]/16 p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
+        <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#82aedb]/55 bg-[#4988C4]/16 p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
           {onCancel ? (
             <Button
               variant="outline"
               size="sm"
               onClick={() => onCancel(transcriptRef.current)}
               disabled={isSubmitting}
-              className="min-h-11 w-full rounded-xl border-[#4988C4]/45 bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D] sm:w-auto"
+              className="h-10 w-full rounded-xl border-[#4988C4] bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D] sm:w-auto"
             >
               Quay lại câu hỏi
             </Button>
@@ -338,7 +347,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
             onClick={() => handleConfirm(false)}
             isLoading={isSubmitting}
             disabled={transcript.trim().length < 10}
-            className="min-h-11 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#0F2854] focus:ring-[#1C4D8D] disabled:shadow-none sm:w-auto"
+            className="h-10 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus:ring-[#1C4D8D] disabled:shadow-none sm:w-auto motion-reduce:transform-none"
           >
             <CheckCircle className="size-4" aria-hidden="true" />
             {isSubmitting ? 'Đang nộp câu trả lời…' : 'Xác nhận nộp ngay'}

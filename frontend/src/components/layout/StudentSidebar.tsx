@@ -46,8 +46,8 @@ const STUDENT_NAVIGATION: StudentNavigationItem[] = [
     icon: TimerReset,
   },
   {
-    label: 'Làm bài thi',
-    path: '/exam',
+    label: 'Làm kiểm tra',
+    path: '/in-class-exam',
     icon: ClipboardCheck,
   },
   {
@@ -84,11 +84,11 @@ export function StudentSidebar({
         )}
       >
         <div className="flex h-[77px] shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4">
-          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white">
+          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white p-0.5">
             <img
               src={universityTechLogo}
               alt="University Tech"
-              className="size-full object-cover"
+              className="size-full object-contain"
               draggable={false}
             />
           </div>
@@ -112,7 +112,7 @@ export function StudentSidebar({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-5">
           <nav className="space-y-1.5">
             {STUDENT_NAVIGATION.map(({ label, path, icon: Icon, end }) => (
               <NavLink

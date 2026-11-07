@@ -81,6 +81,7 @@ public sealed class OpenExamShiftRequest
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public Guid ProctorUserId { get; set; }
+    public Guid ExaminerUserId { get; set; }
 }
 
 public sealed record ExamShiftResponse(
@@ -91,7 +92,16 @@ public sealed record ExamShiftResponse(
     DateTime StartTime,
     DateTime EndTime,
     Guid? ProctorUserId,
-    string Status);
+    string Status,
+    Guid? ExaminerUserId = null,
+    string? ExaminerName = null,
+    string? ProctorName = null);
+
+public sealed class ConfigureOfficialExamFollowUpRequest
+{
+    public bool HasFollowUp { get; set; }
+    public int MaxFollowUpQuestions { get; set; } = 2;
+}
 
 public sealed class AssignExamTicketRequest
 {

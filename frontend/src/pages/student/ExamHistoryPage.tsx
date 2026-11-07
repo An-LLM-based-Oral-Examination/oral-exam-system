@@ -20,16 +20,21 @@ import {
   Search,
   ShieldCheck,
   Trophy,
-  X,
 } from 'lucide-react'
+import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { StatusToast } from '@/components/common/toast'
+import { toast } from '@/components/common/toastStore'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { DialogFooter, FormDialog } from '@/design/overlays'
+import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 import apiClient from '@/services/api.client'
 import { appealsService } from '@/services/appeals.service'
 import { mockExamService } from '@/services/mockExam.service'
 import { officialExamService } from '@/services/officialExam.service'
 import { practiceService } from '@/services/practice.service'
+import { EmptyState } from '@/components/common/EmptyState'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { PracticeSessionScorecard } from '@/components/practice/PracticeSessionScorecard'
 import { QuestionImage } from '@/components/question/QuestionImage'
@@ -44,13 +49,13 @@ import type { PracticeHistoryItem, PracticeSessionDetail } from '@/types/practic
 type HistoryCategory = 'all' | 'practice' | 'mock' | 'official'
 
 const COURSE_CODE_TONES = [
-  'bg-[#4988C4]/16 text-[#1C4D8D]',
-  'bg-[#e8f8f3] text-[#16836a]',
-  'bg-[#fff4e8] text-[#c26a12]',
-  'bg-[#f3eefe] text-[#6d4cc4]',
-  'bg-[#e7f6fb] text-[#0e7490]',
-  'bg-[#fdecef] text-[#c2415b]',
-  'bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
 ]
 
 function courseCodeTone(code?: string) {
@@ -138,6 +143,7 @@ function OfficialExamScorecardView({
   grade,
   appeal,
   appealReason,
+  appealReasonError,
   onChangeAppealReason,
   onAcknowledge,
   onCreateAppeal,
@@ -147,6 +153,7 @@ function OfficialExamScorecardView({
   grade: StudentOfficialExamGrade
   appeal: Appeal | undefined
   appealReason: string
+  appealReasonError: string
   onChangeAppealReason: (next: string) => void
   onAcknowledge: () => void
   onCreateAppeal: () => void
@@ -158,7 +165,7 @@ function OfficialExamScorecardView({
 
   return (
     <div className="space-y-3">
-      <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
+      <section className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
         <div className="bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] px-5 py-5 text-white">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -210,7 +217,7 @@ function OfficialExamScorecardView({
                   type="button"
                   disabled={busy}
                   onClick={onAcknowledge}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-[#0F2854] shadow-sm transition hover:bg-[#F4FBFD] disabled:opacity-60"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-[#0F2854] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] disabled:opacity-60 motion-reduce:transform-none"
                 >
                   <CheckCircle2 className="size-3.5 text-[#15866a]" />
                   Xác nhận đồng ý điểm thi
@@ -223,7 +230,7 @@ function OfficialExamScorecardView({
 
       <div className="space-y-2">
         {grade.detailedScorecard.length === 0 ? (
-          <div className="rounded-2xl border border-[#4988C4]/45 bg-white p-6 text-center text-sm text-[#5b6b84]">
+          <div className="rounded-2xl border border-[#82aedb]/55 bg-white p-6 text-center text-sm text-[#5b6b84]">
             Chưa có chi tiết từng câu hỏi cho ca thi này.
           </div>
         ) : (
@@ -232,7 +239,7 @@ function OfficialExamScorecardView({
             return (
               <article
                 key={`${question.questionId}-${idx}`}
-                className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white"
+                className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white"
               >
                 <button
                   type="button"
@@ -264,9 +271,9 @@ function OfficialExamScorecardView({
                 </button>
 
                 {isOpen && (
-                  <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
+                  <div className="space-y-3 border-t border-[#82aedb]/55 px-4 py-4">
                     {question.questionImageUrl?.trim() ? (
-                      <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white p-3">
+                      <div className="overflow-hidden rounded-xl border border-[#82aedb]/55 bg-white p-3">
                         <QuestionImage
                           imageUrl={question.questionImageUrl}
                           imageAlt={question.questionImageDescription}
@@ -318,7 +325,7 @@ function OfficialExamScorecardView({
                           return (
                             <div
                               key={`${criterion.criterionName}-${cIdx}`}
-                              className="rounded-xl border border-[#e6edf5] px-3 py-2.5"
+                              className="rounded-xl border border-[#82aedb]/55 px-3 py-2.5"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <p className="text-sm font-bold text-[#25364e]">
@@ -353,29 +360,40 @@ function OfficialExamScorecardView({
       </div>
 
       {grade.internalAppeal.canAppeal && (
-        <section className="rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] p-4">
+        <section className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4">
           <p className="text-sm font-bold text-[#0F2854]">
             Phúc khảo nội bộ (Thời hạn {grade.internalAppeal.appealDeadlineDays} ngày)
           </p>
           <p className="mt-1 text-xs text-[#5b6b84]">{grade.internalAppeal.instruction}</p>
           {appeal ? (
-            <div className="mt-3 rounded-xl border border-[#4988C4]/35 bg-white p-3 text-xs text-[#0F2854]">
+            <div className="mt-3 rounded-xl border border-[#82aedb]/55 bg-white p-3 text-xs text-[#0F2854]">
               Trạng thái đơn phúc khảo: <strong className="text-[#1C4D8D]">{appeal.status}</strong>{' '}
               · Lý do: {appeal.reason}
             </div>
           ) : (
             <div className="mt-3 space-y-2.5">
-              <textarea
-                value={appealReason}
-                onChange={(event) => onChangeAppealReason(event.target.value)}
-                placeholder="Nhập lý do đề nghị phúc khảo chi tiết (tối thiểu 10 ký tự)..."
-                className="min-h-20 w-full rounded-xl border border-[#4988C4]/45 bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D]"
-              />
+              <div>
+                <label htmlFor="appeal-reason" className={cn(fieldLabelClass(Boolean(appealReasonError)), 'mb-1.5 block')}>
+                  Lý do phúc khảo
+                </label>
+                <textarea
+                  id="appeal-reason"
+                  value={appealReason}
+                  onChange={(event) => onChangeAppealReason(event.target.value)}
+                  aria-invalid={appealReasonError ? true : undefined}
+                  placeholder="Nhập lý do đề nghị phúc khảo chi tiết (tối thiểu 10 ký tự)..."
+                  className={cn(
+                    'min-h-20 w-full rounded-xl border border-[#4988C4] bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D]',
+                    appealReasonError && fieldInvalidClass,
+                  )}
+                />
+                <FieldError message={appealReasonError} />
+              </div>
               <button
                 type="button"
                 disabled={busy}
                 onClick={onCreateAppeal}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854] disabled:opacity-60"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-60 motion-reduce:transform-none"
               >
                 Gửi đơn phúc khảo tới Trưởng Bộ môn
               </button>
@@ -415,7 +433,8 @@ function LiveExamHistoryPage() {
     id: string
   } | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
-  const [modalError, setModalError] = useState<string | null>(null)
+  const [modalLoadFailed, setModalLoadFailed] = useState(false)
+  const [appealReasonError, setAppealReasonError] = useState('')
   const [practiceDetails, setPracticeDetails] = useState<Record<string, PracticeSessionDetail>>({})
   const [mockDetails, setMockDetails] = useState<Record<string, MockExamScorecardData>>({})
   const [officialGrades, setOfficialGrades] = useState<Record<string, StudentOfficialExamGrade>>({})
@@ -509,7 +528,8 @@ function LiveExamHistoryPage() {
   const openDetailModal = useCallback(
     async (category: 'practice' | 'mock' | 'official', id: string) => {
       setActiveModal({ category, id })
-      setModalError(null)
+      setModalLoadFailed(false)
+      setAppealReasonError('')
 
       if (category === 'practice') {
         if (practiceDetails[id]) return
@@ -518,7 +538,8 @@ function LiveExamHistoryPage() {
           const detail = await practiceService.getSession(id)
           setPracticeDetails((prev) => ({ ...prev, [id]: detail }))
         } catch (err) {
-          setModalError(
+          setModalLoadFailed(true)
+          toast.error(
             extractErrorMessage(err, 'Không thể tải chi tiết câu hỏi và nhận xét phiên luyện tập.'),
           )
         } finally {
@@ -534,9 +555,8 @@ function LiveExamHistoryPage() {
           const detail = await mockExamService.getHistoryDetail(id)
           setMockDetails((prev) => ({ ...prev, [id]: detail }))
         } catch (err) {
-          setModalError(
-            extractErrorMessage(err, 'Không thể tải bảng điểm chi tiết ca thi thử này.'),
-          )
+          setModalLoadFailed(true)
+          toast.error(extractErrorMessage(err, 'Không thể tải bảng điểm chi tiết ca thi thử này.'))
         } finally {
           setModalLoading(false)
         }
@@ -550,7 +570,8 @@ function LiveExamHistoryPage() {
           const grade = await officialExamService.getStudentGrade(id, userId)
           setOfficialGrades((prev) => ({ ...prev, [id]: grade }))
         } catch (err) {
-          setModalError(
+          setModalLoadFailed(true)
+          toast.error(
             extractErrorMessage(
               err,
               'Điểm ca thi chính thức chưa được công bố hoặc chưa có dữ liệu hậu kiểm.',
@@ -581,7 +602,8 @@ function LiveExamHistoryPage() {
 
   const closeDetailModal = () => {
     setActiveModal(null)
-    setModalError(null)
+    setModalLoadFailed(false)
+    setAppealReasonError('')
     if (searchParams.has('id') || searchParams.has('type')) {
       setSearchParams({}, { replace: true })
     }
@@ -589,7 +611,6 @@ function LiveExamHistoryPage() {
 
   const acknowledgeOfficialGrade = async (ticketId: string) => {
     setActionBusy(true)
-    setModalError(null)
     try {
       await officialExamService.acknowledgeGrade(ticketId, user?.id)
       setOfficialItems((current) =>
@@ -612,7 +633,7 @@ function LiveExamHistoryPage() {
       )
       setNotice('Đã xác nhận đồng ý kết quả điểm thi chính thức.')
     } catch (requestError) {
-      setModalError(extractErrorMessage(requestError))
+      toast.error(extractErrorMessage(requestError))
     } finally {
       setActionBusy(false)
     }
@@ -620,18 +641,18 @@ function LiveExamHistoryPage() {
 
   const createOfficialAppeal = async (ticketId: string) => {
     if (appealReason.trim().length < 10) {
-      setModalError('Lý do phúc khảo cần có ít nhất 10 ký tự.')
+      setAppealReasonError('Lý do phúc khảo cần có ít nhất 10 ký tự.')
       return
     }
+    setAppealReasonError('')
     setActionBusy(true)
-    setModalError(null)
     try {
       const created = await appealsService.create({ ticketId, reason: appealReason.trim() })
       setAppeals((current) => [created, ...current])
       setAppealReason('')
       setNotice('Đã gửi đơn phúc khảo. Trưởng Bộ môn sẽ tiếp nhận và phân công chấm lại.')
     } catch (requestError) {
-      setModalError(extractErrorMessage(requestError))
+      toast.error(extractErrorMessage(requestError))
     } finally {
       setActionBusy(false)
     }
@@ -767,68 +788,38 @@ function LiveExamHistoryPage() {
 
   return (
     <div lang="vi" className={cn(ds.page, 'pb-8')}>
-      <section className={ds.banner}>
-        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.3)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-35" />
-        <div className="relative z-10 flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-end sm:p-8">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/14 px-3 py-1 text-xs font-bold tracking-[0.06em] text-[#BDE8F5] uppercase backdrop-blur-sm">
-              <BarChart3 className="size-3.5" />
-              Hồ sơ kết quả & bảng điểm
-            </div>
-            <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white sm:text-3xl">
-              Lịch sử Luyện tập, Thi thử & Kết quả Thi chính thức
-            </h1>
-            <p className="mt-2 text-sm leading-relaxed text-white/85">
-              Tra cứu toàn bộ các phiên luyện tập, ca thi thử tính giờ và kết quả thi chính thức
-              phòng Lab kèm nội dung từng câu hỏi, câu trả lời đã ghi nhận, điểm Rubric và nhận xét
-              đánh giá chi tiết.
-            </p>
-          </div>
+      <PageBanner
+        icon={BarChart3}
+        eyebrow="Hồ sơ kết quả & bảng điểm"
+        title="Lịch sử Luyện tập, Thi thử & Kết quả Thi chính thức"
+        description="Tra cứu phiên luyện tập, ca thi thử và kết quả thi chính thức kèm bảng điểm Rubric chi tiết."
+        extras={
+          <>
+            <BannerFact icon={Mic2}>Luyện tập</BannerFact>
+            <BannerFact icon={BookOpenCheck} tone="green">
+              Thi thử
+            </BannerFact>
+            <BannerFact icon={Trophy} tone="violet">
+              Thi chính thức
+            </BannerFact>
+          </>
+        }
+      />
 
-          <button
-            type="button"
-            onClick={() => void loadAllHistories()}
-            disabled={loading}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] disabled:opacity-60 sm:self-auto"
-          >
-            <RefreshCw className={cn('size-3.5 text-[#1C4D8D]', loading && 'animate-spin')} />
-            {loading ? 'Đang đồng bộ...' : 'Làm mới dữ liệu'}
-          </button>
-        </div>
-      </section>
-
-      {(error || notice) && (
-        <div
-          className={cn(
-            'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm',
-            error
-              ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]'
-              : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
-          )}
-        >
-          <span className="flex items-center gap-2 font-medium">
-            <AlertCircle className="size-4 shrink-0" />
-            {error ?? notice}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null)
-              setNotice(null)
-            }}
-            className="rounded-lg p-1 hover:bg-black/5"
-            aria-label="Đóng thông báo"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
+      <StatusToast
+        notice={notice}
+        error={error}
+        onDismiss={() => {
+          setError(null)
+          setNotice(null)
+        }}
+      />
 
       <section aria-label="Thống kê tổng hợp" className="grid gap-3 md:grid-cols-3">
         <article className="rounded-2xl border border-[#b7e4cf] bg-[#f3fbf7] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#16836a] shadow-2xs">
+              <span className="inline-flex rounded-full border border-[#b7e4cf] bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#16836a] shadow-2xs">
                 Luyện tập tự do
               </span>
               <div className="mt-2.5 flex items-baseline gap-2">
@@ -850,10 +841,10 @@ function LiveExamHistoryPage() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-[#9ec4e8] bg-[#f3f9fd] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
+        <article className="rounded-2xl border border-[#82aedb]/55 bg-[#f3f9fd] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#1C4D8D] shadow-2xs">
+              <span className="inline-flex rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#1C4D8D] shadow-2xs">
                 Thi thử tính giờ
               </span>
               <div className="mt-2.5 flex items-baseline gap-2">
@@ -876,7 +867,7 @@ function LiveExamHistoryPage() {
         <article className="rounded-2xl border border-[#d4c4f5] bg-[#f7f3fd] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <span className="inline-flex rounded-full bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#6d4cc4] shadow-2xs">
+              <span className="inline-flex rounded-full border border-[#c4afe8] bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#6d4cc4] shadow-2xs">
                 Thi chính thức
               </span>
               <div className="mt-2.5 flex items-baseline gap-2">
@@ -906,20 +897,15 @@ function LiveExamHistoryPage() {
             'flex flex-col justify-between gap-3 lg:flex-row lg:items-center',
           )}
         >
-          <div>
+          <div className={ds.sectionHeading}>
             <div className={ds.sectionTitleRow}>
               <span className={ds.sectionIconWrap}>
-                <History className="size-4 text-[#1C4D8D]" />
+                <History className={ds.sectionIcon} />
               </span>
               <h2 className={ds.sectionTitle}>Danh sách phiên làm bài</h2>
-              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D] shadow-2xs">
-                {filteredRows.length} bản ghi
-              </span>
+              <span className={ds.sectionBadge}>{filteredRows.length} bản ghi</span>
             </div>
-            <p className={ds.sectionHint}>
-              Bấm vào từng bản ghi để mở bảng điểm chi tiết, nội dung từng câu hỏi, bài trả lời và
-              nhận xét đánh giá
-            </p>
+            <p className={ds.sectionHint}>Bấm vào bản ghi để xem bảng điểm chi tiết</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -950,10 +936,20 @@ function LiveExamHistoryPage() {
                 className="min-h-9 w-48 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-3 pl-8 text-xs font-medium text-[#0F2854] outline-none focus:border-[#1C4D8D] sm:w-56"
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => void loadAllHistories()}
+              disabled={loading}
+              className={ds.outlineButton}
+            >
+              <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+              {loading ? 'Đang đồng bộ...' : 'Làm mới'}
+            </button>
           </div>
         </div>
 
-        <div className="border-b border-[#4988C4]/35 bg-[#F4FBFD] px-4 py-3 sm:px-6">
+        <div className="border-b border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
@@ -998,31 +994,24 @@ function LiveExamHistoryPage() {
               Đang tải toàn bộ lịch sử luyện tập, thi thử và thi chính thức...
             </div>
           ) : filteredRows.length === 0 ? (
-            <div className="p-10 text-center">
-              <History className="mx-auto size-9 text-[#4988C4]" />
-              <p className="mt-3 text-sm font-bold text-[#0F2854]">
-                Chưa có bản ghi nào trong danh mục đã chọn
-              </p>
-              <p className="mt-1 text-xs text-[#5b6b84]">
-                Hãy bắt đầu một phiên Luyện tập hoặc Thi thử để xem kết quả và nhận xét chi tiết
-                tại đây.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Link
-                  to="/practice"
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
-                >
-                  <Mic2 className="size-3.5" />
-                  Bắt đầu Luyện tập
-                </Link>
-                <Link
-                  to="/mock-exam"
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-[#F4FBFD] px-4 py-2 text-xs font-bold text-[#0F2854] transition hover:bg-[#4988C4]/18"
-                >
-                  <BookOpenCheck className="size-3.5 text-[#1C4D8D]" />
-                  Vào phòng Thi thử
-                </Link>
-              </div>
+            <div className="p-4 sm:p-5">
+              <EmptyState
+                icon={History}
+                title="Chưa có bản ghi nào trong danh mục đã chọn"
+                description="Bắt đầu một phiên Luyện tập hoặc Thi thử để xem kết quả và nhận xét chi tiết tại đây."
+                action={
+                  <>
+                    <Link to="/practice" className={ds.primaryButton}>
+                      <Mic2 className="size-4" />
+                      Bắt đầu Luyện tập
+                    </Link>
+                    <Link to="/mock-exam" className={ds.outlineButton}>
+                      <BookOpenCheck className="size-4" />
+                      Vào phòng Thi thử
+                    </Link>
+                  </>
+                }
+              />
             </div>
           ) : (
             filteredRows.map((row) => (
@@ -1044,21 +1033,21 @@ function LiveExamHistoryPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={cn(
-                          'inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-bold',
-                          row.category === 'practice' && 'bg-[#e8f8f3] text-[#16836a]',
-                          row.category === 'mock' && 'bg-[#0F2854] text-[#BDE8F5]',
-                          row.category === 'official' && 'bg-[#f3eefe] text-[#6d4cc4]',
+                          'inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-xs font-bold',
+                          row.category === 'practice' && 'border-[#b7e4cf] bg-[#e8f8f3] text-[#16836a]',
+                          row.category === 'mock' && 'border-[#0F2854] bg-[#0F2854] text-[#BDE8F5]',
+                          row.category === 'official' && 'border-[#c4afe8] bg-[#f3eefe] text-[#6d4cc4]',
                         )}
                       >
                         {row.badgeLabel}
                       </span>
                       <span
                         className={cn(
-                          'inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold',
-                          row.statusTone === 'emerald' && 'bg-[#edfbf6] text-[#0f8f6b]',
-                          row.statusTone === 'blue' && 'bg-[#4988C4]/16 text-[#1C4D8D]',
-                          row.statusTone === 'amber' && 'bg-[#fff8eb] text-[#9a6414]',
-                          row.statusTone === 'slate' && 'bg-[#f1f5f9] text-[#64748b]',
+                          'inline-flex rounded-full border px-2.5 py-0.5 text-xs font-bold',
+                          row.statusTone === 'emerald' && 'border-[#b7e4cf] bg-[#edfbf6] text-[#0f8f6b]',
+                          row.statusTone === 'blue' && 'border-[#82aedb]/55 bg-[#4988C4]/16 text-[#1C4D8D]',
+                          row.statusTone === 'amber' && 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6414]',
+                          row.statusTone === 'slate' && 'border-[#d5dde8] bg-[#f1f5f9] text-[#64748b]',
                         )}
                       >
                         {row.statusLabel}
@@ -1101,7 +1090,7 @@ function LiveExamHistoryPage() {
                     {row.canContinue && row.continueUrl && (
                       <Link
                         to={row.continueUrl}
-                        className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#4988C4]/16"
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/16 motion-reduce:transform-none"
                       >
                         Tiếp tục làm
                         <ArrowRight className="size-3.5" />
@@ -1111,7 +1100,7 @@ function LiveExamHistoryPage() {
                     <button
                       type="button"
                       onClick={() => void openDetailModal(row.category, row.rawId)}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#0F2854]"
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] motion-reduce:transform-none"
                     >
                       <FileCheck2 className="size-3.5" />
                       Xem câu hỏi & nhận xét
@@ -1125,94 +1114,83 @@ function LiveExamHistoryPage() {
       </section>
 
       {activeModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0F2854]/60 p-3 backdrop-blur-xs sm:p-5"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Chi tiết bảng điểm và nhận xét"
-        >
-          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-[#4988C4]/45 bg-white px-5 py-3.5">
-              <div className="flex items-center gap-2">
-                <Award className="size-5 text-[#1C4D8D]" />
-                <h2 className="text-base font-bold text-[#0F2854]">
-                  {activeModal.category === 'practice' &&
-                    'Chi tiết Phiên luyện tập · Câu hỏi, Trả lời & Nhận xét'}
-                  {activeModal.category === 'mock' &&
-                    'Chi tiết Ca thi thử · Bảng điểm & Nhận xét theo CLO'}
-                  {activeModal.category === 'official' &&
-                    'Chi tiết Kết quả Thi chính thức · Bảng điểm & Phúc khảo'}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={closeDetailModal}
-                className="inline-flex size-8 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#4988C4]/16 hover:text-[#0F2854]"
-                aria-label="Đóng cửa sổ chi tiết"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-              {modalLoading ? (
-                <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 text-sm font-semibold text-[#1C4D8D]">
-                  <LoaderCircle className="size-6 animate-spin" />
-                  Đang tải nội dung câu hỏi, câu trả lời và nhận xét...
-                </div>
-              ) : modalError ? (
-                <div className="rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-5 text-sm text-[#b33d52]">
-                  <p className="font-bold">Chưa thể hiển thị bảng điểm chi tiết</p>
-                  <p className="mt-1">{modalError}</p>
-                </div>
-              ) : activeModal.category === 'practice' && practiceDetails[activeModal.id] ? (
-                <PracticeSessionScorecard session={practiceDetails[activeModal.id]} />
-              ) : activeModal.category === 'mock' && mockDetails[activeModal.id] ? (
-                <MockExamScorecard scorecard={mockDetails[activeModal.id]} />
-              ) : activeModal.category === 'official' && officialGrades[activeModal.id] ? (
-                <OfficialExamScorecardView
-                  ticket={
-                    officialItems.find((item) => item.ticketId === activeModal.id) ?? {
-                      ticketId: activeModal.id,
-                      shiftId: '',
-                      courseCode: officialGrades[activeModal.id].courseCode,
-                      courseName: officialGrades[activeModal.id].courseCode,
-                      sessionTitle: '',
-                      shiftName: 'Ca thi chính thức',
-                      roomLab: 'Lab',
-                      examDate: officialGrades[activeModal.id].publishedAt,
-                      startTime: officialGrades[activeModal.id].publishedAt,
-                      endTime: officialGrades[activeModal.id].publishedAt,
-                      seatNumber: 1,
-                      status: officialGrades[activeModal.id].status,
-                      finalScore: officialGrades[activeModal.id].totalScore,
-                      isLocked: officialGrades[activeModal.id].isLocked,
-                      studentAcknowledgementStatus:
-                        officialGrades[activeModal.id].studentAcknowledgementStatus,
-                    }
-                  }
-                  grade={officialGrades[activeModal.id]}
-                  appeal={appeals.find((a) => a.ticketId === activeModal.id)}
-                  appealReason={appealReason}
-                  onChangeAppealReason={setAppealReason}
-                  onAcknowledge={() => void acknowledgeOfficialGrade(activeModal.id)}
-                  onCreateAppeal={() => void createOfficialAppeal(activeModal.id)}
-                  busy={actionBusy}
-                />
-              ) : null}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 border-t border-[#4988C4]/45 bg-white px-5 py-3">
-              <button
-                type="button"
-                onClick={closeDetailModal}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#0F2854]"
-              >
+        <FormDialog
+          titleId="exam-history-detail-title"
+          eyebrow="Bảng điểm"
+          title={
+            activeModal.category === 'practice'
+              ? 'Chi tiết phiên luyện tập'
+              : activeModal.category === 'mock'
+                ? 'Chi tiết ca thi thử'
+                : 'Chi tiết thi chính thức'
+          }
+          subtitle={
+            activeModal.category === 'practice'
+              ? 'Câu hỏi, trả lời & nhận xét'
+              : activeModal.category === 'mock'
+                ? 'Bảng điểm & nhận xét theo CLO'
+                : 'Bảng điểm & phúc khảo'
+          }
+          icon={Award}
+          onClose={closeDetailModal}
+          size="2xl"
+          align="center"
+          maxHeight="max-h-[min(90vh,820px)]"
+          footer={(
+            <DialogFooter className="bg-white">
+              <button type="button" onClick={closeDetailModal} className={ds.primaryButton}>
                 Đóng
               </button>
+            </DialogFooter>
+          )}
+        >
+          {modalLoading ? (
+            <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 text-sm font-semibold text-[#1C4D8D]">
+              <LoaderCircle className="size-6 animate-spin" />
+              Đang tải nội dung câu hỏi, câu trả lời và nhận xét...
             </div>
-          </div>
-        </div>
+          ) : modalLoadFailed ? (
+            <EmptyState compact icon={AlertCircle} title="Chưa thể hiển thị bảng điểm chi tiết" />
+          ) : activeModal.category === 'practice' && practiceDetails[activeModal.id] ? (
+            <PracticeSessionScorecard session={practiceDetails[activeModal.id]} />
+          ) : activeModal.category === 'mock' && mockDetails[activeModal.id] ? (
+            <MockExamScorecard scorecard={mockDetails[activeModal.id]} />
+          ) : activeModal.category === 'official' && officialGrades[activeModal.id] ? (
+            <OfficialExamScorecardView
+              ticket={
+                officialItems.find((item) => item.ticketId === activeModal.id) ?? {
+                  ticketId: activeModal.id,
+                  shiftId: '',
+                  courseCode: officialGrades[activeModal.id].courseCode,
+                  courseName: officialGrades[activeModal.id].courseCode,
+                  sessionTitle: '',
+                  shiftName: 'Ca thi chính thức',
+                  roomLab: 'Lab',
+                  examDate: officialGrades[activeModal.id].publishedAt,
+                  startTime: officialGrades[activeModal.id].publishedAt,
+                  endTime: officialGrades[activeModal.id].publishedAt,
+                  seatNumber: 1,
+                  status: officialGrades[activeModal.id].status,
+                  finalScore: officialGrades[activeModal.id].totalScore,
+                  isLocked: officialGrades[activeModal.id].isLocked,
+                  studentAcknowledgementStatus:
+                    officialGrades[activeModal.id].studentAcknowledgementStatus,
+                }
+              }
+              grade={officialGrades[activeModal.id]}
+              appeal={appeals.find((a) => a.ticketId === activeModal.id)}
+              appealReason={appealReason}
+              appealReasonError={appealReasonError}
+              onChangeAppealReason={(next) => {
+                setAppealReason(next)
+                setAppealReasonError('')
+              }}
+              onAcknowledge={() => void acknowledgeOfficialGrade(activeModal.id)}
+              onCreateAppeal={() => void createOfficialAppeal(activeModal.id)}
+              busy={actionBusy}
+            />
+          ) : null}
+        </FormDialog>
       )}
     </div>
   )

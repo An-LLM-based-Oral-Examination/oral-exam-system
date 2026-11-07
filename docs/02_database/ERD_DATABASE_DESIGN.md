@@ -11,13 +11,13 @@
 > - 🧑 **Nguyễn Trọng Tốt** — Backend Developer, AI Engineer & QA Lead  
 > - 🧑 **Phạm Nguyễn Đăng Hải** — DB Specialist & Frontend Developer (phụ trách Database 38 bảng PostgreSQL 3NF và dồn toàn lực phát triển Frontend; tuyệt đối không code C# Backend)  
 > - 🧑 **Lê Vũ Hoàng** — Lead Frontend Architect & Fullstack Coordinator  
-> **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (38 bảng 3NF trong 7 Bounded Contexts: 30 bảng lõi bao gồm `course_clos` và `exam_anti_cheat_logs` + 1 bảng phúc khảo + 2 bảng cấu hình hệ thống & thông báo + 1 bảng phân công `course_lecturers` + 4 bảng ca thi tại lớp `in_class_exam_shifts`)  
+> **Chuẩn thiết kế:** Chuẩn hóa Bậc 3 (3NF) — ACID Transactions — PostgreSQL 16+ (38 bảng 3NF trong 7 Bounded Contexts + cụm hạ tầng: Identity & RBAC `2` + Academic Cohorts `6` + Rubrics `2` + Practice MF-01 `5` + Mock Exam MF-02 `6` + Official Exam, Audit & Appeals MF-04 `9` + In-Class Shifts & TOTP MF-05 `4` + Resilience, Audit, Configs & Notifications `4` = **38 bảng 3NF**)  
 > **Sơ đồ ERD:** Nhúng trực tiếp trong Mục 2 của tài liệu này (Mermaid ERD) và tệp Kiến trúc [`KIEN_TRUC_HE_THONG.drawio`](../05_diagrams/KIEN_TRUC_HE_THONG.drawio)  
 > **Nguồn sự thật CSDL duy nhất (Single Source of Truth):** EF Core Code-First ([`backend/src/Infrastructure/Persistence/OralExamDbContext.cs`](../../backend/src/Infrastructure/Persistence/OralExamDbContext.cs)) và các bản Migrations ([`backend/src/Infrastructure/Migrations/`](../../backend/src/Infrastructure/Migrations/))
 
 ---
 
-## 1. TỔNG QUAN KIẾN TRÚC DỮ LIỆU (7 BOUNDED CONTEXTS — 38 BẢNG 3NF: 30 BẢNG LÕI + 1 BẢNG PHÚC KHẢO + 2 BẢNG HỆ THỐNG & THÔNG BÁO + 1 BẢNG COURSE_LECTURERS + 4 BẢNG CA THI TẠI LỚP)
+## 1. TỔNG QUAN KIẾN TRÚC DỮ LIỆU (7 BOUNDED CONTEXTS — 38 BẢNG 3NF: 2 + 6 + 2 + 5 + 6 + 9 + 4 + 4 = 38 BẢNG THỰC THỂ NGHIỆP VỤ)
 
 Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai thế giới: **Kho tự luyện tập mở (Practice)** và **Kho thi cử bảo mật (Exam)**, giải quyết triệt để nguy cơ lộ đề thi và không phụ thuộc vòng lẫn nhau. Hệ thống bao gồm 38 bảng chuẩn hóa 3NF chia thành 7 Bounded Contexts cốt lõi và các phân hệ hỗ trợ:
 
@@ -57,7 +57,7 @@ Cơ sở dữ liệu được thiết kế bóc tách hoàn toàn giữa hai th�
 │  • in_class_exam_submissions (Bài nộp SV tại lớp, AI grading + GV chấm lại)                   │
 ├─────────────────────────────────────────────────────────────────────────────────────────────────┤
 │  [Chịu Lỗi, Cấu Hình & Thông Báo Enterprise]                                                   │
-│  • dead_letter_queues (Zero Data Loss - Phân tách flow_type & managed_by_role: Admin / Khảo thí)│
+│  • dead_letter_queues (Zero Data Loss - flow_type & managed_by_role: Admin / GV / Khảo thí)   │
 │  • audit_logs (Lưu vết thay đổi dữ liệu nhạy cảm & điểm số)                                    │
 │  • system_configs (Cấu hình động: Min/Max Practice, Buffer, Follow-up, Inactivity Timeout 5m)  │
 │  • notifications (Hộp thư thông báo trong ứng dụng FE-11: 5 sự kiện)                           │
@@ -263,6 +263,9 @@ erDiagram
 | `max_students` | `int` | NOT NULL, Default `35`, CHECK `max_students > 0` | Sĩ số tối đa |
 | `is_active` | `boolean` | NOT NULL, Default `true` | Trạng thái lớp học |
 
+- **Check Constraints:** `ck_classes_max_students` (`max_students > 0`).
+- **Chỉ mục ESR:** `ix_classes_code` (`code` UNIQUE), `ix_classes_join_code` (`join_code` UNIQUE), `ix_classes_course` (`course_id`), `ix_classes_semester` (`semester_id`), `ix_classes_lecturer` (`lecturer_id`), `ix_classes_active_semester_course_created` trên `(is_active, semester_id, course_id, created_at DESC)` (R5).
+
 #### Bảng `class_enrollments`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
@@ -339,7 +342,6 @@ erDiagram
 | `status` | `varchar(20)` | NOT NULL, Default `'in_progress'`, CHECK in (`'in_progress'`, `'completed'`, `'abandoned'`, `'timed_out'`) | Trạng thái phiên: đang làm, đã hoàn thành, bỏ dở, hoặc quá hạn timeout không tương tác |
 | `last_activity_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tương tác gần nhất của sinh viên (tạo phiên, bốc câu tiếp theo `POST /next-question`, nộp câu trả lời), phục vụ kiểm soát Lazy Timeout 5 phút không tương tác |
 | `selected_difficulties` | `jsonb` | NOT NULL, Default `'[]'::jsonb` | Mảng JSON lưu trữ tổ hợp mức độ khó sinh viên đã chọn (ví dụ: `["easy"]`, `["easy", "medium"]`, `["easy", "medium", "hard"]`) phục vụ thuật toán bốc đề On-Demand chặn 3 câu liên tiếp cùng mức |
-| `total_score` | `numeric(4,2)` | NULLABLE, CHECK `total_score IS NULL OR (total_score >= 0.00 AND total_score <= 10.00)` | Điểm trung bình tổng kết của phiên luyện tập (lưu trữ trực tiếp chuẩn 3NF giúp truy vấn lịch sử $O(1)$) |
 | `total_score` | `numeric(4,2)` | NULLABLE, CHECK `total_score IS NULL OR (total_score >= 0.00 AND total_score <= 10.00)` | Điểm trung bình tổng kết của phiên luyện tập (lưu trữ trực tiếp chuẩn 3NF giúp truy vấn lịch sử $O(1)$) |
 
 #### Bảng `practice_answers`
@@ -362,16 +364,22 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính đánh giá AI |
+| `student_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Khóa ngoại trực diện tới sinh viên chủ sở hữu bản đánh giá (phục vụ truy xuất O(log N) trên Student Dashboard không cần multi-table OR JOIN) |
+| `answer_type` | `varchar(20)` | NOT NULL, Default `'practice'`, CHECK in (`'practice'`, `'mock_exam'`, `'exam'`, `'in_class'`) | Phân định luồng đánh giá AI: Luyện tập (`practice`), Thi thử (`mock_exam`), Thi thật (`exam`), Ca thi trên lớp (`in_class`) |
 | `practice_answer_id` | `uuid` | NULLABLE, FK `practice_answers(id)` ON DELETE CASCADE | Câu trả lời luyện tập (MF-01) |
 | `mock_exam_answer_id` | `uuid` | NULLABLE, FK `mock_exam_answers(id)` ON DELETE CASCADE | Câu trả lời thi thử (MF-02) |
-| `submission_id` | `uuid` | NULLABLE, FK `exam_question_submissions(id)` ON DELETE CASCADE | Bài nộp câu hỏi thi thật (MF-04) |
+| `exam_submission_id` | `uuid` | NULLABLE, FK `exam_question_submissions(id)` ON DELETE CASCADE | Bài nộp câu hỏi thi thật (MF-04) |
+| `in_class_submission_id` | `uuid` | NULLABLE, FK `in_class_exam_submissions(id)` ON DELETE CASCADE | Bài nộp câu hỏi ca thi trên lớp (MF-05) |
 | `total_score` | `numeric(4,2)` | NOT NULL | Tổng điểm AI chấm theo barem 10.0đ |
 | `feedback` | `text` | NOT NULL | Nhận xét sư phạm tổng thể |
 | `confidence_score` | `numeric(3,2)` | NOT NULL, CHECK `confidence_score >= 0.00 AND confidence_score <= 1.00` | Hệ số tin cậy của AI |
 | `cot_trace` | `text` | NOT NULL | Chuỗi tư duy suy luận Chain-of-Thought 3 bước của Gemini phục vụ Evidence Panel |
 | `follow_up_prompt` | `text` | NULLABLE | Câu hỏi phụ tiếp theo do AI sinh động từ câu trả lời của sinh viên (nếu có) |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm đánh giá |
-| (CHECK XOR) | `ck_ai_evaluations_xor` | CHECK `(practice_answer_id IS NOT NULL)::int + (mock_exam_answer_id IS NOT NULL)::int + (submission_id IS NOT NULL)::int = 1` | **Ràng buộc 3NF XOR:** Mỗi bản ghi đánh giá AI chỉ thuộc về duy nhất 1 trong 3 luồng (MF-01, MF-02 hoặc MF-04) |
+| (CHECK XOR) | `ck_ai_evaluations_xor` | CHECK `(practice_answer_id IS NOT NULL)::int + (mock_exam_answer_id IS NOT NULL)::int + (exam_submission_id IS NOT NULL)::int + (in_class_submission_id IS NOT NULL)::int = 1` | **Ràng buộc 3NF XOR 4 luồng:** Mỗi bản ghi đánh giá AI chỉ thuộc về duy nhất 1 trong 4 luồng (MF-01, MF-02, MF-04 hoặc MF-05) |
+
+- **Check Constraints:** `ck_ai_evaluations_type` (`answer_type IN ('practice', 'mock_exam', 'exam', 'in_class')`), `ck_ai_evaluations_score` (`total_score BETWEEN 0.00 AND 10.00`), `ck_ai_evaluations_xor` (XOR 4 luồng).
+- **Chỉ mục:** `ix_ai_evaluations_student` trên `(student_id)`, `ix_ai_evaluations_in_class_submission` trên `(in_class_submission_id)`, `ix_ai_evaluations_practice_answer` trên `(practice_answer_id)`, `uq_ai_evaluations_exam_submission` trên `(exam_submission_id) WHERE exam_submission_id IS NOT NULL`, `ix_ai_evaluations_mock_exam_answer` trên `(mock_exam_answer_id)`.
 
 #### Bảng `ai_evaluation_details`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
@@ -539,7 +547,7 @@ erDiagram
 | `status` | `varchar(30)` | NOT NULL, CHECK in (`'SCHEDULED'`, `'IN_PROGRESS'`, `'SUBMITTED'`, `'AI_GRADED'`, `'AUDITED'`, `'PUBLISHED'`, `'LOCKED'`) | Vòng đời vé thi 7 bước: Lập lịch $\to$ Đang thi $\to$ Đã nộp (Kiosk khóa an toàn) $\to$ AI chấm ngầm $\to$ Giám khảo hậu kiểm $\to$ Khảo thí công bố điểm $\to$ Khóa một chiều |
 | `ai_confidence_score` | `numeric(3,2)` | NULLABLE, CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00` | Hệ số tin cậy tổng thể của AI khi chấm bài |
 | `is_suspicious` | `boolean` | NOT NULL, Default `false` | Cờ lọc phân nhóm Hậu kiểm: `true` nếu `ai_confidence_score < 0.70` hoặc phát hiện âm thanh/nội dung dị thường |
-| `student_acknowledgement_status` | `varchar(20)` | NOT NULL, Default `'PENDING'`, CHECK in (`'PENDING'`, `'ACKNOWLEDGED'`, `'APPEALED'`) | Trạng thái sinh viên xác nhận nhận điểm trên Student Portal sau khi Khảo thí công bố. Nếu không chấp nhận, sinh viên nộp đơn phúc khảo nội bộ trực tiếp trên hệ thống gán cho Trưởng Bộ Môn thẩm định |
+| `student_acknowledgement_status` | `varchar(20)` | NOT NULL, Default `'PENDING'`, CHECK in (`'PENDING'`, `'ACKNOWLEDGED'`, `'APPEALED'`) | Trạng thái sinh viên xác nhận nhận điểm trên Student Portal sau khi Khảo thí công bố. Nếu không chấp nhận, sinh viên nộp đơn phúc khảo nội bộ trực tiếp trên hệ thống gửi Cán bộ Khảo thí tiếp nhận thẩm tra, phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV) và Cán bộ Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock cập nhật điểm chính thức (Trưởng BM nhận thông báo in-app giám sát chuyên môn). |
 | `is_locked` | `boolean` | NOT NULL, Default `false` | Cờ niêm phong khóa điểm 1 chiều (One-Way Lock) sau khi Khảo thí Publish điểm |
 | `published_at` | `timestamptz` | NULLABLE | Thời điểm Khảo thí bấm Công bố điểm |
 | `published_by` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Khảo thí công bố điểm |
@@ -603,24 +611,40 @@ erDiagram
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính đơn phúc khảo |
-| `ticket_id` | `uuid` | FK `student_exam_tickets(id)` ON DELETE CASCADE | Vé thi bài thi cần phúc khảo (quan hệ 1-1 tại một thời điểm) |
+| `ticket_id` | `uuid` | UNIQUE, FK `student_exam_tickets(id)` ON DELETE CASCADE | Vé thi bài thi cần phúc khảo (quan hệ 1-1 tại một thời điểm) |
 | `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp đơn phúc khảo (Bước 1) |
-| `reason` | `text` | NOT NULL | Lý do chi tiết yêu cầu phúc khảo của sinh viên |
-| `status` | `varchar(32)` | NOT NULL, Default `'SUBMITTED'`, CHECK in (`'SUBMITTED'`, `'FORWARDED_TO_DEPT_HEAD'`, `'ASSIGNED_TO_LECTURER'`, `'REGRADED_BY_LECTURER'`, `'APPROVED'`, `'REJECTED'`) | Trạng thái vòng đời 5 bước của đơn phúc khảo (R7) |
-| `validated_by_officer_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Khảo thí tiếp nhận & thẩm tra hồ sơ hợp lệ (Bước 2) |
-| `validated_at` | `timestamptz` | NULLABLE | Thời điểm Cán bộ Khảo thí thẩm tra và chuyển giao hồ sơ |
-| `validation_notes` | `text` | NULLABLE | Ghi chú thẩm tra quy chế của Cán bộ Khảo thí |
-| `assigned_by_head_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Trưởng Bộ Môn tiếp nhận và phân công giảng viên chấm lại (Bước 3) |
-| `assigned_lecturer_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Giảng viên chuyên môn được phân công chấm lại bài thi |
-| `assigned_at` | `timestamptz` | NULLABLE | Thời điểm Trưởng Bộ Môn phân công giảng viên |
-| `regrade_score` | `numeric(4,2)` | NULLABLE, CHECK `regrade_score >= 0.00 AND regrade_score <= 10.00` | Điểm số do Giảng viên được phân công chấm lại (Bước 4) |
-| `regraded_at` | `timestamptz` | NULLABLE | Thời điểm Giảng viên hoàn tất tái thẩm định điểm trên Evidence Panel |
-| `regrade_notes` | `text` | NULLABLE | Báo cáo giải trình chi tiết của Giảng viên chấm lại |
-| `decision_by_head_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Trưởng Bộ Môn phê duyệt quyết định cuối cùng (Bước 5) |
-| `decided_at` | `timestamptz` | NULLABLE | Thời điểm Trưởng Bộ Môn ra quyết định phê chuẩn |
-| `final_decision` | `varchar(16)` | NULLABLE, CHECK in (`'APPROVED'`, `'REJECTED'`) | Phán quyết cuối cùng của Trưởng Bộ Môn |
-| `decision_notes` | `text` | NULLABLE | Nhận xét và căn cứ pháp lý phê chuẩn của Trưởng Bộ Môn |
+| `reason` | `text` | NOT NULL | Lý do chi tiết yêu cầu phúc khảo của sinh viên (tối thiểu 10 ký tự) |
+| `desired_score` | `numeric(4,2)` | NULLABLE, CHECK `desired_score >= 0.00 AND desired_score <= 10.00` | Điểm số kỳ vọng của sinh viên khi nộp đơn |
+| `regrade_lecturer_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Giảng viên chấm lại độc lập được phân công (tương ứng `assigned_lecturer_id` / `AssignedTo` trong Domain; NULL ban đầu, gán ở Bước 3) |
+| `assigned_by_officer_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Khảo thí tiếp nhận thẩm tra và thực hiện phân công (Bước 2 & 3) |
+| `assigned_at` | `timestamptz` | NULLABLE | Thời điểm Cán bộ Khảo thí phê duyệt phân công giảng viên |
+| `lecturer_notes` | `text` | NULLABLE | Biên bản giải trình chi tiết của Giảng viên chấm lại trên Evidence Panel (Bước 4) |
+| `proposed_score` | `numeric(4,2)` | NULLABLE, CHECK `proposed_score >= 0.00 AND proposed_score <= 10.00` | Điểm số do Giảng viên được phân công chấm lại đề xuất (Bước 4) |
+| `decision_by_officer_id` | `uuid` | NULLABLE, FK `users(id)` ON DELETE SET NULL | Cán bộ Khảo thí thẩm định & phê duyệt quyết định cuối cùng (Bước 5) |
+| `decision_reason` | `text` | NULLABLE | Căn cứ pháp lý, nhận xét & lý do phê chuẩn/bác bỏ của Cán bộ Khảo thí |
+| `final_score` | `numeric(4,2)` | NULLABLE, CHECK `final_score >= 0.00 AND final_score <= 10.00` | Điểm số chính thức sau phúc khảo (nếu APPROVED: mở One-Way Lock cập nhật vé thi) |
+| `status` | `varchar(32)` | NOT NULL, Default `'SUBMITTED_TO_EXAM_OFFICE'`, CHECK in (`'SUBMITTED_TO_EXAM_OFFICE'`, `'ASSIGNED_TO_LECTURER'`, `'REGRADED_BY_LECTURER'`, `'APPROVED'`, `'REJECTED'`) | Trạng thái vòng đời chuẩn 5 bước của đơn phúc khảo nội bộ (R7) |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm sinh viên nộp đơn |
+| `updated_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm cập nhật trạng thái đơn gần nhất |
+
+- **5 Trạng thái Vòng đời Chuẩn (5 Standard Lifecycle Statuses - R7):**
+  1. `SUBMITTED_TO_EXAM_OFFICE`: Sinh viên nộp đơn thành công, hồ sơ chuyển tới Cán bộ Khảo thí thẩm tra tính hợp lệ; Trưởng Bộ Môn nhận thông báo in-app (FE-11) để theo dõi chuyên môn.
+  2. `ASSIGNED_TO_LECTURER`: Cán bộ Khảo thí phê duyệt phân công Giảng viên chấm lại độc lập (theo thuật toán đề xuất $\le 24$ bài/GV, loại trừ giám khảo ban đầu). Giảng viên nhận thông báo in-app.
+  3. `REGRADED_BY_LECTURER`: Giảng viên chấm lại hoàn tất tái thẩm định trên Evidence Panel, nhập `proposed_score` và biên bản `lecturer_notes`.
+  4. `APPROVED`: Cán bộ Khảo thí phê duyệt chấp thuận phúc khảo, kích hoạt ngoại lệ duy nhất của `OneWayLockInterceptor`, mở khóa cập nhật `final_score` vào `student_exam_tickets`.
+  5. `REJECTED`: Cán bộ Khảo thí bác bỏ đơn phúc khảo, giữ nguyên điểm thi ban đầu, ghi nhận lý do tại `decision_reason`.
+- **Check Constraints:**
+  - `ck_appeal_requests_status`: `status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED')`.
+  - `ck_appeal_requests_desired_score`: `desired_score IS NULL OR (desired_score >= 0.00 AND desired_score <= 10.00)`.
+  - `ck_appeal_requests_proposed_score`: `proposed_score IS NULL OR (proposed_score >= 0.00 AND proposed_score <= 10.00)`.
+  - `ck_appeal_requests_final_score`: `final_score IS NULL OR (final_score >= 0.00 AND final_score <= 10.00)`.
+- **Chỉ mục ESR & Khóa duy nhất:**
+  - `uq_appeal_requests_ticket_id`: UNIQUE `(ticket_id)` — Ngăn chặn sinh viên nộp trùng lặp đơn phúc khảo khi vé thi đã có đơn đang xử lý.
+  - `idx_appeal_requests_status_created`: Composite B-Tree `(status, created_at DESC)` — Hỗ trợ Cán bộ Khảo thí lọc đơn theo từng trạng thái xử lý và sắp xếp mới nhất.
+  - `idx_appeal_requests_regrade_lecturer`: Composite B-Tree `(regrade_lecturer_id, status)` — Giảng viên tra cứu nhanh danh sách các bài thi được phân công chấm lại.
+  - `idx_appeal_requests_student`: Composite B-Tree `(student_id, created_at DESC)` — Sinh viên tra cứu lịch sử phúc khảo trên Student Portal.
+  - `idx_appeal_requests_officer_assigned`: B-Tree `(assigned_by_officer_id)`.
+  - `idx_appeal_requests_officer_decided`: B-Tree `(decision_by_officer_id)`.
 
 ---
 
@@ -631,8 +655,8 @@ erDiagram
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi cách ly hàng đợi lỗi |
 | `task_type` | `varchar(50)` | NOT NULL | Loại tác vụ nền gặp sự cố (ví dụ: `eval_grading`, `stt_transcription`) |
-| `flow_type` | `varchar(20)` | NOT NULL, Default `'PRACTICE'`, CHECK in (`'PRACTICE'`, `'MOCK_EXAM'`, `'OFFICIAL_EXAM'`) | Phân định luồng nghiệp vụ: `PRACTICE` (MF-01), `MOCK_EXAM` (MF-02) do Admin quản lý; `OFFICIAL_EXAM` (MF-04) do Cán bộ Khảo thí quản lý (R2) |
-| `managed_by_role` | `varchar(32)` | NOT NULL, Default `'examination_officer'`, CHECK in (`'admin'`, `'examination_officer'`) | Vai trò quản trị & kích hoạt replay: `admin` quản lý luồng Practice/Mock; `examination_officer` quản lý luồng Official Exam; Trưởng Bộ Môn tuyệt đối KHÔNG can thiệp (R2) |
+| `flow_type` | `varchar(20)` | NOT NULL, Default `'PRACTICE'`, CHECK in (`'PRACTICE'`, `'MOCK_EXAM'`, `'OFFICIAL_EXAM'`, `'IN_CLASS_EXAM'`) | Phân định luồng nghiệp vụ: `PRACTICE` (MF-01), `MOCK_EXAM` (MF-02) do Admin quản lý; `IN_CLASS_EXAM` (MF-05) do Giảng viên phụ trách ca thi hoặc Admin quản lý; `OFFICIAL_EXAM` (MF-04) do Cán bộ Khảo thí quản lý (R2) |
+| `managed_by_role` | `varchar(32)` | NOT NULL, Default `'examination_officer'`, CHECK in (`'admin'`, `'examination_officer'`, `'lecturer'`) | Vai trò quản trị & kích hoạt replay: `admin` quản lý luồng Practice/Mock/In-Class; `lecturer` quản lý luồng In-Class Exam; `examination_officer` quản lý luồng Official Exam; Trưởng Bộ Môn tuyệt đối KHÔNG can thiệp (R2) |
 | `payload_json` | `jsonb` | NOT NULL | Toàn bộ dữ liệu payload đầu vào của tác vụ dạng JSON để phục vụ replay |
 | `error_message` | `text` | NOT NULL | Thông điệp lỗi chi tiết từ AI/STT (HTTP 429, Timeout, Circuit Breaker) |
 | `retry_count` | `int` | NOT NULL, Default `0` | Số lần đã retry trong Background Worker (Polly tối đa 3 lần trước khi vào DLQ) |
@@ -678,74 +702,116 @@ erDiagram
 
 ---
 
-### 3.9. Phân hệ 9: Hộp thư Thông báo trong Ứng dụng (In-App Notifications - FE-11)
+### 3.9. Phân hệ 9: Hộp thư Thông báo trong Ứng dụng Chuẩn 3NF (In-App Notifications - FE-11)
 
 #### Bảng `notifications`
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
-| `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính thông báo |
+| `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi thông báo |
 | `user_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Người dùng nhận thông báo |
-| `title` | `varchar(200)` | NOT NULL | Tiêu đề thông báo |
+| `title` | `varchar(255)` | NOT NULL | Tiêu đề thông báo |
 | `message` | `text` | NOT NULL | Nội dung chi tiết thông báo |
-| `type` | `varchar(50)` | NOT NULL | Phân loại thông báo (5 sự kiện: `EXAM_SCHEDULE_PUBLISHED`, `EXAM_GRADE_PUBLISHED`, `APPEAL_LECTURER_ASSIGNED`, `QUESTION_REVIEW_SUBMITTED`, `QUESTION_NEEDS_REVISION`) |
+| `type` | `varchar(50)` | NOT NULL | Phân loại thông báo (`EXAM_SCHEDULE_PUBLISHED`, `EXAM_GRADE_PUBLISHED`, `APPEAL_LECTURER_ASSIGNED`, `QUESTION_REVIEW_SUBMITTED`, `QUESTION_NEEDS_REVISION`, `NEW_APPEAL_SUBMITTED`) |
 | `is_read` | `boolean` | NOT NULL, Default `false` | Trạng thái đã đọc/chưa đọc |
-| `metadata` | `jsonb` | NULLABLE | Dữ liệu phụ trợ đi kèm (ID thực thể liên quan, deep-link, thông tin ca thi/vé thi) |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm gửi thông báo |
 | `read_at` | `timestamptz` | NULLABLE | Thời điểm người dùng ấn đọc thông báo |
+| `related_entity_name` | `varchar(100)` | NULLABLE | Tên thực thể liên quan (`student_exam_tickets`, `appeal_requests`, `exam_questions`) |
+| `related_entity_id` | `uuid` | NULLABLE | Khóa chính của thực thể liên quan |
+| `metadata_json` | `text` | NULLABLE | Dữ liệu phụ trợ JSON đi kèm |
+
+- **Chỉ mục ESR:** `IX_notifications_user_id_is_read_created_at` trên `(user_id, is_read, created_at DESC)` hỗ trợ truy vấn lọc thông báo chưa đọc $O(1)$.
 
 ---
 
-### 3.10. Phân hệ 10: Ca Thi Vấn Đáp Tại Lớp & Mật Khẩu Xoay Vòng Động (In-Class Oral Exams & TOTP - R6)
+### 3.10. Phân hệ 10: Ca Thi Vấn Đáp Tại Lớp & Mật Khẩu Xoay Vòng Động (In-Class Oral Exams & TOTP - MF-05 / R6)
 
 #### Bảng `in_class_exam_shifts` (Ca thi Vấn đáp tại lớp do Giảng viên quản lý)
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính ca thi tại lớp |
 | `class_id` | `uuid` | FK `classes(id)` ON DELETE CASCADE | Lớp học phần trực thuộc |
-| `name` | `varchar(255)` | NOT NULL | Tên hiển thị ca thi tại lớp (ví dụ: "Viva Progress Assessment - Week 5") |
-| `description` | `text` | NULLABLE | Mô tả nội dung ôn tập và hướng dẫn làm bài |
-| `question_ids` | `jsonb` | NOT NULL, Default `'[]'::jsonb` | Danh sách ID các câu hỏi được chọn cho ca thi |
-| `duration_minutes` | `int` | NOT NULL, Default `15`, CHECK `duration_minutes > 0` | Thời lượng làm bài (phút) |
-| `status` | `varchar(32)` | NOT NULL, Default `'DRAFT'`, CHECK in (`'DRAFT'`, `'OPEN'`, `'CLOSED'`, `'FINALIZED'`) | Trạng thái vòng đời ca thi tại lớp: Bản nháp, Đang mở, Đã đóng, Đã hoàn tất bảng điểm |
+| `lecturer_id` | `uuid` | FK `users(id)` ON DELETE RESTRICT | Giảng viên phụ trách tổ chức ca thi |
+| `shift_name` | `varchar(150)` | NOT NULL | Tên hiển thị ca thi tại lớp (ví dụ: "Viva Progress Assessment - Week 5") |
+| `description` | `text` | NULLABLE | Mô tả nội dung bài kiểm tra do Giảng viên nhập |
+| `question_pool_mode` | `varchar(30)` | NOT NULL, Default `'ALL_COURSE_BANK'`, CHECK in (`'ALL_COURSE_BANK'`, `'SELECTED_POOL'`) | Chế độ nguồn câu hỏi (toàn bộ kho ôn tập của môn hoặc pool chọn lọc) |
+| `selected_question_ids` | `uuid[]` | NULLABLE | Danh sách ID câu hỏi nguồn khi chọn `SELECTED_POOL` |
+| `total_questions_per_student` | `int` | NOT NULL, Default `3`, CHECK `total_questions_per_student BETWEEN 1 AND 10` | Tổng số câu hỏi mỗi sinh viên phải thực hiện trong ca |
+| `start_time` | `timestamptz` | NOT NULL | Thời điểm bắt đầu ca thi |
+| `end_time` | `timestamptz` | NOT NULL, CHECK `end_time > start_time` | Thời điểm kết thúc ca thi |
+| `duration_minutes` | `int` | NOT NULL, Default `15`, CHECK `duration_minutes BETWEEN 5 AND 180` | Thời lượng làm bài tối đa của mỗi sinh viên (phút) |
+| `rubric_id` | `uuid` | NULLABLE, FK `rubrics(id)` ON DELETE SET NULL | Barem Rubric áp dụng để chấm điểm |
+| `has_follow_up` | `boolean` | NOT NULL, Default `false` | Bật/tắt câu hỏi phụ Follow-up đào sâu do AI phát vấn |
+| `max_follow_up_questions` | `int` | NOT NULL, Default `2`, CHECK `max_follow_up_questions BETWEEN 0 AND 5` | Số câu hỏi phụ tối đa trên mỗi câu chính (0 khi tắt follow-up, 1–5 khi bật) |
+| `is_auto_publish_grades` | `boolean` | NOT NULL, Default `true` | Tự động publish điểm song song tức thì qua SignalR ngay khi AI chấm xong |
+| `transcript_buffer_seconds` | `int` | NOT NULL, Default `60`, CHECK `transcript_buffer_seconds BETWEEN 10 AND 300` | Thời gian đệm nghe lại và chỉnh sửa transcript |
+| `allow_transcript_edit` | `boolean` | NOT NULL, Default `true` | Cho phép sinh viên chỉnh sửa thuật ngữ trong transcript |
+| `totp_secret_key` | `varchar(128)` | NOT NULL | Khóa bí mật Hex 64 ký tự dùng cho thuật toán TOTP RFC 6238 |
+| `status` | `varchar(20)` | NOT NULL, Default `'SCHEDULED'`, CHECK in (`'SCHEDULED'`, `'IN_PROGRESS'`, `'FINALIZED'`, `'CANCELLED'`) | Trạng thái vòng đời ca thi tại lớp |
+| `is_locked` | `boolean` | NOT NULL, Default `false` | Cờ khóa một chiều One-Way Lock khi giảng viên chốt bảng điểm |
+| `finalized_at` | `timestamptz` | NULLABLE | Thời điểm Giảng viên hoàn tất chấm và chốt bảng điểm lớp |
 | `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm tạo ca thi |
-| `closed_at` | `timestamptz` | NULLABLE | Thời điểm Giảng viên đóng nhận bài |
-| `finalized_at` | `timestamptz` | NULLABLE | Thời điểm Giảng viên hoàn tất chấm và khóa bảng điểm lớp |
+| `updated_at` | `timestamptz` | NULLABLE | Thời điểm cập nhật ca thi |
 
-#### Bảng `in_class_shift_passwords` (Mật khẩu Xoay vòng Động 5 phút & Grace Period 30-60s - R6)
+- **Check Constraints:** `ck_in_class_exam_shifts_status` (`status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')`), `ck_in_class_exam_shifts_time` (`end_time >= start_time`), `ck_in_class_exam_shifts_pool_mode` (`question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')`), `ck_in_class_exam_shifts_total_questions` (`total_questions_per_student >= 1 AND total_questions_per_student <= 10`), `ck_in_class_exam_shifts_max_followup` (`max_follow_up_questions >= 0 AND max_follow_up_questions <= 5`), `ck_in_class_exam_shifts_duration` (`duration_minutes BETWEEN 5 AND 180`), `ck_in_class_exam_shifts_buffer` (`transcript_buffer_seconds BETWEEN 10 AND 300`).
+- **Chỉ mục ESR:** `ix_in_class_exam_shifts_class_status_created` trên `(class_id, status, created_at DESC)`, `ix_in_class_exam_shifts_lecturer` trên `(lecturer_id)`.
+
+#### Bảng `in_class_shift_passwords` (Mật khẩu Xoay vòng Động 5 phút & Grace Period 60s - R6)
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi mật khẩu |
-| `in_class_shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
-| `password_hash` | `varchar(255)` | NOT NULL | Mật khẩu xoay vòng ngẫu nhiên 6 ký tự băm an toàn |
-| `valid_from` | `timestamptz` | NOT NULL | Thời điểm bắt đầu hiệu lực cửa sổ mật khẩu (chu kỳ 5 phút) |
-| `valid_to` | `timestamptz` | NOT NULL | Thời điểm kết thúc cửa sổ mật khẩu chính thức |
-| `grace_until` | `timestamptz` | NOT NULL | Mốc thời gian ân hạn tối đa (+30..60s) để chống rớt mạng / độ trễ mạng khi sinh viên bấm tham gia ở giây cuối |
-| `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm sinh mật khẩu |
+| `shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
+| `plain_code` | `varchar(10)` | NOT NULL | Mã OTP 6 chữ số sinh từ TOTP RFC 6238 chiếu trên màn hình lớp học |
+| `password_hash` | `varchar(255)` | NOT NULL | Mật khẩu xoay vòng băm an toàn |
+| `valid_from` | `timestamptz` | NOT NULL | Thời điểm bắt đầu hiệu lực cửa sổ mật khẩu (chu kỳ 300 giây) |
+| `valid_to` | `timestamptz` | NOT NULL | Thời điểm kết thúc cửa sổ mật khẩu chính thức (+300 giây) |
+| `grace_until` | `timestamptz` | NOT NULL | Thời điểm kết thúc khoảng gia hạn an toàn (+30–60 giây sau `valid_to`) để xử lý độ trễ mạng và lệch đồng hồ |
+| `created_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm ghi nhận mật khẩu |
+
+- **Chỉ mục ESR & Unique:** `uq_in_class_shift_passwords_shift_valid_from` UNIQUE trên `(shift_id, valid_from)` (chống race condition khi polling mã OTP đồng thời), `ix_in_class_shift_passwords_shift_valid` trên `(shift_id, valid_from, grace_until)` tra cứu cửa sổ hiệu lực kèm 60s grace period tức thời (< 5ms).
 
 #### Bảng `in_class_shift_participants` (Danh sách Sinh viên Tham gia Ca thi tại lớp)
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bản ghi tham gia |
-| `in_class_shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
-| `student_id` | `uuid` | FK `users(id)` ON DELETE RESTRICT | Sinh viên tham gia ca thi |
+| `shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
+| `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên tham gia ca thi |
+| `assigned_question_id` | `uuid` | NULLABLE, FK `practice_questions(id)` ON DELETE SET NULL | Khóa ngoại chuẩn 3NF trỏ tới duy nhất 1 câu hỏi mà thuật toán Anti-Collision đã bốc cho sinh viên khi nhập OTP (mặc định 1 câu hỏi/sinh viên cho ca thi trên lớp MF-05) |
+| `assigned_question_ids` | `uuid[]` | NOT NULL, Default `'{}'` | Mảng chứa danh sách ID câu hỏi đã bốc cho sinh viên (đồng bộ với `assigned_question_id`) |
 | `joined_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm nhập đúng mật khẩu xoay vòng vào ca |
-| `status` | `varchar(32)` | NOT NULL, Default `'JOINED'`, CHECK in (`'JOINED'`, `'IN_PROGRESS'`, `'SUBMITTED'`) | Trạng thái làm bài của sinh viên |
-| (UNIQUE) | `uq_in_class_shift_student` | UNIQUE `(in_class_shift_id, student_id)` | **Ràng buộc bất biến:** Mỗi sinh viên chỉ có một bản ghi tham gia trong một ca thi tại lớp |
+| `total_ai_score` | `numeric(4,2)` | NULLABLE, CHECK `total_ai_score >= 0.00 AND total_ai_score <= 10.00` | Tổng điểm trung bình do AI chấm |
+| `total_final_score` | `numeric(4,2)` | NULLABLE, CHECK `total_final_score >= 0.00 AND total_final_score <= 10.00` | Điểm thành phần cuối cùng do Giảng viên xác nhận |
+| `status` | `varchar(20)` | NOT NULL, Default `'JOINED'`, CHECK in (`'JOINED'`, `'SUBMITTED'`, `'ABSENT'`) | Trạng thái tham gia của sinh viên |
+| (UNIQUE) | `uq_in_class_shift_participants_shift_student` | UNIQUE `(shift_id, student_id)` | **Ràng buộc bất biến:** Mỗi sinh viên chỉ có một bản ghi tham gia trong một ca thi tại lớp |
 
-#### Bảng `in_class_exam_submissions` (Bài nộp & Điểm số Ca thi tại lớp)
+- **Check Constraints:** `ck_in_class_shift_participants_status` (`status IN ('JOINED', 'SUBMITTED', 'ABSENT')`), `ck_in_class_shift_participants_scores` (`total_ai_score BETWEEN 0.00 AND 10.00`, `total_final_score BETWEEN 0.00 AND 10.00`).
+- **Chỉ mục ESR:** `ix_in_class_shift_participants_student` trên `(student_id, shift_id)`.
+
+#### Bảng `in_class_exam_submissions` (Bài nộp & Điểm số Ca thi tại lớp — KHÔNG LƯU AUDIO R2)
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả nghiệp vụ |
 |:---|:---|:---:|:---|
 | `id` | `uuid` | PK, Default `gen_random_uuid()` | Khóa chính bài nộp tại lớp |
-| `in_class_shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
-| `student_id` | `uuid` | FK `users(id)` ON DELETE RESTRICT | Sinh viên nộp bài |
-| `transcript` | `text` | NOT NULL | Toàn bộ văn bản phiên âm bài nói của sinh viên |
+| `shift_id` | `uuid` | FK `in_class_exam_shifts(id)` ON DELETE CASCADE | Ca thi tại lớp tương ứng |
+| `student_id` | `uuid` | FK `users(id)` ON DELETE CASCADE | Sinh viên nộp bài |
+| `question_id` | `uuid` | FK `practice_questions(id)` ON DELETE RESTRICT | Câu hỏi vấn đáp được giao trong ca |
+| `transcript` | `text` | NOT NULL | Toàn bộ văn bản phiên âm bài nói của sinh viên (thu từ Web Speech API hoặc client) |
+| `is_follow_up` | `boolean` | NOT NULL, Default `false` | Đánh dấu câu trả lời cho lượt hỏi phụ follow-up |
+| `parent_submission_id` | `uuid` | NULLABLE, FK `in_class_exam_submissions(id)` ON DELETE CASCADE | Khóa ngoại liên kết tới bài nộp câu hỏi chính |
+| `follow_up_index` | `int` | NOT NULL, Default `0`, CHECK `follow_up_index BETWEEN 0 AND 5` | Thứ tự câu hỏi phụ (0 = câu chính, 1..5 = câu phụ) |
+| `follow_up_prompt` | `text` | NULLABLE | Nội dung câu hỏi phụ do AI phát vấn |
 | `ai_score` | `numeric(4,2)` | NULLABLE, CHECK `ai_score >= 0.00 AND ai_score <= 10.00` | Điểm số do AI (Gemini 1.5 Flash CoT) chấm tự động qua BoundedChannel |
-| `ai_feedback` | `jsonb` | NULLABLE | Nhận xét chi tiết và phân tích Rubric từ AI |
+| `ai_feedback` | `text` | NULLABLE | Nhận xét chi tiết và phân tích Rubric từ AI |
+| `ai_confidence_score` | `numeric(3,2)` | NULLABLE, CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00` | Điểm tự tin của AI đối với bài làm |
+| `cot_trace` | `text` | NULLABLE | Chuỗi suy luận Chain-of-Thought từ Gemini |
 | `final_score` | `numeric(4,2)` | NULLABLE, CHECK `final_score >= 0.00 AND final_score <= 10.00` | Điểm số chính thức sau khi Giảng viên phụ trách lớp rà soát / điều chỉnh |
-| `lecturer_comment` | `text` | NULLABLE | Ghi chú nhận xét sư phạm của Giảng viên phụ trách |
-| `status` | `varchar(32)` | NOT NULL, Default `'SUBMITTED'`, CHECK in (`'SUBMITTED'`, `'AI_GRADED'`, `'AUDITED'`) | Trạng thái bài nộp |
+| `lecturer_notes` | `text` | NULLABLE | Ghi chú nhận xét sư phạm hoặc lý do điều chỉnh của Giảng viên |
+| `status` | `varchar(20)` | NOT NULL, Default `'SUBMITTED'`, CHECK in (`'SUBMITTED'`, `'AI_GRADED'`, `'AUDITED'`) | Trạng thái bài nộp |
 | `submitted_at` | `timestamptz` | NOT NULL, Default `CURRENT_TIMESTAMP` | Thời điểm nộp bài (Persist-First < 100ms) |
-| `audited_at` | `timestamptz` | NULLABLE | Thời điểm Giảng viên hoàn tất thẩm định điểm |
+| `graded_at` | `timestamptz` | NULLABLE | Thời điểm AI hoặc Giảng viên hoàn tất chấm điểm |
+| (UNIQUE) | `uq_in_class_exam_submissions_shift_student` | UNIQUE `(shift_id, student_id, question_id, follow_up_index)` | **Ràng buộc duy nhất:** Mỗi sinh viên chỉ nộp 1 lần cho mỗi câu hỏi và từng chỉ mục follow-up trong ca thi |
+
+- **Cam kết Bất biến số 8:** **TUYỆT ĐỐI KHÔNG CÓ CỘT AUDIO R2**, chỉ lưu transcript văn bản.
+- **Check Constraints:** `ck_in_class_exam_submissions_status` (`status IN ('SUBMITTED', 'AI_GRADED', 'AUDITED')`), `ck_in_class_exam_submissions_followup_index` (`follow_up_index >= 0 AND follow_up_index <= 5`).
+- **Chỉ mục ESR:** `ix_in_class_exam_submissions_shift_student` trên `(shift_id, student_id, submitted_at DESC)`, `ix_in_class_exam_submissions_student` trên `(student_id, submitted_at DESC)`, `ix_in_class_exam_submissions_question` trên `(question_id)`.
 
 ---
 
@@ -776,24 +842,24 @@ Nhằm đảm bảo hiệu năng truy vấn cao (< 50ms) và bảo vệ tính to
 | `ix_anti_cheat_logs_shift` | `exam_anti_cheat_logs` | `(shift_id)` | B-Tree | Tra cứu toàn bộ sự kiện gian lận trong ca thi phục vụ Proctor/Khảo thí Console. |
 | `ix_dead_letter_queues_lookup` | `dead_letter_queues` | `(managed_by_role, status, created_at)` | Composite B-Tree | Phân quyền quét DLQ: Admin quét luồng Practice/Mock; Khảo thí quét luồng Official Exam (R2). |
 | `ix_audit_logs_lookup` | `audit_logs` | `(entity_name, entity_id, created_at DESC)` | Composite B-Tree | Truy vết lịch sử sửa đổi điểm và cấu hình ngân hàng câu hỏi. |
-| `ix_appeal_requests_ticket` | `appeal_requests` | `(ticket_id)` | Unique B-Tree | Chặn sinh viên nộp trùng lặp đơn phúc khảo khi vé thi đã có đơn đang xử lý. |
-| `ix_appeal_requests_status` | `appeal_requests` | `(status, assigned_lecturer_id)` | Composite B-Tree | Hỗ trợ Cán bộ Khảo thí, Trưởng BM và Giảng viên lọc danh sách đơn theo từng bước quy trình 5 bước (R7). |
-| `ix_in_class_passwords_window` | `in_class_shift_passwords` | `(in_class_shift_id, valid_from, valid_to, grace_until)` | Composite B-Tree | Xác thực mật khẩu xoay vòng TOTP tức thời (< 5ms) kèm kiểm tra thời gian ân hạn (R6). |
-| `ix_in_class_submissions_shift` | `in_class_exam_submissions` | `(in_class_shift_id, student_id)` | Composite B-Tree | Lọc bài nộp ca thi tại lớp cho Giảng viên hậu kiểm và lên điểm (R6). |
+| `uq_appeal_requests_ticket_id` | `appeal_requests` | `(ticket_id)` UNIQUE | Unique B-Tree | Chặn sinh viên nộp trùng lặp đơn phúc khảo khi vé thi đã có đơn đang xử lý. |
+| `idx_appeal_requests_status_created` | `appeal_requests` | `(status, created_at DESC)` | ESR Composite B-Tree | Hỗ trợ Cán bộ Khảo thí lọc danh sách đơn theo 5 trạng thái chuẩn và sắp xếp thời gian nộp mới nhất. |
+| `idx_appeal_requests_regrade_lecturer` | `appeal_requests` | `(regrade_lecturer_id, status)` | ESR Composite B-Tree | Giảng viên tra cứu nhanh danh sách các bài thi được phân công chấm lại độc lập theo định mức <= 24 bài/GV. |
+| `idx_appeal_requests_student` | `appeal_requests` | `(student_id, created_at DESC)` | ESR Composite B-Tree | Sinh viên tra cứu lịch sử phúc khảo trên Student Portal $O(1)$ không cần Filesort. |
+| `ix_in_class_shift_passwords_shift_valid` | `in_class_shift_passwords` | `(shift_id, valid_from, grace_until)` | ESR Composite B-Tree | Xác thực mật khẩu xoay vòng TOTP RFC 6238 tức thời (< 5ms) kèm kiểm tra cửa sổ 300s + 60s grace period (R6). |
+| `ix_in_class_exam_submissions_shift_student` | `in_class_exam_submissions` | `(shift_id, student_id, submitted_at DESC)` | ESR Composite B-Tree | Lọc bài nộp ca thi tại lớp cho Giảng viên hậu kiểm và lên điểm (R6). |
 | `ix_system_configs_key` | `system_configs` | `(key)` UNIQUE | Unique B-Tree | Tra cứu tham số cấu hình hệ thống tức thì (< 2ms). |
-| `idx_notifications_user_read` | `notifications` | `(user_id, is_read, created_at DESC)` | Composite B-Tree | Lọc nhanh danh sách thông báo chưa đọc của người dùng trên thanh thông báo chuông (FE-11). |
+| `IX_notifications_user_id_is_read_created_at` | `notifications` | `(user_id, is_read, created_at DESC)` | ESR Composite B-Tree | Lọc nhanh danh sách thông báo chưa đọc của người dùng trên thanh thông báo chuông (FE-11). |
 | `ix_practice_sessions_student_started` | `practice_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử luyện tập của sinh viên trên Student Portal và Dashboard ($O(\log N)$ không cần Filesort). |
 | `ix_mock_exam_sessions_student_started` | `mock_exam_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử thi thử có phân trang theo sinh viên và môn học. |
 | `ix_practice_questions_review_queue` | `practice_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt đề của Trưởng Bộ Môn và danh sách câu hỏi `NEEDS_REVISION` trên Lecturer Dashboard. |
 | `ix_exam_questions_review_queue` | `exam_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt câu hỏi thi thật MF-03/MF-04 theo môn học, trạng thái và giảng viên đệ trình. |
 | `ix_practice_answers_session_order` | `practice_answers` | `(session_id, is_follow_up, order_index)` | ESR Composite B-Tree | Truy xuất tức thì các câu trả lời chính/phụ theo đúng thứ tự câu hỏi trong phiên luyện tập. |
-| `ix_courses_dept_head` | `courses` | `(department_head_user_id)` | B-Tree | Tra cứu nhanh các môn học do một Trưởng Bộ Môn phụ trách trong chuỗi phân cấp học thuật R5. |
-| `ix_practice_sessions_student_started` | `practice_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử luyện tập của sinh viên trên Student Portal và Dashboard ($O(\log N)$ không cần Filesort). |
-| `ix_mock_exam_sessions_student_started` | `mock_exam_sessions` | `(student_id, started_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn lịch sử thi thử có phân trang theo sinh viên và môn học. |
-| `ix_practice_questions_review_queue` | `practice_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt đề của Trưởng Bộ Môn và danh sách câu hỏi `NEEDS_REVISION` trên Lecturer Dashboard. |
-| `ix_exam_questions_review_queue` | `exam_questions` | `(course_id, approval_status, submitted_by)` | ESR Composite B-Tree | Tăng tốc hàng đợi duyệt câu hỏi thi thật MF-03/MF-04 theo môn học, trạng thái và giảng viên đệ trình. |
-| `ix_practice_answers_session_order` | `practice_answers` | `(session_id, is_follow_up, order_index)` | ESR Composite B-Tree | Truy xuất tức thì các câu trả lời chính/phụ theo đúng thứ tự câu hỏi trong phiên luyện tập. |
 | `ix_courses_dept_head` | `courses` | `(department_head_user_id)` | B-Tree | Tra cứu nhanh các môn học do một Trưởng Bộ Môn phụ trách trong chuỗi phân cấp học thuật R5. |
+| `ix_ai_evaluations_student` | `ai_evaluations` | `(student_id)` | B-Tree | Tra cứu trực diện toàn bộ đánh giá AI và chi tiết tiêu chí CLO của một sinh viên trên Student Dashboard mà không cần OR JOIN 4 bảng. |
+| `ix_ai_evaluations_in_class_submission` | `ai_evaluations` | `(in_class_submission_id)` | B-Tree | Join tức thời bảng đánh giá AI và chi tiết tiêu chí (`ai_evaluation_details`) cho bài nộp ca thi trên lớp (MF-05). |
+| `uq_in_class_exam_submissions_shift_student` | `in_class_exam_submissions` | `(shift_id, student_id, question_id, follow_up_index)` UNIQUE | Unique B-Tree | Bảo đảm mỗi sinh viên chỉ nộp duy nhất 1 lần cho mỗi câu hỏi và từng lượt follow-up trong ca thi trên lớp ($O(\log N)$). |
+| `ix_classes_active_semester_course_created` | `classes` | `(is_active, semester_id, course_id, created_at DESC)` | ESR Composite B-Tree | Tối ưu hóa truy vấn tìm kiếm và lọc lớp học phần đang mở theo học kỳ và môn học cho sinh viên (R5). |
 
 ### 4.2. Cơ Chế Điều Phối Lưu Trữ Phạm Vi Câu Hỏi (Storage Dispatching Policy — Cô Lập 2 Kho Đề R8)
 Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questions` (Kho mở) và `exam_questions` (Kho bảo mật), tham số `usageScope` trong các API tạo/duyệt câu hỏi (`POST /api/v1/questions/draft`, `POST /api/v1/questions/batch-approve`) được điều phối lưu trữ độc lập như sau:
@@ -815,15 +881,15 @@ Do kiến trúc bóc tách hoàn toàn giữa hai thế giới `practice_questio
 - **Ràng buộc Chuẩn đầu ra duy nhất:** Bảng `course_clos` có Unique constraint `(course_id, clo_code)`.
 - **Ràng buộc Không trùng đề phòng thi:** `student_exam_tickets` có Unique index `(shift_id, exam_set_id) WHERE exam_set_id IS NOT NULL` bảo đảm không có 2 thí sinh cùng phòng thi nhận trùng bộ đề.
 - **Ràng buộc Hạn ngạch thi thử:** `mock_exam_quotas.used_count` có CHECK constraint `used_count >= 0` (so sánh động với `courses.max_mock_exams_per_day` do Admin cấu hình theo môn, vượt hạn ngạch trả `HTTP 429 Too Many Requests`).
-- **Ràng buộc Khóa điểm một chiều & Phúc khảo:** Khi `student_exam_tickets.is_locked = true`, EF Core Interceptor chặn 100% câu lệnh `UPDATE`/`DELETE` ở cấp độ CSDL, ngoại trừ trường hợp Giảng viên được Trưởng Bộ Môn phân công chấm lại đơn phúc khảo nội bộ (`AppealRequest`) sau khi hoàn tất quy trình 5 bước thẩm định hợp lệ (R7).
+- **Ràng buộc Khóa điểm một chiều & Phúc khảo:** Khi `student_exam_tickets.is_locked = true`, EF Core Interceptor chặn 100% câu lệnh `UPDATE`/`DELETE` ở cấp độ CSDL, ngoại trừ trường hợp đơn phúc khảo nội bộ (`AppealRequest`) được Cán bộ Khảo thí phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV) và Cán bộ Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock cập nhật điểm chính thức (R2/R7).
 - **Ràng buộc Phương thức thi môn học:** `courses.exam_input_mode` có CHECK constraint `exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')`.
 - **Ràng buộc Cấu hình động môn học & kỳ thi:** `courses.transcript_buffer_seconds` có CHECK `BETWEEN 10 AND 300` và `courses.max_follow_up_questions` có CHECK `BETWEEN 1 AND 5` (do Admin cấu hình cho hệ thống luyện tập MF-01). Môn thi trong kỳ thi thật MF-04 (`official_exam_sessions`) có `max_follow_up_questions` CHECK `BETWEEN 1 AND 5` (mặc định 2 câu), `transcript_buffer_seconds` CHECK `BETWEEN 10 AND 300` và `exam_input_mode` CHECK in (`'VoiceOnly'`, `'VoiceWithTranscriptEdit'`) do 100% Trưởng Bộ Môn thiết lập (R3). Cán bộ Khảo thí tuyệt đối không có quyền cấu hình follow-up.
 - **Ràng buộc Giới hạn quyền Giám thị (R4):** Cán bộ coi thi (`proctor`) chỉ thực hiện điểm danh thí sinh (SeatNumber 1-40, thẻ SV/CCCD) và ghi nhận nhật ký vi phạm vào `exam_anti_cheat_logs`. Cắt bỏ toàn bộ quyền mở ca thi, đóng ca thi, gỡ niêm phong IP hay reset máy trạm.
 - **Ràng buộc Vòng đời vé thi 7 bước:** `student_exam_tickets.status` có CHECK constraint `status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')`.
 - **Ràng buộc Phân loại bài thi Hậu kiểm:** `student_exam_tickets.ai_confidence_score` và `exam_question_submissions.ai_confidence_score` có CHECK `ai_confidence_score >= 0.00 AND ai_confidence_score <= 1.00`. Khi `is_suspicious == true` hoặc `ai_confidence_score < 0.70`, hệ thống tự động gắn cờ xếp vào Nhóm 1 Đáng nghi ngờ trên Cổng Hậu kiểm Giám khảo để ưu tiên nghe lại Waveform Player và thẩm định trước.
 - **Ràng buộc Phê duyệt Bộ đề & Câu hỏi:** `exam_sets.status` có CHECK constraint `status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')`. Phê duyệt `OFFICIAL` bởi Trưởng Bộ Môn tự động cascade kích hoạt các câu hỏi liên kết trong `exam_questions` sang `approval_status = 'APPROVED'`. Chỉ các bộ đề `HANDED_OVER` mới được Cán bộ Khảo thí phát cho thí sinh trong phòng thi.
-- **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Cán bộ Khảo thí công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu khiếu nại, sinh viên nộp đơn Phúc khảo nội bộ `AppealRequest` tuân thủ quy trình 5 bước nghiêm ngặt: SV nộp đơn -> Khảo thí thẩm tra hợp lệ -> Trưởng BM phân công GV chấm lại -> GV tái thẩm định trên Evidence Panel -> Trưởng BM phê duyệt quyết định cuối cùng (R7).
-- **Ràng buộc Phân định Dead-Letter Queue (R2):** Bảng `dead_letter_queues` bắt buộc chứa 2 trường phân định `flow_type` (`PRACTICE_MOCK`, `OFFICIAL_EXAM`) và `managed_by_role` (`admin`, `examination_officer`). Admin toàn quyền quản trị và kích hoạt replay DLQ cho MF-01/02; Cán bộ Khảo thí quản trị và kích hoạt replay DLQ cho MF-04; Trưởng Bộ Môn tuyệt đối không can thiệp vào DLQ.
+- **Ràng buộc Xác nhận nhận điểm Student Portal & Phúc khảo Nội Bộ:** `student_exam_tickets.student_acknowledgement_status` có CHECK constraint `student_acknowledgement_status IN ('PENDING', 'ACKNOWLEDGED', 'APPEALED')`. Máy trạm Kiosk khóa bảo mật không hiển thị điểm; sau khi Cán bộ Khảo thí công bố điểm (100% sinh viên có điểm), sinh viên xem điểm trên Student Portal. Nếu khiếu nại, sinh viên nộp đơn Phúc khảo nội bộ `AppealRequest` tuân thủ quy trình 5 bước nghiêm ngặt: SV nộp đơn -> Khảo thí thẩm tra hợp lệ & Trưởng BM nhận in-app notif -> Khảo thí phân công GV chấm lại (thuật toán đề xuất <= 24 bài/GV, độc lập) -> GV tái thẩm định trên Evidence Panel -> Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock cập nhật điểm chính thức (R2/R7).
+- **Ràng buộc Phân định Dead-Letter Queue (R2):** Bảng `dead_letter_queues` bắt buộc chứa 2 trường phân định `flow_type` (`PRACTICE_MOCK` / `PRACTICE`, `MOCK_EXAM`, `OFFICIAL_EXAM`, `IN_CLASS_EXAM`) và `managed_by_role` (`admin`, `examination_officer`, `lecturer`). Admin toàn quyền quản trị và kích hoạt replay DLQ cho MF-01/02 và MF-05; Giảng viên quản lý và kích hoạt replay DLQ cho ca thi trong lớp MF-05 (`GET/POST /api/v1/lecturer/dlq/tasks`); Cán bộ Khảo thí quản trị và kích hoạt replay DLQ cho MF-04; Trưởng Bộ Môn tuyệt đối không can thiệp vào DLQ.
 - **Ràng buộc Phân cấp Học thuật (R5):** Cột `courses.department_head_id` bắt buộc được gán bởi Admin. Bảng `course_lecturers` liên kết N-N giữa Môn học và Giảng viên theo từng học kỳ. Chỉ Giảng viên được phân công trong `course_lecturers` mới có quyền tạo Lớp học (`classes`) và quản lý mật khẩu tham gia (`classes.join_password_hash`).
 - **Ràng buộc Mật khẩu Xoay vòng TOTP Ca thi tại lớp (R6):** Mật khẩu ca thi tại lớp thay đổi định kỳ 5 phút một lần lưu tại `in_class_shift_passwords`. Cột `grace_until` bắt buộc được cộng thêm 30–60 giây để xử lý độ trễ mạng. Toàn bộ trạng thái TOTP lưu trữ tại CSDL chuẩn 3NF, nghiêm cấm sử dụng RAM biến tĩnh tạm thời.
 - **Ràng buộc Thời gian không tương tác (Session Inactivity Timeout MF-01):** Tham số `SessionInactivityTimeoutMinutes` trong bảng `system_configs` (mặc định 5 phút) quy định thời gian tối đa một phiên luyện tập được duy trì trạng thái `in_progress` mà không có hoạt động. Mọi request gọi lên (tạo phiên, bốc câu hỏi tiếp theo qua `POST /api/v1/practice/sessions/{id}/next-question`, nộp câu trả lời) đều cập nhật lại mốc thời gian `last_activity_at`. Khi phát hiện quá 5 phút không tương tác, hệ thống tự động đánh dấu phiên là `timed_out`, chấm điểm các câu đã hoàn thành (đối với Full-Session, các câu chưa làm tính 0 điểm; đối với Per-Question, lưu lại các câu đã làm), trả về lỗi `HTTP 410 Gone` (RFC 7807) và tuyệt đối không tạo phiên rác.

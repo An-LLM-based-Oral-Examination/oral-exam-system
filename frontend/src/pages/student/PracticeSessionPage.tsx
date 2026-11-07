@@ -1062,18 +1062,6 @@ export const PracticeSessionPage: React.FC = () => {
   }, [runtime])
 
   useEffect(() => {
-    if (!showStopConfirmation) return
-    const previouslyFocusedElement =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousBodyOverflow
-      previouslyFocusedElement?.focus()
-    }
-  }, [showStopConfirmation])
-
-  useEffect(() => {
     const gradingIsActive = Boolean(
       !showGradingComplete &&
         (runtime?.pendingAnswerId || runtime?.fullSessionSubmitted || runtime?.pendingSubmission),
@@ -2061,7 +2049,7 @@ export const PracticeSessionPage: React.FC = () => {
 
   if (isHydratingRuntime && sessionId && user) {
     return (
-      <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
+      <section className="mx-auto mt-12 max-w-xl overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-white text-center shadow-[0_18px_48px_rgba(31,61,105,0.09)]">
         <div className="bg-[linear-gradient(135deg,#f4fbfd,#BDE8F5)] px-6 py-8">
           <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-white text-[#1C4D8D] shadow-[0_10px_28px_rgba(28,77,141,0.12)]">
             <LoaderCircle className="size-7 animate-spin motion-reduce:animate-none" />
@@ -2091,11 +2079,11 @@ export const PracticeSessionPage: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="border-t border-[#4988C4]/45 bg-white p-4">
+        <div className="border-t border-[#82aedb]/55 bg-white p-4">
           <button
             type="button"
             onClick={() => navigate('/practice')}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
           >
             <ArrowLeft className="size-4" /> Tạo phiên mới
           </button>
@@ -2151,7 +2139,7 @@ export const PracticeSessionPage: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="practice-session-title"
-        className="flex h-[min(695px,calc(100dvh-3rem))] max-h-[calc(100dvh-3rem)] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-[#4988C4]/45 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
+        className="flex h-[min(695px,calc(100dvh-3rem))] max-h-[calc(100dvh-3rem)] w-full max-w-7xl flex-col overflow-hidden rounded-[28px] border border-[#82aedb]/55 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
       >
       <section
         className={cn(
@@ -2159,9 +2147,16 @@ export const PracticeSessionPage: React.FC = () => {
           'shrink-0 rounded-none border-x-0 border-t-0 px-3 py-2.5 text-white shadow-none sm:px-5 sm:py-3',
         )}
       >
-        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-35" />
-        <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#4988C4]/16/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#4988C4]/30 blur-3xl" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
+        />
+        <div className="pointer-events-none absolute -top-24 right-[-8%] size-72 rounded-full bg-[#57dcff]/12 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 left-[38%] size-72 rounded-full bg-[#7357ff]/9 blur-3xl" />
 
         <div className="relative z-10">
           <div className="flex items-center justify-between gap-4">
@@ -2287,7 +2282,7 @@ export const PracticeSessionPage: React.FC = () => {
             type="button"
             onClick={() => void completeAndExit()}
             disabled={isCompleting}
-            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#d94c63]/40 bg-white px-3 text-xs font-bold text-[#b6384e] shadow-sm transition hover:bg-[#ffe8ec] disabled:opacity-50"
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#d94c63]/40 bg-white px-3 text-xs font-bold text-[#b6384e] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#ffe8ec] disabled:opacity-50 motion-reduce:transform-none"
           >
             <X className="size-3.5" /> Thoát phiên
           </button>
@@ -2296,7 +2291,7 @@ export const PracticeSessionPage: React.FC = () => {
 
       {sessionNotice && !showGradingCard && !runtime.activeFollowUp && (
         <div
-          className="flex items-start gap-2.5 rounded-2xl border border-[#bde0fe] bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
+          className="flex items-start gap-2.5 rounded-2xl border border-[#82aedb]/55 bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
           role="status"
           aria-live="polite"
         >
@@ -2316,7 +2311,7 @@ export const PracticeSessionPage: React.FC = () => {
           type="button"
           onClick={() => void reconcilePendingSubmission(runtime)}
           disabled={isSubmitting}
-          className="mx-auto flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-sm font-bold text-amber-700 shadow-sm transition hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60"
+          className="mx-auto flex h-10 items-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-sm font-bold text-amber-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
         >
           <RefreshCw
             className={`size-4 ${isSubmitting ? 'animate-spin motion-reduce:animate-none' : ''}`}
@@ -2330,7 +2325,7 @@ export const PracticeSessionPage: React.FC = () => {
           type="button"
           onClick={() => void synchronizeSession(true)}
           disabled={isManualSyncing}
-          className="mx-auto flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
+          className="mx-auto flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
         >
           <RefreshCw
             className={cn('size-3.5', isManualSyncing && 'animate-spin motion-reduce:animate-none')}
@@ -2350,7 +2345,7 @@ export const PracticeSessionPage: React.FC = () => {
           <article className="shrink-0 overflow-hidden rounded-[22px] border-0 bg-white shadow-none">
             <div
               className={cn(
-                'border-b border-[#4988C4]/45 px-4 py-3 sm:px-5 sm:py-4',
+                'border-b border-[#82aedb]/55 px-4 py-3 sm:px-5 sm:py-4',
                 hasQuestionImage &&
                   (isImageTextLayout
                     ? 'grid items-stretch gap-3 sm:gap-4 md:grid-cols-[minmax(13rem,34%)_minmax(0,1fr)]'
@@ -2448,7 +2443,7 @@ export const PracticeSessionPage: React.FC = () => {
                   currentQuestion.rubricCriteria.map((criterion, index) => (
                     <span
                       key={`${criterion}-${index}`}
-                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2 text-xs leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
+                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
                     >
                       <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#299b7d]" />
                       {criterion}
@@ -2479,7 +2474,7 @@ export const PracticeSessionPage: React.FC = () => {
                     'w-full max-w-2xl rounded-3xl border px-5 py-6 shadow-[0_16px_36px_rgba(31,61,105,0.1)] transition-colors sm:px-7',
                     showGradingComplete
                       ? 'border-[#b9eadc] bg-[linear-gradient(135deg,#f5fffb_0%,#e9faf5_100%)]'
-                      : 'border-[#bde0fe] bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_100%)]',
+                      : 'border-[#82aedb]/55 bg-[linear-gradient(135deg,#f7fbff_0%,#edf5ff_100%)]',
                   )}
                 >
                   <div className="flex items-start gap-4">
@@ -2493,7 +2488,7 @@ export const PracticeSessionPage: React.FC = () => {
                         <>
                           <span
                             aria-hidden="true"
-                            className="pointer-events-none absolute -inset-1 rounded-[1.15rem] border border-[#45b9df]/45 border-t-[#BDE8F5] animate-[spin_2.6s_linear_infinite] motion-reduce:animate-none"
+                            className="pointer-events-none absolute -inset-1 rounded-[1.15rem] border border-[#45b9df]/45 border-t-[#82aedb]/55 animate-[spin_2.6s_linear_infinite] motion-reduce:animate-none"
                           />
                           <span
                             aria-hidden="true"
@@ -2544,7 +2539,7 @@ export const PracticeSessionPage: React.FC = () => {
               </div>
             )}
 
-            <div className="hidden flex-col gap-3 border-b border-[#4988C4]/45 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="hidden flex-col gap-3 border-b border-[#82aedb]/55 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <div className="flex items-center gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   {answerInputMode === 'voice' ? (
@@ -2593,7 +2588,7 @@ export const PracticeSessionPage: React.FC = () => {
                       'mx-auto flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:cursor-not-allowed disabled:opacity-60',
                       isRecording
                         ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                        : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                        : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                     )}
                   >
                     {isTranscribing ? (
@@ -2626,8 +2621,8 @@ export const PracticeSessionPage: React.FC = () => {
                 className={cn(
                   'rounded-2xl border p-3 sm:p-4',
                   answerInputMode === 'text'
-                    ? 'border-[#4988C4]/65 bg-[#f8fbff] shadow-[0_8px_22px_rgba(31,61,105,0.06)]'
-                    : 'border-[#4988C4]/45 bg-white',
+                    ? 'border-[#82aedb]/55 bg-[#f8fbff] shadow-[0_8px_22px_rgba(31,61,105,0.06)]'
+                    : 'border-[#82aedb]/55 bg-white',
                   answerInputMode === 'voice' && !currentAnswerDraft.trim() && 'hidden',
                   answerInputMode === 'voice' && hideRecognizedAnswerHeader && 'hidden',
                   isTextLayout && 'flex min-h-0 flex-1 flex-col overflow-hidden p-2.5 sm:p-3',
@@ -2678,7 +2673,7 @@ export const PracticeSessionPage: React.FC = () => {
                       : 'Nhập câu trả lời bằng văn bản'
                   }
                   className={cn(
-                    'w-full rounded-xl border border-[#4988C4]/45 bg-white text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa]',
+                    'w-full rounded-xl border border-[#4988C4] bg-white text-sm leading-relaxed text-[#33445b] outline-none placeholder:text-[#9aa7b8] disabled:cursor-not-allowed disabled:bg-[#f3f6fa]',
                     isTextLayout
                       ? 'mt-2 h-[clamp(18rem,38vh,30rem)] min-h-[18rem] flex-none resize-none overflow-y-auto p-4 focus:border-[#7fa4ff] focus:ring-3 focus:ring-[#1C4D8D]/10'
                       : 'mt-3 min-h-28 max-h-32 p-3.5',
@@ -2738,7 +2733,7 @@ export const PracticeSessionPage: React.FC = () => {
 
             <div
               className={cn(
-                'flex flex-col gap-2 border-t border-[#4988C4]/45 bg-white px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:px-3',
+                'flex flex-col gap-2 border-t border-[#82aedb]/55 bg-white px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:px-3',
                 !currentAnswerDraft.trim() && 'hidden',
                 'shrink-0',
               )}
@@ -2786,7 +2781,7 @@ export const PracticeSessionPage: React.FC = () => {
             !showGradingCard &&
             (isSubmitting || isWaitingForGrade) && (
               <div
-                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#c9d9f2] bg-[#f2f7ff] px-3 py-2 text-xs font-semibold text-[#1C4D8D]"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#82aedb]/55 bg-[#f2f7ff] px-3 py-2 text-xs font-semibold text-[#1C4D8D]"
                 role="status"
                 aria-live="polite"
               >
@@ -2813,7 +2808,7 @@ export const PracticeSessionPage: React.FC = () => {
                 persistAnswerDraft(nextDraft, nextMode, false, null)
               }}
               disabled={isInputModeLocked}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#1C4D8D] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
             >
               {answerInputMode === 'voice' ? (
                 <>
@@ -2843,7 +2838,7 @@ export const PracticeSessionPage: React.FC = () => {
                   isCompleting
                 }
                 className={cn(
-                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3',
+                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3 motion-reduce:transform-none',
                 )}
               >
                 <ArrowLeft className="size-3.5" /> Quay lại
@@ -2862,7 +2857,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isCompleting
                   }
                   className={cn(
-                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#9ec4ee] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
+                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none',
                   )}
                 >
                   Bỏ qua <ArrowLeft className="size-3.5 rotate-180" />
@@ -2882,7 +2877,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isCompleting
                   }
                   className={cn(
-                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-[0_6px_14px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45',
+                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-[0_6px_14px_rgba(36,94,234,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none',
                   )}
                 >
                   <Send className="size-3.5" /> Nộp bài
@@ -2893,8 +2888,8 @@ export const PracticeSessionPage: React.FC = () => {
         </div>
 
         <aside className="hidden">
-          <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
-            <div className="border-b border-[#4988C4]/45 px-4 py-3.5">
+          <section className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_30px_rgba(31,61,105,0.055)]">
+            <div className="border-b border-[#82aedb]/55 px-4 py-3.5">
               <div className="flex items-center gap-2">
                 <Layers className="size-4 text-[#1C4D8D]" />
                 <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Tóm tắt phiên luyện tập</h2>
@@ -2902,7 +2897,7 @@ export const PracticeSessionPage: React.FC = () => {
             </div>
             <div className="space-y-4 p-4">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
+                <div className="rounded-xl border border-[#82aedb]/55 bg-[#4988C4]/16 p-3">
                   <p className="text-xs font-semibold text-[#8190a3]">Câu hiện tại</p>
                   <p className="mt-1 text-sm font-black text-[#1C4D8D]">
                     {mode === 'PER_QUESTION'
@@ -2910,7 +2905,7 @@ export const PracticeSessionPage: React.FC = () => {
                       : `${currentQuestionNumber}/${totalMainQuestions}`}
                   </p>
                 </div>
-                <div className="rounded-xl border border-[#e2e8f1] bg-[#4988C4]/16 p-3">
+                <div className="rounded-xl border border-[#82aedb]/55 bg-[#4988C4]/16 p-3">
                   <p className="text-xs font-semibold text-[#8190a3]">Đã hoàn thành</p>
                   <p className="mt-1 text-sm font-black text-[#168367]">
                     {mode === 'PER_QUESTION'
@@ -2950,7 +2945,7 @@ export const PracticeSessionPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_10px_30px_rgba(31,61,105,0.05)]">
+          <section className="rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-[0_10px_30px_rgba(31,61,105,0.05)]">
             <div className="flex items-center gap-2">
               <AudioLines className="size-4 text-[#1C4D8D]" />
               <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Ba bước trả lời</h2>
@@ -2973,7 +2968,7 @@ export const PracticeSessionPage: React.FC = () => {
                   ]
               ).map(([step, title, description]) => (
                 <li key={step} className="flex gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#cbd9ef] bg-[#4988C4]/16 text-xs font-black text-[#1C4D8D]">
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#82aedb]/55 bg-[#4988C4]/16 text-xs font-black text-[#1C4D8D]">
                     {step}
                   </span>
                   <div>
@@ -3012,7 +3007,7 @@ export const PracticeSessionPage: React.FC = () => {
               type="button"
               onClick={() => void synchronizeSession(true)}
               disabled={isManualSyncing}
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#f1f6ff] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
             >
               <RefreshCw
                 className={`size-3.5 ${isManualSyncing ? 'animate-spin motion-reduce:animate-none' : ''}`}

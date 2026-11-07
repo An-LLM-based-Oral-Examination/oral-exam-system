@@ -98,6 +98,7 @@ public class OfficialExamCheckInTests
         await using var context = CreateDbContext();
         var head = await SeedUser(context, UserRole.DepartmentHead);
         var proctor = await SeedUser(context, UserRole.Lecturer);
+        var examiner = await SeedUser(context, UserRole.Lecturer);
         var session = await SeedSession(context, head.Id);
 
         var result = await new OpenExamShiftCommandHandler(context, new OpenExamShiftCommandValidator())
@@ -108,10 +109,12 @@ public class OfficialExamCheckInTests
                 "Lab 7.1",
                 new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
                 new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
-                proctor.Id), CancellationToken.None);
+                proctor.Id,
+                examiner.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProctorUserId.Should().Be(proctor.Id);
+        result.Value.ExaminerUserId.Should().Be(examiner.Id);
         result.Value.RoomLab.Should().Be("Lab 7.1");
     }
 

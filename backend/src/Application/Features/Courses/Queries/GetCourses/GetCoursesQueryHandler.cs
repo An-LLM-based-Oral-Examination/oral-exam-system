@@ -32,6 +32,7 @@ public sealed class GetCoursesQueryHandler : IRequestHandler<GetCoursesQuery, Re
                 Name = c.Name,
                 Description = c.Description,
                 Credits = c.Credits,
+                AcademicProgramId = c.AcademicProgramId,
                 SemesterId = c.SemesterId,
                 DepartmentHeadUserId = c.DepartmentHeadUserId,
                 TranscriptBufferSeconds = c.TranscriptBufferSeconds,

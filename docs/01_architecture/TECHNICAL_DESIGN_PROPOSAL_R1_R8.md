@@ -24,19 +24,20 @@
 ## 1. TỔNG QUAN ĐIỀU HÀNH & BỐI CẢNH KIẾN TRÚC (EXECUTIVE SUMMARY & ARCHITECTURE OVERVIEW)
 
 ### 1.1. Bối cảnh dự án & Động lực tái kiến trúc
-Dự án Capstone FA26SE166 xây dựng nền tảng Luyện thi & Đánh giá Vấn đáp bằng Mô hình Ngôn ngữ Lớn (LLM Oral Exam System) cho ngành Kỹ thuật Phần mềm tại Đại học FPT TP.HCM. Hệ thống bao gồm 4 luồng nghiệp vụ cốt lõi:
-- **MF-01:** Luyện tập tương tác tự do (Interactive Practice - On-Demand Anti-3-Consecutive / Full-Session Progressive 3–10 câu).
-- **MF-02:** Thi thử tính giờ có hạn ngạch (Timed Mock Exam - Quota theo môn do Admin cấu hình, Voice-First Gate, Scorecard CLO).
-- **MF-03:** Giảng viên sử dụng AI sinh câu hỏi từ Chuẩn đầu ra CLO 3NF (`course_clos`) & Rubric Studio 10.0đ.
-- **MF-04:** Thi thật phòng Lab Kiosk tập trung, niêm phong audio Cloudflare R2 (`STT_MSSV.webm` + SHA-256), chấm ngầm đa luồng qua BoundedChannel 1,000 slots, hậu kiểm Evidence Panel và One-Way Lock điểm thi (`is_locked = true`).
+Dự án Capstone FA26SE166 xây dựng nền tảng Luyện thi & Đánh giá Vấn đáp bằng Mô hình Ngôn ngữ Lớn (LLM Oral Exam System) cho ngành Kỹ thuật Phần mềm tại Đại học FPT TP.HCM. Hệ thống bao gồm 5 luồng nghiệp vụ cốt lõi:
+- **MF-01:** Luyện tập tương tác tự do (Interactive Practice - On-Demand Anti-3-Consecutive / Full-Session Progressive 3–10 câu, Timeout 5 phút trả `HTTP 410 Gone`, không lưu audio R2).
+- **MF-02:** Thi thử tính giờ có hạn ngạch (Timed Mock Exam - Quota theo môn do Admin cấu hình qua `max_mock_exams_per_day`, Voice-First Gate, Scorecard CLO, không lưu audio R2).
+- **MF-03:** Giảng viên sử dụng AI sinh câu hỏi từ Chuẩn đầu ra CLO 3NF (`course_clos`) & Rubric Studio 10.0đ (Phân tách độc lập 2 kho: `practice_questions` và `exam_questions` bám ma trận đề mẫu Trưởng BM ban hành).
+- **MF-04:** Thi thật phòng Lab Kiosk tập trung, niêm phong audio Cloudflare R2 (`STT_MSSV.webm` + SHA-256), chấm ngầm đa luồng qua BoundedChannel 1,000 slots, hậu kiểm Evidence Panel, One-Way Lock điểm thi (`is_locked = true`), và quy trình Phúc khảo nội bộ 5 bước qua Cán bộ Khảo thí.
+- **MF-05:** Ca thi trong lớp & Mật khẩu tự động xoay vòng 5 phút (In-Class Formative Assessment - Rotating TOTP 5 phút + Grace Period 30–60s, không lưu audio R2, chấm ngầm qua BoundedChannel, GV xem lại transcript và điều chỉnh điểm thành phần trước khi chốt bảng điểm One-Way Lock).
 
 Qua khảo sát thực tế mã nguồn và tài liệu hiện hành, hệ thống bộc lộ các điểm nghẽn kiến trúc và mâu thuẫn nghiệp vụ cần được giải quyết triệt để:
 1. **Thiếu chuỗi phân cấp quản lý học thuật thực tế (Academic Hierarchy):** Môn học chưa gắn với Trưởng bộ môn; Trưởng bộ môn chưa thể phân công nhiều giảng viên cùng giảng dạy môn học; Giảng viên chưa thể tự quản lý lớp học và cấp mật khẩu ghi danh cho sinh viên.
 2. **Chưa hỗ trợ Ca thi trong lớp (In-Class Formative Assessment):** Đánh giá quá trình (Quiz, Progress Test) ngay tại lớp học bằng AI vấn đáp là nhu cầu cấp thiết. Nếu không có cơ chế kiểm soát hiện diện thể lý, sinh viên có thể gian lận hoặc làm bài từ xa.
-3. **Mâu thuẫn và dồn việc quản lý Dead-Letter Queue (DLQ):** Tài liệu cũ gán 100% việc giám sát và replay DLQ cho Trưởng bộ môn, gây quá tải và vi phạm ranh giới nghiệp vụ (Admin quản trị hạ tầng luyện tập/thi thử; Cán bộ Khảo thí quản trị ca thi thật phòng lab).
-4. **Mâu thuẫn thẩm quyền cấu hình câu hỏi phụ (Follow-up) thi thật:** Tài liệu cũ ghi nhận lẫn lộn giữa Khảo thí và Trưởng bộ môn. Trong khi đó, tính chất câu hỏi thi thật là chuyên môn học thuật gắn với chuẩn CLO, bắt buộc thuộc thẩm quyền duy nhất của Trưởng bộ môn.
+3. **Mâu thuẫn và dồn việc quản lý Dead-Letter Queue (DLQ):** Tài liệu cũ gán 100% việc giám sát và replay DLQ cho Trưởng bộ môn, gây quá tải và vi phạm ranh giới nghiệp vụ (Admin quản trị hạ tầng luyện tập/thi thử MF-01/02; Cán bộ Khảo thí quản trị ca thi thật phòng lab MF-04; Trưởng BM bị cắt bỏ hoàn toàn khỏi quản lý DLQ).
+4. **Mâu thuẫn thẩm quyền cấu hình câu hỏi phụ (Follow-up) thi thật:** Tài liệu cũ ghi nhận lẫn lộn giữa Khảo thí và Trưởng bộ môn. Trong khi đó, tính chất câu hỏi thi thật là chuyên môn học thuật gắn với chuẩn CLO, bắt buộc thuộc thẩm quyền độc quyền 100% của Trưởng bộ môn; Cán bộ Khảo thí tổ chức phòng thi bắt buộc phải phân công đồng thời cả Giám khảo (`examiner_user_id`) và Giám thị (`proctor_user_id`).
 5. **Quyền hạn Giám thị (Proctor) bị mở rộng quá mức:** Tài liệu cũ cho phép Giám thị mở ca thi, đóng ca thi, gỡ niêm phong IP máy trạm, dẫn đến nguy cơ sai lệch quy chế thi của nhà trường.
-6. **Bỏ qua Cán bộ Khảo thí trong quy trình Phúc khảo:** Sinh viên nộp đơn gửi thẳng tới Trưởng bộ môn là sai lệch quy chế hành chính của trường đại học.
+6. **Bỏ qua Cán bộ Khảo thí trong quy trình Phúc khảo:** Sinh viên nộp đơn gửi thẳng tới Trưởng bộ môn hoặc Trưởng BM trực tiếp phân công/phê duyệt là sai lệch quy chế khảo thí của trường đại học. Cán bộ Khảo thí phải là đầu mối tiếp nhận, phân công GV chấm lại độc lập ($\le 24$ bài/GV, loại trừ Giám khảo ca ban đầu) và phê duyệt quyết định cuối cùng mở One-Way Lock; Trưởng BM nhận thông báo in-app để theo dõi chuyên môn học thuật.
 7. **Trộn lẫn kho câu hỏi ôn tập và thi thật:** Cho phép Giảng viên tự do tích chọn đưa câu hỏi vào kho thi thật làm suy giảm tính bảo mật và phá vỡ cấu trúc ma trận đề thi mẫu (Blueprint/Slot Definitions) của Bộ môn.
 
 ### 1.2. Phân tích 8 Yêu cầu mới R1–R8 & Ranh giới tác động (Impact Boundary)
@@ -44,11 +45,11 @@ Qua khảo sát thực tế mã nguồn và tài liệu hiện hành, hệ thố
 |:---|:---|:---|:---|:---|
 | **R1** | **Design-First & Spec-Locking**: Khóa đặc tả kiến trúc, hoàn thiện 100% thiết kế kỹ thuật, CHƯA VIẾT CODE C#/React cho đến khi người dùng phê duyệt. | Cập nhật tài liệu thiết kế CSDL 3NF, chuẩn bị script DDL kiểm thử. | Lập hợp đồng API Contracts RFC 7807, schema JSON. | Toàn bộ tài liệu kiến trúc, sơ đồ C4 và ma trận RBAC. |
 | **R2** | **Phân định quản lý DLQ theo luồng**: MF-01/02 chuyển giao Admin; MF-04 chuyển giao Cán bộ Khảo thí. Cắt bỏ vai trò này của Trưởng bộ môn. | Bảng `dead_letter_queues` bổ sung cột `flow_type`, `managed_by_role`, `resolved_by_user_id`. | Tách 2 cổng API: `/api/v1/admin/dlq` và `/api/v1/examination-officer/dlq`. | Xóa quyền DLQ khỏi `department_head`; gán quyền cho `admin` và `examination_officer`. |
-| **R3** | **Cấu hình Follow-up Thi thật do Trưởng bộ môn phụ trách**: Trưởng bộ môn độc quyền bật/tắt `has_follow_up` và số câu (1–5 câu) cho đề/ca thi thật. | Sử dụng các thuộc tính sẵn có trên `official_exam_sessions` và `courses`. | Endpoint mới: `PUT /api/v1/department-head/official-exams/shifts/{id}/follow-up-config`. | Khóa chặt route cho `department_head`; thu hồi khỏi `examination_officer`. |
+| **R3** | **Cấu hình Follow-up Thi thật do Trưởng bộ môn phụ trách & Phân công đồng thời Examiner + Proctor**: Trưởng bộ môn độc quyền cấu hình `has_follow_up` (1–5 câu, mặc định 2); Khảo thí tạo ca thi bắt buộc phân công cả `examiner_user_id` và `proctor_user_id`. | `official_exam_sessions`, `courses`; Bảng `real_exam_session_shifts` thêm `examiner_user_id` và `proctor_user_id` NOT NULL, check `examiner_user_id <> proctor_user_id`. | Endpoint cấu hình: `PUT /api/v1/official-exams/sessions/{id}/follow-up-config`; Endpoint tạo ca thi: `POST /api/v1/examination-officer/official-exams/sessions/{sessionId}/shifts`. | Khóa route cấu hình follow-up cho `department_head,admin`; Route tạo ca thi thuộc `examination_officer,admin`. |
 | **R4** | **Giới hạn quyền hạn Giám thị (Proctor)**: Chỉ điểm danh sinh viên (Seat 1–40) và báo cáo vi phạm phòng thi; cắt bỏ mở/đóng ca thi, đổi IP, xem điểm. | Bảng `exam_anti_cheat_logs` và `student_exam_tickets.checked_in_at`. | Chỉ giữ lại: `POST /api/v1/proctor/shifts/{id}/attendance` và `POST .../violations`. | Cắt bỏ 100% quyền can thiệp vào điểm thi, ca thi, niêm phong IP và bộ đề thi. |
 | **R5** | **Chuỗi phân cấp học thuật 4 cấp**: Admin (Semester $\to$ Course $\to$ gán Dept Head) $\to$ Dept Head (gán nhiều GV vào môn) $\to$ GV (tạo lớp + mật khẩu lớp) $\to$ SV (nhập mật khẩu join lớp). | `courses` (thêm `department_head_user_id`), bảng mới `course_lecturers` ($N-N$), `classes` (thêm `name`, `join_code`, `join_password_hash`). | Phân hệ `/api/v1/academic/*` và `/api/v1/lecturer/classes/*`, `/api/v1/student/classes/join`. | Phân quyền nghiêm ngặt 4 cấp độ: Admin $\to$ Dept Head $\to$ Lecturer $\to$ Student. |
 | **R6** | **Ca thi trong lớp & Mật khẩu xoay vòng 5 phút**: Đánh giá quá trình (Formative Assessment); mật khẩu tự xoay vòng mỗi 5 phút + gia hạn 30–60s; AI chấm ngầm + GV hậu kiểm/chỉnh sửa điểm trước khi chốt. | Bảng mới: `in_class_exam_shifts`, `in_class_shift_passwords`, `in_class_shift_participants`, `in_class_exam_submissions`. | Phân hệ `/api/v1/lecturer/in-class-shifts/*` và `/api/v1/student/in-class-shifts/*`. | Giảng viên đứng lớp có quyền điều hành ca thi, xem lại transcript, chỉnh sửa điểm thành phần; Sinh viên tham gia. |
-| **R7** | **Quy trình Phúc khảo 5 bước chuẩn FPTU**: SV nộp $\to$ Khảo thí tiếp nhận & thẩm định $\to$ Khảo thí chuyển Trưởng BM $\to$ Trưởng BM giao GV chấm lại $\to$ Trưởng BM duyệt quyết định. | Bảng `appeal_requests` mở rộng cột tiếp nhận của Khảo thí, giao của Trưởng BM, và 6 trạng thái vòng đời. | Cổng tiếp nhận `/api/v1/examination-officer/appeals/*`, chuyển tiếp và phân công `/api/v1/academic/appeals/*`. | Phối hợp tác chiến đa role: Student $\to$ Examination Officer $\to$ Department Head $\to$ Lecturer. |
+| **R7** | **Quy trình Phúc khảo 5 bước chuẩn FPTU**: SV nộp $\to$ Khảo thí tiếp nhận & thẩm tra (Trưởng BM nhận thông báo in-app) $\to$ Khảo thí phân công GV chấm lại ($\le 24$ bài/GV, loại trừ Giám khảo ca ban đầu) $\to$ GV chấm lại độc lập trên Evidence Panel $\to$ Khảo thí phê duyệt quyết định cuối cùng mở One-Way Lock. | Bảng `appeal_requests` chuẩn 3NF: `received_by_officer_id`, `assigned_lecturer_id`, `decided_by_officer_id`, 5 trạng thái vòng đời chuẩn (loại bỏ hoàn toàn `FORWARDED_TO_DEPT_HEAD`). | Phân hệ `/api/v1/student/appeals`, `/api/v1/examination-officer/appeals/*` (kèm `/allocation-proposal`, `/batch-assign`, `/decision`), `/api/v1/lecturer/appeals/{id}/regrade`. | Phối hợp tác chiến đa role: Student $\to$ Examination Officer $\to$ Lecturer $\to$ Examination Officer (Trưởng BM nhận thông báo in-app theo dõi học thuật). |
 | **R8** | **Phân tách độc lập 2 luồng tạo câu hỏi**: Luồng ôn tập (MF-01/02) tạo linh hoạt, độc lập; Luồng thi thật (MF-04) bắt buộc bám sát Ma trận cấu trúc đề thi mẫu do Trưởng bộ môn ban hành. | Thêm khóa ngoại `clo_id` vào `practice_questions` và `exam_questions`; thêm `structure_id` vào `exam_questions`; thêm `is_sample_set` vào `exam_sets`. | Tách 2 luồng API: `/api/v1/questions/practice/*` và `/api/v1/department-head/questions/official/*`. | Giảng viên và Trưởng BM soạn câu hỏi ôn tập tự do; Câu hỏi thi thật bắt buộc gắn chặt vào slot ma trận đề mẫu. |
 
 ---
@@ -131,6 +132,7 @@ UPDATE classes SET join_code = UPPER(SUBSTRING(MD5(id::text) FROM 1 FOR 8)) WHER
 
 ALTER TABLE classes ALTER COLUMN join_code SET NOT NULL;
 CREATE UNIQUE INDEX ix_classes_join_code ON classes(join_code);
+CREATE INDEX ix_classes_active_semester_course_created ON classes(is_active, semester_id, course_id, created_at DESC);
 
 COMMENT ON COLUMN classes.join_code IS 'Mã tham gia ngắn gọn do hệ thống cấp để sinh viên tìm kiếm lớp';
 COMMENT ON COLUMN classes.join_password_hash IS 'Mã băm bcrypt/Argon2 mật khẩu do giảng viên đặt để bảo vệ lớp';
@@ -152,7 +154,7 @@ CREATE TABLE in_class_exam_shifts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id UUID NOT NULL,
     lecturer_user_id UUID NOT NULL,
-    title VARCHAR(200) NOT NULL,
+    shift_name VARCHAR(150) NOT NULL,
     description TEXT NULL,
     rubric_id UUID NULL,
     duration_minutes INT NOT NULL DEFAULT 15,
@@ -160,14 +162,20 @@ CREATE TABLE in_class_exam_shifts (
     end_time TIMESTAMPTZ NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'SCHEDULED',
     
+    -- Cấu hình nguồn câu hỏi & số câu hỏi mỗi sinh viên
+    question_pool_mode VARCHAR(30) NOT NULL DEFAULT 'ALL_COURSE_BANK',
+    selected_question_ids UUID[] NULL,
+    total_questions_per_student INT NOT NULL DEFAULT 3,
+
     -- Cấu hình mật khẩu xoay vòng
     is_password_rotation_enabled BOOLEAN NOT NULL DEFAULT true,
     password_rotation_interval_seconds INT NOT NULL DEFAULT 300, -- 5 phút
     password_grace_period_seconds INT NOT NULL DEFAULT 60,       -- 60 giây gia hạn
     
-    -- Cấu hình hình thức làm bài
+    -- Cấu hình hình thức làm bài & follow-up
     has_follow_up BOOLEAN NOT NULL DEFAULT false,
-    max_follow_up_questions INT NOT NULL DEFAULT 1,
+    max_follow_up_questions INT NOT NULL DEFAULT 2,
+    is_auto_publish_grades BOOLEAN NOT NULL DEFAULT true,
     transcript_buffer_seconds INT NOT NULL DEFAULT 60,
     allow_transcript_edit BOOLEAN NOT NULL DEFAULT true,
     
@@ -179,9 +187,11 @@ CREATE TABLE in_class_exam_shifts (
     
     CONSTRAINT ck_in_class_shifts_time CHECK (end_time > start_time),
     CONSTRAINT ck_in_class_shifts_duration CHECK (duration_minutes BETWEEN 5 AND 180),
-    CONSTRAINT ck_in_class_shifts_status CHECK (status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+    CONSTRAINT ck_in_class_shifts_status CHECK (status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')),
+    CONSTRAINT ck_in_class_shifts_pool_mode CHECK (question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')),
+    CONSTRAINT ck_in_class_shifts_total_questions CHECK (total_questions_per_student BETWEEN 1 AND 10),
     CONSTRAINT ck_in_class_shifts_buffer CHECK (transcript_buffer_seconds BETWEEN 10 AND 300),
-    CONSTRAINT ck_in_class_shifts_follow_up CHECK (max_follow_up_questions BETWEEN 1 AND 5),
+    CONSTRAINT ck_in_class_shifts_follow_up CHECK (max_follow_up_questions BETWEEN 0 AND 5),
     CONSTRAINT fk_in_class_shifts_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
     CONSTRAINT fk_in_class_shifts_lecturer FOREIGN KEY (lecturer_user_id) REFERENCES users(id) ON DELETE RESTRICT,
     CONSTRAINT fk_in_class_shifts_rubric FOREIGN KEY (rubric_id) REFERENCES rubrics(id) ON DELETE SET NULL
@@ -223,6 +233,8 @@ CREATE TABLE in_class_shift_participants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     shift_id UUID NOT NULL,
     student_user_id UUID NOT NULL,
+    assigned_question_id UUID NULL,
+    assigned_question_ids UUID[] NOT NULL DEFAULT '{}',
     joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     password_used_id UUID NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'JOINED',
@@ -244,6 +256,7 @@ CREATE TABLE in_class_shift_participants (
     ),
     CONSTRAINT fk_participants_shift FOREIGN KEY (shift_id) REFERENCES in_class_exam_shifts(id) ON DELETE CASCADE,
     CONSTRAINT fk_participants_student FOREIGN KEY (student_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_participants_assigned_q FOREIGN KEY (assigned_question_id) REFERENCES practice_questions(id) ON DELETE SET NULL,
     CONSTRAINT fk_participants_password FOREIGN KEY (password_used_id) REFERENCES in_class_shift_passwords(id) ON DELETE SET NULL,
     CONSTRAINT fk_participants_auditor FOREIGN KEY (audited_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT uq_in_class_shift_student UNIQUE (shift_id, student_user_id)
@@ -264,8 +277,13 @@ CREATE TABLE in_class_exam_submissions (
     student_user_id UUID NOT NULL,
     question_id UUID NOT NULL,
     question_source VARCHAR(20) NOT NULL DEFAULT 'practice',
-    audio_url TEXT NULL,
     transcript TEXT NULL,
+    
+    -- Cấu trúc câu hỏi phụ Follow-up
+    is_follow_up BOOLEAN NOT NULL DEFAULT false,
+    parent_submission_id UUID NULL,
+    follow_up_index INT NOT NULL DEFAULT 0,
+    follow_up_prompt TEXT NULL,
     
     -- Kết quả AI đánh giá
     ai_score NUMERIC(4,2) NULL,
@@ -286,6 +304,7 @@ CREATE TABLE in_class_exam_submissions (
     
     CONSTRAINT ck_in_class_subs_status CHECK (status IN ('SUBMITTED', 'GRADING', 'AI_GRADED', 'REVIEWED', 'FINALIZED')),
     CONSTRAINT ck_in_class_subs_source CHECK (question_source IN ('practice', 'exam')),
+    CONSTRAINT ck_in_class_subs_follow_up CHECK (follow_up_index BETWEEN 0 AND 5),
     CONSTRAINT ck_in_class_subs_scores CHECK (
         (ai_score IS NULL OR (ai_score >= 0.00 AND ai_score <= 10.00)) AND
         (adjusted_score IS NULL OR (adjusted_score >= 0.00 AND adjusted_score <= 10.00)) AND
@@ -295,14 +314,42 @@ CREATE TABLE in_class_exam_submissions (
     CONSTRAINT fk_in_class_subs_participant FOREIGN KEY (participant_id) REFERENCES in_class_shift_participants(id) ON DELETE CASCADE,
     CONSTRAINT fk_in_class_subs_shift FOREIGN KEY (shift_id) REFERENCES in_class_exam_shifts(id) ON DELETE CASCADE,
     CONSTRAINT fk_in_class_subs_student FOREIGN KEY (student_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_in_class_subs_parent FOREIGN KEY (parent_submission_id) REFERENCES in_class_exam_submissions(id) ON DELETE CASCADE,
     CONSTRAINT fk_in_class_subs_reviewer FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT uq_in_class_sub_participant_question UNIQUE (participant_id, question_id)
+    CONSTRAINT uq_in_class_sub_shift_student_question UNIQUE (shift_id, student_user_id, question_id, follow_up_index)
 );
 
 CREATE INDEX ix_in_class_subs_question ON in_class_exam_submissions(question_id);
 CREATE INDEX ix_in_class_subs_status ON in_class_exam_submissions(status);
 
-COMMENT ON TABLE in_class_exam_submissions IS 'Lưu chi tiết từng câu trả lời, audio/transcript, điểm AI và điểm điều chỉnh của giảng viên trong ca thi lớp';
+COMMENT ON TABLE in_class_exam_submissions IS 'Lưu chi tiết từng câu trả lời, transcript, điểm AI và điểm điều chỉnh của giảng viên trong ca thi lớp (Zero R2 Audio)';
+
+-- -----------------------------------------------------------------------------
+-- 8b. BẢNG AI_EVALUATIONS: Bổ sung student_id, in_class_submission_id, ck_ai_evaluations_type và XOR 4 luồng ([DB-01])
+-- -----------------------------------------------------------------------------
+ALTER TABLE ai_evaluations
+    ADD COLUMN student_id UUID NULL,
+    ADD COLUMN in_class_submission_id UUID NULL,
+    ADD CONSTRAINT fk_ai_evaluations_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_ai_evaluations_in_class FOREIGN KEY (in_class_submission_id) REFERENCES in_class_exam_submissions(id) ON DELETE CASCADE;
+
+CREATE INDEX ix_ai_evaluations_student ON ai_evaluations(student_id);
+CREATE INDEX ix_ai_evaluations_in_class_submission ON ai_evaluations(in_class_submission_id);
+
+ALTER TABLE ai_evaluations DROP CONSTRAINT IF EXISTS ck_ai_evaluations_type;
+ALTER TABLE ai_evaluations ADD CONSTRAINT ck_ai_evaluations_type 
+    CHECK (answer_type IN ('practice', 'mock_exam', 'exam', 'in_class'));
+
+ALTER TABLE ai_evaluations DROP CONSTRAINT IF EXISTS ck_ai_evaluations_xor;
+ALTER TABLE ai_evaluations ADD CONSTRAINT ck_ai_evaluations_xor CHECK (
+    (answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR
+    (answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR
+    (answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND in_class_submission_id IS NULL) OR
+    (answer_type = 'in_class' AND in_class_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL)
+);
+
+COMMENT ON COLUMN ai_evaluations.student_id IS 'Khóa ngoại trực diện tới sinh viên phục vụ truy xuất O(log N) trên Student Dashboard';
+COMMENT ON COLUMN ai_evaluations.in_class_submission_id IS 'Khóa ngoại liên kết tới bài nộp ca thi trên lớp MF-05';
 
 -- -----------------------------------------------------------------------------
 -- 9. BỔ SUNG KHÓA NGOẠI CLO & CẤU TRÚC VÀO KHO CÂU HỎI (R8)
@@ -330,43 +377,66 @@ CREATE INDEX ix_exam_sets_sample ON exam_sets(course_id, is_sample_set);
 COMMENT ON COLUMN exam_sets.is_sample_set IS 'Đánh dấu bộ đề thi mẫu do Trưởng bộ môn ban hành làm căn cứ sinh đề thi thật';
 
 -- -----------------------------------------------------------------------------
+-- 9b. BẢNG REAL_EXAM_SESSION_SHIFTS: Phân công đồng thời Examiner & Proctor (R3)
+-- -----------------------------------------------------------------------------
+ALTER TABLE real_exam_session_shifts
+    ADD COLUMN examiner_user_id UUID NOT NULL,
+    ADD COLUMN proctor_user_id UUID NOT NULL,
+    ADD CONSTRAINT fk_shifts_examiner FOREIGN KEY (examiner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT fk_shifts_proctor FOREIGN KEY (proctor_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT ck_shifts_examiner_proctor_distinct CHECK (examiner_user_id <> proctor_user_id);
+
+CREATE INDEX ix_shifts_examiner ON real_exam_session_shifts(examiner_user_id);
+CREATE INDEX ix_shifts_proctor ON real_exam_session_shifts(proctor_user_id);
+
+COMMENT ON COLUMN real_exam_session_shifts.examiner_user_id IS 'Giảng viên chấm thi / hậu kiểm Evidence Panel bài thi phòng Lab';
+COMMENT ON COLUMN real_exam_session_shifts.proctor_user_id IS 'Cán bộ coi thi / giám thị điểm danh máy 1-40 và báo cáo vi phạm phòng Lab';
+
+-- -----------------------------------------------------------------------------
 -- 10. BẢNG APPEAL_REQUESTS: Mở rộng Cổng Khảo thí & Quy trình 5 Bước (R7)
 -- -----------------------------------------------------------------------------
 ALTER TABLE appeal_requests
     ADD COLUMN received_by_officer_id UUID NULL,
     ADD COLUMN officer_received_at TIMESTAMPTZ NULL,
     ADD COLUMN officer_notes TEXT NULL,
-    ADD COLUMN department_head_id UUID NULL,
-    ADD COLUMN forwarded_to_dept_head_at TIMESTAMPTZ NULL,
     ADD COLUMN assigned_lecturer_id UUID NULL,
-    ADD COLUMN assigned_by_dept_head_at TIMESTAMPTZ NULL,
+    ADD COLUMN assigned_by_officer_at TIMESTAMPTZ NULL,
     ADD COLUMN regraded_at TIMESTAMPTZ NULL,
+    ADD COLUMN proposed_score NUMERIC(4,2) NULL,
+    ADD COLUMN regrade_reason TEXT NULL,
+    ADD COLUMN decided_by_officer_id UUID NULL,
+    ADD COLUMN decided_at TIMESTAMPTZ NULL,
+    ADD COLUMN decision VARCHAR(16) NULL,
+    ADD COLUMN decision_notes TEXT NULL,
     ADD CONSTRAINT fk_appeals_officer FOREIGN KEY (received_by_officer_id) REFERENCES users(id) ON DELETE SET NULL,
-    ADD CONSTRAINT fk_appeals_dept_head FOREIGN KEY (department_head_id) REFERENCES users(id) ON DELETE SET NULL,
-    ADD CONSTRAINT fk_appeals_lecturer FOREIGN KEY (assigned_lecturer_id) REFERENCES users(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_appeals_lecturer FOREIGN KEY (assigned_lecturer_id) REFERENCES users(id) ON DELETE SET NULL,
+    ADD CONSTRAINT fk_appeals_decided_officer FOREIGN KEY (decided_by_officer_id) REFERENCES users(id) ON DELETE SET NULL,
+    ADD CONSTRAINT ck_appeals_regrade_score CHECK (proposed_score IS NULL OR (proposed_score >= 0.00 AND proposed_score <= 10.00)),
+    ADD CONSTRAINT ck_appeals_final_decision CHECK (decision IS NULL OR decision IN ('APPROVED', 'REJECTED'));
 
--- Cập nhật CHECK constraint cho status của appeal_requests
+-- Cập nhật CHECK constraint cho status của appeal_requests (chuẩn hóa 5 bước R7, loại bỏ FORWARDED_TO_DEPT_HEAD)
 ALTER TABLE appeal_requests DROP CONSTRAINT IF EXISTS ck_appeal_requests_status;
 ALTER TABLE appeal_requests DROP CONSTRAINT IF EXISTS appeal_requests_status_check;
 
 ALTER TABLE appeal_requests ADD CONSTRAINT ck_appeal_requests_status CHECK (
     status IN (
-        'SUBMITTED_TO_EXAM_OFFICE',  -- Sinh viên nộp đơn, chờ Khảo thí tiếp nhận
-        'FORWARDED_TO_DEPT_HEAD',    -- Khảo thí kiểm tra hợp lệ và chuyển Trưởng BM
-        'ASSIGNED_TO_LECTURER',      -- Trưởng BM giao cho Giảng viên chấm lại
-        'IN_REVIEW',                 -- Giảng viên đang mở Evidence Panel đối soát bài
-        'REGRADED_BY_LECTURER',      -- Giảng viên hoàn tất chấm lại, gửi đề xuất điểm mới
-        'APPROVED',                  -- Trưởng BM / Khảo thí phê duyệt cập nhật điểm
-        'REJECTED',                  -- Bác bỏ phúc khảo, giữ nguyên điểm ban đầu
+        'SUBMITTED_TO_EXAM_OFFICE',  -- Bước 1: Sinh viên nộp đơn, chờ Cán bộ Khảo thí tiếp nhận & thẩm tra
+        'ASSIGNED_TO_LECTURER',      -- Bước 3: Cán bộ Khảo thí phân công Giảng viên chấm lại (<= 24 bài/GV)
+        'IN_REVIEW',                 -- Bước 4: Giảng viên mở Evidence Panel đối soát bài
+        'REGRADED_BY_LECTURER',      -- Bước 4: Giảng viên hoàn tất chấm lại, gửi đề xuất điểm mới & biên bản giải trình
+        'APPROVED',                  -- Bước 5: Cán bộ Khảo thí phê duyệt cập nhật điểm chính thức (mở One-Way Lock)
+        'REJECTED',                  -- Bước 5: Cán bộ Khảo thí bác bỏ phúc khảo, giữ nguyên điểm ban đầu
         'CANCELLED'                  -- Sinh viên rút đơn
     )
 );
 
 CREATE INDEX ix_appeals_workflow_officer ON appeal_requests(received_by_officer_id, status);
-CREATE INDEX ix_appeals_workflow_dept_head ON appeal_requests(department_head_id, status);
 CREATE INDEX ix_appeals_workflow_lecturer ON appeal_requests(assigned_lecturer_id, status);
+CREATE INDEX ix_appeals_decided_officer ON appeal_requests(decided_by_officer_id, status);
 
-COMMENT ON COLUMN appeal_requests.received_by_officer_id IS 'Cán bộ Khảo thí tiếp nhận đơn phúc khảo đầu mối';
+COMMENT ON COLUMN appeal_requests.received_by_officer_id IS 'Cán bộ Khảo thí tiếp nhận & thẩm tra đơn phúc khảo đầu mối';
+COMMENT ON COLUMN appeal_requests.assigned_lecturer_id IS 'Giảng viên chuyên môn độc lập được Khảo thí phân công chấm lại (định mức <= 24 bài/GV)';
+COMMENT ON COLUMN appeal_requests.decided_by_officer_id IS 'Cán bộ Khảo thí thẩm định & phê duyệt quyết định phúc khảo cuối cùng';
 
 -- -----------------------------------------------------------------------------
 -- 11. BẢNG DEAD_LETTER_QUEUES: Phân định Quản lý theo Luồng Nghiệp vụ (R2)
@@ -555,16 +625,22 @@ Mọi API đều tuân thủ các quy tắc bất biến:
 ```json
 {
   "classId": "7f8e9d0c-1b2a-3c4d-5e6f-7a8b9c0d1e2f",
-  "title": "Kiểm tra vấn đáp giữa kỳ - Mẫu thiết kế phần mềm",
-  "description": "Đánh giá quá trình 15 phút, mỗi sinh viên trả lời 2 câu hỏi",
+  "shiftName": "Kiểm tra vấn đáp giữa kỳ - Mẫu thiết kế phần mềm",
+  "description": "Đánh giá quá trình 15 phút, mỗi sinh viên trả lời 3 câu hỏi ngẫu nhiên từ kho đề",
   "rubricId": "55667788-99aa-bbcc-ddee-ff0011223344",
   "durationMinutes": 15,
   "startTime": "2026-11-03T15:30:00Z",
   "endTime": "2026-11-03T16:00:00Z",
+  "questionPoolMode": "ALL_COURSE_BANK",
+  "selectedQuestionIds": null,
+  "totalQuestionsPerStudent": 3,
   "passwordRotationIntervalSeconds": 300,
   "passwordGracePeriodSeconds": 60,
-  "hasFollowUp": false,
-  "transcriptBufferSeconds": 60
+  "hasFollowUp": true,
+  "maxFollowUpQuestions": 2,
+  "isAutoPublishGrades": true,
+  "transcriptBufferSeconds": 60,
+  "allowTranscriptEdit": true
 }
 ```
 - **Response `201 Created` (`InClassExamShiftResponse`):**
@@ -573,7 +649,11 @@ Mọi API đều tuân thủ các quy tắc bất biến:
   "id": "c1d2e3f4-a5b6-7c8d-9e0f-1a2b3c4d5e6f",
   "classId": "7f8e9d0c-1b2a-3c4d-5e6f-7a8b9c0d1e2f",
   "classCode": "SE1701",
-  "title": "Kiểm tra vấn đáp giữa kỳ - Mẫu thiết kế phần mềm",
+  "shiftName": "Kiểm tra vấn đáp giữa kỳ - Mẫu thiết kế phần mềm",
+  "questionPoolMode": "ALL_COURSE_BANK",
+  "totalQuestionsPerStudent": 3,
+  "hasFollowUp": true,
+  "maxFollowUpQuestions": 2,
   "durationMinutes": 15,
   "status": "SCHEDULED",
   "isGradeFinalized": false,
@@ -633,14 +713,43 @@ Mọi API đều tuân thủ các quy tắc bất biến:
   "status": "IN_PROGRESS",
   "durationMinutes": 15,
   "mustSubmitBefore": "2026-11-03T15:50:00Z",
-  "questions": [
+  "hasFollowUp": true,
+  "maxFollowUpQuestions": 2,
+  "assignedQuestions": [
     {
       "questionId": "11223344-5566-7788-9900-aabbccddeeff",
+      "orderIndex": 1,
+      "title": "So sánh Factory Method & Abstract Factory",
       "content": "Hãy giải thích sự khác biệt giữa Factory Method và Abstract Factory?",
+      "difficulty": "medium",
       "bloomLevel": "Analyze",
       "rubricCriteria": [
         { "name": "Hiểu bản chất Factory Method", "maxScore": 5.0 },
         { "name": "So sánh đúng tính đa hình và họ đối tượng", "maxScore": 5.0 }
+      ]
+    },
+    {
+      "questionId": "22334455-6677-8899-0011-bbccddeeff00",
+      "orderIndex": 2,
+      "title": "Nguyên lý Single Responsibility (SRP)",
+      "content": "Trình bày nguyên lý SRP trong SOLID và đưa ví dụ vi phạm?",
+      "difficulty": "easy",
+      "bloomLevel": "Understand",
+      "rubricCriteria": [
+        { "name": "Định nghĩa chính xác một lý do thay đổi", "maxScore": 5.0 },
+        { "name": "Đưa ví dụ minh họa hợp lý", "maxScore": 5.0 }
+      ]
+    },
+    {
+      "questionId": "33445566-7788-9900-1122-ccddeeff0011",
+      "orderIndex": 3,
+      "title": "Dependency Inversion Principle (DIP)",
+      "content": "Phân tích cách áp dụng DIP trong kiến trúc Clean Architecture?",
+      "difficulty": "hard",
+      "bloomLevel": "Evaluate",
+      "rubricCriteria": [
+        { "name": "Giải thích phụ thuộc vào abstraction", "maxScore": 5.0 },
+        { "name": "Sơ đồ phụ thuộc hướng tâm của Clean Architecture", "maxScore": 5.0 }
       ]
     }
   ]
@@ -657,7 +766,8 @@ Mọi API đều tuân thủ các quy tắc bất biến:
 {
   "questionId": "11223344-5566-7788-9900-aabbccddeeff",
   "transcript": "Factory Method định nghĩa một interface tạo đối tượng nhưng để lớp con quyết định lớp nào được khởi tạo. Abstract Factory cung cấp một interface để tạo một họ các đối tượng có liên quan hoặc phụ thuộc lẫn nhau mà không cần chỉ định các lớp cụ thể của chúng...",
-  "audioUrl": "https://r2.oralexam.edu.vn/in-class/SE1701_SE170123_Q1.webm"
+  "isFollowUp": false,
+  "parentSubmissionId": null
 }
 ```
 - **Response `200 OK` (`SubmitInClassAnswerResponse`):**
@@ -665,9 +775,11 @@ Mọi API đều tuân thủ các quy tắc bất biến:
 {
   "submissionId": "aabbccdd-1122-3344-5566-778899aabbcc",
   "status": "SUBMITTED",
-  "message": "Đã lưu bài làm an toàn. Hệ thống đang tiến hành chấm AI.",
+  "message": "Đã lưu bài làm an toàn (< 100ms Persist-First). Hệ thống đang chấm AI song song qua BoundedChannel.",
   "submittedAt": "2026-11-03T15:42:00Z"
 }
+```
+> **Lưu ý nghiệp vụ Invariant 8:** Ca thi trong lớp MF-05 **TUYỆT ĐỐI KHÔNG LƯU AUDIO R2**, chỉ lưu transcript văn bản. Hệ thống đẩy bài nộp ngay vào hàng đợi chấm song song `BoundedChannel(1000)` (`MaxDegreeOfParallelism = 12`) và phát sự kiện SignalR `InClassSubmissionGraded` publish điểm tức thì cho Sinh viên và Dashboard Giảng viên.
 ```
 
 ##### 2.6. Giảng viên xem bài nộp & kết quả AI chấm
@@ -741,14 +853,14 @@ Mọi API đều tuân thủ các quy tắc bất biến:
 
 #### PHÂN HỆ 3: QUẢN LÝ DEAD-LETTER QUEUE (DLQ SEPARATION — R2)
 
-##### 3.1. Admin xem tác vụ DLQ sự cố MF-01 & MF-02
+##### 3.1. Admin xem tác vụ DLQ sự cố MF-01, MF-02 & MF-05
 - **HTTP Method:** `GET`
 - **URI:** `/api/v1/admin/dlq/tasks`
-- **Query Params:** `status=pending&flowType=PRACTICE,MOCK_EXAM&page=1&pageSize=20`
+- **Query Params:** `status=pending&flowType=PRACTICE,MOCK_EXAM,IN_CLASS_EXAM&page=1&pageSize=20`
 - **Quyền truy cập:** `admin`
-- **Response `200 OK`:** Danh sách task DLQ của luồng luyện tập và thi thử.
+- **Response `200 OK`:** Danh sách task DLQ của luồng luyện tập, thi thử và ca thi trong lớp.
 
-##### 3.2. Admin Replay tác vụ lỗi MF-01 & MF-02
+##### 3.2. Admin Replay tác vụ lỗi MF-01, MF-02 & MF-05
 - **HTTP Method:** `POST`
 - **URI:** `/api/v1/admin/dlq/tasks/{id}/replay`
 - **Quyền truy cập:** `admin`
@@ -767,31 +879,65 @@ Mọi API đều tuân thủ các quy tắc bất biến:
 - **Quyền truy cập:** `examination_officer`
 - **Response `200 OK`:** `{ "id": "...", "status": "replaying", "replayedBy": "Cán bộ Khảo thí", "replayedAt": "..." }`
 
+##### 3.5. Giảng viên xem tác vụ DLQ ca thi trong lớp MF-05
+- **HTTP Method:** `GET`
+- **URI:** `/api/v1/lecturer/dlq/tasks`
+- **Query Params:** `status=pending&page=1&pageSize=20` (Mặc định lọc `flow_type = 'IN_CLASS_EXAM'`)
+- **Quyền truy cập:** `lecturer,admin`
+- **Response `200 OK`:** Danh sách bài nộp ca thi trong lớp gặp sự cố chấm AI.
+
+##### 3.6. Giảng viên Replay tác vụ DLQ ca thi trong lớp MF-05
+- **HTTP Method:** `POST`
+- **URI:** `/api/v1/lecturer/dlq/tasks/{id}/replay`
+- **Quyền truy cập:** `lecturer,admin`
+- **Response `200 OK`:** `{ "id": "...", "status": "replaying", "replayedBy": "Giảng viên", "replayedAt": "2026-11-03T15:25:00Z" }`
+
 ---
 
-#### PHÂN HỆ 4: CẤU HÌNH FOLLOW-UP THI THẬT DO TRƯỞNG BỘ MÔN QUẢN LÝ (R3)
+#### PHÂN HỆ 4: CẤU HÌNH FOLLOW-UP THI THẬT & PHÂN BỔ NHÂN SỰ CA THI (R3)
 
-##### 4.1. Trưởng bộ môn cấu hình Follow-up cho Ca thi thật
+##### 4.1. Trưởng bộ môn độc quyền cấu hình Follow-up cho Kỳ thi / Ca thi thật
 - **HTTP Method:** `PUT`
-- **URI:** `/api/v1/department-head/official-exams/shifts/{id}/follow-up-config`
-- **Quyền truy cập:** `department_head`
-- **Request Body (`UpdateShiftFollowUpConfigRequest`):**
+- **URI:** `/api/v1/official-exams/sessions/{id}/follow-up-config` *(Alias: `/api/v1/department-head/official-exams/sessions/{id}/follow-up-config`)*
+- **Quyền truy cập:** `department_head,admin` *(Khảo thí CẤM cấu hình)*
+- **Request Body (`UpdateSessionFollowUpConfigRequest`):**
 ```json
 {
   "hasFollowUp": true,
   "maxFollowUpQuestions": 2
 }
 ```
-- **Response `200 OK` (`ShiftFollowUpConfigResponse`):**
+- **Response `200 OK` (`SessionFollowUpConfigResponse`):**
 ```json
 {
-  "shiftId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+  "sessionId": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
   "hasFollowUp": true,
   "maxFollowUpQuestions": 2,
   "updatedAt": "2026-11-03T15:22:00Z"
 }
 ```
-- **Ràng buộc:** `maxFollowUpQuestions` trong khoảng $[1, 5]$. Nếu ca thi đã mở xuất bản đề (`is_exam_published = true`) thì từ chối `403 Forbidden`.
+- **Ràng buộc:** `maxFollowUpQuestions` trong khoảng $[1, 5]$ (mặc định 2). Nếu kỳ thi/ca thi đã mở xuất bản đề (`is_exam_published = true`) thì từ chối `HTTP 403 Forbidden`.
+
+##### 4.2. Cán bộ Khảo thí tạo ca thi phòng Lab bắt buộc phân công đồng thời Examiner & Proctor
+- **HTTP Method:** `POST`
+- **URI:** `/api/v1/examination-officer/official-exams/sessions/{sessionId}/shifts` *(Alias: `/api/v1/official-exams/shifts`)*
+- **Quyền truy cập:** `examination_officer,admin`
+- **Request Body (`CreateShiftWithStaffRequest`):**
+```json
+{
+  "shiftName": "Ca 1 - Kíp Sáng",
+  "labRoom": "LAB-301",
+  "proctorUserId": "11111111-0000-0000-0000-000000000001",
+  "examinerUserId": "22222222-0000-0000-0000-000000000002",
+  "scheduledStartTime": "2026-11-10T08:00:00Z",
+  "scheduledEndTime": "2026-11-10T10:00:00Z"
+}
+```
+- **Ràng buộc bất biến:**
+  - `proctorUserId != examinerUserId`: Nếu trùng nhau, hệ thống trả về mã lỗi `HTTP 422 Unprocessable Entity` (*"Giám thị và Giám khảo của cùng một ca thi phải là hai nhân sự độc lập"*).
+  - `proctorUserId` phải có role `proctor` hoặc `lecturer`; `examinerUserId` bắt buộc phải có role `lecturer`.
+  - Giá trị `examinerUserId` được ghi nhận làm căn cứ để thuật toán phúc khảo loại trừ Giám khảo này khỏi danh sách chấm lại.
+- **Response `201 Created` (`CreateShiftResponse`):** Khởi tạo ca thi thành công ở trạng thái `SCHEDULED`.
 
 ---
 
@@ -825,15 +971,15 @@ Mọi API đều tuân thủ các quy tắc bất biến:
   "details": "Thí sinh mở tài liệu giấy giấu dưới bàn phím trong lúc máy Kiosk đang ghi âm"
 }
 ```
-- **Response `201 Created`:** Lưu bản ghi vào `exam_anti_cheat_logs` với `logged_by = 'PROCTOR'`.
+- **Response `201 Created`:** Lưu bản ghi vào `exam_anti_cheat_logs` với `logged_by = 'PROCTOR'`, đồng thời broadcast cảnh báo realtime qua SignalR Hub `/hubs/anti-cheat`.
 
 ---
 
-#### PHÂN HỆ 6: QUY TRÌNH PHÚC KHẢO NỘI BỘ (APPEALS WORKFLOW — R7)
+#### PHÂN HỆ 6: QUY TRÌNH PHÚC KHẢO NỘI BỘ 5 BƯỚC CHUẨN FPTU (APPEALS WORKFLOW — R7)
 
-##### 6.1. Sinh viên nộp đơn phúc khảo sau công bố điểm
+##### 6.1. Bước 1 — Sinh viên nộp đơn phúc khảo sau công bố điểm
 - **HTTP Method:** `POST`
-- **URI:** `/api/v1/student/appeals`
+- **URI:** `/api/v1/student/appeals` *(Alias: `/api/v1/appeals`)*
 - **Quyền truy cập:** `student`
 - **Request Body (`SubmitAppealRequest`):**
 ```json
@@ -843,57 +989,58 @@ Mọi API đều tuân thủ các quy tắc bất biến:
   "reason": "Em đã trả lời đầy đủ 3 ý về Clean Architecture nhưng điểm AI chỉ ghi nhận 1 ý."
 }
 ```
-- **Response `201 Created`:** Khởi tạo đơn với `status = 'SUBMITTED_TO_EXAM_OFFICE'`.
+- **Response `201 Created`:** Khởi tạo đơn với `status = 'SUBMITTED_TO_EXAM_OFFICE'`. Hệ thống tự động phát thông báo chuông in-app đồng thời tới Cán bộ Khảo thí (`examination_officer`) để thụ lý và Trưởng Bộ Môn (`department_head`) để theo dõi chuyên môn học thuật.
 
-##### 6.2. Cán bộ Khảo thí tiếp nhận & Chuyển giao Trưởng bộ môn
-- **HTTP Method:** `POST`
-- **URI:** `/api/v1/examination-officer/appeals/{id}/forward-to-head`
-- **Quyền truy cập:** `examination_officer`
-- **Request Body (`ForwardAppealToHeadRequest`):**
+##### 6.2. Bước 2 — Cán bộ Khảo thí tiếp nhận & Thẩm tra tính hợp lệ
+- **HTTP Method:** `GET`
+- **URI:** `/api/v1/examination-officer/appeals?status=SUBMITTED_TO_EXAM_OFFICE` *(Alias: `/api/v1/appeals?status=SUBMITTED_TO_EXAM_OFFICE`)*
+- **Quyền truy cập:** `examination_officer,admin` *(Trưởng Bộ Môn có quyền tra cứu giám sát)*
+- **Response `200 OK`:** Danh sách đơn phúc khảo mới nộp. Cán bộ Khảo thí thẩm tra thời hạn nộp đơn (trong vòng 48 giờ sau khi công bố điểm) và quy chế trước khi tiến hành phân công.
+
+##### 6.3. Bước 3 — Cán bộ Khảo thí xem đề xuất phân bổ $\le 24$ bài/GV & Phân công Giảng viên chấm lại
+- **API Đề xuất phân bổ tối ưu:** `GET /api/v1/examination-officer/appeals/allocation-proposal` *(Alias: `/api/v1/examination-officer/appeals/propose-allocation`)*
+  - **Quyền truy cập:** `examination_officer,admin`
+  - **Response `200 OK`:** Trả về danh sách phân bổ tự động theo giải thuật Greedy Min-Load Balancing với định mức trần trần $\le 24$ bài/GV, tự động loại trừ 100% Giám khảo ca thi ban đầu (`examiner_user_id`).
+- **API Phân công chấm lại:** `POST /api/v1/examination-officer/appeals/batch-assign` *(hoặc `POST /api/v1/examination-officer/appeals/{id}/assign-lecturer`)*
+  - **Quyền truy cập:** `examination_officer,admin`
+  - **Request Body (`BatchAssignAppealsRequest`):**
 ```json
 {
-  "officerNotes": "Đã kiểm tra hợp lệ: đơn nộp trong vòng 48h sau công bố điểm, hoàn tất lệ phí phúc khảo."
+  "assignments": [
+    {
+      "appealId": "99aa88bb-11cc-22dd-33ee-44ff55aa66bb",
+      "assignedLecturerId": "2c963f66-5717-4562-b3fc-3fa85f64afa6"
+    }
+  ]
 }
 ```
-- **Response `200 OK`:** Cập nhật `status = 'FORWARDED_TO_DEPT_HEAD'`, ghi nhận `received_by_officer_id` và `forwarded_to_dept_head_at`.
+  - **Response `200 OK`:** Cập nhật `status = 'ASSIGNED_TO_LECTURER'`, ghi nhận `assigned_lecturer_id` và `assigned_by_officer_at`.
 
-##### 6.3. Trưởng bộ môn phân công Giảng viên chấm lại
-- **HTTP Method:** `POST`
-- **URI:** `/api/v1/department-head/appeals/{id}/assign-lecturer`
-- **Quyền truy cập:** `department_head`
-- **Request Body (`AssignAppealLecturerRequest`):**
-```json
-{
-  "assignedLecturerId": "2c963f66-5717-4562-b3fc-3fa85f64afa6"
-}
-```
-- **Response `200 OK`:** Cập nhật `status = 'ASSIGNED_TO_LECTURER'`, ghi nhận `assigned_lecturer_id` và `assigned_by_dept_head_at`.
-
-##### 6.4. Giảng viên gửi kết quả chấm lại
+##### 6.4. Bước 4 — Giảng viên chấm lại độc lập trên Evidence Panel & Gửi đề xuất điểm
 - **HTTP Method:** `PUT`
 - **URI:** `/api/v1/lecturer/appeals/{id}/regrade`
-- **Quyền truy cập:** `lecturer` (Đúng giảng viên được phân công)
+- **Quyền truy cập:** `lecturer` (Đúng Giảng viên độc lập được Cán bộ Khảo thí phân công)
 - **Request Body (`RegradeAppealSubmissionRequest`):**
 ```json
 {
   "proposedScore": 7.5,
-  "regradeReason": "Đã nghe lại file audio niêm phong R2. Sinh viên có phân tích đúng Dependency Inversion nhưng STT bị nhận diện sai từ khóa."
+  "regradeReason": "Đã nghe lại file audio niêm phong R2 trên Waveform Player đoạn 02:15-02:45. Sinh viên có phân tích đúng Dependency Inversion nhưng STT bị nhận diện sai từ khóa chuyên ngành SE."
 }
 ```
-- **Response `200 OK`:** Cập nhật `status = 'REGRADED_BY_LECTURER'`, ghi nhận `proposedScore` và `regraded_at`.
+- **Response `200 OK`:** Cập nhật `status = 'REGRADED_BY_LECTURER'`, ghi nhận `proposedScore` và `regraded_at`. Ràng buộc `regradeReason` bắt buộc $\ge 10$ ký tự (nếu thiếu trả về `HTTP 422 Unprocessable Entity`).
 
-##### 6.5. Trưởng bộ môn phê duyệt quyết định điểm mới
+##### 6.5. Bước 5 — Cán bộ Khảo thí thẩm định & Phê duyệt quyết định cuối cùng mở One-Way Lock
 - **HTTP Method:** `POST`
-- **URI:** `/api/v1/department-head/appeals/{id}/decision`
-- **Quyền truy cập:** `department_head`
+- **URI:** `/api/v1/examination-officer/appeals/{id}/decision`
+- **Quyền truy cập:** `examination_officer,admin`
 - **Request Body (`ReviewAppealDecisionRequest`):**
 ```json
 {
   "decision": "APPROVED",
-  "reviewNotes": "Chấp thuận đề xuất nâng điểm từ 5.0 lên 7.5"
+  "decisionNotes": "Chấp thuận đề xuất nâng điểm từ 5.0 lên 7.5 sau khi thẩm tra biên bản giải trình của Giảng viên chấm lại độc lập."
 }
 ```
-- **Response `200 OK`:** Cập nhật `status = 'APPROVED'`, mở đường One-Way Lock ghi nhận điểm chính thức mới vào vé thi.
+- **Response `200 OK`:** Cập nhật `status = 'APPROVED'` (hoặc `'REJECTED'`), `decided_by_officer_id = EO.Id`, `decision = 'APPROVED'`. Nếu `APPROVED`, hệ thống kích hoạt đường ngoại lệ hợp lệ duy nhất của `OneWayLockInterceptor`, cập nhật `final_score` mới vào `student_exam_tickets`, khóa lại DB an toàn. Xuất báo cáo điểm phúc khảo Excel (.xlsx) và PDF ký số. Gửi thông báo kết quả cho Sinh viên và Trưởng Bộ Môn.
 
 ---
 
@@ -938,11 +1085,11 @@ Dưới đây là ma trận phân quyền chi tiết cho toàn bộ các tài ng
 | **Công bố điểm Thi thật** | Bấm công bố điểm 1 lần duy nhất (`publish-grades` $\to$ Lock) | ❌ | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | ❌ |
 | **DLQ MF-01 & MF-02** | Xem & Replay tác vụ lỗi Luyện tập / Thi thử (`/admin/dlq/*`) | ❌ | ❌ | ❌ | ❌ | ❌ | **✅ (Duy nhất)** |
 | **DLQ MF-04** | Xem & Replay bài thi thật lỗi chấm AI (`/exam-officer/dlq/*`) | ❌ | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | ❌ |
-| **Nộp Phúc khảo** | Nộp đơn phúc khảo sau công bố điểm (`/student/appeals`) | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Tiếp nhận Phúc khảo** | Thẩm tra điều kiện và chuyển Trưởng BM (`/appeals/.../forward`) | ❌ | ❌ | ❌ | **✅ (Đầu mối)** | ❌ | **✅** |
-| **Giao GV Chấm lại** | Phân công GV chuyên môn chấm lại (`/appeals/.../assign-lecturer`) | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | ❌ | **✅** |
-| **Chấm lại Phúc khảo** | Nghe audio R2, đề xuất điểm mới (`/lecturer/appeals/.../regrade`) | ❌ | **✅ (GV được giao)** | **✅** | ❌ | ❌ | ❌ |
-| **Duyệt Phúc khảo** | Phê duyệt quyết định điểm mới (`/appeals/.../decision`) | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | ❌ | **✅** |
+| **Nộp Phúc khảo (B1)** | Nộp đơn phúc khảo sau công bố điểm (`/student/appeals`) | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Tiếp nhận Phúc khảo (B2)** | Tiếp nhận & thẩm tra hồ sơ (`/examination-officer/appeals`) | ❌ | ❌ | **✅ (Nhận thông báo in-app)** | **✅ (Đầu mối)** | ❌ | **✅** |
+| **Giao GV Chấm lại (B3)** | Xem đề xuất $\le 24$ bài/GV & phân công GV (`.../batch-assign`) | ❌ | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | **✅** |
+| **Chấm lại Phúc khảo (B4)** | Nghe audio R2, đề xuất điểm mới (`/lecturer/appeals/.../regrade`) | ❌ | **✅ (GV được giao)** | ❌ | ❌ | ❌ | ❌ |
+| **Duyệt Phúc khảo (B5)** | Phê duyệt quyết định & mở One-Way Lock (`.../decision`) | ❌ | ❌ | ❌ | **✅ (Duy nhất)** | ❌ | **✅** |
 | **Kho câu hỏi Ôn tập** | Tạo/sinh câu hỏi ôn luyện tự do (`/questions/practice/*`) | ❌ | **✅** | **✅** | ❌ | ❌ | **✅** |
 | **Kho câu hỏi Thi thật** | Tạo câu hỏi gắn slot ma trận đề mẫu (`/questions/official/*`) | ❌ | **✅ (DRAFT)** | **✅ (Phê duyệt)** | ❌ | ❌ | ❌ |
 
@@ -986,11 +1133,49 @@ LIMIT 1;
    - Giảng viên có thể bấm vào từng sinh viên để đọc transcript, nghe lại câu trả lời và ghi đè điểm (`adjusted_score`) kèm lý do giải trình (`adjustment_reason`).
 5. **Chốt điểm One-Way Lock:** Sau khi hoàn tất kiểm tra cả lớp, Giảng viên bấm **"Finalize Grade Sheet"** $\to$ Chốt toàn bộ điểm vào bảng điểm chính thức của môn học, kích hoạt cờ `is_grade_finalized = true`, đóng hoàn toàn quyền sửa đổi.
 
+### 5.3. Thuật toán Tự Bốc Đề Ngẫu Nhiên Chống Trùng Lặp (Anti-Collision Algorithm)
+1. **Mục tiêu bài toán & 2 chế độ chọn nguồn đề (`question_pool_mode`):**
+   - Giảng viên cấu hình chế độ nguồn câu hỏi trong ca thi:
+     - `ALL_COURSE_BANK`: Hệ thống tự động bốc ngẫu nhiên $N$ câu (`total_questions_per_student`, từ 1–10 câu, mặc định 3) từ toàn bộ ngân hàng câu hỏi ôn tập của môn học (`practice_questions` đã được duyệt `status = 'APPROVED'` và `is_active = true`).
+     - `SELECTED_POOL`: Giảng viên khoanh vùng một danh sách câu hỏi cụ thể (`selected_question_ids UUID[]`) từ kho câu hỏi đã duyệt, hệ thống tự động bốc $N$ câu từ tập khoanh vùng này cho mỗi sinh viên.
+2. **Thuật toán Least-Frequently-Assigned (LFA) kết hợp Hoán vị Ngẫu nhiên CSPRNG:**
+   - Khi sinh viên $S_i$ nhập OTP tham gia ca thi tại thời điểm $t$, Backend truy vấn tần suất xuất hiện của các câu hỏi trong tập nguồn (dựa trên các bản ghi `in_class_shift_participants.assigned_question_ids` của ca thi hiện tại):
+     $$\text{Freq}(Q_k) = \sum_{P \in \text{Participants}} \mathbb{I}(Q_k \in P.\text{assigned\_question\_ids})$$
+   - Thuật toán sắp xếp danh sách câu hỏi theo thứ tự tăng dần của $\text{Freq}(Q_k)$. Nhóm các câu hỏi có tần suất thấp nhất được xáo trộn ngẫu nhiên bằng bộ sinh số ngẫu nhiên mật mã (`RandomNumberGenerator.Shuffle`).
+    - Chọn ra đúng $N = \text{total\_questions\_per\_student}$ câu hỏi có tần suất thấp nhất, gán vào `assigned_question_ids` của sinh viên đó và lưu ngay vào CSDL.
+    - **Kết quả chống trùng (Anti-Collision):** Các sinh viên ngồi cạnh nhau trong phòng học tham gia ca thi sẽ nhận các bộ câu hỏi khác nhau hoặc có độ lệch tối đa, loại bỏ hoàn toàn tình trạng "nhìn bài" hay nhắc bài nhau trong buổi kiểm tra vấn đáp tại lớp.
+3. **Tối ưu hóa Bốc Đề 2 Pha Nhẹ Bộ Nhớ RAM (`EnterInClassShiftCommandHandler`):**
+   - **Pha 1 (Lọc ID & Tính Tần Suất):** Chỉ truy vấn danh sách `Guid` câu hỏi (`Select(q => q.Id)`) và mảng ID đã bốc trong ca từ CSDL để tính toán tần suất $O(K)$, hoàn toàn không nạp toàn bộ nội dung text đề bài, barem rubric hay đáp án mẫu vào RAM.
+   - **Pha 2 (Nạp Đầy Đủ $N$ Câu Đã Chọn):** Sau khi thuật toán LFA chọn xong đúng $N$ câu hỏi, hệ thống mới nạp chi tiết nội dung đề bài của đúng $N$ câu hỏi đó để trả về cho Client sinh viên, giảm thiểu $90\%$ tải bộ nhớ RAM khi hàng trăm sinh viên cùng nhập OTP vào ca thi.
+
+### 5.4. Pipeline Chấm Đa Luồng Song Song (MaxDegreeOfParallelism = 12) & Publish Điểm Real-Time Song Song
+1. **Thiết kế Persist-First (< 100ms) & Hàng đợi Không Nghẽn (Zero Bottleneck):**
+   - Khi cả lớp 40–120 sinh viên cùng nộp câu trả lời trong khoảng thời gian ngắn, kiến trúc tuần tự cũ sẽ gây nghẽn cổ chai nghiêm trọng (mỗi lượt gọi Gemini 1.5 Flash mất từ 3–8 giây).
+   - Hệ thống áp dụng nguyên tắc **Persist-First**: API lưu ngay bản ghi vào bảng `in_class_exam_submissions` với trạng thái `SUBMITTED` trong $< 100$ms, trả về HTTP 200 OK ngay lập tức cho client.
+   - Bản ghi nộp bài được đẩy vào kênh hàng đợi trong bộ nhớ `BoundedChannel<GradingTask>(1000, BoundedChannelOptions { FullMode = BoundedChannelFullMode.Wait })`.
+2. **Bộ Xử Lý Đa Luồng Song Song (Parallel.ForEachAsync — MaxDegreeOfParallelism = 12):**
+   - Cả hai tiến trình nền `OfficialExamGradingWorker` (thi thật) và `GradingQueueWorker` (luyện tập, thi thử, ca thi lớp) đều được cấu hình chạy song song bất đồng bộ qua `Parallel.ForEachAsync` với `MaxDegreeOfParallelism = 12` (tận dụng tối đa gói Gemini Billing Tier 1 với 1.000 RPM trên VPS 4 Core AMD EPYC).
+   - 12 tác vụ chấm điểm được thực thi đồng thời độc lập:
+     - Tải Rubric và Barem tiêu chí 10.0đ.
+     - Gọi Gemini 1.5 Flash với Prompt Chain-of-Thought (CoT).
+     - Áp dụng Polly Resilience Pipeline: Retry 3 lần (2s, 4s, 8s) với Circuit Breaker.
+     - Nếu lỗi kiệt quệ sau 3 lần retry, tác vụ được cách ly vào Dead-Letter Queue (`dead_letter_queues`) với cơ chế tự động thử lại sau 5 phút (Zero Data Loss).
+   - Cập nhật kết quả vào CSDL: `ai_score`, `ai_feedback`, `ai_confidence_score`, `cot_trace`, chuyển trạng thái `status = 'AI_GRADED'`.
+3. **Publish Điểm Song Song Theo Thời Gian Thực (Parallel Real-Time Grade Publishing):**
+   - Ngay khi Worker AI hoàn tất chấm câu của sinh viên nào, hệ thống không bắt sinh viên phải chờ cả lớp nộp xong mới công bố.
+   - Nếu ca thi bật cờ `is_auto_publish_grades = true` (mặc định), hệ thống tự động bắn sự kiện SignalR:
+     - Kênh Sinh viên: Bắn trực tiếp qua SignalR Hub tới Client của sinh viên để hiển thị tức thì điểm số, nhận xét chi tiết và phát vấn câu hỏi phụ Follow-up (nếu `has_follow_up = true` và chưa hết hạn ngạch `max_follow_up_questions`).
+     - Kênh Giảng viên: Bắn trực tiếp tới `InClassShiftGradingDashboard` của Giảng viên trên màn hình điều khiển để cập nhật bảng điểm thời gian thực, hiển thị tiến độ và trạng thái chấm của từng sinh viên.
+   - Giảng viên sau đó có thể đối chiếu transcript, điều chỉnh điểm (`final_score`) kèm lý do giải trình (`override_reason`), và bấm **"Finalize Grade Sheet"** để kích hoạt One-Way Lock (`is_grade_finalized = true`).
+4. **Tối Ưu Hóa Truy Vấn Bảng Điều Khiển Sinh Viên & Bộ Dữ Liệu Khởi Tạo FLM:**
+   - **`GetStudentDashboardQueryHandler`:** Gom cụm cập nhật `SaveChangesAsync` 1 lần duy nhất trong toàn bộ command/query, và truy vấn danh sách tiêu chí đánh giá `AiEvaluationDetails` trực tiếp thông qua `d.Evaluation.StudentId` ($O(\log N)$) tận dụng chỉ mục `ix_ai_evaluations_student`, loại bỏ triệt để các câu truy vấn phức tạp kết nối nhiều bảng OR JOIN.
+   - **Bộ Dữ Liệu Seeder Chuẩn FLM:** Hệ thống nạp sẵn dữ liệu chuẩn hóa của 3 môn học FLM (`PRF192`, `CSD201`, `DBI202`) cùng ngân hàng 90 câu hỏi chuẩn bám sát ma trận CLO 3NF và barem rubric 10.0đ.
+
 ---
 
 ## 6. QUY TRÌNH PHÚC KHẢO & MÁY TRẠNG THÁI (APPEALS WORKFLOW & STATE MACHINE)
 
-### 6.1. Sơ đồ Tuần tự 5 Bước Phối Hợp Tác Chiến (Mermaid Diagram)
+### 6.1. Sơ đồ Tuần tự 5 Bước Phối Hợp Tác Chiến Chuẩn FPTU (Mermaid Diagram)
 
 ```mermaid
 sequenceDiagram
@@ -998,52 +1183,84 @@ sequenceDiagram
     actor SV as Sinh Viên (Student)
     actor EO as Cán Bộ Khảo Thí (Exam Officer)
     actor DH as Trưởng Bộ Môn (Dept Head)
-    actor GV as Giảng Viên Chấm Lại (Lecturer)
+    actor GV as Giảng Viên Chấm Lại Độc Lập (Lecturer)
     participant API as Backend API (.NET 8)
     participant DB as PostgreSQL 16 (3NF)
 
-    Note over SV,API: Bước 1: Sinh viên nộp đơn sau khi điểm được công bố
+    Note over SV,API: Bước 1: Sinh viên nộp đơn trực tuyến sau khi công bố điểm
     SV->>API: POST /api/v1/student/appeals (TicketId, Reason)
     API->>DB: INSERT INTO appeal_requests (status = 'SUBMITTED_TO_EXAM_OFFICE')
-    API-->>SV: 201 Created (Đơn đã chuyển đến Phòng Khảo thí)
+    API-->>SV: 201 Created (Đơn đã tiếp nhận tại Cổng Khảo thí)
+    Note over API,DH: Hệ thống tự động bắn thông báo in-app cho Trưởng BM theo dõi chuyên môn học thuật
 
-    Note over EO,DB: Bước 2: Khảo thí tiếp nhận, thẩm tra hành chính & chuyển Trưởng BM
+    Note over EO,DB: Bước 2: Khảo thí tiếp nhận & thẩm tra tính hợp lệ
     EO->>API: GET /api/v1/examination-officer/appeals?status=SUBMITTED_TO_EXAM_OFFICE
-    API-->>EO: Danh sách đơn mới nộp
-    EO->>API: POST /api/v1/examination-officer/appeals/{id}/forward-to-head (Notes)
-    API->>DB: UPDATE appeal_requests SET status = 'FORWARDED_TO_DEPT_HEAD', received_by_officer_id = EO.Id
-    API-->>EO: 200 OK (Đã bàn giao cho Trưởng Bộ Môn)
+    API-->>EO: Danh sách đơn chờ thụ lý (Kiểm tra hạn 48h sau công bố)
+    EO->>API: Xác nhận hồ sơ hợp lệ tiếp nhận xử lý
 
-    Note over DH,GV: Bước 3: Trưởng BM chỉ định Giảng viên chuyên môn chấm lại
-    DH->>API: GET /api/v1/department-head/appeals?status=FORWARDED_TO_DEPT_HEAD
-    API-->>DH: Danh sách đơn cần phân công
-    DH->>API: POST /api/v1/department-head/appeals/{id}/assign-lecturer (AssignedLecturerId)
+    Note over EO,GV: Bước 3: Khảo thí xem đề xuất tối ưu <= 24 bài/GV & phân công Giảng viên
+    EO->>API: GET /api/v1/examination-officer/appeals/allocation-proposal
+    API-->>EO: Bảng đề xuất phân bổ tối ưu (Greedy Min-Load <= 24 bài/GV, loại trừ Giám khảo ca ban đầu)
+    EO->>API: POST /api/v1/examination-officer/appeals/batch-assign (Assignments)
     API->>DB: UPDATE appeal_requests SET status = 'ASSIGNED_TO_LECTURER', assigned_lecturer_id = GV.Id
-    API-->>DH: 200 OK (Đã giao bài cho Giảng viên)
+    API-->>EO: 200 OK (Đã giao bài cho Giảng viên chấm lại độc lập)
 
     Note over GV,DB: Bước 4: Giảng viên đối soát Evidence Panel & nộp điểm đề xuất
     GV->>API: GET /api/v1/lecturer/appeals/{id}
-    API-->>GV: Chi tiết bài thi (Audio URL R2, Transcript, Rubric Barem 10.0)
-    GV->>API: PUT /api/v1/lecturer/appeals/{id}/regrade (ProposedScore, RegradeReason)
-    API->>DB: UPDATE appeal_requests SET status = 'REGRADED_BY_LECTURER', proposed_score = 7.5
-    API-->>GV: 200 OK (Đã nộp biên bản chấm lại)
+    API-->>GV: Evidence Panel (Audio R2 STT_MSSV.webm, Transcript Whisper gốc, Rubric 10.0, AI CoT)
+    GV->>API: PUT /api/v1/lecturer/appeals/{id}/regrade (ProposedScore, RegradeReason >= 10 chars)
+    API->>DB: UPDATE appeal_requests SET status = 'REGRADED_BY_LECTURER', proposed_score = 7.5, regrade_reason = '...'
+    API-->>GV: 200 OK (Đã nộp biên bản giải trình chấm lại)
 
-    Note over DH,SV: Bước 5: Trưởng BM / Khảo thí phê duyệt kết quả cuối cùng
-    DH->>API: POST /api/v1/department-head/appeals/{id}/decision (Decision: 'APPROVED')
-    API->>DB: UPDATE appeal_requests SET status = 'APPROVED'
-    API->>DB: Mở ngoại lệ One-Way Lock cập nhật final_score trên student_exam_tickets
-    API-->>DH: 200 OK (Phúc khảo hoàn tất, điểm mới đã cập nhật)
-    API-->>SV: Thông báo cập nhật điểm thành công trên Student Portal
+    Note over EO,SV: Bước 5: Cán bộ Khảo thí thẩm định & phê duyệt quyết định cuối cùng
+    EO->>API: POST /api/v1/examination-officer/appeals/{id}/decision (Decision: 'APPROVED', Notes)
+    API->>DB: UPDATE appeal_requests SET status = 'APPROVED', decided_by_officer_id = EO.Id
+    API->>DB: Kích hoạt ngoại lệ hợp lệ mở One-Way Lock cập nhật final_score trên student_exam_tickets
+    API-->>EO: 200 OK (Phúc khảo hoàn tất, xuất báo cáo Excel/PDF ký số)
+    API-->>SV: Thông báo cập nhật điểm chính thức thành công trên Student Portal
+    API-->>DH: Thông báo kết quả phúc khảo để hoàn tất hồ sơ học thuật môn học
 ```
 
-### 6.2. Đặc tả Máy trạng thái Đơn phúc khảo (Appeal State Machine)
-Vòng đời đơn phúc khảo trải qua 6 trạng thái bắt buộc, được bảo vệ bằng Check Constraint và Logic Interceptor:
-1. `SUBMITTED_TO_EXAM_OFFICE`: Sinh viên nộp đơn trên Student Portal. Đơn nằm tại hàng đợi của Phòng Khảo thí.
-2. `FORWARDED_TO_DEPT_HEAD`: Cán bộ Khảo thí xác nhận đơn hợp lệ (trong hạn 48 giờ sau công bố, hoàn tất thủ tục) và chuyển giao sang Trưởng bộ môn.
-3. `ASSIGNED_TO_LECTURER`: Trưởng bộ môn chỉ định một Giảng viên có chuyên môn chấm độc lập lần 2.
-4. `IN_REVIEW`: Giảng viên mở Evidence Panel, nghe lại file ghi âm niêm phong `STT_MSSV.webm` trên Cloudflare R2 và đối chiếu Barem Rubric.
-5. `REGRADED_BY_LECTURER`: Giảng viên nộp điểm đề xuất và văn bản giải trình lý do thay đổi.
-6. `APPROVED` / `REJECTED`: Trưởng bộ môn ra quyết định phê duyệt. Nếu `APPROVED`, hệ thống mở đường ngoại lệ hợp pháp qua `OneWayLockInterceptor` để cập nhật điểm chính thức mới vào vé thi của sinh viên; nếu `REJECTED`, giữ nguyên điểm ban đầu.
+### 6.2. Thuật toán Phân bổ Bài Phúc khảo Định mức $\le 24$ bài/GV (R2 / R7)
+
+Để đảm bảo tính khách quan học thuật và năng lực chấm thẩm định, quy trình phúc khảo áp dụng cơ chế phân bổ tự động kèm cổng điều chỉnh thủ công:
+- **Định mức trần tuyệt đối:** Mỗi Giảng viên chấm lại tối đa 24 bài trong một đợt (`MaxRegradePapersPerLecturer = 24`).
+- **Nguyên tắc phân định độc lập (Role Segregation):** Loại trừ 100% Giám khảo đã chấm thi ca ban đầu (`examiner_user_id` ghi nhận trên `real_exam_session_shifts`).
+- **Tập tham số đầu vào:**
+  - $N$: Tổng số đơn phúc khảo hợp lệ đang chờ phân công (`status = 'SUBMITTED_TO_EXAM_OFFICE'`).
+  - $L = \{g_1, g_2, \dots, g_G\}$: Danh sách $G$ giảng viên thuộc bộ môn/môn học (từ `course_lecturers`) đủ tư cách và **không trùng** với Giám khảo ca ban đầu của bài thi.
+  - $W(g_i)$: Số lượng bài phúc khảo hiện đang thụ lý của giảng viên $g_i$ ($0 \le W(g_i) \le 24$).
+  - Dung lượng khả dụng của $g_i$: $C(g_i) = 24 - W(g_i)$.
+  - Tổng dung lượng tiếp nhận toàn bộ môn: $C_{\text{total}} = \sum_{i=1}^G C(g_i)$.
+
+#### 1. Trường hợp 1: Đủ dung lượng tiếp nhận ($N \le C_{\text{total}}$)
+Hệ thống sử dụng giải thuật **Cân bằng tải Tham lam (Greedy Min-Load Balancing)** kết hợp **Ngưỡng chống chia lẻ (Anti-Micro-Allocation Threshold)**:
+- **Phân bổ cơ bản:** Với mỗi đơn phúc khảo, hệ thống gán bài cho giảng viên $g^*$ có tải hiện tại thấp nhất:
+  $$g^* = \arg\min_{g_i \in L, C(g_i) > 0} (W(g_i))$$
+  Sau khi gán, cập nhật $W(g^*) \leftarrow W(g^*) + 1$ và $C(g^*) \leftarrow C(g^*) - 1$.
+- **Quy tắc chống chia lẻ (Anti-Micro-Allocation):** Khi số lượng đơn $N$ nhỏ trong khi số lượng giảng viên $G$ lớn (ví dụ: $N = 3, G = 10$), việc chia lẻ mỗi giảng viên 1 bài gây phân mảnh công tác và khó kiểm soát tiến độ. Thuật toán thiết lập kích thước lô tối thiểu $B_{\min} = 3$ bài:
+  - Số lượng giảng viên tối ưu tham gia đợt: $K = \min\left(G, \max\left(1, \left\lfloor \frac{N}{B_{\min}} \right\rfloor\right)\right)$.
+  - Phân bổ tập trung cho $K$ giảng viên có tải thấp nhất, mỗi giảng viên nhận từ $\lfloor N/K \rfloor$ đến $\lceil N/K \rceil$ bài.
+- **Cổng điều chỉnh thủ công (Manual Adjustment Gate):** API `GET /api/v1/examination-officer/appeals/allocation-proposal` trả về danh sách đề xuất. Cán bộ Khảo thí có toàn quyền xem xét và điều chỉnh thay đổi giảng viên cho từng bài thi trên giao diện trước khi bấm xác nhận `POST /batch-assign`.
+
+#### 2. Trường hợp 2: Quá tải dung lượng tiếp nhận ($N > C_{\text{total}}$)
+- Hệ thống phân bổ tối đa cho $G$ giảng viên đạt mức trần $W(g_i) = 24$ (tổng số bài phân bổ được là $C_{\text{total}}$).
+- Số bài thặng dư $N_{\text{excess}} = N - C_{\text{total}}$ được giữ nguyên trạng thái `SUBMITTED_TO_EXAM_OFFICE` và gắn cờ `OVER_CAPACITY_PENDING`.
+- Hệ thống tự động kích hoạt thông báo in-app gửi tới Cán bộ Khảo thí và Trưởng Bộ Môn để:
+  1. Phân công bổ sung thêm Giảng viên vào môn học (`POST /api/v1/department-head/courses/{id}/lecturers`), hoặc
+  2. Lập kế hoạch tổ chức chấm phúc khảo Đợt 2 ngay sau khi các bài Đợt 1 hoàn tất.
+
+### 6.3. Đặc tả Máy trạng thái Đơn phúc khảo (Appeal State Machine)
+
+Vòng đời đơn phúc khảo trải qua 5 trạng thái hợp chuẩn, bảo vệ bằng Check Constraint `ck_appeal_requests_status` và logic `OneWayLockInterceptor` (loại bỏ hoàn toàn trạng thái cũ lỗi thời `FORWARDED_TO_DEPT_HEAD`):
+1. `SUBMITTED_TO_EXAM_OFFICE`: Sinh viên nộp đơn trên Student Portal sau khi ca thi công bố điểm. Đơn nằm tại hàng đợi tiếp nhận của Cán bộ Khảo thí. Thông báo in-app được gửi đồng thời tới Khảo thí và Trưởng Bộ Môn.
+2. `ASSIGNED_TO_LECTURER`: Cán bộ Khảo thí phê chuẩn phân công Giảng viên chuyên môn độc lập chấm lại lần 2 (định mức $\le 24$ bài/GV, loại trừ Giám khảo ca ban đầu).
+3. `IN_REVIEW`: Giảng viên mở Evidence Panel, nghe lại file ghi âm niêm phong `STT_MSSV.webm` trên Cloudflare R2 bằng Waveform Player, đối chiếu transcript và tiêu chí Barem Rubric 10.0.
+4. `REGRADED_BY_LECTURER`: Giảng viên hoàn tất tái thẩm định, nộp điểm đề xuất mới (`proposed_score`) và biên bản giải trình bắt buộc $\ge 10$ ký tự (`regrade_reason`).
+5. `APPROVED` / `REJECTED`: Cán bộ Khảo thí thẩm định kết quả và ra quyết định phê duyệt cuối cùng.
+   - Nếu `APPROVED`: Kích hoạt ngoại lệ hợp lệ duy nhất của `OneWayLockInterceptor`, cập nhật điểm chính thức mới vào vé thi của sinh viên và khóa lại DB an toàn; xuất báo cáo Excel và PDF ký số.
+   - Nếu `REJECTED`: Bác bỏ phúc khảo, giữ nguyên điểm ban đầu của ca thi.
+   - *(Trạng thái phụ `CANCELLED`: Sinh viên tự nguyện rút đơn khi đơn chưa được phân công).*
 
 ---
 
@@ -1114,7 +1331,7 @@ Triển khai phân tầng chuẩn mực theo cấu trúc Clean Architecture:
   * `AcademicController.cs`: Cổng API phân cấp học thuật.
   * `InClassShiftsController.cs`: Cổng API ca thi trong lớp (Lecturer & Student).
   * `DlqController.cs`: Tách biệt route và Authorize Policy cho Admin và Examination Officer.
-  * `AppealsController.cs`: Cập nhật route tiếp nhận của Khảo thí và phân công của Trưởng BM.
+  * `AppealsController.cs`: Cập nhật route tiếp nhận và phân công của Cán bộ Khảo thí (<= 24 bài/GV, loại trừ 100% Giám khảo chấm ban đầu).
 
 ### 8.3. Chiến lược Kiểm thử & Cổng Kiểm chứng Độc lập (Hard Verification Gates)
 Mọi thay đổi mã nguồn sau khi được người dùng phê duyệt sẽ phải vượt qua 4 Cổng Kiểm chứng Cứng:
@@ -1124,7 +1341,7 @@ Mọi thay đổi mã nguồn sau khi được người dùng phê duyệt sẽ 
    - Test thuật toán xoay vòng mật khẩu 5 phút: Xác minh mật khẩu hợp lệ trong 300s, xác minh mật khẩu cũ vẫn hợp lệ trong 60s grace period, xác minh mật khẩu bị từ chối sau giây thứ 361.
    - Test ma trận 5 ca biên: Sinh viên nhập sai mật khẩu, nhập mật khẩu hết hạn, nộp bài sau khi ca thi kết thúc, điều chỉnh điểm vượt quá 10.0đ.
 3. **Cổng 3: Kiểm thử Tích hợp (Integration Tests with WebApplicationFactory):**
-   - Mô phỏng toàn bộ luồng 5 bước phúc khảo: Student nộp $\to$ Officer forward $\to$ Head assign $\to$ Lecturer regrade $\to$ Head approve $\to$ Điểm trên vé thi được cập nhật chính xác.
+   - Mô phỏng toàn bộ luồng 5 bước phúc khảo chuẩn: Student nộp (SUBMITTED_TO_EXAM_OFFICE) $\to$ Officer tiếp nhận & phân công (ASSIGNED_TO_LECTURER, định mức <= 24 bài/GV) $\to$ Lecturer chấm lại độc lập (REGRADED_BY_LECTURER) $\to$ Officer thẩm định & duyệt quyết định cuối cùng (APPROVED/REJECTED) mở One-Way Lock; Trưởng BM nhận thông báo in-app giám sát chuyên môn $\to$ Điểm trên vé thi được cập nhật chính xác.
 4. **Cổng 4: Lệnh Kiểm chứng Thực tế (Exit Code = 0):**
 ```powershell
 # 1. Kiểm tra biên dịch Backend .NET 8

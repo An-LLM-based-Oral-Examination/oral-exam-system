@@ -43,28 +43,37 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             return Result<StudentDashboardDto>.Failure("Sinh viên không tồn tại trong hệ thống.");
         }
 
-        // 1. Thống kê Luyện tập (MF-01) — Tự động đóng các phiên quá hạn không tương tác
+        // 1. Thống kê Luyện tập (MF-01) — Tự động đóng các phiên quá hạn không tương tác (Batch SaveChanges 1 lần)
         var timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(context, cancellationToken);
         var activePracticeSessions = await context.PracticeSessions
             .Include(ps => ps.Answers)
             .Where(ps => ps.StudentId == request.StudentId && ps.Status == "in_progress")
             .ToListAsync(cancellationToken);
 
+        bool anyTimedOutPracticeClosed = false;
         foreach (var activeSession in activePracticeSessions)
         {
-            await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(
+            var closed = await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(
                 context,
                 activeSession,
                 timeoutMinutes,
-                cancellationToken);
+                cancellationToken,
+                saveChanges: false);
+            if (closed)
+            {
+                anyTimedOutPracticeClosed = true;
+            }
+        }
+
+        if (anyTimedOutPracticeClosed)
+        {
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         var practiceSessions = await context.PracticeSessions
             .AsNoTracking()
             .Include(ps => ps.Answers)
                 .ThenInclude(a => a.AiEvaluations)
-                    .ThenInclude(e => e.Details)
-                        .ThenInclude(d => d.Criterion)
             .AsSplitQuery()
             .Where(ps => ps.StudentId == request.StudentId)
             .ToListAsync(cancellationToken);
@@ -231,19 +240,16 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             };
         }).ToList();
 
-        // 4. Phân tích độ thông thạo theo Tiêu chí Rubric & Bloom Level
+        // 4. Phân tích độ thông thạo theo Tiêu chí Rubric & Bloom Level (Tối ưu O(1) qua ix_ai_evaluations_student + tương thích ngược)
         var evalDetails = await context.AiEvaluationDetails
             .AsNoTracking()
             .Include(d => d.Criterion)
             .Include(d => d.Evaluation)
-                .ThenInclude(e => e.PracticeAnswer)
-            .Include(d => d.Evaluation)
-                .ThenInclude(e => e.MockExamAnswer)
-                    .ThenInclude(ma => ma!.Session)
-            .AsSplitQuery()
             .Where(d =>
-                (d.Evaluation.PracticeAnswer != null && d.Evaluation.PracticeAnswer.StudentId == request.StudentId) ||
-                (d.Evaluation.MockExamAnswer != null && d.Evaluation.MockExamAnswer.Session.StudentId == request.StudentId))
+                d.Evaluation.StudentId == request.StudentId ||
+                (d.Evaluation.StudentId == null && (
+                    (d.Evaluation.PracticeAnswer != null && d.Evaluation.PracticeAnswer.StudentId == request.StudentId) ||
+                    (d.Evaluation.MockExamAnswer != null && d.Evaluation.MockExamAnswer.Session.StudentId == request.StudentId))))
             .ToListAsync(cancellationToken);
 
         var criterionMastery = evalDetails

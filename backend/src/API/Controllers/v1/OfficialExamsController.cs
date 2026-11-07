@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
+using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficialExamSession;
 using OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
@@ -58,7 +59,7 @@ public class OfficialExamsController : ControllerBase
             return id;
         }
 
-        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
+        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
         {
             return headerId;
         }
@@ -446,7 +447,34 @@ public class OfficialExamsController : ControllerBase
             request.RoomLab,
             request.StartTime,
             request.EndTime,
-            request.ProctorUserId), cancellationToken);
+            request.ProctorUserId,
+            request.ExaminerUserId), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Trưởng bộ môn hoặc Quản trị viên cấu hình tính năng Follow-up cho kỳ thi thật (MF-04).
+    /// Cán bộ Khảo thí (examination_officer) bị từ chối 403 Forbidden.
+    /// </summary>
+    [HttpPut("sessions/{id:guid}/follow-up-config")]
+    [Authorize(Roles = "department_head,admin")]
+    public async Task<IActionResult> ConfigureFollowUp(
+        Guid id,
+        [FromBody] ConfigureOfficialExamFollowUpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new ConfigureOfficialExamFollowUpCommand(
+            actorId.Value,
+            id,
+            request.HasFollowUp,
+            request.MaxFollowUpQuestions), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
     }

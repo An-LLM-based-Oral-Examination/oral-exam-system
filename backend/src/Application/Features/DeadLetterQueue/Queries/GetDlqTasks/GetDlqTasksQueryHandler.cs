@@ -43,7 +43,14 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
 
         if (!string.IsNullOrWhiteSpace(request.ManagedByRole))
         {
-            query = query.Where(q => q.ManagedByRole == request.ManagedByRole);
+            if (request.ManagedByRole == "admin")
+            {
+                query = query.Where(q => q.ManagedByRole == "admin" || q.FlowType == "IN_CLASS_EXAM");
+            }
+            else
+            {
+                query = query.Where(q => q.ManagedByRole == request.ManagedByRole);
+            }
         }
 
         var tasks = await query

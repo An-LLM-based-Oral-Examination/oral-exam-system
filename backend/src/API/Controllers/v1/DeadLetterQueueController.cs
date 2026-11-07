@@ -23,7 +23,7 @@ public class ResolveDlqTaskRequest
 /// Cấm tuyệt đối Trưởng Bộ Môn (department_head) can thiệp vào DLQ.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "admin,examination_officer")]
+[Authorize(Roles = "admin,examination_officer,lecturer")]
 public class DeadLetterQueueController : ControllerBase
 {
     private readonly ISender _sender;
@@ -36,7 +36,7 @@ public class DeadLetterQueueController : ControllerBase
     #region Admin Endpoints (/api/v1/admin/dlq)
 
     /// <summary>
-    /// Admin: Lấy danh sách các tác vụ DLQ gặp sự cố thuộc luồng Luyện tập (MF-01) và Thi thử (MF-02).
+    /// Admin: Lấy danh sách các tác vụ DLQ gặp sự cố thuộc luồng Luyện tập (MF-01), Thi thử (MF-02) và Ca thi trong lớp (MF-05).
     /// </summary>
     [HttpGet]
     [Route("api/v1/admin/dlq")]
@@ -46,13 +46,14 @@ public class DeadLetterQueueController : ControllerBase
     {
         if (!string.IsNullOrWhiteSpace(flowType) &&
             !string.Equals(flowType.Trim(), "PRACTICE", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(flowType.Trim(), "MOCK_EXAM", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(flowType.Trim(), "MOCK_EXAM", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(flowType.Trim(), "IN_CLASS_EXAM", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
             {
                 Status = StatusCodes.Status403Forbidden,
                 Title = "Forbidden",
-                Detail = "FORBIDDEN: Quản trị viên (Admin) chỉ quản lý DLQ của luồng Luyện tập (PRACTICE) và Thi thử (MOCK_EXAM).",
+                Detail = "FORBIDDEN: Quản trị viên (Admin) chỉ quản lý DLQ của luồng Luyện tập (PRACTICE), Thi thử (MOCK_EXAM) và Ca thi trong lớp (IN_CLASS_EXAM).",
                 Type = "https://tools.ietf.org/html/rfc7807"
             });
         }
@@ -60,7 +61,7 @@ public class DeadLetterQueueController : ControllerBase
         List<string>? flowTypes = null;
         if (string.IsNullOrWhiteSpace(flowType))
         {
-            flowTypes = new List<string> { "PRACTICE", "MOCK_EXAM" };
+            flowTypes = new List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" };
         }
 
         var query = new GetDlqTasksQuery(
@@ -168,20 +169,21 @@ public class DeadLetterQueueController : ControllerBase
             managedByRole = "admin";
             if (!string.IsNullOrWhiteSpace(effectiveFlowType) &&
                 effectiveFlowType != "PRACTICE" &&
-                effectiveFlowType != "MOCK_EXAM")
+                effectiveFlowType != "MOCK_EXAM" &&
+                effectiveFlowType != "IN_CLASS_EXAM")
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {
                     Status = StatusCodes.Status403Forbidden,
                     Title = "Forbidden",
-                    Detail = "FORBIDDEN: Quản trị viên (Admin) chỉ quản lý DLQ của luồng Luyện tập (PRACTICE) và Thi thử (MOCK_EXAM).",
+                    Detail = "FORBIDDEN: Quản trị viên (Admin) chỉ quản lý DLQ của luồng Luyện tập (PRACTICE), Thi thử (MOCK_EXAM) và Ca thi trong lớp (IN_CLASS_EXAM).",
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });
             }
 
             if (string.IsNullOrWhiteSpace(effectiveFlowType))
             {
-                flowTypes = new List<string> { "PRACTICE", "MOCK_EXAM" };
+                flowTypes = new List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" };
             }
         }
         else if (User.IsInRole("examination_officer") && !User.IsInRole("admin"))
@@ -200,6 +202,23 @@ public class DeadLetterQueueController : ControllerBase
             }
 
             effectiveFlowType = "OFFICIAL_EXAM";
+        }
+        else if (User.IsInRole("lecturer") && !User.IsInRole("admin") && !User.IsInRole("examination_officer"))
+        {
+            managedByRole = "lecturer";
+            if (!string.IsNullOrWhiteSpace(effectiveFlowType) &&
+                effectiveFlowType != "IN_CLASS_EXAM")
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = "FORBIDDEN: Giảng viên chỉ được xem và xử lý DLQ của luồng Ca thi trong lớp (IN_CLASS_EXAM).",
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            effectiveFlowType = "IN_CLASS_EXAM";
         }
 
         var query = new GetDlqTasksQuery(

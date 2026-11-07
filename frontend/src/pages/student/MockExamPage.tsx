@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowRight,
+  Award,
   Bot,
   ChevronDown,
   ChevronLeft,
@@ -17,12 +18,16 @@ import {
   Play,
   ShieldCheck,
   TimerReset,
-  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
+import { DialogFooter, FormDialog } from '@/design/overlays'
+import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
+import { toast } from '@/components/common/toastStore'
+import { studentCardShellClass } from '@/design/studentCardTones'
+import { BannerFact, PageBanner, StudentColorCardAccent } from '@/design/ui'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { courseService } from '@/services/course.service'
 import {
@@ -76,26 +81,16 @@ const HISTORY_STATUS_OPTIONS = [
 ]
 
 const COURSE_CODE_TONES = [
-  'bg-[#4988C4]/16 text-[#1C4D8D]',
-  'bg-[#e8f8f3] text-[#16836a]',
-  'bg-[#fff4e8] text-[#c26a12]',
-  'bg-[#f3eefe] text-[#6d4cc4]',
-  'bg-[#e7f6fb] text-[#0e7490]',
-  'bg-[#fdecef] text-[#c2415b]',
-  'bg-[#eef8e8] text-[#3d7a2a]',
-  'bg-[#fff0f6] text-[#be185d]',
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#be185d]/30 bg-[#fff0f6] text-[#be185d]',
 ]
 
-const COURSE_CARD_TONES = [
-  'border-[#c5dff3] bg-[#eef6fc]',
-  'border-[#c5ead8] bg-[#eefaf4]',
-  'border-[#f3e0bf] bg-[#fff6e8]',
-  'border-[#e4d8f8] bg-[#f6f2fd]',
-  'border-[#c5e6f0] bg-[#eef9fc]',
-  'border-[#f6d5dc] bg-[#fff1f4]',
-  'border-[#d7ecc8] bg-[#f4faef]',
-  'border-[#f6d5e6] bg-[#fff1f7]',
-]
 
 function courseToneIndex(code: string) {
   let hash = 0
@@ -109,16 +104,12 @@ function courseCodeTone(code: string) {
   return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
 }
 
-function courseCardTone(code: string) {
-  return COURSE_CARD_TONES[courseToneIndex(code) % COURSE_CARD_TONES.length]
-}
-
 const EXAM_STEPS = [
   {
     title: 'Chọn môn còn lượt',
     hint: 'Bấm Bắt đầu, chọn hình thức thi.',
     icon: Play,
-    card: 'border-[#9ec4e8] bg-[#f3f9fd]',
+    card: 'border-[#8eb7e0]/55 bg-[#dfeff9]',
     badge: 'bg-[#1C4D8D] text-white',
     iconClass: 'text-[#1C4D8D]',
   },
@@ -126,7 +117,7 @@ const EXAM_STEPS = [
     title: 'Kiểm tra micro',
     hint: 'Nói thử một câu trước khi vào.',
     icon: Mic2,
-    card: 'border-[#b7e4cf] bg-[#f3fbf7]',
+    card: 'border-[#95d6b9]/55 bg-[#dff5eb]',
     badge: 'bg-[#16836a] text-white',
     iconClass: 'text-[#16836a]',
   },
@@ -134,7 +125,7 @@ const EXAM_STEPS = [
     title: 'Nhấn để ghi âm',
     hint: 'Nhấn micro hoặc Space để bật tắt.',
     icon: Keyboard,
-    card: 'border-[#f5b6d6] bg-[#fff5fa]',
+    card: 'border-[#efb5d3]/55 bg-[#fee3ee]',
     badge: 'bg-[#e11d74] text-white',
     iconClass: 'text-[#9d174d]',
   },
@@ -142,7 +133,7 @@ const EXAM_STEPS = [
     title: 'Sửa lời rồi sang câu',
     hint: 'Sửa lời, rồi sang câu hoặc nộp.',
     icon: PenLine,
-    card: 'border-[#d4c4f5] bg-[#f7f3fd]',
+    card: 'border-[#c7b4ef]/55 bg-[#ebe4fc]',
     badge: 'bg-[#6d4cc4] text-white',
     iconClass: 'text-[#6d4cc4]',
   },
@@ -248,11 +239,11 @@ function statusLabel(status: string) {
 
 function statusChipClass(status: string) {
   const normalized = normalizeHistoryStatus(status)
-  if (normalized === 'graded') return 'bg-[#e8f8f1] text-[#16836a]'
-  if (normalized === 'submitted') return 'bg-[#fff8eb] text-[#9a6414]'
-  if (normalized === 'abandoned') return 'bg-[#fdecec] text-[#c2415b]'
-  if (normalized === 'in_progress') return 'bg-[#F4FBFD] text-[#1C4D8D]'
-  return 'bg-[#F4FBFD] text-[#1C4D8D]'
+  if (normalized === 'graded') return 'border border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+  if (normalized === 'submitted') return 'border border-[#f3ddb0] bg-[#fff8eb] text-[#9a6414]'
+  if (normalized === 'abandoned') return 'border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
+  if (normalized === 'in_progress') return 'border border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]'
+  return 'border border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]'
 }
 
 /** Ca chưa nộp — có thể vào phòng thi tiếp. */
@@ -280,7 +271,6 @@ export function MockExamPage() {
   const [deviceNames, setDeviceNames] = useState('')
   const [micLevel, setMicLevel] = useState(0)
   const micTestRef = useRef<{ cancelled: boolean; stop: () => void } | null>(null)
-  const [pageError, setPageError] = useState('')
   const [quotaModal, setQuotaModal] = useState('')
   const [guideOpen, setGuideOpen] = useState(true)
   const [coursesExpanded, setCoursesExpanded] = useState(false)
@@ -299,7 +289,6 @@ export function MockExamPage() {
   const [historyError, setHistoryError] = useState('')
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [historyDetails, setHistoryDetails] = useState<Record<string, MockExamScorecardData>>({})
-  const [detailError, setDetailError] = useState('')
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null)
   const [activeSessionVersion, setActiveSessionVersion] = useState(0)
 
@@ -344,13 +333,12 @@ export function MockExamPage() {
 
   const loadCourses = useCallback(async () => {
     setIsLoadingCourses(true)
-    setPageError('')
     try {
-      const nextCourses = (await courseService.getCourses()).filter((course) => course.isActive)
+      const nextCourses = await courseService.getEnrolledCourses()
       setCourses(nextCourses)
       void loadQuotas(nextCourses.map((course) => course.id))
     } catch (error) {
-      setPageError(getMockExamErrorDetail(error, 'Không thể tải danh sách môn học.'))
+      toast.error(getMockExamErrorDetail(error, 'Không thể tải danh sách môn học.'))
     } finally {
       setIsLoadingCourses(false)
     }
@@ -405,20 +393,6 @@ export function MockExamPage() {
     const timer = window.setTimeout(() => void loadHistory(), 0)
     return () => window.clearTimeout(timer)
   }, [loadHistory])
-
-  const pageScrollLocked = Boolean(archiveOpen || expandedHistoryId || openCourseId || quotaModal)
-
-  useEffect(() => {
-    if (!pageScrollLocked) return
-    const previousBody = document.body.style.overflow
-    const previousRoot = document.documentElement.style.overflow
-    document.body.style.overflow = 'hidden'
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousBody
-      document.documentElement.style.overflow = previousRoot
-    }
-  }, [pageScrollLocked])
 
   useEffect(() => {
     if (!archiveOpen) return
@@ -564,14 +538,12 @@ export function MockExamPage() {
   const openCourse = (courseId: string) => {
     setOpenCourseId(courseId)
     setHasFollowUp(false)
-    setPageError('')
     setExpandedHistoryId(null)
   }
 
   const startExam = async () => {
     if (!modalCourse || !modalQuota?.canStartExam || deviceState !== 'ready') return
     setIsStarting(true)
-    setPageError('')
     try {
       const session = await mockExamService.startSession(modalCourse.id, hasFollowUp)
       saveMockExamSession({ ...session, questions: session.questions, answers: [] })
@@ -601,7 +573,7 @@ export function MockExamPage() {
         }
         return
       }
-      setPageError(getMockExamErrorDetail(error, 'Không thể bắt đầu ca thi thử.'))
+      toast.error(getMockExamErrorDetail(error, 'Không thể bắt đầu ca thi thử.'))
     } finally {
       setIsStarting(false)
     }
@@ -624,7 +596,6 @@ export function MockExamPage() {
     }
 
     if (!canViewScorecard(item.status)) {
-      setDetailError('')
       setExpandedHistoryId(null)
       return
     }
@@ -635,7 +606,6 @@ export function MockExamPage() {
     }
 
     setExpandedHistoryId(item.sessionId)
-    setDetailError('')
     if (historyDetails[item.sessionId]) return
 
     setLoadingDetailId(item.sessionId)
@@ -643,7 +613,8 @@ export function MockExamPage() {
       const detail = await mockExamService.getHistoryDetail(item.sessionId)
       setHistoryDetails((current) => ({ ...current, [item.sessionId]: detail }))
     } catch (error) {
-      setDetailError(getMockExamErrorDetail(error, 'Không thể mở bảng điểm của ca thi này.'))
+      toast.error(getMockExamErrorDetail(error, 'Không thể mở bảng điểm của ca thi này.'))
+      setExpandedHistoryId(null)
     } finally {
       setLoadingDetailId(null)
     }
@@ -660,7 +631,7 @@ export function MockExamPage() {
         <button
           type="button"
           onClick={() => void handleToggleHistory(item)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4]/45 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
         >
           <ArrowRight className="size-3" />
           Tiếp tục ca thi
@@ -673,7 +644,7 @@ export function MockExamPage() {
         <button
           type="button"
           onClick={() => void handleToggleHistory(item)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4]/45 bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4]/45 hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
           aria-expanded={isOpen}
         >
           <Eye className="size-3" />
@@ -683,7 +654,7 @@ export function MockExamPage() {
     }
 
     return (
-      <span className="inline-flex min-h-9 items-center rounded-lg border border-[#d5deea] bg-[#f7f9fc] px-3 text-xs font-semibold text-[#74839a]">
+      <span className="inline-flex min-h-9 items-center rounded-lg border border-[#82aedb]/55 bg-[#f7f9fc] px-3 text-xs font-semibold text-[#74839a]">
         {status === 'submitted' ? 'Đang chấm điểm' : status === 'abandoned' ? 'Không có bảng điểm' : 'Chưa có bảng điểm'}
       </span>
     )
@@ -693,34 +664,27 @@ export function MockExamPage() {
 
   return (
     <div className={ds.page}>
-      <section className={cn(ds.banner, 'min-h-[218px] sm:min-h-[205px]')}>
-        <div className="pointer-events-none absolute inset-0 [background-image:radial-gradient(rgba(255,255,255,0.35)_0.8px,transparent_0.8px)] [background-size:22px_22px] opacity-40" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-[75%] bg-[radial-gradient(circle_at_72%_48%,rgba(189,232,245,0.22),transparent_46%)] sm:w-[60%]" />
-        <div className="relative z-10 flex min-h-[218px] max-w-[760px] flex-col items-start justify-center px-5 py-6 sm:min-h-[205px] sm:px-7 lg:max-w-[64%] lg:px-8">
-          <div className={cn(ds.bannerChip, 'backdrop-blur-sm')}>
-            <ShieldCheck className="size-3" />
-            Thi thử · Không tính điểm
-          </div>
-          <h1 className={ds.bannerTitle}>Thi thử Vấn đáp Giả lập</h1>
-          <p className={cn(ds.bannerText, 'max-w-[620px]')}>
-            Làm bài có đồng hồ máy chủ, trả lời bằng giọng nói và nhận bảng điểm theo rubric ngay
-            khi nộp.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/12 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
-              <TimerReset className="size-3 text-[#BDE8F5]" /> Hết giờ thì bài tự nộp
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6ece7] bg-[#f5fffc]/80 px-3 py-1.5 text-xs font-semibold text-[#26816c] backdrop-blur-sm">
-              <span className="size-1.5 animate-pulse rounded-full bg-[#31c494] motion-reduce:animate-none" />
-              Nhấn vào biểu tượng micro hoặc phím Space để nói
-            </span>
-          </div>
-        </div>
-        <div className="pointer-events-none absolute inset-y-0 right-[-30%] z-0 w-[72%] opacity-35 sm:right-[-7%] sm:w-[62%] sm:opacity-85 lg:right-0 lg:w-[46%] lg:opacity-100">
+      <PageBanner
+        icon={ShieldCheck}
+        eyebrow="Thi thử · Không tính điểm"
+        title="Thi thử Vấn đáp Giả lập"
+        description="Làm bài có đồng hồ máy chủ, trả lời bằng giọng nói và nhận bảng điểm theo rubric ngay khi nộp."
+        extras={
+          <>
+            <BannerFact icon={TimerReset}>Hết giờ thì bài tự nộp</BannerFact>
+            <BannerFact icon={Mic2} tone="green">
+              Nhấn micro hoặc Space để nói
+            </BannerFact>
+            <BannerFact icon={Bot} tone="violet">
+              Bảng điểm ngay khi nộp
+            </BannerFact>
+          </>
+        }
+        scene={
           <Suspense
             fallback={
               <div className="flex size-full items-center justify-center" aria-hidden="true">
-                <div className="size-20 animate-pulse rounded-full border border-[#4988C4]/30 bg-[#4988C4]/10 motion-reduce:animate-none" />
+                <div className="size-20 animate-pulse rounded-full border border-[#82aedb]/55 bg-[#4988C4]/10 motion-reduce:animate-none" />
               </div>
             }
           >
@@ -729,17 +693,8 @@ export function MockExamPage() {
               ready={deviceState === 'ready'}
             />
           </Suspense>
-        </div>
-        <div className="pointer-events-none absolute top-5 right-5 z-10 hidden items-center gap-2 rounded-xl border border-white/25 bg-white/12 px-3 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-md md:flex">
-          <Bot className="size-4 text-[#BDE8F5]" />
-          <span>
-            Bảng điểm ngay khi nộp
-            <span className="mt-0.5 block text-xs font-medium text-white/75">
-              Chi tiết theo từng CLO
-            </span>
-          </span>
-        </div>
-      </section>
+        }
+      />
 
       {localSessions.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-[#f3e2c4] bg-white shadow-[0_1px_0_#fff_inset,0_8px_14px_rgba(176,106,18,0.18)]">
@@ -788,15 +743,15 @@ export function MockExamPage() {
 
       <section className={ds.section}>
         <div className={ds.sectionHeader}>
-          <div className={ds.sectionTitleRow}>
-            <span className={ds.sectionIconWrap}>
-              <GraduationCap className="size-[18px] stroke-[2.75]" aria-hidden="true" />
-            </span>
-            <h2 className={ds.sectionTitle}>Môn học của tôi</h2>
+          <div className={ds.sectionHeading}>
+            <div className={ds.sectionTitleRow}>
+              <span className={ds.sectionIconWrap}>
+                <GraduationCap className={ds.sectionIcon} aria-hidden="true" />
+              </span>
+              <h2 className={ds.sectionTitle}>Môn học của tôi</h2>
+            </div>
+            <p className={ds.sectionHint}>Chọn môn để bắt đầu phiên thi thử</p>
           </div>
-          <p className={ds.sectionHint}>
-            Môn hết lượt được đánh dấu riêng và không bắt đầu được cho đến ngày hôm sau.
-          </p>
         </div>
 
         <div className={cn(ds.sectionBody, 'space-y-4')}>
@@ -806,7 +761,11 @@ export function MockExamPage() {
               Đang tải môn học…
             </div>
           ) : courses.length === 0 ? (
-            <p className="text-sm text-[#5b6b84]">Chưa có môn học đang mở để thi thử.</p>
+            <EmptyState
+              icon={GraduationCap}
+              title="Chưa có môn học đang mở"
+              description="Tham gia lớp học phần trước để thấy môn đủ điều kiện thi thử."
+            />
           ) : (
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -818,77 +777,76 @@ export function MockExamPage() {
                     <article
                       key={course.id}
                       className={cn(
-                        'flex h-full flex-col rounded-2xl border p-3.5 transition duration-200',
                         !coursesExpanded && index >= 6 && 'hidden',
                         !coursesExpanded && index >= 4 && 'max-lg:hidden',
                         !coursesExpanded && index >= 2 && 'max-sm:hidden',
                         exhausted
-                          ? 'border-[#e3e8ef] bg-[#f7f8fa]'
-                          : cn(
-                              courseCardTone(course.code),
-                              'shadow-[0_1px_0_#fff_inset,0_6px_14px_rgba(23,48,96,0.16)] hover:-translate-y-0.5 hover:shadow-[0_10px_18px_rgba(36,78,170,0.2)]',
-                            ),
+                          ? 'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[#f7f8fa] p-3.5'
+                          : studentCardShellClass(course.code),
                       )}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      {!exhausted && <StudentColorCardAccent seed={course.code} />}
+                      <div className={exhausted ? 'flex h-full flex-1 flex-col' : 'relative flex h-full flex-1 flex-col p-3.5'}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
+                                exhausted ? 'border border-[#8b97a8]/30 bg-[#e8edf3] text-[#8b97a8]' : courseCodeTone(course.code),
+                              )}
+                            >
+                              {course.code}
+                            </span>
+                            <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[#4988C4]/55 bg-white/85 px-2 text-xs font-semibold text-[#5b6b84] backdrop-blur-[2px]">
+                              <GraduationCap className="size-3 shrink-0 text-[#1C4D8D]" />
+                              {course.credits} tín chỉ
+                            </span>
+                          </div>
                           <span
                             className={cn(
-                              'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
-                              exhausted ? 'bg-[#e8edf3] text-[#8b97a8]' : courseCodeTone(course.code),
+                              'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-semibold',
+                              exhausted
+                                ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
+                                : courseQuota
+                                  ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                                  : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]',
                             )}
                           >
-                            {course.code}
-                          </span>
-                          <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[#4988C4]/45 bg-white px-2 text-xs font-semibold text-[#5b6b84]">
-                            <GraduationCap className="size-3 shrink-0 text-[#1C4D8D]" />
-                            {course.credits} tín chỉ
+                            <TimerReset className="size-3 shrink-0" />
+                            {courseQuota
+                              ? exhausted
+                                ? 'Hết lượt'
+                                : `${courseQuota.remainingCount}/${courseQuota.maxDailyQuota}`
+                              : quotaUnknown
+                                ? 'Chưa rõ'
+                                : '…'}
                           </span>
                         </div>
-                        <span
+                        <h3
                           className={cn(
-                            'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-semibold',
-                            exhausted
-                              ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
-                              : courseQuota
-                                ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                                : 'border-[#4988C4]/30 bg-[#F4FBFD] text-[#1C4D8D]',
+                            'mt-3 truncate text-xl leading-snug font-bold',
+                            exhausted ? 'text-[#6d7888]' : 'text-[#0F2854]',
                           )}
                         >
-                          <TimerReset className="size-3 shrink-0" />
-                          {courseQuota
-                            ? exhausted
-                              ? 'Hết lượt'
-                              : `${courseQuota.remainingCount}/${courseQuota.maxDailyQuota}`
-                            : quotaUnknown
-                              ? 'Chưa rõ'
-                              : '…'}
-                        </span>
-                      </div>
-                      <h3
-                        className={cn(
-                          'mt-3 truncate text-xl leading-snug font-bold',
-                          exhausted ? 'text-[#6d7888]' : 'text-[#0F2854]',
+                          {course.name}
+                        </h3>
+                        {exhausted ? (
+                          <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
+                            Hết lượt · quay lại ngày mai
+                          </p>
+                        ) : (
+                          <div className="mt-auto pt-3">
+                            <button
+                              type="button"
+                              onClick={() => openCourse(course.id)}
+                              className={ds.outlineButton}
+                            >
+                              <Play className="size-3.5 fill-current" />
+                              Bắt đầu
+                            </button>
+                          </div>
                         )}
-                      >
-                        {course.name}
-                      </h3>
-                      {exhausted ? (
-                        <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
-                          Hết lượt · quay lại ngày mai
-                        </p>
-                      ) : (
-                        <div className="mt-auto pt-3">
-                          <button
-                            type="button"
-                            onClick={() => openCourse(course.id)}
-                            className={ds.outlineButton}
-                          >
-                            <Play className="size-3.5 fill-current" />
-                            Bắt đầu
-                          </button>
-                        </div>
-                      )}
+                      </div>
                     </article>
                   )
                 })}
@@ -917,13 +875,6 @@ export function MockExamPage() {
               )}
             </>
           )}
-
-          {pageError && !openCourseId && (
-            <div className="flex items-start gap-2 rounded-xl border border-[#e7b7c2] bg-white p-3 text-sm leading-relaxed text-[#9a3d50] shadow-[0_6px_16px_rgba(160,40,60,0.06)]">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              {pageError}
-            </div>
-          )}
         </div>
       </section>
 
@@ -938,15 +889,15 @@ export function MockExamPage() {
             !guideOpen && 'border-b-0',
           )}
         >
-          <span>
+          <span className={ds.sectionHeading}>
             <span className={ds.sectionTitleRow}>
               <span className={ds.sectionIconWrap}>
-                <ListChecks className="size-[18px] stroke-[2.75]" aria-hidden="true" />
+                <ListChecks className={ds.sectionIcon} aria-hidden="true" />
               </span>
               <h2 className={ds.sectionTitle}>Hướng dẫn thi thử</h2>
             </span>
             <span className={cn(ds.sectionHint, 'block')}>
-              Bốn bước từ lúc chọn môn đến khi nộp bài.
+              Bốn bước từ chọn môn đến khi nộp bài
             </span>
           </span>
           <ChevronDown
@@ -966,7 +917,7 @@ export function MockExamPage() {
                   <li
                     key={step.title}
                     className={cn(
-                      'flex gap-3 rounded-2xl border p-3.5 shadow-[0_8px_22px_rgba(23,48,96,0.06)]',
+                      'flex gap-3 rounded-2xl border p-3.5 shadow-[0_1px_0_#fff_inset,0_8px_18px_rgba(23,48,96,0.14)]',
                       step.card,
                     )}
                   >
@@ -991,7 +942,7 @@ export function MockExamPage() {
                 )
               })}
             </ol>
-            <div className="mt-4 rounded-2xl border border-[#f0b56a] bg-[#fff6e8] p-4">
+            <div className="mt-4 rounded-2xl border border-[#f0b56a] bg-[#fff6e8] p-4 shadow-[0_1px_0_#fff_inset,0_8px_18px_rgba(180,83,9,0.12)]">
               <h3 className="flex items-center gap-2 text-sm font-bold text-[#b45309]">
                 <AlertTriangle className="size-4 shrink-0 text-[#e07a12]" aria-hidden="true" />
                 Lưu ý
@@ -1014,17 +965,22 @@ export function MockExamPage() {
 
       <section className={ds.section}>
         <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}>
-          <div>
+          <div className={ds.sectionHeading}>
             <div className={ds.sectionTitleRow}>
               <span className={ds.sectionIconWrap}>
-                <History className="size-[18px] stroke-[2.75]" aria-hidden="true" />
+                <History className={ds.sectionIcon} aria-hidden="true" />
               </span>
               <h2 className={ds.sectionTitle}>Lịch sử</h2>
+              <span className={ds.sectionBadge}>
+                {historyTotal > RECENT_HISTORY_SIZE
+                  ? `${RECENT_HISTORY_SIZE}/${historyTotal}`
+                  : `${historyTotal} phiên`}
+              </span>
             </div>
             <p className={ds.sectionHint}>
               {historyTotal > RECENT_HISTORY_SIZE
-                ? `${RECENT_HISTORY_SIZE} phiên gần nhất trong ${historyTotal} lượt.`
-                : 'Các phiên thi thử gần nhất.'}
+                ? `${RECENT_HISTORY_SIZE} phiên gần nhất trong ${historyTotal} lượt`
+                : 'Các phiên thi thử gần nhất'}
             </p>
           </div>
           <button
@@ -1048,12 +1004,18 @@ export function MockExamPage() {
             Đang tải lịch sử…
           </div>
         ) : historyItems.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-[#5b6b84] sm:px-6">Chưa có ca thi thử nào.</p>
+          <div className="p-4 sm:p-5">
+            <EmptyState
+              icon={History}
+              title="Chưa có ca thi thử nào"
+              description="Bắt đầu phiên thi thử đầu tiên để xem lịch sử và bảng điểm tại đây."
+            />
+          </div>
         ) : (
           <>
             <div className="hidden md:block">
               <table className="w-full table-fixed border-collapse text-left">
-                <thead className="border-b border-[#4988C4]/25 bg-white text-xs font-bold text-[#5b6b84]">
+                <thead className="border-b border-[#4988C4] bg-white text-xs font-bold text-[#5b6b84]">
                   <tr>
                     <th className="w-[40%] px-5 py-3">Môn thi</th>
                     <th className="w-[16%] px-3 py-3">Thời điểm</th>
@@ -1086,7 +1048,7 @@ export function MockExamPage() {
                         {item.totalScore === null ? (
                           '—'
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f8f1] px-2 py-1 font-bold text-[#16836a]">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-2 py-1 font-bold text-[#16836a]">
                             {item.totalScore.toFixed(2)} / 10
                           </span>
                         )}
@@ -1133,71 +1095,77 @@ export function MockExamPage() {
       </section>
 
       {archiveOpen && (
-        <div
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0F2854]/45 px-4 py-6 sm:items-center"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setArchiveOpen(false)
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mock-history-title"
-            className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/30 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
-          >
-            <div className="relative z-20 border-b border-[#4988C4]/45 bg-[linear-gradient(180deg,#f7f9ff_0%,#ffffff_100%)] px-5 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#1C4D8D] text-white shadow-[0_8px_16px_rgba(36,94,234,0.28)]">
-                    <History className="size-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <h2 id="mock-history-title" className="text-xl font-bold tracking-[-0.02em] text-[#0F2854]">
-                      Lịch sử thi thử
-                    </h2>
-                    <p className="mt-0.5 text-sm text-[#5b6b84]">{archiveTotal} phiên</p>
-                  </div>
-                </div>
+        <FormDialog
+          titleId="mock-history-title"
+          eyebrow="Thi thử"
+          title="Lịch sử thi thử"
+          subtitle={`${archiveTotal} phiên`}
+          icon={History}
+          onClose={() => setArchiveOpen(false)}
+          size="2xl"
+          maxHeight="max-h-[min(90dvh,820px)]"
+          beforeBody={(
+            <div className="flex flex-wrap items-center gap-2 border-b border-[#82aedb]/55 bg-white px-5 py-3">
+              <FilterDropMenu
+                label="Lọc theo môn học"
+                value={archiveCourseId}
+                onChange={(nextValue) => {
+                  setArchiveCourseId(nextValue)
+                  setArchivePage(1)
+                }}
+                options={
+                  courses.length === 0
+                    ? []
+                    : [
+                        { value: '', label: 'Tất cả môn' },
+                        ...courses.map((course) => ({
+                          value: course.id,
+                          label: `${course.code} · ${course.name}`,
+                        })),
+                      ]
+                }
+                emptyText="Chưa có môn học"
+                className="min-w-52 flex-1 sm:max-w-xs sm:flex-none"
+              />
+              <FilterDropMenu
+                label="Lọc theo trạng thái"
+                value={archiveStatus}
+                onChange={(nextValue) => {
+                  setArchiveStatus(nextValue)
+                  setArchivePage(1)
+                }}
+                options={HISTORY_STATUS_OPTIONS}
+                className="min-w-44"
+              />
+            </div>
+          )}
+          footer={
+            archiveTotalPages > 1 ? (
+              <DialogFooter className="bg-white sm:items-center sm:justify-between">
                 <button
                   type="button"
-                  aria-label="Đóng"
-                  onClick={() => setArchiveOpen(false)}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#4988C4]/45 bg-white text-[#5b6b84] hover:bg-[#4988C4]/18"
+                  disabled={archivePage <= 1}
+                  onClick={() => setArchivePage((current) => Math.max(1, current - 1))}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
                 >
-                  <X className="size-4" />
+                  <ChevronLeft className="size-4" /> Trước
                 </button>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <FilterDropMenu
-                  label="Lọc theo môn học"
-                  value={archiveCourseId}
-                  onChange={(nextValue) => {
-                    setArchiveCourseId(nextValue)
-                    setArchivePage(1)
-                  }}
-                  options={[
-                    { value: '', label: 'Tất cả môn' },
-                    ...courses.map((course) => ({
-                      value: course.id,
-                      label: `${course.code} · ${course.name}`,
-                    })),
-                  ]}
-                  className="min-w-52 flex-1 sm:max-w-xs sm:flex-none"
-                />
-                <FilterDropMenu
-                  label="Lọc theo trạng thái"
-                  value={archiveStatus}
-                  onChange={(nextValue) => {
-                    setArchiveStatus(nextValue)
-                    setArchivePage(1)
-                  }}
-                  options={HISTORY_STATUS_OPTIONS}
-                  className="min-w-44"
-                />
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
+                <span className="text-sm font-semibold text-[#6d7c90]">
+                  Trang {archivePage}/{archiveTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={archivePage >= archiveTotalPages}
+                  onClick={() => setArchivePage((current) => current + 1)}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
+                >
+                  Sau <ChevronDown className="size-4 -rotate-90" />
+                </button>
+              </DialogFooter>
+            ) : undefined
+          }
+        >
+            <div className="min-h-0">
               {archiveError ? (
                 <p className="rounded-xl bg-white px-4 py-8 text-sm text-[#ae3d50]">{archiveError}</p>
               ) : isLoadingArchive ? (
@@ -1210,9 +1178,9 @@ export function MockExamPage() {
                   Không có phiên thi thử phù hợp.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-[#4988C4]/25 bg-white">
+                <div className="overflow-x-auto rounded-2xl border border-[#82aedb]/55 bg-white">
                   <div className="min-w-[760px]">
-                    <div className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] items-center gap-3 border-b border-[#4988C4]/25 bg-white px-4 py-3 text-xs font-bold text-[#5b6b84]">
+                    <div className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] items-center gap-3 border-b border-[#4988C4] bg-white px-4 py-3 text-xs font-bold text-[#5b6b84]">
                       <span>Môn thi</span>
                       <span>Thời điểm</span>
                       <span>Trạng thái</span>
@@ -1249,7 +1217,7 @@ export function MockExamPage() {
                               {item.totalScore === null ? (
                                 '—'
                               ) : (
-                                <span className="inline-flex rounded-full bg-[#e8f8f1] px-2.5 py-1 font-bold text-[#16836a]">
+                                <span className="inline-flex rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-2.5 py-1 font-bold text-[#16836a]">
                                   {item.totalScore.toFixed(2)} / 10
                                 </span>
                               )}
@@ -1263,135 +1231,87 @@ export function MockExamPage() {
                 </div>
               )}
             </div>
-            {archiveTotalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-[#4988C4]/45 bg-white px-5 py-3">
-                <button
-                  type="button"
-                  disabled={archivePage <= 1}
-                  onClick={() => setArchivePage((current) => Math.max(1, current - 1))}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
-                >
-                  <ChevronLeft className="size-4" /> Trước
-                </button>
-                <span className="text-sm font-semibold text-[#6d7c90]">
-                  Trang {archivePage}/{archiveTotalPages}
-                </span>
-                <button
-                  type="button"
-                  disabled={archivePage >= archiveTotalPages}
-                  onClick={() => setArchivePage((current) => current + 1)}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
-                >
-                  Sau <ChevronDown className="size-4 -rotate-90" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        </FormDialog>
       )}
 
       {expandedHistoryId && (
-        <div
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0F2854]/50 px-4 py-6 sm:items-center"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setExpandedHistoryId(null)
-          }}
+        <FormDialog
+          titleId="mock-scorecard-title"
+          eyebrow="Thi thử"
+          title="Bảng điểm"
+          icon={Award}
+          onClose={() => setExpandedHistoryId(null)}
+          size="xl"
+          nested
+          maxHeight="max-h-[min(90dvh,820px)]"
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mock-scorecard-title"
-            className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#4988C4]/30 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.28)]"
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-[#4988C4]/45 bg-white px-5 py-4">
-              <h2 id="mock-scorecard-title" className="text-lg font-bold text-[#0F2854]">
-                Bảng điểm
-              </h2>
-              <button
-                type="button"
-                aria-label="Đóng bảng điểm"
-                onClick={() => setExpandedHistoryId(null)}
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#4988C4]/45 text-[#5b6b84] hover:bg-[#4988C4]/18"
-              >
-                <X className="size-4" />
-              </button>
+          {loadingDetailId === expandedHistoryId && (
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
+              <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
+              Đang mở bảng điểm…
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-              {loadingDetailId === expandedHistoryId && (
-                <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
-                  <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
-                  Đang mở bảng điểm…
-                </div>
-              )}
-              {detailError && <p className="text-sm text-[#ae3d50]">{detailError}</p>}
-              {selectedDetail && <MockExamScorecard scorecard={selectedDetail} />}
-            </div>
-          </div>
-        </div>
+          )}
+          {selectedDetail && <MockExamScorecard scorecard={selectedDetail} />}
+        </FormDialog>
       )}
 
       {modalCourse && (
-        <div
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0F2854]/45 px-4 py-6 sm:items-center"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closeCourseModal()
-          }}
+        <FormDialog
+          titleId="mock-course-title"
+          eyebrow={modalCourse.code}
+          title={modalCourse.name}
+          subtitle={`${modalCourse.credits} tín chỉ`}
+          icon={GraduationCap}
+          onClose={closeCourseModal}
+          busy={isStarting}
+          size="md"
+          maxHeight="max-h-[min(90dvh,720px)]"
+          headerExtra={(
+            <span
+              className={cn(
+                'inline-flex max-w-[9.5rem] items-center gap-1 truncate rounded-full border px-2.5 py-1 text-[11px] font-bold sm:max-w-none',
+                modalQuota && !modalQuota.canStartExam
+                  ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
+                  : modalQuota
+                    ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                    : 'border-[#82aedb]/55 bg-white text-[#1C4D8D]',
+              )}
+            >
+              <TimerReset className="size-3.5 shrink-0" />
+              <span className="truncate">
+                {modalQuota
+                  ? modalQuota.canStartExam
+                    ? `Còn ${modalQuota.remainingCount}/${modalQuota.maxDailyQuota} lượt`
+                    : 'Hết lượt'
+                  : quotaFailedIds.includes(modalCourse.id)
+                    ? 'Chưa rõ lượt'
+                    : 'Đang kiểm tra…'}
+              </span>
+            </span>
+          )}
+          footer={(
+            <DialogFooter className="bg-white">
+              <button
+                type="button"
+                onClick={() => void handleStartExam()}
+                disabled={!canStart}
+                className={cn(ds.primaryButton, 'w-full sm:w-auto')}
+              >
+                {isStarting ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4 fill-current" />
+                )}
+                {isStarting
+                  ? 'Đang tạo đề thi…'
+                  : deviceState === 'ready'
+                    ? 'Bắt đầu thi thử'
+                    : 'Kiểm tra micro để tiếp tục'}
+              </button>
+            </DialogFooter>
+          )}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mock-course-title"
-            className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#4988C4]/30 bg-white shadow-[0_1px_0_#fff_inset,0_24px_60px_rgba(16,32,61,0.22)]"
-          >
-            <div className="border-b border-[#4988C4]/45 px-5 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex rounded-full bg-[#4988C4]/16 px-3 py-1.5 text-xs font-bold text-[#1C4D8D]">
-                  {modalCourse.code}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Đóng"
-                  onClick={closeCourseModal}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#4988C4]/45 text-[#5b6b84] hover:bg-[#4988C4]/18"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-              <div className="mt-2 flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2
-                    id="mock-course-title"
-                    className="text-[20px] leading-snug font-bold text-[#0F2854] sm:text-lg"
-                  >
-                    {modalCourse.name}
-                  </h2>
-                  <p className="mt-1 text-sm text-[#5b6b84]">{modalCourse.credits} tín chỉ</p>
-                </div>
-                <span
-                  className={cn(
-                    'relative top-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-semibold',
-                    modalQuota && !modalQuota.canStartExam
-                      ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
-                      : modalQuota
-                        ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                        : 'border-[#4988C4]/30 bg-[#F4FBFD] text-[#1C4D8D]',
-                  )}
-                >
-                  <TimerReset className="size-3.5 shrink-0" />
-                  {modalQuota
-                    ? modalQuota.canStartExam
-                      ? `Còn ${modalQuota.remainingCount}/${modalQuota.maxDailyQuota} lượt`
-                      : 'Hết lượt'
-                    : quotaFailedIds.includes(modalCourse.id)
-                      ? 'Chưa rõ lượt'
-                      : 'Đang kiểm tra lượt…'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4 overflow-y-auto bg-white p-4 sm:p-5">
+            <div className="space-y-4">
               {modalQuota && !modalQuota.canStartExam && (
                 <p className="rounded-xl border border-[#f3c9d0] bg-[#fff7f8] px-3 py-2 text-sm leading-relaxed text-[#b4233c]">
                   Môn này đã hết lượt thi thử hôm nay. Quay lại vào ngày mai.
@@ -1406,7 +1326,7 @@ export function MockExamPage() {
                     onClick={() => setHasFollowUp(false)}
                     className={cn(
                       'rounded-2xl border bg-white px-3.5 py-3 text-left shadow-[0_8px_22px_rgba(23,48,96,0.06)]',
-                      !hasFollowUp ? 'border-[#4988C4]' : 'border-[#4988C4]/45 hover:border-[#b7c6ef]',
+                      !hasFollowUp ? 'border-[#82aedb]/55' : 'border-[#82aedb]/55 hover:border-[#82aedb]/55',
                     )}
                     aria-pressed={!hasFollowUp}
                   >
@@ -1414,7 +1334,7 @@ export function MockExamPage() {
                       <span
                         className={cn(
                           'size-3.5 rounded-full border-2',
-                          !hasFollowUp ? 'border-[#4988C4] bg-[#1C4D8D]' : 'border-[#4988C4]/45',
+                          !hasFollowUp ? 'border-[#82aedb]/55 bg-[#1C4D8D]' : 'border-[#82aedb]/55',
                         )}
                       />
                       <span className="text-sm font-bold text-[#0F2854]">Không câu hỏi phụ</span>
@@ -1425,7 +1345,7 @@ export function MockExamPage() {
                     onClick={() => setHasFollowUp(true)}
                     className={cn(
                       'rounded-2xl border bg-white px-3.5 py-3 text-left shadow-[0_8px_22px_rgba(23,48,96,0.06)]',
-                      hasFollowUp ? 'border-[#4988C4]' : 'border-[#4988C4]/45 hover:border-[#b7c6ef]',
+                      hasFollowUp ? 'border-[#82aedb]/55' : 'border-[#82aedb]/55 hover:border-[#82aedb]/55',
                     )}
                     aria-pressed={hasFollowUp}
                   >
@@ -1433,14 +1353,14 @@ export function MockExamPage() {
                       <span
                         className={cn(
                           'size-3.5 rounded-full border-2',
-                          hasFollowUp ? 'border-[#4988C4] bg-[#1C4D8D]' : 'border-[#4988C4]/45',
+                          hasFollowUp ? 'border-[#82aedb]/55 bg-[#1C4D8D]' : 'border-[#82aedb]/55',
                         )}
                       />
                       <span className="text-sm font-bold text-[#0F2854]">Có câu hỏi phụ</span>
                     </span>
                   </button>
                 </div>
-                <p className="mt-3 rounded-2xl border border-[#4988C4]/45 bg-white px-4 py-3 text-sm leading-relaxed text-[#5b6b84] shadow-[0_8px_22px_rgba(23,48,96,0.06)]">
+                <p className="mt-3 rounded-2xl border border-[#82aedb]/55 bg-white px-4 py-3 text-sm leading-relaxed text-[#5b6b84] shadow-[0_8px_22px_rgba(23,48,96,0.06)]">
                   {hasFollowUp
                     ? 'Hệ thống AI sẽ tự động sinh câu hỏi phụ đào sâu theo ngữ cảnh câu trả lời của bạn và cộng thêm thời gian làm bài.'
                     : 'Chỉ làm các câu chính trong đề. Thời gian theo cấu hình môn, thường 30 phút.'}
@@ -1454,7 +1374,7 @@ export function MockExamPage() {
                     ? 'border-[#b7e4cf] bg-[#e8f8f1]'
                     : deviceState === 'error'
                       ? 'border-[#f3c2c8] bg-[#fdecec]'
-                      : 'border-[#4988C4]/30 bg-[#F4FBFD]',
+                      : 'border-[#82aedb]/55 bg-[#F4FBFD]',
                 )}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1479,7 +1399,7 @@ export function MockExamPage() {
                     type="button"
                     onClick={() => void handleDeviceCheck()}
                     disabled={deviceState === 'checking' || deviceState === 'testing'}
-                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4]/45 bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
                   >
                     {deviceState === 'checking' || deviceState === 'testing' ? (
                       <LoaderCircle className="size-3.5 animate-spin" />
@@ -1511,35 +1431,8 @@ export function MockExamPage() {
                   </div>
                 )}
               </div>
-
-              {pageError && (
-                <p className="rounded-xl border border-[#f3c9d0] bg-[#fff7f8] px-3 py-2 text-sm leading-relaxed text-[#b4233c]">
-                  {pageError}
-                </p>
-              )}
             </div>
-
-            <div className="border-t border-[#4988C4]/45 bg-white px-4 py-4 sm:px-5">
-              <button
-                type="button"
-                onClick={() => void handleStartExam()}
-                disabled={!canStart}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-6 text-sm font-bold text-white shadow-[0_10px_22px_rgba(36,94,234,0.28)] disabled:opacity-45"
-              >
-                {isStarting ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Play className="size-4 fill-current" />
-                )}
-                {isStarting
-                  ? 'Đang tạo đề thi…'
-                  : deviceState === 'ready'
-                    ? 'Bắt đầu thi thử'
-                    : 'Kiểm tra micro để tiếp tục'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </FormDialog>
       )}
 
       {quotaModal && (

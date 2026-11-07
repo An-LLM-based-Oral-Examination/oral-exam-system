@@ -158,7 +158,7 @@ public class AppealsControllerTests
     public async Task ReviewAppeal_Should_Return_200_When_Successful()
     {
         var reviewerId = Guid.NewGuid();
-        SetUserContext(reviewerId, role: "department_head");
+        SetUserContext(reviewerId, role: "examination_officer");
 
         var appealId = Guid.NewGuid();
         var request = new ReviewAppealRequestDto
@@ -191,7 +191,7 @@ public class AppealsControllerTests
     public async Task ReviewAppeal_Should_Return_422_When_Failed()
     {
         var reviewerId = Guid.NewGuid();
-        SetUserContext(reviewerId, role: "department_head");
+        SetUserContext(reviewerId, role: "examination_officer");
 
         var appealId = Guid.NewGuid();
         var request = new ReviewAppealRequestDto

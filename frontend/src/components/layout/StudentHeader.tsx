@@ -18,6 +18,7 @@ interface StudentHeaderProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/student/overview': { label: 'Tổng quan học tập', icon: LayoutDashboard },
+  '/in-class-exam': { label: 'Làm kiểm tra', icon: ClipboardCheck },
   '/practice': { label: 'Luyện tập vấn đáp', icon: Mic2 },
   '/practice/session': { label: 'Phiên luyện tập', icon: Mic2 },
   '/mock-exam': { label: 'Thi thử tính giờ', icon: TimerReset },
@@ -96,7 +97,7 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
                 {user?.fullName ?? 'Sinh viên'}
               </p>
               <p className="max-w-[160px] truncate text-xs font-medium text-[#1C4D8D]">
-                {user?.studentCode ?? user?.email ?? 'Student'}
+                {user?.studentCode || 'Chưa có MSSV'}
               </p>
             </div>
             <div className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white">

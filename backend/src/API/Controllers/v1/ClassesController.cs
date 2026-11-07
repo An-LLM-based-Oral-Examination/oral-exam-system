@@ -10,12 +10,15 @@ using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClas
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetStudentMyClasses;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.SearchAvailableClasses;
 
 namespace API.Controllers.v1;
 
 /// <summary>
-/// Controller quản trị lớp học phần và tính năng sinh viên tham gia lớp học (R5 Academic Hierarchy).
+/// Controller quản trị lớp học phần, tìm kiếm/hiển thị lớp học và tính năng sinh viên tham gia lớp học (R5 Academic Hierarchy).
 /// </summary>
 [ApiController]
 [Route("api/v1")]
@@ -28,6 +31,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// Giảng viên tạo lớp học phần mới (Authorize: lecturer, admin, department_head).
     /// </summary>
     [HttpPost("lecturer/classes")]
+    [HttpPost("classes")]
     [Authorize(Roles = "lecturer,admin,department_head")]
     public async Task<IActionResult> CreateClass(
         [FromBody] CreateClassRequest request,
@@ -71,7 +75,9 @@ public class ClassesController(ISender sender) : ControllerBase
             request.MaxStudents,
             request.AllowSelfEnrollment,
             request.IsJoinEnabled,
-            effectiveActorRole);
+            effectiveActorRole,
+            request.CourseOfferingId,
+            currentUserId);
 
         var result = await _sender.Send(command, cancellationToken);
 
@@ -88,12 +94,24 @@ public class ClassesController(ISender sender) : ControllerBase
                 });
             }
 
-            if (result.Error.Contains("Không tìm thấy", StringComparison.OrdinalIgnoreCase))
+            if (result.Error.Contains("Không tìm thấy", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new ProblemDetails
                 {
                     Status = StatusCodes.Status404NotFound,
                     Title = "Not Found",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
                     Detail = result.Error,
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });
@@ -109,6 +127,208 @@ public class ClassesController(ISender sender) : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPost("lecturer/course-offerings/{courseOfferingId:guid}/classes")]
+    [Authorize(Roles = "lecturer,admin,department_head")]
+    public async Task<IActionResult> CreateCourseOfferingClass(
+        [FromRoute] Guid courseOfferingId,
+        [FromBody] CreateCourseOfferingClassRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        if (string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase) &&
+            request.LecturerId is { } requestedLecturerId &&
+            requestedLecturerId != Guid.Empty &&
+            requestedLecturerId != currentUserId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = "FORBIDDEN: Giảng viên không được tạo lớp mạo danh giảng viên khác.",
+                Type = "https://oralexam.fpt.edu.vn/errors/class-forbidden"
+            });
+        }
+
+        var lecturerId = string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase)
+            ? currentUserId
+            : request.LecturerId ?? currentUserId;
+        var effectiveActorRole = string.Equals(actorRole, "department_head", StringComparison.OrdinalIgnoreCase)
+            ? $"department_head:{currentUserId}"
+            : actorRole;
+
+        var result = await _sender.Send(new CreateClassCommand(
+            request.Code,
+            request.Name,
+            Guid.Empty,
+            Guid.Empty,
+            lecturerId,
+            request.JoinCode,
+            request.Password,
+            request.MaxStudents,
+            request.AllowSelfEnrollment,
+            request.IsJoinEnabled,
+            effectiveActorRole,
+            courseOfferingId,
+            currentUserId), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.Error switch
+            {
+                var error when error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) =>
+                    StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", error)),
+                var error when error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) =>
+                    NotFound(ClassProblem(404, "Not Found", error)),
+                var error when error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
+                    Conflict(ClassProblem(409, "Conflict", error)),
+                _ => UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", result.Error))
+            };
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// Lấy danh sách các lớp học phần do Giảng viên phụ trách (hoặc toàn bộ lớp theo bộ lọc đối với Trưởng BM / Admin).
+    /// </summary>
+    [HttpGet("lecturer/classes")]
+    [HttpGet("classes")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> GetLecturerClasses(
+        [FromQuery] Guid? courseId = null,
+        [FromQuery] Guid? semesterId = null,
+        [FromQuery] Guid? courseOfferingId = null,
+        [FromQuery] Guid? lecturerId = null,
+        [FromQuery] string? keyword = null,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var effectiveLecturerId = string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase)
+            ? currentUserId
+            : lecturerId;
+
+        var query = new GetLecturerClassesQuery(
+            effectiveLecturerId,
+            courseId,
+            semesterId,
+            courseOfferingId,
+            keyword);
+
+        var result = await _sender.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Sinh viên tìm kiếm & duyệt danh sách các lớp học phần đang mở để xem trạng thái và bấm Tham gia (Join).
+    /// </summary>
+    [HttpGet("student/classes/search")]
+    [HttpGet("student/classes/available")]
+    [HttpGet("classes/available")]
+    [HttpGet("classes/search")]
+    [Authorize(Roles = "student,lecturer,department_head,admin")]
+    public async Task<IActionResult> SearchAvailableClasses(
+        [FromQuery] string? keyword = null,
+        [FromQuery] Guid? courseId = null,
+        [FromQuery] Guid? semesterId = null,
+        [FromQuery] Guid? courseOfferingId = null,
+        [FromQuery] Guid? lecturerId = null,
+        [FromQuery] bool onlyAvailableToJoin = false,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+
+        var query = new SearchAvailableClassesQuery(
+            CurrentStudentId: currentUserId,
+            Keyword: keyword,
+            CourseId: courseId,
+            SemesterId: semesterId,
+            CourseOfferingId: courseOfferingId,
+            OnlyAvailableToJoin: onlyAvailableToJoin,
+            LecturerId: lecturerId);
+
+        var result = await _sender.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Xem chi tiết một lớp học phần (thông tin lớp, danh sách ca thi trong lớp MF-05, và danh sách sinh viên nếu là Giảng viên/TBM/Admin).
+    /// </summary>
+    [HttpGet("classes/{id:guid}")]
+    [HttpGet("lecturer/classes/{id:guid}")]
+    [HttpGet("student/classes/{id:guid}")]
+    [Authorize(Roles = "lecturer,student,department_head,admin")]
+    public async Task<IActionResult> GetClassDetail(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var query = new GetClassDetailQuery(id, currentUserId, actorRole);
+        var result = await _sender.Send(query, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
     }
 
     /// <summary>
@@ -185,12 +405,24 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Sinh viên tham gia lớp học phần bằng mã JoinCode và mật khẩu (Authorize: student, admin).
+    /// Sinh viên tham gia lớp học phần bằng ClassId (chọn từ danh sách tìm kiếm) hoặc mã JoinCode kèm mật khẩu lớp (Authorize: student, admin).
     /// </summary>
+    [NonAction]
+    public Task<IActionResult> JoinClass(
+        JoinClassRequest request,
+        CancellationToken cancellationToken)
+    {
+        return JoinClass(request, null, cancellationToken);
+    }
+
     [HttpPost("student/classes/join")]
+    [HttpPost("classes/join")]
+    [HttpPost("student/classes/{classId:guid}/join")]
+    [HttpPost("classes/{classId:guid}/join")]
     [Authorize(Roles = "student,admin")]
     public async Task<IActionResult> JoinClass(
         [FromBody] JoinClassRequest request,
+        [FromRoute] Guid? classId = null,
         CancellationToken cancellationToken = default)
     {
         var currentStudentId = GetCurrentUserId();
@@ -205,7 +437,15 @@ public class ClassesController(ISender sender) : ControllerBase
             });
         }
 
-        var command = new JoinClassCommand(currentStudentId, request.JoinCode, request.Password);
+        var effectiveClassId = classId.HasValue && classId.Value != Guid.Empty
+            ? classId
+            : request.ClassId;
+
+        var command = new JoinClassCommand(
+            currentStudentId,
+            request.JoinCode,
+            request.Password,
+            effectiveClassId);
         var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
@@ -270,6 +510,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// Lấy danh sách các lớp học phần mà sinh viên đã ghi danh (Authorize: student, admin).
     /// </summary>
     [HttpGet("student/classes/my-classes")]
+    [HttpGet("classes/my-classes")]
     [Authorize(Roles = "student,admin")]
     public async Task<IActionResult> GetMyClasses(
         [FromQuery] Guid? studentId = null,
@@ -325,4 +566,12 @@ public class ClassesController(ISender sender) : ControllerBase
         if (User?.IsInRole("student") == true) return "student";
         return null;
     }
+
+    private static ProblemDetails ClassProblem(int status, string title, string detail) => new()
+    {
+        Status = status,
+        Title = title,
+        Detail = detail,
+        Type = $"https://oralexam.fpt.edu.vn/errors/class-{status}"
+    };
 }

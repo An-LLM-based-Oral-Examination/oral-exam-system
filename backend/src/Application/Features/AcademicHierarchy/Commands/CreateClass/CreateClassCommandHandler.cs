@@ -1,7 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +6,11 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
 
-public class CreateClassCommandHandler(
+public sealed class CreateClassCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
     IValidator<CreateClassCommand> validator)
@@ -27,114 +25,175 @@ public class CreateClassCommandHandler(
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            return Result<CreateClassResponseDto>.Failure(validation.Errors[0].ErrorMessage);
+            return Result<CreateClassResponseDto>.Failure(
+                $"VALIDATION: {validation.Errors[0].ErrorMessage}");
         }
 
-        var normalizedCode = request.Code.Trim();
-
+        var normalizedCode = request.Code.Trim().ToUpperInvariant();
         var codeExists = await context.Classes
-            .AnyAsync(c => c.Code.ToLower() == normalizedCode.ToLower(), cancellationToken);
-
+            .AnyAsync(c => c.Code.ToUpper() == normalizedCode, cancellationToken);
         if (codeExists)
         {
-            return Result<CreateClassResponseDto>.Failure("Mã lớp học đã tồn tại trong hệ thống.");
+            return Result<CreateClassResponseDto>.Failure(
+                "CONFLICT: Mã lớp học đã tồn tại trong hệ thống.");
         }
 
-        var course = await context.Courses
-            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
+        CourseOffering? courseOffering = null;
+        Course course;
+        Semester semester;
 
-        if (course is null)
+        if (request.CourseOfferingId is { } offeringId && offeringId != Guid.Empty)
         {
-            return Result<CreateClassResponseDto>.Failure("Không tìm thấy môn học.");
+            courseOffering = await context.CourseOfferings
+                .Include(o => o.Course)
+                    .ThenInclude(c => c.AcademicProgram)
+                .Include(o => o.Semester)
+                .FirstOrDefaultAsync(o => o.Id == offeringId, cancellationToken);
+
+            if (courseOffering is null)
+            {
+                return Result<CreateClassResponseDto>.Failure(
+                    "NOT_FOUND: Không tìm thấy course offering.");
+            }
+
+            if (!courseOffering.IsEnabled || !courseOffering.Course.IsActive)
+            {
+                return Result<CreateClassResponseDto>.Failure(
+                    "VALIDATION: Course offering đang bị vô hiệu hóa.");
+            }
+
+            if ((request.CourseId != Guid.Empty && request.CourseId != courseOffering.CourseId) ||
+                (request.SemesterId != Guid.Empty && request.SemesterId != courseOffering.SemesterId))
+            {
+                return Result<CreateClassResponseDto>.Failure(
+                    "VALIDATION: CourseId hoặc SemesterId không khớp với CourseOfferingId.");
+            }
+
+            course = courseOffering.Course;
+            semester = courseOffering.Semester;
         }
-
-        var semester = await context.Semesters
-            .FirstOrDefaultAsync(s => s.Id == request.SemesterId, cancellationToken);
-
-        if (semester is null)
+        else
         {
-            return Result<CreateClassResponseDto>.Failure("Không tìm thấy học kỳ.");
+            var legacyCourse = await context.Courses
+                .Include(c => c.AcademicProgram)
+                .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
+            if (legacyCourse is null)
+            {
+                return Result<CreateClassResponseDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
+            }
+            course = legacyCourse;
+
+            var legacySemester = await context.Semesters
+                .FirstOrDefaultAsync(s => s.Id == request.SemesterId, cancellationToken);
+            if (legacySemester is null)
+            {
+                return Result<CreateClassResponseDto>.Failure("NOT_FOUND: Không tìm thấy học kỳ.");
+            }
+            semester = legacySemester;
         }
 
         var lecturer = await context.Users
-            .FirstOrDefaultAsync(u => u.Id == request.LecturerId && u.IsActive, cancellationToken);
-
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
         if (lecturer is null)
         {
-            return Result<CreateClassResponseDto>.Failure("Không tìm thấy giảng viên.");
+            return Result<CreateClassResponseDto>.Failure("NOT_FOUND: Không tìm thấy giảng viên.");
         }
 
-        if (!string.Equals(lecturer.Role, "lecturer", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(lecturer.Role, "department_head", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(lecturer.Role, "admin", StringComparison.OrdinalIgnoreCase))
+        if (!lecturer.IsActive)
         {
-            return Result<CreateClassResponseDto>.Failure("FORBIDDEN: Người dùng được chỉ định không có vai trò Giảng viên.");
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Tài khoản giảng viên đang bị vô hiệu hóa.");
         }
 
-        var (actorRole, actorUserId) = ParseActorRoleAndId(request.ActorRole);
-
-        if (string.Equals(actorRole, "department_head", StringComparison.OrdinalIgnoreCase) &&
-            course.DepartmentHeadUserId.HasValue)
+        if (courseOffering is not null &&
+            !string.Equals(lecturer.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
         {
-            var effectiveDeptHeadId = actorUserId ??
-                                      (string.Equals(lecturer.Role, "department_head", StringComparison.OrdinalIgnoreCase)
-                                          ? request.LecturerId
-                                          : (Guid?)null);
-
-            if (effectiveDeptHeadId.HasValue &&
-                effectiveDeptHeadId.Value != Guid.Empty &&
-                course.DepartmentHeadUserId.Value != effectiveDeptHeadId.Value)
-            {
-                return Result<CreateClassResponseDto>.Failure(
-                    "FORBIDDEN: Trưởng bộ môn chỉ được phép tạo lớp học phần cho môn học do mình quản lý.");
-            }
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Lớp của course offering phải do một giảng viên được phân công sở hữu.");
         }
 
-        // Kiểm tra phân công giảng viên theo môn học và học kỳ (course_lecturers - R5) khi người gọi là giảng viên hoặc môn học đã có phân công
-        var hasCourseAssignments = await context.CourseLecturers
-            .AnyAsync(cl => cl.CourseId == request.CourseId &&
-                            cl.IsActive &&
-                            (cl.SemesterId == null || cl.SemesterId == request.SemesterId), cancellationToken);
+        if (courseOffering is null &&
+            !string.Equals(lecturer.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(lecturer.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(lecturer.Role, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Người dùng được chỉ định không có vai trò phù hợp để sở hữu lớp.");
+        }
 
-        if (string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase) || hasCourseAssignments)
+        var (actorRole, actorIdFromRole) = ParseActorRoleAndId(request.ActorRole);
+        var actorUserId = request.ActorUserId is { } explicitActorId && explicitActorId != Guid.Empty
+            ? explicitActorId
+            : actorIdFromRole ?? request.LecturerId;
+
+        if (string.Equals(actorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+            actorUserId != request.LecturerId)
+        {
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Giảng viên không được tạo lớp mạo danh giảng viên khác.");
+        }
+
+        var owningDepartmentHeadId = course.AcademicProgram?.DepartmentHeadUserId ?? course.DepartmentHeadUserId;
+        if (string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
+            owningDepartmentHeadId != actorUserId)
+        {
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Trưởng bộ môn chỉ được thao tác trên course offering thuộc ngành mình quản lý.");
+        }
+
+        if (courseOffering is not null)
         {
             var isAssignedLecturer = await context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId &&
-                                cl.LecturerUserId == request.LecturerId &&
-                                cl.IsActive &&
-                                (cl.SemesterId == null || cl.SemesterId == request.SemesterId), cancellationToken);
-            var isCourseDeptHead = course.DepartmentHeadUserId.HasValue && course.DepartmentHeadUserId.Value == request.LecturerId;
-
-            if (!isAssignedLecturer && !isCourseDeptHead && !string.Equals(actorRole, "admin", StringComparison.OrdinalIgnoreCase))
+                .AnyAsync(a => a.CourseOfferingId == courseOffering.Id &&
+                               a.LecturerUserId == request.LecturerId &&
+                               a.IsActive, cancellationToken);
+            if (!isAssignedLecturer)
             {
                 return Result<CreateClassResponseDto>.Failure(
-                    "FORBIDDEN: Giảng viên chưa được Trưởng bộ môn phân công quản lý môn học này (course_lecturers).");
-            }
-        }
-
-        string joinCode;
-        if (!string.IsNullOrWhiteSpace(request.JoinCode))
-        {
-            joinCode = request.JoinCode.Trim().ToUpperInvariant();
-            var joinCodeExists = await context.Classes
-                .AnyAsync(c => c.JoinCode.ToUpper() == joinCode, cancellationToken);
-
-            if (joinCodeExists)
-            {
-                return Result<CreateClassResponseDto>.Failure("Mã tham gia lớp (JoinCode) đã tồn tại. Vui lòng chọn mã khác.");
+                    "FORBIDDEN: Giảng viên chưa được phân công active vào course offering này.");
             }
         }
         else
         {
-            joinCode = await GenerateUniqueJoinCodeAsync(cancellationToken);
+            var hasAssignments = await context.CourseLecturers
+                .AnyAsync(a => a.CourseId == course.Id &&
+                               a.IsActive &&
+                               (a.SemesterId == null || a.SemesterId == semester.Id), cancellationToken);
+
+            if (string.Equals(actorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) || hasAssignments)
+            {
+                var isAssignedLecturer = await context.CourseLecturers
+                    .AnyAsync(a => a.CourseId == course.Id &&
+                                   a.LecturerUserId == request.LecturerId &&
+                                   a.IsActive &&
+                                   (a.SemesterId == null || a.SemesterId == semester.Id), cancellationToken);
+                var isCourseDepartmentHead = owningDepartmentHeadId == request.LecturerId;
+
+                if (!isAssignedLecturer && !isCourseDepartmentHead &&
+                    !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<CreateClassResponseDto>.Failure(
+                        "FORBIDDEN: Giảng viên chưa được Trưởng bộ môn phân công quản lý môn học này.");
+                }
+            }
         }
 
-        string? passwordHash = null;
-        if (!string.IsNullOrWhiteSpace(request.Password))
+        var joinCode = await ResolveJoinCodeAsync(request.JoinCode, cancellationToken);
+        if (joinCode is null)
         {
-            passwordHash = passwordHasher.Hash(request.Password.Trim());
+            return Result<CreateClassResponseDto>.Failure(
+                "CONFLICT: Mã tham gia lớp đã tồn tại. Vui lòng chọn mã khác.");
         }
 
+        var plainPassword = string.IsNullOrWhiteSpace(request.Password)
+            ? null
+            : request.Password.Trim();
+        var passwordHash = plainPassword is null
+            ? null
+            : passwordHasher.Hash(plainPassword);
+
+        var now = DateTime.UtcNow;
         var newClass = new Class
         {
             Id = Guid.NewGuid(),
@@ -142,20 +201,32 @@ public class CreateClassCommandHandler(
             Name = request.Name.Trim(),
             JoinCode = joinCode,
             JoinPasswordHash = passwordHash,
-            CourseId = request.CourseId,
-            SemesterId = request.SemesterId,
-            LecturerId = request.LecturerId,
+            JoinPasswordPlain = plainPassword,
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            CourseOfferingId = courseOffering?.Id,
+            LecturerId = lecturer.Id,
             MaxStudents = request.MaxStudents,
             IsJoinEnabled = request.IsJoinEnabled,
             AllowSelfEnrollment = request.AllowSelfEnrollment,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = now
         };
 
         context.Classes.Add(newClass);
+        context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = actorUserId,
+            Action = "CLASS_CREATED",
+            EntityName = "classes",
+            EntityId = newClass.Id,
+            NewValues = $"CourseOfferingId={courseOffering?.Id};Code={newClass.Code}",
+            CreatedAt = now
+        });
         await context.SaveChangesAsync(cancellationToken);
 
-        var response = new CreateClassResponseDto(
+        return Result<CreateClassResponseDto>.Success(new CreateClassResponseDto(
             newClass.Id,
             newClass.Code,
             newClass.Name,
@@ -168,29 +239,36 @@ public class CreateClassCommandHandler(
             lecturer.Id,
             lecturer.FullName,
             newClass.MaxStudents,
-            HasPassword: !string.IsNullOrWhiteSpace(passwordHash),
+            HasPassword: passwordHash is not null,
             newClass.IsJoinEnabled,
             newClass.AllowSelfEnrollment,
-            newClass.CreatedAt);
-
-        return Result<CreateClassResponseDto>.Success(response);
+            newClass.CreatedAt,
+            newClass.CourseOfferingId));
     }
 
-    private async Task<string> GenerateUniqueJoinCodeAsync(CancellationToken cancellationToken)
+    private async Task<string?> ResolveJoinCodeAsync(
+        string? requestedJoinCode,
+        CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(requestedJoinCode))
+        {
+            var normalized = requestedJoinCode.Trim().ToUpperInvariant();
+            var exists = await context.Classes
+                .AnyAsync(c => c.JoinCode.ToUpper() == normalized, cancellationToken);
+            return exists ? null : normalized;
+        }
+
         for (var attempt = 0; attempt < 10; attempt++)
         {
             var chars = new char[8];
-            for (var i = 0; i < chars.Length; i++)
+            for (var index = 0; index < chars.Length; index++)
             {
-                var idx = RandomNumberGenerator.GetInt32(JoinCodeAlphabet.Length);
-                chars[i] = JoinCodeAlphabet[idx];
+                chars[index] = JoinCodeAlphabet[RandomNumberGenerator.GetInt32(JoinCodeAlphabet.Length)];
             }
 
             var candidate = new string(chars);
             var exists = await context.Classes
                 .AnyAsync(c => c.JoinCode.ToUpper() == candidate, cancellationToken);
-
             if (!exists)
             {
                 return candidate;

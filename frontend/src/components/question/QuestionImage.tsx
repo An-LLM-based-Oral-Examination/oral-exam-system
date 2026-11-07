@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Maximize2, X } from 'lucide-react'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { cn } from '@/lib/utils'
 import { resolvePublicAssetUrl } from '@/utils/mediaUrl'
 
@@ -37,12 +38,11 @@ export function QuestionImage({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsExpanded(false)
     }
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockBodyScroll()
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      unlock()
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isExpanded])
@@ -55,7 +55,7 @@ export function QuestionImage({
         className={cn(
           'overflow-hidden',
           framed &&
-            'rounded-2xl border border-[#4988C4]/45 bg-[#F8FBFE] p-2 shadow-[0_6px_20px_rgba(31,61,105,0.05)]',
+            'rounded-2xl border border-[#82aedb]/55 bg-[#F8FBFE] p-2 shadow-[0_6px_20px_rgba(31,61,105,0.05)]',
           fillHeight && 'relative flex h-full min-h-0 flex-col',
           className,
         )}

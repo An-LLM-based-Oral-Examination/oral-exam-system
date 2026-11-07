@@ -111,7 +111,7 @@ function CriteriaBlock({ criteriaScores }: { criteriaScores: PracticeEvaluationD
         return (
           <div
             key={`${criterion.criterionId}-${idx}`}
-            className="rounded-xl border border-[#e6edf5] bg-white px-3 py-2.5"
+            className="rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5"
           >
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-bold text-[#25364e]">{criterion.criterionName}</p>
@@ -322,7 +322,7 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
 
   return (
     <div className="space-y-3">
-      <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
+      <section className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
         <div className="bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] px-5 py-5 text-white">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -385,7 +385,7 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
           return (
             <article
               key={item.key}
-              className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white"
+              className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white"
             >
               <button
                 type="button"
@@ -428,9 +428,9 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
               </button>
 
               {isOpen && (
-                <div className="space-y-3 border-t border-[#4988C4]/45 px-4 py-4">
+                <div className="space-y-3 border-t border-[#82aedb]/55 px-4 py-4">
                   {item.imageUrl?.trim() ? (
-                    <div className="overflow-hidden rounded-xl border border-[#4988C4]/45 bg-white p-3">
+                    <div className="overflow-hidden rounded-xl border border-[#82aedb]/55 bg-white p-3">
                       <QuestionImage
                         imageUrl={item.imageUrl}
                         imageAlt={item.imageAlt}
@@ -477,7 +477,7 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
                     return (
                       <div
                         key={fuItem.answer.answerId}
-                        className="space-y-3 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] p-3.5"
+                        className="space-y-3 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3.5"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -488,7 +488,7 @@ export function PracticeSessionScorecard({ session }: { session: PracticeSession
                               {fuItem.promptText}
                             </p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                          <span className="shrink-0 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
                             {fuItem.answer.totalScore !== null
                               ? showSingleCriterionScale
                                 ? `${formatScore(singleFuCriterion.score, 1)}/${formatScore(singleFuCriterion.maxScore!, 1)}đ (${formatScore(fuItem.answer.totalScore, 1)}/10)`

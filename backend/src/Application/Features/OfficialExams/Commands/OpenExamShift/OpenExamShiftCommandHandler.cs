@@ -32,7 +32,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer))
+        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer && actor.Role != UserRole.Admin))
         {
             return Result<ExamShiftResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -53,6 +53,19 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             return Result<ExamShiftResponse>.Failure(OfficialExamErrors.ProctorInvalid);
         }
 
+        var examiner = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ExaminerUserId, cancellationToken);
+        if (examiner is null
+            || !examiner.IsActive
+            || (examiner.Role != UserRole.Lecturer && examiner.Role != UserRole.DepartmentHead))
+        {
+            return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
+        }
+
+        if (request.ExaminerUserId == request.ProctorUserId)
+        {
+            return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi không được trùng với người coi thi.");
+        }
+
         var shift = new RealExamSessionShift
         {
             SessionId = request.SessionId,
@@ -61,6 +74,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             ProctorUserId = proctor.Id,
+            ExaminerUserId = examiner.Id,
             Status = "scheduled",
             CreatedAt = DateTime.UtcNow
         };
@@ -75,6 +89,9 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             shift.StartTime,
             shift.EndTime,
             shift.ProctorUserId,
-            shift.Status));
+            shift.Status,
+            shift.ExaminerUserId,
+            examiner.FullName,
+            proctor.FullName));
     }
 }

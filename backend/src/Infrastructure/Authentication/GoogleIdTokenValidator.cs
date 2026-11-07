@@ -25,7 +25,8 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
                 ?? Environment.GetEnvironmentVariable("ALLOW_DEV_GOOGLE_EMAIL")
                 ?? "false";
 
-            if (string.Equals(allowDevEmail, "true", StringComparison.OrdinalIgnoreCase))
+            var envName = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["DOTNET_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Development";
+            if (!string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase) && string.Equals(allowDevEmail, "true", StringComparison.OrdinalIgnoreCase))
             {
                 var rawPayload = idToken[DevGooglePrefix.Length..].Trim();
                 var parts = rawPayload.Split('|', 2, StringSplitOptions.TrimEntries);

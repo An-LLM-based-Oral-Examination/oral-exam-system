@@ -60,9 +60,8 @@ docker compose down
 
 ## Tài liệu
 
-- [Kiến trúc tổng thể (Master Architecture)](docs/01_architecture/MASTER_ARCHITECTURE.md)
+- [Kiến trúc tổng thể & Đặc tả chi tiết 4 luồng nghiệp vụ + Ca thi trong lớp (Master Architecture)](docs/01_architecture/MASTER_ARCHITECTURE.md)
 - [Đề xuất thiết kế kỹ thuật R1–R8](docs/01_architecture/TECHNICAL_DESIGN_PROPOSAL_R1_R8.md)
-- [Đặc tả 4 luồng nghiệp vụ & Ca thi trong lớp](docs/01_architecture/MO_TA_4_LUONG_MAINFLOW_NGHIEP_VU.md)
 - [Thiết kế cơ sở dữ liệu (38 bảng 3NF)](docs/02_database/ERD_DATABASE_DESIGN.md)
 - [Hợp đồng API & Tích hợp](docs/03_api_and_contracts/API_CONTRACT_AND_INTEGRATION_GUIDE.md)
 - [Quy trình Git](docs/04_devops_and_workflow/GIT_AND_TEAM_WORKFLOW.md)

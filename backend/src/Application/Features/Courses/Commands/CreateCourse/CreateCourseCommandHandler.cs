@@ -78,6 +78,23 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             deptHeadId = deptHead.Id;
         }
 
+        var academicProgram = await _context.AcademicPrograms
+            .AsNoTracking()
+            .Where(p => p.IsActive && p.Code == "SE")
+            .Select(p => new { p.Id, p.DepartmentHeadUserId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (academicProgram?.DepartmentHeadUserId is Guid programHeadId)
+        {
+            if (deptHeadId.HasValue && deptHeadId.Value != programHeadId)
+            {
+                return Result<CourseDto>.Failure(
+                    "VALIDATION: Môn học ngành SE phải sử dụng Trưởng bộ môn đã gán ở cấp ngành.");
+            }
+
+            deptHeadId = programHeadId;
+        }
+
         var semesterId = request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty
             ? request.SemesterId.Value
             : await _context.Semesters
@@ -94,6 +111,7 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             Name = request.Name.Trim(),
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             Credits = request.Credits,
+            AcademicProgramId = academicProgram?.Id,
             SemesterId = semesterId,
             DepartmentHeadUserId = deptHeadId,
             MaxMockExamsPerDay = request.MaxMockExamsPerDay,
@@ -108,6 +126,18 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
         };
 
         _context.Courses.Add(course);
+        if (semesterId != Guid.Empty)
+        {
+            _context.CourseOfferings.Add(new CourseOffering
+            {
+                Id = Guid.NewGuid(),
+                CourseId = course.Id,
+                SemesterId = semesterId,
+                IsEnabled = request.IsActive,
+                CreatedAt = course.CreatedAt,
+                UpdatedAt = course.CreatedAt
+            });
+        }
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new CourseDto
@@ -117,6 +147,7 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             Name = course.Name,
             Description = course.Description,
             Credits = course.Credits,
+            AcademicProgramId = course.AcademicProgramId,
             SemesterId = course.SemesterId,
             DepartmentHeadUserId = course.DepartmentHeadUserId,
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,

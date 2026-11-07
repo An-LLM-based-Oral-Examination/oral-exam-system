@@ -16,7 +16,8 @@ public sealed record UpdateTicketAttendanceCommand(
     Guid TicketId,
     bool IsPresent = true,
     string? IpAddress = null,
-    string? Note = null) : IRequest<Result<TicketProctorActionResponseDto>>;
+    string? Note = null,
+    int? SeatNumber = null) : IRequest<Result<TicketProctorActionResponseDto>>;
 
 public sealed class UpdateTicketAttendanceCommandHandler
     : IRequestHandler<UpdateTicketAttendanceCommand, Result<TicketProctorActionResponseDto>>
@@ -55,6 +56,22 @@ public sealed class UpdateTicketAttendanceCommandHandler
                 "CONFLICT: Sinh viên đã nộp bài thi, không thể hoàn tác trạng thái điểm danh.");
         }
 
+        if (request.SeatNumber.HasValue)
+        {
+            if (request.SeatNumber.Value is < 1 or > 40)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure(
+                    "VALIDATION: Số ghế phải nằm trong khoảng 1 đến 40.");
+            }
+
+            var isSeatTaken = await _context.StudentExamTickets.AsNoTracking().AnyAsync(t => t.ShiftId == ticket.ShiftId && t.Id != ticket.Id && t.SeatNumber == request.SeatNumber.Value, cancellationToken);
+            if (isSeatTaken)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure("CONFLICT: Số ghế này đã được gán cho một sinh viên khác trong cùng ca thi.");
+            }
+            ticket.SeatNumber = request.SeatNumber.Value;
+        }
+
         var oldStatus = ticket.Status;
         var now = DateTime.UtcNow;
 
@@ -64,15 +81,7 @@ public sealed class UpdateTicketAttendanceCommandHandler
             ticket.CheckedInAt = now;
         }
 
-        if (!string.IsNullOrWhiteSpace(request.IpAddress))
-        {
-            ticket.IpAddress = request.IpAddress.Trim();
-        }
-
-        if (request.IsPresent && string.Equals(ticket.Shift?.Status, "scheduled", StringComparison.OrdinalIgnoreCase))
-        {
-            ticket.Shift!.Status = "in_progress";
-        }
+        // Cam kết Bất biến & Điều Cấm Kỵ 14: Giám thị (Proctor) KHÔNG ĐƯỢC PHÉP sửa IP máy trạm và KHÔNG CÓ QUYỀN mở ca thi
 
         _context.AuditLogs.Add(new AuditLog
         {
@@ -82,7 +91,7 @@ public sealed class UpdateTicketAttendanceCommandHandler
             EntityName = "student_exam_tickets",
             EntityId = ticket.Id,
             OldValues = $"status={oldStatus}",
-            NewValues = $"status={ticket.Status};ip_address={ticket.IpAddress}" + (string.IsNullOrWhiteSpace(request.Note) ? string.Empty : $" | {request.Note.Trim()}"),
+            NewValues = $"status={ticket.Status};seat_number={ticket.SeatNumber}" + (string.IsNullOrWhiteSpace(request.Note) ? string.Empty : $" | {request.Note.Trim()}"),
             CreatedAt = now
         });
 

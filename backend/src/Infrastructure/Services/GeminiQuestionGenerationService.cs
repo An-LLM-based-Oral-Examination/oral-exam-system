@@ -20,6 +20,9 @@ namespace OralExamination.Infrastructure.Services;
 
 public class GeminiQuestionGenerationService : IAiQuestionGenerationService
 {
+    private static readonly SemaphoreSlim AiGenerationBulkhead = new(16, 16);
+    private static int _roundRobinKeyCounter;
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<GeminiQuestionGenerationService> _logger;
@@ -55,14 +58,40 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
             ?? string.Empty;
 
-        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(apiKey)
-            && !apiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase)
-            && !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase)
-            && !apiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
+        var fallbackApiKey = _configuration["Gemini:FallbackApiKey"]
+            ?? _configuration["Gemini__FallbackApiKey"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY")
+            ?? string.Empty;
+
+        var rawKeyPool = _configuration["Gemini:ApiKeys"]
+            ?? _configuration["Gemini__ApiKeys"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEYS")
+            ?? string.Empty;
+
+        var pooledKeys = rawKeyPool
+            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var baseKeys = new[] { apiKey.Trim(), fallbackApiKey.Trim() }
+            .Concat(pooledKeys)
+            .Where(k => !string.IsNullOrWhiteSpace(k) &&
+                        !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) &&
+                        !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var candidateKeys = new List<string>(baseKeys.Count);
+        if (baseKeys.Count > 0)
+        {
+            var startIdx = (int)(unchecked((uint)Interlocked.Increment(ref _roundRobinKeyCounter)) % (uint)baseKeys.Count);
+            for (var i = 0; i < baseKeys.Count; i++)
+            {
+                candidateKeys.Add(baseKeys[(startIdx + i) % baseKeys.Count]);
+            }
+        }
 
         string lastError = string.Empty;
 
-        _ = hasUsableGeminiKey; var fallbackApiKey = _configuration["Gemini:FallbackApiKey"] ?? _configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; var candidateKeys = new[] { apiKey.Trim(), fallbackApiKey.Trim() }.Where(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToList(); foreach (var activeKey in candidateKeys)
+        foreach (var activeKey in candidateKeys)
         {
             try
             {
@@ -75,7 +104,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             catch (Exception ex)
             {
                 lastError = ex.Message;
-                _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang Cloudflare Workers AI (Llama 3.1).");
+                _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang key tiếp theo hoặc Cloudflare Workers AI (Llama 3.1).");
             }
         }
 
@@ -134,12 +163,20 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             {
                 var response = await _resiliencePipeline.ExecuteAsync(async state =>
                 {
-                    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+                    await AiGenerationBulkhead.WaitAsync(state);
+                    try
                     {
-                        Content = JsonContent.Create(payload)
-                    };
-                    requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
-                    return await _httpClient.SendAsync(requestMessage, state);
+                        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, apiUrl)
+                        {
+                            Content = JsonContent.Create(payload)
+                        };
+                        requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
+                        return await _httpClient.SendAsync(requestMessage, state);
+                    }
+                    finally
+                    {
+                        AiGenerationBulkhead.Release();
+                    }
                 }, cancellationToken);
 
                 if (response.IsSuccessStatusCode)

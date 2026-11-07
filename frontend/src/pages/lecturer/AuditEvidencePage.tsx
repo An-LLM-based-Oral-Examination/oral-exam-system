@@ -4,7 +4,6 @@ import {
   AlertCircle,
   BadgeCheck,
   Bot,
-  CheckCircle2,
   ClipboardCheck,
   FileSearch,
   Filter,
@@ -22,11 +21,15 @@ import {
   Download,
 } from 'lucide-react'
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer'
+import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { StatusToast } from '@/components/common/toast'
 import { ScoreOverrideForm } from '@/components/rubric/ScoreOverrideForm'
 import { officialExamService } from '@/services/officialExam.service'
 import { useAuth } from '@/hooks/useAuth'
 import type { AuditEvidenceItem, ExamTicketStatus } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/common/EmptyState'
+import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 
@@ -115,6 +118,7 @@ export function AuditEvidencePage() {
   const [isSavingOverride, setIsSavingOverride] = useState(false)
   const [isLocking, setIsLocking] = useState(false)
   const [isExporting, setIsExporting] = useState<'excel' | 'pdf' | null>(null)
+  const [shiftInputError, setShiftInputError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -162,18 +166,12 @@ export function AuditEvidencePage() {
   useEffect(() => {
     if (!showPublishConfirm) return
 
-    const previousOverflow = document.body.style.overflow
+    // ConfirmDialog tự khóa scroll; chỉ giữ Escape phụ nếu cần.
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !isPublishing) setShowPublishConfirm(false)
     }
-
-    document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', handleKeyDown)
-    }
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isPublishing, showPublishConfirm])
 
   const attentionCount = evidence.filter(needsLecturerAttention).length
@@ -214,10 +212,15 @@ export function AuditEvidencePage() {
   const openShift = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const value = shiftInput.trim()
-    if (!isUuid(value)) {
-      setError('Shift ID phải là một UUID hợp lệ.')
+    if (!value) {
+      setShiftInputError('Vui lòng nhập Shift ID của ca thi.')
       return
     }
+    if (!isUuid(value)) {
+      setShiftInputError('Shift ID phải là một UUID hợp lệ.')
+      return
+    }
+    setShiftInputError('')
     setError('')
     setSearchParams({ shiftId: value })
   }
@@ -320,117 +323,120 @@ export function AuditEvidencePage() {
 
   return (
     <div className={ds.page}>
-      <section className={cn(ds.banner, 'p-5 sm:p-6')}>
-        <div className="pointer-events-none absolute -top-24 right-0 size-72 rounded-full bg-[#7766e9]/10 blur-3xl" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className={cn(ds.bannerChip, 'w-fit')}>
-              <ClipboardCheck className="size-4" aria-hidden="true" />
-              MF-04 · Hậu kiểm bằng chứng & điểm
-            </p>
-            <h1 className={ds.bannerTitle}>
-              Hậu kiểm & công bố điểm ca thi
-            </h1>
-            <p className={ds.bannerText}>
-              Ưu tiên bài được hệ thống đánh dấu nghi ngờ, điểm liệt/rớt (&lt; 5.0) hoặc có confidence
-              dưới 0.70; đối chiếu bằng chứng trước khi công bố điểm một lần cho toàn ca.
-            </p>
-          </div>
+      <LecturerPageBanner
+        icon={ClipboardCheck}
+        eyebrow="Hậu kiểm điểm"
+        title="Hậu kiểm và công bố điểm ca thi"
+        description="Ưu tiên bài được hệ thống đánh dấu nghi ngờ, điểm dưới 5.0 hoặc độ tin cậy dưới 0.70. Đối chiếu bằng chứng trước khi công bố điểm một lần cho toàn ca."
+        extras={
+          <>
+            <BannerFact icon={ShieldAlert}>Bài nghi ngờ</BannerFact>
+            <BannerFact icon={FileSearch} tone="green">
+              Đối chiếu bằng chứng
+            </BannerFact>
+            <BannerFact icon={LockKeyhole} tone="violet">
+              Công bố một lần
+            </BannerFact>
+          </>
+        }
+      />
 
-          <form onSubmit={openShift} className="flex w-full max-w-xl flex-col gap-2 sm:flex-row">
-            <label className="relative min-w-0 flex-1">
+      <section className={ds.section}>
+        <SectionHeader
+          icon={Fingerprint}
+          title="Mở ca thi"
+          hint="Nhập mã ca để xem bài cần hậu kiểm"
+        />
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <form onSubmit={openShift} className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start">
+            <label className="block min-w-0 flex-1">
               <span className="sr-only">Shift ID của ca thi</span>
-              <Fingerprint className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#7c8ca1]" />
-              <input
-                value={shiftInput}
-                onChange={(event) => setShiftInput(event.target.value)}
-                placeholder="Nhập UUID ca thi (Shift ID)"
-                className={cn(ds.field, 'pr-3 pl-9 font-mono text-xs placeholder:font-sans')}
-              />
+              <span className="relative block">
+                <Fingerprint className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#7c8ca1]" />
+                <input
+                  value={shiftInput}
+                  onChange={(event) => {
+                    setShiftInput(event.target.value)
+                    if (shiftInputError) setShiftInputError('')
+                  }}
+                  placeholder="Nhập UUID ca thi (Shift ID)"
+                  aria-invalid={Boolean(shiftInputError)}
+                  className={cn(
+                    ds.field,
+                    'pr-3 pl-9 font-mono text-xs placeholder:font-sans',
+                    shiftInputError && fieldInvalidClass,
+                  )}
+                />
+              </span>
+              <FieldError message={shiftInputError} />
             </label>
-            <button
-              type="submit"
-              className={ds.bannerButton}
-            >
+            <button type="submit" className={ds.primaryButton}>
               <Search className="size-3.5" />
               Mở ca thi
             </button>
           </form>
+          {routeShiftId && isUuid(routeShiftId) && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={ds.outlineButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('excel')}>
+                <Download className="size-3.5" />
+                {isExporting === 'excel' ? 'Đang xuất...' : 'Xuất Excel'}
+              </button>
+              <button type="button" className={ds.outlineButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('pdf')}>
+                <Download className="size-3.5" />
+                {isExporting === 'pdf' ? 'Đang xuất...' : 'Xuất PDF'}
+              </button>
+            </div>
+          )}
         </div>
-        {routeShiftId && isUuid(routeShiftId) && (
-          <div className="relative flex flex-wrap gap-2">
-            <button type="button" className={ds.bannerButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('excel')}>
-              <Download className="size-3.5" />
-              {isExporting === 'excel' ? 'Đang xuất...' : 'Xuất Excel'}
-            </button>
-            <button type="button" className={ds.bannerButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('pdf')}>
-              <Download className="size-3.5" />
-              {isExporting === 'pdf' ? 'Đang xuất...' : 'Xuất PDF'}
-            </button>
-          </div>
-        )}
       </section>
 
-      {(error || notice) && (
-        <div
-          className={cn(
-            'flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold',
-            error
-              ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
-              : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
-          )}
-          role={error ? 'alert' : 'status'}
-        >
-          {error ? (
-            <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          ) : (
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-          )}
-          {error || notice}
-        </div>
-      )}
+      <StatusToast
+        notice={notice}
+        error={error}
+        onDismiss={() => {
+          setError('')
+          setNotice('')
+        }}
+      />
 
       {!routeShiftId || !isUuid(routeShiftId) ? (
-        <section className="flex min-h-[430px] flex-col items-center justify-center rounded-[22px] border border-dashed border-[#4988C4]/45 bg-white px-5 text-center shadow-[0_10px_34px_rgba(31,61,105,0.04)]">
-          <span className="flex size-14 items-center justify-center rounded-2xl bg-[#4988C4]/16 text-[#1C4D8D]">
-            <FileSearch className="size-6" aria-hidden="true" />
-          </span>
-          <h2 className="mt-4 text-base font-bold text-[#0F2854] sm:text-lg">Chọn ca thi cần hậu kiểm</h2>
-          <p className="mt-2 max-w-lg text-xs leading-relaxed text-[#5b6b84]">
-            Nhập Shift ID từ lịch phân công. Danh sách ca thi chưa được đồng bộ vào cổng giảng viên,
-            nên hệ thống chỉ tải bằng chứng sau khi nhận mã hợp lệ.
-          </p>
-          <div className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-3">
-            {[
-              { icon: ShieldAlert, label: 'Ưu tiên bài nghi ngờ' },
-              { icon: Sparkles, label: 'Đối chiếu bằng chứng AI' },
-              { icon: LockKeyhole, label: 'Công bố & khóa toàn ca' },
-            ].map(({ icon: Icon, label }) => (
-              <div
-                key={label}
-                className="flex items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-left text-xs font-semibold text-[#5b6b84]"
-              >
-                <Icon className="size-3.5 shrink-0 text-[#1C4D8D]" />
-                {label}
-              </div>
-            ))}
-          </div>
-        </section>
+        <EmptyState
+          className="min-h-[430px] justify-center"
+          icon={FileSearch}
+          title="Chọn ca thi cần hậu kiểm"
+          description="Nhập Shift ID từ lịch phân công. Hệ thống chỉ tải bằng chứng sau khi nhận mã hợp lệ."
+          action={
+            <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
+              {[
+                { icon: ShieldAlert, label: 'Ưu tiên bài nghi ngờ' },
+                { icon: Sparkles, label: 'Đối chiếu bằng chứng AI' },
+                { icon: LockKeyhole, label: 'Công bố & khóa toàn ca' },
+              ].map(({ icon: Icon, label }) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-2 rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5 text-left text-xs font-semibold text-[#5b6b84]"
+                >
+                  <Icon className="size-3.5 shrink-0 text-[#1C4D8D]" />
+                  {label}
+                </div>
+              ))}
+            </div>
+          }
+        />
       ) : isLoading ? (
-        <section className="flex min-h-[430px] flex-col items-center justify-center rounded-[22px] border border-[#4988C4]/45 bg-white">
+        <section className="flex min-h-[430px] flex-col items-center justify-center rounded-2xl border border-[#82aedb]/55 bg-[#F8FBFD]">
           <LoaderCircle className="size-8 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
           <p className="mt-3 text-sm font-semibold text-[#5b6b84]">
             Đang tải Evidence Panel của ca thi...
           </p>
         </section>
       ) : evidence.length === 0 && !error ? (
-        <section className="flex min-h-[430px] flex-col items-center justify-center rounded-[22px] border border-dashed border-[#4988C4]/45 bg-white px-5 text-center">
-          <UsersRound className="size-7 text-[#8495aa]" />
-          <h2 className="mt-3 text-base font-bold text-[#0F2854] sm:text-lg">Ca thi chưa có bài nộp</h2>
-          <p className="mt-1 text-xs text-[#5b6b84]">
-            Chưa có dữ liệu thí sinh để giảng viên hậu kiểm.
-          </p>
-        </section>
+        <EmptyState
+          className="min-h-[430px] justify-center"
+          icon={UsersRound}
+          title="Ca thi chưa có bài nộp"
+          description="Chưa có dữ liệu thí sinh để giảng viên hậu kiểm."
+        />
       ) : evidence.length > 0 ? (
         <>
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -466,7 +472,7 @@ export function AuditEvidencePage() {
             ].map(({ label, value, helper, icon: Icon, tone }) => (
               <article
                 key={label}
-                className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)]"
+                className="rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-[0_7px_26px_rgba(31,61,105,0.045)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -484,8 +490,8 @@ export function AuditEvidencePage() {
             ))}
           </section>
 
-          <section className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_9px_30px_rgba(31,61,105,0.05)]">
-            <div className="flex flex-col gap-4 border-b border-[#e8edf4] p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+          <section className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_9px_30px_rgba(31,61,105,0.05)]">
+            <div className="flex flex-col gap-4 border-b border-[#82aedb]/55 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -509,7 +515,7 @@ export function AuditEvidencePage() {
                 <button
                   type="button"
                   onClick={() => setReloadKey((key) => key + 1)}
-                  className="flex size-10 items-center justify-center rounded-xl border border-[#4988C4]/45 text-[#5b6b84] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+                  className="flex size-10 items-center justify-center rounded-xl border border-[#82aedb]/55 text-[#5b6b84] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                   aria-label="Tải lại bằng chứng"
                 >
                   <RefreshCw className="size-4" />
@@ -518,7 +524,7 @@ export function AuditEvidencePage() {
                   type="button"
                   onClick={() => setShowPublishConfirm(true)}
                   disabled={!canPublish}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#168367] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(22,131,103,0.2)] transition hover:bg-[#106c55] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:bg-[#a7b7b3] disabled:shadow-none"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#168367] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(22,131,103,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#106c55] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:bg-[#a7b7b3] disabled:shadow-none motion-reduce:transform-none"
                 >
                   {alreadyPublished ? (
                     <LockKeyhole className="size-3.5" />
@@ -541,8 +547,8 @@ export function AuditEvidencePage() {
             )}
 
             <div className="grid min-h-[680px] lg:grid-cols-[330px_minmax(0,1fr)]">
-              <aside className="border-b border-[#e4eaf2] bg-white lg:border-r lg:border-b-0">
-                <div className="border-b border-[#e5eaf1] p-3">
+              <aside className="border-b border-[#82aedb]/55 bg-white lg:border-r lg:border-b-0">
+                <div className="border-b border-[#82aedb]/55 p-3">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#667990]">
                     <Filter className="size-3.5" />
                     Phân nhóm hậu kiểm
@@ -604,8 +610,8 @@ export function AuditEvidencePage() {
                           className={cn(
                             'w-full rounded-xl border p-3 text-left transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]',
                             active
-                              ? 'border-[#aebbed] bg-white shadow-[0_7px_20px_rgba(69,75,155,0.09)]'
-                              : 'border-transparent hover:border-[#dde4ee] hover:bg-white',
+                              ? 'border-[#82aedb]/55 bg-white shadow-[0_7px_20px_rgba(69,75,155,0.09)]'
+                              : 'border-transparent hover:border-[#82aedb]/55 hover:bg-white',
                           )}
                         >
                           <div className="flex items-start gap-3">
@@ -631,12 +637,12 @@ export function AuditEvidencePage() {
                               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                 <StatusBadge status={candidate.status as ExamTicketStatus} />
                                 {attention && (
-                                  <span className="rounded-full bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
+                                  <span className="rounded-full border border-[#f3c2c8] bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
                                     Cần xem kỹ
                                   </span>
                                 )}
                                 {pending && (
-                                  <span className="rounded-full bg-[#fff6e5] px-2 py-1 text-xs font-bold text-[#8d6118]">
+                                  <span className="rounded-full border border-[#f3ddb0] bg-[#fff6e5] px-2 py-1 text-xs font-bold text-[#8d6118]">
                                     Chờ phân loại
                                   </span>
                                 )}
@@ -659,7 +665,7 @@ export function AuditEvidencePage() {
               <div className="min-w-0 bg-[#4988C4]/16 p-3 sm:p-4 lg:p-5">
                 {activeCandidate ? (
                   <div className="space-y-4">
-                    <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)]">
+                    <section className="rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)]">
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex items-center gap-3">
                           <span className="flex size-11 items-center justify-center rounded-2xl bg-[#4988C4]/16 font-mono text-xs font-black text-[#1C4D8D]">
@@ -677,7 +683,7 @@ export function AuditEvidencePage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <StatusBadge status={activeCandidate.status as ExamTicketStatus} />
                           {activeCandidate.isLocked && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#f3c2c8] bg-[#fff0f1] px-2 py-1 text-xs font-bold text-[#a93d48]">
                               <LockKeyhole className="size-3" />
                               One-Way Lock
                             </span>
@@ -686,7 +692,7 @@ export function AuditEvidencePage() {
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl border border-[#e2e8f0] bg-white p-3">
+                        <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3">
                           <p className="flex items-center gap-1.5 text-xs font-bold text-[#79889b] uppercase">
                             <Bot className="size-3.5 text-[#1C4D8D]" />
                             Điểm AI
@@ -698,7 +704,7 @@ export function AuditEvidencePage() {
                             <span className="ml-1 text-xs text-[#8290a2]">/10</span>
                           </p>
                         </div>
-                        <div className="rounded-xl border border-[#e2e8f0] bg-white p-3">
+                        <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3">
                           <p className="flex items-center gap-1.5 text-xs font-bold text-[#79889b] uppercase">
                             <Gauge className="size-3.5 text-[#1C4D8D]" />
                             Confidence
@@ -715,7 +721,7 @@ export function AuditEvidencePage() {
                             {formatConfidence(activeCandidate.confidenceScore)}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-[#e2e8f0] bg-white p-3">
+                        <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3">
                           <p className="flex items-center gap-1.5 text-xs font-bold text-[#79889b] uppercase">
                             <UserRoundCheck className="size-3.5 text-[#168367]" />
                             Điểm hiện tại
@@ -757,12 +763,12 @@ export function AuditEvidencePage() {
                     />
 
                     <div className="grid gap-4 xl:grid-cols-2">
-                      <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)] sm:p-5">
+                      <section className="rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)] sm:p-5">
                         <div className="flex items-center gap-2">
                           <FileSearch className="size-4 text-[#1C4D8D]" />
                           <h3 className="text-sm font-bold text-[#0F2854]">Transcript Whisper</h3>
                         </div>
-                        <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-[#e2e8f0] bg-white p-3">
+                        <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-[#82aedb]/55 bg-white p-3">
                           <p className="text-xs leading-[1.7] whitespace-pre-wrap text-[#5b6b84]">
                             {activeCandidate.transcriptWhisper ||
                               'Chưa có transcript để giảng viên đối chiếu.'}
@@ -770,14 +776,14 @@ export function AuditEvidencePage() {
                         </div>
                       </section>
 
-                      <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)] sm:p-5">
+                      <section className="rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-[0_8px_26px_rgba(31,61,105,0.045)] sm:p-5">
                         <div className="flex items-center gap-2">
                           <Sparkles className="size-4 text-[#1C4D8D]" />
                           <h3 className="text-sm font-bold text-[#0F2854]">
                             Phân tích AI theo tiêu chí
                           </h3>
                         </div>
-                        <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-[#e2e8f0] bg-white p-3">
+                        <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-[#82aedb]/55 bg-white p-3">
                           <p className="text-xs leading-[1.7] whitespace-pre-wrap text-[#5b6b84]">
                             {activeCandidate.cotTrace ||
                               'Chưa có phân tích AI để hiển thị trong Evidence Panel.'}
@@ -794,7 +800,7 @@ export function AuditEvidencePage() {
                       isSaving={isSavingOverride}
                       onSaveOverride={saveOverride}
                     />
-                    <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#4988C4]/35 bg-white p-4">
+                    <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
                       <button
                         type="button"
                         disabled={activeCandidate.isLocked || isLocking}
@@ -834,12 +840,12 @@ export function AuditEvidencePage() {
           onConfirm={() => void publishGrades()}
         >
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[#4988C4]/45 bg-white p-3 text-center">
+            <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3 text-center">
               <p className="text-xs font-bold text-[#5b6b84] uppercase">Sẽ công bố</p>
               <p className="mt-1 font-mono text-lg font-black text-[#1C4D8D]">{evidence.length}</p>
               <p className="text-xs text-[#5b6b84]">sinh viên</p>
             </div>
-            <div className="rounded-xl border border-[#4988C4]/45 bg-white p-3 text-center">
+            <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3 text-center">
               <p className="text-xs font-bold text-[#5b6b84] uppercase">Đã hậu kiểm</p>
               <p className="mt-1 font-mono text-lg font-black text-[#16836a]">
                 {reviewedAttentionCount}/{attentionCount}

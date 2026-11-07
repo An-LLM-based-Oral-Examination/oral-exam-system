@@ -37,7 +37,7 @@ public sealed class GetAppealsQueryHandler : IRequestHandler<GetAppealsQuery, Re
             {
                 "student" => query.Where(a => a.StudentId == request.RequesterId.Value),
                 "lecturer" => query.Where(a => a.AssignedTo == request.RequesterId.Value),
-                "department_head" or "admin" => query,
+                "department_head" or "examination_officer" or "admin" => query,
                 _ => query.Where(_ => false)
             };
         }

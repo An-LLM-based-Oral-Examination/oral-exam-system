@@ -41,14 +41,18 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Tác vụ DLQ đã được giải quyết (resolved) trước đó.");
         }
 
-        var isPracticeOrMockTask =
+        var isInClassTask =
+            string.Equals(dlqItem.TaskType, "InClassGrading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(dlqItem.FlowType, "IN_CLASS_EXAM", StringComparison.OrdinalIgnoreCase);
+
+        var isPracticeOrMockTask = !isInClassTask && (
             string.Equals(dlqItem.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "PRACTICE", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase);
+            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase));
 
-        var isOfficialTask = !isPracticeOrMockTask && (
+        var isOfficialTask = !isInClassTask && !isPracticeOrMockTask && (
             string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.FlowType, "OFFICIAL_EXAM", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(dlqItem.ManagedByRole, "examination_officer", StringComparison.OrdinalIgnoreCase));
@@ -63,6 +67,13 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             if (isOfficialTask && !string.Equals(request.ActorRole, "examination_officer", StringComparison.OrdinalIgnoreCase))
             {
                 return Result<Unit>.Failure("FORBIDDEN: Chỉ có Cán bộ Khảo thí (Examination Officer) mới có quyền replay tác vụ Thi thật.");
+            }
+
+            if (isInClassTask &&
+                !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.ActorRole, "lecturer", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Giảng viên hoặc Quản trị viên mới có quyền replay tác vụ Ca thi trong lớp.");
             }
         }
 
@@ -193,6 +204,68 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                     }
                 }
             }
+
+            dlqItem.Status = "resolved";
+            dlqItem.ResolvedAt = now;
+            dlqItem.NextRetryAt = null;
+            dlqItem.LastAttemptAt = now;
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result<Unit>.Success(Unit.Value);
+        }
+
+        if (isInClassTask)
+        {
+            GradingTask? inClassTask = null;
+            Guid submissionId = dlqItem.CorrelationId ?? Guid.Empty;
+
+            if (!string.IsNullOrWhiteSpace(dlqItem.PayloadJson))
+            {
+                try
+                {
+                    inClassTask = JsonSerializer.Deserialize<GradingTask>(dlqItem.PayloadJson, options);
+                    if (inClassTask?.InClassSubmissionId.HasValue == true && inClassTask.InClassSubmissionId.Value != Guid.Empty)
+                    {
+                        submissionId = inClassTask.InClassSubmissionId.Value;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (submissionId == Guid.Empty)
+                    {
+                        return Result<Unit>.Failure($"Không thể giải mã dữ liệu tác vụ (PayloadJson): {ex.Message}");
+                    }
+                }
+            }
+
+            if (submissionId == Guid.Empty)
+            {
+                return Result<Unit>.Failure("Dữ liệu tác vụ InClassGrading không chứa InClassSubmissionId hoặc CorrelationId hợp lệ.");
+            }
+
+            var submission = await _context.InClassExamSubmissions
+                .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+
+            if (submission == null)
+            {
+                return Result<Unit>.Failure("Không tìm thấy InClassExamSubmission tương ứng với tác vụ DLQ này.");
+            }
+
+            submission.Status = "SUBMITTED";
+
+            inClassTask ??= new GradingTask
+            {
+                AnswerId = submission.Id,
+                SessionId = submission.ShiftId,
+                QuestionId = submission.QuestionId,
+                StudentId = submission.StudentId,
+                AnswerText = submission.Transcript ?? string.Empty,
+                IsFollowUp = false,
+                IsFullSession = false,
+                InClassSubmissionId = submission.Id
+            };
+
+            await _gradingQueueChannel.EnqueueAsync(inClassTask, cancellationToken);
 
             dlqItem.Status = "resolved";
             dlqItem.ResolvedAt = now;

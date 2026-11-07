@@ -79,7 +79,7 @@ public class ExportAndVerifyGradeCertificateTests
             Id = Guid.NewGuid(),
             Email = "depthead.se@fpt.edu.vn",
             FullName = "TS. Trưởng Bộ Môn Kỹ Thuật Phần Mềm",
-            Role = UserRole.DepartmentHead,
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 

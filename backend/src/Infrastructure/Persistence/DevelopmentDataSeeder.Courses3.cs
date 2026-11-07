@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Domain.Entities;
+using OralExamination.Application.Common.Security;
 using OralExamination.Domain.Enums;
+using OralExamination.Infrastructure.Authentication;
 
 namespace OralExamination.Infrastructure.Persistence;
 
@@ -33,6 +35,18 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid ExamSetDbi202Id = Guid.Parse("00000000-0000-0000-0003-000000000033");
 
     public static readonly Guid ExaminationOfficerUserId = Guid.Parse("00000000-0000-0000-0000-00000000000c");
+    public static readonly Guid AcademicProgramSeId = Guid.Parse("00000000-0000-0000-0003-000000000090");
+
+    public static readonly Guid OfferingPrn231Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000091");
+    public static readonly Guid OfferingSwd392Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000092");
+    public static readonly Guid OfferingSwr302Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000093");
+    public static readonly Guid OfferingPrf192Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000094");
+    public static readonly Guid OfferingCsd201Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000095");
+    public static readonly Guid OfferingDbi202Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000096");
+
+    public static readonly Guid InClassShiftPrf192Id = Guid.Parse("00000000-0000-0000-0003-000000000097");
+    public static readonly Guid InClassShiftCsd201Id = Guid.Parse("00000000-0000-0000-0003-000000000098");
+    public static readonly Guid InClassShiftDbi202Id = Guid.Parse("00000000-0000-0000-0003-000000000099");
 
     public static async Task SeedAdditionalThreeCoursesAndClosAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {
@@ -43,6 +57,205 @@ public static partial class DevelopmentDataSeeder
         await EnsureAdditionalPracticeQuestionsAsync(context, cancellationToken);
         await EnsureAdditionalExamQuestionsAsync(context, cancellationToken);
         await EnsureAdditionalClassesAndEnrollmentsAsync(context, cancellationToken);
+        await EnsureAcademicProgramsOfferingsAndInClassShiftsAsync(context, cancellationToken);
+    }
+
+    private static async Task EnsureAcademicProgramsOfferingsAndInClassShiftsAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    {
+        var semester = await context.Semesters
+            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
+        var semesterId = semester?.Id ?? SemesterFa26Id;
+
+        var existingProgram = await context.AcademicPrograms
+            .FirstOrDefaultAsync(p => p.Id == AcademicProgramSeId || p.Code == "SE", cancellationToken);
+        if (existingProgram == null)
+        {
+            existingProgram = new AcademicProgram
+            {
+                Id = AcademicProgramSeId,
+                Code = "SE",
+                Name = "Kỹ thuật Phần mềm (Software Engineering)",
+                DepartmentHeadUserId = DepartmentHeadUserId,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            };
+            context.AcademicPrograms.Add(existingProgram);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            existingProgram.DepartmentHeadUserId = DepartmentHeadUserId;
+            existingProgram.IsActive = true;
+            existingProgram.UpdatedAt = SeedTimestampUtc;
+        }
+
+        var seCourseOfferingMappings = new (Guid CourseId, string CourseCode, Guid OfferingId)[]
+        {
+            (CoursePrn231Id, "PRN231", OfferingPrn231Fa26Id),
+            (CourseSwd392Id, "SWD392", OfferingSwd392Fa26Id),
+            (CourseSwr302Id, "SWR302", OfferingSwr302Fa26Id),
+            (CoursePrf192Id, "PRF192", OfferingPrf192Fa26Id),
+            (CourseCsd201Id, "CSD201", OfferingCsd201Fa26Id),
+            (CourseDbi202Id, "DBI202", OfferingDbi202Fa26Id)
+        };
+
+        var allCourses = await context.Courses.ToListAsync(cancellationToken);
+        var existingOfferings = await context.CourseOfferings.ToListAsync(cancellationToken);
+        var existingCourseLecturers = await context.CourseLecturers.ToListAsync(cancellationToken);
+        var courseToOfferingId = new Dictionary<Guid, Guid>();
+
+        foreach (var (courseId, courseCode, offeringId) in seCourseOfferingMappings)
+        {
+            var actualCourse = allCourses.FirstOrDefault(c =>
+                c.Id == courseId || string.Equals(c.Code, courseCode, StringComparison.OrdinalIgnoreCase));
+            if (actualCourse == null) continue;
+
+            actualCourse.AcademicProgramId = existingProgram.Id;
+            actualCourse.DepartmentHeadUserId ??= DepartmentHeadUserId;
+
+            var offering = existingOfferings.FirstOrDefault(o =>
+                o.Id == offeringId || (o.CourseId == actualCourse.Id && o.SemesterId == semesterId));
+            if (offering == null)
+            {
+                offering = new CourseOffering
+                {
+                    Id = offeringId,
+                    CourseId = actualCourse.Id,
+                    SemesterId = semesterId,
+                    IsEnabled = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                };
+                context.CourseOfferings.Add(offering);
+                existingOfferings.Add(offering);
+            }
+            else
+            {
+                offering.IsEnabled = true;
+                offering.UpdatedAt = SeedTimestampUtc;
+            }
+
+            courseToOfferingId[actualCourse.Id] = offering.Id;
+
+            var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                cl.CourseId == actualCourse.Id && cl.LecturerUserId == LecturerUserId);
+
+            if (existingAssignment == null)
+            {
+                context.CourseLecturers.Add(new CourseLecturer
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = actualCourse.Id,
+                    CourseOfferingId = offering.Id,
+                    LecturerUserId = LecturerUserId,
+                    AssignedByUserId = DepartmentHeadUserId,
+                    SemesterId = semesterId,
+                    AssignedAt = SeedTimestampUtc,
+                    IsActive = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                });
+            }
+            else
+            {
+                existingAssignment.CourseOfferingId ??= offering.Id;
+                existingAssignment.SemesterId ??= semesterId;
+                existingAssignment.IsActive = true;
+                existingAssignment.UpdatedAt = SeedTimestampUtc;
+            }
+
+            if (courseCode is not ("PRF192" or "CSD201" or "DBI202"))
+            {
+                continue;
+            }
+
+            var lecturer2Assignment = existingCourseLecturers.FirstOrDefault(cl =>
+                cl.CourseId == actualCourse.Id && cl.LecturerUserId == Lecturer2UserId);
+            if (lecturer2Assignment == null)
+            {
+                lecturer2Assignment = new CourseLecturer
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = actualCourse.Id,
+                    CourseOfferingId = offering.Id,
+                    LecturerUserId = Lecturer2UserId,
+                    AssignedByUserId = DepartmentHeadUserId,
+                    SemesterId = semesterId,
+                    AssignedAt = SeedTimestampUtc,
+                    IsActive = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                };
+                context.CourseLecturers.Add(lecturer2Assignment);
+                existingCourseLecturers.Add(lecturer2Assignment);
+            }
+            else
+            {
+                lecturer2Assignment.CourseOfferingId ??= offering.Id;
+                lecturer2Assignment.SemesterId ??= semesterId;
+                lecturer2Assignment.IsActive = true;
+                lecturer2Assignment.UpdatedAt = SeedTimestampUtc;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        var allClasses = await context.Classes.ToListAsync(cancellationToken);
+        foreach (var cls in allClasses)
+        {
+            if (courseToOfferingId.TryGetValue(cls.CourseId, out var offeringId))
+            {
+                cls.CourseOfferingId ??= offeringId;
+            }
+
+            if (string.IsNullOrWhiteSpace(cls.JoinPasswordHash))
+            {
+                cls.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", cls.Code);
+            }
+
+            if (string.IsNullOrWhiteSpace(cls.JoinPasswordPlain) && !string.IsNullOrWhiteSpace(cls.JoinPasswordHash))
+            {
+                cls.JoinPasswordPlain = "123456";
+            }
+
+            cls.IsJoinEnabled = true;
+            cls.AllowSelfEnrollment = true;
+            cls.IsActive = true;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        var existingShifts = (await context.InClassExamShifts.Select(s => s.Id).ToListAsync(cancellationToken)).ToHashSet();
+        var shiftSeeds = new (Guid ShiftId, Guid ClassId, string ShiftName, string SecretSeed)[]
+        {
+            (InClassShiftPrf192Id, ClassPrf192Id, "Kiểm tra Vấn đáp Quá trình PRF192 - Con trỏ & Quản lý Bộ nhớ C", "PRF192-TOTP-SECRET-FA26-SE1804PRF"),
+            (InClassShiftCsd201Id, ClassCsd201Id, "Kiểm tra Vấn đáp Quá trình CSD201 - Cây AVL, Đồ thị & Bảng băm", "CSD201-TOTP-SECRET-FA26-SE1805CSD"),
+            (InClassShiftDbi202Id, ClassDbi202Id, "Kiểm tra Vấn đáp Quá trình DBI202 - Chuẩn hóa 3NF, SQL & ACID", "DBI202-TOTP-SECRET-FA26-SE1806DBI")
+        };
+
+        foreach (var (shiftId, classId, shiftName, secretSeed) in shiftSeeds)
+        {
+            if (!existingShifts.Contains(shiftId) && allClasses.Any(c => c.Id == classId))
+            {
+                context.InClassExamShifts.Add(new InClassExamShift
+                {
+                    Id = shiftId,
+                    ClassId = classId,
+                    LecturerId = LecturerUserId,
+                    ShiftName = shiftName,
+                    StartTime = SeedTimestampUtc,
+                    EndTime = SeedTimestampUtc.AddMonths(4),
+                    TotpSecretKey = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(secretSeed)),
+                    Status = "IN_PROGRESS",
+                    IsLocked = false,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                });
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task EnsureCourseClosAsync(OralExamDbContext context, CancellationToken cancellationToken)

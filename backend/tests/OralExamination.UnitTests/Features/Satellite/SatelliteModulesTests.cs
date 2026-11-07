@@ -349,6 +349,31 @@ public class SatelliteModulesTests
         context.Users.Add(student);
         context.RealExamSessionShifts.Add(shift);
         context.StudentExamTickets.Add(ticket);
+        context.Notifications.AddRange(
+            new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = student.Id,
+                Title = "Lịch thi vấn đáp chính thức",
+                Message = "Bạn đã được phân ghế số 12 tại Lab 402 (Ca 2 - Chiều).",
+                Type = "EXAM_SCHEDULE_PUBLISHED",
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow.AddHours(-2),
+                RelatedEntityName = "student_exam_tickets",
+                RelatedEntityId = ticket.Id
+            },
+            new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = student.Id,
+                Title = "Đã công bố điểm thi vấn đáp",
+                Message = "Kết quả điểm thi của bạn tại Ca 2 - Chiều (Lab 402) đã được công bố chính thức.",
+                Type = "EXAM_GRADE_PUBLISHED",
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow.AddHours(-1),
+                RelatedEntityName = "student_exam_tickets",
+                RelatedEntityId = ticket.Id
+            });
         await context.SaveChangesAsync();
 
         var getHandler = new GetNotificationsQueryHandler(context);

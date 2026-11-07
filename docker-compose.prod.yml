@@ -12,6 +12,7 @@ services:
     image: postgres:16-alpine
     container_name: oralexam-postgres-prod
     restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-oralexam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in environment}
@@ -28,13 +29,14 @@ services:
       - oralexam-network
 
   backend:
+    image: ghcr.io/${GITHUB_REPOSITORY:-an-llm-based-oral-examination/oral-exam-system}/backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: oralexam-backend-prod
     restart: unless-stopped
     environment:
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-oralexam};Username=${POSTGRES_USER:-oralexam};Password=${POSTGRES_PASSWORD}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-oralexam};Username=${POSTGRES_USER:-oralexam};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_HTTP_PORTS=5000
       - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
@@ -58,6 +60,7 @@ services:
       - oralexam-network
 
   frontend:
+    image: ghcr.io/${GITHUB_REPOSITORY:-an-llm-based-oral-examination/oral-exam-system}/frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile

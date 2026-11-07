@@ -5,8 +5,6 @@ import {
   AudioLines,
   BrainCircuit,
   ChartNoAxesCombined,
-  ChevronDown,
-  CircleHelp,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -15,6 +13,9 @@ import {
   UserRound,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
+import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { toast } from '@/components/common/toastStore'
+import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import type { ProblemDetails } from '@/types/auth.types'
 import './LoginPage.css'
@@ -70,7 +71,8 @@ export function LoginPage() {
   const navigate = useNavigate()
   const { loginWithPassword, loginWithGoogle } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [usernameError, setUsernameError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -81,18 +83,18 @@ export function LoginPage() {
     event.preventDefault()
     const normalizedUsername = username.trim()
 
-    if (!normalizedUsername || !password) {
-      setError('Vui lòng nhập đầy đủ username và mật khẩu.')
-      return
-    }
+    const nextUsernameError = normalizedUsername ? null : 'Vui lòng nhập username.'
+    const nextPasswordError = password ? null : 'Vui lòng nhập mật khẩu.'
+    setUsernameError(nextUsernameError)
+    setPasswordError(nextPasswordError)
+    if (nextUsernameError || nextPasswordError) return
 
     setIsLoading(true)
-    setError(null)
     try {
       await loginWithPassword(normalizedUsername, password)
       navigate('/')
     } catch (loginError: unknown) {
-      setError(getLoginErrorMessage(loginError))
+      toast.error(getLoginErrorMessage(loginError))
     } finally {
       setIsLoading(false)
     }
@@ -108,10 +110,9 @@ export function LoginPage() {
         client_id: clientId,
         callback: ({ credential }) => {
           setIsLoading(true)
-          setError(null)
           void loginWithGoogle(credential)
             .then(() => navigate('/'))
-            .catch((loginError: unknown) => setError(getLoginErrorMessage(loginError)))
+            .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
             .finally(() => setIsLoading(false))
         },
       })
@@ -145,8 +146,8 @@ export function LoginPage() {
   }, [loginWithGoogle, navigate])
 
   return (
-    <main className="login-page-shell h-dvh w-full overflow-hidden bg-[#7868ef] p-0.5">
-      <div className="grid h-full min-h-0 overflow-hidden rounded-[7px] bg-[#FFFFFF] lg:grid-cols-[58%_42%]">
+    <main className="login-page-shell h-dvh w-full overflow-hidden bg-[#0F2854] p-0.5">
+      <div className="grid h-full min-h-0 overflow-hidden rounded-[10px] bg-[#FFFFFF] lg:grid-cols-[58%_42%]">
         <section
           className="relative hidden h-full min-h-0 overflow-hidden bg-[#071426] lg:block"
           aria-label="Giới thiệu hệ thống luyện thi vấn đáp"
@@ -216,33 +217,33 @@ export function LoginPage() {
           </div>
         </section>
 
-        <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(145deg,#ffffff_0%,#f8fafe_58%,#f3f6fb_100%)]">
-          <header className="login-header flex shrink-0 items-start justify-between gap-3 px-6 pt-3 sm:px-8 sm:pt-4">
-            <p className="pt-1 text-xs font-semibold tracking-[0.1em] text-[#70819a] uppercase">
-              Department portal
-            </p>
+        <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#EAF5FB_0%,#F4FBFD_42%,#FFFFFF_100%)]">
+          <div
+            className="pointer-events-none absolute inset-0"
+            aria-hidden="true"
+            style={{
+              backgroundImage:
+                'radial-gradient(ellipse at 88% 8%, rgba(73,136,196,0.12), transparent 38%), radial-gradient(ellipse at 12% 92%, rgba(189,232,245,0.22), transparent 44%)',
+            }}
+          />
 
-            <div className="flex flex-col items-end gap-1.5">
-              <button
-                type="button"
-                className="login-status-button flex items-center gap-2 rounded-lg border border-[#4988C4]/45 bg-white/90 px-3 py-1.5 text-xs font-semibold text-[#67758a] shadow-sm transition hover:border-[#cbd7e8] hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde]"
-                aria-label="Môi trường hiện tại: mô phỏng"
-              >
-                <span className="size-1.5 rounded-full bg-[#7aa9f4]" />
-                Simulation Status
-                <ChevronDown className="size-3" />
-              </button>
-              <span className="login-status-line flex items-center gap-1.5 pr-1 text-xs font-medium text-[#51667a]">
-                <span className="size-1.5 rounded-full bg-[#22c58b] shadow-[0_0_7px_rgba(34,197,139,0.55)]" />
-                Gateway Active
-              </span>
+          <header className="login-header relative z-10 flex shrink-0 items-center justify-between gap-3 px-6 pt-4 sm:px-8 sm:pt-5">
+            <div>
+              <p className="text-[11px] font-bold tracking-[0.12em] text-[#1C4D8D] uppercase">
+                Cổng đăng nhập
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-[#5b6b84]">Oral Exam System</p>
             </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-2.5 py-1 text-[11px] font-bold text-[#16836a]">
+              <span className="size-1.5 rounded-full bg-[#22c58b] shadow-[0_0_6px_rgba(34,197,139,0.55)]" />
+              Hệ thống sẵn sàng
+            </span>
           </header>
 
-          <div className="login-form-region flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-2 sm:px-8">
-            <div className="w-full max-w-[410px]">
-              <div className="login-form-intro mb-4 text-center">
-                <div className="login-logo relative mx-auto mb-2 flex size-16 items-center justify-center">
+          <div className="login-form-region relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-4 sm:px-8">
+            <div className="w-full max-w-[400px]">
+              <div className="login-form-intro mb-6 text-center">
+                <div className="login-logo relative mx-auto mb-4 flex h-[5.75rem] w-[5.75rem] items-center justify-center sm:h-[6.5rem] sm:w-[6.5rem]">
                   <img
                     src={universityTechLogo}
                     alt="University Tech"
@@ -250,21 +251,24 @@ export function LoginPage() {
                     draggable={false}
                   />
                 </div>
-                <h2 className="text-[1.45rem] font-bold tracking-[-0.035em] text-[#0b1733] sm:text-lg">
-                  Oral Exam System
+                <h2 className="text-[1.45rem] font-bold tracking-[-0.03em] text-[#0F2854]">
+                  Chào mừng trở lại
                 </h2>
-                <p className="login-subtitle mt-1.5 text-sm text-[#738198]">
-                  AI-powered Oral Examination Practice & Assessment
+                <p className="login-subtitle mx-auto mt-1.5 max-w-[34ch] text-sm leading-relaxed text-[#6d7f97]">
+                  Đăng nhập để luyện tập và thi vấn đáp với phản hồi AI theo rubric.
                 </p>
               </div>
 
-              <form onSubmit={handlePasswordLogin} className="space-y-2.5" noValidate>
+              <form onSubmit={handlePasswordLogin} className="space-y-3.5" noValidate>
                 <div>
-                  <label htmlFor="login-username" className="mb-1.5 block text-xs font-bold text-[#30415f]">
+                  <label
+                    htmlFor="login-username"
+                    className="mb-1.5 block text-[11px] font-bold tracking-[0.08em] text-[#6d7f97] uppercase"
+                  >
                     Username
                   </label>
                   <div className="relative">
-                    <UserRound className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#7f91ac]" />
+                    <UserRound className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#4988C4]" />
                     <input
                       id="login-username"
                       name="username"
@@ -272,23 +276,31 @@ export function LoginPage() {
                       value={username}
                       onChange={(event) => {
                         setUsername(event.target.value)
-                        setError(null)
+                        setUsernameError(null)
                       }}
                       autoComplete="username"
                       placeholder="Nhập username của bạn"
-                      className="login-input min-h-10 w-full rounded-xl border border-[#cbd8ea] bg-white px-3.5 py-2 pl-10 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      aria-invalid={Boolean(usernameError)}
+                      className={cn(
+                        'login-input min-h-11 w-full rounded-xl border border-[#B7D4EB] bg-white/85 px-3.5 py-2 pl-10 text-sm font-semibold text-[#0F2854] outline-none transition placeholder:font-medium placeholder:text-[#9aadc2] focus:border-[#4988C4] focus:bg-white focus:ring-4 focus:ring-[#4988C4]/12',
+                        usernameError && fieldInvalidClass,
+                      )}
                       disabled={isLoading}
                       required
                     />
                   </div>
+                  <FieldError message={usernameError} />
                 </div>
 
                 <div>
-                  <label htmlFor="login-password" className="mb-1.5 block text-xs font-bold text-[#30415f]">
+                  <label
+                    htmlFor="login-password"
+                    className="mb-1.5 block text-[11px] font-bold tracking-[0.08em] text-[#6d7f97] uppercase"
+                  >
                     Mật khẩu
                   </label>
                   <div className="relative">
-                    <LockKeyhole className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#7f91ac]" />
+                    <LockKeyhole className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#4988C4]" />
                     <input
                       id="login-password"
                       name="password"
@@ -296,11 +308,15 @@ export function LoginPage() {
                       value={password}
                       onChange={(event) => {
                         setPassword(event.target.value)
-                        setError(null)
+                        setPasswordError(null)
                       }}
                       autoComplete="current-password"
                       placeholder="Nhập mật khẩu"
-                      className="login-password-input min-h-10 w-full rounded-xl border border-[#cbd8ea] bg-white px-11 py-2 text-sm text-[#1b2f50] outline-none transition placeholder:text-[#9aa8ba] focus:border-[#4e87df] focus:ring-4 focus:ring-[#4e87df]/10"
+                      aria-invalid={Boolean(passwordError)}
+                      className={cn(
+                        'login-password-input min-h-11 w-full rounded-xl border border-[#B7D4EB] bg-white/85 px-11 py-2 text-sm font-semibold text-[#0F2854] outline-none transition placeholder:font-medium placeholder:text-[#9aadc2] focus:border-[#4988C4] focus:bg-white focus:ring-4 focus:ring-[#4988C4]/12',
+                        passwordError && fieldInvalidClass,
+                      )}
                       disabled={isLoading}
                       required
                     />
@@ -308,17 +324,18 @@ export function LoginPage() {
                       type="button"
                       aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                       onClick={() => setShowPassword((visible) => !visible)}
-                      className="absolute top-1/2 right-2.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#6f82a0] transition hover:bg-[#edf3fb] hover:text-[#2b5dde] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#2b5dde]"
+                      className="absolute top-1/2 right-2.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#6d7f97] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
                     >
                       {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                     </button>
                   </div>
+                  <FieldError message={passwordError} />
                 </div>
 
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="login-submit inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#1c5fc4] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(28,95,196,0.22)] transition hover:-translate-y-0.5 hover:bg-[#164b9d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b5dde] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
+                  className="login-submit mt-0.5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(28,77,141,0.2)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-wait disabled:opacity-60 motion-reduce:transform-none"
                 >
                   {isLoading ? (
                     <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -329,62 +346,54 @@ export function LoginPage() {
                 </button>
               </form>
 
-              <div className="login-divider my-3 flex items-center gap-3" aria-hidden="true">
-                <span className="h-px flex-1 bg-[#e3eaf3]" />
-                <span className="text-[11px] font-semibold text-[#96a2b3]">HOẶC</span>
-                <span className="h-px flex-1 bg-[#e3eaf3]" />
+              <div className="login-divider my-5 flex items-center gap-3" aria-hidden="true">
+                <span className="h-px flex-1 bg-[#cfe0ef]" />
+                <span className="text-[11px] font-semibold tracking-[0.1em] text-[#8aa0b8] uppercase">
+                  Hoặc
+                </span>
+                <span className="h-px flex-1 bg-[#cfe0ef]" />
               </div>
 
-              <div className="login-google rounded-xl border border-[#4988C4]/45 bg-white/80 p-2.5 shadow-[0_4px_18px_rgba(30,64,112,0.04)]">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[#253653]">Đăng nhập bằng Google</p>
-                    <p className="mt-0.5 text-xs text-[#7b8ba1]">Xác thực OAuth 2.0 theo tài khoản đã được cấp quyền.</p>
+              <div className="login-google rounded-2xl border border-[#82aedb]/45 bg-white/70 p-3.5">
+                <div className="mb-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#0F2854]">Đăng nhập bằng Google</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-[#6d7f97]">
+                      Tài khoản được cấp quyền bởi nhà trường.
+                    </p>
                   </div>
-                  <ShieldCheck className="size-4 shrink-0 text-[#2f70d9]" />
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#82aedb]/40 bg-white text-[#1C4D8D]">
+                    <ShieldCheck className="size-3.5" />
+                  </span>
                 </div>
                 <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
                 {isLoading && (
-                  <p className="mt-2 text-center text-xs font-semibold text-[#4a6dcc]">
+                  <p className="mt-2 text-center text-xs font-semibold text-[#1C4D8D]">
                     Đang xác thực tài khoản…
                   </p>
                 )}
                 {!googleConfigured && (
-                  <p className="mt-2 text-center text-xs text-[#a16a16]">
+                  <p className="mt-2 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] px-2.5 py-1.5 text-center text-xs font-semibold text-[#9a6414]">
                     Chưa cấu hình VITE_GOOGLE_CLIENT_ID cho môi trường này.
                   </p>
                 )}
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="login-alert mt-3 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-relaxed text-red-700"
-                >
-                  {error}
-                </div>
-              )}
-
-              <div className="login-security mt-3 border-t border-[#e5eaf1] pt-3 text-center">
-                <p className="flex items-center justify-center gap-1.5 text-xs text-[#8794a7]">
-                  <ShieldCheck className="size-3.5 text-[#6984b3]" />
-                  Tài khoản được bảo vệ bằng xác thực phiên an toàn.
+              <div className="login-security mt-5 text-center">
+                <p className="flex items-center justify-center gap-1.5 text-xs text-[#6d7f97]">
+                  <ShieldCheck className="size-3.5 text-[#4988C4]" />
+                  Phiên đăng nhập được bảo vệ an toàn.
                 </p>
-                <p id="login-support" className="login-support mt-2 text-xs text-[#8794a7]">
+                <p id="login-support" className="login-support mt-1.5 text-xs text-[#8aa0b8]">
                   Cần hỗ trợ? Liên hệ trợ giảng hoặc quản trị viên hệ thống.
                 </p>
               </div>
-
             </div>
           </div>
 
-          <footer className="login-footer shrink-0 px-6 pb-3 text-center text-xs text-[#9aa6b6] sm:px-8 sm:pb-4">
-            <div className="login-footer-divider mb-3 h-px bg-[#e8ecf2]" />© 2026 Faculty of
-            Computer Science & Engineering. All rights reserved.
+          <footer className="login-footer relative z-10 shrink-0 px-6 pb-4 text-center text-[11px] text-[#8aa0b8] sm:px-8">
+            © 2026 Faculty of Computer Science & Engineering. All rights reserved.
           </footer>
-
-          <div className="pointer-events-none absolute right-8 bottom-20 hidden size-24 rounded-full bg-[#6ea8ff]/6 blur-3xl sm:block" />
-          <CircleHelp className="pointer-events-none absolute right-6 bottom-6 hidden size-3 text-[#b7c1cf] sm:block" />
         </section>
       </div>
     </main>

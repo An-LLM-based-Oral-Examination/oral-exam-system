@@ -1,4 +1,5 @@
 import apiClient from './api.client'
+import { classService } from '@/services/class.service'
 import type { CourseConfigurationDto, CourseDto, ExamInputMode } from '@/types/practice.types'
 
 type JsonRecord = Record<string, unknown>
@@ -100,6 +101,12 @@ function normalizeConfiguration(value: unknown): CourseConfigurationDto {
 }
 
 export const courseService = {
+  async getEnrolledCourses(): Promise<CourseDto[]> {
+    const [enrolled, courses] = await Promise.all([classService.listMyClasses(), this.getCourses()])
+    const courseIds = new Set(enrolled.map((item) => item.courseId).filter(Boolean))
+    return courses.filter((course) => courseIds.has(course.id))
+  },
+
   async getCourses(): Promise<CourseDto[]> {
     const response = await apiClient.get<unknown>('/courses')
     if (!Array.isArray(response.data)) {

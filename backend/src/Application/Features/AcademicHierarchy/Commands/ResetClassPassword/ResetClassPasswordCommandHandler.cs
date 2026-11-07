@@ -52,6 +52,8 @@ public sealed class ResetClassPasswordCommandHandler
 
         var targetClass = await _context.Classes
             .Include(c => c.Course)
+                .ThenInclude(c => c.AcademicProgram)
+            .Include(c => c.CourseOffering)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
 
         if (targetClass is null)
@@ -74,9 +76,9 @@ public sealed class ResetClassPasswordCommandHandler
 
         var isAdmin = string.Equals(effectiveRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase);
         var isClassLecturer = targetClass.LecturerId.HasValue && targetClass.LecturerId.Value == request.ActorUserId;
-        var isCourseDeptHead = targetClass.Course is not null &&
-                               targetClass.Course.DepartmentHeadUserId.HasValue &&
-                               targetClass.Course.DepartmentHeadUserId.Value == request.ActorUserId;
+        var departmentHeadId = targetClass.Course.AcademicProgram?.DepartmentHeadUserId
+                               ?? targetClass.Course.DepartmentHeadUserId;
+        var isCourseDeptHead = departmentHeadId == request.ActorUserId;
 
         if (!isAdmin && !isClassLecturer && !isCourseDeptHead)
         {
@@ -102,9 +104,24 @@ public sealed class ResetClassPasswordCommandHandler
         if (request.NewPassword is not null)
         {
             var trimmedPassword = request.NewPassword.Trim();
-            targetClass.JoinPasswordHash = string.IsNullOrWhiteSpace(trimmedPassword)
-                ? null
-                : HashPassword(trimmedPassword);
+            if (targetClass.CourseOfferingId.HasValue &&
+                targetClass.AllowSelfEnrollment &&
+                string.IsNullOrWhiteSpace(trimmedPassword))
+            {
+                return Result<ResetClassPasswordResponseDto>.Failure(
+                    "VALIDATION: Lớp của course offering phải duy trì mật khẩu tham gia cố định.");
+            }
+
+            if (string.IsNullOrWhiteSpace(trimmedPassword))
+            {
+                targetClass.JoinPasswordHash = null;
+                targetClass.JoinPasswordPlain = null;
+            }
+            else
+            {
+                targetClass.JoinPasswordHash = HashPassword(trimmedPassword);
+                targetClass.JoinPasswordPlain = trimmedPassword;
+            }
         }
 
         if (request.IsJoinEnabled.HasValue)

@@ -8,10 +8,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.Commands.AssignAppealLecturer;
+using OralExamination.Application.Features.Appeals.Commands.BatchAssignAppeals;
 using OralExamination.Application.Features.Appeals.Commands.CreateAppeal;
 using OralExamination.Application.Features.Appeals.Commands.RegradeAppeal;
 using OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Application.Features.Appeals.Queries.GetAppealAllocationProposal;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealById;
 using OralExamination.Application.Features.Appeals.Queries.GetAppeals;
 
@@ -43,7 +45,7 @@ public class AppealsController : ControllerBase
             return id;
         }
 
-        if (Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
+        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
         {
             return headerId;
         }
@@ -62,6 +64,7 @@ public class AppealsController : ControllerBase
     /// Sinh viên nộp đơn phúc khảo bài thi chính thức (MF-04).
     /// </summary>
     [HttpPost]
+    [HttpPost("/api/v1/student/appeals")]
     [Authorize(Roles = "student")]
     public async Task<IActionResult> CreateAppeal([FromBody] CreateAppealRequestDto request)
     {
@@ -97,7 +100,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu danh sách đơn phúc khảo có hỗ trợ lọc theo trạng thái, ca thi, sinh viên, người thụ lý.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "student,lecturer,department_head,admin")]
+    [Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> GetAppeals(
         [FromQuery] string? status,
         [FromQuery] Guid? sessionId,
@@ -131,7 +134,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu chi tiết một đơn phúc khảo theo ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "student,lecturer,department_head,admin")]
+    [Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> GetAppealById(Guid id)
     {
         var requesterId = GetAuthenticatedUserId();
@@ -158,11 +161,13 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng Bộ Môn (department_head) hoặc Admin thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
+    /// Cán bộ Khảo thí, Trưởng Bộ Môn hoặc Admin thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
     /// </summary>
     [HttpPut("{id:guid}/review")]
     [HttpPut("{id:guid}/decision")]
-    [Authorize(Roles = "department_head,admin")]
+    [HttpPut("/api/v1/examination-officer/appeals/{id:guid}/decision")]
+    [HttpPost("/api/v1/examination-officer/appeals/{id:guid}/decision")]
+    [Authorize(Roles = "examination_officer,admin")]
     public async Task<IActionResult> ReviewAppeal(Guid id, [FromBody] ReviewAppealRequestDto request)
     {
         var reviewerId = GetAuthenticatedUserId();
@@ -195,31 +200,95 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn tiếp nhận và giao một giảng viên đang hoạt động chấm lại đơn phúc khảo.
+    /// Cán bộ Khảo thí hoặc Quản trị viên phân công một giảng viên đang hoạt động chấm lại đơn phúc khảo.
     /// </summary>
     [HttpPut("{id:guid}/assign-lecturer")]
-    [Authorize(Roles = "department_head")]
+    [HttpPost("{id:guid}/assign-lecturer")]
+    [HttpPost("/api/v1/examination-officer/appeals/{id:guid}/assign-lecturer")]
+    [Authorize(Roles = "examination_officer,admin")]
     public async Task<IActionResult> AssignLecturer(
         Guid id,
         [FromBody] AssignAppealLecturerRequestDto request,
         CancellationToken cancellationToken)
     {
-        var departmentHeadId = GetAuthenticatedUserId();
-        if (departmentHeadId == Guid.Empty)
+        var assignerId = GetAuthenticatedUserId();
+        if (assignerId == Guid.Empty)
         {
             return Unauthorized();
         }
 
         var result = await _sender.Send(
-            new AssignAppealLecturerCommand(id, departmentHeadId, request.LecturerId),
+            new AssignAppealLecturerCommand(id, assignerId, request.LecturerId),
             cancellationToken);
         return AppealMutationResult(result, "assign-lecturer");
+    }
+
+    /// <summary>
+    /// Thuật toán đề xuất phân bổ tự động chấm lại đơn phúc khảo định mức <= 24 bài/GV (MF-04).
+    /// Cán bộ Khảo thí xem trước trước khi bấm phân công hàng loạt.
+    /// </summary>
+    [HttpGet("/api/v1/examination-officer/appeals/allocation-proposal")]
+    [HttpGet("/api/v1/examination-officer/appeals/propose-allocation")]
+    [HttpGet("allocation-proposal")]
+    [HttpGet("propose-allocation")]
+    [Authorize(Roles = "examination_officer,admin")]
+    public async Task<IActionResult> GetAllocationProposal(
+        [FromQuery] Guid? sessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetAppealAllocationProposalQuery(sessionId);
+        var result = await _sender.Send(query, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/allocation-proposal-failed",
+                title = "Unprocessable Entity",
+                status = 422,
+                detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Cán bộ Khảo thí hoặc Quản trị viên xác nhận lưu phân công chấm lại đồng loạt sau khi điều chỉnh thủ công.
+    /// </summary>
+    [HttpPost("/api/v1/examination-officer/appeals/batch-assign")]
+    [HttpPost("batch-assign")]
+    [Authorize(Roles = "examination_officer,admin")]
+    public async Task<IActionResult> BatchAssign(
+        [FromBody] BatchAssignAppealsRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var officerId = GetAuthenticatedUserId();
+        if (officerId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var command = new BatchAssignAppealsCommand(officerId, request.Assignments);
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return UnprocessableEntity(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/batch-assign-failed",
+                title = "Unprocessable Entity",
+                status = 422,
+                detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
     }
 
     /// <summary>
     /// Giảng viên được phân công gửi điểm chấm lại và giải trình; One-Way Lock chỉ mở cho transaction này.
     /// </summary>
     [HttpPut("{id:guid}/regrade")]
+    [HttpPut("/api/v1/lecturer/appeals/{id:guid}/regrade")]
     [Authorize(Roles = "lecturer")]
     public async Task<IActionResult> Regrade(
         Guid id,
