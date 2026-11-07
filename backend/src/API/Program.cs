@@ -21,6 +21,7 @@ builder.Services.AddHostedService<OralExamination.API.Workers.GradingQueueWorker
 builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamGradingDispatcher>();
 builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamGradingWorker>();
 builder.Services.AddHostedService<OralExamination.API.Workers.OfficialExamDlqReplayWorker>();
+builder.Services.AddHostedService<OralExamination.API.Workers.InClassShiftAutoCloseWorker>();
 
 builder.Services.AddCors(options =>
 {

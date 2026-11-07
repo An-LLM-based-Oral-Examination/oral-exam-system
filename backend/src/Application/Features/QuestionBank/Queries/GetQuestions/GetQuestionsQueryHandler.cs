@@ -73,6 +73,12 @@ public sealed class GetQuestionsQueryHandler
             practiceQuery = practiceQuery.Where(q => q.Title.Contains(request.Search) || q.Content.Contains(request.Search));
         }
 
+        if (request.SubmittedBy.HasValue && request.SubmittedBy.Value != Guid.Empty)
+        {
+            examQuery = examQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
+            practiceQuery = practiceQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
+        }
+
         var pageNumber = Math.Max(1, request.PageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var normalizedScope = (request.UsageScope ?? string.Empty).Trim().ToLowerInvariant();

@@ -11,6 +11,8 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Common.Security;
 using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.AdjustInClassSubmissionScore;
+using OralExamination.Application.Features.InClassShifts.Commands.CloseDueInClassShifts;
+using OralExamination.Application.Features.InClassShifts.Commands.CloseInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
@@ -173,7 +175,7 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
-            Status = "SCHEDULED",
+            Status = "IN_PROGRESS",
             IsLocked = false
         };
         context.InClassExamShifts.Add(shift);
@@ -230,7 +232,7 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = secret,
-            Status = "SCHEDULED",
+            Status = "IN_PROGRESS",
             IsLocked = false
         };
         context.InClassExamShifts.Add(shift);
@@ -290,7 +292,7 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = secret,
-            Status = "SCHEDULED",
+            Status = "IN_PROGRESS",
             IsLocked = false
         };
         context.InClassExamShifts.Add(shift);
@@ -326,7 +328,7 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = secret,
-            Status = "SCHEDULED",
+            Status = "IN_PROGRESS",
             IsLocked = false
         };
         context.InClassExamShifts.Add(shift);
@@ -709,7 +711,7 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = secretKey,
-            Status = "SCHEDULED",
+            Status = "IN_PROGRESS",
             IsLocked = false
         };
         context.InClassExamShifts.Add(shift);
@@ -931,7 +933,9 @@ public class InClassShiftTests
         createRes.Value.IsAutoPublishGrades.Should().BeTrue();
 
         var shiftEntity = await context.InClassExamShifts.FindAsync(createRes.Value.Id);
-        string otp = TotpPasswordHelper.GenerateCode(shiftEntity!.TotpSecretKey);
+        shiftEntity!.Status = "IN_PROGRESS";
+        await context.SaveChangesAsync();
+        string otp = TotpPasswordHelper.GenerateCode(shiftEntity.TotpSecretKey);
 
         // 2. Sinh viên vào ca thi -> nhận đúng 2 câu hỏi trong SELECTED_POOL (không dính excludedQ3)
         var enterHandler = new EnterInClassShiftCommandHandler(context, new EnterInClassShiftCommandValidator());
@@ -988,5 +992,121 @@ public class InClassShiftTests
         subFollowUp1.IsSuccess.Should().BeTrue();
         subFollowUp1.Value.IsFollowUp.Should().BeTrue();
         subFollowUp1.Value.FollowUpIndex.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CloseInClassShift_Manual_ClosesOpenShift()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, _, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca đóng thủ công",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(20),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var handler = new CloseInClassShiftCommandHandler(context, new Mock<IGradingQueueChannel>().Object);
+        var result = await handler.Handle(new CloseInClassShiftCommand(lecturer.Id, shift.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Status.Should().Be("CLOSED");
+        (await context.InClassExamShifts.FindAsync(shift.Id))!.Status.Should().Be("CLOSED");
+    }
+
+    [Fact]
+    public async Task CloseDueInClassShifts_ClosesShiftWhenEndTimePassed_AndKeepsFinalized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var due = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca tới giờ",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(-1),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        var finalized = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca đã chốt",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(-1),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "FINALIZED",
+            IsLocked = true
+        };
+        context.InClassExamShifts.AddRange(due, finalized);
+        await context.SaveChangesAsync();
+
+        var closed = await new CloseDueInClassShiftsCommandHandler(context, new Mock<IGradingQueueChannel>().Object)
+            .Handle(new CloseDueInClassShiftsCommand(), CancellationToken.None);
+
+        closed.Should().Be(1);
+        (await context.InClassExamShifts.FindAsync(due.Id))!.Status.Should().Be("CLOSED");
+        (await context.InClassExamShifts.FindAsync(finalized.Id))!.Status.Should().Be("FINALIZED");
+
+        var enter = await new EnterInClassShiftCommandHandler(context, new EnterInClassShiftCommandValidator())
+            .Handle(new EnterInClassShiftCommand(student.Id, due.Id, "000000"), CancellationToken.None);
+        enter.IsSuccess.Should().BeFalse();
+        enter.Error.Should().Be(InClassShiftErrors.ShiftClosed);
+    }
+
+    [Fact]
+    public async Task CloseInClassShift_SubmitsUnansweredQuestionsForAiGrading()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var questionId = Guid.NewGuid();
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca còn bài chưa nộp",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(20),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = questionId,
+            AssignedQuestionIdsJson = $"[\"{questionId}\"]",
+            Status = "JOINED"
+        });
+        await context.SaveChangesAsync();
+
+        var queue = new Mock<IGradingQueueChannel>();
+        var handler = new CloseInClassShiftCommandHandler(context, queue.Object);
+        var result = await handler.Handle(new CloseInClassShiftCommand(lecturer.Id, shift.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var submission = await context.InClassExamSubmissions.SingleAsync(item => item.ShiftId == shift.Id);
+        submission.StudentId.Should().Be(student.Id);
+        submission.QuestionId.Should().Be(questionId);
+        submission.Transcript.Should().BeEmpty();
+        submission.Status.Should().Be("SUBMITTED");
+        (await context.InClassShiftParticipants.SingleAsync()).Status.Should().Be("SUBMITTED");
+        queue.Verify(channel => channel.EnqueueAsync(
+            It.Is<GradingTask>(task => task.InClassSubmissionId == submission.Id && task.TaskType == "InClass"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

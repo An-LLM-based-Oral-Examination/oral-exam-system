@@ -75,7 +75,8 @@ public sealed class GetStudentInClassSubmissionQueryHandler(
             submission.ParentSubmissionId,
             submission.FollowUpIndex,
             submission.FollowUpPrompt,
-            canViewScores ? submission.AiConfidenceScore : null
+            canViewScores ? submission.AiConfidenceScore : null,
+            submission.Student?.StudentCode
         );
 
         return Result<InClassExamSubmissionResponse>.Success(response);

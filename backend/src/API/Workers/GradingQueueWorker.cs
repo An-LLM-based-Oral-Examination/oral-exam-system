@@ -896,6 +896,17 @@ public class GradingQueueWorker : BackgroundService
             }
         }
 
+        var latestTranscript = await dbContext.InClassExamSubmissions
+            .AsNoTracking()
+            .Where(s => s.Id == submission.Id)
+            .Select(s => s.Transcript)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!string.Equals(latestTranscript, submission.Transcript, StringComparison.Ordinal))
+        {
+            _logger.LogInformation("Bỏ qua kết quả chấm cũ vì bài {SubmissionId} đã được nộp lại.", submissionId);
+            return;
+        }
+
         var inClassEvaluation = new AiEvaluation
         {
             AnswerType = "in_class",

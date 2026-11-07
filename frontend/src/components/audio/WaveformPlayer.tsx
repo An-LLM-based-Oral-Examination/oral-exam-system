@@ -166,9 +166,9 @@ export function WaveformPlayer({
   return (
     <section
       aria-labelledby="evidence-audio-title"
-      className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]"
+      className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]"
     >
-      <div className="flex flex-col gap-3 border-b border-[#e8edf4] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex flex-col gap-3 border-b border-[#82aedb]/55 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
             <FileAudio2 className="size-[18px]" aria-hidden="true" />
@@ -197,7 +197,7 @@ export function WaveformPlayer({
 
       <div className="space-y-4 p-4 sm:p-5">
         {audioUrl ? (
-          <div className="rounded-2xl border border-[#d9e5f4] bg-[linear-gradient(135deg,#BDE8F5,#edf5ff)] p-4">
+          <div className="rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#BDE8F5,#edf5ff)] p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[#3e5f89]">
               <span className="flex items-center gap-2">
                 <Volume2 className="size-4 text-[#1C4D8D]" aria-hidden="true" />
@@ -208,7 +208,7 @@ export function WaveformPlayer({
                 <select
                   value={playbackRate}
                   onChange={(event) => setPlaybackRate(Number(event.target.value))}
-                  className="rounded-lg border border-[#cbd9eb] bg-white px-2 py-1 text-xs font-bold text-[#2c4d78] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  className="rounded-lg border border-[#4988C4] bg-white px-2 py-1 text-xs font-bold text-[#2c4d78] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   aria-label="Tốc độ phát audio"
                 >
                   <option value={1}>1.0x</option>
@@ -218,7 +218,7 @@ export function WaveformPlayer({
               </label>
             </div>
 
-            <div className="rounded-xl border border-[#d6e2f2] bg-white/75 px-3 py-2">
+            <div className="rounded-xl border border-[#82aedb]/55 bg-white/75 px-3 py-2">
               <canvas
                 ref={canvasRef}
                 className="h-16 w-full"
@@ -247,7 +247,7 @@ export function WaveformPlayer({
             </audio>
           </div>
         ) : (
-          <div className="flex min-h-28 flex-col items-center justify-center rounded-2xl border border-dashed border-[#ccd8e8] bg-[#4988C4]/16 px-5 text-center">
+          <div className="flex min-h-28 flex-col items-center justify-center rounded-2xl border border-dashed border-[#82aedb]/55 bg-[#4988C4]/16 px-5 text-center">
             <VolumeX className="size-6 text-[#8fa0b8]" aria-hidden="true" />
             <p className="mt-2 text-xs font-bold text-[#455873]">Chưa nhận được tệp âm thanh</p>
             <p className="mt-1 max-w-md text-xs leading-relaxed text-[#78889e]">
@@ -256,7 +256,7 @@ export function WaveformPlayer({
           </div>
         )}
 
-        <div className="rounded-xl border border-[#e4eaf2] bg-white px-3 py-2.5">
+        <div className="rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5">
           <p className="text-xs font-bold tracking-[0.08em] text-[#7e8da1] uppercase">
             Mã băm toàn vẹn
           </p>

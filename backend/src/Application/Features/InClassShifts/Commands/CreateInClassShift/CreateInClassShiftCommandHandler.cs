@@ -98,6 +98,28 @@ public sealed class CreateInClassShiftCommandHandler(
         string secretKey = TotpPasswordHelper.GenerateSecretKey(32);
         int maxFollowUp = request.HasFollowUp ? Math.Clamp(request.MaxFollowUpQuestions <= 0 ? 2 : request.MaxFollowUpQuestions, 1, 5) : 0;
 
+        var startUtc = ToUtc(request.StartTime);
+        var endUtc = ToUtc(request.EndTime);
+        var nowUtc = DateTime.UtcNow;
+
+        if (endUtc <= startUtc)
+        {
+            return Result<InClassExamShiftResponse>.Failure(InClassShiftErrors.InvalidTimeRange);
+        }
+
+        if (endUtc <= nowUtc)
+        {
+            return Result<InClassExamShiftResponse>.Failure(
+                "Giờ đóng ca đã qua. Hãy chọn khung giờ còn ở tương lai trước khi tạo ca.");
+        }
+
+        var examMinutes = Math.Clamp(request.ExamDurationMinutes, 1, 60);
+        if (endUtc - startUtc < TimeSpan.FromMinutes(examMinutes))
+        {
+            return Result<InClassExamShiftResponse>.Failure(
+                $"Khung giờ ca phải dài hơn hoặc bằng thời gian làm bài ({examMinutes} phút).");
+        }
+
         var shift = new InClassExamShift
         {
             Id = Guid.NewGuid(),
@@ -111,12 +133,13 @@ public sealed class CreateInClassShiftCommandHandler(
             HasFollowUp = request.HasFollowUp,
             MaxFollowUpQuestions = maxFollowUp,
             IsAutoPublishGrades = request.IsAutoPublishGrades,
-            StartTime = request.StartTime,
-            EndTime = request.EndTime,
+            StartTime = startUtc,
+            EndTime = endUtc,
+            ExamDurationMinutes = examMinutes,
             TotpSecretKey = secretKey,
             Status = "SCHEDULED",
             IsLocked = false,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = nowUtc
         };
 
         context.InClassExamShifts.Add(shift);
@@ -144,9 +167,19 @@ public sealed class CreateInClassShiftCommandHandler(
             shift.TotalQuestionsPerStudent,
             shift.HasFollowUp,
             shift.MaxFollowUpQuestions,
-            shift.IsAutoPublishGrades
+            shift.IsAutoPublishGrades,
+            shift.ExamDurationMinutes
         );
 
         return Result<InClassExamShiftResponse>.Success(response);
     }
+
+    private static DateTime ToUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            // JSON có offset đã được parser đưa về UTC; Unspecified thuần coi là UTC để khớp CloseDue.
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 }

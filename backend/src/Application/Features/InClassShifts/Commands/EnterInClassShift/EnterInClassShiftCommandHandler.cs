@@ -42,14 +42,24 @@ public sealed class EnterInClassShiftCommandHandler(
             return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound);
         }
 
+        if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (shift.Status is "CLOSED" or "ENDED")
+        {
+            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftClosed);
+        }
+
         if (shift.IsLocked || shift.Status == "FINALIZED")
         {
             return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        if (shift.Status == "CANCELLED")
+        if (shift.Status != "IN_PROGRESS")
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftCancelled);
+            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotOpen);
         }
 
         bool isEnrolled = await context.ClassEnrollments
@@ -101,6 +111,11 @@ public sealed class EnterInClassShiftCommandHandler(
 
         if (existingParticipant is not null)
         {
+            if (IsCompletedParticipation(existingParticipant.Status))
+            {
+                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.AlreadyParticipated);
+            }
+
             var existingIds = ParseGuidList(existingParticipant.AssignedQuestionIdsJson);
             if (existingIds.Count == 0 && existingParticipant.AssignedQuestionId.HasValue)
             {
@@ -141,12 +156,6 @@ public sealed class EnterInClassShiftCommandHandler(
         if (assignedQuestionIds.Count < targetQuestionCount)
         {
             return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
-        }
-
-        if (shift.Status == "SCHEDULED")
-        {
-            shift.Status = "IN_PROGRESS";
-            shift.UpdatedAt = utcNow;
         }
 
         var assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
@@ -297,5 +306,14 @@ public sealed class EnterInClassShiftCommandHandler(
         {
             return new List<Guid>();
         }
+    }
+
+    internal static bool IsCompletedParticipation(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return false;
+        return status.Equals("SUBMITTED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("GRADED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("FINALIZED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase);
     }
 }

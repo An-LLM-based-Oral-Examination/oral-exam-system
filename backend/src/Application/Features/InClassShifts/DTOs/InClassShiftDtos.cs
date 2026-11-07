@@ -25,7 +25,9 @@ public sealed record InClassExamShiftResponse(
     int TotalQuestionsPerStudent = 1,
     bool HasFollowUp = false,
     int MaxFollowUpQuestions = 2,
-    bool IsAutoPublishGrades = true
+    bool IsAutoPublishGrades = true,
+    int? ExamDurationMinutes = null,
+    string? MyParticipationStatus = null
 );
 
 public sealed record InClassShiftDetailResponse(
@@ -50,7 +52,8 @@ public sealed record InClassShiftDetailResponse(
     int TotalQuestionsPerStudent = 1,
     bool HasFollowUp = false,
     int MaxFollowUpQuestions = 2,
-    bool IsAutoPublishGrades = true
+    bool IsAutoPublishGrades = true,
+    int? ExamDurationMinutes = null
 );
 
 public sealed record InClassAssignedQuestionDto(
@@ -74,7 +77,8 @@ public sealed record InClassShiftParticipantResponse(
     IReadOnlyList<Guid>? AssignedQuestionIds = null,
     IReadOnlyList<InClassAssignedQuestionDto>? AssignedQuestions = null,
     decimal? TotalAiScore = null,
-    decimal? TotalFinalScore = null
+    decimal? TotalFinalScore = null,
+    string? StudentCode = null
 );
 
 public sealed record InClassExamSubmissionResponse(
@@ -98,7 +102,8 @@ public sealed record InClassExamSubmissionResponse(
     Guid? ParentSubmissionId = null,
     int FollowUpIndex = 0,
     string? FollowUpPrompt = null,
-    decimal? AiConfidenceScore = null
+    decimal? AiConfidenceScore = null,
+    string? StudentCode = null
 );
 
 public sealed record ActiveShiftPasswordResponse(

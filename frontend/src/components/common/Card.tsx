@@ -8,7 +8,7 @@ export const Card: React.FC<HTMLAttributes<HTMLDivElement>> = ({
 }) => (
   <div
     className={cn(
-      'overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white text-[#0F2854] shadow-[0_16px_40px_rgba(15,40,84,0.08)]',
+      'overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white text-[#0F2854] shadow-[0_16px_40px_rgba(15,40,84,0.08)]',
       className,
     )}
     {...props}
@@ -24,7 +24,7 @@ export const CardHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({
 }) => (
   <div
     className={cn(
-      'flex flex-col space-y-1.5 border-b border-[#4988C4]/45 bg-white p-6',
+      'flex flex-col space-y-1.5 border-b border-[#82aedb]/55 bg-white p-6',
       className,
     )}
     {...props}
@@ -76,7 +76,7 @@ export const CardFooter: React.FC<HTMLAttributes<HTMLDivElement>> = ({
 }) => (
   <div
     className={cn(
-      'mt-4 flex items-center border-t border-[#4988C4]/45 p-6 pt-0',
+      'mt-4 flex items-center border-t border-[#82aedb]/55 p-6 pt-0',
       className,
     )}
     {...props}

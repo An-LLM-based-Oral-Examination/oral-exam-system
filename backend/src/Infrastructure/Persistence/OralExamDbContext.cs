@@ -620,6 +620,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(150).HasDefaultValue("").IsRequired();
             entity.Property(e => e.JoinCode).HasColumnName("join_code").HasMaxLength(20).IsRequired();
             entity.Property(e => e.JoinPasswordHash).HasColumnName("join_password_hash").HasMaxLength(256);
+            entity.Property(e => e.JoinPasswordPlain).HasColumnName("join_password_plain").HasMaxLength(128);
             entity.Property(e => e.IsJoinEnabled).HasColumnName("is_join_enabled").HasDefaultValue(true);
             entity.Property(e => e.AllowSelfEnrollment).HasColumnName("allow_self_enrollment").HasDefaultValue(true);
             entity.HasIndex(e => e.Code).IsUnique().HasDatabaseName("ix_classes_code");
@@ -2089,10 +2090,11 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("in_class_exam_shifts", t =>
             {
-                t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
                 t.HasCheckConstraint("ck_in_class_exam_shifts_time", "end_time >= start_time");
                 t.HasCheckConstraint("ck_in_class_exam_shifts_pool_mode", "question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')");
                 t.HasCheckConstraint("ck_in_class_exam_shifts_total_questions", "total_questions_per_student >= 1 AND total_questions_per_student <= 10");
+                t.HasCheckConstraint("ck_in_class_exam_shifts_exam_duration", "exam_duration_minutes IS NULL OR (exam_duration_minutes >= 1 AND exam_duration_minutes <= 60)");
                 t.HasCheckConstraint("ck_in_class_exam_shifts_max_followup", "max_follow_up_questions >= 0 AND max_follow_up_questions <= 5");
             });
             entity.HasKey(e => e.Id);
@@ -2109,6 +2111,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.IsAutoPublishGrades).HasColumnName("is_auto_publish_grades").HasDefaultValue(true).IsRequired();
             entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
             entity.Property(e => e.EndTime).HasColumnName("end_time").IsRequired();
+            entity.Property(e => e.ExamDurationMinutes).HasColumnName("exam_duration_minutes");
             entity.Property(e => e.TotpSecretKey).HasColumnName("totp_secret_key").HasMaxLength(128).IsRequired();
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED").IsRequired();
             entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false).IsRequired();

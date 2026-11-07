@@ -112,9 +112,16 @@ public sealed class ResetClassPasswordCommandHandler
                     "VALIDATION: Lớp của course offering phải duy trì mật khẩu tham gia cố định.");
             }
 
-            targetClass.JoinPasswordHash = string.IsNullOrWhiteSpace(trimmedPassword)
-                ? null
-                : HashPassword(trimmedPassword);
+            if (string.IsNullOrWhiteSpace(trimmedPassword))
+            {
+                targetClass.JoinPasswordHash = null;
+                targetClass.JoinPasswordPlain = null;
+            }
+            else
+            {
+                targetClass.JoinPasswordHash = HashPassword(trimmedPassword);
+                targetClass.JoinPasswordPlain = trimmedPassword;
+            }
         }
 
         if (request.IsJoinEnabled.HasValue)

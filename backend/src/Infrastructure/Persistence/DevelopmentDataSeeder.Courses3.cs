@@ -164,6 +164,39 @@ public static partial class DevelopmentDataSeeder
                 existingAssignment.IsActive = true;
                 existingAssignment.UpdatedAt = SeedTimestampUtc;
             }
+
+            if (courseCode is not ("PRF192" or "CSD201" or "DBI202"))
+            {
+                continue;
+            }
+
+            var lecturer2Assignment = existingCourseLecturers.FirstOrDefault(cl =>
+                cl.CourseId == actualCourse.Id && cl.LecturerUserId == Lecturer2UserId);
+            if (lecturer2Assignment == null)
+            {
+                lecturer2Assignment = new CourseLecturer
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = actualCourse.Id,
+                    CourseOfferingId = offering.Id,
+                    LecturerUserId = Lecturer2UserId,
+                    AssignedByUserId = DepartmentHeadUserId,
+                    SemesterId = semesterId,
+                    AssignedAt = SeedTimestampUtc,
+                    IsActive = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                };
+                context.CourseLecturers.Add(lecturer2Assignment);
+                existingCourseLecturers.Add(lecturer2Assignment);
+            }
+            else
+            {
+                lecturer2Assignment.CourseOfferingId ??= offering.Id;
+                lecturer2Assignment.SemesterId ??= semesterId;
+                lecturer2Assignment.IsActive = true;
+                lecturer2Assignment.UpdatedAt = SeedTimestampUtc;
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -179,6 +212,11 @@ public static partial class DevelopmentDataSeeder
             if (string.IsNullOrWhiteSpace(cls.JoinPasswordHash))
             {
                 cls.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", cls.Code);
+            }
+
+            if (string.IsNullOrWhiteSpace(cls.JoinPasswordPlain) && !string.IsNullOrWhiteSpace(cls.JoinPasswordHash))
+            {
+                cls.JoinPasswordPlain = "123456";
             }
 
             cls.IsJoinEnabled = true;

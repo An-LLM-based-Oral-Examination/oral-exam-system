@@ -241,7 +241,7 @@ public class DomainEntitiesAndDbContextTests
         var inClassShiftType = model.FindEntityType(typeof(InClassExamShift))!;
         var inClassStatusCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_status");
         inClassStatusCheck.Should().NotBeNull();
-        inClassStatusCheck!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+        inClassStatusCheck!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
 
         var inClassTimeCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_time");
         inClassTimeCheck.Should().NotBeNull();
@@ -258,6 +258,10 @@ public class DomainEntitiesAndDbContextTests
         var inClassMaxFollowUpCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_max_followup");
         inClassMaxFollowUpCheck.Should().NotBeNull();
         inClassMaxFollowUpCheck!.Sql.Should().Be("max_follow_up_questions >= 0 AND max_follow_up_questions <= 5");
+
+        var inClassDurationCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_exam_duration");
+        inClassDurationCheck.Should().NotBeNull();
+        inClassDurationCheck!.Sql.Should().Be("exam_duration_minutes IS NULL OR (exam_duration_minutes >= 1 AND exam_duration_minutes <= 60)");
 
         var inClassPartType = model.FindEntityType(typeof(InClassShiftParticipant))!;
         var inClassPartCheck = inClassPartType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_shift_participants_status");
@@ -282,7 +286,7 @@ public class DomainEntitiesAndDbContextTests
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(64, "grading_jobs adds status and non-negative attempt constraints, plus 5 constraints for course clos, anti-cheat, exam sets, practice questions, 2 constraints for DLQ flow_type/managed_by_role, 4 constraints for courses mock exam config, practice_sessions.total_score, and ai_evaluations XOR, 8 constraints for in-class exam shifts and submissions, and 1 constraint for exam_questions approval_status");
+        allCheckConstraints.Count.Should().Be(65, "grading_jobs adds status and non-negative attempt constraints, plus 5 constraints for course clos, anti-cheat, exam sets, practice questions, 2 constraints for DLQ flow_type/managed_by_role, 4 constraints for courses mock exam config, practice_sessions.total_score, and ai_evaluations XOR, 9 constraints for in-class exam shifts and submissions, and 1 constraint for exam_questions approval_status");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 

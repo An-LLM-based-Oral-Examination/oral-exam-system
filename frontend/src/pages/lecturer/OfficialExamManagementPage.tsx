@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { officialExamService } from '@/services/officialExam.service'
 import type { ExamStructure } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/common/EmptyState'
+import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 
 interface ExamSession {
@@ -196,17 +198,29 @@ export function OfficialExamManagementPage() {
 
   return (
     <div className={ds.page}>
-      <section className={cn(ds.banner, 'p-5 sm:p-6')}>
-        <p className={ds.bannerChip}><ClipboardList className="size-4" /> MF-04 · Quản lý kỳ thi chính thức</p>
-        <h1 className={ds.bannerTitle}>Kỳ thi, ca thi & vé thi</h1>
-        <p className={ds.bannerText}>Tạo kỳ thi, mở ca phòng Lab, phân công giám thị và cấp vé thi theo số máy.</p>
-      </section>
+      <LecturerPageBanner
+        icon={ClipboardList}
+        eyebrow="Kỳ thi chính thức"
+        title="Kỳ thi, ca thi và vé thi"
+        description="Tạo kỳ thi, mở ca phòng Lab, phân công giám thị và cấp vé thi theo số máy."
+        extras={
+          <>
+            <BannerFact icon={CalendarPlus}>Kỳ thi</BannerFact>
+            <BannerFact icon={UsersRound} tone="green">
+              Ca phòng Lab
+            </BannerFact>
+            <BannerFact icon={Ticket} tone="violet">
+              Vé theo số máy
+            </BannerFact>
+          </>
+        }
+      />
 
       {(error || notice) && <div role={error ? 'alert' : 'status'} className={cn('rounded-xl border px-4 py-3 text-sm font-semibold', error ? 'border-[#f0c5c9] bg-[#fff5f6] text-[#a43c47]' : 'border-[#b7e4cf] bg-[#effaf6] text-[#176f58]')}>{error || notice}</div>}
 
       <section className="grid gap-4 xl:grid-cols-3">
         <form onSubmit={submitSession} className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><CalendarPlus className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Tạo kỳ thi</span></h2><p className={ds.sectionHint}>Cấu hình follow-up và buffer theo MF-04.</p></div>
+          <SectionHeader icon={CalendarPlus} title="Tạo kỳ thi" hint="Cấu hình kỳ thi chính thức" />
           <div className="space-y-3 p-4">
             <input required className={ds.field} placeholder="Course ID" value={sessionForm.courseId} onChange={(e) => setSessionForm({ ...sessionForm, courseId: e.target.value })} />
             {structures.length > 0 ? <select required className={ds.field} value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })}><option value="">Chọn cấu trúc đề thi</option>{structures.filter((structure) => structure.isActive).map((structure) => <option key={structure.id} value={structure.id}>{structure.name} · {structure.courseCode}</option>)}</select> : <input required className={ds.field} placeholder="Exam Structure ID" value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })} />}
@@ -220,7 +234,7 @@ export function OfficialExamManagementPage() {
         </form>
 
         <form onSubmit={submitShift} className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><CalendarPlus className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Mở ca thi</span></h2><p className={ds.sectionHint}>Gắn phòng Lab và giám thị.</p></div>
+          <SectionHeader icon={CalendarPlus} title="Mở ca thi" hint="Gắn phòng Lab và giám thị" />
           <div className="space-y-3 p-4">
             <select required className={ds.field} value={shiftForm.sessionId} onChange={(e) => setShiftForm({ ...shiftForm, sessionId: e.target.value })}><option value="">Chọn kỳ thi</option>{sessions.map((session) => <option key={session.id} value={session.id}>{session.title || session.id}</option>)}</select>
             <input required className={ds.field} placeholder="Tên ca" value={shiftForm.shiftName} onChange={(e) => setShiftForm({ ...shiftForm, shiftName: e.target.value })} />
@@ -233,7 +247,7 @@ export function OfficialExamManagementPage() {
         </form>
 
         <form onSubmit={submitTicket} className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><Ticket className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Cấp vé thi</span></h2><p className={ds.sectionHint}>Gán sinh viên vào ghế số 1–40.</p></div>
+          <SectionHeader icon={Ticket} title="Cấp vé thi" hint="Gán sinh viên vào ghế Lab" />
           <div className="space-y-3 p-4">
             <select required className={ds.field} value={ticketForm.shiftId} onChange={(e) => setTicketForm({ ...ticketForm, shiftId: e.target.value })}><option value="">Chọn ca thi</option>{shifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.shiftName} · {shift.roomLab}</option>)}</select>
             <input required className={ds.field} placeholder="Student ID" value={ticketForm.studentId} onChange={(e) => setTicketForm({ ...ticketForm, studentId: e.target.value })} />
@@ -245,7 +259,7 @@ export function OfficialExamManagementPage() {
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <form onSubmit={submitStructure} className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Cấu trúc đề thi</span></h2><p className={ds.sectionHint}>Cấu hình Bloom và số câu cho MF-04.</p></div>
+          <SectionHeader icon={ClipboardList} title="Cấu trúc đề thi" hint="Cấu hình số câu và bậc Bloom" />
           <div className="space-y-3 p-4">
             <input required className={ds.field} placeholder="Course ID" value={structureForm.courseId} onChange={(e) => setStructureForm({ ...structureForm, courseId: e.target.value })} />
             <input required className={ds.field} placeholder="Tên cấu trúc" value={structureForm.name} onChange={(e) => setStructureForm({ ...structureForm, name: e.target.value })} />
@@ -255,14 +269,23 @@ export function OfficialExamManagementPage() {
           </div>
         </form>
         <section className={ds.section}>
-          <div className={ds.sectionHeader}><h2 className={ds.sectionTitleRow}><ClipboardList className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Danh sách cấu trúc</span></h2><p className={ds.sectionHint}>Bật/tắt cấu trúc đề thi đang có.</p></div>
-          <div className="grid gap-3 p-4 md:grid-cols-2">{structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#dce5ef] p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} · {structure.totalQuestions} câu · {structure.durationMinutes} phút</p></div><span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span></div><button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#cbd8e7] px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Tắt cấu trúc' : 'Bật cấu trúc'}</button></article>)}{structures.length === 0 && <p className="p-4 text-sm text-[#687a91]">Chưa có cấu trúc đề thi.</p>}</div>
+          <SectionHeader icon={ClipboardList} title="Danh sách cấu trúc" hint="Bật/tắt cấu trúc đề đang có" />
+          <div className="grid gap-3 p-4 md:grid-cols-2">{structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#82aedb]/55 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} · {structure.totalQuestions} câu · {structure.durationMinutes} phút</p></div><span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span></div><button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#82aedb]/55 px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Tắt cấu trúc' : 'Bật cấu trúc'}</button></article>)}{structures.length === 0 && <EmptyState compact icon={ClipboardList} title="Chưa có cấu trúc đề thi" description="Tạo cấu trúc ở form bên trái để bắt đầu." />}</div>
         </section>
       </section>
 
       <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex items-center justify-between')}><div><h2 className={ds.sectionTitleRow}><UsersRound className={ds.sectionIcon} /> <span className="text-sm font-bold text-[#0F2854]">Danh sách đã cấu hình</span></h2><p className={ds.sectionHint}>Theo dõi trạng thái kỳ thi và ca thi từ backend.</p></div><button type="button" className={ds.outlineButton} onClick={() => void loadData()} disabled={loading}><RefreshCw className={cn('size-4', loading && 'animate-spin')} /> Làm mới</button></div>
-        {loading ? <div className="flex items-center justify-center p-10"><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div> : <div className="grid gap-3 p-4 md:grid-cols-2">{sessions.map((session) => <article key={session.id} className="rounded-xl border border-[#dce5ef] p-4"><div className="flex justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{session.title || 'Kỳ thi chính thức'}</h3><p className="mt-1 text-xs text-[#687a91]">{session.examDate} · {session.examInputMode}</p></div><span className={ds.infoChip}>{session.status}</span></div><p className="mt-3 text-xs text-[#5b6b84]">Follow-up: {session.hasFollowUp ? `${session.maxFollowUpQuestions} câu` : 'Không'} · Buffer: {session.transcriptBufferSeconds}s</p></article>)}{sessions.length === 0 && <p className="p-4 text-sm text-[#687a91]">Chưa có kỳ thi.</p>}</div>}
+        <SectionHeader
+          icon={UsersRound}
+          title="Danh sách đã cấu hình"
+          hint="Theo dõi kỳ thi và ca thi đã cấu hình"
+          action={
+            <button type="button" className={ds.outlineButton} onClick={() => void loadData()} disabled={loading}>
+              <RefreshCw className={cn('size-4', loading && 'animate-spin')} /> Làm mới
+            </button>
+          }
+        />
+        {loading ? <div className="flex items-center justify-center p-10"><LoaderCircle className="size-7 animate-spin text-[#1C4D8D]" /></div> : <div className="grid gap-3 p-4 md:grid-cols-2">{sessions.map((session) => <article key={session.id} className="rounded-xl border border-[#82aedb]/55 p-4"><div className="flex justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{session.title || 'Kỳ thi chính thức'}</h3><p className="mt-1 text-xs text-[#687a91]">{session.examDate} · {session.examInputMode}</p></div><span className={ds.infoChip}>{session.status}</span></div><p className="mt-3 text-xs text-[#5b6b84]">Follow-up: {session.hasFollowUp ? `${session.maxFollowUpQuestions} câu` : 'Không'} · Buffer: {session.transcriptBufferSeconds}s</p></article>)}{sessions.length === 0 && <EmptyState compact icon={CalendarPlus} title="Chưa có kỳ thi" description="Tạo kỳ thi ở form phía trên để bắt đầu cấu hình." />}</div>}
       </section>
     </div>
   )

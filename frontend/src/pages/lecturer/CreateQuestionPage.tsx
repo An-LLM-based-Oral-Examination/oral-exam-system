@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import apiClient from '@/services/api.client'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -20,9 +19,13 @@ import {
   Trash2,
   WandSparkles,
 } from 'lucide-react'
-import { questionService } from '@/services/question.service'
+import { FilterDropMenu } from '@/components/common/FilterDropMenu'
+import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { toast } from '@/components/common/toastStore'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
+import { courseService } from '@/services/course.service'
+import { questionService } from '@/services/question.service'
 import type {
   BloomLevel,
   GenerateQuestionsFromFlmResponse,
@@ -33,12 +36,43 @@ import type {
   UsageScope,
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
+import { DialogFooter, FormDialog } from '@/design/overlays'
+import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
+
+export interface CreatePracticeQuestionFormProps {
+  presentation?: 'page' | 'dialog'
+  onClose?: () => void
+  onCreated?: (questionId?: string) => void
+}
 
 type StudioMode = 'manual' | 'ai'
 
 interface CriterionForm extends RubricCriterionDraft {
   localId: string
+}
+
+const SESSION_INVALID_MESSAGE =
+  'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.'
+
+type ManualFieldErrors = {
+  courseId?: string
+  title?: string
+  content?: string
+  sampleAnswer?: string
+  rubricName?: string
+  criteria?: string
+  rubricTotal?: string
+}
+
+type CriterionFieldErrors = Record<string, { name?: string; score?: string }>
+
+type AiFieldErrors = {
+  courseId?: string
+  clo?: string
+  topics?: string
+  numberOfQuestions?: string
+  distribution?: string
 }
 
 const BLOOM_LEVELS: BloomLevel[] = [
@@ -56,13 +90,20 @@ const DIFFICULTIES: Array<{ value: QuestionDifficulty; label: string }> = [
   { value: 'hard', label: 'Khó' },
 ]
 
-function createCriterion(maxScore = 5): CriterionForm {
+/** Bloom gắn theo độ khó: Dễ → Remember, Trung bình → Apply, Khó → Analyze. */
+function bloomFromDifficulty(difficulty: QuestionDifficulty): BloomLevel {
+  if (difficulty === 'easy') return 'Remember'
+  if (difficulty === 'hard') return 'Analyze'
+  return 'Apply'
+}
+
+function createCriterion(maxScore = 5, bloomLevel: BloomLevel = 'Apply'): CriterionForm {
   return {
     localId: crypto.randomUUID(),
     criterionName: '',
     maxScore,
     weight: maxScore / 10,
-    bloomLevel: 'Understand',
+    bloomLevel,
     description: '',
   }
 }
@@ -95,60 +136,59 @@ function getDifficultyLabel(value: QuestionDifficulty) {
   return DIFFICULTIES.find((item) => item.value === value)?.label ?? value
 }
 
-export function CreateQuestionPage() {
+export function CreatePracticeQuestionForm({
+  presentation = 'page',
+  onClose,
+  onCreated,
+}: CreatePracticeQuestionFormProps) {
   const { user } = useAuth()
+  const isDialog = presentation === 'dialog'
   const [mode, setMode] = useState<StudioMode>('manual')
   const [courseId, setCourseId] = useState('')
-  const [usageScope, setUsageScope] = useState<UsageScope>('exam')
+  /** Luồng này cố định kho luyện tập (practice_questions). */
+  const usageScope: UsageScope = 'practice'
   const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; code: string; name: string }>>([])
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   useEffect(() => {
     let active = true
-    void apiClient
-      .get<unknown>('/courses')
-      .then((res) => {
+    void courseService
+      .getLecturerCourses()
+      .then((courses) => {
         if (!active) return
-        const payload = res.data as Record<string, unknown> | unknown[]
-        const rawList = Array.isArray(payload)
-          ? payload
-          : Array.isArray((payload as Record<string, unknown>)?.items)
-            ? ((payload as Record<string, unknown>).items as unknown[])
-            : Array.isArray((payload as Record<string, unknown>)?.value)
-              ? ((payload as Record<string, unknown>).value as unknown[])
-              : []
-        const mapped = rawList
-          .map((item) => {
-            const rec = item as Record<string, unknown>
-            return {
-              id: String(rec.id ?? rec.Id ?? ''),
-              code: String(rec.code ?? rec.Code ?? ''),
-              name: String(rec.name ?? rec.Name ?? ''),
-            }
-          })
-          .filter((item) => item.id && item.code)
-        setAvailableCourses(mapped)
+        setAvailableCourses(courses)
       })
       .catch(() => {
-        // Fallback cho phép nhập trực tiếp UUID nếu API môn học chưa trả về
+        // Fallback: vẫn cho nhập UUID nếu API môn phân công lỗi
       })
     return () => {
       active = false
     }
   }, [])
+
+  const courseOptions = useMemo(
+    () =>
+      availableCourses.map((course) => ({
+        value: course.id,
+        label: `${course.code} · ${course.name}`,
+      })),
+    [availableCourses],
+  )
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [sampleAnswer, setSampleAnswer] = useState('')
   const [keyPointsInput, setKeyPointsInput] = useState('')
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('medium')
-  const [bloomLevel, setBloomLevel] = useState<BloomLevel>('Understand')
+  const bloomLevel = bloomFromDifficulty(difficulty)
   const [rubricName, setRubricName] = useState('')
   const [rubricDescription, setRubricDescription] = useState('')
   const [manualSource, setManualSource] = useState<QuestionSource>('manual')
-  const [criteria, setCriteria] = useState<CriterionForm[]>([
-    createCriterion(5),
-    createCriterion(5),
+  const [criteria, setCriteria] = useState<CriterionForm[]>(() => [
+    createCriterion(5, bloomFromDifficulty('medium')),
+    createCriterion(5, bloomFromDifficulty('medium')),
   ])
-  const [manualError, setManualError] = useState('')
+  const [manualErrors, setManualErrors] = useState<ManualFieldErrors>({})
+  const [criterionErrors, setCriterionErrors] = useState<CriterionFieldErrors>({})
   const [manualNotice, setManualNotice] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [savedQuestionId, setSavedQuestionId] = useState('')
@@ -168,7 +208,7 @@ export function CreateQuestionPage() {
   const [selectedGenerated, setSelectedGenerated] = useState<Set<string>>(new Set())
   const [savedGeneratedIds, setSavedGeneratedIds] = useState<Set<string>>(new Set())
   const [editingGeneratedTempId, setEditingGeneratedTempId] = useState('')
-  const [aiError, setAiError] = useState('')
+  const [aiErrors, setAiErrors] = useState<AiFieldErrors>({})
   const [aiNotice, setAiNotice] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSavingGenerated, setIsSavingGenerated] = useState(false)
@@ -181,11 +221,49 @@ export function CreateQuestionPage() {
   const sampleAnswerIsValid = sampleAnswer.trim().length >= 50
   const difficultyTotal = easyCount + mediumCount + hardCount
 
+  const clearManualError = (...keys: Array<keyof ManualFieldErrors>) => {
+    setManualErrors((current) => {
+      if (!keys.some((key) => current[key])) return current
+      const next = { ...current }
+      for (const key of keys) delete next[key]
+      return next
+    })
+  }
+
+  const clearAiError = (...keys: Array<keyof AiFieldErrors>) => {
+    setAiErrors((current) => {
+      if (!keys.some((key) => current[key])) return current
+      const next = { ...current }
+      for (const key of keys) delete next[key]
+      return next
+    })
+  }
+
+  const clearCriterionError = (localId: string, key: 'name' | 'score') => {
+    setCriterionErrors((current) => {
+      if (!current[localId]?.[key]) return current
+      const next = { ...current, [localId]: { ...current[localId] } }
+      delete next[localId][key]
+      return next
+    })
+  }
+
+  const changeCourse = (value: string) => {
+    setCourseId(value)
+    clearManualError('courseId')
+    clearAiError('courseId')
+  }
+
   const updateCriterion = <Key extends keyof CriterionForm>(
     localId: string,
     key: Key,
     value: CriterionForm[Key],
   ) => {
+    if (key === 'criterionName') clearCriterionError(localId, 'name')
+    if (key === 'maxScore') {
+      clearCriterionError(localId, 'score')
+      clearManualError('rubricTotal')
+    }
     setCriteria((current) =>
       current.map((criterion) => {
         if (criterion.localId !== localId) return criterion
@@ -196,9 +274,19 @@ export function CreateQuestionPage() {
     )
   }
 
-  const addCriterion = () => setCriteria((current) => [...current, createCriterion(0)])
+  const changeDifficulty = (value: QuestionDifficulty) => {
+    const nextBloom = bloomFromDifficulty(value)
+    setDifficulty(value)
+    setCriteria((current) => current.map((criterion) => ({ ...criterion, bloomLevel: nextBloom })))
+  }
+
+  const addCriterion = () => {
+    clearManualError('criteria')
+    setCriteria((current) => [...current, createCriterion(0, bloomFromDifficulty(difficulty))])
+  }
 
   const removeCriterion = (localId: string) => {
+    clearManualError('rubricTotal')
     setCriteria((current) =>
       current.length <= 2 ? current : current.filter((criterion) => criterion.localId !== localId),
     )
@@ -210,14 +298,17 @@ export function CreateQuestionPage() {
     setSampleAnswer('')
     setKeyPointsInput('')
     setDifficulty('medium')
-    setBloomLevel('Understand')
     setRubricName('')
     setRubricDescription('')
-    setCriteria([createCriterion(5), createCriterion(5)])
+    setCriteria([
+      createCriterion(5, bloomFromDifficulty('medium')),
+      createCriterion(5, bloomFromDifficulty('medium')),
+    ])
     setManualSource('manual')
     setEditingGeneratedTempId('')
     setSavedQuestionId('')
-    setManualError('')
+    setManualErrors({})
+    setCriterionErrors({})
     setManualNotice('')
   }
 
@@ -226,8 +317,9 @@ export function CreateQuestionPage() {
     setContent(question.content)
     setSampleAnswer(question.modelAnswer)
     setKeyPointsInput(question.keyPoints.join('\n'))
-    setDifficulty(question.difficulty)
-    setBloomLevel(question.bloomLevel)
+    const nextDifficulty = question.difficulty
+    const nextBloom = bloomFromDifficulty(nextDifficulty)
+    setDifficulty(nextDifficulty)
     setRubricName(question.rubric.name)
     setRubricDescription(question.rubric.description ?? '')
     setCriteria(
@@ -236,6 +328,7 @@ export function CreateQuestionPage() {
         localId: crypto.randomUUID(),
         description: criterion.description ?? '',
         weight: criterion.maxScore / 10,
+        bloomLevel: nextBloom,
       })),
     )
     setManualSource('flm_api')
@@ -246,7 +339,8 @@ export function CreateQuestionPage() {
       return next
     })
     setSavedQuestionId('')
-    setManualError('')
+    setManualErrors({})
+    setCriterionErrors({})
     setManualNotice('Đã nạp đề xuất AI. Hãy rà soát và chỉnh sửa trước khi lưu bản nháp.')
     setMode('manual')
     window.scrollTo({
@@ -256,35 +350,44 @@ export function CreateQuestionPage() {
   }
 
   const validateManualForm = () => {
-    if (!isUuid(user?.id ?? '')) {
-      return 'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.'
+    const errors: ManualFieldErrors = {}
+    const nextCriterionErrors: CriterionFieldErrors = {}
+
+    if (!isUuid(courseId.trim())) errors.courseId = 'Vui lòng chọn môn học hợp lệ.'
+    if (!title.trim()) errors.title = 'Vui lòng nhập tiêu đề câu hỏi.'
+    if (!content.trim()) errors.content = 'Vui lòng nhập nội dung câu hỏi.'
+    if (!sampleAnswerIsValid) errors.sampleAnswer = 'Model Answer bắt buộc có ít nhất 50 ký tự.'
+    if (!rubricName.trim()) errors.rubricName = 'Vui lòng đặt tên cho Barem Rubric.'
+    if (criteria.length < 2) errors.criteria = 'Barem Rubric phải có ít nhất hai tiêu chí.'
+    for (const criterion of criteria) {
+      const entry: { name?: string; score?: string } = {}
+      if (!criterion.criterionName.trim()) entry.name = 'Nhập tên tiêu chí.'
+      if (!(criterion.maxScore > 0)) entry.score = 'Điểm phải lớn hơn 0.'
+      if (entry.name || entry.score) nextCriterionErrors[criterion.localId] = entry
     }
-    if (!isUuid(courseId.trim())) return 'Course ID phải là một UUID hợp lệ.'
-    if (!title.trim() || !content.trim()) return 'Vui lòng nhập đầy đủ tiêu đề và nội dung câu hỏi.'
-    if (!sampleAnswerIsValid) return 'Model Answer bắt buộc có ít nhất 50 ký tự.'
-    if (!rubricName.trim()) return 'Vui lòng đặt tên cho Barem Rubric.'
-    if (criteria.length < 2) return 'Barem Rubric phải có ít nhất hai tiêu chí.'
-    if (criteria.some((criterion) => !criterion.criterionName.trim() || criterion.maxScore <= 0)) {
-      return 'Mỗi tiêu chí phải có tên và điểm tối đa lớn hơn 0.'
-    }
-    if (!rubricIsValid) return 'Tổng điểm các tiêu chí phải bằng chính xác 10.0.'
-    return ''
+    if (!rubricIsValid) errors.rubricTotal = 'Tổng điểm các tiêu chí phải bằng chính xác 10.0.'
+
+    return { errors, criterionErrors: nextCriterionErrors }
   }
 
   const saveManualDraft = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isSaving || savedQuestionId) return
-    const validationError = validateManualForm()
-    if (validationError) {
-      setManualError(validationError)
+    const validation = validateManualForm()
+    setManualErrors(validation.errors)
+    setCriterionErrors(validation.criterionErrors)
+    if (Object.keys(validation.errors).length > 0 || Object.keys(validation.criterionErrors).length > 0) {
+      return
+    }
+    if (!isUuid(user?.id ?? '')) {
+      toast.error(SESSION_INVALID_MESSAGE)
       return
     }
 
-    setManualError('')
     setManualNotice('')
     setIsSaving(true)
     try {
-      const result = await questionService.createDraft({
+      const result = await questionService.createPracticeQuestion({
         courseId: courseId.trim(),
         title: title.trim(),
         content: content.trim(),
@@ -293,7 +396,7 @@ export function CreateQuestionPage() {
         difficulty,
         bloomLevel,
         source: manualSource,
-        usageScope,
+        usageScope: 'practice',
         hasFollowUp: false,
         followUpPrompt: null,
         lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
@@ -304,7 +407,7 @@ export function CreateQuestionPage() {
           criteria: criteria.map((criterion, index) => ({
             criterionName: criterion.criterionName.trim(),
             maxScore: criterion.maxScore,
-            bloomLevel: criterion.bloomLevel,
+            bloomLevel,
             description: criterion.description.trim(),
             weight: criterion.maxScore / 10,
             orderIndex: index + 1,
@@ -315,11 +418,41 @@ export function CreateQuestionPage() {
       if (editingGeneratedTempId) {
         setSavedGeneratedIds((current) => new Set([...current, editingGeneratedTempId]))
       }
-      setManualNotice(`Đã lưu bản nháp thành công. Mã câu hỏi: ${result.questionId}`)
+      setManualNotice(
+        `Đã lưu bản nháp luyện tập. Mã câu hỏi: ${result.questionId}. Bạn có thể gửi Trưởng Bộ môn duyệt ngay bên dưới.`,
+      )
+      onCreated?.(result.questionId)
     } catch (saveError) {
-      setManualError(getErrorMessage(saveError))
+      toast.error(getErrorMessage(saveError))
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const submitSavedDraftForReview = async () => {
+    if (!savedQuestionId || !isUuid(courseId.trim()) || isSubmittingReview) return
+    if (!isUuid(user?.id ?? '')) {
+      toast.error(SESSION_INVALID_MESSAGE)
+      return
+    }
+
+    setIsSubmittingReview(true)
+    setManualNotice('')
+    try {
+      const result = await questionService.batchSubmitForReview({
+        courseId: courseId.trim(),
+        questionIds: [savedQuestionId],
+        submissionNotes: 'Giảng viên gửi câu hỏi luyện tập lên Trưởng Bộ môn thẩm định.',
+        lecturerId: user?.id,
+      })
+      setManualNotice(
+        result.message ||
+          'Đã gửi câu hỏi luyện tập lên Trưởng Bộ môn. Trạng thái: Chờ duyệt (SUBMITTED_FOR_REVIEW).',
+      )
+    } catch (submitError) {
+      toast.error(getErrorMessage(submitError))
+    } finally {
+      setIsSubmittingReview(false)
     }
   }
 
@@ -335,26 +468,23 @@ export function CreateQuestionPage() {
 
   const generateQuestions = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!isUuid(user?.id ?? '')) {
-      setAiError(
-        'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
-      )
-      return
-    }
-    if (!isUuid(courseId.trim())) {
-      setAiError('Course ID phải là một UUID hợp lệ.')
-      return
-    }
-    if (splitTerms(cloInput).length === 0 || splitTerms(topicsInput).length === 0) {
-      setAiError('Vui lòng cung cấp ít nhất một CLO và một chủ đề.')
-      return
+    const errors: AiFieldErrors = {}
+    if (!isUuid(courseId.trim())) errors.courseId = 'Vui lòng chọn môn học hợp lệ.'
+    if (splitTerms(cloInput).length === 0) errors.clo = 'Nhập ít nhất một mã CLO.'
+    if (splitTerms(topicsInput).length === 0) errors.topics = 'Nhập ít nhất một chủ đề.'
+    if (!Number.isInteger(numberOfQuestions) || numberOfQuestions < 1 || numberOfQuestions > 10) {
+      errors.numberOfQuestions = 'Số câu cần sinh phải từ 1 đến 10.'
     }
     if (difficultyTotal !== numberOfQuestions) {
-      setAiError('Tổng số câu Dễ + Trung bình + Khó phải bằng số câu cần sinh.')
+      errors.distribution = 'Tổng số câu Dễ + Trung bình + Khó phải bằng số câu cần sinh.'
+    }
+    setAiErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    if (!isUuid(user?.id ?? '')) {
+      toast.error(SESSION_INVALID_MESSAGE)
       return
     }
 
-    setAiError('')
     setAiNotice('')
     setGeneration(null)
     setSelectedGenerated(new Set())
@@ -385,7 +515,7 @@ export function CreateQuestionPage() {
         ),
       )
     } catch (generationError) {
-      setAiError(getErrorMessage(generationError))
+      toast.error(getErrorMessage(generationError))
     } finally {
       setIsGenerating(false)
     }
@@ -404,12 +534,9 @@ export function CreateQuestionPage() {
   const saveGeneratedDrafts = async () => {
     if (!generation || selectedGenerated.size === 0) return
     if (!isUuid(user?.id ?? '')) {
-      setAiError(
-        'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
-      )
+      toast.error(SESSION_INVALID_MESSAGE)
       return
     }
-    setAiError('')
     setAiNotice('')
     setIsSavingGenerated(true)
 
@@ -427,7 +554,7 @@ export function CreateQuestionPage() {
 
     for (const question of selected) {
       try {
-        await questionService.createDraft({
+        await questionService.createPracticeQuestion({
           courseId: generation.courseId,
           title: question.title,
           content: question.content,
@@ -436,7 +563,7 @@ export function CreateQuestionPage() {
           difficulty: question.difficulty,
           bloomLevel: question.bloomLevel,
           source: 'flm_api',
-          usageScope,
+          usageScope: 'practice',
           hasFollowUp: false,
           followUpPrompt: null,
           lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
@@ -459,123 +586,226 @@ export function CreateQuestionPage() {
 
     if (savedCount > 0) {
       setAiNotice(
-        `Đã lưu ${savedCount}/${selected.length} câu hỏi AI thành bản nháp để giảng viên tiếp tục rà soát.`,
+        `Đã lưu ${savedCount}/${selected.length} câu hỏi AI vào kho luyện tập (DRAFT). Tiếp tục gửi duyệt tại Ngân hàng câu hỏi luyện tập.`,
       )
       setSavedGeneratedIds((current) => new Set([...current, ...successfulIds]))
       setSelectedGenerated(
         (current) => new Set([...current].filter((tempId) => !successfulIds.has(tempId))),
       )
+      onCreated?.()
     }
     if (failures.length > 0) {
-      setAiError(`Không lưu được ${failures.length} câu hỏi. ${failures[0]}`)
+      toast.error(`Không lưu được ${failures.length} câu hỏi. ${failures[0]}`)
     }
     setIsSavingGenerated(false)
   }
 
-  return (
-    <div className={ds.page}>
-      <header className={cn(ds.banner, 'p-5 sm:p-6')}>
+  const modeToggle = (
+    <div
+      className={cn(
+        'rounded-2xl border border-[#82aedb]/55 bg-white p-1',
+        isDialog ? 'grid w-full grid-cols-2 gap-1' : 'inline-flex',
+      )}
+      role="tablist"
+      aria-label="Chế độ tạo câu hỏi"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'manual'}
+        onClick={() => setMode('manual')}
+        className={cn(
+          'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition',
+          mode === 'manual'
+            ? 'bg-[#1C4D8D] text-white shadow-[0_8px_16px_rgba(28,77,141,0.22)]'
+            : 'text-[#5f7088] hover:bg-[#F4FBFD] hover:text-[#0F2854]',
+        )}
+      >
+        <FilePenLine className="size-3.5 shrink-0" />
+        Soạn thủ công
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === 'ai'}
+        onClick={() => setMode('ai')}
+        className={cn(
+          'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition',
+          mode === 'ai'
+            ? 'bg-[#1C4D8D] text-white shadow-[0_8px_16px_rgba(28,77,141,0.22)]'
+            : 'text-[#5f7088] hover:bg-[#F4FBFD] hover:text-[#0F2854]',
+        )}
+      >
+        <WandSparkles className="size-3.5 shrink-0" />
+        AI từ FLM
+      </button>
+    </div>
+  )
+
+  const dialogBusy = isSaving || isSubmittingReview || isGenerating
+
+  const dialogFooter = (
+    <DialogFooter className="bg-white sm:items-center sm:justify-between">
+      {mode === 'manual' ? (
+        <>
+          <p className="hidden text-xs text-[#5b6b84] sm:block">
+            Lưu DRAFT → gửi Trưởng BM duyệt → vào kho luyện tập.
+          </p>
+          <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
+            {manualNotice && (
+              <p
+                className="order-first text-xs font-semibold text-[#176f58] sm:order-none sm:mr-1"
+                role="status"
+              >
+                {manualNotice}
+              </p>
+            )}
+            {savedQuestionId ? (
+              <>
+                <button type="button" onClick={resetManualDraft} disabled={dialogBusy} className={ds.outlineButton}>
+                  <RotateCcw className="size-3.5" />
+                  Soạn câu khác
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitSavedDraftForReview()}
+                  disabled={isSubmittingReview}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#16836a] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(22,131,106,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#136f5a] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transform-none"
+                >
+                  {isSubmittingReview ? (
+                    <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {isSubmittingReview ? 'Đang gửi...' : 'Gửi duyệt'}
+                </button>
+                <button type="button" onClick={onClose} disabled={dialogBusy} className={ds.outlineButton}>
+                  Đóng
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} disabled={dialogBusy} className={ds.outlineButton}>
+                  Hủy
+                </button>
+                <button type="submit" form="create-practice-manual-form" disabled={isSaving} className={ds.primaryButton}>
+                  {isSaving ? (
+                    <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  {isSaving ? 'Đang lưu...' : 'Lưu bản nháp'}
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={onClose} disabled={dialogBusy} className={ds.outlineButton}>
+          Đóng
+        </button>
+      )}
+    </DialogFooter>
+  )
+
+  const pageChrome = !isDialog ? (
+    <>
+      <LecturerPageBanner
+        icon={Sparkles}
+        eyebrow="Câu hỏi luyện tập"
+        title="Tạo câu hỏi luyện tập"
+        description="Soạn câu hỏi, lưu bản nháp rồi gửi trưởng bộ môn duyệt trước khi dùng cho luyện tập, thi thử và ca thi trên lớp."
+        extras={
+          <>
+            <BannerFact icon={FilePenLine}>Soạn thủ công</BannerFact>
+            <BannerFact icon={WandSparkles} tone="green">
+              AI từ FLM
+            </BannerFact>
+            <BannerFact icon={Send} tone="violet">
+              Lưu bản nháp
+            </BannerFact>
+          </>
+        }
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link
           to="/question-bank"
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg text-xs font-bold text-white/80 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="inline-flex min-h-10 w-fit items-center gap-1.5 text-sm font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
         >
-          <ArrowLeft className="size-3.5" aria-hidden="true" />
+          <ArrowLeft className="size-4" aria-hidden="true" />
           Quay lại ngân hàng đề
         </Link>
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className={cn(ds.bannerChip, 'w-fit')}>
-              <Sparkles className="size-3.5" aria-hidden="true" />
-              Không gian biên soạn · MF-03
-            </p>
-            <h1 className={ds.bannerTitle}>
-              Tạo câu hỏi & Barem Rubric 10.0
-            </h1>
-            <p className={ds.bannerText}>
-              Mọi câu hỏi được lưu ở trạng thái DRAFT. Giảng viên cần rà soát rồi gửi Trưởng Bộ môn
-              phê duyệt trước khi sử dụng.
-            </p>
-          </div>
-          <div className="flex rounded-xl border border-white/30 bg-white/10 p-1">
-            <button
-              type="button"
-              onClick={() => setMode('manual')}
-              className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#1C4D8D]',
-                mode === 'manual'
-                  ? 'bg-white text-[#1C4D8D] shadow-sm'
-                  : 'text-white/80 hover:text-white',
-              )}
-              aria-pressed={mode === 'manual'}
-            >
-              <FilePenLine className="size-3.5" />
-              Soạn thủ công
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('ai')}
-              className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-[#1C4D8D]',
-                mode === 'ai'
-                  ? 'bg-white text-[#1C4D8D] shadow-sm'
-                  : 'text-white/80 hover:text-white',
-              )}
-              aria-pressed={mode === 'ai'}
-            >
-              <WandSparkles className="size-3.5" />
-              AI từ FLM
-            </button>
-          </div>
-        </div>
-      </header>
+        {modeToggle}
+      </div>
+    </>
+  ) : null
 
-      <section className="rounded-2xl border border-[#4988C4]/45 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4">
-        <div className="grid max-w-4xl gap-4 sm:grid-cols-2">
-          {availableCourses.length > 0 && (
-            <label className="block">
-              <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                Chọn môn học
-              </span>
-              <select
-                value={availableCourses.some((c) => c.id === courseId.trim()) ? courseId.trim() : ''}
-                onChange={(event) => {
-                  if (event.target.value) setCourseId(event.target.value)
-                }}
-                className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-              >
-                <option value="">-- Chọn môn học từ danh sách --</option>
-                {availableCourses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.code} — {course.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+  const formFields = (
+    <div className="space-y-4">
+      <section
+        className={cn(
+          'rounded-2xl border border-[#82aedb]/55 p-4',
+          ds.panelShadow,
+          isDialog ? 'bg-white' : 'bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)]',
+        )}
+      >
+        <div
+          className={cn(
+            'grid gap-3',
+            isDialog ? 'sm:grid-cols-1' : 'max-w-4xl sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end',
           )}
-          <label className="block">
-            <span className="flex items-center gap-2 text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-              Course ID
+        >
+          <div className="block">
+            <span
+              className={cn(
+                'flex items-center gap-2 text-xs font-bold tracking-[0.07em] uppercase',
+                (mode === 'manual' ? manualErrors.courseId : aiErrors.courseId)
+                  ? 'text-[#c2415b]'
+                  : 'text-[#5b6b84]',
+              )}
+            >
+              Môn học
               <span className="tracking-normal text-[#b03a46] normal-case">Bắt buộc</span>
             </span>
-            <input
+            <FilterDropMenu
+              label="Chọn môn học"
               value={courseId}
-              onChange={(event) => setCourseId(event.target.value)}
-              placeholder="UUID môn học được phân công"
-              autoComplete="off"
-              className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm text-[#0F2854] transition outline-none placeholder:font-sans placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+              onChange={changeCourse}
+              options={courseOptions}
+              emptyText="Chưa có môn được phân công"
+              className={cn(
+                'mt-1.5 w-full',
+                (mode === 'manual' ? manualErrors.courseId : aiErrors.courseId) &&
+                  'rounded-xl ring-2 ring-[#c2415b]/35',
+              )}
             />
-          </label>
+            <FieldError message={mode === 'manual' ? manualErrors.courseId : aiErrors.courseId} />
+          </div>
+          {!isDialog && (
+            <div className="inline-flex min-h-10 items-center rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-4 text-xs font-bold text-[#16836a]">
+              Kho luyện tập (practice)
+            </div>
+          )}
         </div>
-        <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#5b6b84]">
-          <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />
-          Chọn môn học từ danh sách hoặc nhập trực tiếp UUID môn học từ phân công học vụ.
-        </p>
+        {!isDialog && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#5b6b84]">
+            <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />
+            Chọn môn học được phân công. Câu hỏi sẽ lưu ở trạng thái DRAFT trong kho luyện tập.
+          </p>
+        )}
       </section>
 
       {mode === 'manual' ? (
-        <form onSubmit={saveManualDraft} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+        <form
+          onSubmit={saveManualDraft}
+          id="create-practice-manual-form"
+          className={cn(
+            'grid gap-4',
+            isDialog ? 'lg:grid-cols-[minmax(0,1fr)_280px]' : 'xl:grid-cols-[minmax(0,1fr)_330px]',
+          )}
+        >
           <div className="space-y-4">
-            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4 sm:p-5', ds.panelShadow)}>
               <div className="flex items-center gap-3">
                 <span className="flex size-8 items-center justify-center rounded-lg bg-[#4988C4]/16 font-mono text-xs font-black text-[#1C4D8D]">
                   01
@@ -588,45 +818,67 @@ export function CreateQuestionPage() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <label className="block sm:col-span-2">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Tiêu đề</span>
+              <div
+                className={cn(
+                  'mt-5 grid gap-4',
+                  isDialog ? 'sm:grid-cols-1' : 'sm:grid-cols-3',
+                )}
+              >
+                <label className={cn('block', !isDialog && 'sm:col-span-2')}>
+                  <span className={fieldLabelClass(Boolean(manualErrors.title))}>Tiêu đề</span>
                   <input
                     value={title}
-                    onChange={(event) => setTitle(event.target.value)}
+                    onChange={(event) => {
+                      setTitle(event.target.value)
+                      clearManualError('title')
+                    }}
                     maxLength={300}
                     placeholder="Tên ngắn gọn giúp nhận diện câu hỏi"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                    aria-invalid={Boolean(manualErrors.title)}
+                    className={cn(
+                      'mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      manualErrors.title && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={manualErrors.title} />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi kho đề</span>
-                  <select
-                    value={usageScope}
-                    onChange={(event) => setUsageScope(event.target.value as UsageScope)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                  >
-                    <option value="exam">Kho thi chính thức (exam_questions)</option>
-                    <option value="practice">Kho luyện tập &amp; thi thử (practice_questions)</option>
-                    <option value="both">Cả 2 kho (practice_questions &amp; exam_questions)</option>
-                  </select>
-                </label>
+                {!isDialog && (
+                  <div className="block">
+                    <span className="text-xs font-bold text-[#5b6b84] uppercase">Kho đích</span>
+                    <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-3 text-sm font-bold text-[#16836a]">
+                      Luyện tập (practice)
+                    </div>
+                  </div>
+                )}
               </div>
 
               <label className="mt-4 block">
-                <span className="text-xs font-bold text-[#5b6b84] uppercase">
+                <span className={fieldLabelClass(Boolean(manualErrors.content))}>
                   Nội dung câu hỏi
                 </span>
                 <textarea
                   value={content}
-                  onChange={(event) => setContent(event.target.value)}
+                  onChange={(event) => {
+                    setContent(event.target.value)
+                    clearManualError('content')
+                  }}
                   placeholder="Viết đầy đủ yêu cầu mà sinh viên cần trình bày..."
-                  className="mt-1.5 min-h-28 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  aria-invalid={Boolean(manualErrors.content)}
+                  className={cn(
+                    'mt-1.5 min-h-28 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                    manualErrors.content && fieldInvalidClass,
+                  )}
                 />
+                <FieldError message={manualErrors.content} />
               </label>
 
               <label className="mt-4 block">
-                <span className="flex items-center justify-between gap-3 text-xs font-bold text-[#5b6b84] uppercase">
+                <span
+                  className={cn(
+                    'flex items-center justify-between gap-3',
+                    fieldLabelClass(Boolean(manualErrors.sampleAnswer)),
+                  )}
+                >
                   Model Answer
                   <span
                     className={cn(
@@ -639,10 +891,18 @@ export function CreateQuestionPage() {
                 </span>
                 <textarea
                   value={sampleAnswer}
-                  onChange={(event) => setSampleAnswer(event.target.value)}
+                  onChange={(event) => {
+                    setSampleAnswer(event.target.value)
+                    clearManualError('sampleAnswer')
+                  }}
                   placeholder="Câu trả lời chuẩn mực dùng làm mốc chấm..."
-                  className="mt-1.5 min-h-36 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  aria-invalid={Boolean(manualErrors.sampleAnswer)}
+                  className={cn(
+                    'mt-1.5 min-h-36 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                    manualErrors.sampleAnswer && fieldInvalidClass,
+                  )}
                 />
+                <FieldError message={manualErrors.sampleAnswer} />
               </label>
 
               <label className="mt-4 block">
@@ -653,43 +913,23 @@ export function CreateQuestionPage() {
                   value={keyPointsInput}
                   onChange={(event) => setKeyPointsInput(event.target.value)}
                   placeholder={'Khái niệm trọng tâm\nLập luận cần có\nVí dụ hoặc tình huống'}
-                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </label>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Độ khó</span>
-                  <select
-                    value={difficulty}
-                    onChange={(event) => setDifficulty(event.target.value as QuestionDifficulty)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                  >
-                    {DIFFICULTIES.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Bậc Bloom</span>
-                  <select
-                    value={bloomLevel}
-                    onChange={(event) => setBloomLevel(event.target.value as BloomLevel)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                  >
-                    {BLOOM_LEVELS.map((level) => (
-                      <option key={level} value={level}>
-                        {level}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="mt-4 block max-w-xs">
+                <span className="text-xs font-bold text-[#5b6b84] uppercase">Độ khó</span>
+                <FilterDropMenu
+                  label="Chọn độ khó"
+                  value={difficulty}
+                  onChange={(value) => changeDifficulty(value as QuestionDifficulty)}
+                  options={DIFFICULTIES}
+                  className="mt-1.5 w-full"
+                />
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4 sm:p-5', ds.panelShadow)}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="flex size-8 items-center justify-center rounded-lg bg-[#4988C4]/16 font-mono text-xs font-black text-[#1C4D8D]">
@@ -705,7 +945,7 @@ export function CreateQuestionPage() {
                 <button
                   type="button"
                   onClick={addCriterion}
-                  className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 px-3 text-xs font-bold text-[#5b6b84] transition hover:bg-[#f0f4fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+                  className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#82aedb]/55 bg-[#4988C4]/16 px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-[#f0f4fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
                 >
                   <Plus className="size-3.5" />
                   Thêm tiêu chí
@@ -714,13 +954,21 @@ export function CreateQuestionPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Tên rubric</span>
+                  <span className={fieldLabelClass(Boolean(manualErrors.rubricName))}>Tên rubric</span>
                   <input
                     value={rubricName}
-                    onChange={(event) => setRubricName(event.target.value)}
+                    onChange={(event) => {
+                      setRubricName(event.target.value)
+                      clearManualError('rubricName')
+                    }}
                     placeholder="Ví dụ: Rubric đánh giá kiến trúc"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                    aria-invalid={Boolean(manualErrors.rubricName)}
+                    className={cn(
+                      'mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      manualErrors.rubricName && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={manualErrors.rubricName} />
                 </label>
                 <label className="block">
                   <span className="text-xs font-bold text-[#5b6b84] uppercase">Mô tả</span>
@@ -728,7 +976,7 @@ export function CreateQuestionPage() {
                     value={rubricDescription}
                     onChange={(event) => setRubricDescription(event.target.value)}
                     placeholder="Mục tiêu đánh giá của rubric"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
               </div>
@@ -737,11 +985,11 @@ export function CreateQuestionPage() {
                 {criteria.map((criterion, index) => (
                   <article
                     key={criterion.localId}
-                    className="rounded-2xl border border-[#4988C4]/45 bg-white p-3.5"
+                    className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5"
                   >
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_100px_150px_auto]">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_100px_auto]">
                       <label className="block">
-                        <span className="text-xs font-bold text-[#5b6b84] uppercase">
+                        <span className={fieldLabelClass(Boolean(criterionErrors[criterion.localId]?.name))}>
                           Tiêu chí {index + 1}
                         </span>
                         <input
@@ -750,11 +998,18 @@ export function CreateQuestionPage() {
                             updateCriterion(criterion.localId, 'criterionName', event.target.value)
                           }
                           placeholder="Tên tiêu chí đánh giá"
-                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-xs outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                          aria-invalid={Boolean(criterionErrors[criterion.localId]?.name)}
+                          className={cn(
+                            'mt-1 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-xs outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                            criterionErrors[criterion.localId]?.name && fieldInvalidClass,
+                          )}
                         />
+                        <FieldError message={criterionErrors[criterion.localId]?.name} />
                       </label>
                       <label className="block">
-                        <span className="text-xs font-bold text-[#5b6b84] uppercase">Điểm</span>
+                        <span className={fieldLabelClass(Boolean(criterionErrors[criterion.localId]?.score))}>
+                          Điểm
+                        </span>
                         <input
                           type="number"
                           min="0.1"
@@ -768,28 +1023,13 @@ export function CreateQuestionPage() {
                               Number(event.target.value),
                             )
                           }
-                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                          aria-invalid={Boolean(criterionErrors[criterion.localId]?.score)}
+                          className={cn(
+                            'mt-1 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                            criterionErrors[criterion.localId]?.score && fieldInvalidClass,
+                          )}
                         />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold text-[#5b6b84] uppercase">Bloom</span>
-                        <select
-                          value={criterion.bloomLevel}
-                          onChange={(event) =>
-                            updateCriterion(
-                              criterion.localId,
-                              'bloomLevel',
-                              event.target.value as BloomLevel,
-                            )
-                          }
-                          className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-2 text-xs font-semibold outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                        >
-                          {BLOOM_LEVELS.map((level) => (
-                            <option key={level} value={level}>
-                              {level}
-                            </option>
-                          ))}
-                        </select>
+                        <FieldError message={criterionErrors[criterion.localId]?.score} />
                       </label>
                       <button
                         type="button"
@@ -809,16 +1049,23 @@ export function CreateQuestionPage() {
                           updateCriterion(criterion.localId, 'description', event.target.value)
                         }
                         placeholder="Mô tả biểu hiện đạt điểm của tiêu chí..."
-                        className="min-h-16 w-full resize-y rounded-lg border border-[#4988C4]/45 bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                        className="min-h-16 w-full resize-y rounded-lg border border-[#4988C4] bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                       />
                     </label>
                   </article>
                 ))}
+                <FieldError message={manualErrors.criteria} />
+                <FieldError message={manualErrors.rubricTotal} />
               </div>
             </section>
           </div>
 
-          <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
+          <aside
+            className={cn(
+              'space-y-4 self-start',
+              isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
+            )}
+          >
             <section
               className={cn(
                 'rounded-2xl border-2 bg-white p-5 shadow-[0_12px_34px_rgba(31,61,105,0.065)]',
@@ -865,64 +1112,88 @@ export function CreateQuestionPage() {
               </p>
             </section>
 
-            {(manualError || manualNotice) && (
+            {manualNotice && !isDialog && (
               <div
-                className={cn(
-                  'rounded-2xl border p-4 text-xs leading-relaxed font-semibold',
-                  manualError
-                    ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
-                    : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
-                )}
-                role={manualError ? 'alert' : 'status'}
+                className="rounded-2xl border border-[#bce4d7] bg-[#effaf6] p-4 text-xs leading-relaxed font-semibold text-[#176f58]"
+                role="status"
               >
-                {manualError || manualNotice}
+                {manualNotice}
               </div>
             )}
 
-            <div className="space-y-2">
-              <button
-                type="submit"
-                disabled={isSaving || Boolean(savedQuestionId)}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSaving ? (
-                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                ) : savedQuestionId ? (
-                  <CheckCircle2 className="size-4" />
-                ) : (
-                  <Save className="size-4" />
-                )}
-                {isSaving
-                  ? 'Đang lưu...'
-                  : savedQuestionId
-                    ? 'Bản nháp đã được lưu'
-                    : 'Lưu thành bản nháp'}
-              </button>
-              {savedQuestionId && (
-                <button
-                  type="button"
-                  onClick={resetManualDraft}
-                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-xs font-bold text-[#526780] transition hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-                >
-                  <RotateCcw className="size-3.5" />
-                  Soạn câu hỏi khác
-                </button>
-              )}
-            </div>
+            {!isDialog && (
+              <>
+                <div className="space-y-2">
+                  <button
+                    type="submit"
+                    disabled={isSaving || Boolean(savedQuestionId)}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.24)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? (
+                      <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                    ) : savedQuestionId ? (
+                      <CheckCircle2 className="size-4" />
+                    ) : (
+                      <Save className="size-4" />
+                    )}
+                    {isSaving
+                      ? 'Đang lưu...'
+                      : savedQuestionId
+                        ? 'Bản nháp đã được lưu'
+                        : 'Lưu thành bản nháp'}
+                  </button>
+                  {savedQuestionId && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void submitSavedDraftForReview()}
+                        disabled={isSubmittingReview}
+                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#16836a] px-4 text-sm font-bold text-white shadow-[0_8px_18px_rgba(22,131,106,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#136f5a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16836a] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
+                      >
+                        {isSubmittingReview ? (
+                          <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                        {isSubmittingReview ? 'Đang gửi duyệt...' : 'Gửi Trưởng Bộ môn duyệt'}
+                      </button>
+                      <Link
+                        to="/question-bank"
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+                      >
+                        Đến ngân hàng luyện tập
+                        <ChevronRight className="size-3.5" />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={resetManualDraft}
+                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-xs font-bold text-[#526780] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Soạn câu hỏi khác
+                      </button>
+                    </>
+                  )}
+                </div>
 
-            <p className="rounded-xl border border-[#4988C4]/45 bg-[#4988C4]/16 p-3 text-xs leading-relaxed text-[#5b6b84]">
-              Follow-up không được cấu hình tại đây: Admin quản lý luyện tập MF-01 và Trưởng Bộ môn
-              cấu hình theo môn thi trong MF-04.
-            </p>
+                <p className="rounded-xl border border-[#82aedb]/55 bg-[#4988C4]/16 p-3 text-xs leading-relaxed text-[#5b6b84]">
+                  Luồng này chỉ ghi vào <strong>practice_questions</strong>. Sau khi lưu DRAFT, nhấn
+                  “Gửi Trưởng Bộ môn duyệt” hoặc chọn nhiều bản nháp tại Ngân hàng câu hỏi luyện tập.
+                </p>
+              </>
+            )}
           </aside>
         </form>
       ) : (
         <div className="space-y-4">
           <form
             onSubmit={generateQuestions}
-            className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]"
+            className={cn(
+              'grid gap-4',
+              isDialog ? 'lg:grid-cols-[minmax(0,1fr)_280px]' : 'xl:grid-cols-[minmax(0,1fr)_330px]',
+            )}
           >
-            <section className="rounded-2xl border border-[#4988C4]/45 bg-white p-4 shadow-[0_8px_28px_rgba(31,61,105,0.045)] sm:p-5">
+            <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4 sm:p-5', ds.panelShadow)}>
               <div className="flex items-center gap-3">
                 <span className="flex size-9 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
                   <Bot className="size-[18px]" />
@@ -937,26 +1208,42 @@ export function CreateQuestionPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
+                  <span className={fieldLabelClass(Boolean(aiErrors.clo))}>
                     Mã CLO · ngăn cách bằng dấu phẩy
                   </span>
                   <textarea
                     value={cloInput}
-                    onChange={(event) => setCloInput(event.target.value)}
+                    onChange={(event) => {
+                      setCloInput(event.target.value)
+                      clearAiError('clo')
+                    }}
                     placeholder="CLO1, CLO2"
-                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
+                    aria-invalid={Boolean(aiErrors.clo)}
+                    className={cn(
+                      'mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      aiErrors.clo && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={aiErrors.clo} />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
+                  <span className={fieldLabelClass(Boolean(aiErrors.topics))}>
                     Chủ đề · mỗi dòng một nội dung
                   </span>
                   <textarea
                     value={topicsInput}
-                    onChange={(event) => setTopicsInput(event.target.value)}
+                    onChange={(event) => {
+                      setTopicsInput(event.target.value)
+                      clearAiError('topics')
+                    }}
                     placeholder={'Kiến trúc hệ thống\nThiết kế API'}
-                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
+                    aria-invalid={Boolean(aiErrors.topics)}
+                    className={cn(
+                      'mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      aiErrors.topics && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={aiErrors.topics} />
                 </label>
               </div>
 
@@ -975,8 +1262,8 @@ export function CreateQuestionPage() {
                         className={cn(
                           'inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
                           selected
-                            ? 'border-[#a8a1ee] bg-[#4988C4]/16 text-[#5c50c5]'
-                            : 'border-[#d8e0eb] bg-white text-[#6d7d91] hover:bg-[#f3f6fa]',
+                            ? 'border-[#82aedb]/55 bg-[#4988C4]/16 text-[#1C4D8D]'
+                            : 'border-[#82aedb]/55 bg-white text-[#6d7d91] hover:bg-[#f3f6fa]',
                         )}
                         aria-pressed={selected}
                       >
@@ -988,9 +1275,9 @@ export function CreateQuestionPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className={cn('mt-4 grid gap-4', isDialog ? 'sm:grid-cols-1' : 'sm:grid-cols-2')}>
                 <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">
+                  <span className={fieldLabelClass(Boolean(aiErrors.numberOfQuestions))}>
                     Số câu cần sinh
                   </span>
                   <input
@@ -998,22 +1285,26 @@ export function CreateQuestionPage() {
                     min="1"
                     max="10"
                     value={numberOfQuestions}
-                    onChange={(event) => setNumberOfQuestions(Number(event.target.value))}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 font-mono text-sm font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
+                    onChange={(event) => {
+                      setNumberOfQuestions(Number(event.target.value))
+                      clearAiError('numberOfQuestions', 'distribution')
+                    }}
+                    aria-invalid={Boolean(aiErrors.numberOfQuestions)}
+                    className={cn(
+                      'mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 font-mono text-sm font-bold outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      aiErrors.numberOfQuestions && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={aiErrors.numberOfQuestions} />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-bold text-[#5b6b84] uppercase">Phạm vi kho đề</span>
-                  <select
-                    value={usageScope}
-                    onChange={(event) => setUsageScope(event.target.value as UsageScope)}
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
-                  >
-                    <option value="exam">Kho thi chính thức (exam_questions)</option>
-                    <option value="practice">Kho luyện tập &amp; thi thử (practice_questions)</option>
-                    <option value="both">Cả 2 kho (practice_questions &amp; exam_questions)</option>
-                  </select>
-                </label>
+                {!isDialog && (
+                  <div className="block">
+                    <span className="text-xs font-bold text-[#5b6b84] uppercase">Kho đích</span>
+                    <div className="mt-1.5 flex min-h-11 items-center rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-3 text-sm font-bold text-[#16836a]">
+                      Luyện tập (practice)
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="mt-4">
@@ -1043,18 +1334,31 @@ export function CreateQuestionPage() {
                         min="0"
                         max="10"
                         value={item.value}
-                        onChange={(event) => item.setter(Number(event.target.value))}
-                        className="mt-1 min-h-10 w-full rounded-xl border border-[#4988C4]/45 bg-white px-3 text-center font-mono text-sm font-bold outline-none focus:border-[#7c77dd] focus:ring-2 focus:ring-[#4988C4]/30"
+                        onChange={(event) => {
+                          item.setter(Number(event.target.value))
+                          clearAiError('distribution')
+                        }}
+                        aria-invalid={Boolean(aiErrors.distribution)}
+                        className={cn(
+                          'mt-1 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-center font-mono text-sm font-bold outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                          aiErrors.distribution && fieldInvalidClass,
+                        )}
                       />
                     </label>
                   ))}
                 </div>
+                <FieldError message={aiErrors.distribution} />
               </div>
             </section>
 
-            <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
-              <section className="rounded-2xl border border-[#d9d4f7] bg-[linear-gradient(145deg,#f9f8ff,#f1efff)] p-5">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#5f54c7]">
+            <aside
+              className={cn(
+                'space-y-4 self-start',
+                isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
+              )}
+            >
+              <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(145deg,#F4FBFD,#E8F4FA)] p-5', ds.panelShadow)}>
+                <div className="flex items-center gap-2 text-xs font-bold text-[#1C4D8D]">
                   <Sparkles className="size-4" />
                   Cổng kiểm tra nội dung AI
                 </div>
@@ -1066,7 +1370,7 @@ export function CreateQuestionPage() {
                   ].map((item, index) => (
                     <li
                       key={item}
-                      className="flex gap-2.5 text-xs leading-relaxed text-[#64627c]"
+                      className="flex gap-2.5 text-xs leading-relaxed text-[#5b6b84]"
                     >
                       <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white font-mono text-xs font-bold text-[#1C4D8D] shadow-sm">
                         {index + 1}
@@ -1077,24 +1381,19 @@ export function CreateQuestionPage() {
                 </ol>
               </section>
 
-              {(aiError || aiNotice) && (
+              {aiNotice && (
                 <div
-                  className={cn(
-                    'rounded-2xl border p-4 text-xs leading-relaxed font-semibold',
-                    aiError
-                      ? 'border-[#efc8cc] bg-[#fff5f6] text-[#a43c47]'
-                      : 'border-[#bce4d7] bg-[#effaf6] text-[#176f58]',
-                  )}
-                  role={aiError ? 'alert' : 'status'}
+                  className="rounded-2xl border border-[#bce4d7] bg-[#effaf6] p-4 text-xs leading-relaxed font-semibold text-[#176f58]"
+                  role="status"
                 >
-                  {aiError || aiNotice}
+                  {aiNotice}
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={isGenerating}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(98,86,206,0.22)] transition hover:-translate-y-0.5 hover:bg-[#5146b8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(28,77,141,0.28)] transition hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isGenerating ? (
                   <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1107,8 +1406,8 @@ export function CreateQuestionPage() {
           </form>
 
           {generation && (
-            <section className="overflow-hidden rounded-2xl border border-[#dedff0] bg-white shadow-[0_10px_34px_rgba(31,61,105,0.055)]">
-              <div className="flex flex-col gap-3 border-b border-[#4988C4]/45 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <section className={cn('overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white', ds.panelShadow)}>
+              <div className="flex flex-col gap-3 border-b border-[#82aedb]/55 bg-[#F4FBFD]/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
                   <p className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase">
                     Xem trước bản nháp AI · {generation.courseCode}
@@ -1121,7 +1420,7 @@ export function CreateQuestionPage() {
                   type="button"
                   onClick={() => void saveGeneratedDrafts()}
                   disabled={selectedGenerated.size === 0 || isSavingGenerated}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(28,77,141,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
                 >
                   {isSavingGenerated ? (
                     <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -1148,8 +1447,8 @@ export function CreateQuestionPage() {
                       className={cn(
                         'relative rounded-2xl border p-4 transition',
                         selected
-                          ? 'border-[#9fb6ec] bg-[#4988C4]/16 shadow-[0_8px_22px_rgba(36,94,234,0.08)]'
-                          : 'border-[#4988C4]/45 bg-white',
+                          ? 'border-[#82aedb]/55 bg-[#4988C4]/16 shadow-[0_8px_22px_rgba(36,94,234,0.08)]'
+                          : 'border-[#82aedb]/55 bg-white',
                         !valid && 'border-[#efc4c9] bg-[#fff7f7]',
                         alreadySaved && 'border-[#bce4d7] bg-[#f4fbf8]',
                       )}
@@ -1210,7 +1509,7 @@ export function CreateQuestionPage() {
                         imageAlt={question.imageAlt}
                         className="mt-3"
                       />
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#4988C4]/45 pt-3 text-xs font-semibold text-[#7a899c]">
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#82aedb]/55 pt-3 text-xs font-semibold text-[#7a899c]">
                         <span>{question.rubric.criteria.length} tiêu chí rubric</span>
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <span
@@ -1231,7 +1530,7 @@ export function CreateQuestionPage() {
                             type="button"
                             onClick={() => editGeneratedDraft(question)}
                             disabled={alreadySaved}
-                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#cbc8ee] bg-white px-2.5 text-xs font-bold text-[#5d55bc] transition hover:bg-[#f2f0ff] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             <PencilLine className="size-3" />
                             Chỉnh sửa trước khi lưu
@@ -1243,17 +1542,19 @@ export function CreateQuestionPage() {
                 })}
               </div>
 
-              <div className="flex items-start gap-2 border-t border-[#4988C4]/45 bg-[#fafbfe] px-4 py-3 text-xs leading-relaxed text-[#5b6b84] sm:px-5">
+              <div className="flex items-start gap-2 border-t border-[#82aedb]/55 bg-[#fafbfe] px-4 py-3 text-xs leading-relaxed text-[#5b6b84] sm:px-5">
                 <Send className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" />
                 Lưu ở đây chỉ tạo DRAFT. Sau khi tự rà soát, giảng viên chọn các bản nháp trong Ngân
                 hàng đề để gửi Trưởng Bộ môn thẩm định.
-                <Link
-                  to="/question-bank"
-                  className="ml-auto inline-flex shrink-0 items-center gap-1 font-bold text-[#1C4D8D] hover:underline"
-                >
-                  Đến ngân hàng đề
-                  <ChevronRight className="size-3" />
-                </Link>
+                {!isDialog && (
+                  <Link
+                    to="/question-bank"
+                    className="ml-auto inline-flex shrink-0 items-center gap-1 font-bold text-[#1C4D8D] hover:underline"
+                  >
+                    Đến ngân hàng đề
+                    <ChevronRight className="size-3" />
+                  </Link>
+                )}
               </div>
             </section>
           )}
@@ -1261,4 +1562,61 @@ export function CreateQuestionPage() {
       )}
     </div>
   )
+
+  if (isDialog) {
+    return (
+      <FormDialog
+        titleId="create-practice-question-title"
+        eyebrow="Kho luyện tập"
+        title="Tạo câu hỏi luyện tập"
+        subtitle="Soạn thủ công hoặc nhờ AI · lưu DRAFT · gửi Trưởng BM duyệt"
+        icon={Sparkles}
+        onClose={() => onClose?.()}
+        busy={dialogBusy}
+        size="2xl"
+        maxHeight="max-h-[min(90dvh,760px)]"
+        beforeBody={
+          <div className="shrink-0 border-b border-[#82aedb]/55 bg-white px-5 py-3">{modeToggle}</div>
+        }
+        footer={dialogFooter}
+      >
+        {formFields}
+      </FormDialog>
+    )
+  }
+
+  return (
+    <div className={ds.page}>
+      {pageChrome}
+      {formFields}
+    </div>
+  )
+}
+
+export function CreatePracticeQuestionDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  onCreated?: (questionId?: string) => void
+}) {
+  if (!open) return null
+  return (
+    <CreatePracticeQuestionForm
+      presentation="dialog"
+      onClose={onClose}
+      onCreated={onCreated}
+    />
+  )
+}
+
+/** Route `/question-bank/create` chuyển về ngân hàng và mở popup tạo câu hỏi. */
+export function CreateQuestionPage() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    navigate('/question-bank', { replace: true, state: { openCreate: true } })
+  }, [navigate])
+  return null
 }

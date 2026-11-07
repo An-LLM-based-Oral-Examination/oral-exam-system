@@ -64,6 +64,12 @@ public sealed class GetInClassShiftsByClassQueryHandler(
             }
         }
 
+        await InClassShiftLifecycle.CloseDueAsync(
+            context,
+            DateTime.UtcNow,
+            cancellationToken,
+            classId: request.ClassId);
+
         var rawShifts = await context.InClassExamShifts
             .AsNoTracking()
             .Include(s => s.Lecturer)
@@ -73,6 +79,7 @@ public sealed class GetInClassShiftsByClassQueryHandler(
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        // Luôn trả trạng thái tham gia của user hiện tại (SV) để FE khóa card sau khi nộp bài.
         var shifts = rawShifts
             .Select(s => new InClassExamShiftResponse(
                 s.Id,
@@ -89,14 +96,16 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                 s.FinalizedAt,
                 s.CreatedAt,
                 s.Participants.Count,
-                s.Submissions.Count,
+                s.Participants.Count(p => p.Status == "SUBMITTED"),
                 s.Description,
                 s.QuestionPoolMode,
                 EnterInClassShiftCommandHandler.ParseGuidList(s.SelectedQuestionIdsJson),
                 s.TotalQuestionsPerStudent,
                 s.HasFollowUp,
                 s.MaxFollowUpQuestions,
-                s.IsAutoPublishGrades
+                s.IsAutoPublishGrades,
+                s.ExamDurationMinutes,
+                s.Participants.FirstOrDefault(p => p.StudentId == actor.Id)?.Status
             ))
             .ToList();
 

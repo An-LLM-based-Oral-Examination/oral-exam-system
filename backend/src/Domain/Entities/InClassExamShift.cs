@@ -19,6 +19,7 @@ public partial class InClassExamShift : ILockableEntity
     public bool IsAutoPublishGrades { get; set; } = true;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
+    public int? ExamDurationMinutes { get; set; }
     public string TotpSecretKey { get; set; } = null!;
     public string Status { get; set; } = "SCHEDULED";
     public bool IsLocked { get; set; } = false;

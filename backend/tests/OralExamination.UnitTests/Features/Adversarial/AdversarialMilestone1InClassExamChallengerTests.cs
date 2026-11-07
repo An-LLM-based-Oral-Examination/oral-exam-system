@@ -56,7 +56,7 @@ public class AdversarialMilestone1InClassExamChallengerTests
         // 1. ck_in_class_exam_shifts_status
         var statusConstraint = constraints.FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_status");
         statusConstraint.Should().NotBeNull("ck_in_class_exam_shifts_status phải tồn tại");
-        statusConstraint!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+        statusConstraint!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
 
         // 2. ck_in_class_exam_shifts_time
         var timeConstraint = constraints.FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_time");
@@ -116,9 +116,17 @@ public class AdversarialMilestone1InClassExamChallengerTests
 
         var migrationCode = File.ReadAllText(migrationFiles.First());
 
-        // Check constraint ck_in_class_exam_shifts_status
+        // Ca thi được tạo ở migration gốc; status hiện hành là CLOSED, nằm ở migration nối tiếp.
         migrationCode.Should().Contain("ck_in_class_exam_shifts_status");
-        migrationCode.Should().Contain("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+
+        var followUpFiles = Directory.GetFiles(
+            Path.Combine(AppContext.BaseDirectory, "../../../../../src/Infrastructure/Migrations"),
+            "*AddClassJoinPasswordAndShiftExamWindow.cs");
+        followUpFiles.Should().NotBeEmpty("File migration AddClassJoinPasswordAndShiftExamWindow phải tồn tại");
+        var followUpCode = File.ReadAllText(followUpFiles.First());
+        followUpCode.Should().Contain("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
+        followUpCode.Should().Contain("join_password_plain");
+        followUpCode.Should().Contain("ck_in_class_exam_shifts_exam_duration");
 
         // Check constraint ck_in_class_exam_shifts_time
         migrationCode.Should().Contain("ck_in_class_exam_shifts_time");

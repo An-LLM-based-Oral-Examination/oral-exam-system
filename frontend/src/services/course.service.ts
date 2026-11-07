@@ -1,4 +1,5 @@
 import apiClient from './api.client'
+import { classService } from '@/services/class.service'
 import type { CourseConfigurationDto, CourseDto, ExamInputMode } from '@/types/practice.types'
 
 type JsonRecord = Record<string, unknown>
@@ -15,7 +16,14 @@ function invalidResponse(detail: string): never {
 
 function readString(record: JsonRecord, key: string) {
   const value = record[key] ?? record[`${key.charAt(0).toUpperCase()}${key.slice(1)}`]
-  return typeof value === 'string' ? value : null
+  if (typeof value === 'string' && value.trim()) return value
+  // Guid / số từ một số payload JSON vẫn dùng được làm id môn học.
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const text = String(value)
+    if (text && text !== '[object Object]') return text
+  }
+  return null
 }
 
 function readNumber(record: JsonRecord, key: string) {
@@ -93,12 +101,59 @@ function normalizeConfiguration(value: unknown): CourseConfigurationDto {
 }
 
 export const courseService = {
+  async getEnrolledCourses(): Promise<CourseDto[]> {
+    const [enrolled, courses] = await Promise.all([classService.listMyClasses(), this.getCourses()])
+    const courseIds = new Set(enrolled.map((item) => item.courseId).filter(Boolean))
+    return courses.filter((course) => courseIds.has(course.id))
+  },
+
   async getCourses(): Promise<CourseDto[]> {
     const response = await apiClient.get<unknown>('/courses')
     if (!Array.isArray(response.data)) {
       return invalidResponse('API không trả về danh sách môn học.')
     }
     return response.data.map(normalizeCourse)
+  },
+
+  /**
+   * Môn học GV được phân công (`GET /lecturer/courses`).
+   * Trưởng BM / Admin nhận toàn bộ môn active.
+   * Nếu endpoint lỗi / rỗng → fallback `GET /courses` (active) để dropdown không trống.
+   */
+  async getLecturerCourses(): Promise<Array<{ id: string; code: string; name: string }>> {
+    try {
+      const response = await apiClient.get<unknown>('/lecturer/courses')
+      const payload = response.data
+      const rawList = Array.isArray(payload)
+        ? payload
+        : isRecord(payload) && Array.isArray(payload.value)
+          ? payload.value
+          : isRecord(payload) && Array.isArray(payload.items)
+            ? payload.items
+            : null
+
+      if (rawList) {
+        const assigned = rawList
+          .map((item) => {
+            if (!isRecord(item)) return null
+            const id = readString(item, 'id')
+            const code = readString(item, 'code')
+            const name = readString(item, 'name')
+            if (!id || !code || !name) return null
+            return { id, code, name }
+          })
+          .filter((item): item is { id: string; code: string; name: string } => item !== null)
+
+        if (assigned.length > 0) return assigned
+      }
+    } catch {
+      /* fallback bên dưới */
+    }
+
+    const all = await this.getCourses()
+    return all
+      .filter((course) => course.isActive)
+      .map((course) => ({ id: course.id, code: course.code, name: course.name }))
   },
 
   async getConfiguration(courseId: string): Promise<CourseConfigurationDto> {

@@ -58,7 +58,7 @@ public class InClassExamAndNotificationEntitiesTests
         var statusConstraint = designEntityType.GetCheckConstraints()
             .FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_status");
         statusConstraint.Should().NotBeNull();
-        statusConstraint!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+        statusConstraint!.Sql.Should().Be("status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
     }
 
     [Fact(DisplayName = "M1-02. InClassShiftPassword maps to in_class_shift_passwords with ESR index")]

@@ -461,6 +461,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("join_password_hash");
 
+                    b.Property<string>("JoinPasswordPlain")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("join_password_plain");
+
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uuid")
                         .HasColumnName("lecturer_id");
@@ -1853,6 +1858,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("end_time");
 
+                    b.Property<int?>("ExamDurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("exam_duration_minutes");
+
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finalized_at");
@@ -1944,11 +1953,13 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("in_class_exam_shifts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_in_class_exam_shifts_exam_duration", "exam_duration_minutes IS NULL OR (exam_duration_minutes >= 1 AND exam_duration_minutes <= 60)");
+
                             t.HasCheckConstraint("ck_in_class_exam_shifts_max_followup", "max_follow_up_questions >= 0 AND max_follow_up_questions <= 5");
 
                             t.HasCheckConstraint("ck_in_class_exam_shifts_pool_mode", "question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')");
 
-                            t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CANCELLED')");
+                            t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
 
                             t.HasCheckConstraint("ck_in_class_exam_shifts_time", "end_time >= start_time");
 

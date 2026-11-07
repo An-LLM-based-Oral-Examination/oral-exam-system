@@ -105,7 +105,8 @@ public sealed class GetInClassShiftSubmissionsQueryHandler(
                     s.ParentSubmissionId,
                     s.FollowUpIndex,
                     s.FollowUpPrompt,
-                    s.AiConfidenceScore
+                    s.AiConfidenceScore,
+                    s.Student?.StudentCode
                 );
             })
             .ToList();

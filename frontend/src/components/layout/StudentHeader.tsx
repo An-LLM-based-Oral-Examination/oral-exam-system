@@ -18,6 +18,7 @@ interface StudentHeaderProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/student/overview': { label: 'Tổng quan học tập', icon: LayoutDashboard },
+  '/in-class-exam': { label: 'Làm kiểm tra', icon: ClipboardCheck },
   '/practice': { label: 'Luyện tập vấn đáp', icon: Mic2 },
   '/practice/session': { label: 'Phiên luyện tập', icon: Mic2 },
   '/mock-exam': { label: 'Thi thử tính giờ', icon: TimerReset },
@@ -54,8 +55,8 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white px-4 pt-4 pb-3 sm:px-6 xl:px-8">
-      <div className="flex h-16 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
+    <header className="sticky top-0 z-30 flex h-[77px] items-stretch bg-white px-4 py-2 sm:px-6 xl:px-8">
+      <div className="flex min-h-0 w-full flex-1 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -96,7 +97,7 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
                 {user?.fullName ?? 'Sinh viên'}
               </p>
               <p className="max-w-[160px] truncate text-xs font-medium text-[#1C4D8D]">
-                {user?.studentCode ?? user?.email ?? 'Student'}
+                {user?.studentCode || 'Chưa có MSSV'}
               </p>
             </div>
             <div className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white">

@@ -67,7 +67,7 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
                     s.Status,
                     s.IsLocked,
                     s.Participants.Count,
-                    s.Submissions.Count,
+                    s.Participants.Count(p => p.Status == "SUBMITTED"),
                     s.CreatedAt))
                 .ToListAsync(cancellationToken)
             : new List<ClassInClassShiftSummaryDto>();
@@ -112,7 +112,8 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
             IsAlreadyEnrolled: isAlreadyEnrolled,
             CreatedAt: targetClass.CreatedAt,
             Shifts: shifts,
-            EnrolledStudents: enrolledStudents);
+            EnrolledStudents: enrolledStudents,
+            JoinPassword: targetClass.JoinPasswordPlain);
 
         return Result<ClassDetailDto>.Success(detail);
     }

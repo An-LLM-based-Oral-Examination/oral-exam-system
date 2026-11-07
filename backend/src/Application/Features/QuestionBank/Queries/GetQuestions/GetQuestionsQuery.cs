@@ -14,5 +14,6 @@ public sealed record GetQuestionsQuery(
     string? Search = null,
     int PageNumber = 1,
     int PageSize = 20,
-    string? UsageScope = null
+    string? UsageScope = null,
+    Guid? SubmittedBy = null
 ) : IRequest<Result<PagedResult<QuestionSummaryDto>>>;

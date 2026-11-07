@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { AlertCircle, CheckCircle2, LockKeyhole, Save } from 'lucide-react'
+import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { cn } from '@/lib/utils'
 
 interface ScoreOverrideFormProps {
   initialScore?: number | null
@@ -18,7 +20,8 @@ export function ScoreOverrideForm({
 }: ScoreOverrideFormProps) {
   const [score, setScore] = useState(initialScore ?? 0)
   const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
+  const [scoreError, setScoreError] = useState('')
+  const [reasonError, setReasonError] = useState('')
 
   const isReadOnly = isLocked || !persistenceAvailable || !onSaveOverride
 
@@ -26,26 +29,24 @@ export function ScoreOverrideForm({
     event.preventDefault()
     if (isReadOnly || !onSaveOverride) return
 
-    if (score < 0 || score > 10) {
-      setError('Điểm chính thức phải nằm trong khoảng từ 0 đến 10.')
-      return
-    }
-    if (reason.trim().length < 10) {
-      setError('Bắt buộc nhập lý do giải trình khi điều chỉnh điểm.')
-      return
-    }
+    const nextScoreError =
+      score < 0 || score > 10 ? 'Điểm chính thức phải nằm trong khoảng từ 0 đến 10.' : ''
+    const nextReasonError =
+      reason.trim().length < 10 ? 'Bắt buộc nhập lý do giải trình khi điều chỉnh điểm (tối thiểu 10 ký tự).' : ''
+    setScoreError(nextScoreError)
+    setReasonError(nextReasonError)
+    if (nextScoreError || nextReasonError) return
 
-    setError('')
     await onSaveOverride(score, reason.trim())
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]"
+      className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_34px_rgba(31,61,105,0.06)]"
       aria-labelledby="score-review-title"
     >
-      <div className="flex flex-col gap-3 border-b border-[#e8edf4] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex flex-col gap-3 border-b border-[#82aedb]/55 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <h3 id="score-review-title" className="text-sm font-bold text-[#0F2854]">
             Điểm hậu kiểm của giảng viên
@@ -58,7 +59,7 @@ export function ScoreOverrideForm({
           className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${
             isLocked
               ? 'border border-[#f0c5c9] bg-[#fff1f2] text-[#ad3541]'
-              : 'border border-[#cbdcf7] bg-[#4988C4]/16 text-[#1C4D8D]'
+              : 'border border-[#82aedb]/55 bg-[#4988C4]/16 text-[#1C4D8D]'
           }`}
         >
           {isLocked ? (
@@ -83,58 +84,65 @@ export function ScoreOverrideForm({
 
         <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)]">
           <label className="block">
-            <span className="text-xs font-bold tracking-[0.06em] text-[#63758e] uppercase">
+            <span className={fieldLabelClass(Boolean(scoreError))}>
               Điểm chính thức
             </span>
-            <div className="mt-1.5 flex items-baseline gap-1 rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 focus-within:border-[#6991ee] focus-within:ring-2 focus-within:ring-[#BDE8F5]">
+            <div
+              className={cn(
+                'mt-1.5 flex items-baseline gap-1 rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5 focus-within:border-[#6991ee] focus-within:ring-2 focus-within:ring-[#BDE8F5]',
+                scoreError && fieldInvalidClass,
+              )}
+            >
               <input
                 type="number"
                 min="0"
                 max="10"
                 step="0.1"
                 value={score}
-                onChange={(event) => setScore(Number(event.target.value))}
+                aria-invalid={Boolean(scoreError)}
+                onChange={(event) => {
+                  setScore(Number(event.target.value))
+                  setScoreError('')
+                }}
                 disabled={isReadOnly || isSaving}
                 className="min-w-0 flex-1 bg-transparent font-mono text-lg font-black text-[#0F2854] outline-none disabled:cursor-not-allowed disabled:opacity-60"
               />
               <span className="text-xs font-bold text-[#7e8ca0]">/10</span>
             </div>
+            <FieldError message={scoreError} />
           </label>
 
           <label className="block">
-            <span className="flex items-center justify-between gap-2 text-xs font-bold tracking-[0.06em] text-[#63758e] uppercase">
+            <span className={cn(fieldLabelClass(Boolean(reasonError)), 'flex items-center justify-between gap-2')}>
               Lý do điều chỉnh
               <span className="text-[#b33c48] normal-case">Bắt buộc khi override</span>
             </span>
             <textarea
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value)
+                setReasonError('')
+              }}
               disabled={isReadOnly || isSaving}
               minLength={10}
               maxLength={2000}
-              aria-invalid={Boolean(error)}
+              aria-invalid={Boolean(reasonError)}
               placeholder="Đối chiếu audio, transcript và từng tiêu chí rubric trước khi giải trình..."
-              className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2.5 text-xs leading-relaxed text-[#0F2854] transition outline-none placeholder:text-[#9aa8ba] focus:border-[#6991ee] focus:ring-2 focus:ring-[#4988C4]/30 disabled:cursor-not-allowed disabled:opacity-60"
+              className={cn(
+                'mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-xs leading-relaxed text-[#0F2854] transition outline-none placeholder:text-[#9aa8ba] focus:border-[#6991ee] focus:ring-2 focus:ring-[#4988C4]/30 disabled:cursor-not-allowed disabled:opacity-60',
+                reasonError && fieldInvalidClass,
+              )}
             />
+            <FieldError message={reasonError} />
           </label>
         </div>
-
-        {error && (
-          <p
-            className="flex items-center gap-1.5 text-xs font-semibold text-[#b23441]"
-            role="alert"
-          >
-            <AlertCircle className="size-3.5" aria-hidden="true" />
-            {error}
-          </p>
-        )}
       </div>
 
-      <div className="flex justify-end border-t border-[#e8edf4] bg-white px-4 py-3 sm:px-5">
+      <div className="flex justify-end border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
         <button
           type="submit"
           disabled={isReadOnly || isSaving}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:bg-[#aab8cb] disabled:shadow-none"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(36,94,234,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:bg-[#aab8cb] disabled:shadow-none motion-reduce:transform-none"
         >
           <Save className="size-4" aria-hidden="true" />
           {isSaving ? 'Đang lưu...' : 'Lưu điểm hậu kiểm'}

@@ -8,10 +8,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.InClassShifts;
+using OralExamination.Application.Features.InClassShifts.Commands.ActivateInClassShift;
+using OralExamination.Application.Features.InClassShifts.Commands.CloseInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.AdjustInClassSubmissionScore;
 using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
+using OralExamination.Application.Features.InClassShifts.Commands.FinishStudentInClassExam;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
 using OralExamination.Application.Features.InClassShifts.DTOs;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftById;
@@ -76,7 +79,8 @@ public class InClassShiftsController(ISender sender) : ControllerBase
             request.TotalQuestionsPerStudent ?? 1,
             request.HasFollowUp ?? false,
             request.MaxFollowUpQuestions ?? 2,
-            request.IsAutoPublishGrades ?? true
+            request.IsAutoPublishGrades ?? true,
+            request.ExamDurationMinutes ?? 20
         );
 
         var result = await sender.Send(command, cancellationToken);
@@ -101,6 +105,90 @@ public class InClassShiftsController(ISender sender) : ControllerBase
         }
 
         return CreatedAtAction(nameof(GetShiftById), new { id = result.Value.Id }, result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên kích hoạt ca đang chờ để sinh viên nhập mã OTP và làm bài.
+    /// </summary>
+    [HttpPost("{id}/activate")]
+    [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/activate")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    [ProducesResponseType(typeof(ActivateInClassShiftResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ActivateShift(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new ActivateInClassShiftCommand(userId, id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error == InClassShiftErrors.LecturerNotAuthorized)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên đóng ca đang chờ hoặc đang mở. Sinh viên không vào ca hoặc nộp bài được nữa.
+    /// </summary>
+    [HttpPost("{id}/close")]
+    [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/close")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    [ProducesResponseType(typeof(CloseInClassShiftResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CloseShift(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new CloseInClassShiftCommand(userId, id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error == InClassShiftErrors.LecturerNotAuthorized)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(result.Value);
     }
 
     /// <summary>
@@ -423,6 +511,38 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    /// Sinh viên kết thúc phiên làm bài — khóa quyền vào lại ca.
+    /// </summary>
+    [HttpPost("{id}/finish")]
+    [HttpPost("/api/v1/student/in-class-shifts/{id}/finish")]
+    [Authorize(Roles = "student")]
+    [ProducesResponseType(typeof(FinishStudentInClassExamResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> FinishExam(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        var studentId = GetAuthenticatedUserId();
+        if (studentId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new FinishStudentInClassExamCommand(studentId, id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Sinh viên nộp bài làm transcript vấn đáp, đẩy vào hàng đợi chấm tự động.
     /// </summary>
     [HttpPost("{id}/submit-answer")]
@@ -560,7 +680,8 @@ public sealed record CreateInClassShiftRequest(
     int? TotalQuestionsPerStudent = 1,
     bool? HasFollowUp = false,
     int? MaxFollowUpQuestions = 2,
-    bool? IsAutoPublishGrades = true
+    bool? IsAutoPublishGrades = true,
+    int? ExamDurationMinutes = 20
 );
 
 public sealed record EnterInClassShiftRequest(string OtpCode);

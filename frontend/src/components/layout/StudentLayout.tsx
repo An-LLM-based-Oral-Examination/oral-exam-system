@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { resetBodyScrollLock } from '@/design/bodyScrollLock'
 import { StudentHeader } from './StudentHeader'
 import { StudentSidebar } from './StudentSidebar'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,10 @@ import { cn } from '@/lib/utils'
 export function StudentLayout() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    resetBodyScrollLock()
+  }, [])
 
   return (
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
@@ -25,7 +30,7 @@ export function StudentLayout() {
       >
         <StudentHeader onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
 
-        <main className="px-4 py-5 sm:px-6 sm:py-6 xl:px-8">
+        <main className="px-4 py-5 sm:px-6 sm:py-5 xl:px-8">
           <div className="mx-auto w-full max-w-[1380px]">
             <Outlet />
           </div>

@@ -186,9 +186,12 @@ public sealed class CreateClassCommandHandler(
                 "CONFLICT: Mã tham gia lớp đã tồn tại. Vui lòng chọn mã khác.");
         }
 
-        var passwordHash = string.IsNullOrWhiteSpace(request.Password)
+        var plainPassword = string.IsNullOrWhiteSpace(request.Password)
             ? null
-            : passwordHasher.Hash(request.Password.Trim());
+            : request.Password.Trim();
+        var passwordHash = plainPassword is null
+            ? null
+            : passwordHasher.Hash(plainPassword);
 
         var now = DateTime.UtcNow;
         var newClass = new Class
@@ -198,6 +201,7 @@ public sealed class CreateClassCommandHandler(
             Name = request.Name.Trim(),
             JoinCode = joinCode,
             JoinPasswordHash = passwordHash,
+            JoinPasswordPlain = plainPassword,
             CourseId = course.Id,
             SemesterId = semester.Id,
             CourseOfferingId = courseOffering?.Id,

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Badge } from '@/components/common/Badge'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
 import type { ScorecardPayload } from '@/types/practice.types'
 import { Award, HelpCircle, Check, ArrowRight, SkipForward, X } from 'lucide-react'
 
@@ -31,8 +32,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
   useEffect(() => {
     const previouslyFocusedElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockBodyScroll()
     dialogRef.current?.focus()
 
     const handleDialogKeyboard = (event: KeyboardEvent) => {
@@ -63,7 +63,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
     window.addEventListener('keydown', handleDialogKeyboard)
     return () => {
       window.removeEventListener('keydown', handleDialogKeyboard)
-      document.body.style.overflow = previousBodyOverflow
+      unlock()
       previouslyFocusedElement?.focus()
     }
   }, [])
@@ -92,7 +92,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#0F2854]/70 px-3 py-4 backdrop-blur-[3px] outline-none sm:p-6"
     >
-      <Card className="flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white text-[#0F2854] shadow-[0_28px_80px_rgba(4,20,48,0.3)]">
+      <Card className="flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-white text-[#0F2854] shadow-[0_28px_80px_rgba(4,20,48,0.3)]">
         <CardHeader className="relative shrink-0 space-y-0 overflow-hidden border-b border-white/10 bg-[linear-gradient(125deg,#071a35_0%,#123263_58%,#24528e_100%)] p-0 text-white">
           <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(129,220,255,0.18)_1px,transparent_1px),linear-gradient(90deg,rgba(129,220,255,0.18)_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.13]" />
           <div className="pointer-events-none absolute -top-20 -right-12 size-56 rounded-full bg-[#5de0f2]/16 blur-3xl" />
@@ -150,7 +150,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
 
         <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#4988C4]/16 p-4 sm:p-5">
           {hasFollowUpUpdate && (
-            <section className="rounded-xl border border-[#bde0fe] bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
+            <section className="rounded-xl border border-[#82aedb]/55 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
                   Tổng hợp điểm câu hỏi sau câu phụ
@@ -196,7 +196,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                   Điểm và nhận xét được phân tích theo từng tiêu chí đánh giá.
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-[#dce6f4] bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
+              <span className="shrink-0 rounded-full border border-[#4988C4] bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
                 {hasQuestionBreakdown ? `${questionNumbers.length} câu` : `${scorecard.criteriaScores.length} tiêu chí`}
               </span>
             </div>
@@ -217,7 +217,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                         Câu {item.questionNumber}
                       </div>
                     )}
-                    <article className="flex flex-col gap-2.5 rounded-xl border border-[#4988C4]/45 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
+                    <article className="flex flex-col gap-2.5 rounded-xl border border-[#82aedb]/55 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
                       <div className="flex items-start justify-between gap-3">
                         <p className="text-sm font-bold text-[#25364e] sm:text-xs">
                           {item.criterionName || `Tiêu chí: ${item.criterionId}`}
@@ -247,7 +247,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
 
           <section
             aria-labelledby="scorecard-feedback-title"
-            className="rounded-xl border border-[#d7e4f7] bg-[linear-gradient(135deg,#f4f8ff_0%,#eef5ff_100%)] p-4"
+            className="rounded-xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#f4f8ff_0%,#eef5ff_100%)] p-4"
           >
             <h4
               id="scorecard-feedback-title"
@@ -286,14 +286,14 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
           )}
         </CardContent>
 
-        <CardFooter className="mt-0 shrink-0 flex-col-reverse justify-end gap-2 border-t border-[#e8edf4] bg-white p-4 sm:flex-row sm:px-5">
+        <CardFooter className="mt-0 shrink-0 flex-col-reverse justify-end gap-2 border-t border-[#82aedb]/55 bg-white p-4 sm:flex-row sm:px-5">
           {onSkipFollowUp && (
             <Button
               variant="outline"
               size="md"
               onClick={onSkipFollowUp}
               isLoading={isActionPending}
-              className="min-h-11 w-full rounded-xl border-[#4988C4]/55 bg-white px-5 text-sm font-bold text-[#1C4D8D] hover:bg-[#edf5ff] focus:ring-[#1C4D8D] sm:w-auto"
+              className="h-10 w-full rounded-xl border-[#4988C4] bg-white px-5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:bg-[#edf5ff] focus:ring-[#1C4D8D] sm:w-auto motion-reduce:transform-none"
             >
               <SkipForward className="size-4" aria-hidden="true" />
               Bỏ qua câu hỏi đào sâu
@@ -305,7 +305,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
               size="md"
               onClick={onNextQuestion}
               isLoading={isActionPending}
-              className="min-h-11 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:bg-[#0F2854] focus:ring-[#1C4D8D] sm:w-auto"
+              className="h-10 w-full rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(36,94,234,0.22)] hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus:ring-[#1C4D8D] sm:w-auto motion-reduce:transform-none"
             >
               {nextActionLabel ||
                 (scorecard.needsFollowUp ? 'Trả lời câu hỏi đào sâu' : 'Luyện tập câu tiếp theo')}
@@ -317,7 +317,7 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
               size="sm"
               onClick={onClose}
               disabled={isActionPending}
-              className="min-h-10 w-full rounded-xl border-[#4988C4]/45 bg-white px-4 text-xs font-bold text-[#42536d] hover:bg-[#4988C4]/18 focus:ring-[#1C4D8D] sm:w-auto"
+              className="min-h-10 w-full rounded-xl border-[#4988C4] bg-white px-4 text-xs font-bold text-[#42536d] hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus:ring-[#1C4D8D] sm:w-auto motion-reduce:transform-none"
             >
               <Check className="size-4 text-[#168367]" aria-hidden="true" />
               {nextActionLabel ?? 'Đóng bảng điểm'}

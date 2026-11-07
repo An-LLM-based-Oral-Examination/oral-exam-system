@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.Lecturer.Queries.GetLecturerCourses;
 using OralExamination.Application.Features.Lecturer.Queries.GetLecturerDashboard;
 
 namespace API.Controllers.v1;
@@ -56,6 +57,39 @@ public class LecturerController(ISender sender) : ControllerBase
                 Detail = result.Error,
                 Type = "https://oralexam.fpt.edu.vn/errors/lecturer-404"
             });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Danh sách môn học giảng viên được phân công (course_lecturers).
+    /// Trưởng BM / Admin nhận toàn bộ môn đang active.
+    /// </summary>
+    [HttpGet("courses")]
+    public async Task<IActionResult> GetMyCourses(CancellationToken cancellationToken = default)
+    {
+        var resolvedUserId = GetCurrentUserId();
+        if (resolvedUserId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new GetLecturerCoursesQuery(resolvedUserId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Không tìm thấy giảng viên.",
+                    Detail = result.Error,
+                    Type = "https://oralexam.fpt.edu.vn/errors/lecturer-404"
+                });
+            }
+
+            return Unauthorized();
         }
 
         return Ok(result.Value);

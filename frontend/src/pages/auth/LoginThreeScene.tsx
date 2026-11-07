@@ -66,7 +66,7 @@ export function LoginThreeScene() {
     scene.add(ambientLight, directionalLight, rimLight, pointLight, highlightLight)
 
     const masterGroup = new THREE.Group()
-    masterGroup.position.set(0, -2.2, 0)
+    masterGroup.position.set(0, -0.7, 0)
     scene.add(masterGroup)
 
     const particleCount = 100
@@ -243,7 +243,7 @@ export function LoginThreeScene() {
       if (!reduceMotion && document.visibilityState !== 'hidden') {
         smoothPointer.lerp(targetPointer, 0.05)
         masterGroup.position.x = -smoothPointer.x * 0.5
-        masterGroup.position.y = -2.2 + smoothPointer.y * 0.45
+        masterGroup.position.y = -0.7 + smoothPointer.y * 0.45
         masterGroup.rotation.y = smoothPointer.x * 0.22
         masterGroup.rotation.x = -smoothPointer.y * 0.15
 

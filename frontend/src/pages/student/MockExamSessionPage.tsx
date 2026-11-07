@@ -17,6 +17,7 @@ import {
   isLikelySilentOrInvalidTranscript,
   looksLikeQuestionEcho,
 } from '@/lib/transcriptGuards'
+import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { AutoFitQuestionText } from '@/components/question/AutoFitQuestionText'
@@ -236,7 +237,7 @@ function MissingSession({ message }: { message?: string }) {
         </p>
         <Link
           to="/mock-exam"
-          className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
         >
           <ArrowLeft className="size-4" /> Về phòng chờ
         </Link>
@@ -1390,10 +1391,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   }, [answers, audioBlob, phase, question?.id, recordedSeconds])
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockBodyScroll()
     return () => {
-      document.body.style.overflow = previousOverflow
+      unlock()
       if (playbackUrlRef.current) URL.revokeObjectURL(playbackUrlRef.current)
       if (draftSaveTimerRef.current !== null) {
         window.clearTimeout(draftSaveTimerRef.current)
@@ -1796,7 +1796,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="mock-grading-title"
-          className="w-full max-w-md rounded-2xl border border-[#4988C4]/45 bg-white px-6 py-8 text-center text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
+          className="w-full max-w-md rounded-2xl border border-[#82aedb]/55 bg-white px-6 py-8 text-center text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)]"
         >
           <LoaderCircle className="mx-auto size-8 animate-spin text-[#1C4D8D]" />
           <h1 id="mock-grading-title" className="mt-4 text-xl font-bold">
@@ -1816,14 +1816,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         <div
           role="dialog"
           aria-modal="true"
-          className="max-h-[90dvh] w-full max-w-3xl space-y-4 overflow-y-auto rounded-2xl border border-[#4988C4]/45 bg-white p-4 text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:p-5"
+          className="max-h-[90dvh] w-full max-w-3xl space-y-4 overflow-y-auto rounded-2xl border border-[#82aedb]/55 bg-white p-4 text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:p-5"
         >
           <MockExamScorecard scorecard={scorecard} />
           <div className="flex justify-end">
             <button
               type="button"
               onClick={() => navigate('/mock-exam')}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
             >
               Về phòng chờ <ArrowRight className="size-4" />
             </button>
@@ -1841,7 +1841,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="mock-session-title"
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-y-auto rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:max-h-[calc(100dvh-2rem)]"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-y-auto rounded-[22px] border border-[#82aedb]/55 bg-white shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:max-h-[calc(100dvh-2rem)]"
       >
         <header className="relative z-20 shrink-0 bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white">
           <div className="flex items-center justify-between gap-2.5 px-4 py-3.5 sm:px-5">
@@ -1882,7 +1882,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               {settingsOpen && (
                 <div
                   data-space-ignore="true"
-                  className="absolute top-12 right-0 z-30 w-72 rounded-2xl border border-[#4988C4]/45 bg-white p-3 text-left text-[#0F2854] shadow-[0_18px_50px_rgba(15,40,84,0.18)]"
+                  className="absolute top-12 right-0 z-30 w-72 rounded-2xl border border-[#82aedb]/55 bg-white p-3 text-left text-[#0F2854] shadow-[0_18px_50px_rgba(15,40,84,0.18)]"
                 >
                   <button
                     type="button"
@@ -1995,16 +1995,16 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               </button>
             </div>
             {activeFollowUp && (
-              <p className="rounded-xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
+              <p className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
                 AI yêu cầu làm rõ thêm trước khi sang câu chính tiếp theo.
               </p>
             )}
             {!activeFollowUp && savedAnswer && queuedFollowUp && (
-              <p className="rounded-xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
+              <p className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
                 Hãy kiểm tra và chỉnh transcript câu chính, rồi chọn <span className="font-bold">Câu hỏi phụ</span> hoặc bỏ qua để sang câu kế.
               </p>
             )}
-            <div className="overflow-hidden rounded-2xl border border-[#4988C4]/45 bg-white">
+            <div className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white">
               {!activeFollowUp && question.imageUrl?.trim() ? (
                 <div data-question-panel className="grid grid-cols-1 md:grid-cols-2">
                   {/* Text absolute on md: row height = image; font auto-fits that height */}
@@ -2056,7 +2056,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     Nội dung chỉnh sửa được lưu tự động và dùng khi nộp bài.
                   </p>
                   {isSendingAnswer && isMicOpenForMain && !savedAnswer ? (
-                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                       <LoaderCircle className="size-4 animate-spin" />
                       Đang nhận diện giọng nói (Việt / Anh)…
                     </div>
@@ -2096,7 +2096,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                       className="min-h-10 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-3.5 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
                     />
                   ) : (
-                    <p className="rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-3 text-sm text-[#5b6b84]">
+                    <p className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-3 text-sm text-[#5b6b84]">
                       Chưa có transcript câu chính trên máy này. Hãy ghi âm lại hoặc tiếp tục câu khác.
                     </p>
                   )}
@@ -2110,7 +2110,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                         onClick={() =>
                           setReRecordTarget({ kind: 'main', questionId: question.id })
                         }
-                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
                       >
                         <Mic className="size-4" />
                         Ghi âm lại câu trả lời
@@ -2128,7 +2128,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                           'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                           isRecording
                             ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                            : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                            : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                         )}
                       >
                         <Mic
@@ -2171,7 +2171,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                       return (
                         <div
                           key={item.answerId}
-                          className="space-y-2 rounded-2xl border border-[#4988C4]/35 bg-[#F4FBFD] px-3.5 py-3"
+                          className="space-y-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-3"
                         >
                           <p className="text-xs font-bold text-[#1C4D8D]">
                             Câu hỏi phụ {index + 1}
@@ -2222,7 +2222,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                                 },
                               )
                             }}
-                            className="min-h-10 w-full resize-none rounded-xl border border-[#4988C4]/45 bg-white px-3 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
+                            className="min-h-10 w-full resize-none rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
                           />
                           {!micOpen && !isRecording && !isSendingAnswer && (
                             <button
@@ -2235,7 +2235,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                                   questionId: question.id,
                                 })
                               }
-                              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
                             >
                               <Mic className="size-4" />
                               Ghi âm lại câu trả lời
@@ -2253,7 +2253,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                                   'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                                   isRecording
                                     ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                                    : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                                    : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                                 )}
                               >
                                 <Mic
@@ -2303,7 +2303,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   Câu trả lời phụ
                 </label>
                 {isSendingAnswer && !savedFollowUpAnswer ? (
-                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                  <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                     <LoaderCircle className="size-4 animate-spin" />
                     Đang nhận diện câu trả lời phụ…
                   </div>
@@ -2368,7 +2368,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                               questionId: question.id,
                             })
                           }
-                          className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                          className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
                         >
                           <Mic className="size-4" />
                           Ghi âm lại câu trả lời
@@ -2386,7 +2386,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                             'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                             isRecording
                               ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                              : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                              : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                           )}
                         >
                           <Mic
@@ -2432,7 +2432,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                     isRecording
                       ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                      : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                      : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                   )}
                 >
                   <Mic
@@ -2480,7 +2480,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     Nội dung chỉnh sửa được lưu tự động và dùng khi nộp bài.
                   </p>
                   {isSendingAnswer && !savedAnswer ? (
-                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#4988C4]/45 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
+                    <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                       <LoaderCircle className="size-4 animate-spin" />
                       Đang nhận diện giọng nói (Việt / Anh)…
                     </div>
@@ -2535,7 +2535,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                         onClick={() =>
                           setReRecordTarget({ kind: 'main', questionId: question.id })
                         }
-                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:bg-[#F4FBFD]"
+                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
                       >
                         <Mic className="size-4" />
                         Ghi âm lại câu trả lời
@@ -2552,7 +2552,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                           'flex size-[7.5rem] flex-col items-center justify-center gap-1 rounded-full border text-sm font-bold shadow-[0_12px_28px_rgba(28,77,141,0.16)] transition select-none disabled:opacity-60',
                           isRecording
                             ? 'border-[#ff8fa0] bg-[#ff5d73] text-white shadow-[0_12px_28px_rgba(255,93,115,0.28)]'
-                            : 'border-[#4988C4] bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
+                            : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#0F2854] hover:bg-[#BDE8F5]',
                         )}
                       >
                         <Mic
@@ -2595,7 +2595,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 data-space-ignore="true"
                 onClick={() => void moveToQuestion(questionIndex - 1)}
                 disabled={questionIndex <= 0 || isRecording || isSendingAnswer || secondsLeft <= 0}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
               >
                 <ArrowLeft className="size-4" />
                 Câu trước
@@ -2607,7 +2607,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     data-space-ignore="true"
                     onClick={() => void advanceToNextMainQuestion()}
                     disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
                   >
                     Bỏ qua câu phụ
                     <ArrowRight className="size-4" />
@@ -2635,7 +2635,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     data-space-ignore="true"
                     onClick={() => void moveToQuestion(questionIndex + 1)}
                     disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
                   >
                     Bỏ qua
                     <ArrowRight className="size-4" />
@@ -2648,7 +2648,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                       data-space-ignore="true"
                       onClick={() => void advanceToNextMainQuestion()}
                       disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4]/45 bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:border-[#4988C4]/45 disabled:opacity-40"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
                     >
                       Bỏ qua câu phụ
                       <ArrowRight className="size-4" />
@@ -2682,7 +2682,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   data-space-ignore="true"
                   onClick={() => void handleSubmit()}
                   disabled={isRecording || isSendingAnswer}
-                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition hover:bg-[#0F2854] disabled:opacity-40"
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-40 motion-reduce:transform-none"
                 >
                   Nộp bài
                 </button>
@@ -2690,7 +2690,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             </div>
           </section>
         ) : (
-          <section className="flex w-full flex-1 flex-col items-center justify-center rounded-2xl border border-[#4988C4]/45 bg-white px-6 py-8 text-center shadow-[0_16px_40px_rgba(31,61,105,0.06)]">
+          <section className="flex w-full flex-1 flex-col items-center justify-center rounded-2xl border border-[#82aedb]/55 bg-white px-6 py-8 text-center shadow-[0_16px_40px_rgba(31,61,105,0.06)]">
             <p className="text-sm text-[#3d4e6b]">
               Ca thi không có câu hỏi. Bạn có thể nộp để đóng phiên.
             </p>
@@ -2698,7 +2698,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               type="button"
               data-space-ignore="true"
               onClick={handleSubmit}
-              className="mt-5 inline-flex min-h-11 items-center rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
+              className="mt-5 inline-flex h-10 items-center rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
             >
               Nộp bài
             </button>

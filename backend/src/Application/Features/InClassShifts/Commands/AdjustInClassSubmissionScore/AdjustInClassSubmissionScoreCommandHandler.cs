@@ -115,7 +115,8 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
             ParentSubmissionId: submission.ParentSubmissionId,
             FollowUpIndex: submission.FollowUpIndex,
             FollowUpPrompt: submission.FollowUpPrompt,
-            AiConfidenceScore: submission.AiConfidenceScore
+            AiConfidenceScore: submission.AiConfidenceScore,
+            StudentCode: submission.Student?.StudentCode
         );
 
         return Result<InClassExamSubmissionResponse>.Success(response);

@@ -53,9 +53,19 @@ public sealed class GetInClassShiftCurrentPasswordQueryHandler(
             }
         }
 
-        if (shift.Status == "CANCELLED")
+        if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
         {
-            return Result<ActiveShiftPasswordResponse>.Failure(InClassShiftErrors.ShiftCancelled);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (shift.Status is "CLOSED" or "ENDED")
+        {
+            return Result<ActiveShiftPasswordResponse>.Failure(InClassShiftErrors.ShiftClosed);
+        }
+
+        if (shift.Status != "IN_PROGRESS")
+        {
+            return Result<ActiveShiftPasswordResponse>.Failure(InClassShiftErrors.ShiftNotOpen);
         }
 
         // Tính toán OTP chu kỳ hiện tại kèm mốc thời gian

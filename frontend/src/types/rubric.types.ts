@@ -106,7 +106,9 @@ export interface QuestionFilters {
   difficulty?: QuestionDifficulty
   bloomLevel?: BloomLevel
   source?: QuestionSource
+  usageScope?: UsageScope
   search?: string
+  submittedBy?: string
   pageNumber?: number
   pageSize?: number
 }
@@ -125,6 +127,9 @@ export interface CreateDraftQuestionRequest {
   followUpPrompt?: string | null
   rubric: RubricDraft
   lecturerId?: string
+  imageUrl?: string | null
+  imageDescription?: string | null
+  cloId?: string | null
 }
 
 export interface CreateDraftQuestionResponse {

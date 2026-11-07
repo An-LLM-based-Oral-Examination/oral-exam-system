@@ -33,5 +33,9 @@ public sealed class CreateInClassShiftCommandValidator : AbstractValidator<Creat
         RuleFor(x => x.MaxFollowUpQuestions)
             .InclusiveBetween(0, 5)
             .WithMessage("Số lượng câu hỏi phụ tối đa phải nằm trong khoảng từ 0 đến 5.");
+
+        RuleFor(x => x.ExamDurationMinutes)
+            .InclusiveBetween(1, 60)
+            .WithMessage("Thời gian làm bài phải từ 1 đến 60 phút.");
     }
 }

@@ -23,6 +23,7 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid AdminUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     public static readonly Guid DepartmentHeadUserId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     public static readonly Guid LecturerUserId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+    public static readonly Guid Lecturer2UserId = Guid.Parse("00000000-0000-0000-0000-00000000000d");
     public static readonly Guid ProctorUserId = Guid.Parse("00000000-0000-0000-0000-000000000004");
     public static readonly Guid StudentHoangId = Guid.Parse("00000000-0000-0000-0000-000000000005");
     public static readonly Guid StudentMaiId = Guid.Parse("00000000-0000-0000-0000-000000000006");
@@ -168,6 +169,19 @@ public static partial class DevelopmentDataSeeder
             },
             new()
             {
+                Id = Lecturer2UserId,
+                Email = "lecturer2@fe.edu.vn",
+                FullName = "Phạm Minh Khoa",
+                Username = "lecturer2",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Lecturer2!", "lecturer2"),
+                MustChangePassword = false,
+                Role = UserRole.Lecturer,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
                 Id = ProctorUserId,
                 Email = "haind@fe.edu.vn",
                 FullName = "Nguyen Dang Hai",
@@ -257,6 +271,12 @@ public static partial class DevelopmentDataSeeder
                 if (string.IsNullOrWhiteSpace(existing.Username))
                 {
                     existing.Username = user.Username;
+                }
+                if (user.Id == Lecturer2UserId ||
+                    string.IsNullOrWhiteSpace(existing.FullName) ||
+                    existing.FullName == "Giang vien CSD DBI PRF")
+                {
+                    existing.FullName = user.FullName;
                 }
                 if (string.IsNullOrWhiteSpace(existing.PasswordHash))
                 {
@@ -3447,8 +3467,9 @@ public static partial class DevelopmentDataSeeder
             .Where(c => c.IsActive)
             .ToListAsync(cancellationToken);
 
+        var demoStudentIds = new[] { StudentHoangId, StudentMaiId, StudentThanhId };
         var studentUsers = await context.Users
-            .Where(u => u.Role == UserRole.Student && u.IsActive)
+            .Where(u => demoStudentIds.Contains(u.Id) && u.IsActive)
             .ToListAsync(cancellationToken);
 
         var existingEnrollments = await context.ClassEnrollments

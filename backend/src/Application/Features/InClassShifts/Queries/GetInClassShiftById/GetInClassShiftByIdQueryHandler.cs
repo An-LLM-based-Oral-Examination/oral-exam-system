@@ -21,6 +21,12 @@ public sealed class GetInClassShiftByIdQueryHandler(
         GetInClassShiftByIdQuery request,
         CancellationToken cancellationToken)
     {
+        await InClassShiftLifecycle.CloseDueAsync(
+            context,
+            DateTime.UtcNow,
+            cancellationToken,
+            shiftId: request.ShiftId);
+
         var shift = await context.InClassExamShifts
             .AsNoTracking()
             .Include(s => s.Class)
@@ -135,14 +141,15 @@ public sealed class GetInClassShiftByIdQueryHandler(
             shift.FinalizedAt,
             shift.CreatedAt,
             shift.Participants.Count,
-            shift.Submissions.Count,
+            shift.Participants.Count(p => p.Status == "SUBMITTED"),
             shift.Description,
             shift.QuestionPoolMode,
             selectedPoolIds,
             shift.TotalQuestionsPerStudent,
             shift.HasFollowUp,
             shift.MaxFollowUpQuestions,
-            shift.IsAutoPublishGrades
+            shift.IsAutoPublishGrades,
+            shift.ExamDurationMinutes
         );
 
         var participants = visibleParticipants
@@ -183,7 +190,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     pIds,
                     pDtos,
                     canStudentViewScores ? p.TotalAiScore : null,
-                    canStudentViewScores ? p.TotalFinalScore : null
+                    canStudentViewScores ? p.TotalFinalScore : null,
+                    p.Student?.StudentCode
                 );
             })
             .ToList();
@@ -214,7 +222,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     s.ParentSubmissionId,
                     s.FollowUpIndex,
                     s.FollowUpPrompt,
-                    canStudentViewScores ? s.AiConfidenceScore : null
+                    canStudentViewScores ? s.AiConfidenceScore : null,
+                    s.Student?.StudentCode
                 );
             })
             .ToList();
@@ -241,7 +250,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
             shift.TotalQuestionsPerStudent,
             shift.HasFollowUp,
             shift.MaxFollowUpQuestions,
-            shift.IsAutoPublishGrades
+            shift.IsAutoPublishGrades,
+            shift.ExamDurationMinutes
         );
         return Result<InClassShiftDetailResponse>.Success(detail);
     }

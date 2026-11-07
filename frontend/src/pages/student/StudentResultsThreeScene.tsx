@@ -474,7 +474,7 @@ export function StudentResultsThreeScene({
     <div ref={mountRef} className="relative size-full touch-pan-y" aria-hidden="true">
       <div
         ref={fallbackRef}
-        className="absolute top-1/2 left-1/2 w-[210px] -translate-x-1/2 -translate-y-1/2 rotate-[-3deg] rounded-2xl border border-[#9dc9de] bg-[linear-gradient(135deg,#0b315d,#14677b)] p-4 shadow-[0_18px_45px_rgba(20,83,112,0.2)] sm:w-[240px]"
+        className="absolute top-1/2 left-1/2 w-[210px] -translate-x-1/2 -translate-y-1/2 rotate-[-3deg] rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#0b315d,#14677b)] p-4 shadow-[0_18px_45px_rgba(20,83,112,0.2)] sm:w-[240px]"
       >
         <div className="h-1.5 w-14 rounded-full bg-[#55e0dc]" />
         <p className="mt-3 text-xs font-bold tracking-[0.12em] text-[#a8f5f1] uppercase">

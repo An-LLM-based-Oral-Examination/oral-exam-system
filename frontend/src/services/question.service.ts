@@ -147,14 +147,44 @@ export const questionService = {
   },
 
   async createDraft(payload: CreateDraftQuestionRequest): Promise<CreateDraftQuestionResponse> {
-    const response = await apiClient.post<unknown>('/questions', payload)
+    const response = await apiClient.post<unknown>('/questions', {
+      ...payload,
+      usageScope: payload.usageScope ?? 'practice',
+    })
+    return normalizeCreateResponse(response.data)
+  },
+
+  /**
+   * Luồng MF-03 / R8 — Giảng viên tạo câu hỏi thẳng vào kho luyện tập & thi thử.
+   * Backend cố định usageScope = "practice" trên bảng practice_questions.
+   */
+  async createPracticeQuestion(
+    payload: CreateDraftQuestionRequest,
+  ): Promise<CreateDraftQuestionResponse> {
+    const response = await apiClient.post<unknown>('/practice/questions', {
+      ...payload,
+      usageScope: 'practice',
+    })
     return normalizeCreateResponse(response.data)
   },
 
   async generateFromFlm(
     payload: GenerateQuestionsFromFlmRequest,
   ): Promise<GenerateQuestionsFromFlmResponse> {
-    const response = await apiClient.post<unknown>('/questions/generate-from-flm', payload)
+    const response = await apiClient.post<unknown>('/questions/generate-from-flm', {
+      ...payload,
+      usageScope: payload.usageScope ?? 'practice',
+    })
+    return normalizeGenerationResponse(response.data)
+  },
+
+  async generateFromClo(
+    payload: GenerateQuestionsFromFlmRequest,
+  ): Promise<GenerateQuestionsFromFlmResponse> {
+    const response = await apiClient.post<unknown>('/questions/generate-from-clo', {
+      ...payload,
+      usageScope: payload.usageScope ?? 'practice',
+    })
     return normalizeGenerationResponse(response.data)
   },
 

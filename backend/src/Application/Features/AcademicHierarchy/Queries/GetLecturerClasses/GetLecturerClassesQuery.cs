@@ -92,7 +92,8 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
                 c.IsJoinEnabled,
                 c.AllowSelfEnrollment,
                 c.IsActive,
-                c.CreatedAt))
+                c.CreatedAt,
+                c.JoinPasswordPlain))
             .ToListAsync(cancellationToken);
 
         return Result<List<LecturerClassItemDto>>.Success(items);

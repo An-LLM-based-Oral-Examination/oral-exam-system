@@ -217,7 +217,8 @@ public sealed record LecturerClassItemDto(
     bool IsJoinEnabled,
     bool AllowSelfEnrollment,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? JoinPassword = null);
 
 /// <summary>
 /// DTO thông tin sinh viên ghi danh trong lớp (hiển thị cho Giảng viên / TBM / Admin).
@@ -270,4 +271,5 @@ public sealed record ClassDetailDto(
     bool IsAlreadyEnrolled,
     DateTime CreatedAt,
     IReadOnlyList<ClassInClassShiftSummaryDto> Shifts,
-    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents);
+    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents,
+    string? JoinPassword = null);

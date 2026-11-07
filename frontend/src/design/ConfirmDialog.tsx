@@ -1,7 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { AlertTriangle, Info, LoaderCircle, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Info, LoaderCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ds } from './system'
+import { lockBodyScroll } from './bodyScrollLock'
+import { ds, overlay } from './system'
+import { DialogFooter, OverlayCloseButton } from './overlays'
 
 type ConfirmTone = 'info' | 'warning' | 'danger'
 
@@ -11,7 +13,7 @@ const TONE_STYLE: Record<
 > = {
   info: {
     eyebrow: 'Thông báo',
-    iconWrap: 'border border-[#4988C4]/30 bg-[#F4FBFD] text-[#1C4D8D]',
+    iconWrap: 'border border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]',
     confirm: ds.primaryButton,
     icon: Info,
   },
@@ -25,7 +27,7 @@ const TONE_STYLE: Record<
     eyebrow: 'Cần xác nhận',
     iconWrap: 'border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]',
     confirm:
-      'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c2415b] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(194,65,91,0.22)] transition hover:bg-[#a4334b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] disabled:opacity-45',
+      'inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#c2415b] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(194,65,91,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#a4334b] hover:shadow-[0_12px_22px_rgba(164,51,75,0.28)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transform-none',
     icon: AlertTriangle,
   },
 }
@@ -66,18 +68,22 @@ export function ConfirmDialog({
 
   useEffect(() => {
     confirmRef.current?.focus()
+    const unlock = lockBodyScroll()
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || pending) return
       event.preventDefault()
       dismissRef.current()
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      unlock()
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [pending])
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-[#0F2854]/55 px-4 py-6 backdrop-blur-[3px] sm:items-center"
+      className={cn(overlay.scrim, overlay.z.confirm)}
       role="presentation"
       data-space-ignore="true"
       onClick={(event) => {
@@ -88,7 +94,7 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="w-full max-w-md overflow-hidden rounded-[22px] border border-[#4988C4]/45 bg-white shadow-[0_24px_70px_rgba(15,40,84,0.28)]"
+        className={cn(overlay.panelCompact, 'max-w-md')}
       >
         <div className="px-5 pt-5 pb-4 sm:px-6">
           <div className="flex items-start gap-3">
@@ -111,23 +117,18 @@ export function ConfirmDialog({
                 {title}
               </h2>
             </div>
-            <button
-              type="button"
-              data-space-ignore="true"
-              onClick={() => dismissRef.current()}
-              disabled={pending}
-              aria-label="Đóng"
-              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-[#4988C4]/45 text-[#5b6b84] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:opacity-40"
-            >
-              <X className="size-4" />
-            </button>
+            <OverlayCloseButton
+              onClose={() => dismissRef.current()}
+              busy={pending}
+              className="rounded-full"
+            />
           </div>
           {message && (
             <p className="mt-4 text-sm leading-relaxed text-[#5b6b84]">{message}</p>
           )}
           {children && <div className="mt-4">{children}</div>}
         </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-[#4988C4]/45 bg-[#F4FBFD] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <DialogFooter>
           {cancelLabel && onCancel && (
             <button
               type="button"
@@ -152,7 +153,7 @@ export function ConfirmDialog({
             )}
             {confirmLabel}
           </button>
-        </div>
+        </DialogFooter>
       </section>
     </div>
   )

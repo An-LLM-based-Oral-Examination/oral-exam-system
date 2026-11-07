@@ -8,6 +8,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.DTOs;
 using OralExamination.Domain.Entities;
@@ -40,14 +41,25 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftNotFound);
         }
 
+        if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        var closed = shift.Status is "CLOSED" or "ENDED";
         if (shift.IsLocked || shift.Status == "FINALIZED")
         {
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        if (shift.Status == "CANCELLED")
+        if (closed && !InClassShiftLifecycle.CanAcceptLateAnswer(shift, DateTime.UtcNow))
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftCancelled);
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftClosed);
+        }
+
+        if (!closed && shift.Status != "IN_PROGRESS")
+        {
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftNotOpen);
         }
 
         var participant = await context.InClassShiftParticipants
@@ -63,16 +75,15 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         int effectiveFollowUpIndex = request.IsFollowUp ? Math.Max(1, request.FollowUpIndex) : 0;
 
         // 1. Chặn nộp trùng lặp cùng 1 câu hỏi / lượt follow-up trong cùng 1 ca thi
-        bool alreadySubmitted = await context.InClassExamSubmissions
-            .AsNoTracking()
-            .AnyAsync(
+        var existingSubmission = await context.InClassExamSubmissions
+            .FirstOrDefaultAsync(
                 s => s.ShiftId == shift.Id &&
                      s.StudentId == request.StudentId &&
                      s.QuestionId == request.QuestionId &&
                      s.FollowUpIndex == effectiveFollowUpIndex,
                 cancellationToken);
 
-        if (alreadySubmitted)
+        if (existingSubmission is not null && !string.IsNullOrWhiteSpace(existingSubmission.Transcript))
         {
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.DuplicateSubmission);
         }
@@ -109,44 +120,65 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         string keyPoints = questionInfo.KeyPoints ?? "[]";
 
         DateTime utcNow = DateTime.UtcNow;
+        InClassExamSubmission submission;
 
-        // Cam kết Zero-R2 Invariant: Tuyệt đối KHÔNG lưu file ghi âm R2, chỉ lưu TranscriptText (Persist-First < 100ms)
-        var submission = new InClassExamSubmission
+        if (existingSubmission is not null)
         {
-            Id = Guid.NewGuid(),
-            ShiftId = shift.Id,
-            StudentId = request.StudentId,
-            QuestionId = request.QuestionId,
-            IsFollowUp = request.IsFollowUp,
-            ParentSubmissionId = request.ParentSubmissionId,
-            FollowUpIndex = effectiveFollowUpIndex,
-            Transcript = request.TranscriptText.Trim(),
-            Status = "SUBMITTED",
-            SubmittedAt = utcNow
-        };
-
-        context.InClassExamSubmissions.Add(submission);
-
-        if (assignedQuestionIds.Count <= 1)
-        {
-            participant.Status = "SUBMITTED";
+            existingSubmission.Transcript = request.TranscriptText.Trim();
+            existingSubmission.Status = "SUBMITTED";
+            existingSubmission.SubmittedAt = utcNow;
+            existingSubmission.AiScore = null;
+            existingSubmission.AiConfidenceScore = null;
+            existingSubmission.AiFeedback = null;
+            existingSubmission.CotTrace = null;
+            existingSubmission.FinalScore = null;
+            existingSubmission.GradedAt = null;
+            submission = existingSubmission;
         }
         else
         {
-            var submittedMainIds = await context.InClassExamSubmissions
-                .AsNoTracking()
-                .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId && !s.IsFollowUp)
-                .Select(s => s.QuestionId)
-                .ToListAsync(cancellationToken);
+            // Cam kết Zero-R2 Invariant: Tuyệt đối KHÔNG lưu file ghi âm R2, chỉ lưu TranscriptText (Persist-First < 100ms)
+            submission = new InClassExamSubmission
+            {
+                Id = Guid.NewGuid(),
+                ShiftId = shift.Id,
+                StudentId = request.StudentId,
+                QuestionId = request.QuestionId,
+                IsFollowUp = request.IsFollowUp,
+                ParentSubmissionId = request.ParentSubmissionId,
+                FollowUpIndex = effectiveFollowUpIndex,
+                Transcript = request.TranscriptText.Trim(),
+                Status = "SUBMITTED",
+                SubmittedAt = utcNow
+            };
 
-            submittedMainIds.Add(request.QuestionId);
-            if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)))
+            context.InClassExamSubmissions.Add(submission);
+
+            if (assignedQuestionIds.Count <= 1)
             {
                 participant.Status = "SUBMITTED";
+            }
+            else
+            {
+                var submittedMainIds = await context.InClassExamSubmissions
+                    .AsNoTracking()
+                    .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId && !s.IsFollowUp)
+                    .Select(s => s.QuestionId)
+                    .ToListAsync(cancellationToken);
+
+                submittedMainIds.Add(request.QuestionId);
+                if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)))
+                {
+                    participant.Status = "SUBMITTED";
+                }
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        if (closed)
+        {
+            await InClassShiftAutoSubmit.SubmitMissingAsync(context, gradingQueueChannel, cancellationToken, shift.Id);
+        }
 
         // Đẩy vào hàng đợi BoundedChannel (1,000 slots RAM) để GradingQueueWorker chấm ngầm bất đồng bộ
         var gradingTask = new GradingTask

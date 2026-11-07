@@ -1,27 +1,17 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   Award,
-  BarChart3,
-  BookOpenCheck,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock3,
   FileCheck2,
   Gauge,
   History,
   Mic2,
-  TimerReset,
   TrendingUp,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -35,6 +25,10 @@ import {
   type OfficialExamTicketOverview,
   type PracticeHistoryItem,
 } from '@/services/studentOverview.service'
+import { EmptyState } from '@/components/common/EmptyState'
+import { StudentClassPanel } from '@/components/student/StudentClassPanel'
+import { BannerFact, PageBanner } from '@/design/ui'
+import { classService } from '@/services/class.service'
 import { mockExamService } from '@/services/mockExam.service'
 import type { MockExamHistoryItem } from '@/types/mockExam.types'
 
@@ -70,13 +64,13 @@ interface RecentActivity {
 }
 
 const COURSE_CODE_TONES = [
-  'bg-[#4988C4]/16 text-[#1C4D8D]',
-  'bg-[#e8f8f3] text-[#16836a]',
-  'bg-[#fff4e8] text-[#c26a12]',
-  'bg-[#f3eefe] text-[#6d4cc4]',
-  'bg-[#e7f6fb] text-[#0e7490]',
-  'bg-[#fdecef] text-[#c2415b]',
-  'bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
 ]
 
 function courseCodeTone(code?: string) {
@@ -133,6 +127,7 @@ function buildOverviewStats(
   courses: CourseSummary[],
   history: PracticeHistoryItem[],
   quotas: MockExamQuota[],
+  classCount: number,
   now: Date,
 ): OverviewStat[] {
   const completed = history.filter((item) => item.status === 'completed')
@@ -168,27 +163,28 @@ function buildOverviewStats(
 
   return [
     {
-      label: 'Học phần đang mở',
-      value: padCount(courses.length),
-      suffix: 'Môn',
-      helper:
-        quotaLimit > 0
-          ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
-          : courseCodes || 'Chưa có môn học đang mở',
-      icon: BookOpenCheck,
-      cardClassName: 'border-[#9ec4e8] bg-[#f3f9fd]',
+      label: 'Lớp đã tham gia',
+      value: padCount(classCount),
+      suffix: 'Lớp',
+      helper: courses.length > 0 ? `${courses.length} môn · ${courseCodes}` : 'Tìm lớp để tham gia học phần',
+      icon: UsersRound,
+      cardClassName: 'border-[#88b2de]/55 bg-[linear-gradient(145deg,#e9f5fc_0%,#cae3f5_100%)] shadow-[0_14px_28px_rgba(28,77,141,0.18)]',
       iconClassName: 'bg-[#1C4D8D] text-white',
       badgeText: 'Học kỳ hiện tại',
-      badgeClassName: 'bg-white text-[#1C4D8D]',
+      badgeClassName: 'border border-[#82aedb]/55 bg-white text-[#1C4D8D]',
     },
     {
       label: 'Phiên luyện tập hoàn tất',
       value: padCount(completed.length),
       suffix: 'Phiên',
       helper:
-        passRate === null ? 'Chưa có phiên đã chấm điểm' : `${passRate}% phiên đạt từ 5.0 điểm`,
+        quotaLimit > 0
+          ? `${quotaRemaining}/${quotaLimit} lượt thi thử còn lại hôm nay`
+          : passRate === null
+            ? 'Chưa có phiên đã chấm điểm'
+            : `${passRate}% phiên đạt từ 5.0 điểm`,
       icon: Mic2,
-      cardClassName: 'border-[#b7e4cf] bg-[#f3fbf7]',
+      cardClassName: 'border-[#82cfad]/55 bg-[linear-gradient(145deg,#e8f7f1_0%,#c6ebd9_100%)] shadow-[0_14px_28px_rgba(22,131,106,0.16)]',
       iconClassName: 'bg-[#16836a] text-white',
       badgeText: 'Tích lũy',
       badgeClassName: 'bg-white text-[#16836a]',
@@ -203,7 +199,7 @@ function buildOverviewStats(
           : `${formatSignedDelta(scoreDelta)} điểm so với tuần trước`,
       trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
       icon: Gauge,
-      cardClassName: 'border-[#d4c4f5] bg-[#f7f3fd]',
+      cardClassName: 'border-[#c4afe8]/55 bg-[linear-gradient(145deg,#f2eafc_0%,#ddcef7_100%)] shadow-[0_14px_28px_rgba(109,76,196,0.16)]',
       iconClassName: 'bg-[#6d4cc4] text-white',
       badgeText: 'Theo Rubric',
       badgeClassName: 'bg-white text-[#6d4cc4]',
@@ -294,8 +290,9 @@ export function StudentDashboardPage() {
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [history, setHistory] = useState<PracticeHistoryItem[]>([])
   const [mockHistory, setMockHistory] = useState<MockExamHistoryItem[]>([])
-  const [officialTickets, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
+  const [, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
   const [quotas, setQuotas] = useState<MockExamQuota[]>([])
+  const [classCount, setClassCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -308,9 +305,10 @@ export function StudentDashboardPage() {
     let cancelled = false
 
     void (async () => {
-      const [coursesResult, historyResult, mockHistoryResult, officialTicketsResult] =
+      const [coursesResult, classesResult, historyResult, mockHistoryResult, officialTicketsResult] =
         await Promise.allSettled([
           studentOverviewService.getCourses(),
+          classService.listMyClasses(),
           studentOverviewService.getPracticeHistory(),
           mockExamService.getHistory({ pageIndex: 1, pageSize: 10 }),
           studentOverviewService.getOfficialExamTickets(),
@@ -318,12 +316,21 @@ export function StudentDashboardPage() {
 
       if (cancelled) return
 
-      const nextCourses = coursesResult.status === 'fulfilled' ? coursesResult.value : []
+      const enrolledIds = new Set(
+        classesResult.status === 'fulfilled'
+          ? classesResult.value.map((item) => item.courseId).filter(Boolean)
+          : [],
+      )
+      const nextCourses =
+        coursesResult.status === 'fulfilled'
+          ? coursesResult.value.filter((course) => enrolledIds.has(course.id))
+          : []
       const nextHistory = historyResult.status === 'fulfilled' ? historyResult.value : []
       const nextMockHistory =
         mockHistoryResult.status === 'fulfilled' ? mockHistoryResult.value.items : []
       const nextOfficialTickets =
         officialTicketsResult.status === 'fulfilled' ? officialTicketsResult.value : []
+      setClassCount(classesResult.status === 'fulfilled' ? classesResult.value.length : 0)
       setCourses(nextCourses)
       setHistory(nextHistory)
       setMockHistory(nextMockHistory)
@@ -363,8 +370,8 @@ export function StudentDashboardPage() {
   }, [])
 
   const overviewStats = useMemo(
-    () => buildOverviewStats(courses, history, quotas, now),
-    [courses, history, quotas, now],
+    () => buildOverviewStats(courses, history, quotas, classCount, now),
+    [courses, history, quotas, classCount, now],
   )
   const recentActivities = useMemo(
     () => buildRecentActivities(history, now, mockHistory),
@@ -372,127 +379,72 @@ export function StudentDashboardPage() {
   )
   const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 5)
   const studentName = user?.fullName ?? 'Sinh viên'
-  const studentIdentifier = user?.studentCode ?? user?.email ?? user?.id ?? 'Student'
-
-  const handleHeroPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = ((event.clientX - rect.left) / rect.width - 0.5) * 2
-    const y = ((event.clientY - rect.top) / rect.height - 0.5) * 2
-
-    event.currentTarget.style.setProperty('--hero-scene-x', `${x * 8}px`)
-    event.currentTarget.style.setProperty('--hero-scene-y', `${y * 6}px`)
-    event.currentTarget.style.setProperty('--hero-grid-x', `${x * -3}px`)
-    event.currentTarget.style.setProperty('--hero-grid-y', `${y * -2}px`)
-  }
-
-  const resetHeroParallax = (event: ReactPointerEvent<HTMLElement>) => {
-    event.currentTarget.style.setProperty('--hero-scene-x', '0px')
-    event.currentTarget.style.setProperty('--hero-scene-y', '0px')
-    event.currentTarget.style.setProperty('--hero-grid-x', '0px')
-    event.currentTarget.style.setProperty('--hero-grid-y', '0px')
-  }
 
   return (
     <div className={ds.page}>
-      <section
-        className={ds.banner}
-        onPointerMove={handleHeroPointerMove}
-        onPointerLeave={resetHeroParallax}
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-70 transition-transform duration-300 ease-out motion-reduce:transform-none"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-            transform:
-              'translate3d(var(--hero-grid-x, 0px), var(--hero-grid-y, 0px), 0) scale(1.03)',
-          }}
-        />
-        <div className="pointer-events-none absolute -top-24 -right-20 size-80 rounded-full bg-[#57dcff]/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-[35%] size-72 rounded-full bg-[#5674ef]/8 blur-3xl" />
+      <PageBanner
+        icon={Award}
+        eyebrow={`Học kỳ ${getSemesterLabel(now)}`}
+        title={
+          <>
+            {getGreeting(now.getHours())},{' '}
+            <span className="text-[#BDE8F5]">{studentName}</span>
+          </>
+        }
+        description="Quản lý lớp học phần tại đây. Luyện tập và thi thử chỉ mở các môn của lớp bạn đã tham gia."
+        extras={
+          <>
+            <BannerFact icon={Mic2}>Luyện tập theo Rubric</BannerFact>
+            <BannerFact icon={Gauge} tone="green">
+              Thi thử không tính điểm
+            </BannerFact>
+            <BannerFact icon={CalendarDays} tone="violet">
+              Theo dõi lịch thi Lab
+            </BannerFact>
+          </>
+        }
+        scene={
+          <Suspense
+            fallback={
+              <div className="flex size-full items-center justify-center" aria-hidden="true">
+                <div className="size-28 animate-pulse rounded-full border border-[#7cdff4]/40 bg-[#dffaff]/30" />
+              </div>
+            }
+          >
+            <StudentOverviewThreeScene />
+          </Suspense>
+        }
+      />
 
-        <div className="relative grid min-h-[285px] lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-          <div className="relative z-10 flex flex-col justify-center px-5 py-6 sm:px-7 sm:py-7 xl:px-9">
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-medium text-white/80">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/14 px-3 py-1 font-bold text-white">
-                <Award className="size-3.5 text-[#BDE8F5]" />
-                Học kỳ {getSemesterLabel(now)}
-              </span>
-              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 font-semibold text-[#BDE8F5]">
-                Khoa Kỹ thuật Phần mềm · FPTU
-              </span>
-              <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 font-semibold text-white">
-                MSSV: {studentIdentifier}
-              </span>
-            </div>
-
-            <div className="max-w-[680px]">
-              <h1 className="text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.12] font-bold tracking-[-0.04em] text-white">
-                {getGreeting(now.getHours())},{' '}
-                <span className="block text-[#BDE8F5] sm:inline">{studentName}</span>
-              </h1>
-              <p className="mt-2 max-w-[620px] text-sm leading-relaxed text-white/85">
-                Theo dõi lộ trình ôn tập vấn đáp chuyên ngành, chủ động luyện phản xạ câu hỏi theo
-                học phần và tra cứu bảng điểm chi tiết từng ca thi.
+      <section aria-label="Tóm tắt học tập" className="relative z-10 grid gap-3 md:grid-cols-3">
+        {(isLoading
+          ? buildOverviewStats([], [], [], 0, now).map((stat) => ({
+              ...stat,
+              value: '…',
+              helper: 'Đang đồng bộ dữ liệu...',
+            }))
+          : overviewStats
+        ).map(({ label, value, suffix, helper, icon: Icon, iconClassName, cardClassName, trend }) => (
+          <article
+            key={label}
+            className={cn('flex items-center gap-4 rounded-2xl border px-4 py-4', cardClassName)}
+          >
+            <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-2xl', iconClassName)}>
+              <Icon className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">{label}</p>
+              <div className="mt-0.5 flex items-baseline gap-1.5">
+                <strong className="text-[1.65rem] leading-none font-black tracking-[-0.04em] text-[#0F2854]">{value}</strong>
+                {suffix && <span className="text-xs font-bold text-[#1C4D8D]">{suffix}</span>}
+              </div>
+              <p className="mt-1 flex items-center gap-1 truncate text-xs font-semibold text-[#5b6b84]">
+                {trend ? <TrendingUp className="size-3.5 shrink-0 text-[#16836a]" /> : <CheckCircle2 className="size-3.5 shrink-0 text-[#1C4D8D]" />}
+                <span className={cn('truncate', trend && 'text-[#16836a]')}>{helper}</span>
               </p>
             </div>
-
-            <div className="mt-5 flex max-w-[660px] flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-[#4988C4]/45 bg-white/92 p-3 shadow-[0_6px_20px_rgba(15,40,84,0.08)] backdrop-blur-md">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white">
-                  <CalendarDays className="size-[18px]" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
-                    Ca thi chính thức sắp tới
-                  </p>
-                  <p className="truncate text-sm font-bold text-[#0F2854]">
-                    {officialTickets[0]
-                      ? `${officialTickets[0].courseCode} · ${officialTickets[0].shiftName}`
-                      : 'Chưa có lịch thi phòng Lab'}
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#5b6b84]">
-                    <Clock3 className="size-3 text-[#1C4D8D]" />
-                    {officialTickets[0]
-                      ? `Phòng ${officialTickets[0].roomLab} · Máy ${officialTickets[0].seatNumber}`
-                      : 'Sẽ hiển thị khi Bộ môn phân công ca thi'}
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                to="/exam"
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#0F2854] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                Vào phòng thi Kiosk
-                <ArrowRight className="size-4 text-[#1C4D8D]" />
-              </Link>
-            </div>
-          </div>
-
-          <div className="relative min-h-[210px] overflow-hidden lg:min-h-full">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(76,206,245,0.16),transparent_48%)]" />
-            <div
-              className="absolute inset-[-8%] transition-transform duration-200 ease-out motion-reduce:transform-none"
-              style={{
-                transform: 'translate3d(var(--hero-scene-x, 0px), var(--hero-scene-y, 0px), 0)',
-              }}
-            >
-              <Suspense
-                fallback={
-                  <div className="flex size-full items-center justify-center" aria-hidden="true">
-                    <div className="size-28 animate-pulse rounded-full border border-[#7cdff4]/40 bg-[#dffaff]/30" />
-                  </div>
-                }
-              >
-                <StudentOverviewThreeScene />
-              </Suspense>
-            </div>
-          </div>
-        </div>
+          </article>
+        ))}
       </section>
 
       {loadError && (
@@ -504,131 +456,7 @@ export function StudentDashboardPage() {
         </div>
       )}
 
-      <section aria-label="Tóm tắt học tập" className="grid gap-3 md:grid-cols-3">
-        {(isLoading
-          ? buildOverviewStats([], [], [], now).map((stat) => ({
-              ...stat,
-              value: '…',
-              helper: 'Đang đồng bộ dữ liệu...',
-            }))
-          : overviewStats
-        ).map(
-          ({
-            label,
-            value,
-            suffix,
-            helper,
-            icon: Icon,
-            cardClassName,
-            iconClassName,
-            badgeText,
-            badgeClassName,
-            trend,
-          }) => (
-            <article
-              key={label}
-              className={cn(
-                'group rounded-2xl border p-4 shadow-[0_7px_24px_rgba(15,40,84,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,40,84,0.09)] sm:p-5',
-                cardClassName,
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span
-                    className={cn(
-                      'inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-2xs',
-                      badgeClassName,
-                    )}
-                  >
-                    {badgeText}
-                  </span>
-                  <p className="mt-2.5 text-xs font-bold text-[#0F2854]/80">{label}</p>
-                  <div className="mt-1.5 flex items-baseline gap-1.5">
-                    <strong className="text-3xl font-black tracking-[-0.04em] text-[#0F2854]">
-                      {value}
-                    </strong>
-                    {suffix && (
-                      <span className="text-xs font-bold text-[#1C4D8D]">{suffix}</span>
-                    )}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    'flex size-10 items-center justify-center rounded-xl shadow-xs',
-                    iconClassName,
-                  )}
-                >
-                  <Icon className="size-5" />
-                </div>
-              </div>
-              <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-[#0F2854]/75">
-                {trend ? (
-                  <TrendingUp className="size-3.5 text-[#16836a]" />
-                ) : (
-                  <CheckCircle2 className="size-3.5 text-[#1C4D8D]" />
-                )}
-                <span className={cn(trend && 'text-[#16836a]')}>{helper}</span>
-              </p>
-            </article>
-          ),
-        )}
-      </section>
-
-      <section aria-label="Lối tắt học tập" className="grid gap-3 sm:grid-cols-3">
-        <Link
-          to="/practice"
-          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#e8f8f3] text-[#16836a]">
-              <Mic2 className="size-5" />
-            </span>
-            <div>
-              <h2 className="text-sm font-bold text-[#0F2854]">Luyện tập tự do</h2>
-              <p className="mt-0.5 text-xs text-[#5b6b84]">
-                Luyện từng câu hoặc trọn gói 3–10 câu
-              </p>
-            </div>
-          </div>
-          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
-        </Link>
-
-        <Link
-          to="/mock-exam"
-          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#4988C4]/16 text-[#1C4D8D]">
-              <TimerReset className="size-5" />
-            </span>
-            <div>
-              <h2 className="text-sm font-bold text-[#0F2854]">Thi thử tính giờ</h2>
-              <p className="mt-0.5 text-xs text-[#5b6b84]">
-                Mô phỏng áp lực phòng thi & chấm theo CLO
-              </p>
-            </div>
-          </div>
-          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
-        </Link>
-
-        <Link
-          to="/results"
-          className="group flex items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white p-4 shadow-xs transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-md"
-        >
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#f3eefe] text-[#6d4cc4]">
-              <BarChart3 className="size-5" />
-            </span>
-            <div>
-              <h2 className="text-sm font-bold text-[#0F2854]">Lịch sử & Bảng điểm</h2>
-              <p className="mt-0.5 text-xs text-[#5b6b84]">
-                Xem lại câu hỏi, bài trả lời & nhận xét
-              </p>
-            </div>
-          </div>
-          <ArrowRight className="size-4 shrink-0 text-[#1C4D8D] transition-transform group-hover:translate-x-1" />
-        </Link>
-      </section>
+      <StudentClassPanel onClassCount={setClassCount} />
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div
@@ -637,26 +465,24 @@ export function StudentDashboardPage() {
             'flex flex-col justify-between gap-2 sm:flex-row sm:items-center',
           )}
         >
-          <div>
+          <div className={ds.sectionHeading}>
             <div className={ds.sectionTitleRow}>
               <span className={ds.sectionIconWrap}>
-                <History className="size-4 text-[#1C4D8D]" />
+                <History className={ds.sectionIcon} />
               </span>
               <h2 className={ds.sectionTitle}>Hoạt động gần đây</h2>
-              <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D] shadow-2xs">
-                {isLoading ? '…' : recentActivities.length} phiên
+              <span className={ds.sectionBadge}>
+                {isLoading ? '…' : `${recentActivities.length} phiên`}
               </span>
             </div>
-            <p className={ds.sectionHint}>
-              Các phiên luyện tập và ca thi thử vừa thực hiện kèm điểm đánh giá và nhận xét chi tiết
-            </p>
+            <p className={ds.sectionHint}>Phiên luyện tập và thi thử gần đây</p>
           </div>
 
           {recentActivities.length > 5 && (
             <button
               type="button"
               onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
-              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
               aria-expanded={showAllActivities}
             >
               {showAllActivities ? 'Thu gọn danh sách' : 'Xem toàn bộ'}
@@ -669,13 +495,12 @@ export function StudentDashboardPage() {
 
         <div className="divide-y divide-[#4988C4]/30 px-4 sm:px-6">
           {!isLoading && displayedActivities.length === 0 && (
-            <div className="py-10 text-center">
-              <p className="text-sm font-bold text-[#0F2854]">
-                Chưa có phiên luyện tập hoặc thi thử nào
-              </p>
-              <p className="mt-1 text-xs text-[#5b6b84]">
-                Hãy chọn Luyện tập hoặc Thi thử ở phía trên để bắt đầu phiên đầu tiên của bạn.
-              </p>
+            <div className="py-4">
+              <EmptyState
+                icon={History}
+                title="Chưa có phiên luyện tập hoặc thi thử"
+                description="Vào Luyện tập hoặc Thi thử trên menu để bắt đầu phiên đầu tiên."
+              />
             </div>
           )}
 
@@ -735,7 +560,7 @@ export function StudentDashboardPage() {
 
                 <Link
                   to={activity.destination}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-2xs transition hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-2xs transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
                   aria-label={`Xem chi tiết cho ${activity.title}`}
                 >
                   <FileCheck2 className="size-3.5" />
@@ -746,7 +571,7 @@ export function StudentDashboardPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#4988C4]/45 bg-[#F4FBFD] px-4 py-3 text-xs text-[#5b6b84] sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 text-xs text-[#5b6b84] sm:px-6">
           <span className="inline-flex items-center gap-1.5 font-medium text-[#0F2854]">
             <CheckCircle2 className="size-3.5 text-[#16836a]" />
             Lưu trữ đầy đủ câu hỏi, bản ghi câu trả lời và điểm từng tiêu chí Rubric
