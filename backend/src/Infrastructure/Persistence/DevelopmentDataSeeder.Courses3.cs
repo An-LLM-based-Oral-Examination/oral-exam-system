@@ -237,6 +237,7 @@ public static partial class DevelopmentDataSeeder
         {
             (InClassShiftPrn231Id, ClassPrn231Id, "Kiểm tra Vấn đáp Quá trình PRN231 - Clean Architecture & .NET 8 Web API", "PRN231-TOTP-SECRET-FA26-SE1701PRN", 2, true, 2),
             (InClassShiftSwd392Id, ClassSwd392Id, "Kiểm tra Vấn đáp Quá trình SWD392 - Software Architecture & Microservices", "SWD392-TOTP-SECRET-FA26-SE1702SWD", 3, false, 0),
+            (InClassShiftSwr302Id, ClassSwr302Id, "Kiểm tra Vấn đáp Quá trình SWR302 - Software Requirements & Use Cases", "SWR302-TOTP-SECRET-FA26-SE1703SWR", 2, true, 2),
             (InClassShiftPrf192Id, ClassPrf192Id, "Kiểm tra Vấn đáp Quá trình PRF192 - Con trỏ & Quản lý Bộ nhớ C", "PRF192-TOTP-SECRET-FA26-SE1804PRF", 2, true, 2),
             (InClassShiftCsd201Id, ClassCsd201Id, "Kiểm tra Vấn đáp Quá trình CSD201 - Cây AVL, Đồ thị & Bảng băm", "CSD201-TOTP-SECRET-FA26-SE1805CSD", 2, true, 2),
             (InClassShiftDbi202Id, ClassDbi202Id, "Kiểm tra Vấn đáp Quá trình DBI202 - Chuẩn hóa 3NF, SQL & ACID", "DBI202-TOTP-SECRET-FA26-SE1806DBI", 2, true, 2)

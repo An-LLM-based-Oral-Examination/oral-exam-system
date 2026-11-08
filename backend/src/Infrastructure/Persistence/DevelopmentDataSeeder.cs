@@ -100,6 +100,7 @@ public static partial class DevelopmentDataSeeder
     // MF-05 In-Class Shifts for Flagship Courses
     public static readonly Guid InClassShiftPrn231Id = Guid.Parse("00000000-0000-0000-0000-00000000009a");
     public static readonly Guid InClassShiftSwd392Id = Guid.Parse("00000000-0000-0000-0000-00000000009b");
+    public static readonly Guid InClassShiftSwr302Id = Guid.Parse("00000000-0000-0000-0000-00000000009c");
 
     private static readonly DateTime SeedTimestampUtc = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
