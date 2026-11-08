@@ -122,7 +122,10 @@ export function StatusToast({
   const lastNotice = useRef('')
   const lastError = useRef('')
   const onDismissRef = useRef(onDismiss)
-  onDismissRef.current = onDismiss
+
+  useEffect(() => {
+    onDismissRef.current = onDismiss
+  }, [onDismiss])
 
   useEffect(() => {
     const nextError = error?.trim() ?? ''

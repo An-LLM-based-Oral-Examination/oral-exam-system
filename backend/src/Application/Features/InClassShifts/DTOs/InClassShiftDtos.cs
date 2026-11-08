@@ -27,7 +27,10 @@ public sealed record InClassExamShiftResponse(
     int MaxFollowUpQuestions = 2,
     bool IsAutoPublishGrades = true,
     int? ExamDurationMinutes = null,
-    string? MyParticipationStatus = null
+    string? MyParticipationStatus = null,
+    DateTime? MyJoinedAt = null,
+    DateTime? MyExamEndsAt = null,
+    int? MyRemainingSeconds = null
 );
 
 public sealed record InClassShiftDetailResponse(
@@ -126,7 +129,10 @@ public sealed record JoinInClassShiftResponse(
     IReadOnlyList<InClassAssignedQuestionDto>? AssignedQuestions = null,
     int TotalQuestionsPerStudent = 1,
     bool HasFollowUp = false,
-    int MaxFollowUpQuestions = 0
+    int MaxFollowUpQuestions = 0,
+    DateTime? ExamEndsAt = null,
+    int RemainingSeconds = 0,
+    bool TimedOut = false
 );
 
 public sealed record SubmitInClassAnswerResponse(

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 
 export interface FilterDropMenuOption {
@@ -53,8 +54,7 @@ export function FilterDropMenu({
 
   useLayoutEffect(() => {
     if (!open) {
-      setBox(null)
-      return
+      return scheduleUi(() => setBox(null))
     }
 
     const place = () => {
@@ -88,17 +88,19 @@ export function FilterDropMenu({
       }
     }
 
-    place()
+    const cancelPlace = scheduleUi(place)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     return () => {
+      cancelPlace()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
   }, [open, options.length])
 
   useEffect(() => {
-    if (isEmpty && open) setOpen(false)
+    if (!isEmpty || !open) return
+    return scheduleUi(() => setOpen(false))
   }, [isEmpty, open])
 
   useEffect(() => {

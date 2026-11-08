@@ -22,4 +22,6 @@ public static class InClassShiftErrors
     public const string InsufficientQuestionPool = "Ngân hàng câu hỏi luyện tập của môn học chưa đủ số lượng câu hỏi đã duyệt (APPROVED) để phân bổ cho ca thi.";
     public const string InvalidScoreRange = "Điểm số phải nằm trong khoảng từ 0.00 đến 10.00 điểm.";
     public const string EmptyTranscript = "Nội dung bài nói không được để trống.";
+    public const string ExamTimeExpired = "Đã hết thời gian làm bài. Bài làm được nộp tự động để AI chấm.";
 }
+

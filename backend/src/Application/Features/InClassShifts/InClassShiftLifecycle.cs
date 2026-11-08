@@ -11,9 +11,36 @@ namespace OralExamination.Application.Features.InClassShifts;
 public static class InClassShiftLifecycle
 {
     public static readonly TimeSpan ClosedAnswerGrace = TimeSpan.FromMinutes(2);
+    public const int DefaultExamDurationMinutes = 20;
 
     public static bool IsClosable(string status) =>
         status is "SCHEDULED" or "IN_PROGRESS";
+
+    /// <summary>Thời lượng làm bài cá nhân (phút), mặc định 20 nếu ca chưa cấu hình.</summary>
+    public static int EffectiveExamDurationMinutes(InClassExamShift shift)
+    {
+        var minutes = shift.ExamDurationMinutes ?? DefaultExamDurationMinutes;
+        return Math.Clamp(minutes <= 0 ? DefaultExamDurationMinutes : minutes, 1, 60);
+    }
+
+    public static DateTime GetPersonalExamEndsAt(InClassShiftParticipant participant, InClassExamShift shift) =>
+        participant.JoinedAt.AddMinutes(EffectiveExamDurationMinutes(shift));
+
+    public static DateTime GetPersonalExamEndsAt(DateTime joinedAt, int? examDurationMinutes)
+    {
+        var minutes = examDurationMinutes ?? DefaultExamDurationMinutes;
+        minutes = Math.Clamp(minutes <= 0 ? DefaultExamDurationMinutes : minutes, 1, 60);
+        return joinedAt.AddMinutes(minutes);
+    }
+
+    public static bool IsPersonalExamTimeExpired(
+        InClassShiftParticipant participant,
+        InClassExamShift shift,
+        DateTime utcNow) =>
+        utcNow >= GetPersonalExamEndsAt(participant, shift);
+
+    public static int GetRemainingExamSeconds(DateTime examEndsAt, DateTime utcNow) =>
+        Math.Max(0, (int)Math.Floor((examEndsAt - utcNow).TotalSeconds));
 
     public static bool CanAcceptLateAnswer(InClassExamShift shift, DateTime utcNow)
     {

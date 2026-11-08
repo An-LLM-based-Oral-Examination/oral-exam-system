@@ -19,7 +19,9 @@ import {
   looksLikeQuestionEcho,
 } from '@/lib/transcriptGuards'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { EmptyState } from '@/components/common/EmptyState'
+import { StatusToast } from '@/components/common/toast'
 import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 import { officialExamService } from '@/services/officialExam.service'
@@ -47,11 +49,7 @@ type MF04StudentService = {
 const mf04StudentService = officialExamService as unknown as MF04StudentService
 
 function mf04ErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return error instanceof Error ? error.message : 'Không thể hoàn tất yêu cầu phòng thi.'
+  return userMessage(error, 'Không hoàn tất được thao tác phòng thi. Vui lòng thử lại.')
 }
 
 async function calculateSha256(blob: Blob) {
@@ -687,7 +685,7 @@ function OfficialExamLivePage() {
           description="Kiểm tra đúng máy phòng Lab được phân công và thời gian ca thi, sau đó thử tải lại vé thi."
           action={
             <>
-              {error ? <p className="rounded-xl bg-[#fff4f5] px-4 py-3 text-sm text-[#b33d52]">{error}</p> : null}
+              <StatusToast notice={notice} error={error} onDismiss={() => { setError(null); setNotice(null) }} />
               <button type="button" onClick={() => void refreshTicket()} className={ds.primaryButton}>
                 Tải lại vé thi
               </button>
@@ -720,7 +718,7 @@ function OfficialExamLivePage() {
         </>
       }
     />
-    {(error || notice) && <div className={cn('rounded-2xl border px-4 py-3 text-sm', error ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]' : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]')}>{error ?? notice}</div>}
+    <StatusToast notice={notice} error={error} onDismiss={() => { setError(null); setNotice(null) }} />
     {(kiosk.isLocked || audioRecorder.error) && <div className="flex items-start gap-3 rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><div><strong>{kiosk.isLocked ? 'Phòng thi đã đình chỉ vé thi.' : 'Lỗi microphone.'}</strong><p className="mt-1">{kiosk.isLocked ? `Số lần rời màn hình vượt quy định (${kiosk.violations} lần). Vui lòng liên hệ giám thị.` : audioRecorder.error}</p></div></div>}
     <section className={cn(ds.section, 'overflow-hidden')}><div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}><div className={ds.sectionHeading}><div className={ds.sectionTitleRow}><span className={ds.sectionIconWrap}><Mic2 className={ds.sectionIcon} /></span><h2 className={ds.sectionTitle}>Bài thi vấn đáp chính thức</h2></div><p className={ds.sectionHint}>Chế độ {inputModeLabel} · đệm hiệu đính {ticket.transcriptBufferSeconds} giây</p></div>{!isSubmitted && <div className="flex flex-wrap gap-2">{!isInProgress ? <button type="button" disabled={busy} onClick={() => void handleCheckIn()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-50 motion-reduce:transform-none"><CheckCircle2 className="size-4" />Xác nhận nhận máy (Check-in)</button> : (!audioRecorder.isRecording && !hasRecordedAudioBlob) ? <><button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleTestMicrophone()} className={cn('inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-bold transition disabled:opacity-50', micTested ? 'border-[#16836a] bg-[#effbf6] text-[#16785f]' : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D] hover:bg-[#4988C4]/16')}><Volume2 className="size-4" />{isTestingMic ? `Đang đo âm lượng (${micPeakDb}dB)...` : micTested ? `Mic đạt chuẩn (${micPeakDb}dB ≥ 60dB)` : 'Kiểm tra Microphone (≥ 60dB)'}</button><button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleStartRecording()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-50 motion-reduce:transform-none"><Mic2 className="size-4" />Bắt đầu ghi âm &amp; Vào chế độ Kiosk Lockdown</button></> : <button type="button" disabled={busy || kiosk.isLocked} onClick={() => void handleSubmit()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#b33d52] px-4 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#932c3f] disabled:opacity-50 motion-reduce:transform-none"><UploadCloud className="size-4" />{busy ? 'Đang lưu...' : 'Nộp bài và niêm phong'}</button>}</div>}</div><div className="p-5 sm:p-6">{isSubmitted && <div className="mb-4 rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4 text-sm text-[#16785f]"><strong>Bài thi đã được tiếp nhận và niêm phong an toàn.</strong> Bạn có thể ký biên bản phòng thi và theo dõi kết quả sau khi giảng viên công bố điểm. {submission && `Trạng thái: ${submission.status}.`}</div>}{audioRecorder.isRecording && <div className="mb-4 flex items-center gap-2 rounded-xl bg-[#fff4f5] px-3.5 py-2.5 text-sm font-semibold text-[#b33d52]"><span className="size-2 animate-pulse rounded-full bg-[#d9455d]" />Đang ghi âm · {formatRecordingDuration(recordingSeconds)} · Còn {kiosk.remainingStrikes} lần nhắc nhở toàn màn hình</div>}{!canViewQuestions ? <div className="rounded-2xl border border-dashed border-[#82aedb]/55 bg-[#F4FBFD] p-8 text-center"><LockKeyhole className="mx-auto size-10 text-[#1C4D8D]" /><h3 className="mt-3 text-base font-bold text-[#0F2854]">Nội dung đề thi đang được niêm phong bảo mật</h3><p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#596b84]">{!isInProgress ? 'Vui lòng bấm "Xác nhận nhận máy (Check-in)" để đối chiếu máy trạm trước khi bước vào ca thi.' : 'Để mở đề thi, vui lòng thực hiện bước Kiểm tra Microphone (≥ 60dB), sau đó bấm "Bắt đầu ghi âm & Vào chế độ Kiosk Lockdown".'}</p>{isInProgress && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-[#1C4D8D] shadow-xs"><Volume2 className="size-3.5" />Trạng thái Microphone: {micTested ? `Đạt chuẩn (${micPeakDb}dB ≥ 60dB)` : `Chưa kiểm tra hoặc chưa đạt 60dB (cực đại: ${micPeakDb}dB)`}</div>}</div> : <div className="space-y-4">{questions.length === 0 ? <div className="rounded-2xl border border-dashed border-[#82aedb]/55 p-6 text-center text-sm text-[#60718a]">Ca thi chưa được gán bộ câu hỏi. Hãy liên hệ giám thị phòng thi.</div> : questions.map((question, index) => {
       const baselineTranscript = voiceBaselinesByQuestion[question.questionId] ?? ''

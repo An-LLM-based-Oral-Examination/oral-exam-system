@@ -1,3 +1,5 @@
+import { clarifyToastText } from '@/lib/userMessage'
+
 export type ToastTone = 'success' | 'info' | 'warning' | 'error'
 
 export type ToastItem = {
@@ -53,18 +55,8 @@ export function dismissToast(id: string) {
   emit()
 }
 
-/** Bỏ prefix kỹ thuật kiểu "CONFLICT: ..." / "BAD REQUEST: ...". */
-function sanitizeToastMessage(message: string) {
-  return message
-    .replace(
-      /^(CONFLICT|BAD\s*REQUEST|UNAUTHORIZED|FORBIDDEN|NOT\s*FOUND|INTERNAL\s*SERVER\s*ERROR|ERROR|WARNING|INFO)\s*[:\-–—]\s*/i,
-      '',
-    )
-    .trim()
-}
-
 function push(message: string, tone: ToastTone, durationMs?: number) {
-  const text = sanitizeToastMessage(message)
+  const text = clarifyToastText(message)
   if (!text) return
 
   const duration = durationMs ?? DURATION_MS[tone]

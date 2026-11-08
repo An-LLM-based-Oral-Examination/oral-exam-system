@@ -16,8 +16,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { ds } from '@/design/system'
-import type { ProblemDetails } from '@/types/auth.types'
 import {
   studentOverviewService,
   type CourseSummary,
@@ -26,6 +26,7 @@ import {
   type PracticeHistoryItem,
 } from '@/services/studentOverview.service'
 import { EmptyState } from '@/components/common/EmptyState'
+import { toast } from '@/components/common/toastStore'
 import { StudentClassPanel } from '@/components/student/StudentClassPanel'
 import { BannerFact, PageBanner } from '@/design/ui'
 import { classService } from '@/services/class.service'
@@ -81,12 +82,6 @@ function courseCodeTone(code?: string) {
 
 function padCount(value: number) {
   return String(value).padStart(2, '0')
-}
-
-function getLoadErrorMessage(error: unknown) {
-  if (!error || typeof error !== 'object') return 'Không tải được dữ liệu tổng quan.'
-  const problem = error as Partial<ProblemDetails>
-  return problem.detail || problem.title || 'Không tải được dữ liệu tổng quan.'
 }
 
 function average(values: number[]) {
@@ -294,7 +289,6 @@ export function StudentDashboardPage() {
   const [quotas, setQuotas] = useState<MockExamQuota[]>([])
   const [classCount, setClassCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
@@ -337,16 +331,16 @@ export function StudentDashboardPage() {
       setOfficialTickets(nextOfficialTickets)
 
       if (coursesResult.status === 'rejected' && historyResult.status === 'rejected') {
-        setLoadError(getLoadErrorMessage(coursesResult.reason))
+        toast.error(userMessage(coursesResult.reason, 'Không tải được dữ liệu tổng quan. Vui lòng thử lại.'))
         setQuotas([])
         setIsLoading(false)
         return
       }
 
       if (coursesResult.status === 'rejected') {
-        setLoadError(getLoadErrorMessage(coursesResult.reason))
+        toast.error(userMessage(coursesResult.reason, 'Không tải được dữ liệu tổng quan. Vui lòng thử lại.'))
       } else if (historyResult.status === 'rejected') {
-        setLoadError(getLoadErrorMessage(historyResult.reason))
+        toast.error(userMessage(historyResult.reason, 'Không tải được lịch sử luyện tập. Vui lòng thử lại.'))
       }
 
       const quotaResults = await Promise.all(
@@ -446,15 +440,6 @@ export function StudentDashboardPage() {
           </article>
         ))}
       </section>
-
-      {loadError && (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-700"
-        >
-          {loadError}
-        </div>
-      )}
 
       <StudentClassPanel onClassCount={setClassCount} />
 

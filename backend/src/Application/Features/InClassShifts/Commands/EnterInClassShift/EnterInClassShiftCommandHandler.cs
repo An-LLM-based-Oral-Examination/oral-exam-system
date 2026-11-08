@@ -18,7 +18,8 @@ namespace OralExamination.Application.Features.InClassShifts.Commands.EnterInCla
 
 public sealed class EnterInClassShiftCommandHandler(
     IApplicationDbContext context,
-    IValidator<EnterInClassShiftCommand> validator)
+    IValidator<EnterInClassShiftCommand> validator,
+    IGradingQueueChannel gradingQueue)
     : IRequestHandler<EnterInClassShiftCommand, Result<JoinInClassShiftResponse>>
 {
     private const int GracePeriodSeconds = 45;
@@ -135,7 +136,18 @@ public sealed class EnterInClassShiftCommandHandler(
                 await context.SaveChangesAsync(cancellationToken);
             }
 
+            if (InClassShiftLifecycle.IsPersonalExamTimeExpired(existingParticipant, shift, utcNow))
+            {
+                await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+                    context,
+                    gradingQueue,
+                    existingParticipant,
+                    cancellationToken);
+                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
+            }
+
             var existingDtos = await LoadQuestionDtosAsync(existingIds, cancellationToken);
+            var existingEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(existingParticipant, shift);
             return Result<JoinInClassShiftResponse>.Success(new JoinInClassShiftResponse(
                 shift.Id,
                 existingParticipant.StudentId,
@@ -148,7 +160,9 @@ public sealed class EnterInClassShiftCommandHandler(
                 existingDtos,
                 targetQuestionCount,
                 shift.HasFollowUp,
-                shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0
+                shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
+                existingEndsAt,
+                InClassShiftLifecycle.GetRemainingExamSeconds(existingEndsAt, utcNow)
             ));
         }
 
@@ -174,6 +188,7 @@ public sealed class EnterInClassShiftCommandHandler(
         context.InClassShiftParticipants.Add(participant);
         await context.SaveChangesAsync(cancellationToken);
 
+        var examEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant, shift);
         var response = new JoinInClassShiftResponse(
             shift.Id,
             participant.StudentId,
@@ -186,7 +201,9 @@ public sealed class EnterInClassShiftCommandHandler(
             assignedQuestionDtos,
             targetQuestionCount,
             shift.HasFollowUp,
-            shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0
+            shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
+            examEndsAt,
+            InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt, utcNow)
         );
 
         return Result<JoinInClassShiftResponse>.Success(response);

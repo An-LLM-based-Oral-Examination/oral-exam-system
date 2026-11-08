@@ -10,19 +10,16 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { overlay } from '@/design/system'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { ActiveTotpPassword, InClassShift } from '@/types/inClassShift.types'
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể tải mã OTP.'
+  return userMessage(error, 'Không tải được mã OTP. Vui lòng thử lại.')
 }
 
 /** Popup chiếu mã OTP cho sinh viên vào ca. */
@@ -39,7 +36,7 @@ export function InClassShiftProjectorDialog({
   const [otp, setOtp] = useState<ActiveTotpPassword | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tick, setTick] = useState(0)
+  const [nowMs, setNowMs] = useState(0)
 
   const refreshPassword = useCallback(async () => {
     if (!shiftId) return
@@ -56,28 +53,30 @@ export function InClassShiftProjectorDialog({
   useEffect(() => {
     if (!open || !shiftId) return
     let cancelled = false
-    const boot = async () => {
+    const cancelBoot = scheduleUi(() => {
       setLoading(true)
       setError('')
       setOtp(null)
       setShift(null)
-      try {
-        const [shiftResult, password] = await Promise.all([
-          inClassShiftService.getShift(shiftId),
-          inClassShiftService.getActivePassword(shiftId),
-        ])
-        if (cancelled) return
-        setShift(shiftResult)
-        setOtp(password)
-      } catch (bootError) {
-        if (!cancelled) setError(getErrorMessage(bootError))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void boot()
+      void (async () => {
+        try {
+          const [shiftResult, password] = await Promise.all([
+            inClassShiftService.getShift(shiftId),
+            inClassShiftService.getActivePassword(shiftId),
+          ])
+          if (cancelled) return
+          setShift(shiftResult)
+          setOtp(password)
+        } catch (bootError) {
+          if (!cancelled) setError(getErrorMessage(bootError))
+        } finally {
+          if (!cancelled) setLoading(false)
+        }
+      })()
+    })
     return () => {
       cancelled = true
+      cancelBoot()
     }
   }, [open, shiftId])
 
@@ -96,21 +95,26 @@ export function InClassShiftProjectorDialog({
 
   useEffect(() => {
     if (!open) return
-    const timer = window.setInterval(() => setTick((value) => value + 1), 1000)
+    const syncNow = () => setNowMs(Date.now())
+    syncNow()
+    const timer = window.setInterval(syncNow, 1000)
     return () => window.clearInterval(timer)
   }, [open])
 
   useEffect(() => {
-    if (!open || !otp) return
+    if (!open || !otp || nowMs <= 0) return
     const expiresAt = new Date(otp.expiresAt).getTime()
-    const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
-    if (remaining <= 1) void refreshPassword()
-  }, [tick, otp, open, refreshPassword])
+    const remaining = Math.max(0, Math.ceil((expiresAt - nowMs) / 1000))
+    if (remaining > 1) return
+    return scheduleUi(() => {
+      void refreshPassword()
+    })
+  }, [nowMs, otp, open, refreshPassword])
 
   if (!open) return null
 
-  const remainingSeconds = otp
-    ? Math.max(0, Math.ceil((new Date(otp.expiresAt).getTime() - Date.now()) / 1000))
+  const remainingSeconds = otp && nowMs > 0
+    ? Math.max(0, Math.ceil((new Date(otp.expiresAt).getTime() - nowMs) / 1000))
     : 0
   const rotationTotal = shift?.passwordRotationSeconds || 300
   const progress = Math.min(100, Math.max(0, (remainingSeconds / rotationTotal) * 100))

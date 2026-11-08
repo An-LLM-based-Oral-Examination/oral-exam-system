@@ -218,7 +218,14 @@ public sealed record LecturerClassItemDto(
     bool AllowSelfEnrollment,
     bool IsActive,
     DateTime CreatedAt,
-    string? JoinPassword = null);
+    string? JoinPassword = null,
+    int ActiveShiftCount = 0);
+
+public sealed record ClassStudentLookupDto(
+    Guid StudentId,
+    string FullName,
+    string Email,
+    string? StudentCode);
 
 /// <summary>
 /// DTO thông tin sinh viên ghi danh trong lớp (hiển thị cho Giảng viên / TBM / Admin).

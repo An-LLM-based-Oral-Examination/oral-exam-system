@@ -1,6 +1,7 @@
 import { apiClient } from '@/services/api.client'
 import type {
   ClassDetail,
+  ClassStudentLookup,
   CreateManagedClassRequest,
   JoinableClassItem,
   LecturerCourseOffering,
@@ -94,6 +95,8 @@ export const classService = {
         semesterCode: readString(item, 'semesterCode'),
         enrolledCount: readNumber(item, 'enrolledCount'),
         maxStudents: readNumber(item, 'maxStudents'),
+        shiftCount: readNumber(item, 'shiftsCount', 'shiftCount'),
+        activeShiftCount: readNumber(item, 'activeShiftCount'),
         hasPassword: readBool(item, 'hasPassword'),
         isJoinEnabled: readBool(item, 'isJoinEnabled'),
       }))
@@ -146,6 +149,27 @@ export const classService = {
         }))
         .filter((shift) => shift.shiftId),
     }
+  },
+
+  async lookupStudent(query: string): Promise<ClassStudentLookup> {
+    const response = await apiClient.get<unknown>('/lecturer/classes/students/lookup', {
+      params: { q: query.trim() },
+    })
+    const item = isRecord(response.data) ? response.data : {}
+    return {
+      studentId: readString(item, 'studentId'),
+      fullName: readString(item, 'fullName'),
+      email: readString(item, 'email'),
+      studentCode: readString(item, 'studentCode'),
+    }
+  },
+
+  async assignStudent(classId: string, studentId: string): Promise<void> {
+    await apiClient.post(`/lecturer/classes/${classId}/students`, { studentId })
+  },
+
+  async dropStudent(classId: string, studentId: string): Promise<void> {
+    await apiClient.delete(`/lecturer/classes/${classId}/students/${studentId}`)
   },
 
   async createClass(payload: CreateManagedClassRequest): Promise<void> {

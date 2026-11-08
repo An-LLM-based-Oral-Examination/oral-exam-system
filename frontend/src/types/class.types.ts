@@ -29,8 +29,17 @@ export interface ManagedClass {
   semesterCode: string
   enrolledCount: number
   maxStudents: number
+  shiftCount: number
+  activeShiftCount: number
   hasPassword: boolean
   isJoinEnabled: boolean
+}
+
+export interface ClassStudentLookup {
+  studentId: string
+  fullName: string
+  email: string
+  studentCode: string
 }
 
 export interface ClassStudent {

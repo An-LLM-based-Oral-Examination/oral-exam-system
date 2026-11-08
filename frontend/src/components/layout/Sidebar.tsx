@@ -57,12 +57,6 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     end: true,
   },
   {
-    label: 'Ca kiểm tra',
-    path: '/in-class-shifts',
-    icon: UsersRound,
-    roles: ['Instructor', 'DepartmentHead', 'Admin'],
-  },
-  {
     label: 'Hậu kiểm điểm',
     path: '/lecturer/audit',
     icon: ClipboardCheck,

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Badge } from '@/components/common/Badge'
+import { toast } from '@/components/common/toastStore'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import type { ScorecardPayload } from '@/types/practice.types'
 import { Award, HelpCircle, Check, ArrowRight, SkipForward, X } from 'lucide-react'
@@ -28,6 +29,16 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
   isActionPending = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const lastError = useRef('')
+
+  useEffect(() => {
+    const next = errorMessage?.trim() ?? ''
+    if (next && next !== lastError.current) {
+      lastError.current = next
+      toast.error(next)
+    }
+    if (!next) lastError.current = ''
+  }, [errorMessage])
 
   useEffect(() => {
     const previouslyFocusedElement =
@@ -276,14 +287,6 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
             </section>
           )}
 
-          {errorMessage && (
-            <p
-              className="rounded-xl border border-[#f1c7ce] bg-[#fff5f6] p-3 text-xs leading-relaxed font-semibold text-[#ae3d50]"
-              role="alert"
-            >
-              {errorMessage}
-            </p>
-          )}
         </CardContent>
 
         <CardFooter className="mt-0 shrink-0 flex-col-reverse justify-end gap-2 border-t border-[#82aedb]/55 bg-white p-4 sm:flex-row sm:px-5">

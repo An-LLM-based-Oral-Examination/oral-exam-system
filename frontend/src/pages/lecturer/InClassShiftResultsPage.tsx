@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   CircleDashed,
   ClipboardList,
   Clock3,
@@ -19,14 +17,16 @@ import {
   X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { DialogFooter, FormDialog } from '@/design/overlays'
-import { InClassShiftPageBanner } from '@/pages/lecturer/InClassShiftPageBanner'
 import { ds, overlay } from '@/design/system'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { InClassShift, InClassSubmission } from '@/types/inClassShift.types'
 
@@ -71,12 +71,7 @@ const SUBMISSION_TABS: Array<{
 ]
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể tải bảng điểm.'
+  return userMessage(error, 'Không tải được bảng điểm. Vui lòng thử lại.')
 }
 
 function isInProgress(status: InClassSubmission['status']) {
@@ -147,7 +142,7 @@ const shiftFactClass =
   'inline-flex items-center gap-1.5 rounded-lg bg-[#D1EFF8] px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D]'
 
 export function InClassShiftResultsPage() {
-  const { shiftId = '' } = useParams()
+  const { classId = '', shiftId = '' } = useParams()
   const [shift, setShift] = useState<InClassShift | null>(null)
   const [submissions, setSubmissions] = useState<InClassSubmission[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -155,8 +150,6 @@ export function InClassShiftResultsPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [examScore, setExamScore] = useState('')
   const [examScoreError, setExamScoreError] = useState('')
   const [examComment, setExamComment] = useState('')
@@ -170,12 +163,11 @@ export function InClassShiftResultsPage() {
 
   const load = async () => {
     if (!shiftId) {
-      setError('Thiếu mã ca thi.')
+      toast.error('Thiếu mã ca thi. Hãy mở lại từ danh sách ca.')
       setLoading(false)
       return
     }
     setLoading(true)
-    setError('')
     try {
       const [shiftResult, submissionResult] = await Promise.all([
         inClassShiftService.getShift(shiftId),
@@ -189,15 +181,16 @@ export function InClassShiftResultsPage() {
         return firstReady?.id ?? submissionResult[0]?.id ?? null
       })
     } catch (loadError) {
-      setError(getErrorMessage(loadError))
+      toast.error(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return scheduleUi(() => {
+      void load()
+    })
   }, [shiftId])
 
   const selected = useMemo(() => {
@@ -214,8 +207,10 @@ export function InClassShiftResultsPage() {
   const activeAnswer = answers[answerIndex] ?? null
 
   useEffect(() => {
-    setAnswerCursor(0)
-    setGradeDialogOpen(false)
+    return scheduleUi(() => {
+      setAnswerCursor(0)
+      setGradeDialogOpen(false)
+    })
   }, [selected?.id])
 
   const viewingInProgress = selected ? isInProgress(selected.status) : false
@@ -331,7 +326,6 @@ export function InClassShiftResultsPage() {
     setExamScore(score != null ? String(score) : '')
     setExamComment(selected.overrideReason ?? '')
     setExamScoreError('')
-    setError('')
     setGradeDialogOpen(true)
   }
 
@@ -358,8 +352,6 @@ export function InClassShiftResultsPage() {
     const comment = examComment.trim()
     setExamScoreError('')
     setBusy(true)
-    setError('')
-    setNotice('')
     try {
       const updated = await inClassShiftService.gradeExam(shiftId, selected.id, answerIds, {
         lecturerScore: score,
@@ -369,10 +361,10 @@ export function InClassShiftResultsPage() {
         current.map((item) => (item.id === updated.id ? updated : item)),
       )
       const who = updated.studentCode !== '—' ? updated.studentCode : updated.studentName
-      setNotice(`Đã lưu điểm cả bài cho ${who} (${score.toFixed(1)}).`)
+      toast.success(`Đã lưu điểm cả bài cho ${who} (${score.toFixed(1)}).`)
       setGradeDialogOpen(false)
     } catch (gradeError) {
-      toast.error(getErrorMessage(gradeError))
+      toast.error(userMessage(gradeError, 'Không lưu được điểm. Vui lòng thử lại.'))
     } finally {
       setBusy(false)
     }
@@ -381,8 +373,6 @@ export function InClassShiftResultsPage() {
   const finalize = async () => {
     if (!shiftId || locked || busy) return
     setBusy(true)
-    setError('')
-    setNotice('')
     try {
       const result = await inClassShiftService.finalizeGrades(shiftId)
       setShift((current) =>
@@ -398,9 +388,9 @@ export function InClassShiftResultsPage() {
         })),
       )
       setConfirmFinalize(false)
-      setNotice(result.message)
+      toast.success(userMessage(result.message, 'Đã chốt điểm ca thi.'))
     } catch (finalizeError) {
-      setError(getErrorMessage(finalizeError))
+      toast.error(userMessage(finalizeError, 'Không chốt được điểm. Vui lòng thử lại.'))
     } finally {
       setBusy(false)
     }
@@ -409,46 +399,13 @@ export function InClassShiftResultsPage() {
   return (
     <div lang="vi" className={cn(ds.page, 'pb-28')}>
       <div className="space-y-3">
-        <InClassShiftPageBanner />
-
         <Link
-          to="/in-class-shifts"
+          to={classId ? `/lecturer/classes/${classId}?tab=shifts` : shift?.classId ? `/lecturer/classes/${shift.classId}?tab=shifts` : '/lecturer/classes'}
           className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
         >
           <ArrowLeft className="size-5" aria-hidden="true" />
-          Quay lại danh sách ca
+          Về lớp
         </Link>
-
-        {(error || notice) && (
-          <div
-            className={cn(
-              'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm',
-              error
-                ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]'
-                : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
-            )}
-            role={error ? 'alert' : 'status'}
-          >
-            <span className="flex items-center gap-2 font-medium">
-              {error ? (
-                <AlertCircle className="size-4 shrink-0" />
-              ) : (
-                <CheckCircle2 className="size-4 shrink-0" />
-              )}
-              {error || notice}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setError('')
-                setNotice('')
-              }}
-              className="text-xs font-bold underline-offset-2 hover:underline"
-            >
-              Đóng
-            </button>
-          </div>
-        )}
 
         <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={ds.sectionHeader}>

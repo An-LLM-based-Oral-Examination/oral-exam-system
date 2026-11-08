@@ -72,6 +72,18 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ParticipantNotFound);
         }
 
+        // Cho phép follow-up sau khi đã nộp đủ câu chính (Status có thể đã SUBMITTED).
+        // Chỉ khóa khi hết thời gian làm bài cá nhân.
+        if (InClassShiftLifecycle.IsPersonalExamTimeExpired(participant, shift, DateTime.UtcNow))
+        {
+            await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+                context,
+                gradingQueueChannel,
+                participant,
+                cancellationToken);
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
+        }
+
         int effectiveFollowUpIndex = request.IsFollowUp ? Math.Max(1, request.FollowUpIndex) : 0;
 
         // 1. Chặn nộp trùng lặp cùng 1 câu hỏi / lượt follow-up trong cùng 1 ca thi

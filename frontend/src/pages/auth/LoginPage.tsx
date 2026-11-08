@@ -13,11 +13,12 @@ import {
   UserRound,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { useAuth } from '@/hooks/useAuth'
-import type { ProblemDetails } from '@/types/auth.types'
 import './LoginPage.css'
 
 declare global {
@@ -61,10 +62,7 @@ const FEATURE_ITEMS = [
 ]
 
 function getLoginErrorMessage(error: unknown): string {
-  if (!error || typeof error !== 'object') return DEFAULT_LOGIN_ERROR
-
-  const problem = error as Partial<ProblemDetails>
-  return problem.detail || problem.title || DEFAULT_LOGIN_ERROR
+  return userMessage(error, DEFAULT_LOGIN_ERROR)
 }
 
 export function LoginPage() {

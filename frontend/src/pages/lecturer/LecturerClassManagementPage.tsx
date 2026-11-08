@@ -1,24 +1,23 @@
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
-import { ArrowRight, CalendarDays, Eye, EyeOff, GraduationCap, KeyRound, LoaderCircle, Lock, Plus, Search, Unlock, Users, UsersRound } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowRight, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Plus, Users, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { classService } from '@/services/class.service'
-import type { ClassDetail, LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
+import type { LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể tải dữ liệu lớp học.'
+  return userMessage(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
 }
 
 const COURSE_CODE_TONES = [
@@ -69,8 +68,7 @@ export function LecturerClassManagementPage() {
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [courseCode, setCourseCode] = useState('ALL')
-  const [detail, setDetail] = useState<ClassDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+  const navigate = useNavigate()
 
   const load = async (selectedSemester = semesterId) => {
     setLoading(true)
@@ -97,8 +95,9 @@ export function LecturerClassManagementPage() {
   }
 
   useEffect(() => {
-    void load('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return scheduleUi(() => {
+      void load('')
+    })
   }, [])
 
   const semesters = useMemo(() => {
@@ -126,19 +125,6 @@ export function LecturerClassManagementPage() {
   }, [visibleOfferings])
   const visibleClasses = classes.filter((item) => courseCode === 'ALL' || item.courseCode === courseCode)
   const semesterLabel = semesterCatalog.find((item) => item.id === semesterId)?.name || classes[0]?.semesterCode || 'hiện tại'
-
-  const openDetail = async (classId: string) => {
-    setDetail(null)
-    setDetailLoading(true)
-    try {
-      setDetail(await classService.getClassDetail(classId))
-    } catch (loadError) {
-      toast.error(getErrorMessage(loadError))
-      setDetail(null)
-    } finally {
-      setDetailLoading(false)
-    }
-  }
 
   return (
     <div lang="vi" className={ds.page}>
@@ -230,24 +216,13 @@ export function LecturerClassManagementPage() {
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {visibleClasses.map((item) => (
                 <li key={item.id}>
-                  <LecturerClassCard item={item} onOpen={(classId) => void openDetail(classId)} />
+                  <LecturerClassCard item={item} onOpen={(classId) => navigate(`/lecturer/classes/${classId}`)} />
                 </li>
               ))}
             </ul>
           )}
         </div>
       </section>
-
-      {(detailLoading || detail) && (
-        <ClassDetailDialog
-          detail={detail}
-          loading={detailLoading}
-          onClose={() => {
-            setDetail(null)
-            setDetailLoading(false)
-          }}
-        />
-      )}
 
       {createOpen && (
         <CreateClassDialog
@@ -264,83 +239,10 @@ export function LecturerClassManagementPage() {
   )
 }
 
-function formatWhen(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('vi-VN', { hour12: false })
-}
-
-function joinMethodLabel(value: string) {
-  const key = value.toLowerCase()
-  if (key === 'assigned') return 'Được thêm'
-  if (key === 'self' || key === 'self_enroll') return 'Tự tham gia'
-  if (key === 'password') return 'Mật khẩu'
-  return value || 'Tham gia'
-}
-
-function shiftStatusLabel(value: string) {
-  const labels: Record<string, string> = {
-    SCHEDULED: 'Chờ kích hoạt',
-    ACTIVE: 'Đang diễn ra',
-    IN_PROGRESS: 'Đang diễn ra',
-    FINALIZED: 'Đã chốt điểm',
-    CLOSED: 'Đã kết thúc',
-    ENDED: 'Đã kết thúc',
-  }
-  return labels[value] || value || 'Chưa rõ'
-}
-
-function nameInitial(name: string) {
-  const part = name.trim().split(/\s+/).filter(Boolean).at(-1) || '?'
-  return part.slice(0, 1).toUpperCase()
-}
-
-function joinSecretLabel(password: string | null | undefined, hasPassword: boolean) {
-  if (password?.trim()) return password.trim()
-  if (hasPassword) return null
-  return ''
-}
-
-function JoinPasswordReveal({
-  password,
-  hasPassword,
-}: {
-  password: string | null | undefined
-  hasPassword: boolean
-}) {
-  const [visible, setVisible] = useState(false)
-  const secret = joinSecretLabel(password, hasPassword)
-  const canReveal = Boolean(secret)
-
-  const toggle = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!canReveal) return
-    setVisible((current) => !current)
-  }
-
-  return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      <p className="min-w-0 flex-1 truncate font-mono text-sm font-black tracking-[0.06em] text-[#0F2854]">
-        {!hasPassword && !secret
-          ? 'Chưa đặt'
-          : visible && secret
-            ? secret
-            : '••••••••'}
-      </p>
-      {canReveal && (
-        <button
-          type="button"
-          aria-label={visible ? 'Ẩn mật khẩu tham gia' : 'Hiện mật khẩu tham gia'}
-          aria-pressed={visible}
-          onClick={toggle}
-          className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#82aedb]/55 bg-white text-[#1C4D8D] shadow-[0_1px_0_#fff_inset] transition hover:border-[#1C4D8D] hover:bg-[#E7F3FB]"
-        >
-          {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </button>
-      )}
-    </div>
-  )
+function classShiftLine(item: ManagedClass) {
+  if (item.activeShiftCount > 0) return `${item.activeShiftCount} ca đang diễn ra`
+  if (item.shiftCount > 0) return 'Chưa có ca đang diễn ra'
+  return 'Chưa có ca'
 }
 
 function LecturerClassCard({
@@ -395,21 +297,6 @@ function LecturerClassCard({
               {item.semesterCode}
             </span>
           </div>
-          <span
-            className={cn(
-              'inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] font-bold',
-              item.isJoinEnabled
-                ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                : 'border-[#d5dde8] bg-[#F8FBFD] text-[#5b6b84]',
-            )}
-          >
-            {item.isJoinEnabled ? (
-              <Unlock className="size-3 shrink-0" aria-hidden="true" />
-            ) : (
-              <Lock className="size-3 shrink-0" aria-hidden="true" />
-            )}
-            {item.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}
-          </span>
         </div>
 
         <p className="mt-3 text-[11px] font-bold tracking-[0.08em] text-[#5b6b84] uppercase">
@@ -445,20 +332,12 @@ function LecturerClassCard({
           </div>
         </div>
 
-        <div className="mt-3 rounded-2xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.05em] text-[#5b6b84] uppercase">
-              <KeyRound className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
-              Mật khẩu tham gia
-            </p>
-          </div>
-          <div className="mt-1.5">
-            <JoinPasswordReveal password={item.joinPassword} hasPassword={item.hasPassword} />
-          </div>
-        </div>
+        <p className={cn('mt-3 text-sm font-bold', item.activeShiftCount > 0 ? 'text-[#16836a]' : 'text-[#5b6b84]')}>
+          {classShiftLine(item)}
+        </p>
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-3.5">
-          <span className="text-xs font-semibold text-[#5b6b84]">Nhấn để xem sinh viên & ca thi</span>
+          <span className="text-xs font-semibold text-[#5b6b84]">Mở lớp</span>
           <span className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition group-hover:border-[#1C4D8D] group-hover:bg-[#E7F3FB]">
             Chi tiết
             <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" aria-hidden="true" />
@@ -469,163 +348,6 @@ function LecturerClassCard({
   )
 }
 
-function ClassDetailDialog({
-  detail,
-  loading,
-  onClose,
-}: {
-  detail: ClassDetail | null
-  loading: boolean
-  onClose: () => void
-}) {
-  const [keyword, setKeyword] = useState('')
-  const students = (detail?.students ?? []).filter((student) => {
-    const text = `${student.fullName} ${student.studentCode} ${student.email}`.toLowerCase()
-    return text.includes(keyword.trim().toLowerCase())
-  })
-
-  return (
-    <FormDialog
-      titleId="class-detail-title"
-      eyebrow={detail ? `${detail.courseCode} · ${detail.semesterCode}` : 'Lớp học phần'}
-      title={detail?.name || 'Đang tải lớp'}
-      subtitle={detail?.courseName}
-      icon={GraduationCap}
-      onClose={onClose}
-      size="lg"
-    >
-      {loading && <p className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]"><LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" /> Đang tải thông tin lớp...</p>}
-      {detail && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className={cn('min-w-0 rounded-2xl border border-[#82aedb]/55 bg-white px-3.5 py-3', ds.panelShadow)}>
-              <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
-                <span className={ds.sectionIconWrap}>
-                  <KeyRound className="size-3.5" aria-hidden="true" />
-                </span>
-                Mật khẩu tham gia
-              </p>
-              <div className="mt-2.5">
-                <JoinPasswordReveal password={detail.joinPassword} hasPassword={detail.hasPassword} />
-              </div>
-            </div>
-
-            <div className={cn('min-w-0 rounded-2xl border border-[#82aedb]/55 bg-white px-3.5 py-3', ds.panelShadow)}>
-              <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
-                <span className={ds.sectionIconWrap}>
-                  <Users className="size-3.5" aria-hidden="true" />
-                </span>
-                Sĩ số
-              </p>
-              <div className="mt-2.5">
-                <p className="text-sm font-black text-[#0F2854]">
-                  {detail.enrolledCount}
-                  <span className="font-semibold text-[#5b6b84]">/{detail.maxStudents}</span>
-                </p>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E7F3FB] ring-1 ring-[#82aedb]/30">
-                  <div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,#4988C4,#1C4D8D)]"
-                    style={{
-                      width: `${Math.max(
-                        detail.maxStudents > 0
-                          ? Math.min(100, (detail.enrolledCount / detail.maxStudents) * 100)
-                          : 0,
-                        detail.enrolledCount > 0 ? 8 : 0,
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={cn('min-w-0 rounded-2xl border border-[#82aedb]/55 bg-white px-3.5 py-3', ds.panelShadow)}>
-              <p className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
-                <span className={ds.sectionIconWrap}>
-                  {detail.isJoinEnabled ? (
-                    <Unlock className="size-3.5" aria-hidden="true" />
-                  ) : (
-                    <Lock className="size-3.5" aria-hidden="true" />
-                  )}
-                </span>
-                Tham gia
-              </p>
-              <div className="mt-2.5">
-                <span
-                  className={cn(
-                    'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-bold',
-                    detail.isJoinEnabled
-                      ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                      : 'border-[#d5dde8] bg-[#F8FBFD] text-[#5b6b84]',
-                  )}
-                >
-                  {detail.isJoinEnabled ? (
-                    <Unlock className="size-3.5 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <Lock className="size-3.5 shrink-0" aria-hidden="true" />
-                  )}
-                  {detail.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-3', ds.panelShadow)}>
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="inline-flex items-center gap-2 text-sm font-bold text-[#0F2854]">
-                <span className={ds.sectionIconWrap}><Users className="size-3.5" aria-hidden="true" /></span>
-                Sinh viên · {detail.students.length}
-              </h3>
-              <label className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-                <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm tên, mã, email" className="h-8 w-40 rounded-full border border-[#4988C4] bg-[#F8FBFD] pr-2.5 pl-7 text-xs font-semibold text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 sm:w-48" />
-              </label>
-            </div>
-            {students.length === 0 ? (
-              <EmptyState compact icon={Users} title="Chưa có sinh viên khớp bộ lọc" className="mt-2" />
-            ) : (
-              <ul className="mt-2 space-y-1.5">
-                {students.map((student) => (
-                  <li key={student.studentId} className="flex items-center gap-2.5 rounded-xl bg-[#F8FBFD] px-2.5 py-1.5">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1C4D8D] text-xs font-black text-white">{nameInitial(student.fullName)}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-[#0F2854]">{student.fullName}</p>
-                      <p className="truncate text-xs text-[#5b6b84]">{student.studentCode || 'Chưa có mã'} · {student.email}</p>
-                    </div>
-                    <span className={ds.infoChip}>{joinMethodLabel(student.joinMethod)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-3', ds.panelShadow)}>
-            <h3 className="inline-flex items-center gap-2 text-sm font-bold text-[#0F2854]">
-              <span className={ds.sectionIconWrap}><CalendarDays className="size-3.5" aria-hidden="true" /></span>
-              Ca kiểm tra · {detail.shifts.length}
-            </h3>
-            {detail.shifts.length === 0 ? (
-              <EmptyState compact icon={CalendarDays} title="Lớp chưa có ca kiểm tra" className="mt-2" />
-            ) : (
-              <ul className="mt-2 space-y-1.5">
-                {detail.shifts.map((shift) => (
-                  <li key={shift.shiftId} className="rounded-xl bg-[#F8FBFD] px-2.5 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-bold text-[#0F2854]">{shift.shiftName}</p>
-                      <span className={shift.status === 'ACTIVE' || shift.status === 'IN_PROGRESS' ? ds.successChip : ds.infoChip}>
-                        {shiftStatusLabel(shift.status)}{shift.isLocked ? ' · Đã khóa' : ''}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs font-semibold text-[#5b6b84]">{formatWhen(shift.startTime)} – {formatWhen(shift.endTime)} · {shift.participantsCount} lượt vào · {shift.submissionsCount} bài nộp</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
-    </FormDialog>
-  )
-}
 
 type CreateClassFieldErrors = {
   offeringId?: string

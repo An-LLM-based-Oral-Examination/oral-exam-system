@@ -15,6 +15,7 @@ using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassS
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
 using OralExamination.Application.Features.InClassShifts.Commands.FinishStudentInClassExam;
+using OralExamination.Application.Features.InClassShifts.Commands.ResumeInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
 using OralExamination.Application.Features.InClassShifts.DTOs;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftById;
@@ -499,6 +500,38 @@ public class InClassShiftsController(ISender sender) : ControllerBase
                 });
             }
 
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Sinh viên vào lại phòng sau sự cố (đóng tab / crash) — không cần OTP; đồng hồ cá nhân vẫn chạy.
+    /// </summary>
+    [HttpPost("{id}/resume")]
+    [HttpPost("/api/v1/student/in-class-shifts/{id}/resume")]
+    [Authorize(Roles = "student")]
+    [ProducesResponseType(typeof(JoinInClassShiftResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResumeShift(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        var studentId = GetAuthenticatedUserId();
+        if (studentId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new ResumeInClassShiftCommand(studentId, id), cancellationToken);
+        if (!result.IsSuccess)
+        {
             return BadRequest(new ProblemDetails
             {
                 Title = "Bad Request",

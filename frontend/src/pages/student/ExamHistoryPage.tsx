@@ -21,7 +21,8 @@ import {
   ShieldCheck,
   Trophy,
 } from 'lucide-react'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { useAuth } from '@/hooks/useAuth'

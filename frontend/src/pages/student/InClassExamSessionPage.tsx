@@ -12,7 +12,9 @@ import {
 } from 'lucide-react'
 import { toast } from '@/components/common/toastStore'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import {
   getSpeechRecognitionLangForCourse,
@@ -22,9 +24,13 @@ import {
 } from '@/services/speech.service'
 import type { InClassShift, StudentExamQuestion } from '@/types/inClassShift.types'
 import {
+  clearInClassExamDrafts,
   clearInClassExamSession,
+  loadInClassExamDrafts,
   loadInClassExamSession,
   markInClassShiftCompleted,
+  saveInClassExamDrafts,
+  saveInClassExamSession,
 } from '@/utils/inClassExamSessionStorage'
 
 function formatClock(totalSeconds: number) {
@@ -47,27 +53,22 @@ function fitTranscriptTextarea(el: HTMLTextAreaElement | null) {
   el.style.overflowY = contentHeight > maxHeight + 1 ? 'auto' : 'hidden'
 }
 
-function examDurationMinutesOf(shift: InClassShift) {
-  return Math.max(1, shift.examDurationMinutes ?? shift.durationMinutes ?? 30)
-}
-
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể xử lý ca thi trên lớp.'
+  return userMessage(error, 'Không xử lý được ca thi trên lớp. Vui lòng thử lại.')
 }
 
 export function InClassExamSessionPage() {
   const navigate = useNavigate()
   const boot = loadInClassExamSession()
+  const draftBoot = boot ? loadInClassExamDrafts(boot.shift.id) : null
   const [shift] = useState<InClassShift | null>(boot?.shift ?? null)
   const [questions] = useState<StudentExamQuestion[]>(boot?.questions ?? [])
-  const [startedAt] = useState(boot?.startedAt ?? Date.now())
-  const [questionIndex, setQuestionIndex] = useState(0)
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [examEndsAt] = useState(() => boot?.examEndsAt ?? Date.now())
+  const [questionIndex, setQuestionIndex] = useState(() => {
+    if (!boot || !draftBoot) return 0
+    return Math.max(0, Math.min(boot.questions.length - 1, draftBoot.questionIndex))
+  })
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => draftBoot?.drafts ?? {})
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
   const [isReadingQuestion, setIsReadingQuestion] = useState(false)
@@ -75,12 +76,9 @@ export function InClassExamSessionPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reRecording, setReRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const examLimitSeconds = shift ? examDurationMinutesOf(shift) * 60 : 0
-  const [secondsLeft, setSecondsLeft] = useState(() => {
-    if (!shift) return 0
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000)
-    return Math.max(0, examDurationMinutesOf(shift) * 60 - elapsed)
-  })
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)),
+  )
   const [answerError, setAnswerError] = useState('')
   const speech = useSpeechRecognition()
   const transcriptAreaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -92,11 +90,14 @@ export function InClassExamSessionPage() {
   const questionsRef = useRef(questions)
   const questionIndexRef = useRef(questionIndex)
   const readingGenerationRef = useRef(0)
-  speechRef.current = speech
-  draftsRef.current = drafts
-  submittedRef.current = submitted
-  questionsRef.current = questions
-  questionIndexRef.current = questionIndex
+
+  useEffect(() => {
+    speechRef.current = speech
+    draftsRef.current = drafts
+    submittedRef.current = submitted
+    questionsRef.current = questions
+    questionIndexRef.current = questionIndex
+  }, [speech, drafts, submitted, questions, questionIndex])
 
   const question = questions[questionIndex]
   const draft = question ? drafts[question.questionId] ?? '' : ''
@@ -112,7 +113,10 @@ export function InClassExamSessionPage() {
 
   const leaveWithMessage = useCallback(
     (message: string, finishedShiftId?: string) => {
-      if (finishedShiftId) markInClassShiftCompleted(finishedShiftId)
+      if (finishedShiftId) {
+        markInClassShiftCompleted(finishedShiftId)
+        clearInClassExamDrafts(finishedShiftId)
+      }
       clearInClassExamSession()
       navigate('/in-class-exam', {
         replace: true,
@@ -130,14 +134,40 @@ export function InClassExamSessionPage() {
 
   useEffect(() => {
     if (!shift) return
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
-      setSecondsLeft(Math.max(0, examLimitSeconds - elapsed))
-    }
+    const tick = () => setSecondsLeft(Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)))
     tick()
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
-  }, [examLimitSeconds, shift, startedAt])
+  }, [examEndsAt, shift])
+
+  useEffect(() => {
+    if (!shift || questions.length === 0) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const results = await inClassShiftService.listStudentResults(shift.id)
+        if (cancelled) return
+        const nextSubmitted: Record<string, boolean> = {}
+        const nextDrafts: Record<string, string> = { ...draftsRef.current }
+        for (const item of results) {
+          if (!item.questionId) continue
+          if (item.transcript?.trim()) {
+            nextSubmitted[item.questionId] = true
+            nextDrafts[item.questionId] = item.transcript
+          }
+        }
+        setSubmitted(nextSubmitted)
+        setDrafts(nextDrafts)
+        const firstOpen = questions.findIndex((q) => !nextSubmitted[q.questionId])
+        if (firstOpen >= 0) setQuestionIndex(firstOpen)
+      } catch {
+        // Giữ draft local nếu chưa tải được bài đã nộp.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [questions, shift])
 
   useEffect(() => {
     if (!showTranscript) return
@@ -185,61 +215,95 @@ export function InClassExamSessionPage() {
       .filter((item) => item.transcript.length > 0)
   }, [])
 
-  const flushExamKeepalive = useCallback(() => {
+  const persistDrafts = useCallback(() => {
     if (!shift || endedRef.current) return
-    endedRef.current = true
+    const pendingDrafts = { ...draftsRef.current }
+    const speechNow = speechRef.current
+    const currentQuestion = questionsRef.current[questionIndexRef.current]
+    if (currentQuestion && speechNow.transcript.trim()) {
+      pendingDrafts[currentQuestion.questionId] = speechNow.transcript
+    }
+    saveInClassExamDrafts(shift.id, {
+      drafts: pendingDrafts,
+      questionIndex: questionIndexRef.current,
+    })
+    if (boot) {
+      saveInClassExamSession({
+        ...boot,
+        examEndsAt,
+      })
+    }
+  }, [boot, examEndsAt, shift])
+
+  /** Nộp transcript + finish — enqueue AI trên submit-answer. */
+  const submitExamForGrading = useCallback(async () => {
+    if (!shift) return false
     stopReadingQuestion()
     const speechNow = speechRef.current
     if (speechNow.isListening) speechNow.stopListening()
     const answers = collectPendingAnswers()
-    inClassShiftService.flushStudentExamOnLeave(shift.id, answers)
-    markInClassShiftCompleted(shift.id)
-    clearInClassExamSession()
+    await Promise.all(
+      answers.map(async (item) => {
+        try {
+          await inClassShiftService.submitStudentAnswer(shift.id, item.questionId, item.transcript)
+        } catch {
+          // Vẫn gọi finish; câu thiếu có thể được xử lý khi đóng ca / hết giờ server.
+        }
+      }),
+    )
+    try {
+      await inClassShiftService.finishStudentExam(shift.id)
+      markInClassShiftCompleted(shift.id)
+      clearInClassExamDrafts(shift.id)
+      clearInClassExamSession()
+      return true
+    } catch {
+      return false
+    }
   }, [collectPendingAnswers, shift, stopReadingQuestion])
 
   const endExam = useCallback(
     (message: string) => {
       if (!shift || endedRef.current) return
       endedRef.current = true
-      stopReadingQuestion()
-      const speechNow = speechRef.current
-      if (speechNow.isListening) speechNow.stopListening()
-      const answers = collectPendingAnswers()
       void (async () => {
-        await Promise.all(
-          answers.map(async (item) => {
-            try {
-              await inClassShiftService.submitStudentAnswer(shift.id, item.questionId, item.transcript)
-            } catch {
-              // Máy chủ vẫn nộp các câu chưa có bài khi ca đóng.
-            }
-          }),
-        )
-        try {
-          await inClassShiftService.finishStudentExam(shift.id)
-        } catch {
-          // Vẫn rời phòng nếu finish lỗi mạng — danh sách sẽ khóa khi tải lại.
+        const finishedOk = await submitExamForGrading()
+        if (finishedOk) {
+          leaveWithMessage(message, shift.id)
+          return
         }
-        leaveWithMessage(message, shift.id)
+        endedRef.current = false
+        toast.error('Không nộp được bài lên máy chủ. Hãy thử nộp lại.')
+        setBusy(false)
       })()
     },
-    [collectPendingAnswers, leaveWithMessage, shift, stopReadingQuestion],
+    [leaveWithMessage, shift, submitExamForGrading],
   )
   const endExamRef = useRef(endExam)
-  endExamRef.current = endExam
-  const flushExamKeepaliveRef = useRef(flushExamKeepalive)
-  flushExamKeepaliveRef.current = flushExamKeepalive
+  const persistDraftsRef = useRef(persistDrafts)
+  const submitExamForGradingRef = useRef(submitExamForGrading)
+
+  useEffect(() => {
+    endExamRef.current = endExam
+    persistDraftsRef.current = persistDrafts
+    submitExamForGradingRef.current = submitExamForGrading
+  }, [endExam, persistDrafts, submitExamForGrading])
+
+  useEffect(() => {
+    if (!shift) return
+    const timer = window.setInterval(() => persistDraftsRef.current(), 5000)
+    return () => window.clearInterval(timer)
+  }, [shift])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      flushExamKeepaliveRef.current()
+      persistDraftsRef.current()
       event.preventDefault()
-      event.returnValue = 'Bài làm sẽ được nộp tự động nếu bạn rời trang.'
+      event.returnValue = 'Thời gian vẫn chạy. Bạn có thể vào lại để làm tiếp trước khi hết giờ.'
     }
     const onPageHide = (event: PageTransitionEvent) => {
-      // persisted = bfcache — không nộp lại khi chỉ vào cache.
       if (event.persisted) return
-      flushExamKeepaliveRef.current()
+      persistDraftsRef.current()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('pagehide', onPageHide)
@@ -256,17 +320,55 @@ export function InClassExamSessionPage() {
       currentLocation.pathname !== nextLocation.pathname,
   )
 
+  const leaveSubmitInFlightRef = useRef(false)
+
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    // Điều hướng trong app (Back, link) → nộp keepalive rồi cho đi tiếp.
-    flushExamKeepaliveRef.current()
-    toast.success('Bạn đã rời trang làm bài. Bài làm được nộp tự động để AI chấm.')
-    blocker.proceed?.()
-  }, [blocker])
+    if (!shift) {
+      blocker.proceed?.()
+      return
+    }
+    if (leaveSubmitInFlightRef.current) return
+    if (endedRef.current) {
+      blocker.proceed?.()
+      return
+    }
+
+    const shouldSubmit = window.confirm(
+      'Nộp bài và thoát phòng?\n\nChọn OK để nộp bài (AI chấm). Chọn Cancel để ở lại làm tiếp.',
+    )
+    if (!shouldSubmit) {
+      persistDraftsRef.current()
+      blocker.reset?.()
+      return
+    }
+
+    leaveSubmitInFlightRef.current = true
+    endedRef.current = true
+    void (async () => {
+      const finishedOk = await submitExamForGradingRef.current()
+      leaveSubmitInFlightRef.current = false
+      if (finishedOk) {
+        toast.success('Đã nộp bài. AI đang chấm nền.')
+        blocker.reset?.()
+        navigate('/in-class-exam', {
+          replace: true,
+          state: {
+            notice: 'Đã nộp bài. AI đang chấm nền; điểm hiện sau khi giảng viên chốt.',
+            finishedShiftId: shift.id,
+          },
+        })
+        return
+      }
+      endedRef.current = false
+      toast.error('Không nộp được bài lên máy chủ. Hãy ở lại phòng và thử nộp lại.')
+      blocker.reset?.()
+    })()
+  }, [blocker, navigate, shift])
 
   useEffect(() => {
     if (secondsLeft !== 0) return
-    endExamRef.current('Hết thời gian làm bài. Bài chưa nộp được gửi để AI chấm.')
+    endExamRef.current('Hết thời gian làm bài. Bài làm được nộp tự động để AI chấm.')
   }, [secondsLeft])
 
   useEffect(() => {
@@ -292,8 +394,7 @@ export function InClassExamSessionPage() {
 
   useEffect(() => {
     if (!speech.isListening) {
-      setRecordingSeconds(0)
-      return
+      return scheduleUi(() => setRecordingSeconds(0))
     }
     const timer = window.setInterval(() => setRecordingSeconds((current) => current + 1), 1000)
     return () => window.clearInterval(timer)
@@ -301,13 +402,18 @@ export function InClassExamSessionPage() {
 
   useEffect(() => {
     if (!speech.isListening || !question) return
-    setDrafts((current) => ({ ...current, [question.questionId]: speech.transcript }))
+    return scheduleUi(() => {
+      setDrafts((current) => ({ ...current, [question.questionId]: speech.transcript }))
+    })
   }, [speech.isListening, speech.transcript, question])
 
   const wasListeningRef = useRef(false)
   useEffect(() => {
     if (wasListeningRef.current && !speech.isListening) {
-      setReRecording(false)
+      return scheduleUi(() => {
+        setReRecording(false)
+        wasListeningRef.current = speech.isListening
+      })
     }
     wasListeningRef.current = speech.isListening
   }, [speech.isListening])
@@ -320,7 +426,7 @@ export function InClassExamSessionPage() {
       window.clearTimeout(timer)
       stopReadingQuestion()
     }
-  }, [autoRead, question?.questionId, startReadingQuestion, stopReadingQuestion])
+  }, [autoRead, question, startReadingQuestion, stopReadingQuestion])
 
   useEffect(() => {
     if (!settingsOpen) return

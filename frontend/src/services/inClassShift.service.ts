@@ -9,6 +9,7 @@ import type {
   InClassShift,
   InClassSubmission,
   LecturerClassOption,
+  EnterInClassExamResult,
   StudentExamQuestion,
   StudentExamResult,
 } from '@/types/inClassShift.types'
@@ -129,6 +130,53 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     endTime: endTime || null,
     myParticipationStatus:
       readString(raw, 'myParticipationStatus', 'MyParticipationStatus') || null,
+    myJoinedAt: readString(raw, 'myJoinedAt', 'MyJoinedAt') || null,
+    myExamEndsAt: readString(raw, 'myExamEndsAt', 'MyExamEndsAt') || null,
+    myRemainingSeconds: readNullableNumber(raw, 'myRemainingSeconds', 'MyRemainingSeconds'),
+  }
+}
+
+function parseAssignedQuestions(data: Record<string, unknown>): StudentExamQuestion[] {
+  const assigned = unwrapList(data.assignedQuestions)
+  const questions = assigned
+    .filter(isRecord)
+    .map((item) => ({
+      questionId: readString(item, 'questionId'),
+      title: readString(item, 'title') || 'Câu hỏi',
+      content: readString(item, 'content'),
+    }))
+    .filter((item) => item.questionId)
+  if (questions.length > 0) return questions
+  const single = data.assignedQuestion
+  if (!isRecord(single)) return []
+  const questionId = readString(single, 'questionId')
+  if (!questionId) return []
+  return [
+    {
+      questionId,
+      title: readString(single, 'title') || 'Câu hỏi',
+      content: readString(single, 'content'),
+    },
+  ]
+}
+
+function parseEnterResult(data: unknown, fallbackDurationMinutes: number): EnterInClassExamResult {
+  const record = isRecord(data) ? data : {}
+  const joinedAt = readString(record, 'joinedAt') || new Date().toISOString()
+  const remainingSeconds = Math.max(0, readNumber(record, 'remainingSeconds'))
+  const examEndsAtRaw = readString(record, 'examEndsAt')
+  const examEndsAt =
+    examEndsAtRaw ||
+    new Date(
+      Date.parse(joinedAt) + Math.max(1, fallbackDurationMinutes) * 60 * 1000,
+    ).toISOString()
+  return {
+    questions: parseAssignedQuestions(record),
+    joinedAt,
+    examEndsAt,
+    remainingSeconds,
+    timedOut: Boolean(record.timedOut),
+    status: readString(record, 'status') || 'JOINED',
   }
 }
 
@@ -257,11 +305,17 @@ function groupStudents(
     const overridden = answers.some((item) => item.lecturerScore != null)
     const allDone = answers.length > 0 && answers.every((item) => item.status !== 'PENDING')
     const anyGraded = answers.some((item) => item.status === 'GRADED')
+    const participationDone =
+      row.participantStatus === 'SUBMITTED' ||
+      row.participantStatus === 'GRADED' ||
+      row.participantStatus === 'FINALIZED' ||
+      row.participantStatus === 'COMPLETED'
     let status: InClassSubmission['status'] = 'JOINED'
-    if (anyGraded && allDone) status = 'GRADED'
-    else if (allDone) status = 'SUBMITTED'
-    else if (answers.some((item) => item.status !== 'PENDING')) status = 'IN_PROGRESS'
-    else if (row.participantStatus === 'IN_PROGRESS') status = 'IN_PROGRESS'
+    if (anyGraded && (allDone || participationDone)) status = 'GRADED'
+    else if (allDone || participationDone) status = 'SUBMITTED'
+    else if (answers.some((item) => item.status !== 'PENDING') || row.participantStatus === 'IN_PROGRESS') {
+      status = 'IN_PROGRESS'
+    }
     if (shiftLocked && status !== 'JOINED' && status !== 'IN_PROGRESS') status = 'FINALIZED'
     return {
       id: studentId,
@@ -504,27 +558,23 @@ export const inClassShiftService = {
     })
   },
 
-  async enterStudentShift(shiftId: string, otpCode: string): Promise<StudentExamQuestion[]> {
+  async enterStudentShift(
+    shiftId: string,
+    otpCode: string,
+    fallbackDurationMinutes = 20,
+  ): Promise<EnterInClassExamResult> {
     const response = await apiClient.post<unknown>(`/student/in-class-shifts/${shiftId}/enter`, {
       otpCode: otpCode.trim(),
     })
-    if (!isRecord(response.data)) return []
-    const assigned = unwrapList(response.data.assignedQuestions)
-    const questions = assigned.filter(isRecord).map((item) => ({
-      questionId: readString(item, 'questionId'),
-      title: readString(item, 'title') || 'Câu hỏi',
-      content: readString(item, 'content'),
-    })).filter((item) => item.questionId)
-    if (questions.length > 0) return questions
-    const single = response.data.assignedQuestion
-    if (!isRecord(single)) return []
-    const questionId = readString(single, 'questionId')
-    if (!questionId) return []
-    return [{
-      questionId,
-      title: readString(single, 'title') || 'Câu hỏi',
-      content: readString(single, 'content'),
-    }]
+    return parseEnterResult(response.data, fallbackDurationMinutes)
+  },
+
+  async resumeStudentShift(
+    shiftId: string,
+    fallbackDurationMinutes = 20,
+  ): Promise<EnterInClassExamResult> {
+    const response = await apiClient.post<unknown>(`/student/in-class-shifts/${shiftId}/resume`)
+    return parseEnterResult(response.data, fallbackDurationMinutes)
   },
 
   async submitStudentAnswer(shiftId: string, questionId: string, transcript: string): Promise<void> {
@@ -538,42 +588,6 @@ export const inClassShiftService = {
 
   async finishStudentExam(shiftId: string): Promise<void> {
     await apiClient.post(`/student/in-class-shifts/${shiftId}/finish`)
-  },
-
-  /**
-   * Nộp nhanh khi đóng tab / rời trang — dùng fetch keepalive (axios thường bị hủy).
-   */
-  flushStudentExamOnLeave(
-    shiftId: string,
-    answers: Array<{ questionId: string; transcript: string }>,
-  ): void {
-    const base = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
-    const token = sessionStorage.getItem('access_token')
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    for (const answer of answers) {
-      const transcript = answer.transcript.trim()
-      if (!transcript || !answer.questionId) continue
-      void fetch(`${base}/student/in-class-shifts/${encodeURIComponent(shiftId)}/submit-answer`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          questionId: answer.questionId,
-          transcriptText: transcript,
-          isFollowUp: false,
-          followUpIndex: 0,
-        }),
-        keepalive: true,
-      }).catch(() => undefined)
-    }
-
-    void fetch(`${base}/student/in-class-shifts/${encodeURIComponent(shiftId)}/finish`, {
-      method: 'POST',
-      headers,
-      body: '{}',
-      keepalive: true,
-    }).catch(() => undefined)
   },
 
   async listStudentResults(shiftId: string): Promise<StudentExamResult[]> {

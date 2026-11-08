@@ -6,13 +6,16 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.DropClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetStudentMyClasses;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.LookupClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.SearchAvailableClasses;
 
 namespace API.Controllers.v1;
@@ -548,6 +551,68 @@ public class ClassesController(ISender sender) : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Giảng viên tra đúng một sinh viên theo mã hoặc email trước khi thêm vào lớp.
+    /// </summary>
+    [HttpGet("lecturer/classes/students/lookup")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> LookupClassStudent(
+        [FromQuery] string? q,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new LookupClassStudentQuery(q), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return RosterFailure(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên phụ trách thêm một sinh viên vào lớp. Khóa tham gia của sinh viên không chặn thao tác này.
+    /// </summary>
+    [HttpPost("lecturer/classes/{id:guid}/students")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> AssignClassStudent(
+        [FromRoute] Guid id,
+        [FromBody] AssignClassStudentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new AssignClassStudentCommand(id, request.StudentId, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return RosterFailure(result.Error);
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên phụ trách đưa sinh viên ra khỏi sĩ số. Bài đã nộp trong các ca vẫn giữ nguyên.
+    /// </summary>
+    [HttpDelete("lecturer/classes/{id:guid}/students/{studentId:guid}")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> DropClassStudent(
+        [FromRoute] Guid id,
+        [FromRoute] Guid studentId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new DropClassStudentCommand(id, studentId, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return RosterFailure(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
     private Guid GetCurrentUserId()
     {
         var claimValue = User?.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -567,6 +632,27 @@ public class ClassesController(ISender sender) : ControllerBase
         return null;
     }
 
+    private IActionResult RosterFailure(string error)
+    {
+        var detail = error.Contains(':') ? error[(error.IndexOf(':') + 1)..].Trim() : error;
+        if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", detail));
+        }
+
+        if (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(ClassProblem(404, "Not Found", detail));
+        }
+
+        if (error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(ClassProblem(409, "Conflict", detail));
+        }
+
+        return UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", detail));
+    }
+
     private static ProblemDetails ClassProblem(int status, string title, string detail) => new()
     {
         Status = status,
@@ -575,3 +661,5 @@ public class ClassesController(ISender sender) : ControllerBase
         Type = $"https://oralexam.fpt.edu.vn/errors/class-{status}"
     };
 }
+
+public sealed record AssignClassStudentRequest(Guid StudentId);

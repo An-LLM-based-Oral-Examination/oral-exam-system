@@ -2,20 +2,24 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Key
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CheckCircle2, ClipboardCheck, KeyRound, LoaderCircle, Lock, Mic2, TimerReset, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { studentCardShellClass } from '@/design/studentCardTones'
 import { BannerFact, PageBanner, StudentColorCardAccent } from '@/design/ui'
 import { ds } from '@/design/system'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
-import type { InClassShift, StudentExamResult } from '@/types/inClassShift.types'
+import type { EnterInClassExamResult, InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import {
   applyCompletedInClassShifts,
   loadInClassExamSession,
   markInClassShiftCompleted,
+  reconcileCompletedInClassShifts,
   saveInClassExamSession,
 } from '@/utils/inClassExamSessionStorage'
 
@@ -79,9 +83,13 @@ const MIC_STATUS: Record<MicState, { title: string; helper: string; color: strin
   },
 }
 
-/** Thời lượng làm bài của SV (phút) — không dùng khung giờ mở/đóng ca. */
+/** Thời lượng làm bài của SV (phút). Không lấy khung giờ mở/đóng ca. */
 function examDurationMinutesOf(shift: InClassShift) {
-  return Math.max(1, shift.examDurationMinutes ?? shift.durationMinutes ?? 30)
+  const minutes = shift.examDurationMinutes
+  if (typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0) {
+    return Math.min(60, Math.max(1, Math.round(minutes)))
+  }
+  return 20
 }
 
 const COURSE_CODE_TONES = [
@@ -118,12 +126,14 @@ function codeTone(index: number) {
 function formatExamWindow(shift: InClassShift) {
   const start = new Date(shift.startTime)
   if (!Number.isFinite(start.getTime())) return 'Chưa xếp giờ'
-  const date = start.toLocaleDateString('vi-VN')
+  const startDate = start.toLocaleDateString('vi-VN')
   const startClock = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
   const end = shift.endTime ? new Date(shift.endTime) : null
-  if (!end || !Number.isFinite(end.getTime())) return `${date} · ${startClock}`
+  if (!end || !Number.isFinite(end.getTime())) return `${startDate} · ${startClock}`
+  const endDate = end.toLocaleDateString('vi-VN')
   const endClock = end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-  return `${date} · ${startClock}–${endClock}`
+  if (startDate === endDate) return `${startDate} · ${startClock}–${endClock}`
+  return `${startDate} ${startClock} – ${endDate} ${endClock}`
 }
 
 function questionLabel(shift: InClassShift) {
@@ -132,12 +142,7 @@ function questionLabel(shift: InClassShift) {
 }
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể xử lý ca thi trên lớp.'
+  return userMessage(error, 'Không xử lý được ca thi trên lớp. Vui lòng thử lại.')
 }
 
 function participationDone(status?: string | null) {
@@ -153,6 +158,7 @@ export function StudentInClassExamPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [joinTarget, setJoinTarget] = useState<InClassShift | null>(null)
+  const [joinMode, setJoinMode] = useState<'enter' | 'resume'>('enter')
   const [otp, setOtp] = useState('')
   const [otpError, setOtpError] = useState('')
   const [micError, setMicError] = useState('')
@@ -173,7 +179,11 @@ export function StudentInClassExamPage() {
     setError('')
     try {
       const list = await inClassShiftService.listStudentShifts()
-      setShifts(applyCompletedInClassShifts(list))
+      await reconcileCompletedInClassShifts(list, (shiftId) =>
+        inClassShiftService.finishStudentExam(shiftId),
+      )
+      const latest = await inClassShiftService.listStudentShifts()
+      setShifts(applyCompletedInClassShifts(latest))
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
@@ -186,32 +196,39 @@ export function StudentInClassExamPage() {
       navigate('/in-class-exam/session', { replace: true })
       return
     }
-    void load()
+    const cancelLoad = scheduleUi(() => {
+      void load()
+    })
     const timer = window.setInterval(() => {
       void inClassShiftService
         .listStudentShifts()
         .then((list) => setShifts(applyCompletedInClassShifts(list)))
         .catch(() => undefined)
     }, 15000)
-    return () => window.clearInterval(timer)
+    return () => {
+      cancelLoad()
+      window.clearInterval(timer)
+    }
   }, [navigate])
 
   useEffect(() => {
     const state = location.state as { notice?: string; finishedShiftId?: string } | null
     if (!state?.notice && !state?.finishedShiftId) return
-    if (state.notice) setNotice(state.notice)
-    if (state.finishedShiftId) {
-      markInClassShiftCompleted(state.finishedShiftId)
-      setShifts((current) =>
-        applyCompletedInClassShifts(
-          current.map((item) =>
-            item.id === state.finishedShiftId ? { ...item, myParticipationStatus: 'SUBMITTED' } : item,
+    return scheduleUi(() => {
+      if (state.notice) setNotice(state.notice)
+      if (state.finishedShiftId) {
+        markInClassShiftCompleted(state.finishedShiftId)
+        setShifts((current) =>
+          applyCompletedInClassShifts(
+            current.map((item) =>
+              item.id === state.finishedShiftId ? { ...item, myParticipationStatus: 'SUBMITTED' } : item,
+            ),
           ),
-        ),
-      )
-    }
-    navigate(location.pathname, { replace: true, state: null })
-    void load()
+        )
+      }
+      navigate(location.pathname, { replace: true, state: null })
+      void load()
+    })
   }, [location.pathname, location.state, navigate])
 
   const stopMicTest = useCallback(() => {
@@ -308,12 +325,13 @@ export function StudentInClassExamPage() {
     [],
   )
 
-  const openJoin = (shift: InClassShift) => {
+  const openJoin = (shift: InClassShift, mode: 'enter' | 'resume' = 'enter') => {
     if (participationDone(shift.myParticipationStatus)) {
       setError('Bạn đã hoàn thành ca này và không thể tham gia lại.')
       return
     }
     stopMicTest()
+    setJoinMode(mode)
     setJoinTarget(shift)
     setOtp('')
     setOtpError('')
@@ -324,6 +342,56 @@ export function StudentInClassExamPage() {
     setMicIssue('')
     setMicName('')
     setMicLevel(0)
+  }
+
+  const beginSessionFromResult = (shift: InClassShift, result: EnterInClassExamResult) => {
+    if (result.timedOut || participationDone(result.status)) {
+      markInClassShiftCompleted(shift.id)
+      setShifts((current) =>
+        applyCompletedInClassShifts(
+          current.map((item) =>
+            item.id === shift.id ? { ...item, myParticipationStatus: 'SUBMITTED' } : item,
+          ),
+        ),
+      )
+      setJoinTarget(null)
+      setNotice(
+        result.timedOut
+          ? 'Hết thời gian làm bài khi bạn vắng mặt. Bài đã được nộp tự động để AI chấm.'
+          : 'Bạn đã nộp bài ca này và không thể tham gia lại.',
+      )
+      return false
+    }
+
+    const endsMs = Date.parse(result.examEndsAt)
+    const joinedMs = Date.parse(result.joinedAt)
+    const durationMs = examDurationMinutesOf(shift) * 60 * 1000
+    const examEndsAt = Number.isFinite(endsMs)
+      ? endsMs
+      : Number.isFinite(joinedMs)
+        ? joinedMs + Math.max(durationMs, Math.max(0, result.remainingSeconds) * 1000)
+        : 0
+    const startedAt = Number.isFinite(joinedMs)
+      ? joinedMs
+      : examEndsAt - durationMs
+
+    saveInClassExamSession({
+      shift,
+      questions: result.questions,
+      startedAt,
+      examEndsAt,
+      joinedAt: result.joinedAt,
+    })
+    setResultsShift(null)
+    setResults([])
+    setJoinTarget(null)
+    setOtp('')
+    setMicState('idle')
+    setMicIssue('')
+    setMicName('')
+    setMicLevel(0)
+    navigate('/in-class-exam/session')
+    return true
   }
 
   const handleMicCheck = async () => {
@@ -430,7 +498,10 @@ export function StudentInClassExamPage() {
   const enter = async () => {
     if (!joinTarget || entering) return
     const code = sanitizeOtp(otp)
-    const nextOtpError = code.length !== OTP_LENGTH ? `Nhập đủ ${OTP_LENGTH} số mã đang chiếu trên lớp.` : ''
+    const nextOtpError =
+      joinMode === 'enter' && code.length !== OTP_LENGTH
+        ? `Nhập đủ ${OTP_LENGTH} số mã đang chiếu trên lớp.`
+        : ''
     const nextMicError = micState !== 'ready' ? 'Hãy kiểm tra micro trước khi vào làm bài.' : ''
     setOtpError(nextOtpError)
     setMicError(nextMicError)
@@ -443,26 +514,17 @@ export function StudentInClassExamPage() {
     setError('')
     setNotice('')
     try {
-      const assigned = await inClassShiftService.enterStudentShift(joinTarget.id, code)
+      const duration = examDurationMinutesOf(joinTarget)
+      const result =
+        joinMode === 'resume'
+          ? await inClassShiftService.resumeStudentShift(joinTarget.id, duration)
+          : await inClassShiftService.enterStudentShift(joinTarget.id, code, duration)
       stopMicTest()
-      saveInClassExamSession({
-        shift: joinTarget,
-        questions: assigned,
-        startedAt: Date.now(),
-      })
-      setResultsShift(null)
-      setResults([])
-      setJoinTarget(null)
-      setOtp('')
-      setMicState('idle')
-      setMicIssue('')
-      setMicName('')
-      setMicLevel(0)
-      navigate('/in-class-exam/session')
+      beginSessionFromResult(joinTarget, result)
     } catch (enterError) {
       const message = getErrorMessage(enterError)
       toast.error(message)
-      if (/hoàn thành|không thể tham gia lại|đã nộp/i.test(message)) {
+      if (/hoàn thành|không thể tham gia lại|đã nộp|hết thời gian làm bài/i.test(message)) {
         markInClassShiftCompleted(joinTarget.id)
         setShifts((current) =>
           applyCompletedInClassShifts(
@@ -472,7 +534,11 @@ export function StudentInClassExamPage() {
           ),
         )
         setJoinTarget(null)
-        setNotice('Bạn đã nộp bài ca này và không thể tham gia lại.')
+        setNotice(
+          /hết thời gian làm bài/i.test(message)
+            ? 'Hết thời gian làm bài. Bài đã được nộp tự động để AI chấm.'
+            : 'Bạn đã nộp bài ca này và không thể tham gia lại.',
+        )
       }
     } finally {
       setEntering(false)
@@ -646,7 +712,11 @@ export function StudentInClassExamPage() {
                       </div>
                     ) : shift.status === 'ACTIVE' ? (
                       <div className="mt-auto pt-3">
-                        <button type="button" onClick={() => openJoin(shift)} className={ds.outlineButton}>
+                        <button
+                          type="button"
+                          onClick={() => openJoin(shift, inProgress ? 'resume' : 'enter')}
+                          className={ds.outlineButton}
+                        >
                           <KeyRound className="size-3.5" />
                           {inProgress ? 'Tiếp tục làm bài' : 'Tham gia'}
                         </button>
@@ -676,8 +746,12 @@ export function StudentInClassExamPage() {
         <FormDialog
           titleId="join-inclass-title"
           eyebrow={`${joinTarget.courseCode || 'Ca kiểm tra'} · ${joinTarget.className}`}
-          title="Vào ca kiểm tra"
-          subtitle={joinTarget.title}
+          title={joinMode === 'resume' ? 'Tiếp tục làm bài' : 'Vào ca kiểm tra'}
+          subtitle={
+            joinMode === 'resume'
+              ? 'Thời gian vẫn chạy từ lúc bạn vào phòng. Kiểm tra micro rồi làm tiếp.'
+              : joinTarget.title
+          }
           icon={KeyRound}
           onClose={closeJoin}
           busy={entering}
@@ -696,15 +770,20 @@ export function StudentInClassExamPage() {
               >
                 {entering ? <LoaderCircle className="size-4 animate-spin" /> : <ClipboardCheck className="size-4" />}
                 {entering
-                  ? 'Đang vào...'
+                  ? joinMode === 'resume'
+                    ? 'Đang vào lại...'
+                    : 'Đang vào...'
                   : micState === 'ready'
-                    ? 'Vào làm bài'
+                    ? joinMode === 'resume'
+                      ? 'Làm tiếp'
+                      : 'Vào làm bài'
                     : 'Kiểm tra micro để tiếp tục'}
               </button>
             </DialogFooter>
           )}
         >
           <div className="space-y-4">
+            {joinMode === 'enter' && (
             <div
               className={cn(
                 'rounded-2xl border px-4 py-4',
@@ -774,6 +853,7 @@ export function StudentInClassExamPage() {
               </div>
               <FieldError message={otpError} className="text-center" />
             </div>
+            )}
 
             <div
               className={cn(

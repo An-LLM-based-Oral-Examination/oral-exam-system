@@ -42,6 +42,12 @@ export interface InClassShift {
   endTime?: string | null
   /** Trạng thái tham gia của SV hiện tại: JOINED | IN_PROGRESS | SUBMITTED | ... */
   myParticipationStatus?: string | null
+  /** Thời điểm SV vào phòng (ISO UTC). */
+  myJoinedAt?: string | null
+  /** Hết giờ làm bài cá nhân (ISO UTC). */
+  myExamEndsAt?: string | null
+  /** Số giây còn lại theo đồng hồ server. */
+  myRemainingSeconds?: number | null
 }
 
 export type InClassQuestionPoolMode = 'ALL_COURSE_BANK' | 'SELECTED_POOL'
@@ -124,6 +130,16 @@ export interface StudentExamQuestion {
   questionId: string
   title: string
   content: string
+}
+
+/** Kết quả enter / resume phòng làm bài. */
+export interface EnterInClassExamResult {
+  questions: StudentExamQuestion[]
+  joinedAt: string
+  examEndsAt: string
+  remainingSeconds: number
+  timedOut: boolean
+  status: string
 }
 
 export interface StudentExamResult {

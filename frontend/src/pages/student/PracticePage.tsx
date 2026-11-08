@@ -24,6 +24,7 @@ import {
   Volume2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { useAuth } from '@/hooks/useAuth'
@@ -184,7 +185,6 @@ export function PracticePage() {
   const [selectedScorecardId, setSelectedScorecardId] = useState<string | null>(null)
   const [scorecardMap, setScorecardMap] = useState<Record<string, PracticeSessionDetail>>({})
   const [isLoadingScorecard, setIsLoadingScorecard] = useState(false)
-  const [scorecardError, setScorecardError] = useState('')
   const [tipIndex, setTipIndex] = useState(0)
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [isStarting, setIsStarting] = useState(false)
@@ -198,7 +198,6 @@ export function PracticePage() {
   const openPracticeScorecard = useCallback(
     async (sessionId: string) => {
       setSelectedScorecardId(sessionId)
-      setScorecardError('')
       if (scorecardMap[sessionId]) return
 
       setIsLoadingScorecard(true)
@@ -206,13 +205,7 @@ export function PracticePage() {
         const detail = await practiceService.getSession(sessionId)
         setScorecardMap((prev) => ({ ...prev, [sessionId]: detail }))
       } catch (err) {
-        const problem = err as Partial<{ detail: string; error: string; message: string }>
-        setScorecardError(
-          problem.detail ||
-            problem.error ||
-            problem.message ||
-            'Không thể tải chi tiết câu hỏi và nhận xét phiên luyện tập.',
-        )
+        toast.error(userMessage(err, 'Không tải được chi tiết câu hỏi và nhận xét phiên luyện tập.'))
       } finally {
         setIsLoadingScorecard(false)
       }
@@ -237,16 +230,11 @@ export function PracticePage() {
         setPracticeHistory(historyResult.value)
       } else {
         setPracticeHistory([])
-        const historyProblem = historyResult.reason as Partial<{
-          detail: string
-          error: string
-          message: string
-        }>
         toast.error(
-          historyProblem.detail ||
-            historyProblem.error ||
-            historyProblem.message ||
-            'Đã tải danh sách môn học nhưng chưa thể tải lịch sử luyện tập.',
+          userMessage(
+            historyResult.reason,
+            'Đã tải danh sách môn học nhưng chưa tải được lịch sử luyện tập.',
+          ),
         )
       }
       setSelectedCourseId((current) =>
@@ -255,10 +243,7 @@ export function PracticePage() {
           : (availableCourses[0]?.id ?? ''),
       )
     } catch (loadError) {
-      const problem = loadError as Partial<{ detail: string; error: string; message: string }>
-      toast.error(
-        problem.detail || problem.error || problem.message || 'Không thể tải dữ liệu luyện tập.',
-      )
+      toast.error(userMessage(loadError, 'Không tải được dữ liệu luyện tập. Vui lòng thử lại.'))
     } finally {
       setIsLoadingData(false)
     }
@@ -422,10 +407,7 @@ export function PracticePage() {
 
       navigate(`/practice/session?session=${session.sessionId}`)
     } catch (startError) {
-      const problem = startError as Partial<{ detail: string; error: string; message: string }>
-      toast.error(
-        problem.detail || problem.error || problem.message || 'Không thể bắt đầu phiên luyện tập.',
-      )
+      toast.error(userMessage(startError, 'Không bắt đầu được phiên luyện tập. Vui lòng thử lại.'))
     } finally {
       setIsStarting(false)
     }
@@ -1099,10 +1081,6 @@ export function PracticePage() {
             <div className="flex min-h-[240px] flex-col items-center justify-center gap-2 text-sm font-semibold text-[#1C4D8D]">
               <LoaderCircle className="size-6 animate-spin" />
               Đang tải câu hỏi, câu trả lời và nhận xét...
-            </div>
-          ) : scorecardError ? (
-            <div className="rounded-2xl border border-[#f3c8cf] bg-[#fff5f6] p-4 text-sm text-[#b33d52]">
-              {scorecardError}
             </div>
           ) : scorecardMap[selectedScorecardId] ? (
             <PracticeSessionScorecard session={scorecardMap[selectedScorecardId]} />

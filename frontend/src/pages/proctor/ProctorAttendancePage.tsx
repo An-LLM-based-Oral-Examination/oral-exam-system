@@ -3,9 +3,12 @@ import { AlertTriangle, Armchair, CheckCircle2, LoaderCircle, MonitorCheck, Refr
 import { proctorService } from '@/services/proctor.service'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
+import { toast } from '@/components/common/toastStore'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { userMessage } from '@/lib/userMessage'
 
 interface Seat {
   seatNumber: number
@@ -37,11 +40,7 @@ interface Monitor {
 }
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
+  return userMessage(error, 'Không hoàn tất được thao tác điểm danh. Vui lòng thử lại.')
 }
 
 export function ProctorAttendancePage() {
@@ -55,8 +54,6 @@ export function ProctorAttendancePage() {
   const [blurCountError, setBlurCountError] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   const loadAttendance = async () => {
     if (!shiftId.trim()) {
@@ -64,8 +61,8 @@ export function ProctorAttendancePage() {
       return
     }
     setShiftIdError('')
-    setLoading(true); setError('')
-    try { setMonitor(await proctorService.getShiftAttendance(shiftId.trim())) } catch (loadError) { setMonitor(null); setError(getErrorMessage(loadError)) } finally { setLoading(false) }
+    setLoading(true)
+    try { setMonitor(await proctorService.getShiftAttendance(shiftId.trim())) } catch (loadError) { setMonitor(null); toast.error(getErrorMessage(loadError)) } finally { setLoading(false) }
   }
 
   useEffect(() => {
@@ -74,15 +71,15 @@ export function ProctorAttendancePage() {
       const initial = params.get('shiftId') ?? ''
       if (!initial) return
       setShiftId(initial)
-      void proctorService.getShiftAttendance(initial).then(setMonitor).catch((error) => setError(getErrorMessage(error)))
+      void proctorService.getShiftAttendance(initial).then(setMonitor).catch((error) => toast.error(getErrorMessage(error)))
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
 
   const updateSeat = async (seat: Seat, present: boolean) => {
     if (!seat.ticketId) return
-    setBusy(true); setError(''); setNotice('')
-    try { await proctorService.updateTicketAttendance(seat.ticketId, { isPresent: present, ipAddress: seat.ipAddress ?? undefined }); setNotice(present ? `Đã điểm danh ghế ${seat.seatNumber}.` : `Đã ghi nhận ghế ${seat.seatNumber} vắng.`); await loadAttendance() } catch (actionError) { setError(getErrorMessage(actionError)) } finally { setBusy(false) }
+    setBusy(true)
+    try { await proctorService.updateTicketAttendance(seat.ticketId, { isPresent: present, ipAddress: seat.ipAddress ?? undefined }); toast.success(present ? `Đã điểm danh ghế ${seat.seatNumber}.` : `Đã ghi nhận ghế ${seat.seatNumber} vắng.`); await loadAttendance() } catch (actionError) { toast.error(getErrorMessage(actionError)) } finally { setBusy(false) }
   }
 
   const suspendSeat = async () => {
@@ -95,8 +92,8 @@ export function ProctorAttendancePage() {
     setSuspendReasonError(reasonError)
     setBlurCountError(countError)
     if (reasonError || countError) return
-    setBusy(true); setError(''); setNotice('')
-    try { await proctorService.suspendTicket(selectedSeat.ticketId, { reason: suspendReason.trim(), blurViolationCount }); setNotice(`Đã đình chỉ vé thi tại ghế ${selectedSeat.seatNumber}.`); setSuspendReason(''); setSuspendReasonError(''); setBlurCountError(''); setSelectedSeat(null); await loadAttendance() } catch (actionError) { setError(getErrorMessage(actionError)) } finally { setBusy(false) }
+    setBusy(true)
+    try { await proctorService.suspendTicket(selectedSeat.ticketId, { reason: suspendReason.trim(), blurViolationCount }); toast.success(`Đã đình chỉ vé thi tại ghế ${selectedSeat.seatNumber}.`); setSuspendReason(''); setSuspendReasonError(''); setBlurCountError(''); setSelectedSeat(null); await loadAttendance() } catch (actionError) { toast.error(getErrorMessage(actionError)) } finally { setBusy(false) }
   }
 
   return (
@@ -122,7 +119,6 @@ export function ProctorAttendancePage() {
         <div className="min-w-0 flex-1 sm:max-w-md"><input className={cn(ds.field, 'font-mono text-xs', shiftIdError && fieldInvalidClass)} value={shiftId} onChange={(event) => { setShiftId(event.target.value); if (shiftIdError) setShiftIdError('') }} placeholder="Nhập Shift ID" aria-label="Shift ID" aria-invalid={Boolean(shiftIdError)} /><FieldError message={shiftIdError} /></div>
         <button className={ds.primaryButton}>Mở ca thi</button>
       </form>
-      {(error || notice) && <div role={error ? 'alert' : 'status'} className={cn('rounded-xl border px-4 py-3 text-sm font-semibold', error ? 'border-[#f0c5c9] bg-[#fff5f6] text-[#a43c47]' : 'border-[#b7e4cf] bg-[#effaf6] text-[#176f58]')}>{error || notice}</div>}
       {loading ? <div className="flex min-h-[300px] items-center justify-center rounded-2xl bg-white"><LoaderCircle className="size-8 animate-spin text-[#1C4D8D]" /></div> : monitor ? <>
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[['Đã cấp vé', monitor.assignedTicketsCount], ['Đã điểm danh', monitor.checkedInCount], ['Đang thi', monitor.inProgressCount], ['Đã nộp', monitor.submittedCount], ['Đình chỉ', monitor.suspendedCount]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-[#82aedb]/55 bg-white p-4"><p className="text-xs font-bold text-[#708097]">{label}</p><p className="mt-2 font-mono text-2xl font-black text-[#0F2854]">{value}</p></div>)}</section>
         <section className={ds.section}><SectionHeader icon={UserCheck} title={`${monitor.shiftName} · ${monitor.roomLab}`} hint={`Điểm danh ghế Lab · trạng thái: ${monitor.shiftStatus}`} action={<button type="button" className={ds.outlineButton} onClick={() => void loadAttendance()}><RefreshCw className="size-4" /> Làm mới</button>} /><div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 lg:grid-cols-5">{monitor.seats.map((seat) => <button key={seat.seatNumber} type="button" onClick={() => { setSelectedSeat(seat); setSuspendReasonError(''); setBlurCountError('') }} className={cn('min-h-28 rounded-2xl border p-3 text-left transition hover:-translate-y-0.5', seat.isSuspended ? 'border-[#f0c5c9] bg-[#fff5f6]' : seat.isCheckedIn ? 'border-[#b7e4cf] bg-[#effaf6]' : seat.isOccupied ? 'border-[#ead9ae] bg-[#fff9ec]' : 'border-[#82aedb]/55 bg-white')}><div className="flex items-center justify-between"><span className="font-mono text-sm font-black text-[#1C4D8D]">#{String(seat.seatNumber).padStart(2, '0')}</span>{seat.isSuspended ? <AlertTriangle className="size-4 text-[#b8404b]" /> : seat.isCheckedIn ? <CheckCircle2 className="size-4 text-[#16836a]" /> : <UserX className="size-4 text-[#9aa8ba]" />}</div><p className="mt-3 truncate text-xs font-bold text-[#0F2854]">{seat.fullName || 'Ghế trống'}</p><p className="mt-1 truncate font-mono text-[10px] text-[#718298]">{seat.studentCode || seat.ipAddress || 'Chưa cấp vé'}</p></button>)}</div></section>
