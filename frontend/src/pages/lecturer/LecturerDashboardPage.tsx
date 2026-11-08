@@ -2,15 +2,12 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   BookOpenCheck,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
   FilePenLine,
   GraduationCap,
   Mic,
-  RefreshCw,
   ScanSearch,
-  TriangleAlert,
   Users,
   UsersRound,
   type LucideIcon,
@@ -22,8 +19,10 @@ import type { LecturerCourseOffering, ManagedClass, SemesterOption } from '@/typ
 import type { QuestionSummary } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { toast } from '@/components/common/toastStore'
 import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
+import { userMessage } from '@/lib/userMessage'
 
 const LecturerOverviewThreeScene = lazy(() =>
   import('./LecturerOverviewThreeScene').then((module) => ({
@@ -38,14 +37,6 @@ interface DashboardMetric {
   icon: LucideIcon
   iconClassName: string
   cardClassName: string
-}
-
-function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể đồng bộ dữ liệu câu hỏi. Vui lòng thử lại.'
 }
 
 function countStatus(questions: QuestionSummary[] | undefined, status: string) {
@@ -110,15 +101,12 @@ export function LecturerDashboardPage() {
   const [semester, setSemester] = useState<SemesterOption | null>(null)
   const [semesterCode, setSemesterCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let isActive = true
 
     const loadOverview = async () => {
       setIsLoading(true)
-      setError('')
       try {
         const [offeringResult, semesterResult, classResult] = await Promise.all([
           classService.listMyOfferings().catch(() => [] as LecturerCourseOffering[]),
@@ -158,7 +146,7 @@ export function LecturerDashboardPage() {
       } catch (loadError) {
         if (isActive) {
           setQuestions([])
-          setError(getErrorMessage(loadError))
+          toast.error(userMessage(loadError, 'Không tải được dữ liệu tổng quan. Vui lòng thử lại.'))
         }
       } finally {
         if (isActive) setIsLoading(false)
@@ -169,7 +157,7 @@ export function LecturerDashboardPage() {
     return () => {
       isActive = false
     }
-  }, [reloadKey, user?.id, user?.role])
+  }, [user?.id, user?.role])
 
   const assignedCourses = useMemo(() => {
     const map = new Map<string, LecturerCourseOffering>()
@@ -254,26 +242,6 @@ export function LecturerDashboardPage() {
           </Suspense>
         }
       />
-
-      {error && (
-        <div
-          className="flex flex-col gap-3 rounded-2xl border border-[#f0d1d5] bg-[#fff7f7] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          role="alert"
-        >
-          <p className="flex items-center gap-2 text-sm font-semibold text-[#9e3742]">
-            <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {error}
-          </p>
-          <button
-            type="button"
-            onClick={() => setReloadKey((key) => key + 1)}
-            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-[#e4bfc4] bg-white px-3 text-xs font-bold text-[#963743] transition duration-200 hover:-translate-y-0.5 hover:bg-[#fff0f1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b8404b] motion-reduce:transform-none"
-          >
-            <RefreshCw className="size-3.5" aria-hidden="true" />
-            Thử lại
-          </button>
-        </div>
-      )}
 
       <section aria-label="Tóm tắt giảng dạy" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(({ label, value, helper, icon: Icon, iconClassName, cardClassName }) => (
@@ -410,18 +378,6 @@ export function LecturerDashboardPage() {
             </span>
           </span>
           <ChevronRight className="size-4 text-[#6d4cc4] transition group-hover:translate-x-0.5" />
-        </Link>
-        <Link to="/in-class-shifts" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#67c09b]/55 bg-[linear-gradient(145deg,#f4fbf8_0%,#d7f3e6_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
-          <span className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#16836a] text-white">
-              <CalendarDays className="size-4" aria-hidden="true" />
-            </span>
-            <span>
-              <span className="block text-sm font-bold text-[#0F2854]">Ca kiểm tra</span>
-              <span className="mt-0.5 block text-xs text-[#5b6b84]">Tạo ca và chiếu mã</span>
-            </span>
-          </span>
-          <ChevronRight className="size-4 text-[#16836a] transition group-hover:translate-x-0.5" />
         </Link>
       </section>
     </div>

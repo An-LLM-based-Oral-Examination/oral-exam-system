@@ -15,6 +15,7 @@ using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetStudentMyClasses;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.LookupClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.SearchAvailableClasses;
 
 namespace API.Controllers.v1;
@@ -551,6 +552,24 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    /// Giảng viên tra đúng một sinh viên theo mã hoặc email trước khi thêm vào lớp.
+    /// </summary>
+    [HttpGet("lecturer/classes/students/lookup")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> LookupClassStudent(
+        [FromQuery] string? q,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new LookupClassStudentQuery(q), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return RosterFailure(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Giảng viên thêm sinh viên vào lớp học phần do mình phụ trách (hỗ trợ MSSV, Email, StudentId hoặc chuỗi định danh).
     /// </summary>
     [HttpPost("lecturer/classes/{classId:guid}/students")]
@@ -577,46 +596,7 @@ public class ClassesController(ISender sender) : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
-            {
-                return Conflict(new ProblemDetails
-                {
-                    Status = StatusCodes.Status409Conflict,
-                    Title = "Conflict",
-                    Detail = result.Error["CONFLICT:".Length..].Trim(),
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return RosterFailure(result.Error);
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
@@ -646,35 +626,7 @@ public class ClassesController(ISender sender) : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return RosterFailure(result.Error);
         }
 
         return Ok(result.Value);
@@ -718,35 +670,7 @@ public class ClassesController(ISender sender) : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return RosterFailure(result.Error);
         }
 
         return Ok(result.Value);
@@ -771,6 +695,27 @@ public class ClassesController(ISender sender) : ControllerBase
         return null;
     }
 
+    private IActionResult RosterFailure(string error)
+    {
+        var detail = error.Contains(':') ? error[(error.IndexOf(':') + 1)..].Trim() : error;
+        if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", detail));
+        }
+
+        if (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(ClassProblem(404, "Not Found", detail));
+        }
+
+        if (error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(ClassProblem(409, "Conflict", detail));
+        }
+
+        return UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", detail));
+    }
+
     private static ProblemDetails ClassProblem(int status, string title, string detail) => new()
     {
         Status = status,
@@ -779,3 +724,4 @@ public class ClassesController(ISender sender) : ControllerBase
         Type = $"https://oralexam.fpt.edu.vn/errors/class-{status}"
     };
 }
+

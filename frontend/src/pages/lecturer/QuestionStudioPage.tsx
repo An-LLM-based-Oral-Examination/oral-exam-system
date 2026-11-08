@@ -21,7 +21,8 @@ import {
   X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { QuestionImage } from '@/components/question/QuestionImage'
@@ -36,7 +37,9 @@ import type {
   QuestionFilters,
   QuestionSummary,
 } from '@/types/rubric.types'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds, overlay } from '@/design/system'
@@ -115,14 +118,6 @@ const STATUS_META: Record<QuestionApprovalStatus, { label: string; className: st
     label: 'Đã từ chối',
     className: 'border-[#e5c5d4] bg-[#fff2f7] text-[#963b66]',
   },
-}
-
-function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
 }
 
 function formatDate(value?: string) {
@@ -236,8 +231,6 @@ export function QuestionStudioPage() {
   const [coursesReady, setCoursesReady] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [submissionNotes, setSubmissionNotes] = useState('')
@@ -256,14 +249,11 @@ export function QuestionStudioPage() {
 
   useEffect(() => {
     const state = location.state as { openCreate?: boolean } | null
-    if (state?.openCreate) {
-      const timer = window.setTimeout(() => {
-        setIsCreateOpen(true)
-        navigate(location.pathname, { replace: true, state: {} })
-      }, 0)
-      return () => window.clearTimeout(timer)
-
-    }
+    if (!state?.openCreate) return
+    return scheduleUi(() => {
+      setIsCreateOpen(true)
+      navigate(location.pathname, { replace: true, state: {} })
+    })
   }, [location.pathname, location.state, navigate])
 
   useEffect(() => {
@@ -291,7 +281,6 @@ export function QuestionStudioPage() {
       if (workspace === 'bank' && !filters.courseId && !coursesReady) return
 
       setIsLoading(true)
-      setError('')
       try {
         const query: QuestionFilters = {
           ...filters,
@@ -351,7 +340,7 @@ export function QuestionStudioPage() {
         )
         setSelectedIds((current) => new Set([...current].filter((id) => visibleDraftIds.has(id))))
       } catch (loadError) {
-        if (isActive) setError(getErrorMessage(loadError))
+        if (isActive) toast.error(userMessage(loadError, 'Không tải được danh sách câu hỏi. Vui lòng thử lại.'))
       } finally {
         if (isActive) setIsLoading(false)
       }
@@ -376,8 +365,7 @@ export function QuestionStudioPage() {
 
   useEffect(() => {
     if (workspace !== 'mine' || !user?.id || !isUuid(user.id)) {
-      const timer = window.setTimeout(() => setStatusCounts({}), 0)
-      return () => window.clearTimeout(timer)
+      return scheduleUi(() => setStatusCounts({}))
     }
 
     let isActive = true
@@ -457,8 +445,6 @@ export function QuestionStudioPage() {
     setPageNumber(1)
     setSelectedIds(new Set())
     setStatusTab('')
-    setNotice('')
-    setError('')
   }
 
   const switchStatusTab = (next: QuestionApprovalStatus | '') => {
@@ -482,7 +468,7 @@ export function QuestionStudioPage() {
   const toggleQuestion = (question: QuestionSummary) => {
     if (question.approvalStatus !== 'DRAFT' && question.approvalStatus !== 'NEEDS_REVISION') return
     if (!canManageQuestion(question, user?.role, user?.id)) {
-      setNotice('Bạn chỉ có thể gửi thẩm định các bản nháp do chính mình tạo.')
+      toast.warning('Bạn chỉ có thể gửi thẩm định các bản nháp do chính mình tạo.')
       return
     }
     if (
@@ -490,11 +476,10 @@ export function QuestionStudioPage() {
       selectedCourseId !== question.courseId &&
       !selectedIds.has(question.id)
     ) {
-      setNotice('Chỉ có thể gửi cùng lúc các câu hỏi thuộc một môn học.')
+      toast.warning('Chỉ có thể gửi cùng lúc các câu hỏi thuộc một môn học.')
       return
     }
 
-    setNotice('')
     setSelectedIds((current) => {
       const next = new Set(current)
       if (next.has(question.id)) next.delete(question.id)
@@ -551,7 +536,7 @@ export function QuestionStudioPage() {
       setReviewNotes(loaded.reviewNotes ?? '')
     } catch (loadError) {
       setDetailLoadFailed(true)
-      toast.error(getErrorMessage(loadError))
+      toast.error(userMessage(loadError, 'Không tải được chi tiết câu hỏi. Vui lòng thử lại.'))
     } finally {
       setIsDetailLoading(false)
     }
@@ -599,27 +584,24 @@ export function QuestionStudioPage() {
       unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
 
   const submitForReview = async () => {
     if (!selectedCourseId || selectedIds.size === 0) return
     if (!isUuid(user?.id ?? '')) {
-      setError(
+      toast.error(
         'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
       )
       return
     }
     if (selectedQuestions.some((question) => !canManageQuestion(question, user?.role, user?.id))) {
-      setError(
+      toast.error(
         'Danh sách chọn có câu hỏi không thuộc quyền quản lý của bạn. Vui lòng tải lại trang.',
       )
       setSelectedIds(new Set())
       return
     }
     setIsSubmitting(true)
-    setError('')
-    setNotice('')
     try {
       const result = await questionService.batchSubmitForReview({
         courseId: selectedCourseId,
@@ -627,12 +609,12 @@ export function QuestionStudioPage() {
         submissionNotes: submissionNotes.trim() || undefined,
         lecturerId: user?.id,
       })
-      setNotice(result.message)
+      toast.success(userMessage(result.message, 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.'))
       setSelectedIds(new Set())
       setSubmissionNotes('')
       setReloadKey((key) => key + 1)
     } catch (submitError) {
-      setError(getErrorMessage(submitError))
+      toast.error(userMessage(submitError, 'Không gửi được câu hỏi thẩm định. Vui lòng thử lại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -641,8 +623,6 @@ export function QuestionStudioPage() {
   const handleSubmitSingleFromDrawer = async () => {
     if (!selectedQuestion || isSubmitting) return
     setIsSubmitting(true)
-    setError('')
-    setNotice('')
     try {
       const result = await questionService.batchSubmitReview(
         [selectedQuestion.id],
@@ -662,10 +642,10 @@ export function QuestionStudioPage() {
             : item,
         ),
       )
-      setNotice(result.message || 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.')
+      toast.success(userMessage(result.message, 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.'))
       setReloadKey((key) => key + 1)
     } catch (submitError) {
-      toast.error(getErrorMessage(submitError))
+      toast.error(userMessage(submitError, 'Không gửi được câu hỏi thẩm định. Vui lòng thử lại.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -687,8 +667,6 @@ export function QuestionStudioPage() {
 
     setIsReviewing(true)
     setReviewNotesError('')
-    setError('')
-    setNotice('')
     try {
       const updated = await questionService.reviewDecision(selectedQuestion.id, {
         decision,
@@ -714,10 +692,10 @@ export function QuestionStudioPage() {
           : decision === 'NEEDS_REVISION'
             ? 'Đã gửi yêu cầu chỉnh sửa câu hỏi cho giảng viên.'
             : 'Đã từ chối câu hỏi.'
-      setNotice(decisionLabel)
+      toast.success(decisionLabel)
       setReloadKey((key) => key + 1)
     } catch (reviewError) {
-      toast.error(getErrorMessage(reviewError))
+      toast.error(userMessage(reviewError, 'Không ghi nhận được quyết định thẩm định. Vui lòng thử lại.'))
     } finally {
       setIsReviewing(false)
     }
@@ -726,8 +704,6 @@ export function QuestionStudioPage() {
   const handleBatchApprovePending = async () => {
     if (!canReviewQuestions || pendingReviewQuestions.length === 0 || isReviewing) return
     setIsReviewing(true)
-    setError('')
-    setNotice('')
     try {
       const targetIds = pendingReviewQuestions.map((item) => item.id)
       const result = await questionService.batchApprove(targetIds)
@@ -736,10 +712,10 @@ export function QuestionStudioPage() {
           targetIds.includes(item.id) ? { ...item, approvalStatus: 'APPROVED' } : item,
         ),
       )
-      setNotice(`Đã phê duyệt nhanh ${result.approvedCount} câu hỏi chờ duyệt.`)
+      toast.success(`Đã phê duyệt nhanh ${result.approvedCount} câu hỏi chờ duyệt.`)
       setReloadKey((key) => key + 1)
     } catch (approveError) {
-      setError(getErrorMessage(approveError))
+      toast.error(userMessage(approveError, 'Không phê duyệt được câu hỏi. Vui lòng thử lại.'))
     } finally {
       setIsReviewing(false)
     }
@@ -766,38 +742,6 @@ export function QuestionStudioPage() {
           </>
         }
       />
-
-      {(error || notice) && (
-        <div
-          className={cn(
-            'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm',
-            error
-              ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]'
-              : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
-          )}
-          role={error ? 'alert' : 'status'}
-        >
-          <span className="flex items-center gap-2 font-medium">
-            {error ? (
-              <AlertCircle className="size-4 shrink-0" />
-            ) : (
-              <CheckCircle2 className="size-4 shrink-0" />
-            )}
-            {error || notice}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setError('')
-              setNotice('')
-            }}
-            className="rounded-lg p-1 hover:bg-black/5"
-            aria-label="Đóng thông báo"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
 
       {showSelectionActions && selectedIds.size > 0 && (
         <section
@@ -1564,7 +1508,7 @@ export function QuestionStudioPage() {
         onCreated={() => {
           setWorkspace('mine')
           setStatusTab('DRAFT')
-          setNotice('Đã lưu bản nháp luyện tập. Chọn câu hỏi rồi gửi Trưởng Bộ môn duyệt.')
+          toast.success('Đã lưu bản nháp luyện tập. Chọn câu hỏi rồi gửi Trưởng Bộ môn duyệt.')
           setReloadKey((key) => key + 1)
         }}
       />

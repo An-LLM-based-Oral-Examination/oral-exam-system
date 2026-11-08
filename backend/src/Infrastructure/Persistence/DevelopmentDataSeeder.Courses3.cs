@@ -170,32 +170,35 @@ public static partial class DevelopmentDataSeeder
                 continue;
             }
 
-            var lecturer2Assignment = existingCourseLecturers.FirstOrDefault(cl =>
-                cl.CourseId == actualCourse.Id && cl.LecturerUserId == Lecturer2UserId);
-            if (lecturer2Assignment == null)
+            foreach (var extraLecturerId in new[] { Lecturer2UserId, Lecturer3UserId, Lecturer4UserId })
             {
-                lecturer2Assignment = new CourseLecturer
+                var extraAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                    cl.CourseId == actualCourse.Id && cl.LecturerUserId == extraLecturerId);
+                if (extraAssignment == null)
                 {
-                    Id = Guid.NewGuid(),
-                    CourseId = actualCourse.Id,
-                    CourseOfferingId = offering.Id,
-                    LecturerUserId = Lecturer2UserId,
-                    AssignedByUserId = DepartmentHeadUserId,
-                    SemesterId = semesterId,
-                    AssignedAt = SeedTimestampUtc,
-                    IsActive = true,
-                    CreatedAt = SeedTimestampUtc,
-                    UpdatedAt = SeedTimestampUtc
-                };
-                context.CourseLecturers.Add(lecturer2Assignment);
-                existingCourseLecturers.Add(lecturer2Assignment);
-            }
-            else
-            {
-                lecturer2Assignment.CourseOfferingId ??= offering.Id;
-                lecturer2Assignment.SemesterId ??= semesterId;
-                lecturer2Assignment.IsActive = true;
-                lecturer2Assignment.UpdatedAt = SeedTimestampUtc;
+                    extraAssignment = new CourseLecturer
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseId = actualCourse.Id,
+                        CourseOfferingId = offering.Id,
+                        LecturerUserId = extraLecturerId,
+                        AssignedByUserId = DepartmentHeadUserId,
+                        SemesterId = semesterId,
+                        AssignedAt = SeedTimestampUtc,
+                        IsActive = true,
+                        CreatedAt = SeedTimestampUtc,
+                        UpdatedAt = SeedTimestampUtc
+                    };
+                    context.CourseLecturers.Add(extraAssignment);
+                    existingCourseLecturers.Add(extraAssignment);
+                }
+                else
+                {
+                    extraAssignment.CourseOfferingId ??= offering.Id;
+                    extraAssignment.SemesterId ??= semesterId;
+                    extraAssignment.IsActive = true;
+                    extraAssignment.UpdatedAt = SeedTimestampUtc;
+                }
             }
         }
 
@@ -255,6 +258,7 @@ public static partial class DevelopmentDataSeeder
                         ClassId = classId,
                         LecturerId = LecturerUserId,
                         ShiftName = shiftName,
+                        ExamDurationMinutes = 20,
                         QuestionPoolMode = "ALL_COURSE_BANK",
                         TotalQuestionsPerStudent = totalQuestions,
                         HasFollowUp = hasFollowUp,
@@ -304,6 +308,16 @@ public static partial class DevelopmentDataSeeder
                 staticPwd.ValidFrom = nowUtc.AddDays(-1);
                 staticPwd.ValidTo = nowUtc.AddYears(1);
             }
+        }
+
+        var seededShiftIds = shiftSeeds.Select(item => item.ShiftId).ToArray();
+        var shiftsMissingDuration = await context.InClassExamShifts
+            .Where(shift => seededShiftIds.Contains(shift.Id) && shift.ExamDurationMinutes == null)
+            .ToListAsync(cancellationToken);
+        foreach (var shift in shiftsMissingDuration)
+        {
+            shift.ExamDurationMinutes = 20;
+            shift.UpdatedAt = DateTime.UtcNow;
         }
 
         await context.SaveChangesAsync(cancellationToken);

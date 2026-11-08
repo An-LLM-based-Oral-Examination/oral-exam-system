@@ -5,8 +5,10 @@ import { officialExamService } from '@/services/officialExam.service'
 import type { ExamStructure } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { toast } from '@/components/common/toastStore'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { userMessage } from '@/lib/userMessage'
 
 interface ExamSession {
   id: string
@@ -41,14 +43,6 @@ const service = officialExamService as typeof officialExamService & {
   getExamStructures: (params?: { courseId?: string; isActive?: boolean }) => Promise<ExamStructure[]>
   createExamStructure: (payload: Record<string, unknown>) => Promise<ExamStructure>
   updateExamStructure: (id: string, payload: Record<string, unknown>) => Promise<ExamStructure>
-}
-
-function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
 }
 
 const emptySession = {
@@ -91,8 +85,6 @@ export function OfficialExamManagementPage() {
   const [structureForm, setStructureForm] = useState(emptyStructure)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === shiftForm.sessionId),
@@ -101,7 +93,6 @@ export function OfficialExamManagementPage() {
 
   const loadData = async () => {
     setLoading(true)
-    setError('')
     try {
       const [sessionResult, shiftResult, structureResult] = await Promise.all([
         service.getSessions(),
@@ -112,7 +103,7 @@ export function OfficialExamManagementPage() {
       setShifts(Array.isArray(shiftResult) ? shiftResult : [])
       setStructures(Array.isArray(structureResult) ? structureResult : [])
     } catch (loadError) {
-      setError(getErrorMessage(loadError))
+      toast.error(userMessage(loadError, 'Không tải được dữ liệu kỳ thi. Vui lòng thử lại.'))
     } finally {
       setLoading(false)
     }
@@ -125,7 +116,7 @@ export function OfficialExamManagementPage() {
 
   const submitSession = async (event: FormEvent) => {
     event.preventDefault()
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true)
     try {
       await service.createSession({
         ...sessionForm,
@@ -136,14 +127,14 @@ export function OfficialExamManagementPage() {
         transcriptBufferSeconds: Number(sessionForm.transcriptBufferSeconds),
       })
       setSessionForm(emptySession)
-      setNotice('Đã tạo kỳ thi chính thức.')
+      toast.success('Đã tạo kỳ thi chính thức.')
       await loadData()
-    } catch (submitError) { setError(getErrorMessage(submitError)) } finally { setBusy(false) }
+    } catch (submitError) { toast.error(userMessage(submitError, 'Không tạo được kỳ thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
 
   const submitShift = async (event: FormEvent) => {
     event.preventDefault()
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true)
     try {
       await service.createShift({
         ...shiftForm,
@@ -151,24 +142,24 @@ export function OfficialExamManagementPage() {
         endTime: new Date(shiftForm.endTime).toISOString(),
       })
       setShiftForm(emptyShift)
-      setNotice('Đã mở ca thi và phân công giám thị.')
+      toast.success('Đã mở ca thi và phân công giám thị.')
       await loadData()
-    } catch (submitError) { setError(getErrorMessage(submitError)) } finally { setBusy(false) }
+    } catch (submitError) { toast.error(userMessage(submitError, 'Không mở được ca thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault()
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true)
     try {
       await service.assignTicket({ ...ticketForm, seatNumber: Number(ticketForm.seatNumber) })
       setTicketForm((current) => ({ ...current, studentId: '', ipAddress: '', seatNumber: current.seatNumber + 1 }))
-      setNotice('Đã phân vé thi và số máy cho sinh viên.')
-    } catch (submitError) { setError(getErrorMessage(submitError)) } finally { setBusy(false) }
+      toast.success('Đã phân vé thi và số máy cho sinh viên.')
+    } catch (submitError) { toast.error(userMessage(submitError, 'Không phân được vé thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
 
   const submitStructure = async (event: FormEvent) => {
     event.preventDefault()
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true)
     try {
       await service.createExamStructure({
         ...structureForm,
@@ -176,13 +167,13 @@ export function OfficialExamManagementPage() {
         durationMinutes: Number(structureForm.durationMinutes),
       })
       setStructureForm(emptyStructure)
-      setNotice('Đã tạo cấu trúc đề thi.')
+      toast.success('Đã tạo cấu trúc đề thi.')
       await loadData()
-    } catch (submitError) { setError(getErrorMessage(submitError)) } finally { setBusy(false) }
+    } catch (submitError) { toast.error(userMessage(submitError, 'Không tạo được cấu trúc đề thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
 
   const toggleStructure = async (structure: ExamStructure) => {
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true)
     try {
       await service.updateExamStructure(structure.id, {
         name: structure.name,
@@ -191,9 +182,9 @@ export function OfficialExamManagementPage() {
         bloomDistribution: structure.bloomDistribution,
         isActive: !structure.isActive,
       })
-      setNotice(`Đã ${structure.isActive ? 'tắt' : 'bật'} cấu trúc đề thi ${structure.name}.`)
+      toast.success(`Đã ${structure.isActive ? 'tắt' : 'bật'} cấu trúc đề thi ${structure.name}.`)
       await loadData()
-    } catch (updateError) { setError(getErrorMessage(updateError)) } finally { setBusy(false) }
+    } catch (updateError) { toast.error(userMessage(updateError, 'Không cập nhật được cấu trúc đề thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
 
   return (
@@ -215,8 +206,6 @@ export function OfficialExamManagementPage() {
           </>
         }
       />
-
-      {(error || notice) && <div role={error ? 'alert' : 'status'} className={cn('rounded-xl border px-4 py-3 text-sm font-semibold', error ? 'border-[#f0c5c9] bg-[#fff5f6] text-[#a43c47]' : 'border-[#b7e4cf] bg-[#effaf6] text-[#176f58]')}>{error || notice}</div>}
 
       <section className="grid gap-4 xl:grid-cols-3">
         <form onSubmit={submitSession} className={ds.section}>

@@ -21,13 +21,15 @@ import {
   Download,
 } from 'lucide-react'
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { ScoreOverrideForm } from '@/components/rubric/ScoreOverrideForm'
 import { officialExamService } from '@/services/officialExam.service'
 import { useAuth } from '@/hooks/useAuth'
 import type { AuditEvidenceItem, ExamTicketStatus } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { EmptyState } from '@/components/common/EmptyState'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
@@ -48,11 +50,7 @@ const STATUS_META: Record<ExamTicketStatus, { label: string; className: string }
 }
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
+  return userMessage(error, 'Không hoàn tất được yêu cầu hậu kiểm. Vui lòng thử lại.')
 }
 
 function isUuid(value: string) {

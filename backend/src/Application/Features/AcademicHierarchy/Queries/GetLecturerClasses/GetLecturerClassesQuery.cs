@@ -93,7 +93,8 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
                 c.AllowSelfEnrollment,
                 c.IsActive,
                 c.CreatedAt,
-                c.JoinPasswordPlain))
+                c.JoinPasswordPlain,
+                c.InClassExamShifts.Count(s => s.Status == "ACTIVE" || s.Status == "IN_PROGRESS")))
             .ToListAsync(cancellationToken);
 
         return Result<List<LecturerClassItemDto>>.Success(items);

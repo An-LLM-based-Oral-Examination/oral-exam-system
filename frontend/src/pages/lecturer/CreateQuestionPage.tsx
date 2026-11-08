@@ -20,7 +20,8 @@ import {
   WandSparkles,
 } from 'lucide-react'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
@@ -36,6 +37,7 @@ import type {
   UsageScope,
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
@@ -109,11 +111,7 @@ function createCriterion(maxScore = 5, bloomLevel: BloomLevel = 'Apply'): Criter
 }
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng kiểm tra dữ liệu và thử lại.'
+  return userMessage(error, 'Không lưu được câu hỏi. Vui lòng kiểm tra dữ liệu và thử lại.')
 }
 
 function splitTerms(value: string) {

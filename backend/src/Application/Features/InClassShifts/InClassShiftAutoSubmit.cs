@@ -20,7 +20,7 @@ public static class InClassShiftAutoSubmit
         Guid? shiftId = null)
     {
         var participants = await context.InClassShiftParticipants
-            .Where(participant => participant.Status != "SUBMITTED")
+            .Where(participant => !IsTerminalStatus(participant.Status))
             .Where(participant => context.InClassExamShifts.Any(shift =>
                 shift.Id == participant.ShiftId &&
                 shift.Status == "CLOSED" &&
@@ -28,6 +28,87 @@ public static class InClassShiftAutoSubmit
                 (shiftId == null || shift.Id == shiftId)))
             .ToListAsync(cancellationToken);
 
+        return await FinalizeParticipantsAsync(context, gradingQueue, participants, cancellationToken);
+    }
+
+    /// <summary>
+    /// Hết thời gian làm bài cá nhân (JoinedAt + ExamDurationMinutes) khi ca vẫn IN_PROGRESS —
+    /// tự nộp câu trống còn thiếu, khóa participant, enqueue AI.
+    /// </summary>
+    public static async Task<int> SubmitExpiredPersonalExamsAsync(
+        IApplicationDbContext context,
+        IGradingQueueChannel gradingQueue,
+        CancellationToken cancellationToken,
+        Guid? shiftId = null,
+        Guid? studentId = null)
+    {
+        var utcNow = DateTime.UtcNow;
+
+        var openShiftsQuery = context.InClassExamShifts
+            .Where(shift => shift.Status == "IN_PROGRESS" && !shift.IsLocked);
+        if (shiftId.HasValue)
+        {
+            openShiftsQuery = openShiftsQuery.Where(shift => shift.Id == shiftId.Value);
+        }
+
+        var openShifts = await openShiftsQuery
+            .Select(shift => new { shift.Id, shift.ExamDurationMinutes })
+            .ToListAsync(cancellationToken);
+
+        if (openShifts.Count == 0)
+        {
+            return 0;
+        }
+
+        var openShiftIds = openShifts.Select(shift => shift.Id).ToList();
+        var durationByShift = openShifts.ToDictionary(shift => shift.Id, shift => shift.ExamDurationMinutes);
+
+        var participantsQuery = context.InClassShiftParticipants
+            .Where(participant => openShiftIds.Contains(participant.ShiftId))
+            .Where(participant => !IsTerminalStatus(participant.Status));
+        if (studentId.HasValue)
+        {
+            participantsQuery = participantsQuery.Where(participant => participant.StudentId == studentId.Value);
+        }
+
+        var participants = await participantsQuery.ToListAsync(cancellationToken);
+        var expired = participants
+            .Where(participant =>
+            {
+                durationByShift.TryGetValue(participant.ShiftId, out var minutes);
+                var endsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant.JoinedAt, minutes);
+                return utcNow >= endsAt;
+            })
+            .ToList();
+
+        return await FinalizeParticipantsAsync(context, gradingQueue, expired, cancellationToken);
+    }
+
+    /// <summary>Khóa một participant cụ thể (hết giờ khi đang submit / resume).</summary>
+    public static async Task<int> FinalizeParticipantAsync(
+        IApplicationDbContext context,
+        IGradingQueueChannel gradingQueue,
+        InClassShiftParticipant participant,
+        CancellationToken cancellationToken)
+    {
+        if (IsTerminalStatus(participant.Status))
+        {
+            return 0;
+        }
+
+        return await FinalizeParticipantsAsync(
+            context,
+            gradingQueue,
+            new List<InClassShiftParticipant> { participant },
+            cancellationToken);
+    }
+
+    private static async Task<int> FinalizeParticipantsAsync(
+        IApplicationDbContext context,
+        IGradingQueueChannel gradingQueue,
+        IReadOnlyList<InClassShiftParticipant> participants,
+        CancellationToken cancellationToken)
+    {
         if (participants.Count == 0)
         {
             return 0;
@@ -47,6 +128,11 @@ public static class InClassShiftAutoSubmit
 
         foreach (var participant in participants)
         {
+            if (IsTerminalStatus(participant.Status))
+            {
+                continue;
+            }
+
             var assigned = EnterInClassShiftCommandHandler.ParseGuidList(participant.AssignedQuestionIdsJson);
             if (assigned.Count == 0 && participant.AssignedQuestionId.HasValue)
             {
@@ -77,14 +163,7 @@ public static class InClassShiftAutoSubmit
                 created.Add(submission);
             }
 
-            // Đóng ca → khóa tham gia: mọi participant còn mở đều chuyển SUBMITTED.
             participant.Status = "SUBMITTED";
-        }
-
-        if (created.Count == 0)
-        {
-            await context.SaveChangesAsync(cancellationToken);
-            return 0;
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -106,4 +185,7 @@ public static class InClassShiftAutoSubmit
 
         return created.Count;
     }
+
+    private static bool IsTerminalStatus(string? status) =>
+        EnterInClassShiftCommandHandler.IsCompletedParticipation(status);
 }

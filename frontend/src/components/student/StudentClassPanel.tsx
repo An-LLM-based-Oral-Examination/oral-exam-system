@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Mic2, Search, TimerReset, UserRound, UsersRound, X } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
@@ -10,17 +11,14 @@ import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { studentCardShellClass } from '@/design/studentCardTones'
 import { StudentColorCardAccent } from '@/design/ui'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { classService } from '@/services/class.service'
 import type { JoinableClassItem, SemesterOption, StudentClassItem } from '@/types/class.types'
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể tải lớp học.'
+  return userMessage(error, 'Không tải được lớp học. Vui lòng thử lại.')
 }
 
 const COURSE_CODE_TONES = [
@@ -79,17 +77,12 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
   const [searchFailed, setSearchFailed] = useState(false)
   const [password, setPassword] = useState('')
   const [keyword, setKeyword] = useState('')
-  const appliedKeyword = keyword.trim()
+  const [appliedKeyword, setAppliedKeyword] = useState('')
   const searchRef = useRef<HTMLDivElement>(null)
   const requestId = useRef(0)
   const passwordRef = useRef<HTMLInputElement>(null)
-  const onClassCountRef = useRef(onClassCount)
 
-  useEffect(() => {
-    onClassCountRef.current = onClassCount
-  }, [onClassCount])
-
-  const loadMine = useCallback(async (silent = false) => {
+  const loadMine = async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
     try {
@@ -100,57 +93,58 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
       setSemesters(semesterResult)
       setSemesterId((current) => current || pickCurrentSemester(semesterResult)?.id || '')
       setMine(myResult)
-      onClassCountRef.current?.(myResult.length)
+      onClassCount?.(myResult.length)
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    return scheduleUi(() => {
+      void loadMine()
+    })
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadMine()
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [loadMine])
-
-  useEffect(() => {
     const trimmed = keyword.trim()
-    const current = ++requestId.current
-    const timer = window.setTimeout(
-      () => {
-        if (!semesterId || !trimmed) {
-          setDirectory([])
-          setSearched(false)
-          setSearching(false)
-          setSearchFailed(false)
-          return
-        }
-        setSearched(true)
+    if (!semesterId || !trimmed) {
+      requestId.current += 1
+      return scheduleUi(() => {
+        setAppliedKeyword(trimmed)
+        setDirectory([])
+        setSearched(false)
+        setSearching(false)
         setSearchFailed(false)
-        setSearching(true)
-        void (async () => {
-          try {
-            const openResult = await classService.searchClasses({
-              keyword: trimmed,
-              semesterId,
-            })
-            if (requestId.current !== current) return
-            setDirectory(openResult)
-            setError('')
-          } catch (searchError) {
-            if (requestId.current !== current) return
-            setDirectory([])
-            setSearchFailed(true)
-            toast.error(getErrorMessage(searchError))
-          } finally {
-            if (requestId.current === current) setSearching(false)
-          }
-        })()
-      },
-      !semesterId || !trimmed ? 0 : 280,
-    )
+      })
+    }
+
+    const current = ++requestId.current
+    const timer = window.setTimeout(() => {
+      setAppliedKeyword(trimmed)
+      setSearched(true)
+      setSearchFailed(false)
+      setSearching(true)
+      void (async () => {
+        try {
+          const openResult = await classService.searchClasses({
+            keyword: trimmed,
+            semesterId,
+          })
+          if (requestId.current !== current) return
+          setDirectory(openResult)
+          setError('')
+        } catch (searchError) {
+          if (requestId.current !== current) return
+          setDirectory([])
+          setSearchFailed(true)
+          toast.error(getErrorMessage(searchError))
+        } finally {
+          if (requestId.current === current) setSearching(false)
+        }
+      })()
+    }, 280)
 
     return () => window.clearTimeout(timer)
   }, [keyword, semesterId])

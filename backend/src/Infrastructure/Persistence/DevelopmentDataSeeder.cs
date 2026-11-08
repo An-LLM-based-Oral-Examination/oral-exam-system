@@ -24,6 +24,8 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid DepartmentHeadUserId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     public static readonly Guid LecturerUserId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     public static readonly Guid Lecturer2UserId = Guid.Parse("00000000-0000-0000-0000-00000000000d");
+    public static readonly Guid Lecturer3UserId = Guid.Parse("00000000-0000-0000-0000-00000000000e");
+    public static readonly Guid Lecturer4UserId = Guid.Parse("00000000-0000-0000-0000-00000000000f");
     public static readonly Guid ProctorUserId = Guid.Parse("00000000-0000-0000-0000-000000000004");
     public static readonly Guid StudentHoangId = Guid.Parse("00000000-0000-0000-0000-000000000005");
     public static readonly Guid StudentMaiId = Guid.Parse("00000000-0000-0000-0000-000000000006");
@@ -185,6 +187,32 @@ public static partial class DevelopmentDataSeeder
                 FullName = "Phạm Minh Khoa",
                 Username = "lecturer2",
                 PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Lecturer2!", "lecturer2"),
+                MustChangePassword = false,
+                Role = UserRole.Lecturer,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Lecturer3UserId,
+                Email = "lecturer3@fe.edu.vn",
+                FullName = "Lê Thu Hà",
+                Username = "lecturer3",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Lecturer3!", "lecturer3"),
+                MustChangePassword = false,
+                Role = UserRole.Lecturer,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = Lecturer4UserId,
+                Email = "lecturer4@fe.edu.vn",
+                FullName = "Hoàng Đức Anh",
+                Username = "lecturer4",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-Lecturer4!", "lecturer4"),
                 MustChangePassword = false,
                 Role = UserRole.Lecturer,
                 IsActive = true,

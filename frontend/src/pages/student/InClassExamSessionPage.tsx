@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { toast } from '@/components/common/toastStore'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import {
@@ -23,9 +24,13 @@ import {
 } from '@/services/speech.service'
 import type { InClassShift, StudentExamQuestion } from '@/types/inClassShift.types'
 import {
+  clearInClassExamDrafts,
   clearInClassExamSession,
+  loadInClassExamDrafts,
   loadInClassExamSession,
   markInClassShiftCompleted,
+  saveInClassExamDrafts,
+  saveInClassExamSession,
 } from '@/utils/inClassExamSessionStorage'
 
 interface FollowUpTurnState {
@@ -58,10 +63,6 @@ function fitTranscriptTextarea(el: HTMLTextAreaElement | null) {
   el.style.overflowY = contentHeight > maxHeight + 1 ? 'auto' : 'hidden'
 }
 
-function examDurationMinutesOf(shift: InClassShift) {
-  return Math.max(1, shift.examDurationMinutes ?? shift.durationMinutes ?? 30)
-}
-
 function getErrorMessage(error: unknown) {
   if (typeof error === 'object' && error !== null && 'detail' in error) {
     const detail = (error as { detail?: unknown }).detail
@@ -74,11 +75,16 @@ function getErrorMessage(error: unknown) {
 export function InClassExamSessionPage() {
   const navigate = useNavigate()
   const boot = loadInClassExamSession()
+  const draftBoot = boot ? loadInClassExamDrafts(boot.shift.id) : null
   const [shift] = useState<InClassShift | null>(boot?.shift ?? null)
   const [questions] = useState<StudentExamQuestion[]>(boot?.questions ?? [])
   const [startedAt] = useState(() => boot?.startedAt ?? Date.now())
-  const [questionIndex, setQuestionIndex] = useState(0)
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [examEndsAt] = useState(() => boot?.examEndsAt ?? Date.now())
+  const [questionIndex, setQuestionIndex] = useState(() => {
+    if (!boot || !draftBoot) return 0
+    return Math.max(0, Math.min(boot.questions.length - 1, draftBoot.questionIndex))
+  })
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => draftBoot?.drafts ?? {})
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({})
   const [followUpTurns, setFollowUpTurns] = useState<Record<string, FollowUpTurnState>>({})
   const [busy, setBusy] = useState(false)
@@ -87,12 +93,9 @@ export function InClassExamSessionPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reRecording, setReRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const examLimitSeconds = shift ? examDurationMinutesOf(shift) * 60 : 0
-  const [secondsLeft, setSecondsLeft] = useState(() => {
-    if (!shift) return 0
-    const elapsed = Math.floor((Date.now() - startedAt) / 1000)
-    return Math.max(0, examDurationMinutesOf(shift) * 60 - elapsed)
-  })
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)),
+  )
   const [answerError, setAnswerError] = useState('')
   const speech = useSpeechRecognition()
   const transcriptAreaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -134,7 +137,10 @@ export function InClassExamSessionPage() {
 
   const leaveWithMessage = useCallback(
     (message: string, finishedShiftId?: string) => {
-      if (finishedShiftId) markInClassShiftCompleted(finishedShiftId)
+      if (finishedShiftId) {
+        markInClassShiftCompleted(finishedShiftId)
+        clearInClassExamDrafts(finishedShiftId)
+      }
       clearInClassExamSession()
       navigate('/in-class-exam', {
         replace: true,
@@ -152,14 +158,11 @@ export function InClassExamSessionPage() {
 
   useEffect(() => {
     if (!shift) return
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
-      setSecondsLeft(Math.max(0, examLimitSeconds - elapsed))
-    }
+    const tick = () => setSecondsLeft(Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)))
     tick()
     const timer = window.setInterval(tick, 1000)
     return () => window.clearInterval(timer)
-  }, [examLimitSeconds, shift, startedAt])
+  }, [examEndsAt, shift])
 
   useEffect(() => {
     if (!showTranscript) return
@@ -209,48 +212,75 @@ export function InClassExamSessionPage() {
       .filter((item) => item.transcript.length > 0)
   }, [])
 
-  const flushExamKeepalive = useCallback(() => {
+  const persistDrafts = useCallback(() => {
     if (!shift || endedRef.current) return
-    endedRef.current = true
+    const pendingDrafts = { ...draftsRef.current }
+    const speechNow = speechRef.current
+    const currentQuestion = questionsRef.current[questionIndexRef.current]
+    if (currentQuestion && speechNow.transcript.trim()) {
+      const turn = followUpTurnsRef.current[currentQuestion.questionId]
+      const key = getTurnKey(currentQuestion.questionId, turn?.followUpIndex ?? 0)
+      pendingDrafts[key] = speechNow.transcript
+    }
+    saveInClassExamDrafts(shift.id, {
+      drafts: pendingDrafts,
+      questionIndex: questionIndexRef.current,
+    })
+    if (boot) {
+      saveInClassExamSession({
+        ...boot,
+        startedAt,
+        examEndsAt,
+      })
+    }
+  }, [boot, examEndsAt, shift, startedAt])
+
+  const submitExamForGrading = useCallback(async () => {
+    if (!shift) return false
     stopReadingQuestion()
     const speechNow = speechRef.current
     if (speechNow.isListening) speechNow.stopListening()
     const answers = collectPendingAnswers()
-    inClassShiftService.flushStudentExamOnLeave(shift.id, answers)
-    markInClassShiftCompleted(shift.id)
-    clearInClassExamSession()
+    await Promise.all(
+      answers.map(async (item) => {
+        try {
+          await inClassShiftService.submitStudentAnswer(shift.id, item.questionId, item.transcript)
+        } catch {
+          // Máy chủ vẫn nộp các câu chưa có bài khi ca đóng.
+        }
+      }),
+    )
+    try {
+      await inClassShiftService.finishStudentExam(shift.id)
+      markInClassShiftCompleted(shift.id)
+      clearInClassExamDrafts(shift.id)
+      clearInClassExamSession()
+      return true
+    } catch {
+      return false
+    }
   }, [collectPendingAnswers, shift, stopReadingQuestion])
 
   const endExam = useCallback(
     (message: string) => {
       if (!shift || endedRef.current) return
       endedRef.current = true
-      stopReadingQuestion()
-      const speechNow = speechRef.current
-      if (speechNow.isListening) speechNow.stopListening()
-      const answers = collectPendingAnswers()
       void (async () => {
-        await Promise.all(
-          answers.map(async (item) => {
-            try {
-              await inClassShiftService.submitStudentAnswer(shift.id, item.questionId, item.transcript)
-            } catch {
-              // Máy chủ vẫn nộp các câu chưa có bài khi ca đóng.
-            }
-          }),
-        )
-        try {
-          await inClassShiftService.finishStudentExam(shift.id)
-        } catch {
-          // Vẫn rời phòng nếu finish lỗi mạng — danh sách sẽ khóa khi tải lại.
+        const finishedOk = await submitExamForGrading()
+        if (finishedOk) {
+          leaveWithMessage(message, shift.id)
+          return
         }
-        leaveWithMessage(message, shift.id)
+        endedRef.current = false
+        toast.error('Không nộp được bài lên máy chủ. Hãy thử nộp lại.')
+        setBusy(false)
       })()
     },
-    [collectPendingAnswers, leaveWithMessage, shift, stopReadingQuestion],
+    [leaveWithMessage, shift, submitExamForGrading],
   )
   const endExamRef = useRef(endExam)
-  const flushExamKeepaliveRef = useRef(flushExamKeepalive)
+  const submitExamForGradingRef = useRef(submitExamForGrading)
+  const persistDraftsRef = useRef(persistDrafts)
 
   useEffect(() => {
     speechRef.current = speech
@@ -260,18 +290,25 @@ export function InClassExamSessionPage() {
     questionIndexRef.current = questionIndex
     followUpTurnsRef.current = followUpTurns
     endExamRef.current = endExam
-    flushExamKeepaliveRef.current = flushExamKeepalive
+    submitExamForGradingRef.current = submitExamForGrading
+    persistDraftsRef.current = persistDrafts
   })
 
   useEffect(() => {
+    if (!shift) return
+    const timer = window.setInterval(() => persistDraftsRef.current(), 5000)
+    return () => window.clearInterval(timer)
+  }, [shift])
+
+  useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      flushExamKeepaliveRef.current()
+      persistDraftsRef.current()
       event.preventDefault()
-      event.returnValue = 'Bài làm sẽ được nộp tự động nếu bạn rời trang.'
+      event.returnValue = 'Thời gian vẫn chạy. Bạn có thể vào lại để làm tiếp trước khi hết giờ.'
     }
     const onPageHide = (event: PageTransitionEvent) => {
       if (event.persisted) return
-      flushExamKeepaliveRef.current()
+      persistDraftsRef.current()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('pagehide', onPageHide)
@@ -288,12 +325,51 @@ export function InClassExamSessionPage() {
       currentLocation.pathname !== nextLocation.pathname,
   )
 
+  const leaveSubmitInFlightRef = useRef(false)
+
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    flushExamKeepaliveRef.current()
-    toast.success('Bạn đã rời trang làm bài. Bài làm được nộp tự động để AI chấm.')
-    blocker.proceed?.()
-  }, [blocker])
+    if (!shift) {
+      blocker.proceed?.()
+      return
+    }
+    if (leaveSubmitInFlightRef.current) return
+    if (endedRef.current) {
+      blocker.proceed?.()
+      return
+    }
+
+    const shouldSubmit = window.confirm(
+      'Nộp bài và thoát phòng?\n\nChọn OK để nộp bài (AI chấm). Chọn Cancel để ở lại làm tiếp.',
+    )
+    if (!shouldSubmit) {
+      persistDraftsRef.current()
+      blocker.reset?.()
+      return
+    }
+
+    leaveSubmitInFlightRef.current = true
+    endedRef.current = true
+    void (async () => {
+      const finishedOk = await submitExamForGradingRef.current()
+      leaveSubmitInFlightRef.current = false
+      if (finishedOk) {
+        toast.success('Đã nộp bài. AI đang chấm nền.')
+        blocker.reset?.()
+        navigate('/in-class-exam', {
+          replace: true,
+          state: {
+            notice: 'Đã nộp bài. AI đang chấm nền; điểm hiện sau khi giảng viên chốt.',
+            finishedShiftId: shift.id,
+          },
+        })
+        return
+      }
+      endedRef.current = false
+      toast.error('Không nộp được bài lên máy chủ. Hãy ở lại phòng và thử nộp lại.')
+      blocker.reset?.()
+    })()
+  }, [blocker, navigate, shift])
 
   useEffect(() => {
     if (secondsLeft !== 0) return
@@ -322,7 +398,9 @@ export function InClassExamSessionPage() {
   }, [shift])
 
   useEffect(() => {
-    if (!speech.isListening) return
+    if (!speech.isListening) {
+      return scheduleUi(() => setRecordingSeconds(0))
+    }
     const timer = window.setInterval(() => setRecordingSeconds((current) => current + 1), 1000)
     return () => {
       window.clearInterval(timer)

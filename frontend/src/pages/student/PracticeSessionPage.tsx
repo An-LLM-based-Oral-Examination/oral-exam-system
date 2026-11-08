@@ -26,6 +26,8 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
+import { toast } from '@/components/common/toastStore'
 import {
   isLikelySilentOrInvalidTranscript,
   looksLikeQuestionEcho,
@@ -161,10 +163,10 @@ function getErrorInfo(error: unknown) {
   const candidate = error as Record<string, unknown>
   const status = typeof candidate.status === 'number' ? candidate.status : 500
   const rawMessage = candidate.detail ?? candidate.error ?? candidate.message ?? candidate.title
-  const message =
-    typeof rawMessage === 'string' && rawMessage.trim()
-      ? rawMessage.trim()
-      : 'Không thể xử lý yêu cầu. Vui lòng thử lại.'
+  const message = userMessage(
+    typeof rawMessage === 'string' ? rawMessage : error,
+    'Không thể xử lý yêu cầu. Vui lòng thử lại.',
+  )
 
   if ([502, 503, 504].includes(status) || /status code (502|503|504)/i.test(message)) {
     return {
@@ -479,6 +481,24 @@ export const PracticeSessionPage: React.FC = () => {
     segmentDurationMs: 20_000,
     onSegment: handleRecorderSegment,
   })
+
+  const lastPageError = useRef('')
+  const lastRecorderError = useRef('')
+  useEffect(() => {
+    if (pageError && pageError !== lastPageError.current) {
+      lastPageError.current = pageError
+      toast.error(pageError)
+    }
+    if (!pageError) lastPageError.current = ''
+  }, [pageError])
+  useEffect(() => {
+    if (recorderError && recorderError !== lastRecorderError.current) {
+      lastRecorderError.current = recorderError
+      toast.error(recorderError)
+    }
+    if (!recorderError) lastRecorderError.current = ''
+  }, [recorderError])
+
   const {
     status: hubStatus,
     isConnected: isHubConnected,
@@ -2267,28 +2287,6 @@ export const PracticeSessionPage: React.FC = () => {
           hasQuestionImage && 'gap-1 px-3 py-3 sm:px-6 sm:py-4',
         )}
       >
-      {(pageError || recorderError) && (
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#efc4ca] bg-[#fff5f6] px-4 py-3 text-sm font-semibold text-[#b6384e] shadow-[0_8px_24px_rgba(182,56,78,0.05)]"
-          role="alert"
-        >
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#d94c63] shadow-sm">
-              <AlertCircle className="size-4" />
-            </span>
-            <span className="pt-1 leading-relaxed">{pageError || recorderError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void completeAndExit()}
-            disabled={isCompleting}
-            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#d94c63]/40 bg-white px-3 text-xs font-bold text-[#b6384e] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#ffe8ec] disabled:opacity-50 motion-reduce:transform-none"
-          >
-            <X className="size-3.5" /> Thoát phiên
-          </button>
-        </div>
-      )}
-
       {sessionNotice && !showGradingCard && !runtime.activeFollowUp && (
         <div
           className="flex items-start gap-2.5 rounded-2xl border border-[#82aedb]/55 bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
@@ -3077,7 +3075,6 @@ export const PracticeSessionPage: React.FC = () => {
                 ? 'Hoàn tất phiên'
                 : 'Câu chính tiếp theo'
           }
-          errorMessage={pageError}
           isActionPending={isSubmitting || isCompleting}
         />
       )}

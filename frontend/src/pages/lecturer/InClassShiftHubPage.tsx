@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
-  AlertCircle,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -21,14 +20,17 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { InClassShiftPageBanner } from '@/pages/lecturer/InClassShiftPageBanner'
 import { ds } from '@/design/system'
+import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
+import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import { questionService } from '@/services/question.service'
 import { InClassShiftProjectorDialog } from '@/pages/lecturer/InClassShiftProjectorDialog'
@@ -81,12 +83,7 @@ const STATUS_FILTERS: Array<{
 ]
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  if (error instanceof Error && error.message) return error.message
-  return 'Không thể tải dữ liệu ca thi trên lớp.'
+  return userMessage(error, 'Không tải được dữ liệu ca thi trên lớp. Vui lòng thử lại.')
 }
 
 function statusChip(status: InClassShiftStatus) {
@@ -229,8 +226,7 @@ function ClockField({
 
   useLayoutEffect(() => {
     if (!open) {
-
-      return
+      return scheduleUi(() => setBox(null))
     }
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect()
@@ -247,10 +243,11 @@ function ClockField({
           : { top: rect.bottom + gap, left, width },
       )
     }
-    place()
+    const cancelPlace = scheduleUi(place)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     return () => {
+      cancelPlace()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
@@ -368,8 +365,7 @@ function DateField({
   useEffect(() => {
     if (!open || !value) return
     const date = parseDateKey(value)
-    const timer = window.setTimeout(() => setCursor(new Date(date.getFullYear(), date.getMonth(), 1)), 0)
-    return () => window.clearTimeout(timer)
+    return scheduleUi(() => setCursor(new Date(date.getFullYear(), date.getMonth(), 1)))
   }, [open, value])
 
   useEffect(() => {
@@ -395,8 +391,7 @@ function DateField({
 
   useLayoutEffect(() => {
     if (!open) {
-
-      return
+      return scheduleUi(() => setBox(null))
     }
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect()
@@ -413,10 +408,11 @@ function DateField({
           : { top: rect.bottom + gap, left },
       )
     }
-    place()
+    const cancelPlace = scheduleUi(place)
     window.addEventListener('resize', place)
     window.addEventListener('scroll', place, true)
     return () => {
+      cancelPlace()
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
@@ -578,11 +574,13 @@ type FieldErrors = Partial<Record<'classId' | 'title' | 'examDate' | 'time' | 'e
 function CreateInClassShiftDialog({
   open,
   classes,
+  fixedClassId,
   onClose,
   onCreated,
 }: {
   open: boolean
   classes: LecturerClassOption[]
+  fixedClassId?: string
   onClose: () => void
   onCreated: (shift: InClassShift) => void
 }) {
@@ -607,59 +605,59 @@ function CreateInClassShiftDialog({
   useEffect(() => {
     if (!open) return
     // Cửa sổ ca mặc định 2 giờ — đủ thời gian cấu hình đề trước khi kích hoạt.
-    const timer = window.setTimeout(() => {
-      const start = new Date()
+    const start = new Date()
     const end = new Date(start.getTime() + 2 * 60 * 60_000)
-    setStep(1)
-    setClassId(classes[0]?.id ?? '')
-    setTitle('')
-    setExamDate(toDateKey(start))
-    setStartClock(toClock(start))
-    setEndClock(toClock(end))
-    setExamMinutes(20)
-    setDescription('')
-    setQuestionCount(1)
-    setHasFollowUp(false)
-    setMaxFollowUpQuestions(2)
-    setPoolMode('ALL_COURSE_BANK')
-    setSelectedQuestionIds([])
-    setQuestionOptions([])
-    setFieldErrors({})
+    return scheduleUi(() => {
+      setStep(1)
+      setClassId(fixedClassId || classes[0]?.id || '')
+      setTitle('')
+      setExamDate(toDateKey(start))
+      setStartClock(toClock(start))
+      setEndClock(toClock(end))
+      setExamMinutes(20)
+      setDescription('')
+      setQuestionCount(1)
+      setHasFollowUp(false)
+      setMaxFollowUpQuestions(2)
+      setPoolMode('ALL_COURSE_BANK')
+      setSelectedQuestionIds([])
+      setQuestionOptions([])
+      setFieldErrors({})
       setBusy(false)
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [open, classes])
+    })
+  }, [open, classes, fixedClassId])
 
   const selectedCourseId = classes.find((item) => item.id === classId)?.courseId
 
   useEffect(() => {
     if (!open || poolMode !== 'SELECTED_POOL') return
     if (!selectedCourseId) {
-      const emptyTimer = window.setTimeout(() => setQuestionOptions([]), 0)
-      return () => window.clearTimeout(emptyTimer)
+      return scheduleUi(() => setQuestionOptions([]))
     }
     let cancelled = false
-    const loadingTimer = window.setTimeout(() => setQuestionsLoading(true), 0)
-    void questionService
-      .getQuestions({
-        courseId: selectedCourseId,
-        approvalStatus: 'APPROVED',
-        pageNumber: 1,
-        pageSize: 100,
-      })
-      .then((result) => {
-        if (cancelled) return
-        setQuestionOptions(result.items.map((item) => ({ id: item.id, title: item.title })))
-      })
-      .catch(() => {
-        if (!cancelled) setQuestionOptions([])
-      })
-      .finally(() => {
-        if (!cancelled) setQuestionsLoading(false)
-      })
+    const cancelStart = scheduleUi(() => {
+      setQuestionsLoading(true)
+      void questionService
+        .getQuestions({
+          courseId: selectedCourseId,
+          approvalStatus: 'APPROVED',
+          pageNumber: 1,
+          pageSize: 100,
+        })
+        .then((result) => {
+          if (cancelled) return
+          setQuestionOptions(result.items.map((item) => ({ id: item.id, title: item.title })))
+        })
+        .catch(() => {
+          if (!cancelled) setQuestionOptions([])
+        })
+        .finally(() => {
+          if (!cancelled) setQuestionsLoading(false)
+        })
+    })
     return () => {
       cancelled = true
-      window.clearTimeout(loadingTimer)
+      cancelStart()
     }
   }, [open, poolMode, selectedCourseId])
 
@@ -805,7 +803,7 @@ function CreateInClassShiftDialog({
   }
 
   const steps = [
-    { id: 1 as const, title: 'Lớp và thời gian' },
+    { id: 1 as const, title: fixedClassId ? 'Thời gian' : 'Lớp và thời gian' },
     { id: 2 as const, title: 'Cấu trúc đề' },
   ]
 
@@ -814,7 +812,7 @@ function CreateInClassShiftDialog({
       titleId="create-inclass-title"
       eyebrow="Ca kiểm tra"
       title="Tạo ca kiểm tra"
-      subtitle={step === 1 ? 'Chọn lớp, tên ca và khung giờ.' : 'Chọn số câu và thời gian làm bài.'}
+      subtitle={step === 1 ? (fixedClassId ? 'Đặt tên ca và khung giờ.' : 'Chọn lớp, tên ca và khung giờ.') : 'Chọn số câu và thời gian làm bài.'}
       icon={ClipboardList}
       onClose={onClose}
       busy={busy}
@@ -900,6 +898,7 @@ function CreateInClassShiftDialog({
       <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-3">
             {step === 1 ? (
               <section className="space-y-3">
+                {fixedClassId ? null : (
                 <label className="block">
                   <span className={fieldLabelClass(Boolean(fieldErrors.classId))}>Lớp</span>
                   <FilterDropMenu
@@ -916,6 +915,7 @@ function CreateInClassShiftDialog({
                   />
                   <FieldError message={fieldErrors.classId} />
                 </label>
+                )}
                 <label className="block">
                   <span className={fieldLabelClass(Boolean(fieldErrors.title))}>Tên ca</span>
                   <input
@@ -1124,15 +1124,20 @@ function CreateInClassShiftDialog({
   )
 }
 
-export function InClassShiftHubPage() {
+export function InClassShiftHubPage({
+  classId: lockedClassId,
+  embedded = false,
+}: {
+  classId?: string
+  embedded?: boolean
+} = {}) {
+  const [searchParams] = useSearchParams()
   const [classes, setClasses] = useState<LecturerClassOption[]>([])
   const [shifts, setShifts] = useState<InClassShift[]>([])
-  const [classFilter, setClassFilter] = useState('ALL')
+  const [classFilter, setClassFilter] = useState(() => lockedClassId || searchParams.get('classId') || 'ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [projectorShiftId, setProjectorShiftId] = useState<string | null>(null)
   const [activatingId, setActivatingId] = useState<string | null>(null)
@@ -1144,17 +1149,16 @@ export function InClassShiftHubPage() {
     let cancelled = false
     const load = async () => {
       setLoading(true)
-      setError('')
       try {
         const [classResult, shiftResult] = await Promise.all([
           inClassShiftService.getLecturerClasses(),
-          inClassShiftService.listShifts(),
+          inClassShiftService.listShifts(lockedClassId ? { classId: lockedClassId } : undefined),
         ])
         if (cancelled) return
-        setClasses(classResult)
+        setClasses(lockedClassId ? classResult.filter((item) => item.id === lockedClassId) : classResult)
         setShifts(shiftResult)
       } catch (loadError) {
-        if (!cancelled) setError(getErrorMessage(loadError))
+        if (!cancelled) toast.error(getErrorMessage(loadError))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -1163,14 +1167,14 @@ export function InClassShiftHubPage() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, lockedClassId])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void inClassShiftService.listShifts().then(setShifts).catch(() => undefined)
+      void inClassShiftService.listShifts(lockedClassId ? { classId: lockedClassId } : undefined).then(setShifts).catch(() => undefined)
     }, 15000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [lockedClassId])
 
   const classOptions = useMemo(() => {
     if (classes.length === 0) return []
@@ -1180,10 +1184,12 @@ export function InClassShiftHubPage() {
     ]
   }, [classes])
 
+  const activeClassId = lockedClassId || classFilter
+
   const classScopedShifts = useMemo(() => {
-    if (classFilter === 'ALL') return shifts
-    return shifts.filter((shift) => shift.classId === classFilter)
-  }, [shifts, classFilter])
+    if (activeClassId === 'ALL') return shifts
+    return shifts.filter((shift) => shift.classId === activeClassId)
+  }, [shifts, activeClassId])
 
   const statusCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = {
@@ -1214,16 +1220,14 @@ export function InClassShiftHubPage() {
 
   const activate = async (shift: InClassShift) => {
     setActivatingId(shift.id)
-    setError('')
-    setNotice('')
     try {
       await inClassShiftService.activateShift(shift.id)
       setShifts((current) =>
         current.map((item) => (item.id === shift.id ? { ...item, status: 'ACTIVE' } : item)),
       )
-      setNotice(`Đã kích hoạt “${shift.title}”. Có thể chiếu mã OTP cho sinh viên.`)
+      toast.success(`Đã kích hoạt “${shift.title}”. Có thể chiếu mã OTP cho sinh viên.`)
     } catch (activateError) {
-      setError(getErrorMessage(activateError))
+      toast.error(userMessage(activateError, 'Không kích hoạt được ca thi. Vui lòng thử lại.'))
     } finally {
       setActivatingId(null)
     }
@@ -1232,57 +1236,24 @@ export function InClassShiftHubPage() {
   const confirmClose = async () => {
     if (!closingShift) return
     setClosing(true)
-    setError('')
-    setNotice('')
     try {
       await inClassShiftService.closeShift(closingShift.id)
       setShifts((current) =>
         current.map((item) => (item.id === closingShift.id ? { ...item, status: 'CLOSED' } : item)),
       )
       if (projectorShiftId === closingShift.id) setProjectorShiftId(null)
-      setNotice(`Đã đóng ca “${closingShift.title}”. Sinh viên không vào ca hoặc nộp bài được nữa.`)
+      toast.success(`Đã đóng ca “${closingShift.title}”. Sinh viên không vào ca hoặc nộp bài được nữa.`)
       setClosingShift(null)
     } catch (closeError) {
-      setError(getErrorMessage(closeError))
+      toast.error(userMessage(closeError, 'Không đóng được ca thi. Vui lòng thử lại.'))
     } finally {
       setClosing(false)
     }
   }
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-8')}>
-      <InClassShiftPageBanner />
-
-      {(error || notice) && (
-        <div
-          className={cn(
-            'flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm',
-            error
-              ? 'border-[#f3c8cf] bg-[#fff5f6] text-[#b33d52]'
-              : 'border-[#bcebdc] bg-[#effbf6] text-[#16785f]',
-          )}
-          role={error ? 'alert' : 'status'}
-        >
-          <span className="flex items-center gap-2 font-medium">
-            {error ? (
-              <AlertCircle className="size-4 shrink-0" />
-            ) : (
-              <CheckCircle2 className="size-4 shrink-0" />
-            )}
-            {error || notice}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setError('')
-              setNotice('')
-            }}
-            className="text-xs font-bold underline-offset-2 hover:underline"
-          >
-            Đóng
-          </button>
-        </div>
-      )}
+    <div lang="vi" className={embedded ? 'space-y-3' : cn(ds.page, 'pb-8')}>
+      {embedded ? null : <InClassShiftPageBanner />}
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between')}>
@@ -1296,9 +1267,10 @@ export function InClassShiftHubPage() {
                   {loading ? '…' : `${filtered.length} ca`}
                 </span>
               </div>
-              <p className={ds.sectionHint}>Theo dõi các ca kiểm tra trên lớp</p>
+              <p className={ds.sectionHint}>{embedded ? 'Ca kiểm tra của lớp này' : 'Theo dõi các ca kiểm tra trên lớp'}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {lockedClassId ? null : (
               <FilterDropMenu
                 label="Lớp học phần"
                 value={classFilter}
@@ -1307,6 +1279,7 @@ export function InClassShiftHubPage() {
                 emptyText="Chưa có lớp"
                 className="w-56 shrink-0"
               />
+              )}
               <div className="relative shrink-0">
                 <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
                 <input
@@ -1518,7 +1491,7 @@ export function InClassShiftHubPage() {
                       </button>
                     )}
                     <Link
-                      to={`/in-class-shifts/${shift.id}/results`}
+                      to={shift.classId ? `/lecturer/classes/${shift.classId}/shifts/${shift.id}/results` : '/lecturer/classes'}
                       className={cn(ds.outlineButton, 'min-h-10')}
                     >
                       {shift.status === 'FINALIZED' ? 'Xem điểm' : 'Bảng điểm'}
@@ -1536,10 +1509,11 @@ export function InClassShiftHubPage() {
       <CreateInClassShiftDialog
         open={createOpen}
         classes={classes}
+        fixedClassId={lockedClassId}
         onClose={() => setCreateOpen(false)}
         onCreated={(shift) => {
           setCreateOpen(false)
-          setNotice(`Đã tạo ca “${shift.title}”. Bấm Kích hoạt khi bắt đầu giờ thi, rồi chiếu mã OTP.`)
+          toast.success(`Đã tạo ca “${shift.title}”. Bấm Kích hoạt khi bắt đầu giờ thi, rồi chiếu mã OTP.`)
           setShifts((current) => [shift, ...current.filter((item) => item.id !== shift.id)])
         }}
       />

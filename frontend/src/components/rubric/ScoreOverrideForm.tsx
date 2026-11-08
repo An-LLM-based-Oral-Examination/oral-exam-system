@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { AlertCircle, CheckCircle2, LockKeyhole, Save } from 'lucide-react'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { cn } from '@/lib/utils'
 
 interface ScoreOverrideFormProps {
