@@ -10,6 +10,8 @@ public interface IPracticeClient
     Task ReceiveGradingResult(PracticeAnswerDetailDto result);
     // Nhận sự kiện chấm điểm ca thi trong lớp MF-05 theo đặc tả tích hợp FE
     Task InClassSubmissionGraded(object payload);
+    // Nhận sự kiện chốt sổ bảng điểm ca thi trong lớp MF-05
+    Task InClassShiftGradesFinalized(object payload);
     // Nhận thông báo lỗi nếu chấm tạch
     Task ReceiveGradingError(Guid answerId, string error);
 }

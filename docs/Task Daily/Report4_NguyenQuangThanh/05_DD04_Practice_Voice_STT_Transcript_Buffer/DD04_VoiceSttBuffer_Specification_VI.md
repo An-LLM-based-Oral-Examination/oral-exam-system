@@ -142,56 +142,53 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     actor Student as Student
-    participant UI as Practice Audio UI
+    participant UI as Practice UI
     participant Ctrl as SpeechController
-    participant TtsHdl as SynthesizeSpeechQueryHandler
-    participant TtsSvc as ResilientTextToSpeechService
-    participant SttHdl as TranscribeSpeechCommandHandler
-    participant SttSvc as ResilientSpeechToTextService
+    participant Handler as SynthesizeSpeech / TranscribeHandler
+    participant Svc as ResilientTextToSpeech / SpeechToTextService
     participant Ext as Cloud AI & SE Normalizer
 
-    Student->>UI: Click listen question or start microphone recording
+    Student->>UI: 1. Listen question or record answer
 
-    opt AI Examiner Reads Question via TTS
-        UI->>Ctrl: Send question speech synthesis request
-        Ctrl->>TtsHdl: Forward SynthesizeSpeechQuery
-        TtsHdl->>TtsSvc: Request neural voice synthesis
-        alt SHA-256 Audio Cache Hit
-            TtsSvc-->>TtsHdl: Return cached MP3 audio bytes
-            TtsHdl-->>Ctrl: Return synthesis result
-            Ctrl-->>UI: Stream question audio to browser
-        else Audio Cache Miss
-            TtsSvc->>Ext: Synthesize via Edge Neural TTS or fallback Google TTS
-            TtsSvc-->>TtsHdl: Return synthesized audio bytes
-            TtsHdl-->>Ctrl: Return synthesis result
-            Ctrl-->>UI: Stream question audio to browser
+    alt Synthesize Question Speech
+        UI->>Ctrl: 2.1 Send text-to-speech request
+        Ctrl->>Handler: 3.1 Forward speech synthesis query
+        Handler->>Svc: 4.1 Request speech synthesis
+        alt Audio Cached
+            Svc-->>Handler: 5.1 Return cached audio bytes
+            Handler-->>Ctrl: 6.1 Return synthesis response
+            Ctrl-->>UI: 7.1 Play question audio
+        else Audio Not Cached
+            Svc->>Ext: 5.2 Generate neural speech audio
+            Ext-->>Svc: 6.2 Return audio bytes
+            Svc-->>Handler: 7.2 Return synthesis result
+            Handler-->>Ctrl: 8.2 Return success response
+            Ctrl-->>UI: 9.2 Play question audio
+        end
+    else Transcribe Recorded Answer
+        UI->>Ctrl: 2.3 Send recorded audio stream
+        Ctrl->>Handler: 3.3 Forward transcription command
+        Handler->>Svc: 4.3 Request audio transcription
+        alt Invalid Audio File
+            Svc-->>Handler: 5.3 Return invalid file message
+            Handler-->>Ctrl: 6.3 Return failure response
+            Ctrl-->>UI: 7.3 Display failure message
+        else Valid Audio File
+            Svc->>Ext: 5.4 Transcribe audio with AI service
+            Ext-->>Svc: 6.4 Return raw transcript
+            Svc->>Ext: 7.4 Normalize technical terms
+            Ext-->>Svc: 8.4 Return normalized transcript
+            Svc-->>Handler: 9.4 Return transcription result
+            Handler-->>Ctrl: 10.4 Return success response
+            Ctrl-->>UI: 11.4 Display transcript and countdown
         end
     end
 
-    alt Student Records Voice Answer in RAM Without R2 Storage
-        UI->>Ctrl: Send recorded audio stream for transcription
-        alt Audio Stream Empty or Exceeds 25MB Limit
-            Ctrl-->>UI: Return invalid audio file size error
-        else Valid Audio Stream
-            Ctrl->>SttHdl: Forward TranscribeSpeechCommand
-            SttHdl->>SttSvc: Verify audio container header and request transcription
-            alt Primary Whisper STT Succeeds
-                SttSvc->>Ext: Transcribe via Cloudflare Whisper Large-v3-Turbo
-            else Primary STT Fails or Times Out
-                SttSvc->>Ext: Fallback to Gemini Multimodal STT
-            end
-            SttSvc->>Ext: Normalize SE code-switching terms
-            SttSvc-->>SttHdl: Return normalized SpeechTranscriptionResult
-            SttHdl-->>Ctrl: Return transcription result
-            Ctrl-->>UI: Display transcript and start review buffer countdown
-        end
-    end
-
-    opt Transcript Review Buffer Countdown 10 to 300 Seconds
-        Student->>UI: Edit misrecognized SE terms during buffer countdown
-        UI->>UI: Lock transcript editor and confirm text when timer reaches zero
+    opt Exception occurs
+        Handler->>Handler: 12.5 Log error
+        Handler-->>Ctrl: 13.5 Return error response
+        Ctrl-->>UI: 14.5 Display error message
     end
 ```
 

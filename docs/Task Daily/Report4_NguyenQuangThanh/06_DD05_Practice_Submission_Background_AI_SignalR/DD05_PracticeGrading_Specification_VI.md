@@ -160,7 +160,8 @@ classDiagram
     GeminiAiGradingService ..|> IAiGradingService : Implements
     SubmitPracticeAnswerCommandHandler ..> PracticeAnswer : Uses
     GradingQueueWorker ..> AiEvaluation : Uses
-    AiEvaluation ..> AiEvaluationDetail : Uses
+    GradingQueueWorker ..> AiEvaluationDetail : Uses
+    AiEvaluation "1" --> "*" AiEvaluationDetail : Details
     GradingQueueWorker ..> DeadLetterQueue : Uses
 ```
 
@@ -182,41 +183,45 @@ sequenceDiagram
     participant AI as GeminiAiGradingService
     participant DB as Database & DLQ
 
-    Student->>UI: 1. Join SignalR group and submit transcript
-    alt Single Answer Submit (Per-Question)
+    Student->>UI: 1. Submit answer transcript
+    alt Single Answer Submission
         UI->>Ctrl: 2.1 Send single answer request
-        Ctrl->>Handler: 3.1 Call Handle(SubmitPracticeAnswerCommand)
-        Handler->>DB: 4.1 Save PracticeAnswer (status = pending, <100ms)
-        Handler->>Worker: 5.1 Enqueue GradingTask to BoundedChannel(1000)
-        Handler-->>Ctrl: 6.1 Return answerId
-        Ctrl-->>UI: 7.1 Return HTTP 202 Accepted
-    else Batch Submit (Full-Session Progressive)
+        Ctrl->>Handler: 3.1 Forward single answer command
+        Handler->>DB: 4.1 Save pending practice answer
+        DB-->>Handler: 5.1 Confirm answer saved
+        Handler->>Worker: 6.1 Enqueue grading task
+        Handler-->>Ctrl: 7.1 Return answer ID
+        Ctrl-->>UI: 8.1 Return accepted status
+    else Batch Submission
         UI->>Ctrl: 2.2 Send batch answers request
-        Ctrl->>Handler: 3.2 Call Handle(SubmitPracticeBatchCommand)
-        Handler->>DB: 4.2 Bulk insert answers and 0.0 score for skipped
-        Handler->>Worker: 5.2 Enqueue non-empty GradingTasks
-        Ctrl-->>UI: 6.2 Return HTTP 202 Accepted
+        Ctrl->>Handler: 3.2 Forward batch answers command
+        Handler->>DB: 4.2 Save batch answers and zero scores
+        DB-->>Handler: 5.2 Confirm batch saved
+        Handler->>Worker: 6.2 Enqueue grading tasks
+        Ctrl-->>UI: 7.2 Return accepted status
     end
 
-    alt AI Grading Succeeds Within 3 Retries (2s, 4s, 8s)
-        Worker->>DB: 8.1 Load question, rubric and prior answers
-        DB-->>Worker: 9.1 Return question and rubric context
-        Worker->>AI: 10.1 GradeAnswerAsync with Polly retry
-        AI-->>Worker: 11.1 Return score, CoT and followUpPrompt
-        Worker->>DB: 12.1 Save AiEvaluation & mark answer graded
-        Worker->>UI: 13.1 Push ReceiveGradingResult to session_{id}
-        UI-->>Student: 14.1 Render realtime AI feedback
-    else Transient Failure Exhausts 3 Retries -> Isolate to DLQ
-        Worker->>AI: 8.2 GradeAnswerAsync fails after 3 retries
-        AI-->>Worker: 9.2 Throw HttpRequestException (429 / 503)
-        Worker->>DB: 10.2 Save DeadLetterQueue (retry +5m) & mark failed
-        Worker->>UI: 11.2 Push ReceiveGradingError to session_{id}
+    alt AI Grading Succeeds
+        Worker->>DB: 8.3 Load question, rubric and context
+        DB-->>Worker: 9.3 Return grading context
+        Worker->>AI: 10.3 Evaluate answer with AI service
+        AI-->>Worker: 11.3 Return score and feedback
+        Worker->>DB: 12.3 Save AI evaluation and update status
+        DB-->>Worker: 13.3 Confirm evaluation saved
+        Worker->>UI: 14.3 Push grading result via SignalR
+        UI-->>Student: 15.3 Display AI feedback
+    else AI Grading Fails After Retries
+        Worker->>AI: 8.4 Evaluate answer with AI service
+        AI-->>Worker: 9.4 Return AI service error
+        Worker->>DB: 10.4 Save failed task to Dead Letter Queue
+        DB-->>Worker: 11.4 Confirm task queued
+        Worker->>UI: 12.4 Push grading error notification
     end
 
-    alt Exception occurs
-        Handler->>Handler: Log error
-        Handler-->>Ctrl: Return error response
-        Ctrl-->>UI: Display RFC 7807 error (400 / 410 Gone)
+    opt Exception occurs
+        Handler->>Handler: 13.5 Log error
+        Handler-->>Ctrl: 14.5 Return error response
+        Ctrl-->>UI: 15.5 Display error message
     end
 ```
 

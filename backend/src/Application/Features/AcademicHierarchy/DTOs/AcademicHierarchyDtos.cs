@@ -280,3 +280,48 @@ public sealed record ClassDetailDto(
     IReadOnlyList<ClassInClassShiftSummaryDto> Shifts,
     IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents,
     string? JoinPassword = null);
+
+/// <summary>
+/// DTO yêu cầu thêm sinh viên vào lớp học phần (Giảng viên / Admin / Trưởng BM).
+/// Hỗ trợ linh hoạt: studentId (Guid), studentCode (MSSV), email, hoặc identifier chung.
+/// </summary>
+public sealed record AddClassStudentRequest(
+    Guid? StudentId = null,
+    string? StudentCode = null,
+    string? Email = null,
+    string? Identifier = null);
+
+/// <summary>
+/// DTO phản hồi kết quả thêm sinh viên vào lớp học phần.
+/// </summary>
+public sealed record AddClassStudentResponseDto(
+    Guid ClassId,
+    Guid StudentId,
+    string FullName,
+    string Email,
+    string? StudentCode,
+    DateTime EnrolledAt,
+    string Status,
+    string JoinMethod);
+
+/// <summary>
+/// DTO yêu cầu xóa sinh viên khỏi lớp học phần (Giảng viên / Admin / Trưởng BM).
+/// Hỗ trợ linh hoạt: studentId (Guid), studentCode (MSSV), email, hoặc identifier chung.
+/// </summary>
+public sealed record RemoveClassStudentRequest(
+    Guid? StudentId = null,
+    string? StudentCode = null,
+    string? Email = null,
+    string? Identifier = null);
+
+/// <summary>
+/// DTO phản hồi kết quả xóa sinh viên khỏi lớp học phần.
+/// </summary>
+public sealed record RemoveClassStudentResponseDto(
+    Guid ClassId,
+    Guid StudentId,
+    string FullName,
+    string Email,
+    string? StudentCode,
+    string Message);
+

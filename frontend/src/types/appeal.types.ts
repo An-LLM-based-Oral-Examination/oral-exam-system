@@ -53,3 +53,49 @@ export interface RegradeAppealRequest {
   newScore: number
   reviewNotes: string
 }
+
+export interface LecturerAllocationSummary {
+  lecturerId: string
+  lecturerName: string
+  email: string
+  assignedCount: number
+}
+
+export interface AppealAssignmentProposalItem {
+  appealId: string
+  ticketId: string
+  studentCode: string
+  studentName: string
+  sessionId: string
+  sessionTitle: string
+  initialExaminerUserId: string | null
+  initialExaminerName: string | null
+  proposedLecturerId: string | null
+  proposedLecturerName: string | null
+  originalScore: number | null
+  reason: string
+}
+
+export interface AppealAllocationProposal {
+  totalAppeals: number
+  totalLecturers: number
+  exceedsStandardQuota: boolean
+  lecturerSummaries: LecturerAllocationSummary[]
+  items: AppealAssignmentProposalItem[]
+}
+
+export interface AppealAssignmentItem {
+  appealId: string
+  lecturerId: string
+}
+
+export interface BatchAssignAppealsRequest {
+  assignments: AppealAssignmentItem[]
+}
+
+export interface BatchAssignAppealsResponse {
+  totalAssigned: number
+  assignedCount: number
+  failedCount: number
+  assignedAppeals: Appeal[]
+}

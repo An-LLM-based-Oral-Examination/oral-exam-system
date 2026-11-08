@@ -63,9 +63,13 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      {/* Instructor, Department Head and Admin portal. Proctor has no standalone portal. */}
+      {/* Instructor, Department Head, Examination Officer and Admin portal */}
       <Route
-        element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}
+        element={
+          <ProtectedRoute
+            allowedRoles={['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin']}
+          />
+        }
       >
         <Route element={<AppLayout />}>
           <Route
@@ -95,8 +99,14 @@ export const appRoutes = createRoutesFromElements(
         />
       </Route>
 
-      {/* Proctor portal: attendance, seat monitor and Kiosk suspension. */}
-      <Route element={<ProtectedRoute allowedRoles={['Proctor', 'Instructor', 'DepartmentHead', 'Admin']} />}>
+      {/* Proctor portal: attendance, seat monitor and anti-cheat violation logging */}
+      <Route
+        element={
+          <ProtectedRoute
+            allowedRoles={['Proctor', 'ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin']}
+          />
+        }
+      >
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -110,7 +120,14 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute allowedRoles={['DepartmentHead', 'Admin']} />}>
+      {/* Dead Letter Queue portal: Examination Officer (MF-04) & Admin (MF-01/02) */}
+      <Route
+        element={
+          <ProtectedRoute
+            allowedRoles={['ExaminationOfficer', 'DepartmentHead', 'Instructor', 'Admin']}
+          />
+        }
+      >
         <Route element={<AppLayout />}>
           <Route
             element={

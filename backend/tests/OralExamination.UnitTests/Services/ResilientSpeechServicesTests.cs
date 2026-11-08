@@ -26,6 +26,7 @@ using Xunit;
 
 namespace OralExamination.UnitTests.Services;
 
+[Collection("ResilientTtsCooldown")]
 public class ResilientSpeechServicesTests
 {
     private static IConfiguration BuildConfig(Dictionary<string, string?> values)

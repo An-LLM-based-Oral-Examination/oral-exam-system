@@ -6,10 +6,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignClassStudent;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.AddClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
-using OralExamination.Application.Features.AcademicHierarchy.Commands.DropClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.RemoveClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
@@ -570,18 +570,29 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên phụ trách thêm một sinh viên vào lớp. Khóa tham gia của sinh viên không chặn thao tác này.
+    /// Giảng viên thêm sinh viên vào lớp học phần do mình phụ trách (hỗ trợ MSSV, Email, StudentId hoặc chuỗi định danh).
     /// </summary>
-    [HttpPost("lecturer/classes/{id:guid}/students")]
+    [HttpPost("lecturer/classes/{classId:guid}/students")]
+    [HttpPost("classes/{classId:guid}/students")]
     [Authorize(Roles = "lecturer,department_head,admin")]
-    public async Task<IActionResult> AssignClassStudent(
-        [FromRoute] Guid id,
-        [FromBody] AssignClassStudentRequest request,
+    public async Task<IActionResult> AddStudentToClass(
+        [FromRoute] Guid classId,
+        [FromBody] AddClassStudentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(
-            new AssignClassStudentCommand(id, request.StudentId, GetCurrentUserId(), GetActorRole()),
-            cancellationToken);
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var command = new AddClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: request.StudentId,
+            StudentCode: request.StudentCode,
+            Email: request.Email,
+            Identifier: request.Identifier);
+
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -592,18 +603,70 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên phụ trách đưa sinh viên ra khỏi sĩ số. Bài đã nộp trong các ca vẫn giữ nguyên.
+    /// Giảng viên xóa sinh viên khỏi lớp học phần theo StudentId.
     /// </summary>
-    [HttpDelete("lecturer/classes/{id:guid}/students/{studentId:guid}")]
+    [HttpDelete("lecturer/classes/{classId:guid}/students/{studentId:guid}")]
+    [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
     [Authorize(Roles = "lecturer,department_head,admin")]
-    public async Task<IActionResult> DropClassStudent(
-        [FromRoute] Guid id,
+    public async Task<IActionResult> RemoveStudentFromClass(
+        [FromRoute] Guid classId,
         [FromRoute] Guid studentId,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(
-            new DropClassStudentCommand(id, studentId, GetCurrentUserId(), GetActorRole()),
-            cancellationToken);
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var command = new RemoveClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: studentId);
+
+        var result = await _sender.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return RosterFailure(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên xóa sinh viên khỏi lớp học phần bằng thông tin định danh linh hoạt (Query param hoặc Body).
+    /// </summary>
+    [HttpDelete("lecturer/classes/{classId:guid}/students")]
+    [HttpDelete("classes/{classId:guid}/students")]
+    [HttpPost("lecturer/classes/{classId:guid}/students/remove")]
+    [HttpPost("classes/{classId:guid}/students/remove")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> RemoveStudentFlexible(
+        [FromRoute] Guid classId,
+        [FromBody] RemoveClassStudentRequest? bodyRequest = null,
+        [FromQuery] Guid? studentId = null,
+        [FromQuery] string? studentCode = null,
+        [FromQuery] string? email = null,
+        [FromQuery] string? identifier = null,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var effectiveStudentId = bodyRequest?.StudentId ?? studentId;
+        var effectiveStudentCode = bodyRequest?.StudentCode ?? studentCode;
+        var effectiveEmail = bodyRequest?.Email ?? email;
+        var effectiveIdentifier = bodyRequest?.Identifier ?? identifier;
+
+        var command = new RemoveClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: effectiveStudentId,
+            StudentCode: effectiveStudentCode,
+            Email: effectiveEmail,
+            Identifier: effectiveIdentifier);
+
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -662,4 +725,3 @@ public class ClassesController(ISender sender) : ControllerBase
     };
 }
 
-public sealed record AssignClassStudentRequest(Guid StudentId);

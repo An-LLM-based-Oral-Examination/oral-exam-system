@@ -159,42 +159,47 @@ sequenceDiagram
     participant Handler as Session / Complete / History Handlers
     participant DB as Database
 
-    Student->>UI: 1. View graded answer, complete session or open history
-    alt Per-Question Borderline Score (4.0..8.0) & FollowUps < Max (1..5, default 2)
-        UI->>Ctrl: 2.1 GET /practice/sessions/{id}
-        Ctrl->>Handler: 3.1 Call Handle(GetPracticeSessionQuery)
-        Handler->>DB: 4.1 Load session, answers & config
-        DB-->>Handler: 5.1 Return session graph
-        Handler->>Helper: 6.1 Target weakest criterion & ResolveFollowUpPrompt
-        Helper-->>Handler: 7.1 Return needsFollowUp = true and prompt
+    Student->>UI: 1. View answer, finish or open history
+    alt Borderline Score and Follow-up Limit Not Reached
+        UI->>Ctrl: 2.1 Send get session request
+        Ctrl->>Handler: 3.1 Forward get session query
+        Handler->>DB: 4.1 Load session, answers and config
+        DB-->>Handler: 5.1 Return session details
+        Handler->>Helper: 6.1 Build follow-up prompt for weakest criterion
+        Helper-->>Handler: 7.1 Return follow-up prompt
         Handler-->>Ctrl: 8.1 Return session detail with follow-up
-        Ctrl-->>UI: 9.1 Display contextual follow-up question
-    else Score Outside 4.0..8.0 or Max Follow-ups Reached -> Open Scorecard
-        Handler->>Helper: 6.2 ComputeEffectiveQuestionScore
-        Helper-->>Handler: 7.2 Return effective score & needsFollowUp = false
+        Ctrl-->>UI: 9.1 Display follow-up question
+    else Score Outside Range or Follow-up Limit Reached
+        Handler->>Helper: 6.2 Calculate effective question score
+        Helper-->>Handler: 7.2 Return effective score
         Handler-->>Ctrl: 8.2 Return completed question scorecard
-        Ctrl-->>UI: 9.2 Display detailed rubric scorecard
+        Ctrl-->>UI: 9.2 Display detailed scorecard
     end
 
-    alt Complete Session or Auto-Close After 5 Minutes Inactivity
-        UI->>Ctrl: 2.2 POST /practice/sessions/{id}/complete
-        Ctrl->>Handler: 3.2 Call Handle(CompletePracticeSessionCommand)
-        Handler->>Helper: 4.2 Populate 0.0 for skipped & compute total
-        Helper->>DB: 5.2 Update status = completed & totalScore
-        Handler-->>Ctrl: 6.2 Return completion success
-        Ctrl-->>UI: 7.2 Display final session scorecard
+    alt Complete Session or Auto-Close on Timeout
+        UI->>Ctrl: 2.3 Send complete session request
+        Ctrl->>Handler: 3.3 Forward complete session command
+        Handler->>Helper: 4.3 Calculate final session score
+        Helper-->>Handler: 5.3 Return calculated total score
+        Handler->>DB: 6.3 Update session status and total score
+        DB-->>Handler: 7.3 Confirm session updated
+        Handler-->>Ctrl: 8.3 Return completion response
+        Ctrl-->>UI: 9.3 Display final session scorecard
     else View Student Practice History
-        UI->>Ctrl: 2.3 GET /practice/student/history
-        Ctrl->>Handler: 3.3 Call Handle(GetStudentPracticeHistoryQuery)
-        Handler->>Helper: 4.3 Auto-close stale in_progress sessions (>5m)
-        Handler->>DB: 5.3 Query ordered PracticeHistoryItemDto list
-        Ctrl-->>UI: 6.3 Render practice history on Student Portal
+        UI->>Ctrl: 2.4 Send practice history request
+        Ctrl->>Handler: 3.4 Forward practice history query
+        Handler->>Helper: 4.4 Close expired active sessions
+        Helper-->>Handler: 5.4 Return cleanup status
+        Handler->>DB: 6.4 Query student practice history
+        DB-->>Handler: 7.4 Return history records
+        Handler-->>Ctrl: 8.4 Return practice history response
+        Ctrl-->>UI: 9.4 Display practice history
     end
 
-    alt Exception occurs
-        Handler->>Handler: Log error
-        Handler-->>Ctrl: Return error response
-        Ctrl-->>UI: Display RFC 7807 error (403 / 404 / 410 Gone)
+    opt Exception occurs
+        Handler->>Handler: 10.5 Log error
+        Handler-->>Ctrl: 11.5 Return error response
+        Ctrl-->>UI: 12.5 Display error message
     end
 ```
 

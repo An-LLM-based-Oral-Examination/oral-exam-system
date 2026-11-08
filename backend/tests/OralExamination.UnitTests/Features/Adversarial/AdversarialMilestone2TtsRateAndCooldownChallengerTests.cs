@@ -20,6 +20,7 @@ namespace OralExamination.UnitTests.Features.Adversarial;
 /// và chu kỳ kích hoạt, bỏ qua, phục hồi đóng băng (Cooldown Recovery) của Edge Neural TTS.
 /// Được tạo và thực thi trực tiếp bởi challenger_m2_1.
 /// </summary>
+[Collection("ResilientTtsCooldown")]
 public class AdversarialMilestone2TtsRateAndCooldownChallengerTests
 {
     private static IConfiguration BuildConfig(Dictionary<string, string?> values)

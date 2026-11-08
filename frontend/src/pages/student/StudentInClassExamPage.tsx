@@ -14,6 +14,7 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
+import { createPracticeHubConnection } from '@/services/signalr.service'
 import type { EnterInClassExamResult, InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import {
   applyCompletedInClassShifts,
@@ -558,6 +559,63 @@ export function StudentInClassExamPage() {
       setResultsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!resultsShift) return
+    const activeShiftId = resultsShift.id
+    let disposed = false
+    const hubUrl = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice'
+    const connection = createPracticeHubConnection(
+      hubUrl,
+      () => sessionStorage.getItem('access_token') ?? '',
+    )
+
+    const refreshResults = async () => {
+      try {
+        const latest = await inClassShiftService.listStudentResults(activeShiftId)
+        if (!disposed) {
+          setResults(latest)
+        }
+      } catch {
+        // Không làm gián đoạn cửa sổ kết quả nếu một lượt đồng bộ thất bại
+      }
+    }
+
+    connection.on('InClassSubmissionGraded', () => {
+      void refreshResults()
+    })
+    connection.on('ReceiveGradingResult', () => {
+      void refreshResults()
+    })
+    connection.on('InClassShiftGradesFinalized', () => {
+      void refreshResults()
+      void load()
+    })
+
+    void connection
+      .start()
+      .then(() => {
+        if (disposed) return
+        return connection.invoke('JoinInClassShiftGroup', activeShiftId).catch(() =>
+          connection.invoke('JoinShift', activeShiftId),
+        )
+      })
+      .catch(() => undefined)
+
+    const pollTimer = window.setInterval(() => {
+      void refreshResults()
+    }, 4000)
+
+    return () => {
+      disposed = true
+      window.clearInterval(pollTimer)
+      connection.off('InClassSubmissionGraded')
+      connection.off('ReceiveGradingResult')
+      connection.off('InClassShiftGradesFinalized')
+      void connection.stop().catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultsShift?.id])
 
   const orderedShifts = [...shifts].sort((left, right) => {
     const rank = { ACTIVE: 0, SCHEDULED: 1, FINALIZED: 2, CLOSED: 3 }

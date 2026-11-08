@@ -21,7 +21,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/proctor")]
-[Authorize(Roles = "proctor,lecturer,department_head,admin")]
+[Authorize(Roles = "proctor,examination_officer,lecturer,department_head,admin")]
 public class ProctorController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
@@ -34,14 +34,6 @@ public class ProctorController(ISender sender) : ControllerBase
         if (Guid.TryParse(claim, out var id) && id != Guid.Empty)
         {
             return id;
-        }
-
-        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
-            Guid.TryParse(headerVal, out var headerId) &&
-            headerId != Guid.Empty)
-        {
-            return headerId;
         }
 
         return Guid.Empty;
@@ -63,8 +55,18 @@ public class ProctorController(ISender sender) : ControllerBase
     }
 
     [HttpPost("shifts/{shiftId:guid}/attendance")]
+    [HttpPost("shifts/{shiftId:guid}/check-in")]
     public async Task<IActionResult> UpdateShiftAttendance(
         [FromRoute] Guid shiftId,
+        [FromBody] UpdateTicketAttendanceRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var ticketId = request?.TicketId ?? Guid.Empty;
+        return await UpdateAttendance(ticketId, request, cancellationToken);
+    }
+
+    [HttpPost("check-in")]
+    public async Task<IActionResult> CheckInByTicketBody(
         [FromBody] UpdateTicketAttendanceRequest? request = null,
         CancellationToken cancellationToken = default)
     {
@@ -129,7 +131,7 @@ public class ProctorController(ISender sender) : ControllerBase
     }
 
     [HttpPost("shifts/{shiftId:guid}/violations")]
-    [Authorize(Roles = "proctor,admin")]
+    [Authorize(Roles = "proctor,examination_officer,admin")]
     public async Task<IActionResult> RecordViolation(
         [FromRoute] Guid shiftId,
         [FromBody] RecordProctorViolationRequest request,

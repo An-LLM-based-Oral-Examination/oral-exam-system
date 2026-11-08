@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using OralExamination.API.Configuration;
@@ -76,10 +77,17 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 builder.Services.AddControllers();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddScoped<OralExamination.Application.Common.Interfaces.IAntiCheatNotifier, OralExamination.API.Services.AntiCheatSignalRNotifier>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseSwagger();
@@ -139,24 +147,19 @@ static async Task ApplyMigrationsAsync(WebApplication app)
 
                 await context.Database.MigrateAsync();
             }
-            else
-            {
-                logger.LogInformation(
-                    "PostgreSQL container on port 5432 is offline; running with seeded In-Memory database for uninterrupted live operation.");
-            }
 
             var seedConfig = app.Configuration["Database:EnableDevelopmentSeed"]
                 ?? app.Configuration["DATABASE_ENABLE_DEVELOPMENT_SEED"];
-            var shouldSeed = string.IsNullOrWhiteSpace(seedConfig)
-                ? (app.Environment.IsDevelopment() || !bool.TryParse(seedConfig, out _))
-                : (bool.TryParse(seedConfig, out var parsedSeed) && parsedSeed);
+            var shouldSeed = bool.TryParse(seedConfig, out var parsedSeed)
+                ? parsedSeed
+                : true;
 
             if (shouldSeed)
             {
                 await DevelopmentDataSeeder.SeedAsync(context);
             }
 
-            logger.LogInformation("Database schema and development seed data applied successfully.");
+            logger.LogInformation("Database schema and initial academic catalog verified successfully.");
             return;
         }
         catch (Exception ex) when (attempt < maxAttempts)

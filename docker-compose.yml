@@ -1,15 +1,11 @@
-# Local stack: PostgreSQL 16 + API.
-# Schema comes from EF Core migrations applied when the API starts.
-#
-#   docker compose up --build
-#   docker compose logs -f web-api
-#   docker compose down          # stop
-#   docker compose down -v       # stop + wipe data volume
-#
-# Generate a migration on the host, from oral-exam-system/backend:
-#   dotnet ef migrations add TenThayDoi -p src/Infrastructure -s src/API
-# Then rebuild so the API image contains the new migration:
-#   docker compose up --build
+# ==============================================================================
+# Oral Exam System — Full Stack Docker Compose (PostgreSQL 16 + .NET 8 API + React 19 Nginx)
+# ==============================================================================
+# 1. Local / Standard Run:
+#      docker compose up -d --build
+# 2. Production VPS Run (https://oralexam.io.vn — SSL Let's Encrypt):
+#      docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# ==============================================================================
 
 services:
   postgres:
@@ -23,8 +19,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
       TZ: Asia/Ho_Chi_Minh
     ports:
-      # Published so host-side `dotnet ef database update` can reach this database.
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Khóa chặt PostgreSQL 5432 ở loopback 127.0.0.1 (tuyệt đối không expose ra internet)
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - oralexam_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - oralexam-net
 
   web-api:
     build:
@@ -40,12 +38,18 @@ services:
     container_name: oralexam-api
     restart: unless-stopped
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_HTTP_PORTS: "5000"
+      DATABASE_ALLOW_IN_MEMORY_FALLBACK: "false"
+      DATABASE_ENABLE_DEVELOPMENT_SEED: ${DATABASE_ENABLE_DEVELOPMENT_SEED:-true}
+      GradingQueue__MaxDegreeOfParallelism: ${GRADING_QUEUE_MAX_PARALLELISM:-12}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://oralexam.io.vn,http://localhost:3000,http://localhost:5173}
       Gemini__ApiKey: ${Gemini__ApiKey:-}
+      Gemini__FallbackApiKey: ${Gemini__FallbackApiKey:-}
+      Gemini__ApiKeys: ${Gemini__ApiKeys:-}
       Gemini__ApiUrl: ${Gemini__ApiUrl:-}
       Cloudflare__AccountId: ${Cloudflare__AccountId:-}
       Cloudflare__ApiToken: ${Cloudflare__ApiToken:-}
@@ -55,11 +59,53 @@ services:
       Storage__BucketName: ${Storage__BucketName:-oral-exam-bucket}
       Storage__PublicUrlPrefix: ${Storage__PublicUrlPrefix:-}
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - oralexam_uploads:/app/wwwroot/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      oralexam-net:
+        aliases:
+          - backend
+          - web-api
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_SIGNALR_HUB_URL: ${VITE_SIGNALR_HUB_URL:-/hubs/practice}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    container_name: oralexam-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HTTP_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      web-api:
+        condition: service_healthy
+    networks:
+      - oralexam-net
+
+networks:
+  oralexam-net:
+    driver: bridge
 
 volumes:
   oralexam_pgdata:
     name: oralexam_pgdata
+  oralexam_uploads:
+    name: oralexam_uploads

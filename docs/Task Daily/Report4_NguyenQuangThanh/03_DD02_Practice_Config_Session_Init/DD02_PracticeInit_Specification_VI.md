@@ -141,22 +141,40 @@ classDiagram
         +SerializeQuestionIds(IEnumerable~Guid~)$ string
     }
 
-    AdminController ..> GetSystemConfigsQueryHandler : MediatR Send
-    AdminController ..> UpdateSystemConfigCommandHandler : MediatR Send
-    PracticeController ..> StartPracticeSessionCommandHandler : MediatR Send
+    class IApplicationDbContext {
+        <<Interface>>
+        +DbSet~SystemConfig~ SystemConfigs
+        +DbSet~PracticeSession~ PracticeSessions
+        +DbSet~PracticeQuestion~ PracticeQuestions
+        +SaveChangesAsync(CancellationToken ct) Task~int~
+    }
 
-    UpdateSystemConfigCommandHandler --> SystemConfig
-    UpdateSystemConfigCommandHandler --> AuditLog
-    StartPracticeSessionCommandValidator --> SystemConfig
+    class OralExamDbContext {
+        +DbSet~SystemConfig~ SystemConfigs
+        +DbSet~PracticeSession~ PracticeSessions
+        +DbSet~PracticeQuestion~ PracticeQuestions
+        +SaveChangesAsync(CancellationToken ct) Task~int~
+    }
 
-    StartPracticeSessionCommandHandler ..> StartPracticeSessionCommandValidator : Validated by Pipeline
-    StartPracticeSessionCommandHandler --> SystemConfig
-    StartPracticeSessionCommandHandler --> Course
-    StartPracticeSessionCommandHandler --> PracticeQuestion
-    StartPracticeSessionCommandHandler --> PracticeSession
+    AdminController ..> GetSystemConfigsQueryHandler : Uses
+    AdminController ..> UpdateSystemConfigCommandHandler : Uses
+    PracticeController ..> StartPracticeSessionCommandHandler : Uses
 
-    Course "1" --> "*" PracticeQuestion : has pool
-    Course "1" --> "*" PracticeSession : hosts
+    GetSystemConfigsQueryHandler ..> IApplicationDbContext : Uses
+    UpdateSystemConfigCommandHandler ..> IApplicationDbContext : Uses
+    StartPracticeSessionCommandValidator ..> IApplicationDbContext : Uses
+    StartPracticeSessionCommandHandler ..> StartPracticeSessionCommandValidator : Uses
+    StartPracticeSessionCommandHandler ..> IApplicationDbContext : Uses
+
+    OralExamDbContext ..|> IApplicationDbContext : Implements
+    IApplicationDbContext ..> SystemConfig : Uses
+    IApplicationDbContext ..> AuditLog : Uses
+    IApplicationDbContext ..> Course : Uses
+    IApplicationDbContext ..> PracticeQuestion : Uses
+    IApplicationDbContext ..> PracticeSession : Uses
+
+    Course "1" --> "*" PracticeQuestion : PracticeQuestions
+    Course "1" --> "*" PracticeSession : PracticeSessions
 ```
 
 *Hình 3.2.2 — Sơ đồ lớp gói `DD-02` (Cấu hình Tham số Luyện tập & Khởi tạo Phiên Luyện tập).*
@@ -169,69 +187,54 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor Actor as Student / Admin
-    participant UI as Practice UI / Admin UI
-    participant Ctrl as PracticeController / AdminController
+    actor Student as Student
+    participant UI as Practice UI
+    participant Ctrl as PracticeController
     participant Val as StartPracticeSessionValidator
-    participant Handler as StartPracticeSessionHandler
+    participant Handler as StartPracticeSessionCommandHandler
     participant DB as Database
 
-    Actor->>UI: Enter config value or select practice options
+    Student->>UI: 1. Select course, mode and difficulty
+    UI->>Ctrl: 2. Send start session request
 
-    opt Admin Updates Practice System Config
-        UI->>Ctrl: Send update system config request
-        Ctrl->>Handler: Forward UpdateSystemConfigCommand
-        alt Config Value Out of Allowed Range
-            Handler-->>Ctrl: Return range validation error
-            Ctrl-->>UI: Display validation error message
-        else Valid Config Value
-            Handler->>DB: Save system config and insert audit log
-            DB-->>Handler: Return updated config
-            Handler-->>Ctrl: Return updated config result
-            Ctrl-->>UI: Display update success message
+    alt Per-Question Mode
+        Ctrl->>Val: 3.1 Validate request
+        Val-->>Ctrl: 4.1 Return validation status
+        Ctrl->>Handler: 5.1 Forward start session command
+        Handler->>DB: 6.1 Check approved questions by difficulty
+        DB-->>Handler: 7.1 Return question list
+        alt No Questions Found
+            Handler-->>Ctrl: 8.1 Return empty pool message
+            Ctrl-->>UI: 9.1 Display failure message
+        else Questions Available
+            Handler->>DB: 8.2 Select first question and rubric
+            DB-->>Handler: 9.2 Return question details
+            Handler->>DB: 10.2 Insert new practice session
+            DB-->>Handler: 11.2 Return created session
+            Handler-->>Ctrl: 12.2 Return success response
+            Ctrl-->>UI: 13.2 Display first question
+        end
+    else Full-Session Mode
+        Ctrl->>Handler: 3.3 Forward start session command
+        Handler->>DB: 4.3 Count Easy, Medium and Hard questions
+        DB-->>Handler: 5.3 Return question counts
+        alt Not Enough Questions
+            Handler-->>Ctrl: 6.3 Return insufficient pool message
+            Ctrl-->>UI: 7.3 Display failure message
+        else Enough Questions
+            Handler->>DB: 6.4 Select progressive questions
+            DB-->>Handler: 7.4 Return ordered questions
+            Handler->>DB: 8.4 Insert new practice session
+            DB-->>Handler: 9.4 Return created session
+            Handler-->>Ctrl: 10.4 Return success response
+            Ctrl-->>UI: 11.4 Display practice session
         end
     end
 
-    alt Student Starts Practice Session
-        UI->>Ctrl: Send start practice session request
-        Ctrl->>Val: Validate StartPracticeSessionCommand
-        Val->>DB: Read min and max progressive question bounds
-        DB-->>Val: Return question count bounds
-        Val-->>Ctrl: Return command validation status
-        Ctrl->>Handler: Forward to StartPracticeSessionCommandHandler
-        Handler->>DB: Check active course existence
-        DB-->>Handler: Return course entity
-        Handler->>DB: Batch load practice system configs
-        DB-->>Handler: Return config values
-
-        alt Per-Question On-Demand Mode
-            Handler->>DB: Query approved question IDs by difficulty
-            DB-->>Handler: Return matching question IDs
-            alt No Approved Questions Available
-                Handler-->>Ctrl: Return empty question pool error
-                Ctrl-->>UI: Display empty pool message
-            else Approved Questions Available
-                Handler->>DB: Pick random question and load rubric criteria
-                DB-->>Handler: Return first question with rubric
-                Handler->>DB: Insert per-question practice session
-                Handler-->>Ctrl: Return session response
-                Ctrl-->>UI: Display practice session with first question
-            end
-        else Full-Session Progressive Mode
-            Handler->>DB: Count approved Easy, Medium, and Hard questions
-            DB-->>Handler: Return candidate counts per difficulty
-            alt Insufficient Easy, Medium, or Hard Questions
-                Handler-->>Ctrl: Return insufficient question pool error
-                Ctrl-->>UI: Display insufficient pool message
-            else Sufficient Questions Across All Difficulties
-                Handler->>DB: Pick progressive questions and load rubric criteria
-                DB-->>Handler: Return ordered progressive questions
-                Handler->>DB: Insert full-session practice record
-                Handler-->>Ctrl: Return session response
-                Ctrl-->>UI: Display progressive practice session
-            end
-        end
+    opt Exception occurs
+        Handler->>Handler: 12.5 Log error
+        Handler-->>Ctrl: 13.5 Return error response
+        Ctrl-->>UI: 14.5 Display error message
     end
 ```
 

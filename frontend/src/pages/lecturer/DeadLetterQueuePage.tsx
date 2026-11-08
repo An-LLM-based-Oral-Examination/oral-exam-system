@@ -44,17 +44,17 @@ export function DeadLetterQueuePage() {
   return <div className={ds.page}>
     <LecturerPageBanner
       icon={AlertTriangle}
-      eyebrow="Lỗi chấm AI"
-      title="Theo dõi bài chấm lỗi"
-      description="Trưởng bộ môn hoặc Admin xem và chạy lại task lỗi để giữ nguyên dữ liệu chấm thi."
+      eyebrow="Dead-Letter Queue (Zero Data Loss)"
+      title="Theo dõi & Replay Hàng đợi lỗi AI"
+      description="Admin giám sát & replay DLQ cho Luyện tập (MF-01) và Thi thử (MF-02); Cán bộ Khảo thí giám sát & replay DLQ cho Thi thật (MF-04)."
       extras={
         <>
-          <BannerFact icon={AlertTriangle}>Task lỗi</BannerFact>
+          <BannerFact icon={AlertTriangle}>Cách ly task lỗi</BannerFact>
           <BannerFact icon={RotateCcw} tone="green">
-            Chạy lại an toàn
+            Replay chủ động
           </BannerFact>
           <BannerFact icon={RefreshCw} tone="violet">
-            Giữ dữ liệu chấm
+            Zero Data Loss
           </BannerFact>
         </>
       }

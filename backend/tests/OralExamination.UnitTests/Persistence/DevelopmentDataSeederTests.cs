@@ -14,6 +14,11 @@ using OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
 using OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Common.Security;
+using OralExamination.Application.Features.InClassShifts;
+using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
+using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkstationTicket;
 using OralExamination.Infrastructure.Persistence;
 using Xunit;
 
@@ -438,5 +443,233 @@ public class DevelopmentDataSeederTests
                 .ToHashSet();
             coveredCloIds.Should().BeEquivalentTo(cloIds, $"Toàn bộ {expectedCloCount} CLOs của môn {code} đều phải có câu hỏi phủ");
         }
+    }
+
+    [Fact(DisplayName = "7. SeedAsync khởi tạo Ca thi thật Kiosk (MF-04) ở trạng thái Ready-to-Test (in_progress, published) với vé thi IP 127.0.0.1 và ::1")]
+    public async Task SeedAsync_Should_Seed_ReadyToTest_MF04_LabKiosk_Shift_And_Tickets()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var readyShift = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == DevelopmentDataSeeder.OfficialShiftReadyToTestPrn231Id);
+
+        readyShift.Should().NotBeNull("Ca thi Kíp 2 Lab 302 (Ready-to-Test) phải được khởi tạo");
+        readyShift!.Status.Should().Be("in_progress");
+        readyShift.IsExamPublished.Should().BeTrue("Đề thi phải được xuất bản sẵn sàng để Kiosk tải đề");
+        readyShift.RoomLab.Should().Be("Lab 302");
+        readyShift.StartTime.Should().BeBefore(DateTime.UtcNow);
+        readyShift.EndTime.Should().BeAfter(DateTime.UtcNow);
+
+        var tickets = await context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.ShiftId == readyShift.Id)
+            .ToListAsync();
+
+        tickets.Should().HaveCount(3);
+
+        var hoangTicket = tickets.FirstOrDefault(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestHoangId);
+        hoangTicket.Should().NotBeNull();
+        hoangTicket!.IpAddress.Should().Be("127.0.0.1", "Vé của Hoàng phải gắn IP 127.0.0.1 để test trên localhost Kiosk");
+        hoangTicket.Status.Should().Be(ExamTicketStatus.Scheduled);
+        hoangTicket.IsLocked.Should().BeFalse();
+
+        var thanhTicket = tickets.FirstOrDefault(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestThanhId);
+        thanhTicket.Should().NotBeNull();
+        thanhTicket!.IpAddress.Should().Be("::1", "Vé của Thành phải gắn IP IPv6 loopback ::1");
+        thanhTicket.Status.Should().Be(ExamTicketStatus.Scheduled);
+
+        var maiTicket = tickets.FirstOrDefault(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestMaiId);
+        maiTicket.Should().NotBeNull();
+        maiTicket!.IpAddress.Should().Be("192.168.1.103", "Vé của Mai phải gắn IP LAN test");
+        maiTicket.Status.Should().Be(ExamTicketStatus.Scheduled);
+    }
+
+    [Fact(DisplayName = "8. SeedAsync khởi tạo Ca thi trong lớp (MF-05) cho PRN231 và SWD392 ở trạng thái IN_PROGRESS kèm mã OTP tĩnh 123456")]
+    public async Task SeedAsync_Should_Seed_ReadyToTest_MF05_InClass_Shifts_With_Static_And_Dynamic_Otp()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var inClassShifts = await context.InClassExamShifts
+            .AsNoTracking()
+            .Where(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id || s.Id == DevelopmentDataSeeder.InClassShiftSwd392Id)
+            .ToListAsync();
+
+        inClassShifts.Should().HaveCount(2, "Cả hai ca thi MF-05 cho PRN231 và SWD392 phải được khởi tạo");
+
+        foreach (var shift in inClassShifts)
+        {
+            shift.Status.Should().Be("IN_PROGRESS");
+            shift.IsLocked.Should().BeFalse();
+            shift.StartTime.Should().BeBefore(DateTime.UtcNow);
+            shift.EndTime.Should().BeAfter(DateTime.UtcNow);
+            shift.TotpSecretKey.Should().NotBeNullOrWhiteSpace();
+
+            // Kiểm tra mật khẩu tĩnh dự phòng "123456"
+            var staticPassword = await context.InClassShiftPasswords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.ShiftId == shift.Id && p.PlainCode == "123456");
+
+            staticPassword.Should().NotBeNull($"Ca thi {shift.ShiftName} phải có mật khẩu tĩnh fallback 123456");
+            staticPassword!.ValidFrom.Should().BeBefore(DateTime.UtcNow);
+            staticPassword.ValidTo.Should().BeAfter(DateTime.UtcNow);
+        }
+    }
+
+    [Fact(DisplayName = "9. Empirical: MF-04 Lab Kiosk Kíp 2 cho phép sinh viên Hoàng (127.0.0.1) và Thành (::1) truy cập vé thi SCHEDULED, và chặn IP không khớp (10.0.0.99)")]
+    public async Task MF04_LabKiosk_WorkstationTicket_Access_ValidAndInvalidIps()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var validator = new GetMyWorkstationTicketQueryValidator();
+        var handler = new GetMyWorkstationTicketQueryHandler(context, validator);
+
+        // 1. Sinh viên Hoàng truy cập từ IPv4 Loopback 127.0.0.1 -> Thành công trả về vé SCHEDULED
+        var hoangResult = await handler.Handle(
+            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "127.0.0.1", DateTime.UtcNow),
+            CancellationToken.None);
+
+        hoangResult.IsSuccess.Should().BeTrue("Sinh viên Hoàng tại máy trạm 127.0.0.1 phải lấy được vé thi");
+        hoangResult.Value.Id.Should().Be(DevelopmentDataSeeder.TicketReadyToTestHoangId);
+        hoangResult.Value.ShiftId.Should().Be(DevelopmentDataSeeder.OfficialShiftReadyToTestPrn231Id);
+        hoangResult.Value.Status.Should().Be("SCHEDULED");
+        hoangResult.Value.ShiftStatus.Should().Be("in_progress");
+        hoangResult.Value.StartTime.Should().BeBefore(DateTime.UtcNow);
+        hoangResult.Value.EndTime.Should().BeAfter(DateTime.UtcNow);
+        hoangResult.Value.Questions.Should().NotBeNullOrEmpty("Đề thi đã xuất bản phải kèm danh sách câu hỏi cho Kiosk");
+
+        // 2. Sinh viên Thành truy cập từ IPv6 Loopback ::1 -> Thành công trả về vé SCHEDULED
+        var thanhResult = await handler.Handle(
+            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentThanhId, "::1", DateTime.UtcNow),
+            CancellationToken.None);
+
+        thanhResult.IsSuccess.Should().BeTrue("Sinh viên Thành tại máy trạm ::1 phải lấy được vé thi");
+        thanhResult.Value.Id.Should().Be(DevelopmentDataSeeder.TicketReadyToTestThanhId);
+        thanhResult.Value.ShiftId.Should().Be(DevelopmentDataSeeder.OfficialShiftReadyToTestPrn231Id);
+        thanhResult.Value.Status.Should().Be("SCHEDULED");
+        thanhResult.Value.ShiftStatus.Should().Be("in_progress");
+
+        // 3. Sinh viên Hoàng truy cập từ địa chỉ IP không hợp lệ (10.0.0.99) -> Bị từ chối lỗi WorkstationTicketNotFound
+        var invalidIpResult = await handler.Handle(
+            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "10.0.0.99", DateTime.UtcNow),
+            CancellationToken.None);
+
+        invalidIpResult.IsSuccess.Should().BeFalse("Địa chỉ IP 10.0.0.99 không khớp máy trạm đã đăng ký phải bị từ chối");
+        invalidIpResult.Error.Should().Be(OfficialExamErrors.WorkstationTicketNotFound);
+    }
+
+    [Fact(DisplayName = "10. Empirical: MF-05 Ca thi trong lớp PRN231 cho phép Hoàng vào thi bằng OTP tĩnh 123456, Thành vào thi bằng dynamic TOTP, và từ chối SV chưa ghi danh")]
+    public async Task MF05_InClass_Shift_Entry_StaticOtp_DynamicTotp_And_NonEnrolledRejection()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var enterValidator = new EnterInClassShiftCommandValidator();
+        var enterHandler = new EnterInClassShiftCommandHandler(context, enterValidator);
+
+        // 1. Sinh viên Hoàng vào ca thi PRN231 bằng mã OTP tĩnh "123456" -> Thành công nhận bộ câu hỏi anti-collision
+        var hoangResult = await enterHandler.Handle(
+            new EnterInClassShiftCommand(DevelopmentDataSeeder.StudentHoangId, DevelopmentDataSeeder.InClassShiftPrn231Id, "123456"),
+            CancellationToken.None);
+
+        hoangResult.IsSuccess.Should().BeTrue("Sinh viên Hoàng phải vào được ca thi PRN231 bằng OTP tĩnh 123456");
+        hoangResult.Value.ShiftId.Should().Be(DevelopmentDataSeeder.InClassShiftPrn231Id);
+        hoangResult.Value.StudentId.Should().Be(DevelopmentDataSeeder.StudentHoangId);
+        hoangResult.Value.TotalQuestionsPerStudent.Should().Be(2);
+        hoangResult.Value.AssignedQuestionIds.Should().HaveCount(2);
+        hoangResult.Value.AssignedQuestions.Should().HaveCount(2);
+        hoangResult.Value.HasFollowUp.Should().BeTrue();
+        hoangResult.Value.MaxFollowUpQuestions.Should().Be(2);
+
+        // 2. Sinh viên Thành vào ca thi PRN231 bằng mã dynamic TOTP sinh từ TotpSecretKey -> Thành công nhận bộ câu hỏi
+        var shift = await context.InClassExamShifts.FirstAsync(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id);
+        var dynamicOtp = TotpPasswordHelper.GenerateCode(shift.TotpSecretKey, DateTime.UtcNow);
+
+        var thanhResult = await enterHandler.Handle(
+            new EnterInClassShiftCommand(DevelopmentDataSeeder.StudentThanhId, DevelopmentDataSeeder.InClassShiftPrn231Id, dynamicOtp),
+            CancellationToken.None);
+
+        thanhResult.IsSuccess.Should().BeTrue("Sinh viên Thành phải vào được ca thi PRN231 bằng dynamic TOTP");
+        thanhResult.Value.StudentId.Should().Be(DevelopmentDataSeeder.StudentThanhId);
+        thanhResult.Value.AssignedQuestionIds.Should().HaveCount(2);
+        thanhResult.Value.AssignedQuestions.Should().HaveCount(2);
+
+        // 3. Sinh viên chưa ghi danh vào lớp PRN231 nhập OTP 123456 -> Bị từ chối lỗi StudentNotEnrolled
+        var strangerStudentId = Guid.NewGuid();
+        context.Users.Add(new User
+        {
+            Id = strangerStudentId,
+            Email = "stranger.student@fpt.edu.vn",
+            FullName = "Sinh Vien Chua Ghi Danh",
+            StudentCode = "SE199999",
+            Role = UserRole.Student,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var nonEnrolledResult = await enterHandler.Handle(
+            new EnterInClassShiftCommand(strangerStudentId, DevelopmentDataSeeder.InClassShiftPrn231Id, "123456"),
+            CancellationToken.None);
+
+        nonEnrolledResult.IsSuccess.Should().BeFalse("Sinh viên chưa ghi danh phải bị từ chối");
+        nonEnrolledResult.Error.Should().Be(InClassShiftErrors.StudentNotEnrolled);
+    }
+
+    [Fact(DisplayName = "11. Empirical: Cơ chế Self-healing tự động phục hồi ca thi MF-04 và MF-05 về IN_PROGRESS kèm khung giờ hợp lệ khi ca thi bị đóng hoặc hết hạn")]
+    public async Task SelfHealing_When_Shifts_Closed_Or_Expired_SeedAsync_Restores_Both_Shifts_To_InProgress()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        // 1. Phá vỡ trạng thái: Đóng ca thi MF-04 Lab Kiosk và làm hết hạn khung giờ
+        var readyShift = await context.RealExamSessionShifts.FirstAsync(s => s.Id == DevelopmentDataSeeder.OfficialShiftReadyToTestPrn231Id);
+        readyShift.Status = "completed";
+        readyShift.StartTime = DateTime.UtcNow.AddHours(-10);
+        readyShift.EndTime = DateTime.UtcNow.AddHours(-2);
+        readyShift.IsExamPublished = false;
+
+        var hoangTicket = await context.StudentExamTickets.FirstAsync(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestHoangId);
+        hoangTicket.Status = ExamTicketStatus.Submitted;
+        hoangTicket.IpAddress = "10.0.0.1";
+        hoangTicket.IsLocked = true;
+
+        // 2. Phá vỡ trạng thái: Đóng ca thi MF-05 In-Class và làm hết hạn khung giờ
+        var inClassShift = await context.InClassExamShifts.FirstAsync(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id);
+        inClassShift.Status = "CLOSED";
+        inClassShift.StartTime = DateTime.UtcNow.AddHours(-8);
+        inClassShift.EndTime = DateTime.UtcNow.AddHours(-1);
+        inClassShift.IsLocked = true;
+
+        await context.SaveChangesAsync();
+
+        // 3. Thực thi Seeder lần nữa để kích hoạt Self-healing logic
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        // 4. Kiểm chứng MF-04 Lab Kiosk đã được phục hồi hoàn toàn
+        var healedShift = await context.RealExamSessionShifts.FirstAsync(s => s.Id == DevelopmentDataSeeder.OfficialShiftReadyToTestPrn231Id);
+        healedShift.Status.Should().Be("in_progress", "Ca thi MF-04 phải được tự phục hồi về in_progress");
+        healedShift.IsExamPublished.Should().BeTrue("Đề thi MF-04 phải được tự xuất bản lại");
+        healedShift.StartTime.Should().BeBefore(DateTime.UtcNow);
+        healedShift.EndTime.Should().BeAfter(DateTime.UtcNow);
+
+        var healedHoangTicket = await context.StudentExamTickets.FirstAsync(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestHoangId);
+        healedHoangTicket.Status.Should().Be(ExamTicketStatus.Scheduled, "Vé của Hoàng phải được phục hồi về Scheduled");
+        healedHoangTicket.IpAddress.Should().Be("127.0.0.1", "Vé của Hoàng phải gắn lại IP 127.0.0.1");
+        healedHoangTicket.IsLocked.Should().BeFalse();
+
+        // 5. Kiểm chứng MF-05 In-Class đã được phục hồi hoàn toàn
+        var healedInClass = await context.InClassExamShifts.FirstAsync(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id);
+        healedInClass.Status.Should().Be("IN_PROGRESS", "Ca thi MF-05 phải được tự phục hồi về IN_PROGRESS");
+        healedInClass.IsLocked.Should().BeFalse();
+        healedInClass.StartTime.Should().BeBefore(DateTime.UtcNow);
+        healedInClass.EndTime.Should().BeAfter(DateTime.UtcNow);
+
+        var staticPassword = await context.InClassShiftPasswords.FirstOrDefaultAsync(p => p.ShiftId == healedInClass.Id && p.PlainCode == "123456");
+        staticPassword.Should().NotBeNull();
+        staticPassword!.ValidFrom.Should().BeBefore(DateTime.UtcNow);
+        staticPassword.ValidTo.Should().BeAfter(DateTime.UtcNow);
     }
 }

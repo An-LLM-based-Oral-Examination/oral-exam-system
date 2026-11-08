@@ -7,10 +7,13 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using OralExamination.API.Hubs;
+using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.ActivateInClassShift;
-using OralExamination.Application.Features.InClassShifts.Commands.CloseInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.AdjustInClassSubmissionScore;
+using OralExamination.Application.Features.InClassShifts.Commands.CloseInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
@@ -22,6 +25,8 @@ using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShift
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftCurrentPassword;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftSubmissions;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftsByClass;
+using OralExamination.Application.Features.InClassShifts.Queries.GetMyInClassShifts;
+using OralExamination.Application.Features.InClassShifts.Queries.GetNextInClassFollowUp;
 using OralExamination.Application.Features.InClassShifts.Queries.GetStudentInClassSubmission;
 
 namespace API.Controllers.v1;
@@ -33,7 +38,9 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/in-class-shifts")]
 [Authorize]
-public class InClassShiftsController(ISender sender) : ControllerBase
+public class InClassShiftsController(
+    ISender sender,
+    IHubContext<PracticeHub, IPracticeClient>? hubContext = null) : ControllerBase
 {
     private Guid GetAuthenticatedUserId()
     {
@@ -97,6 +104,16 @@ public class InClassShiftsController(ISender sender) : ControllerBase
                 });
             }
 
+            if (result.Error == InClassShiftErrors.InsufficientQuestionPool)
+            {
+                return UnprocessableEntity(new ProblemDetails
+                {
+                    Title = "Unprocessable Entity",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status422UnprocessableEntity
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Title = "Bad Request",
@@ -109,12 +126,12 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên kích hoạt ca đang chờ để sinh viên nhập mã OTP và làm bài.
+    /// Giảng viên kích hoạt ca kiểm tra để chiếu mã OTP và cho sinh viên vào làm bài.
     /// </summary>
     [HttpPost("{id}/activate")]
     [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/activate")]
     [Authorize(Roles = "lecturer,department_head,admin")]
-    [ProducesResponseType(typeof(ActivateInClassShiftResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(InClassExamShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateShift(
         [FromRoute] Guid id,
@@ -193,11 +210,40 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    /// Sinh viên lấy toàn bộ danh sách các ca kiểm tra trên lớp thuộc các lớp học phần đang tham gia.
+    /// </summary>
+    [HttpGet("my")]
+    [HttpGet("/api/v1/student/in-class-shifts/my")]
+    [Authorize(Roles = "student")]
+    [ProducesResponseType(typeof(IReadOnlyList<InClassExamShiftResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyShifts(CancellationToken cancellationToken)
+    {
+        var studentId = GetAuthenticatedUserId();
+        if (studentId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new GetMyInClassShiftsQuery(studentId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Xem thông tin chi tiết ca thi kèm danh sách sinh viên tham gia và bài nộp.
     /// </summary>
-    [HttpGet("{id}")]
-    [HttpGet("/api/v1/lecturer/in-class-shifts/{id}")]
-    [HttpGet("/api/v1/student/in-class-shifts/{id}")]
+    [HttpGet("{id:guid}")]
+    [HttpGet("/api/v1/lecturer/in-class-shifts/{id:guid}")]
+    [HttpGet("/api/v1/student/in-class-shifts/{id:guid}")]
     [Authorize(Roles = "lecturer,department_head,admin,student")]
     [ProducesResponseType(typeof(InClassShiftDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -322,8 +368,10 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     /// Giảng viên hậu kiểm điểm thành phần, nhập nhận xét và điều chỉnh điểm.
     /// </summary>
     [HttpPut("{id}/submissions/{submissionId}/grade")]
+    [HttpPut("{id}/submissions/{submissionId}/audit")]
     [HttpPut("submissions/{submissionId}/adjust-score")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/grade")]
+    [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/audit")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/submissions/{submissionId}/adjust-score")]
     [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(InClassExamSubmissionResponse), StatusCodes.Status200OK)]
@@ -344,8 +392,8 @@ public class InClassShiftsController(ISender sender) : ControllerBase
         var command = new AdjustInClassSubmissionScoreCommand(
             userId,
             submissionId,
-            request.FinalScore,
-            request.LecturerNotes
+            request.EffectiveFinalScore,
+            request.EffectiveNotes
         );
 
         var result = await sender.Send(command, cancellationToken);
@@ -367,6 +415,18 @@ public class InClassShiftsController(ISender sender) : ControllerBase
                 Detail = result.Error,
                 Status = StatusCodes.Status400BadRequest
             });
+        }
+
+        if (hubContext is not null)
+        {
+            try
+            {
+                await hubContext.Clients.Group($"session_{result.Value.ShiftId:D}").InClassSubmissionGraded(result.Value);
+            }
+            catch
+            {
+                // Không chặn phản hồi HTTP nếu kết nối SignalR tạm thời gián đoạn
+            }
         }
 
         return Ok(result.Value);
@@ -412,6 +472,18 @@ public class InClassShiftsController(ISender sender) : ControllerBase
                 Detail = result.Error,
                 Status = StatusCodes.Status400BadRequest
             });
+        }
+
+        if (hubContext is not null)
+        {
+            try
+            {
+                await hubContext.Clients.Group($"session_{id:D}").InClassShiftGradesFinalized(result.Value);
+            }
+            catch
+            {
+                // Không chặn phản hồi HTTP nếu kết nối SignalR tạm thời gián đoạn
+            }
         }
 
         return Ok(result.Value);
@@ -634,6 +706,42 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     }
 
     /// <summary>
+    /// Sinh câu hỏi phụ (Follow-up) theo ngữ cảnh câu trả lời chính khi Giảng viên bật HasFollowUp cho ca thi trên lớp (MF-05, Zero-R2).
+    /// </summary>
+    [HttpPost("{id}/submissions/{submissionId}/next-followup")]
+    [HttpPost("/api/v1/student/in-class-shifts/{id}/submissions/{submissionId}/next-followup")]
+    [Authorize(Roles = "student")]
+    [ProducesResponseType(typeof(InClassNextFollowUpResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetNextFollowUp(
+        [FromRoute] Guid id,
+        [FromRoute] Guid submissionId,
+        CancellationToken cancellationToken)
+    {
+        var studentId = GetAuthenticatedUserId();
+        if (studentId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(
+            new GetNextInClassFollowUpQuery(studentId, id, submissionId),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Not Found",
+                Detail = result.Error,
+                Status = StatusCodes.Status404NotFound
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Sinh viên xem lại bài làm của mình trong ca thi (hỗ trợ lọc theo questionId và followUpIndex).
     /// </summary>
     [HttpGet("{id}/my-submission")]
@@ -673,7 +781,9 @@ public class InClassShiftsController(ISender sender) : ControllerBase
     /// Sinh viên xem toàn bộ danh sách các lượt nộp bài (N câu chính + các lượt follow-up) của chính mình trong ca thi.
     /// </summary>
     [HttpGet("{id}/my-submissions")]
+    [HttpGet("{id}/results")]
     [HttpGet("/api/v1/student/in-class-shifts/{id}/my-submissions")]
+    [HttpGet("/api/v1/student/in-class-shifts/{id}/results")]
     [Authorize(Roles = "student")]
     [ProducesResponseType(typeof(IReadOnlyList<InClassExamSubmissionResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -728,4 +838,18 @@ public sealed record SubmitInClassAnswerRequest(
     string? Transcript = null
 );
 
-public sealed record AdjustSubmissionScoreRequest(decimal FinalScore, string? LecturerNotes);
+public sealed record AdjustSubmissionScoreRequest(
+    decimal? FinalScore = null,
+    string? LecturerNotes = null,
+    decimal? AdjustedScore = null,
+    decimal? LecturerScore = null,
+    string? OverrideReason = null,
+    string? LecturerComment = null)
+{
+    public decimal EffectiveFinalScore => FinalScore ?? AdjustedScore ?? LecturerScore ?? 0m;
+    public string? EffectiveNotes => !string.IsNullOrWhiteSpace(LecturerNotes)
+        ? LecturerNotes
+        : !string.IsNullOrWhiteSpace(OverrideReason)
+            ? OverrideReason
+            : LecturerComment;
+}

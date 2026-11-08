@@ -148,59 +148,53 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     actor Student as Student
     participant UI as Practice UI
     participant Ctrl as PracticeController
     participant TO as PracticeSessionTimeoutHelper
-    participant NextHdl as NextQuestionCommandHandler
-    participant GetHdl as GetPracticeSessionQueryHandler
+    participant Handler as Session / NextQuestion Handler
     participant DB as Database
 
-    Student->>UI: Request next question or open practice session
+    Student->>UI: 1. Request next question
 
-    alt Per-Question On-Demand Mode: Request Next Question
-        UI->>Ctrl: Send next question request
-        Ctrl->>NextHdl: Forward NextQuestionCommand
-        NextHdl->>DB: Load practice session by ID
-        DB-->>NextHdl: Return session entity
-        NextHdl->>TO: Check session inactivity timeout
-        TO->>DB: Read SessionInactivityTimeoutMinutes config
-        DB-->>TO: Return timeout minutes
+    alt Next Question Request
+        UI->>Ctrl: 2.1 Send next question request
+        Ctrl->>Handler: 3.1 Forward next question command
+        Handler->>DB: 4.1 Get practice session
+        DB-->>Handler: 5.1 Return session record
+        Handler->>TO: 6.1 Check session timeout
+        TO-->>Handler: 7.1 Return timeout status
 
-        alt Inactivity Exceeds 5 Minutes Timeout
-            TO->>DB: Auto-close session and preserve completed scores
-            TO-->>NextHdl: Return session timed out status
-            NextHdl-->>Ctrl: Return session timeout error
-            Ctrl-->>UI: Display session expired notification
-        else Session Active Within 5 Minutes
-            NextHdl->>DB: Query answered question IDs and candidate metadata
-            DB-->>NextHdl: Return candidate IDs and difficulties
-
-            alt All Candidate Questions Exhausted
-                NextHdl-->>Ctrl: Return no more questions available
-                Ctrl-->>UI: Display practice completion summary
-            else Candidate Questions Available
-                NextHdl->>NextHdl: Filter anti-3-consecutive difficulty and pick random ID
-                NextHdl->>DB: Load selected question with rubric criteria
-                DB-->>NextHdl: Return question and rubric details
-                NextHdl->>DB: Append question ID and update LastActivityAt
-                NextHdl-->>Ctrl: Return next question response
-                Ctrl-->>UI: Display new question and rubric criteria
-            end
+        alt Session Timed Out
+            Handler->>DB: 8.1 Close expired session and save score
+            DB-->>Handler: 9.1 Confirm session closed
+            Handler-->>Ctrl: 10.1 Return session expired error
+            Ctrl-->>UI: 11.1 Display session expired message
+        else Questions Available
+            Handler->>DB: 8.2 Select next question by difficulty
+            DB-->>Handler: 9.2 Return question and rubric
+            Handler->>DB: 10.2 Update selected question list
+            DB-->>Handler: 11.2 Confirm session updated
+            Handler-->>Ctrl: 12.2 Return next question response
+            Ctrl-->>UI: 13.2 Display next question
         end
-    else Load or Resume Practice Session State
-        UI->>Ctrl: Send get practice session request
-        Ctrl->>GetHdl: Forward GetPracticeSessionQuery
-        GetHdl->>DB: Load session with answers and AI evaluations
-        DB-->>GetHdl: Return session graph
-        GetHdl->>TO: Verify lazy timeout for in-progress session
-        TO->>DB: Auto-fill zero scores for skipped progressive questions if timed out
-        TO-->>GetHdl: Return updated session state
-        GetHdl->>DB: Load ordered questions with rubric criteria and buffer config
-        DB-->>GetHdl: Return ordered questions and config
-        GetHdl-->>Ctrl: Return practice session detail result
-        Ctrl-->>UI: Display ordered questions and session progress
+    else Get Session Detail
+        UI->>Ctrl: 2.3 Send get session request
+        Ctrl->>Handler: 3.3 Forward get session query
+        Handler->>DB: 4.3 Get session with answers
+        DB-->>Handler: 5.3 Return session record
+        Handler->>TO: 6.3 Verify session timeout
+        TO-->>Handler: 7.3 Return timeout status
+        Handler->>DB: 8.3 Load ordered questions and rubric
+        DB-->>Handler: 9.3 Return ordered questions
+        Handler-->>Ctrl: 10.3 Return session detail response
+        Ctrl-->>UI: 11.3 Display session progress
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 12.4 Log error
+        Handler-->>Ctrl: 13.4 Return error response
+        Ctrl-->>UI: 14.4 Display error message
     end
 ```
 

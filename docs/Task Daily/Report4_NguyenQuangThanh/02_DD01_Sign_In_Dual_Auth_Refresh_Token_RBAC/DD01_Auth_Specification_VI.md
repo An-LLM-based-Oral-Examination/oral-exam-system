@@ -160,32 +160,46 @@ classDiagram
         +bool IsActive
     }
 
-    AuthController ..> GoogleLoginCommandHandler : MediatR Send
-    AuthController ..> PasswordLoginCommandHandler : MediatR Send
-    AuthController ..> ChangePasswordCommandHandler : MediatR Send
-    AuthController ..> RefreshTokenCommandHandler : MediatR Send
-    AuthController ..> SignOutCommandHandler : MediatR Send
+    class IApplicationDbContext {
+        <<Interface>>
+        +DbSet~User~ Users
+        +DbSet~RefreshToken~ RefreshTokens
+        +SaveChangesAsync(CancellationToken ct) Task~int~
+    }
 
-    GoogleLoginCommandHandler --> IGoogleIdTokenValidator
-    GoogleLoginCommandHandler --> IAccessTokenIssuer
-    PasswordLoginCommandHandler --> IPasswordHasher
-    PasswordLoginCommandHandler --> IAccessTokenIssuer
-    ChangePasswordCommandHandler --> IPasswordHasher
-    ChangePasswordCommandHandler --> IAccessTokenIssuer
-    RefreshTokenCommandHandler --> IAccessTokenIssuer
+    class OralExamDbContext {
+        +DbSet~User~ Users
+        +DbSet~RefreshToken~ RefreshTokens
+        +SaveChangesAsync(CancellationToken ct) Task~int~
+    }
 
-    GoogleIdTokenValidator ..|> IGoogleIdTokenValidator
-    JwtAccessTokenIssuer ..|> IAccessTokenIssuer
-    Pbkdf2PasswordHasher ..|> IPasswordHasher
+    AuthController ..> GoogleLoginCommandHandler : Uses
+    AuthController ..> PasswordLoginCommandHandler : Uses
+    AuthController ..> ChangePasswordCommandHandler : Uses
+    AuthController ..> RefreshTokenCommandHandler : Uses
+    AuthController ..> SignOutCommandHandler : Uses
 
-    GoogleLoginCommandHandler --> User
-    GoogleLoginCommandHandler --> RefreshToken
-    PasswordLoginCommandHandler --> User
-    PasswordLoginCommandHandler --> RefreshToken
-    ChangePasswordCommandHandler --> User
-    RefreshTokenCommandHandler --> RefreshToken
-    SignOutCommandHandler --> RefreshToken
-    User "1" --> "*" RefreshToken : owns
+    GoogleLoginCommandHandler ..> IGoogleIdTokenValidator : Uses
+    GoogleLoginCommandHandler ..> IAccessTokenIssuer : Uses
+    GoogleLoginCommandHandler ..> IApplicationDbContext : Uses
+    PasswordLoginCommandHandler ..> IPasswordHasher : Uses
+    PasswordLoginCommandHandler ..> IAccessTokenIssuer : Uses
+    PasswordLoginCommandHandler ..> IApplicationDbContext : Uses
+    ChangePasswordCommandHandler ..> IPasswordHasher : Uses
+    ChangePasswordCommandHandler ..> IAccessTokenIssuer : Uses
+    ChangePasswordCommandHandler ..> IApplicationDbContext : Uses
+    RefreshTokenCommandHandler ..> IAccessTokenIssuer : Uses
+    RefreshTokenCommandHandler ..> IApplicationDbContext : Uses
+    SignOutCommandHandler ..> IApplicationDbContext : Uses
+
+    GoogleIdTokenValidator ..|> IGoogleIdTokenValidator : Implements
+    JwtAccessTokenIssuer ..|> IAccessTokenIssuer : Implements
+    Pbkdf2PasswordHasher ..|> IPasswordHasher : Implements
+    OralExamDbContext ..|> IApplicationDbContext : Implements
+
+    IApplicationDbContext ..> User : Uses
+    IApplicationDbContext ..> RefreshToken : Uses
+    User "1" --> "*" RefreshToken : RefreshTokens
 ```
 
 *Hình 3.1.2 — Sơ đồ lớp gói `DD-01` (Xác thực Kép, Xoay vòng Refresh Token & Phân quyền 6 Roles).*
@@ -198,71 +212,57 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     actor User as User
     participant UI as Login UI
-    participant MW as MustChangePassword<br/>Middleware
     participant Ctrl as AuthController
     participant Handler as AuthCommandHandler
     participant Infra as AuthSecurityService
     participant DB as Database
 
-    User->>UI: Enter login credentials
+    User->>UI: 1. Enter login credentials
 
     alt Google OAuth Login
-        UI->>Ctrl: Send Google login request
-        Ctrl->>Handler: Forward GoogleLoginCommand
-        Handler->>Infra: Validate Google ID token
-        Infra-->>Handler: Return token verification result
-        alt Invalid Google Token or Account Locked
-            Handler-->>Ctrl: Return authentication failure
-            Ctrl-->>UI: Display error message
+        UI->>Ctrl: 2.1 Send Google login request
+        Ctrl->>Handler: 3.1 Forward Google login command
+        Handler->>Infra: 4.1 Validate Google ID token
+        Infra-->>Handler: 5.1 Return token validation status
+        alt Invalid Token or Account Locked
+            Handler-->>Ctrl: 6.1 Return failure message
+            Ctrl-->>UI: 7.1 Display failure message
         else Valid Google Account
-            Handler->>DB: Check user email and provision student if new
-            DB-->>Handler: Return user account and role
-            Handler->>Infra: Issue access token and hash refresh token
-            Handler->>DB: Save new refresh token
-            Handler-->>Ctrl: Return login success result
-            Ctrl-->>UI: Return token pair and user profile
+            Handler->>DB: 6.2 Find or create student account
+            DB-->>Handler: 7.2 Return user account
+            Handler->>Infra: 8.2 Issue access and refresh tokens
+            Infra-->>Handler: 9.2 Return token pair
+            Handler->>DB: 10.2 Save refresh token
+            DB-->>Handler: 11.2 Confirm token saved
+            Handler-->>Ctrl: 12.2 Return login response
+            Ctrl-->>UI: 13.2 Display login success
         end
-    else Institution Password Login
-        UI->>Ctrl: Send password login request
-        Ctrl->>Handler: Forward PasswordLoginCommand
-        Handler->>DB: Find user by normalized username
-        DB-->>Handler: Return user record
-        Handler->>Infra: Verify PBKDF2 password hash
-        alt Account Not Found or Wrong Password
-            Handler-->>Ctrl: Return invalid credentials message
-            Ctrl-->>UI: Display login failure message
+    else Password Login
+        UI->>Ctrl: 2.3 Send password login request
+        Ctrl->>Handler: 3.3 Forward password login command
+        Handler->>DB: 4.3 Find user by username or email
+        DB-->>Handler: 5.3 Return user record
+        Handler->>Infra: 6.3 Verify password hash
+        Infra-->>Handler: 7.3 Return verification result
+        alt Invalid Credentials
+            Handler-->>Ctrl: 8.3 Return failure message
+            Ctrl-->>UI: 9.3 Display failure message
         else Valid Credentials
-            Handler->>Infra: Issue access token and refresh token
-            Handler->>DB: Save new refresh token
-            Handler-->>Ctrl: Return login response
-            Ctrl-->>UI: Return token pair and password status
+            Handler->>Infra: 8.4 Issue access and refresh tokens
+            Infra-->>Handler: 9.4 Return token pair
+            Handler->>DB: 10.4 Save refresh token
+            DB-->>Handler: 11.4 Confirm token saved
+            Handler-->>Ctrl: 12.4 Return login response
+            Ctrl-->>UI: 13.4 Display login success
         end
     end
 
-    opt First-Login Password Change Required
-        UI->>MW: Send protected feature request
-        MW-->>UI: Reject request and require password change
-        UI->>MW: Send change password request
-        MW->>Ctrl: Allow whitelisted request
-        Ctrl->>Handler: Forward ChangePasswordCommand
-        Handler->>Infra: Verify current password and hash new password
-        Handler->>DB: Update user password hash and clear flag
-        Ctrl-->>UI: Return new access token and refresh token
-    end
-
-    alt Revoked Refresh Token Reused
-        UI->>Ctrl: Send refresh token request
-        Ctrl->>Handler: Forward RefreshTokenCommand
-        Handler->>DB: Find refresh token by SHA-256 hash
-        DB-->>Handler: Return refresh token record
-        Handler->>DB: Revoke all active tokens of user
-        Ctrl-->>UI: Return session revoked error
-    else Active Refresh Token
-        Handler->>DB: Revoke current token and insert rotated token
-        Ctrl-->>UI: Return rotated access and refresh tokens
+    opt Exception occurs
+        Handler->>Handler: 14.5 Log error
+        Handler-->>Ctrl: 15.5 Return error response
+        Ctrl-->>UI: 16.5 Display error message
     end
 ```
 

@@ -166,9 +166,13 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
             context.InClassExamSubmissions.Add(submission);
 
+            bool requiresMoreFollowUp = shift.HasFollowUp &&
+                shift.MaxFollowUpQuestions > 0 &&
+                effectiveFollowUpIndex < shift.MaxFollowUpQuestions;
+
             if (assignedQuestionIds.Count <= 1)
             {
-                participant.Status = "SUBMITTED";
+                participant.Status = requiresMoreFollowUp ? "IN_PROGRESS" : "SUBMITTED";
             }
             else
             {
@@ -178,10 +182,18 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                     .Select(s => s.QuestionId)
                     .ToListAsync(cancellationToken);
 
-                submittedMainIds.Add(request.QuestionId);
-                if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)))
+                if (!request.IsFollowUp)
+                {
+                    submittedMainIds.Add(request.QuestionId);
+                }
+
+                if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)) && !requiresMoreFollowUp)
                 {
                     participant.Status = "SUBMITTED";
+                }
+                else
+                {
+                    participant.Status = "IN_PROGRESS";
                 }
             }
         }
