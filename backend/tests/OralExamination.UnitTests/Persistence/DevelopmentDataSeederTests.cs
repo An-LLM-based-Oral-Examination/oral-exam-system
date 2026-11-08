@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
+using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamHistory;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail;
@@ -568,7 +570,10 @@ public class DevelopmentDataSeederTests
         await DevelopmentDataSeeder.SeedAsync(context);
 
         var enterValidator = new EnterInClassShiftCommandValidator();
-        var enterHandler = new EnterInClassShiftCommandHandler(context, enterValidator);
+        var enterHandler = new EnterInClassShiftCommandHandler(
+            context,
+            enterValidator,
+            new Mock<IGradingQueueChannel>().Object);
 
         // 1. Sinh viên Hoàng vào ca thi PRN231 bằng mã OTP tĩnh "123456" -> Thành công nhận bộ câu hỏi anti-collision
         var hoangResult = await enterHandler.Handle(
