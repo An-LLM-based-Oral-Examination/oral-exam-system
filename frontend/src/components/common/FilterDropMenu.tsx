@@ -48,14 +48,12 @@ export function FilterDropMenu({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLUListElement>(null)
   const isEmpty = options.length === 0
+  const isOpen = open && !isEmpty
   const selected = options.find((option) => option.value === value)?.label
   const triggerLabel = selected ?? (isEmpty ? emptyText : label)
 
   useLayoutEffect(() => {
-    if (!open) {
-      setBox(null)
-      return
-    }
+    if (!isOpen) return
 
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect()
@@ -95,14 +93,10 @@ export function FilterDropMenu({
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [open, options.length])
+  }, [isOpen, options.length])
 
   useEffect(() => {
-    if (isEmpty && open) setOpen(false)
-  }, [isEmpty, open])
-
-  useEffect(() => {
-    if (!open) return
+    if (!isOpen) return
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return
@@ -120,46 +114,45 @@ export function FilterDropMenu({
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [open])
+  }, [isOpen])
 
   return (
     <div
       ref={rootRef}
-      data-filter-open={open ? 'true' : undefined}
+      data-filter-open={isOpen ? 'true' : undefined}
       className={cn('relative', className)}
     >
       <button
         ref={buttonRef}
         type="button"
         aria-label={label}
-        aria-expanded={open}
+        aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-disabled={isEmpty || undefined}
         disabled={isEmpty}
         onClick={() => {
           if (isEmpty) return
-          setOpen((current) => !current)
+          setOpen((current) => !(current && !isEmpty))
         }}
         aria-invalid={invalid || undefined}
         className={cn(
           'relative inline-flex h-10 w-full items-center rounded-full border bg-white py-0 pr-11 pl-4 text-left text-sm font-semibold shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition',
           invalid ? 'border-[#c2415b] bg-[#fff7f8]' : 'border-[#4988C4]',
           isEmpty ? 'cursor-default text-[#8aa0b8]' : 'text-[#0F2854]',
-          open && !invalid && 'ring-2 ring-[#1C4D8D]/15',
-          open && invalid && 'ring-2 ring-[#c2415b]/20',
+          isOpen && !invalid && 'ring-2 ring-[#1C4D8D]/15',
+          isOpen && invalid && 'ring-2 ring-[#c2415b]/20',
         )}
       >
         <span className="truncate">{triggerLabel}</span>
         <ChevronDown
           className={cn(
             'pointer-events-none absolute right-5 size-4 text-[#1C4D8D] transition',
-            open && 'rotate-180',
+            isOpen && 'rotate-180',
             isEmpty && 'opacity-50',
           )}
         />
       </button>
-      {open &&
-        !isEmpty &&
+      {isOpen &&
         box &&
         createPortal(
           <ul

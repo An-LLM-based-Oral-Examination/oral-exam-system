@@ -45,11 +45,6 @@ public class AppealsController : ControllerBase
             return id;
         }
 
-        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
-        {
-            return headerId;
-        }
-
         return Guid.Empty;
     }
 

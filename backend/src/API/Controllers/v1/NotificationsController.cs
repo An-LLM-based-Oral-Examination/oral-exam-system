@@ -32,15 +32,6 @@ public class NotificationsController(ISender sender) : ControllerBase
             return id;
         }
 
-        if (User?.Identity?.IsAuthenticated != true &&
-            Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-User-Id", out var headerVal) &&
-            Guid.TryParse(headerVal, out var headerId) &&
-            headerId != Guid.Empty)
-        {
-            return headerId;
-        }
-
         return Guid.Empty;
     }
 

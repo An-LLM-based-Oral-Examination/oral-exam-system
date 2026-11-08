@@ -33,50 +33,59 @@ Sơ đồ `D-09` mô tả luồng tương tác từ lúc thí sinh khởi chạy
 ```mermaid
 sequenceDiagram
     actor Candidate as Candidate
-    participant Lobby as ShellLockdown & LobbyView [Kiosk]
-    participant CheckIn as TicketCheckInService [Kiosk]
-    participant Mic as MicCalibrationService [Kiosk]
-    participant API as OfficialExams & Proctor API [BE]
-    participant Hub as AntiCheatHub SignalR [BE]
-    participant DB as Database [PostgreSQL]
+    participant Lobby as ShellLockdown & LobbyView
+    participant CheckIn as TicketCheckInService
+    participant Mic as MicCalibrationService
+    participant API as OfficialExams & Proctor API
+    participant Hub as AntiCheatHub SignalR
+    participant DB as Database
 
-    Candidate->>Lobby: 1. Launch Kiosk App & sign in
-    Lobby->>Lobby: 2. Enable Fullscreen & block OS shortcuts
-    Lobby->>CheckIn: 3. Fetch workstation ticket by ip_address
-    CheckIn->>API: 4. GET /api/v1/official-exams/tickets/current
-    API->>DB: 5. Query ticket by studentId & ip_address
+    Candidate->>Lobby: 1. Launch Kiosk and sign in
+    Lobby->>Lobby: 2. Enable fullscreen lockdown and keyboard hook
 
-    alt Workstation IP Mismatch or Shift Not Published
-        API-->>CheckIn: 6.1 Return HTTP 403 WrongWorkstation
-        CheckIn-->>Lobby: 7.1 Display workstation IP mismatch warning
-    else Workstation IP Matches Seat 1..40 & Ticket SCHEDULED
-        API-->>CheckIn: 6.2 Return ticket (Seat 1..40, SCHEDULED)
-        CheckIn-->>Lobby: 7.2 Open 30s microphone pre-check screen
+    alt Multiple Displays, Forbidden Process or VM Detected
+        Lobby-->>Candidate: 3.1 Block entry and display alert
+    else Workstation Environment Clean
+        Candidate->>Lobby: 3.2 Select shift and seat number
+        Lobby->>CheckIn: 4. Request seat check-in with IP
+        CheckIn->>API: 5. Send seat check-in request
+        API->>DB: 6. Verify ticket attendance and workstation IP
+        DB-->>API: 7. Return ticket and IP verification status
+
+        alt IP Conflict on Seat
+            API-->>CheckIn: 8.1 Return seat IP conflict error
+            CheckIn-->>Lobby: 9.1 Display workstation conflict error
+        else Valid Seat and IP Sealed
+            API->>DB: 8.2 Seal workstation IP and update check-in status
+            DB-->>API: 9.2 Confirm check-in saved
+            API-->>CheckIn: 10.2 Return check-in confirmation
+        end
+
+        Lobby->>Mic: 11. Run thirty-second microphone calibration
+        alt Signal Below Threshold or Silent
+            Mic-->>Lobby: 12.1 Return low signal warning
+        else Signal Meets Threshold
+            Mic-->>Lobby: 12.2 Confirm microphone calibrated
+        end
+
+        Lobby->>Hub: 13. Connect to anti-cheat hub and join shift group
+        Hub-->>Lobby: 14. Confirm shift room joined
+        Lobby-->>Candidate: 15. Display waiting lobby screen
     end
 
-    alt 30s Mic Calibration < 60 dB Threshold
-        Candidate->>Mic: 8. Speak into microphone for 30s test
-        Mic-->>Lobby: 9.1 Peak < 60 dB -> block entry & prompt retry
-    else Mic Calibration >= 60 dB Passed -> Check-in Ticket
-        Mic-->>Lobby: 9.2 Peak >= 60 dB verified
-        Lobby->>CheckIn: 10.2 Request ticket check-in
-        CheckIn->>API: 11.2 POST /official-exams/tickets/{id}/check-in
-        API->>DB: 12.2 Update status SCHEDULED -> IN_PROGRESS
-        API-->>Lobby: 13.2 Return IN_PROGRESS ticket & exam config
+    opt Shift Exam Published by Examination Officer
+        Hub->>Lobby: 16. Broadcast exam published event
+        Lobby->>API: 17. Request assigned exam paper
+        API->>DB: 18. Load assigned exam set and questions
+        DB-->>API: 19. Return exam set questions
+        API-->>Lobby: 20. Return exam paper payload
+        Lobby-->>Candidate: 21. Open exam workspace
     end
 
-    alt Focus Blur > 3 Strikes or Shortcut Violation -> Lock Ticket
-        Lobby->>CheckIn: 14. Detect blurCount > 3 strikes
-        CheckIn->>API: 15. POST /official-exams/anti-cheat/log & suspend
-        API->>DB: 16. Save anti-cheat log & transition -> LOCKED
-        API->>Hub: 17. Broadcast alert to Proctor / Officer
-        API-->>Lobby: 18. Lock Kiosk screen (Status = LOCKED)
-    end
-
-    alt Exception occurs
-        CheckIn->>CheckIn: Log error
-        API-->>CheckIn: Return RFC 7807 ProblemDetails
-        CheckIn-->>Lobby: Display error dialog
+    opt Exception occurs
+        API->>API: 22. Log error
+        API-->>CheckIn: 23. Return error response
+        CheckIn-->>Lobby: 24. Display error dialog
     end
 ```
 
@@ -110,46 +119,55 @@ Sơ đồ `D-10` đặc tả luồng làm bài vấn đáp chính thức trên *
 ```mermaid
 sequenceDiagram
     actor Candidate as Candidate
-    participant Canvas as ExamCanvas & SafeLockView [Kiosk]
-    participant Audio as AudioServices & LocalJournal [Kiosk]
-    participant Disp as SubmissionDispatcher [Kiosk]
+    participant Canvas as ExamCanvas & SafeLockView
+    participant Audio as AudioServices & LocalJournal
+    participant Disp as SubmissionDispatcher
     participant R2 as Cloudflare R2 Storage
-    participant API as OfficialExamSubmissions API [BE]
+    participant API as OfficialExamSubmissions API
     participant DB as PostgreSQL & BoundedChannel
 
-    Candidate->>Canvas: 1. Read/listen questions & record oral answer
-    Canvas->>Audio: 2. Capture WebM & spool AES-256 chunks
-    Audio-->>Canvas: 3. Return draft transcript & start buffer timer
-    Candidate->>Canvas: 4. Edit SE terms in buffer window & click Submit
-    Canvas->>Audio: 5. Finalize immutable file STT_MSSV.webm
-    Audio->>Audio: 6. Compute 64-char hex SHA-256 seal
+    Candidate->>Canvas: 1. Speak answer into microphone
+    Canvas->>Audio: 2. Capture audio and write chunks
+    Candidate->>Canvas: 3. Click Stop Recording
+    Canvas->>Audio: 4. Finalize audio and compute hash
+    Audio->>Audio: 5. Save encrypted journal entry
+    Audio-->>Canvas: 6. Return audio path and hash
 
-    alt Network Available -> R2 Upload, SHA-256 Seal & Persist-First (<100ms)
-        Canvas->>Disp: 7.1 Dispatch 3-step submission protocol
-        Disp->>API: 8.1 POST /tickets/{id}/audio-upload-authorizations
-        API-->>Disp: 9.1 Return presigned PUT URL & objectKey
-        Disp->>R2: 10.1 Direct PUT STT_MSSV.webm to R2
-        R2-->>Disp: 11.1 Return HTTP 200 OK from R2
-        Disp->>API: 12.1 PUT /tickets/{id}/audio (objectKey, sha256)
-        API->>DB: 13.1 Verify R2 & save SHA-256 seal
-        API-->>Disp: 14.1 Return sealed audio confirmation
-        Disp->>API: 15.1 PUT /tickets/{id}/submission (answers)
-        API->>DB: 16.1 Save SUBMITTED (<100ms) & enqueue
-        API-->>Disp: 17.1 Return HTTP 202 Accepted
-        Disp-->>Canvas: 18.1 Wipe journal & lock screen (No Instant Score)
-    else Transient Network Drop or Duplicate Submit -> Idempotent Retry Recovery
-        Disp->>Audio: 7.2 Read encrypted journal & SHA-256 seal
-        Audio-->>Disp: 8.2 Return persisted payload and objectKey
-        Disp->>API: 9.2 Retry PUT or GET /tickets/{id}/submission
-        API->>DB: 10.2 Check existing SUBMITTED state
-        API-->>Disp: 11.2 Return confirmed SUBMITTED status
-        Disp-->>Canvas: 12.2 Lock SafeSubmittedLockView (Zero Data Loss)
+    alt Network Online - Immediate Persist-First Upload
+        Canvas->>Disp: 7.1 Queue submission for dispatch
+        Disp->>API: 8.1 Request speech transcription
+        API-->>Disp: 9.1 Return raw transcript
+        Disp-->>Canvas: 10.1 Start transcript review countdown
+        Canvas-->>Candidate: 11.1 Play audio and show transcript
+        opt Transcript Edit Mode Enabled
+            Candidate->>Canvas: 12.1 Edit technical terms
+            Canvas->>Disp: 13.1 Confirm final transcript
+        end
+        Disp->>R2: 14.1 Upload immutable audio file
+        R2-->>Disp: 15.1 Confirm audio file stored
+        Disp->>API: 16.1 Submit answer with audio URL and hash
+        API->>DB: 17.1 Save submission and ticket
+        DB-->>API: 18.1 Confirm submission saved
+        API->>DB: 19.1 Enqueue grading task
+        API-->>Disp: 20.1 Return submission receipt
+        Disp-->>Canvas: 21.1 Activate safe lock screen without score
+        Canvas-->>Candidate: 22.1 Display submission saved
+    else Network Disconnected - Offline Local Journal & Auto-Sync
+        Disp->>Audio: 7.2 Read encrypted local journal
+        Audio-->>Disp: 8.2 Return persisted submission
+        Disp-->>Canvas: 9.2 Display offline safe-save status
+        Disp->>R2: 10.2 Retry upload when online
+        R2-->>Disp: 11.2 Confirm audio file stored
+        Disp->>API: 12.2 Resend submission payload
+        API->>DB: 13.2 Save submission and queue task
+        DB-->>API: 14.2 Confirm submission saved
+        API-->>Disp: 15.2 Return submission receipt
     end
 
-    alt Exception occurs
-        API->>API: Log error
-        API-->>Disp: Return RFC 7807 error (403 / 409 / 422)
-        Disp-->>Canvas: Display error & keep encrypted journal
+    opt Exception occurs
+        API->>API: 23. Log error
+        API-->>Disp: 24. Return error response
+        Disp-->>Canvas: 25. Display error notification
     end
 ```
 

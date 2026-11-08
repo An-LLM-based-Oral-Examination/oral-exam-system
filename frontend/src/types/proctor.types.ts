@@ -41,6 +41,25 @@ export interface SuspendExamTicketRequest {
   blurViolationCount?: number | null
 }
 
+export interface RecordProctorViolationRequest {
+  ticketId?: string | null
+  studentId?: string | null
+  eventType: string
+  severity: string
+  details: string
+}
+
+export interface ProctorViolationResponse {
+  id: string
+  shiftId: string
+  ticketId: string | null
+  studentId: string | null
+  eventType: string
+  severity: string
+  details: string
+  occurredAt: string
+}
+
 export interface TicketProctorActionResponse {
   ticketId: string
   shiftId: string

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -28,6 +28,7 @@ import { InClassShiftPageBanner } from '@/pages/lecturer/InClassShiftPageBanner'
 import { ds, overlay } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { inClassShiftService } from '@/services/inClassShift.service'
+import { createPracticeHubConnection } from '@/services/signalr.service'
 import type { InClassShift, InClassSubmission } from '@/types/inClassShift.types'
 
 type SubmissionFilter = 'ALL' | 'PENDING' | 'AI' | 'OVERRIDE' | 'LOCKED'
@@ -168,14 +169,16 @@ export function InClassShiftResultsPage() {
 
   const locked = shift?.status === 'FINALIZED'
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!shiftId) {
       setError('Thiếu mã ca thi.')
       setLoading(false)
       return
     }
-    setLoading(true)
-    setError('')
+    if (!silent) {
+      setLoading(true)
+      setError('')
+    }
     try {
       const [shiftResult, submissionResult] = await Promise.all([
         inClassShiftService.getShift(shiftId),
@@ -189,16 +192,63 @@ export function InClassShiftResultsPage() {
         return firstReady?.id ?? submissionResult[0]?.id ?? null
       })
     } catch (loadError) {
-      setError(getErrorMessage(loadError))
+      if (!silent) setError(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shiftId])
+
+  useEffect(() => {
+    if (!shiftId) return
+    let disposed = false
+    const hubUrl = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice'
+    const connection = createPracticeHubConnection(
+      hubUrl,
+      () => sessionStorage.getItem('access_token') ?? '',
+    )
+
+    const refreshSilent = () => {
+      if (!disposed) void load(true)
+    }
+
+    connection.on('InClassSubmissionGraded', refreshSilent)
+    connection.on('ReceiveGradingResult', refreshSilent)
+    connection.on('InClassShiftGradesFinalized', refreshSilent)
+
+    void connection
+      .start()
+      .then(() => {
+        if (disposed) return
+        return connection.invoke('JoinInClassShiftGroup', shiftId).catch(() =>
+          connection.invoke('JoinShift', shiftId),
+        )
+      })
+      .catch(() => undefined)
+
+    const pollTimer = !locked
+      ? window.setInterval(() => {
+          refreshSilent()
+        }, 6000)
+      : undefined
+
+    return () => {
+      disposed = true
+      if (pollTimer !== undefined) window.clearInterval(pollTimer)
+      connection.off('InClassSubmissionGraded')
+      connection.off('ReceiveGradingResult')
+      connection.off('InClassShiftGradesFinalized')
+      void connection.stop().catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftId, locked])
 
   const selected = useMemo(() => {
     const found = submissions.find((item) => item.id === selectedId) ?? null
@@ -212,11 +262,6 @@ export function InClassShiftResultsPage() {
   const answers = selected?.answers ?? []
   const answerIndex = answers.length === 0 ? 0 : Math.min(answerCursor, answers.length - 1)
   const activeAnswer = answers[answerIndex] ?? null
-
-  useEffect(() => {
-    setAnswerCursor(0)
-    setGradeDialogOpen(false)
-  }, [selected?.id])
 
   const viewingInProgress = selected ? isInProgress(selected.status) : false
 
@@ -270,6 +315,8 @@ export function InClassShiftResultsPage() {
 
   const openReview = (studentId: string) => {
     setSelectedId(studentId)
+    setAnswerCursor(0)
+    setGradeDialogOpen(false)
     setReviewOpen(true)
   }
 
@@ -278,10 +325,17 @@ export function InClassShiftResultsPage() {
     setReviewOpen(false)
   }
 
-  const openAdjacentReview = (direction: -1 | 1) => {
-    const next = filtered[reviewIndex + direction]
-    if (next) setSelectedId(next.id)
-  }
+  const openAdjacentReview = useCallback(
+    (direction: -1 | 1) => {
+      const next = filtered[reviewIndex + direction]
+      if (next) {
+        setSelectedId(next.id)
+        setAnswerCursor(0)
+        setGradeDialogOpen(false)
+      }
+    },
+    [filtered, reviewIndex],
+  )
 
   useEffect(() => {
     if (!reviewOpen) return
@@ -323,7 +377,7 @@ export function InClassShiftResultsPage() {
       unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [reviewOpen, gradeDialogOpen, busy, hasPrevReview, hasNextReview, reviewIndex, filtered])
+  }, [reviewOpen, gradeDialogOpen, busy, hasPrevReview, hasNextReview, openAdjacentReview])
 
   const openGradeDialog = () => {
     if (!selected || locked || viewingInProgress) return

@@ -89,6 +89,11 @@ public class PracticeHub : Hub<IPracticeClient>
     public Task JoinShift(string shiftId) => JoinSession(shiftId);
 
     /// <summary>
+    /// Alias tương thích ngược cho phép Frontend tham gia nhóm ca thi trong lớp (MF-05).
+    /// </summary>
+    public Task JoinInClassShiftGroup(string shiftId) => JoinSession(shiftId);
+
+    /// <summary>
     /// Cho phép Frontend rời nhóm phiên luyện tập khi kết thúc hoặc chuyển trang.
     /// </summary>
     public async Task LeaveSession(string sessionId)
@@ -103,4 +108,9 @@ public class PracticeHub : Hub<IPracticeClient>
     /// Alias cho phép Frontend rời nhóm ca thi trong lớp (MF-05).
     /// </summary>
     public Task LeaveShift(string shiftId) => LeaveSession(shiftId);
+
+    /// <summary>
+    /// Alias tương thích ngược cho phép Frontend rời nhóm ca thi trong lớp (MF-05).
+    /// </summary>
+    public Task LeaveInClassShiftGroup(string shiftId) => LeaveSession(shiftId);
 }

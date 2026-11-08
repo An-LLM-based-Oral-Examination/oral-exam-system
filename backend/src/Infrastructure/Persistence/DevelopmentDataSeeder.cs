@@ -89,6 +89,16 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid TicketMaiId = Guid.Parse("00000000-0000-0000-0000-000000000025");
     public static readonly Guid AppealHoangId = Guid.Parse("00000000-0000-0000-0000-000000000026");
 
+    // MF-04 Ready-to-Test Lab Kiosk Shift and Tickets
+    public static readonly Guid OfficialShiftReadyToTestPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000027");
+    public static readonly Guid TicketReadyToTestHoangId = Guid.Parse("00000000-0000-0000-0000-000000000028");
+    public static readonly Guid TicketReadyToTestThanhId = Guid.Parse("00000000-0000-0000-0000-000000000029");
+    public static readonly Guid TicketReadyToTestMaiId = Guid.Parse("00000000-0000-0000-0000-00000000002a");
+
+    // MF-05 In-Class Shifts for Flagship Courses
+    public static readonly Guid InClassShiftPrn231Id = Guid.Parse("00000000-0000-0000-0000-00000000009a");
+    public static readonly Guid InClassShiftSwd392Id = Guid.Parse("00000000-0000-0000-0000-00000000009b");
+
     private static readonly DateTime SeedTimestampUtc = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
     public static async Task SeedAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
@@ -4391,6 +4401,125 @@ public static partial class DevelopmentDataSeeder
         else if (appeal.SubmissionId == null && actualHoangSub != null)
         {
             appeal.SubmissionId = actualHoangSub.Id;
+        }
+
+        // 5. Đảm bảo Ca thi phòng Lab 302 ở trạng thái sẵn sàng kiểm thử (Ready-to-Test MF-04 Lab Kiosk)
+        var readyShift = await context.RealExamSessionShifts
+            .FirstOrDefaultAsync(s => s.Id == OfficialShiftReadyToTestPrn231Id, cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var readyStart = now.AddHours(-1);
+        var readyEnd = now.AddMonths(4);
+
+        if (readyShift == null)
+        {
+            readyShift = new RealExamSessionShift
+            {
+                Id = OfficialShiftReadyToTestPrn231Id,
+                SessionId = officialSession.Id,
+                ShiftName = "Kíp 2 — Ca Thi Thật Kiosk Đang Mở (Ready-to-Test)",
+                RoomLab = "Lab 302",
+                StartTime = readyStart,
+                EndTime = readyEnd,
+                ProctorUserId = ProctorUserId,
+                ExaminerUserId = LecturerUserId,
+                Status = "in_progress",
+                IsExamPublished = true,
+                CreatedAt = SeedTimestampUtc
+            };
+            context.RealExamSessionShifts.Add(readyShift);
+        }
+        else
+        {
+            // Self-healing: if shift was completed, closed, or expired, reset to in_progress with active window
+            readyShift.Status = "in_progress";
+            readyShift.StartTime = readyStart;
+            readyShift.EndTime = readyEnd;
+            readyShift.IsExamPublished = true;
+        }
+
+        // Vé thi của sinh viên Hoàng (127.0.0.1)
+        var readyTicketHoang = await context.StudentExamTickets
+            .FirstOrDefaultAsync(t => t.Id == TicketReadyToTestHoangId, cancellationToken);
+        if (readyTicketHoang == null)
+        {
+            readyTicketHoang = new StudentExamTicket
+            {
+                Id = TicketReadyToTestHoangId,
+                ShiftId = readyShift.Id,
+                StudentId = StudentHoangId,
+                ExamSetId = prnSet.Id,
+                SeatNumber = 1,
+                IpAddress = "127.0.0.1",
+                Status = ExamTicketStatus.Scheduled,
+                StudentAcknowledgementStatus = "PENDING",
+                IsLocked = false
+            };
+            context.StudentExamTickets.Add(readyTicketHoang);
+        }
+        else
+        {
+            readyTicketHoang.Status = ExamTicketStatus.Scheduled;
+            readyTicketHoang.IpAddress = "127.0.0.1";
+            readyTicketHoang.IsLocked = false;
+            readyTicketHoang.SubmittedAt = null;
+            readyTicketHoang.CheckedInAt = SeedTimestampUtc;
+        }
+
+        // Vé thi của sinh viên Thành (::1)
+        var readyTicketThanh = await context.StudentExamTickets
+            .FirstOrDefaultAsync(t => t.Id == TicketReadyToTestThanhId, cancellationToken);
+        if (readyTicketThanh == null)
+        {
+            readyTicketThanh = new StudentExamTicket
+            {
+                Id = TicketReadyToTestThanhId,
+                ShiftId = readyShift.Id,
+                StudentId = StudentThanhId,
+                ExamSetId = ExamSetPrn231Set02Id,
+                SeatNumber = 2,
+                IpAddress = "::1",
+                Status = ExamTicketStatus.Scheduled,
+                StudentAcknowledgementStatus = "PENDING",
+                IsLocked = false
+            };
+            context.StudentExamTickets.Add(readyTicketThanh);
+        }
+        else
+        {
+            readyTicketThanh.Status = ExamTicketStatus.Scheduled;
+            readyTicketThanh.IpAddress = "::1";
+            readyTicketThanh.IsLocked = false;
+            readyTicketThanh.SubmittedAt = null;
+            readyTicketThanh.CheckedInAt = SeedTimestampUtc;
+        }
+
+        // Vé thi của sinh viên Mai (192.168.1.103)
+        var readyTicketMai = await context.StudentExamTickets
+            .FirstOrDefaultAsync(t => t.Id == TicketReadyToTestMaiId, cancellationToken);
+        if (readyTicketMai == null)
+        {
+            readyTicketMai = new StudentExamTicket
+            {
+                Id = TicketReadyToTestMaiId,
+                ShiftId = readyShift.Id,
+                StudentId = StudentMaiId,
+                ExamSetId = prnSet.Id,
+                SeatNumber = 3,
+                IpAddress = "192.168.1.103",
+                Status = ExamTicketStatus.Scheduled,
+                StudentAcknowledgementStatus = "PENDING",
+                IsLocked = false
+            };
+            context.StudentExamTickets.Add(readyTicketMai);
+        }
+        else
+        {
+            readyTicketMai.Status = ExamTicketStatus.Scheduled;
+            readyTicketMai.IpAddress = "192.168.1.103";
+            readyTicketMai.IsLocked = false;
+            readyTicketMai.SubmittedAt = null;
+            readyTicketMai.CheckedInAt = SeedTimestampUtc;
         }
 
         await context.SaveChangesAsync(cancellationToken);

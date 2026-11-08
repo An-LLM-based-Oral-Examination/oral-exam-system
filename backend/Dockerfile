@@ -4,16 +4,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
 WORKDIR /src
 
-# Sao chép solution và toàn bộ 5 tệp .csproj để tối ưu hóa Docker layer caching
-COPY OralExamination.sln ./
+# Sao chép 4 tệp .csproj của tầng runtime để tối ưu hóa Docker layer caching
 COPY src/Domain/Domain.csproj src/Domain/
 COPY src/Application/Application.csproj src/Application/
 COPY src/Infrastructure/Infrastructure.csproj src/Infrastructure/
 COPY src/API/API.csproj src/API/
-COPY tests/OralExamination.UnitTests/OralExamination.UnitTests.csproj tests/OralExamination.UnitTests/
 
-# Khôi phục dependencies cho toàn bộ solution
-RUN dotnet restore OralExamination.sln
+# Khôi phục dependencies cho API project
+RUN dotnet restore src/API/API.csproj
 
 # Sao chép toàn bộ mã nguồn src/ và biên dịch release
 COPY src/ src/
@@ -34,6 +32,9 @@ RUN apk add --no-cache icu-libs tzdata
 
 # Sao chép build artifacts từ build stage và gán quyền cho appuser
 COPY --from=build --chown=appuser:appgroup /app/publish .
+
+# Đảm bảo thư mục lưu ảnh câu hỏi đính kèm (MF-03) có quyền ghi cho non-root appuser
+RUN mkdir -p /app/wwwroot/uploads/questions && chown -R appuser:appgroup /app
 
 # Cấu hình biến môi trường và cổng 5000 chuẩn Capstone Invariant
 ENV ASPNETCORE_HTTP_PORTS=5000 \

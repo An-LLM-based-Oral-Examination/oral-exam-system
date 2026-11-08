@@ -148,3 +148,12 @@ public sealed record FinalizeInClassGradesResponse(
     bool IsLocked,
     DateTime? FinalizedAt
 );
+
+public sealed record InClassNextFollowUpResponse(
+    bool HasMoreFollowUp,
+    int FollowUpIndex,
+    int MaxFollowUpQuestions,
+    Guid ParentSubmissionId,
+    Guid QuestionId,
+    string? FollowUpPrompt
+);

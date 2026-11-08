@@ -39,13 +39,14 @@ export function InClassShiftProjectorDialog({
   const [otp, setOtp] = useState<ActiveTotpPassword | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tick, setTick] = useState(0)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const refreshPassword = useCallback(async () => {
     if (!shiftId) return
     try {
       const password = await inClassShiftService.getActivePassword(shiftId)
       setOtp(password)
+      setNowMs(Date.now())
       setError('')
     } catch (loadError) {
       setOtp(null)
@@ -69,6 +70,7 @@ export function InClassShiftProjectorDialog({
         if (cancelled) return
         setShift(shiftResult)
         setOtp(password)
+        setNowMs(Date.now())
       } catch (bootError) {
         if (!cancelled) setError(getErrorMessage(bootError))
       } finally {
@@ -96,21 +98,22 @@ export function InClassShiftProjectorDialog({
 
   useEffect(() => {
     if (!open) return
-    const timer = window.setInterval(() => setTick((value) => value + 1), 1000)
+    const timer = window.setInterval(() => {
+      const currentNow = Date.now()
+      setNowMs(currentNow)
+      if (otp) {
+        const expiresAt = new Date(otp.expiresAt).getTime()
+        const remaining = Math.max(0, Math.ceil((expiresAt - currentNow) / 1000))
+        if (remaining <= 1) void refreshPassword()
+      }
+    }, 1000)
     return () => window.clearInterval(timer)
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !otp) return
-    const expiresAt = new Date(otp.expiresAt).getTime()
-    const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
-    if (remaining <= 1) void refreshPassword()
-  }, [tick, otp, open, refreshPassword])
+  }, [open, otp, refreshPassword])
 
   if (!open) return null
 
   const remainingSeconds = otp
-    ? Math.max(0, Math.ceil((new Date(otp.expiresAt).getTime() - Date.now()) / 1000))
+    ? Math.max(0, Math.ceil((new Date(otp.expiresAt).getTime() - nowMs) / 1000))
     : 0
   const rotationTotal = shift?.passwordRotationSeconds || 300
   const progress = Math.min(100, Math.max(0, (remainingSeconds / rotationTotal) * 100))

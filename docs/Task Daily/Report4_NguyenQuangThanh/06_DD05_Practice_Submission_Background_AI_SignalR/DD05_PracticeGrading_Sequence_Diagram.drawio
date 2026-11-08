@@ -1,252 +1,76 @@
-<mxfile host="app.diagrams.net" version="24.0.0">
-  <diagram name="Sequence Diagram" id="sequence-diagram">
-    <mxGraphModel dx="1120" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1120" pageHeight="830" math="0" shadow="0">
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="DD05_PracticeGrading_Sequence_Diagram" name="DD05_PracticeGrading_Sequence_Diagram">
+    <mxGraphModel dx="1570" dy="1299" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1570" pageHeight="1299" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <mxCell id="2" value="Student" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="-5" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="3" value="Practice UI &amp;
-PracticeHub" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="130" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="4" value="PracticeController" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="300" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="5" value="SubmitAnswer /
-BatchHandler" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="475" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="6" value="BoundedChannel &amp;
-GradingWorker" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="650" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="7" value="GeminiAiGrading
-Service" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="825" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="8" value="Database &amp;
-DLQ" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="980" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="9" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="191" y="102" width="8" height="703" as="geometry"/>
-        </mxCell>
-        <mxCell id="10" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="361" y="154" width="8" height="84" as="geometry"/>
-        </mxCell>
-        <mxCell id="11" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="536" y="168" width="8" height="56" as="geometry"/>
-        </mxCell>
-        <mxCell id="12" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1041" y="182" width="8" height="14" as="geometry"/>
-        </mxCell>
-        <mxCell id="13" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="711" y="200" width="8" height="14" as="geometry"/>
-        </mxCell>
-        <mxCell id="14" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="361" y="276" width="8" height="74" as="geometry"/>
-        </mxCell>
-        <mxCell id="15" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="536" y="290" width="8" height="46" as="geometry"/>
-        </mxCell>
-        <mxCell id="16" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1041" y="304" width="8" height="14" as="geometry"/>
-        </mxCell>
-        <mxCell id="17" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="711" y="322" width="8" height="12" as="geometry"/>
-        </mxCell>
-        <mxCell id="18" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="711" y="398" width="8" height="270" as="geometry"/>
-        </mxCell>
-        <mxCell id="19" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1041" y="402" width="8" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="20" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="886" y="434" width="8" height="34" as="geometry"/>
-        </mxCell>
-        <mxCell id="21" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1041" y="484" width="8" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="22" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="886" y="576" width="8" height="26" as="geometry"/>
-        </mxCell>
-        <mxCell id="23" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1041" y="616" width="8" height="20" as="geometry"/>
-        </mxCell>
-        <mxCell id="24" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="361" y="715" width="8" height="70" as="geometry"/>
-        </mxCell>
-        <mxCell id="25" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="536" y="715" width="8" height="50" as="geometry"/>
-        </mxCell>
-        <mxCell id="26" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="125" width="930" height="235" as="geometry"/>
-        </mxCell>
-        <mxCell id="27" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="370" width="930" height="310" as="geometry"/>
-        </mxCell>
-        <mxCell id="28" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="692" width="770" height="102" as="geometry"/>
-        </mxCell>
-        <mxCell id="29" value="1. Join SignalR group and submit transcript" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="60" y="106" as="sourcePoint"/>
-            <mxPoint x="195" y="106" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="30" value="2.1 Send single answer request" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="158" as="sourcePoint"/>
-            <mxPoint x="365" y="158" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="31" value="3.1 Call Handle(SubmitPracticeAnswerCommand)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="365" y="172" as="sourcePoint"/>
-            <mxPoint x="540" y="172" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="32" value="4.1 Save PracticeAnswer (status = pending, &lt;100ms)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="186" as="sourcePoint"/>
-            <mxPoint x="1045" y="186" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="33" value="5.1 Enqueue GradingTask to BoundedChannel(1000)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="204" as="sourcePoint"/>
-            <mxPoint x="715" y="204" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="34" value="6.1 Return answerId" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="220" as="sourcePoint"/>
-            <mxPoint x="365" y="220" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="35" value="7.1 Return HTTP 202 Accepted" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="365" y="236" as="sourcePoint"/>
-            <mxPoint x="195" y="236" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="36" value="2.2 Send batch answers request" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="280" as="sourcePoint"/>
-            <mxPoint x="365" y="280" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="37" value="3.2 Call Handle(SubmitPracticeBatchCommand)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="365" y="294" as="sourcePoint"/>
-            <mxPoint x="540" y="294" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="38" value="4.2 Bulk insert answers and 0.0 score for skipped" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="308" as="sourcePoint"/>
-            <mxPoint x="1045" y="308" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="39" value="5.2 Enqueue non-empty GradingTasks" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="326" as="sourcePoint"/>
-            <mxPoint x="715" y="326" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="40" value="6.2 Return HTTP 202 Accepted" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="365" y="344" as="sourcePoint"/>
-            <mxPoint x="195" y="344" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="41" value="8.1 Load question, rubric and prior answers" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="404" as="sourcePoint"/>
-            <mxPoint x="1045" y="404" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="42" value="9.1 Return question and rubric context" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="1045" y="418" as="sourcePoint"/>
-            <mxPoint x="715" y="418" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="43" value="10.1 GradeAnswerAsync with Polly retry" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="438" as="sourcePoint"/>
-            <mxPoint x="890" y="438" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="44" value="11.1 Return score, CoT and followUpPrompt" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="890" y="464" as="sourcePoint"/>
-            <mxPoint x="715" y="464" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="45" value="12.1 Save AiEvaluation &amp; mark answer graded" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="488" as="sourcePoint"/>
-            <mxPoint x="1045" y="488" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="46" value="13.1 Push ReceiveGradingResult to session_{id}" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="518" as="sourcePoint"/>
-            <mxPoint x="195" y="518" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="47" value="14.1 Render realtime AI feedback" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="534" as="sourcePoint"/>
-            <mxPoint x="60" y="534" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="48" value="8.2 GradeAnswerAsync fails after 3 retries" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="580" as="sourcePoint"/>
-            <mxPoint x="890" y="580" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="49" value="9.2 Throw HttpRequestException (429 / 503)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="890" y="598" as="sourcePoint"/>
-            <mxPoint x="715" y="598" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="50" value="10.2 Save DeadLetterQueue (retry +5m) &amp; mark failed" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="620" as="sourcePoint"/>
-            <mxPoint x="1045" y="620" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="51" value="11.2 Push ReceiveGradingError to session_{id}" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="715" y="650" as="sourcePoint"/>
-            <mxPoint x="195" y="650" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="52" value="Log error" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="722" as="sourcePoint"/>
-            <mxPoint x="540" y="722" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="53" value="Return error response" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="540" y="754" as="sourcePoint"/>
-            <mxPoint x="365" y="754" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="54" value="Display RFC 7807 error (400 / 410 Gone)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="365" y="780" as="sourcePoint"/>
-            <mxPoint x="195" y="780" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fr_30" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="187" y="168" width="1359" height="458" as="geometry" /></mxCell>
+        <mxCell id="fr_33" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="32" y="642" width="1514" height="458" as="geometry" /></mxCell>
+        <mxCell id="fr_36" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="187" y="1116" width="727" height="136" as="geometry" /></mxCell>
+        <mxCell id="dv_line_32" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="187" y="412" as="sourcePoint" /><mxPoint x="1546" y="412" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="dv_line_35" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="32" y="916" as="sourcePoint" /><mxPoint x="1546" y="916" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="actor_3" value="Student" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="40" y="42" width="30" height="48" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_5" value="Practice UI &amp;&#xa;PracticeHub" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="197" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_7" value="PracticeController" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="429" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_9" value="SubmitAnswer /&#xa;BatchHandler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="667" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_11" value="BoundedChannel &amp;&#xa;GradingWorker" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="903" y="42" width="160" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_13" value="GeminiAiGrading&#xa;Service" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="1143" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_15" value="Database &amp; DLQ" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="1369" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_stem_4" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="112" as="sourcePoint" /><mxPoint x="55" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_6" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="275" y="86" as="sourcePoint" /><mxPoint x="275" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_8" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="507" y="86" as="sourcePoint" /><mxPoint x="507" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_10" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="745" y="86" as="sourcePoint" /><mxPoint x="745" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_12" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="983" y="86" as="sourcePoint" /><mxPoint x="983" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_14" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1221" y="86" as="sourcePoint" /><mxPoint x="1221" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_16" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1447" y="86" as="sourcePoint" /><mxPoint x="1447" y="1272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="bar_17" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="270" y="142" width="10" height="1101" as="geometry" /></mxCell>
+        <mxCell id="bar_18" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="502" y="203" width="10" height="1036" as="geometry" /></mxCell>
+        <mxCell id="bar_19" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="740" y="234" width="10" height="976" as="geometry" /></mxCell>
+        <mxCell id="bar_20" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="978" y="324" width="10" height="26" as="geometry" /></mxCell>
+        <mxCell id="bar_21" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="978" y="568" width="10" height="24" as="geometry" /></mxCell>
+        <mxCell id="bar_22" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="978" y="674" width="10" height="416" as="geometry" /></mxCell>
+        <mxCell id="bar_23" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1216" y="741" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_24" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1216" y="954" width="10" height="41" as="geometry" /></mxCell>
+        <mxCell id="bar_25" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="267" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_26" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="511" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_27" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="680" width="10" height="41" as="geometry" /></mxCell>
+        <mxCell id="bar_28" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="801" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_29" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="1015" width="10" height="42" as="geometry" /></mxCell>
+        <mxCell id="tg_31" value="[Single Answer Submission]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="170" width="141" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_34" value="[AI Grading Succeeds]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="644" width="114" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_37" value="[Exception occurs]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="1118" width="97" height="17" as="geometry" /></mxCell>
+        <mxCell id="dv_txt_32" value="[Batch Submission]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="415" width="101" height="17" as="geometry" /></mxCell>
+        <mxCell id="dv_txt_35" value="[AI Grading Fails After Retries]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="919" width="155" height="17" as="geometry" /></mxCell>
+        <mxCell id="msg_38" value="1. Submit answer transcript" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="148" as="sourcePoint" /><mxPoint x="270" y="148" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_39" value="2.1 Send single answer request" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="212" as="sourcePoint" /><mxPoint x="502" y="212" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_40" value="3.1 Forward single answer command" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="512" y="242" as="sourcePoint" /><mxPoint x="740" y="242" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_41" value="4.1 Save pending practice answer" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="272" as="sourcePoint" /><mxPoint x="1442" y="272" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_42" value="5.1 Confirm answer saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="302" as="sourcePoint" /><mxPoint x="750" y="302" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_43" value="6.1 Enqueue grading task" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="332" as="sourcePoint" /><mxPoint x="978" y="332" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_44" value="7.1 Return answer ID" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="362" as="sourcePoint" /><mxPoint x="512" y="362" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_45" value="8.1 Return accepted status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="502" y="392" as="sourcePoint" /><mxPoint x="280" y="392" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_46" value="2.2 Send batch answers request" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="456" as="sourcePoint" /><mxPoint x="502" y="456" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_47" value="3.2 Forward batch answers command" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="512" y="486" as="sourcePoint" /><mxPoint x="740" y="486" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_48" value="4.2 Save batch answers and zero scores" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="516" as="sourcePoint" /><mxPoint x="1442" y="516" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_49" value="5.2 Confirm batch saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="546" as="sourcePoint" /><mxPoint x="750" y="546" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_50" value="6.2 Enqueue grading tasks" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="576" as="sourcePoint" /><mxPoint x="978" y="576" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_51" value="7.2 Return accepted status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="502" y="606" as="sourcePoint" /><mxPoint x="280" y="606" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_52" value="8.3 Load question, rubric and context" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="988" y="686" as="sourcePoint" /><mxPoint x="1442" y="686" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_53" value="9.3 Return grading context" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="716" as="sourcePoint" /><mxPoint x="988" y="716" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_54" value="10.3 Evaluate answer with AI service" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="988" y="746" as="sourcePoint" /><mxPoint x="1216" y="746" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_55" value="11.3 Return score and feedback" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="776" as="sourcePoint" /><mxPoint x="988" y="776" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_56" value="12.3 Save AI evaluation and update status" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="988" y="806" as="sourcePoint" /><mxPoint x="1442" y="806" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_57" value="13.3 Confirm evaluation saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="836" as="sourcePoint" /><mxPoint x="988" y="836" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_58" value="14.3 Push grading result via SignalR" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="978" y="866" as="sourcePoint" /><mxPoint x="280" y="866" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_59" value="15.3 Display AI feedback" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="270" y="896" as="sourcePoint" /><mxPoint x="55" y="896" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_60" value="8.4 Evaluate answer with AI service" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="988" y="960" as="sourcePoint" /><mxPoint x="1216" y="960" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_61" value="9.4 Return AI service error" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="990" as="sourcePoint" /><mxPoint x="988" y="990" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_62" value="10.4 Save failed task to Dead Letter Queue" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="988" y="1020" as="sourcePoint" /><mxPoint x="1442" y="1020" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_63" value="11.4 Confirm task queued" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="1050" as="sourcePoint" /><mxPoint x="988" y="1050" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_64" value="12.4 Push grading error notification" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="978" y="1080" as="sourcePoint" /><mxPoint x="280" y="1080" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_65" value="13.5 Log error" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="1160" as="sourcePoint" /><mxPoint x="750" y="1176" as="targetPoint" /><Array as="points"><mxPoint x="784" y="1160" /><mxPoint x="784" y="1176" /></Array></mxGeometry></mxCell>
+        <mxCell id="msg_66" value="14.5 Return error response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="1202" as="sourcePoint" /><mxPoint x="512" y="1202" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_67" value="15.5 Display error message" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="502" y="1232" as="sourcePoint" /><mxPoint x="280" y="1232" as="targetPoint" /></mxGeometry></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

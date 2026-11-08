@@ -11,6 +11,7 @@ import { BannerFact, PageBanner, StudentColorCardAccent } from '@/design/ui'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { inClassShiftService } from '@/services/inClassShift.service'
+import { createPracticeHubConnection } from '@/services/signalr.service'
 import type { InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import {
   applyCompletedInClassShifts,
@@ -186,32 +187,40 @@ export function StudentInClassExamPage() {
       navigate('/in-class-exam/session', { replace: true })
       return
     }
-    void load()
+    const initialTimer = window.setTimeout(() => {
+      void load()
+    }, 0)
     const timer = window.setInterval(() => {
       void inClassShiftService
         .listStudentShifts()
         .then((list) => setShifts(applyCompletedInClassShifts(list)))
         .catch(() => undefined)
     }, 15000)
-    return () => window.clearInterval(timer)
+    return () => {
+      window.clearTimeout(initialTimer)
+      window.clearInterval(timer)
+    }
   }, [navigate])
 
   useEffect(() => {
     const state = location.state as { notice?: string; finishedShiftId?: string } | null
     if (!state?.notice && !state?.finishedShiftId) return
-    if (state.notice) setNotice(state.notice)
-    if (state.finishedShiftId) {
-      markInClassShiftCompleted(state.finishedShiftId)
-      setShifts((current) =>
-        applyCompletedInClassShifts(
-          current.map((item) =>
-            item.id === state.finishedShiftId ? { ...item, myParticipationStatus: 'SUBMITTED' } : item,
+    const timer = window.setTimeout(() => {
+      if (state.notice) setNotice(state.notice)
+      if (state.finishedShiftId) {
+        markInClassShiftCompleted(state.finishedShiftId)
+        setShifts((current) =>
+          applyCompletedInClassShifts(
+            current.map((item) =>
+              item.id === state.finishedShiftId ? { ...item, myParticipationStatus: 'SUBMITTED' } : item,
+            ),
           ),
-        ),
-      )
-    }
-    navigate(location.pathname, { replace: true, state: null })
-    void load()
+        )
+      }
+      navigate(location.pathname, { replace: true, state: null })
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [location.pathname, location.state, navigate])
 
   const stopMicTest = useCallback(() => {
@@ -448,7 +457,7 @@ export function StudentInClassExamPage() {
       saveInClassExamSession({
         shift: joinTarget,
         questions: assigned,
-        startedAt: Date.now(),
+        startedAt: new Date().getTime(),
       })
       setResultsShift(null)
       setResults([])
@@ -492,6 +501,63 @@ export function StudentInClassExamPage() {
       setResultsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!resultsShift) return
+    const activeShiftId = resultsShift.id
+    let disposed = false
+    const hubUrl = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice'
+    const connection = createPracticeHubConnection(
+      hubUrl,
+      () => sessionStorage.getItem('access_token') ?? '',
+    )
+
+    const refreshResults = async () => {
+      try {
+        const latest = await inClassShiftService.listStudentResults(activeShiftId)
+        if (!disposed) {
+          setResults(latest)
+        }
+      } catch {
+        // Không làm gián đoạn cửa sổ kết quả nếu một lượt đồng bộ thất bại
+      }
+    }
+
+    connection.on('InClassSubmissionGraded', () => {
+      void refreshResults()
+    })
+    connection.on('ReceiveGradingResult', () => {
+      void refreshResults()
+    })
+    connection.on('InClassShiftGradesFinalized', () => {
+      void refreshResults()
+      void load()
+    })
+
+    void connection
+      .start()
+      .then(() => {
+        if (disposed) return
+        return connection.invoke('JoinInClassShiftGroup', activeShiftId).catch(() =>
+          connection.invoke('JoinShift', activeShiftId),
+        )
+      })
+      .catch(() => undefined)
+
+    const pollTimer = window.setInterval(() => {
+      void refreshResults()
+    }, 4000)
+
+    return () => {
+      disposed = true
+      window.clearInterval(pollTimer)
+      connection.off('InClassSubmissionGraded')
+      connection.off('ReceiveGradingResult')
+      connection.off('InClassShiftGradesFinalized')
+      void connection.stop().catch(() => undefined)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultsShift?.id])
 
   const orderedShifts = [...shifts].sort((left, right) => {
     const rank = { ACTIVE: 0, SCHEDULED: 1, FINALIZED: 2, CLOSED: 3 }
@@ -632,17 +698,14 @@ export function StudentInClassExamPage() {
 
                     {alreadyDone ? (
                       <div className="mt-auto flex flex-col gap-2 pt-3">
-                        {shift.status === 'FINALIZED' || shift.status === 'CLOSED' ? (
-                          <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
+                        <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
+                          {shift.status === 'FINALIZED' ? (
                             <Lock className="size-3.5" />
-                            Xem kết quả
-                          </button>
-                        ) : (
-                          <div className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-4 text-sm font-bold text-[#16836a]">
-                            <CheckCircle2 className="size-3.5 shrink-0" />
-                            Đã nộp bài
-                          </div>
-                        )}
+                          ) : (
+                            <CheckCircle2 className="size-3.5 text-[#16836a]" />
+                          )}
+                          Xem kết quả
+                        </button>
                       </div>
                     ) : shift.status === 'ACTIVE' ? (
                       <div className="mt-auto pt-3">
@@ -844,7 +907,7 @@ export function StudentInClassExamPage() {
       {resultsShift && (
         <FormDialog
           titleId="in-class-results-title"
-          eyebrow="Kết quả kiểm tra"
+          eyebrow="Kết quả kiểm tra (Real-time)"
           title={resultsShift.title}
           subtitle={resultsShift.className}
           icon={ClipboardCheck}
@@ -860,21 +923,45 @@ export function StudentInClassExamPage() {
           ) : (
             <div className="space-y-3">
               <div className="rounded-2xl border border-[#82aedb]/55 bg-white px-4 py-3">
-                <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Điểm cả bài</p>
+                <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Điểm trung bình cả bài</p>
                 <p className="mt-1 font-mono text-2xl font-black text-[#0F2854]">{examScoreLabel}</p>
                 {examLecturerNote ? (
                   <p className="mt-2 text-sm leading-relaxed text-[#1C4D8D]">Giảng viên: {examLecturerNote}</p>
                 ) : null}
               </div>
               <ul className="space-y-3">
-                {results.map((item, index) => (
-                  <li key={item.submissionId} className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5">
-                    <p className="text-[11px] font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">Câu {index + 1}</p>
-                    <h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.title}</h3>
-                    {item.transcript && <p className="mt-2 text-sm leading-relaxed text-[#33445f]">{item.transcript}</p>}
-                    {item.aiFeedback && <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">AI: {item.aiFeedback}</p>}
-                  </li>
-                ))}
+                {results.map((item, index) => {
+                  const itemScore = item.finalScore ?? item.aiScore
+                  return (
+                    <li key={item.submissionId} className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">
+                          {item.isFollowUp
+                            ? `Câu hỏi phụ #${item.followUpIndex || 1}`
+                            : `Câu ${index + 1}`}
+                        </p>
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-xs font-bold',
+                            itemScore != null
+                              ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                              : 'border-[#f3e0bf] bg-[#fff6e8] text-[#c26a12]',
+                          )}
+                        >
+                          {itemScore != null ? `${itemScore.toFixed(1)} / 10` : 'Đang chấm AI...'}
+                        </span>
+                      </div>
+                      <h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.title}</h3>
+                      {item.transcript && <p className="mt-2 text-sm leading-relaxed text-[#33445f]">{item.transcript}</p>}
+                      {item.aiFeedback && <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">AI: {item.aiFeedback}</p>}
+                      {item.lecturerNotes && (
+                        <p className="mt-1.5 text-sm font-semibold leading-relaxed text-[#1C4D8D]">
+                          Giảng viên: {item.lecturerNotes}
+                        </p>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}

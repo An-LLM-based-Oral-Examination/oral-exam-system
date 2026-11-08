@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Clock3,
   LoaderCircle,
+  MessageSquarePlus,
   Mic,
   Settings,
   Volume2,
@@ -26,6 +27,16 @@ import {
   loadInClassExamSession,
   markInClassShiftCompleted,
 } from '@/utils/inClassExamSessionStorage'
+
+interface FollowUpTurnState {
+  followUpIndex: number
+  parentSubmissionId: string | null
+  followUpPrompt: string | null
+}
+
+function getTurnKey(questionId: string, followUpIndex: number) {
+  return followUpIndex > 0 ? `${questionId}:fu:${followUpIndex}` : questionId
+}
 
 function formatClock(totalSeconds: number) {
   const safe = Math.max(0, totalSeconds)
@@ -65,10 +76,11 @@ export function InClassExamSessionPage() {
   const boot = loadInClassExamSession()
   const [shift] = useState<InClassShift | null>(boot?.shift ?? null)
   const [questions] = useState<StudentExamQuestion[]>(boot?.questions ?? [])
-  const [startedAt] = useState(boot?.startedAt ?? Date.now())
+  const [startedAt] = useState(() => boot?.startedAt ?? Date.now())
   const [questionIndex, setQuestionIndex] = useState(0)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({})
+  const [followUpTurns, setFollowUpTurns] = useState<Record<string, FollowUpTurnState>>({})
   const [busy, setBusy] = useState(false)
   const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const [autoRead, setAutoRead] = useState(false)
@@ -91,22 +103,32 @@ export function InClassExamSessionPage() {
   const submittedRef = useRef(submitted)
   const questionsRef = useRef(questions)
   const questionIndexRef = useRef(questionIndex)
+  const followUpTurnsRef = useRef(followUpTurns)
   const readingGenerationRef = useRef(0)
-  speechRef.current = speech
-  draftsRef.current = drafts
-  submittedRef.current = submitted
-  questionsRef.current = questions
-  questionIndexRef.current = questionIndex
 
   const question = questions[questionIndex]
-  const draft = question ? drafts[question.questionId] ?? '' : ''
+  const currentTurn: FollowUpTurnState = question
+    ? followUpTurns[question.questionId] ?? {
+        followUpIndex: 0,
+        parentSubmissionId: null,
+        followUpPrompt: null,
+      }
+    : { followUpIndex: 0, parentSubmissionId: null, followUpPrompt: null }
+  const turnKey = question ? getTurnKey(question.questionId, currentTurn.followUpIndex) : ''
+  const draft = turnKey ? drafts[turnKey] ?? '' : ''
   const isLast = questionIndex >= questions.length - 1
+  const maxFollowUps = shift?.hasFollowUp ? Math.max(0, shift.maxFollowUpQuestions || 0) : 0
+  const hasPendingFollowUpTurns = maxFollowUps > 0 && currentTurn.followUpIndex < maxFollowUps
+  const activePromptText =
+    currentTurn.followUpIndex > 0 && currentTurn.followUpPrompt
+      ? currentTurn.followUpPrompt
+      : question?.content || question?.title || ''
   const isUrgent = secondsLeft <= 60
-  const hasTranscript = Boolean(draft.trim()) || Boolean(question && submitted[question.questionId])
+  const hasTranscript = Boolean(draft.trim()) || Boolean(turnKey && submitted[turnKey])
   const showTranscript = !speech.isListening && hasTranscript
   const showFirstMic =
     Boolean(question) &&
-    !submitted[question?.questionId ?? ''] &&
+    !submitted[turnKey] &&
     !reRecording &&
     (speech.isListening || !hasTranscript)
 
@@ -142,7 +164,7 @@ export function InClassExamSessionPage() {
   useEffect(() => {
     if (!showTranscript) return
     fitTranscriptTextarea(transcriptAreaRef.current)
-  }, [showTranscript, draft, question?.questionId])
+  }, [showTranscript, draft, turnKey])
 
   const stopReadingQuestion = useCallback(() => {
     readingGenerationRef.current += 1
@@ -174,7 +196,9 @@ export function InClassExamSessionPage() {
     const speechNow = speechRef.current
     const currentQuestion = questionsRef.current[questionIndexRef.current]
     if (currentQuestion && speechNow.transcript.trim()) {
-      pendingDrafts[currentQuestion.questionId] = speechNow.transcript
+      const turn = followUpTurnsRef.current[currentQuestion.questionId]
+      const key = getTurnKey(currentQuestion.questionId, turn?.followUpIndex ?? 0)
+      pendingDrafts[key] = speechNow.transcript
     }
     return questionsRef.current
       .filter((item) => !submittedRef.current[item.questionId])
@@ -226,9 +250,18 @@ export function InClassExamSessionPage() {
     [collectPendingAnswers, leaveWithMessage, shift, stopReadingQuestion],
   )
   const endExamRef = useRef(endExam)
-  endExamRef.current = endExam
   const flushExamKeepaliveRef = useRef(flushExamKeepalive)
-  flushExamKeepaliveRef.current = flushExamKeepalive
+
+  useEffect(() => {
+    speechRef.current = speech
+    draftsRef.current = drafts
+    submittedRef.current = submitted
+    questionsRef.current = questions
+    questionIndexRef.current = questionIndex
+    followUpTurnsRef.current = followUpTurns
+    endExamRef.current = endExam
+    flushExamKeepaliveRef.current = flushExamKeepalive
+  })
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -237,7 +270,6 @@ export function InClassExamSessionPage() {
       event.returnValue = 'Bài làm sẽ được nộp tự động nếu bạn rời trang.'
     }
     const onPageHide = (event: PageTransitionEvent) => {
-      // persisted = bfcache — không nộp lại khi chỉ vào cache.
       if (event.persisted) return
       flushExamKeepaliveRef.current()
     }
@@ -258,7 +290,6 @@ export function InClassExamSessionPage() {
 
   useEffect(() => {
     if (blocker.state !== 'blocked') return
-    // Điều hướng trong app (Back, link) → nộp keepalive rồi cho đi tiếp.
     flushExamKeepaliveRef.current()
     toast.success('Bạn đã rời trang làm bài. Bài làm được nộp tự động để AI chấm.')
     blocker.proceed?.()
@@ -291,36 +322,43 @@ export function InClassExamSessionPage() {
   }, [shift])
 
   useEffect(() => {
-    if (!speech.isListening) {
-      setRecordingSeconds(0)
-      return
-    }
+    if (!speech.isListening) return
     const timer = window.setInterval(() => setRecordingSeconds((current) => current + 1), 1000)
-    return () => window.clearInterval(timer)
+    return () => {
+      window.clearInterval(timer)
+      setRecordingSeconds(0)
+    }
   }, [speech.isListening])
 
   useEffect(() => {
-    if (!speech.isListening || !question) return
-    setDrafts((current) => ({ ...current, [question.questionId]: speech.transcript }))
-  }, [speech.isListening, speech.transcript, question])
+    if (!speech.isListening || !turnKey) return
+    const latestTranscript = speech.transcript
+    const timer = window.setTimeout(() => {
+      setDrafts((current) => ({ ...current, [turnKey]: latestTranscript }))
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [speech.isListening, speech.transcript, turnKey])
 
   const wasListeningRef = useRef(false)
   useEffect(() => {
-    if (wasListeningRef.current && !speech.isListening) {
-      setReRecording(false)
-    }
+    const shouldExitReRecording = wasListeningRef.current && !speech.isListening
     wasListeningRef.current = speech.isListening
+    if (!shouldExitReRecording) return
+    const timer = window.setTimeout(() => {
+      setReRecording(false)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [speech.isListening])
 
   useEffect(() => {
     if (!question || !autoRead) return
-    const text = question.content || question.title
+    const text = activePromptText
     const timer = window.setTimeout(() => startReadingQuestion(text), 0)
     return () => {
       window.clearTimeout(timer)
       stopReadingQuestion()
     }
-  }, [autoRead, question?.questionId, startReadingQuestion, stopReadingQuestion])
+  }, [activePromptText, autoRead, question, startReadingQuestion, stopReadingQuestion, turnKey])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -341,7 +379,7 @@ export function InClassExamSessionPage() {
         if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return
       }
       event.preventDefault()
-      if (busy || !question || submitted[question.questionId]) return
+      if (busy || !question || submitted[turnKey]) return
       if (speech.isListening) {
         speech.stopListening()
         return
@@ -351,12 +389,12 @@ export function InClassExamSessionPage() {
         return
       }
       speech.startListening(
-        getSpeechRecognitionLangForCourse(shift.courseCode, shift.className, question.content),
+        getSpeechRecognitionLangForCourse(shift.courseCode, shift.className, activePromptText),
       )
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [busy, hasTranscript, question, reRecording, shift, showFirstMic, speech, submitted])
+  }, [activePromptText, busy, hasTranscript, question, reRecording, shift, showFirstMic, speech, submitted, turnKey])
 
   const toggleReadQuestion = () => {
     if (!question) return
@@ -364,23 +402,23 @@ export function InClassExamSessionPage() {
       stopReadingQuestion()
       return
     }
-    startReadingQuestion(question.content || question.title)
+    startReadingQuestion(activePromptText)
   }
 
   const toggleRecording = () => {
-    if (!shift || !question || submitted[question.questionId] || busy) return
+    if (!shift || !question || submitted[turnKey] || busy) return
     setAnswerError('')
     if (speech.isListening) {
       speech.stopListening()
       return
     }
     speech.startListening(
-      getSpeechRecognitionLangForCourse(shift.courseCode, shift.className, question.content),
+      getSpeechRecognitionLangForCourse(shift.courseCode, shift.className, activePromptText),
     )
   }
 
   const beginReRecord = () => {
-    if (!question || submitted[question.questionId] || busy || secondsLeft <= 0) return
+    if (!question || submitted[turnKey] || busy || secondsLeft <= 0) return
     if (speech.isListening) speech.stopListening()
     stopReadingQuestion()
     setAnswerError('')
@@ -392,20 +430,54 @@ export function InClassExamSessionPage() {
     setReRecording(false)
   }
 
-  const submitCurrent = async () => {
-    if (!shift || !question || submitted[question.questionId]) return true
-    const transcript = (drafts[question.questionId] ?? '').trim()
-    if (!transcript) return false
+  const submitCurrent = async (): Promise<'DONE' | 'FOLLOW_UP_READY' | 'FAILED'> => {
+    if (!shift || !question || submitted[turnKey]) return 'DONE'
+    const transcript = (drafts[turnKey] ?? '').trim()
+    if (!transcript) return 'FAILED'
     if (speech.isListening) speech.stopListening()
     setBusy(true)
     setAnswerError('')
     try {
-      await inClassShiftService.submitStudentAnswer(shift.id, question.questionId, transcript)
-      setSubmitted((current) => ({ ...current, [question.questionId]: true }))
-      return true
+      const response = await inClassShiftService.submitStudentAnswer(
+        shift.id,
+        question.questionId,
+        transcript,
+        {
+          isFollowUp: currentTurn.followUpIndex > 0,
+          parentSubmissionId: currentTurn.parentSubmissionId,
+          followUpIndex: currentTurn.followUpIndex,
+        },
+      )
+      setSubmitted((current) => ({
+        ...current,
+        [turnKey]: true,
+        [question.questionId]: true,
+      }))
+
+      if (hasPendingFollowUpTurns && response.submissionId) {
+        try {
+          const nextFu = await inClassShiftService.requestNextFollowUp(shift.id, response.submissionId)
+          if (nextFu.hasMoreFollowUp && nextFu.followUpPrompt) {
+            setFollowUpTurns((current) => ({
+              ...current,
+              [question.questionId]: {
+                followUpIndex: nextFu.followUpIndex,
+                parentSubmissionId: nextFu.parentSubmissionId,
+                followUpPrompt: nextFu.followUpPrompt,
+              },
+            }))
+            setReRecording(false)
+            return 'FOLLOW_UP_READY'
+          }
+        } catch {
+          // Nếu không sinh được câu hỏi phụ tiếp theo, cho phép chuyển câu bình thường
+        }
+      }
+
+      return 'DONE'
     } catch (submitError) {
       setAnswerError(getErrorMessage(submitError))
-      return false
+      return 'FAILED'
     } finally {
       setBusy(false)
     }
@@ -413,23 +485,33 @@ export function InClassExamSessionPage() {
 
   const goNext = async () => {
     if (speech.isListening || busy) return
-    const hasText = Boolean((drafts[question?.questionId ?? ''] ?? '').trim())
-    if (hasText) {
-      const ok = await submitCurrent()
-      if (!ok) return
+    const hasText = Boolean((drafts[turnKey] ?? '').trim())
+    if (hasText && !submitted[turnKey]) {
+      const status = await submitCurrent()
+      if (status === 'FAILED' || status === 'FOLLOW_UP_READY') return
     }
     setReRecording(false)
     setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
   }
 
+  const skipFollowUpOrQuestion = () => {
+    if (speech.isListening || busy || secondsLeft <= 0) return
+    setReRecording(false)
+    if (!isLast) {
+      setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
+      return
+    }
+    endExam('Đã nộp bài. Điểm và nhận xét AI được cập nhật theo thời gian thực.')
+  }
+
   const finish = async () => {
     if (speech.isListening || busy || endedRef.current) return
-    const hasText = Boolean((drafts[question?.questionId ?? ''] ?? '').trim())
-    if (hasText && question && !submitted[question.questionId]) {
-      const ok = await submitCurrent()
-      if (!ok) return
+    const hasText = Boolean((drafts[turnKey] ?? '').trim())
+    if (hasText && question && !submitted[turnKey]) {
+      const status = await submitCurrent()
+      if (status === 'FAILED' || status === 'FOLLOW_UP_READY') return
     }
-    endExam('Đã nộp bài. AI chấm nền; điểm hiện sau khi giảng viên chốt.')
+    endExam('Đã nộp bài. Điểm và nhận xét AI được cập nhật theo thời gian thực.')
   }
 
   if (!shift) {
@@ -523,6 +605,9 @@ export function InClassExamSessionPage() {
           <div className="flex items-center gap-2.5 border-t border-white/15 px-4 py-2.5 sm:px-5">
             <span className="text-xs font-bold text-white/90">
               Câu {questions.length === 0 ? 0 : questionIndex + 1}/{questions.length}
+              {maxFollowUps > 0 && currentTurn.followUpIndex > 0
+                ? ` · Phụ ${currentTurn.followUpIndex}/${maxFollowUps}`
+                : ''}
             </span>
             <div className="flex h-2.5 min-w-0 flex-1 gap-1.5">
               {questions.map((item, index) => (
@@ -559,7 +644,17 @@ export function InClassExamSessionPage() {
           question && (
             <section className="flex flex-col gap-3 px-4 py-4 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <p className="text-sm font-semibold text-[#5b6b84]">{question.title}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-[#5b6b84]">{question.title}</p>
+                  {maxFollowUps > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#82aedb]/65 bg-[#F4FBFD] px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D]">
+                      <MessageSquarePlus className="size-3.5" />
+                      {currentTurn.followUpIndex > 0
+                        ? `Câu hỏi phụ ${currentTurn.followUpIndex}/${maxFollowUps}`
+                        : `Có tới ${maxFollowUps} câu phụ`}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   data-space-ignore="true"
@@ -586,6 +681,17 @@ export function InClassExamSessionPage() {
                 </div>
               </div>
 
+              {currentTurn.followUpIndex > 0 && currentTurn.followUpPrompt && (
+                <div className="rounded-2xl border border-[#1C4D8D]/40 bg-[#F4FBFD] p-3.5">
+                  <p className="text-xs font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
+                    Câu hỏi phụ #{currentTurn.followUpIndex}/{maxFollowUps} (Phát vấn theo ngữ cảnh)
+                  </p>
+                  <p className="mt-1.5 text-base leading-snug font-semibold text-[#0F2854]">
+                    {currentTurn.followUpPrompt}
+                  </p>
+                </div>
+              )}
+
               {showFirstMic && (
                 <div className="flex flex-col items-center gap-2 py-1">
                   <button
@@ -607,7 +713,11 @@ export function InClassExamSessionPage() {
                     </span>
                   </button>
                   <p className="text-center text-sm font-bold text-[#0F2854]">
-                    {speech.isListening ? 'Nhấn để dừng ghi âm' : 'Nhấn để bắt đầu ghi âm'}
+                    {speech.isListening
+                      ? 'Nhấn để dừng ghi âm'
+                      : currentTurn.followUpIndex > 0
+                        ? `Nhấn để ghi âm câu trả lời phụ #${currentTurn.followUpIndex}`
+                        : 'Nhấn để bắt đầu ghi âm'}
                   </p>
                   {!speech.isListening && (
                     <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
@@ -622,7 +732,9 @@ export function InClassExamSessionPage() {
               {(showTranscript || reRecording) && (
                 <div className="flex flex-col gap-2">
                   <label htmlFor="in-class-transcript" className="text-sm font-semibold text-[#0F2854]">
-                    Transcript để kiểm tra và chỉnh sửa
+                    {currentTurn.followUpIndex > 0
+                      ? `Transcript câu trả lời phụ #${currentTurn.followUpIndex}`
+                      : 'Transcript để kiểm tra và chỉnh sửa'}
                   </label>
                   <p className="text-xs leading-relaxed text-[#5b6b84]">
                     Nội dung chỉnh sửa được lưu khi chuyển câu hoặc nộp bài.
@@ -637,7 +749,7 @@ export function InClassExamSessionPage() {
                       value={draft}
                       disabled={
                         speech.isListening ||
-                        submitted[question.questionId] ||
+                        submitted[turnKey] ||
                         busy ||
                         secondsLeft <= 0 ||
                         reRecording
@@ -646,7 +758,7 @@ export function InClassExamSessionPage() {
                         fitTranscriptTextarea(event.currentTarget)
                         setDrafts((current) => ({
                           ...current,
-                          [question.questionId]: event.target.value,
+                          [turnKey]: event.target.value,
                         }))
                       }}
                       className="min-h-10 w-full resize-none rounded-2xl border border-[#4988C4] bg-white px-3.5 py-2 text-sm leading-relaxed text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:opacity-60"
@@ -655,7 +767,7 @@ export function InClassExamSessionPage() {
 
                   {showTranscript &&
                     !reRecording &&
-                    !submitted[question.questionId] &&
+                    !submitted[turnKey] &&
                     secondsLeft > 0 && (
                       <button
                         type="button"
@@ -731,7 +843,19 @@ export function InClassExamSessionPage() {
                   Câu trước
                 </button>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {!isLast && !draft.trim() && !submitted[question.questionId] && (
+                  {currentTurn.followUpIndex > 0 && !draft.trim() && !submitted[turnKey] && (
+                    <button
+                      type="button"
+                      data-space-ignore="true"
+                      onClick={skipFollowUpOrQuestion}
+                      disabled={speech.isListening || busy || secondsLeft <= 0}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
+                    >
+                      {isLast ? 'Bỏ qua câu phụ & Nộp bài' : 'Bỏ qua câu phụ'}
+                      <ArrowRight className="size-4" />
+                    </button>
+                  )}
+                  {!isLast && currentTurn.followUpIndex === 0 && !draft.trim() && !submitted[turnKey] && (
                     <button
                       type="button"
                       data-space-ignore="true"
@@ -746,7 +870,7 @@ export function InClassExamSessionPage() {
                       <ArrowRight className="size-4" />
                     </button>
                   )}
-                  {!isLast && (Boolean(draft.trim()) || submitted[question.questionId]) && (
+                  {!isLast && (Boolean(draft.trim()) || submitted[turnKey]) && (
                     <button
                       type="button"
                       data-space-ignore="true"
@@ -754,7 +878,11 @@ export function InClassExamSessionPage() {
                       disabled={speech.isListening || busy || secondsLeft <= 0}
                       className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
                     >
-                      {busy ? 'Đang lưu...' : 'Câu tiếp'}
+                      {busy
+                        ? 'Đang lưu...'
+                        : hasPendingFollowUpTurns && !submitted[turnKey]
+                          ? `Gửi & Câu phụ (${currentTurn.followUpIndex + 1}/${maxFollowUps})`
+                          : 'Câu tiếp'}
                       <ArrowRight className="size-4" />
                     </button>
                   )}
@@ -766,7 +894,11 @@ export function InClassExamSessionPage() {
                       disabled={speech.isListening || busy || secondsLeft <= 0}
                       className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-40 motion-reduce:transform-none"
                     >
-                      {busy ? 'Đang nộp...' : 'Nộp bài'}
+                      {busy
+                        ? 'Đang nộp...'
+                        : hasPendingFollowUpTurns && Boolean(draft.trim()) && !submitted[turnKey]
+                          ? `Gửi & Câu phụ (${currentTurn.followUpIndex + 1}/${maxFollowUps})`
+                          : 'Nộp bài'}
                     </button>
                   )}
                 </div>

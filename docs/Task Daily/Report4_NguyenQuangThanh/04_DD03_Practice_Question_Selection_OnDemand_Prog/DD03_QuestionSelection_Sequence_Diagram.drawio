@@ -1,246 +1,72 @@
-<mxfile host="app.diagrams.net" version="24.0.0">
-  <diagram name="Sequence Diagram" id="sequence-diagram">
-    <mxGraphModel dx="1080" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1080" pageHeight="830" math="0" shadow="0">
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="DD03_QuestionSelection_Sequence_Diagram" name="DD03_QuestionSelection_Sequence_Diagram">
+    <mxGraphModel dx="1454" dy="1302" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1454" pageHeight="1302" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <mxCell id="2" value="Student" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="0" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="3" value="Practice UI" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="150" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="4" value="PracticeController" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="340" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="5" value="PracticeSession
-TimeoutHelper" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="535" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="6" value="NextQuestion
-CommandHandler" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="740" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="7" value="Database" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="930" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="8" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="211" y="105" width="8" height="700" as="geometry"/>
-        </mxCell>
-        <mxCell id="9" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="401" y="158" width="8" height="287" as="geometry"/>
-        </mxCell>
-        <mxCell id="10" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="801" y="174" width="8" height="256" as="geometry"/>
-        </mxCell>
-        <mxCell id="11" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="190" width="8" height="22" as="geometry"/>
-        </mxCell>
-        <mxCell id="12" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="596" y="220" width="8" height="75" as="geometry"/>
-        </mxCell>
-        <mxCell id="13" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="272" width="8" height="14" as="geometry"/>
-        </mxCell>
-        <mxCell id="14" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="346" width="8" height="20" as="geometry"/>
-        </mxCell>
-        <mxCell id="15" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="388" width="8" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="16" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="401" y="496" width="8" height="164" as="geometry"/>
-        </mxCell>
-        <mxCell id="17" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="801" y="512" width="8" height="133" as="geometry"/>
-        </mxCell>
-        <mxCell id="18" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="530" width="8" height="22" as="geometry"/>
-        </mxCell>
-        <mxCell id="19" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="596" y="565" width="8" height="27" as="geometry"/>
-        </mxCell>
-        <mxCell id="20" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="991" y="605" width="8" height="20" as="geometry"/>
-        </mxCell>
-        <mxCell id="21" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="401" y="715" width="8" height="73" as="geometry"/>
-        </mxCell>
-        <mxCell id="22" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="801" y="715" width="8" height="41" as="geometry"/>
-        </mxCell>
-        <mxCell id="23" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="175" y="130" width="860" height="545" as="geometry"/>
-        </mxCell>
-        <mxCell id="24" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="190" y="245" width="830" height="208" as="geometry"/>
-        </mxCell>
-        <mxCell id="25" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="175" y="690" width="670" height="105" as="geometry"/>
-        </mxCell>
-        <mxCell id="26" value="1. Request next question or open session" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="65" y="108" as="sourcePoint"/>
-            <mxPoint x="215" y="108" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="27" value="2.1 Send next question request" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="215" y="160" as="sourcePoint"/>
-            <mxPoint x="405" y="160" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="28" value="3.1 Call Handle" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="176" as="sourcePoint"/>
-            <mxPoint x="805" y="176" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="29" value="4.1 Get practice session" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="192" as="sourcePoint"/>
-            <mxPoint x="995" y="192" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="30" value="5.1 Return session record" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="995" y="210" as="sourcePoint"/>
-            <mxPoint x="805" y="210" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="31" value="6.1 Check session timeout" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="226" as="sourcePoint"/>
-            <mxPoint x="600" y="226" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="32" value="7.1 Close session and save score" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="600" y="274" as="sourcePoint"/>
-            <mxPoint x="995" y="274" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="33" value="8.1 Return timeout failure" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="600" y="290" as="sourcePoint"/>
-            <mxPoint x="405" y="290" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="34" value="9.1 Display session expired message" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="304" as="sourcePoint"/>
-            <mxPoint x="215" y="304" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="35" value="7.2 Filter difficulty and pick random question" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="348" as="sourcePoint"/>
-            <mxPoint x="995" y="348" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="36" value="8.2 Return question and rubric" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="995" y="364" as="sourcePoint"/>
-            <mxPoint x="805" y="364" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="37" value="9.2 Update selected question list" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="390" as="sourcePoint"/>
-            <mxPoint x="995" y="390" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="38" value="10.2 Return next question response" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="416" as="sourcePoint"/>
-            <mxPoint x="405" y="416" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="39" value="11.2 Display next question" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="436" as="sourcePoint"/>
-            <mxPoint x="215" y="436" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="40" value="2.2 Send get session request" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="215" y="498" as="sourcePoint"/>
-            <mxPoint x="405" y="498" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="41" value="3.2 Call Handle" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="514" as="sourcePoint"/>
-            <mxPoint x="805" y="514" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="42" value="4.2 Get session with answers" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="532" as="sourcePoint"/>
-            <mxPoint x="995" y="532" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="43" value="5.2 Return session record" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="995" y="550" as="sourcePoint"/>
-            <mxPoint x="805" y="550" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="44" value="6.2 Verify session timeout" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="568" as="sourcePoint"/>
-            <mxPoint x="600" y="568" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="45" value="7.2 Return timeout status" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="600" y="588" as="sourcePoint"/>
-            <mxPoint x="805" y="588" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="46" value="8.2 Load ordered questions and rubric" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="606" as="sourcePoint"/>
-            <mxPoint x="995" y="606" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="47" value="9.2 Return ordered questions" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="995" y="624" as="sourcePoint"/>
-            <mxPoint x="805" y="624" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="48" value="10.2 Return session detail response" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="640" as="sourcePoint"/>
-            <mxPoint x="405" y="640" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="49" value="11.2 Display session progress" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="656" as="sourcePoint"/>
-            <mxPoint x="215" y="656" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="50" value="Log error" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="722" as="sourcePoint"/>
-            <mxPoint x="805" y="722" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="51" value="Return error response" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="754" as="sourcePoint"/>
-            <mxPoint x="405" y="754" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="52" value="Display error message" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="405" y="782" as="sourcePoint"/>
-            <mxPoint x="215" y="782" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fr_26" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="187" y="171" width="1237" height="932" as="geometry" /></mxCell>
+        <mxCell id="fr_29" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="211" y="385" width="1190" height="368" as="geometry" /></mxCell>
+        <mxCell id="fr_32" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="187" y="1119" width="1040" height="136" as="geometry" /></mxCell>
+        <mxCell id="dv_line_28" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="187" y="769" as="sourcePoint" /><mxPoint x="1424" y="769" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="dv_line_31" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="211" y="539" as="sourcePoint" /><mxPoint x="1401" y="539" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="actor_3" value="Student" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="40" y="42" width="30" height="48" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_5" value="Practice UI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="197" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_7" value="PracticeController" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="452" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_9" value="PracticeSession&#xa;TimeoutHelper" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="709" y="42" width="165" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_11" value="Session / NextQuestion&#xa;Handler" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="971" y="42" width="175" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_13" value="Database" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="1253" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_stem_4" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="112" as="sourcePoint" /><mxPoint x="55" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_6" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="275" y="86" as="sourcePoint" /><mxPoint x="275" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_8" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="530" y="86" as="sourcePoint" /><mxPoint x="530" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_10" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="791" y="86" as="sourcePoint" /><mxPoint x="791" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_12" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1058" y="86" as="sourcePoint" /><mxPoint x="1058" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_14" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1331" y="86" as="sourcePoint" /><mxPoint x="1331" y="1275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="bar_15" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="270" y="143" width="10" height="1104" as="geometry" /></mxCell>
+        <mxCell id="bar_16" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="525" y="206" width="10" height="1035" as="geometry" /></mxCell>
+        <mxCell id="bar_17" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="786" y="330" width="10" height="42" as="geometry" /></mxCell>
+        <mxCell id="bar_18" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="786" y="928" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_19" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1053" y="240" width="10" height="976" as="geometry" /></mxCell>
+        <mxCell id="bar_20" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="270" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_21" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="423" width="10" height="42" as="geometry" /></mxCell>
+        <mxCell id="bar_22" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="577" width="10" height="41" as="geometry" /></mxCell>
+        <mxCell id="bar_23" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="638" width="10" height="42" as="geometry" /></mxCell>
+        <mxCell id="bar_24" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="868" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_25" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1326" y="988" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="tg_27" value="[Next Question Request]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="173" width="127" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_30" value="[Session Timed Out]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="387" width="105" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_33" value="[Exception occurs]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="1121" width="97" height="17" as="geometry" /></mxCell>
+        <mxCell id="dv_txt_28" value="[Get Session Detail]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="772" width="103" height="17" as="geometry" /></mxCell>
+        <mxCell id="dv_txt_31" value="[Questions Available]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="542" width="111" height="17" as="geometry" /></mxCell>
+        <mxCell id="msg_34" value="1. Request next question" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="148" as="sourcePoint" /><mxPoint x="270" y="148" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_35" value="2.1 Send next question request" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="215" as="sourcePoint" /><mxPoint x="525" y="215" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_36" value="3.1 Forward next question command" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="535" y="245" as="sourcePoint" /><mxPoint x="1053" y="245" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_37" value="4.1 Get practice session" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="275" as="sourcePoint" /><mxPoint x="1326" y="275" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_38" value="5.1 Return session record" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="305" as="sourcePoint" /><mxPoint x="1063" y="305" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_39" value="6.1 Check session timeout" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="335" as="sourcePoint" /><mxPoint x="796" y="335" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_40" value="7.1 Return timeout status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="796" y="365" as="sourcePoint" /><mxPoint x="1053" y="365" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_41" value="8.1 Close expired session and save score" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="429" as="sourcePoint" /><mxPoint x="1326" y="429" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_42" value="9.1 Confirm session closed" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="459" as="sourcePoint" /><mxPoint x="1063" y="459" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_43" value="10.1 Return session expired error" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="489" as="sourcePoint" /><mxPoint x="535" y="489" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_44" value="11.1 Display session expired message" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="525" y="519" as="sourcePoint" /><mxPoint x="280" y="519" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_45" value="8.2 Select next question by difficulty" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="583" as="sourcePoint" /><mxPoint x="1326" y="583" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_46" value="9.2 Return question and rubric" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="613" as="sourcePoint" /><mxPoint x="1063" y="613" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_47" value="10.2 Update selected question list" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="643" as="sourcePoint" /><mxPoint x="1326" y="643" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_48" value="11.2 Confirm session updated" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="673" as="sourcePoint" /><mxPoint x="1063" y="673" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_49" value="12.2 Return next question response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="703" as="sourcePoint" /><mxPoint x="535" y="703" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_50" value="13.2 Display next question" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="525" y="733" as="sourcePoint" /><mxPoint x="280" y="733" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_51" value="2.3 Send get session request" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="813" as="sourcePoint" /><mxPoint x="525" y="813" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_52" value="3.3 Forward get session query" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="535" y="843" as="sourcePoint" /><mxPoint x="1053" y="843" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_53" value="4.3 Get session with answers" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="873" as="sourcePoint" /><mxPoint x="1326" y="873" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_54" value="5.3 Return session record" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="903" as="sourcePoint" /><mxPoint x="1063" y="903" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_55" value="6.3 Verify session timeout" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="933" as="sourcePoint" /><mxPoint x="796" y="933" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_56" value="7.3 Return timeout status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="796" y="963" as="sourcePoint" /><mxPoint x="1053" y="963" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_57" value="8.3 Load ordered questions and rubric" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="993" as="sourcePoint" /><mxPoint x="1326" y="993" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_58" value="9.3 Return ordered questions" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1326" y="1023" as="sourcePoint" /><mxPoint x="1063" y="1023" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_59" value="10.3 Return session detail response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="1053" as="sourcePoint" /><mxPoint x="535" y="1053" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_60" value="11.3 Display session progress" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="525" y="1083" as="sourcePoint" /><mxPoint x="280" y="1083" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_61" value="12.4 Log error" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1063" y="1163" as="sourcePoint" /><mxPoint x="1063" y="1179" as="targetPoint" /><Array as="points"><mxPoint x="1097" y="1163" /><mxPoint x="1097" y="1179" /></Array></mxGeometry></mxCell>
+        <mxCell id="msg_62" value="13.4 Return error response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1053" y="1205" as="sourcePoint" /><mxPoint x="535" y="1205" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_63" value="14.4 Display error message" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="525" y="1235" as="sourcePoint" /><mxPoint x="280" y="1235" as="targetPoint" /></mxGeometry></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

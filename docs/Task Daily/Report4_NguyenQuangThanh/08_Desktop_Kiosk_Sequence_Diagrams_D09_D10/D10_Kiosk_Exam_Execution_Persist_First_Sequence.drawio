@@ -1,247 +1,74 @@
-<mxfile host="app.diagrams.net" version="24.0.0">
-  <diagram name="Sequence Diagram" id="sequence-diagram">
-    <mxGraphModel dx="1135" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1135" pageHeight="830" math="0" shadow="0">
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="D10_Kiosk_Exam_Execution_Persist_First_Sequence" name="D10_Kiosk_Exam_Execution_Persist_First_Sequence">
+    <mxGraphModel dx="1570" dy="1394" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1570" pageHeight="1394" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <mxCell id="2" value="Candidate" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="-5" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="3" value="ExamCanvas &amp;
-SafeLockView [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="130" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="4" value="AudioServices &amp;
-LocalJournal [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="305" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="5" value="Submission
-Dispatcher [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="485" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="6" value="Cloudflare R2
-Storage" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="660" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="7" value="OfficialExam
-Submissions API [BE]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="830" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="8" value="PostgreSQL &amp;
-BoundedChannel" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="990" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="9" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="191" y="102" width="8" height="703" as="geometry"/>
-        </mxCell>
-        <mxCell id="10" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="128" width="8" height="147" as="geometry"/>
-        </mxCell>
-        <mxCell id="11" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="546" y="320" width="8" height="345" as="geometry"/>
-        </mxCell>
-        <mxCell id="12" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="891" y="334" width="8" height="26" as="geometry"/>
-        </mxCell>
-        <mxCell id="13" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="721" y="370" width="8" height="28" as="geometry"/>
-        </mxCell>
-        <mxCell id="14" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="891" y="410" width="8" height="36" as="geometry"/>
-        </mxCell>
-        <mxCell id="15" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1051" y="422" width="8" height="16" as="geometry"/>
-        </mxCell>
-        <mxCell id="16" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="891" y="460" width="8" height="58" as="geometry"/>
-        </mxCell>
-        <mxCell id="17" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1051" y="474" width="8" height="32" as="geometry"/>
-        </mxCell>
-        <mxCell id="18" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="572" width="8" height="26" as="geometry"/>
-        </mxCell>
-        <mxCell id="19" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="891" y="608" width="8" height="44" as="geometry"/>
-        </mxCell>
-        <mxCell id="20" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1051" y="620" width="8" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="21" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="546" y="715" width="8" height="70" as="geometry"/>
-        </mxCell>
-        <mxCell id="22" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="891" y="715" width="8" height="50" as="geometry"/>
-        </mxCell>
-        <mxCell id="23" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="292" width="940" height="382" as="geometry"/>
-        </mxCell>
-        <mxCell id="24" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="690" width="780" height="102" as="geometry"/>
-        </mxCell>
-        <mxCell id="25" value="1. Read/listen questions &amp; record oral answer" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="60" y="106" as="sourcePoint"/>
-            <mxPoint x="195" y="106" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="26" value="2. Capture WebM &amp; spool AES-256 chunks" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="134" as="sourcePoint"/>
-            <mxPoint x="370" y="134" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="27" value="3. Return draft transcript &amp; start buffer timer" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="166" as="sourcePoint"/>
-            <mxPoint x="195" y="166" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="28" value="4. Edit SE terms in buffer window &amp; click Submit" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="60" y="200" as="sourcePoint"/>
-            <mxPoint x="195" y="200" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="29" value="5. Finalize immutable file STT_MSSV.webm" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="230" as="sourcePoint"/>
-            <mxPoint x="370" y="230" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="30" value="6. Compute 64-char hex SHA-256 seal" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="254" as="sourcePoint"/>
-            <mxPoint x="370" y="254" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="31" value="7.1 Dispatch 3-step submission protocol" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="324" as="sourcePoint"/>
-            <mxPoint x="550" y="324" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="32" value="8.1 POST /tickets/{id}/audio-upload-authorizations" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="338" as="sourcePoint"/>
-            <mxPoint x="895" y="338" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="33" value="9.1 Return presigned PUT URL &amp; objectKey" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="356" as="sourcePoint"/>
-            <mxPoint x="550" y="356" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="34" value="10.1 Direct PUT STT_MSSV.webm to R2" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="374" as="sourcePoint"/>
-            <mxPoint x="725" y="374" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="35" value="11.1 Return HTTP 200 OK from R2" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="394" as="sourcePoint"/>
-            <mxPoint x="550" y="394" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="36" value="12.1 PUT /tickets/{id}/audio (objectKey, sha256)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="414" as="sourcePoint"/>
-            <mxPoint x="895" y="414" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="37" value="13.1 Verify R2 &amp; save SHA-256 seal" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="428" as="sourcePoint"/>
-            <mxPoint x="1055" y="428" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="38" value="14.1 Return sealed audio confirmation" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="444" as="sourcePoint"/>
-            <mxPoint x="550" y="444" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="39" value="15.1 PUT /tickets/{id}/submission (answers)" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="464" as="sourcePoint"/>
-            <mxPoint x="895" y="464" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="40" value="16.1 Save SUBMITTED (&lt;100ms) &amp; enqueue" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="480" as="sourcePoint"/>
-            <mxPoint x="1055" y="480" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="41" value="17.1 Return HTTP 202 Accepted" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="510" as="sourcePoint"/>
-            <mxPoint x="550" y="510" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="42" value="18.1 Wipe journal &amp; lock screen (No Instant Score)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="530" as="sourcePoint"/>
-            <mxPoint x="195" y="530" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="43" value="7.2 Read encrypted journal &amp; SHA-256 seal" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="576" as="sourcePoint"/>
-            <mxPoint x="370" y="576" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="44" value="8.2 Return persisted payload and objectKey" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="594" as="sourcePoint"/>
-            <mxPoint x="550" y="594" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="45" value="9.2 Retry PUT or GET /tickets/{id}/submission" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="612" as="sourcePoint"/>
-            <mxPoint x="895" y="612" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="46" value="10.2 Check existing SUBMITTED state" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="626" as="sourcePoint"/>
-            <mxPoint x="1055" y="626" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="47" value="11.2 Return confirmed SUBMITTED status" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="644" as="sourcePoint"/>
-            <mxPoint x="550" y="644" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="48" value="12.2 Lock SafeSubmittedLockView (Zero Data Loss)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="660" as="sourcePoint"/>
-            <mxPoint x="195" y="660" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="49" value="Log error" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="722" as="sourcePoint"/>
-            <mxPoint x="895" y="722" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="50" value="Return RFC 7807 error (403 / 409 / 422)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="895" y="754" as="sourcePoint"/>
-            <mxPoint x="550" y="754" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="51" value="Display error &amp; keep encrypted journal" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="550" y="780" as="sourcePoint"/>
-            <mxPoint x="195" y="780" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fr_26" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="32" y="332" width="1514" height="863" as="geometry" /></mxCell>
+        <mxCell id="fr_29" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="32" y="516" width="771" height="94" as="geometry" /></mxCell>
+        <mxCell id="fr_31" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="187" y="1211" width="1196" height="136" as="geometry" /></mxCell>
+        <mxCell id="dv_line_28" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="32" y="891" as="sourcePoint" /><mxPoint x="1546" y="891" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="actor_3" value="Candidate" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="40" y="42" width="30" height="48" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_5" value="ExamCanvas &amp;&#xa;SafeLockView" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="197" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_7" value="AudioServices &amp;&#xa;LocalJournal" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="429" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_9" value="Submission&#xa;Dispatcher" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="667" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_11" value="Cloudflare R2&#xa;Storage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="905" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_13" value="OfficialExam&#xa;Submissions API" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="1143" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_hdr_15" value="PostgreSQL &amp;&#xa;BoundedChannel" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1"><mxGeometry x="1369" y="42" width="156" height="44" as="geometry" /></mxCell>
+        <mxCell id="lf_stem_4" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="112" as="sourcePoint" /><mxPoint x="55" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_6" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="275" y="86" as="sourcePoint" /><mxPoint x="275" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_8" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="507" y="86" as="sourcePoint" /><mxPoint x="507" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_10" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="745" y="86" as="sourcePoint" /><mxPoint x="745" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_12" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="983" y="86" as="sourcePoint" /><mxPoint x="983" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_14" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1221" y="86" as="sourcePoint" /><mxPoint x="1221" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lf_stem_16" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1447" y="86" as="sourcePoint" /><mxPoint x="1447" y="1367" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="bar_17" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="270" y="142" width="10" height="1191" as="geometry" /></mxCell>
+        <mxCell id="bar_18" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="502" y="173" width="10" height="143" as="geometry" /></mxCell>
+        <mxCell id="bar_19" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="502" y="929" width="10" height="41" as="geometry" /></mxCell>
+        <mxCell id="bar_20" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="740" y="367" width="10" height="966" as="geometry" /></mxCell>
+        <mxCell id="bar_21" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="978" y="627" width="10" height="39" as="geometry" /></mxCell>
+        <mxCell id="bar_22" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="978" y="1020" width="10" height="40" as="geometry" /></mxCell>
+        <mxCell id="bar_23" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1216" y="401" width="10" height="904" as="geometry" /></mxCell>
+        <mxCell id="bar_24" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="716" width="10" height="76" as="geometry" /></mxCell>
+        <mxCell id="bar_25" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1"><mxGeometry x="1442" y="1110" width="10" height="41" as="geometry" /></mxCell>
+        <mxCell id="tg_27" value="[Network Online - Immediate Persist-First Upload]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="334" width="248" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_30" value="[Transcript Edit Mode Enabled]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="518" width="157" height="17" as="geometry" /></mxCell>
+        <mxCell id="tg_32" value="[Exception occurs]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="1213" width="97" height="17" as="geometry" /></mxCell>
+        <mxCell id="dv_txt_28" value="[Network Disconnected - Offline Local Journal &amp; Auto-Sync]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1"><mxGeometry x="290" y="894" width="297" height="17" as="geometry" /></mxCell>
+        <mxCell id="msg_33" value="1. Speak answer into microphone" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="148" as="sourcePoint" /><mxPoint x="270" y="148" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_34" value="2. Capture audio and write chunks" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="178" as="sourcePoint" /><mxPoint x="502" y="178" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_35" value="3. Click Stop Recording" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="208" as="sourcePoint" /><mxPoint x="270" y="208" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_36" value="4. Finalize audio and compute hash" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="238" as="sourcePoint" /><mxPoint x="502" y="238" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_37" value="5. Save encrypted journal entry" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="512" y="268" as="sourcePoint" /><mxPoint x="512" y="284" as="targetPoint" /><Array as="points"><mxPoint x="546" y="268" /><mxPoint x="546" y="284" /></Array></mxGeometry></mxCell>
+        <mxCell id="msg_38" value="6. Return audio path and hash" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="502" y="310" as="sourcePoint" /><mxPoint x="280" y="310" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_39" value="7.1 Queue submission for dispatch" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="376" as="sourcePoint" /><mxPoint x="740" y="376" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_40" value="8.1 Request speech transcription" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="406" as="sourcePoint" /><mxPoint x="1216" y="406" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_41" value="9.1 Return raw transcript" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="436" as="sourcePoint" /><mxPoint x="750" y="436" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_42" value="10.1 Start transcript review countdown" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="466" as="sourcePoint" /><mxPoint x="280" y="466" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_43" value="11.1 Play audio and show transcript" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="270" y="496" as="sourcePoint" /><mxPoint x="55" y="496" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_44" value="12.1 Edit technical terms" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="55" y="560" as="sourcePoint" /><mxPoint x="270" y="560" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_45" value="13.1 Confirm final transcript" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="280" y="590" as="sourcePoint" /><mxPoint x="740" y="590" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_46" value="14.1 Upload immutable audio file" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="631" as="sourcePoint" /><mxPoint x="978" y="631" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_47" value="15.1 Confirm audio file stored" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="978" y="661" as="sourcePoint" /><mxPoint x="750" y="661" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_48" value="16.1 Submit answer with audio URL and hash" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="691" as="sourcePoint" /><mxPoint x="1216" y="691" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_49" value="17.1 Save submission and ticket" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1226" y="721" as="sourcePoint" /><mxPoint x="1442" y="721" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_50" value="18.1 Confirm submission saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="751" as="sourcePoint" /><mxPoint x="1226" y="751" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_51" value="19.1 Enqueue grading task" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1226" y="781" as="sourcePoint" /><mxPoint x="1442" y="781" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_52" value="20.1 Return submission receipt" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="811" as="sourcePoint" /><mxPoint x="750" y="811" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_53" value="21.1 Activate safe lock screen without score" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="841" as="sourcePoint" /><mxPoint x="280" y="841" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_54" value="22.1 Display submission saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="270" y="871" as="sourcePoint" /><mxPoint x="55" y="871" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_55" value="7.2 Read encrypted local journal" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="935" as="sourcePoint" /><mxPoint x="512" y="935" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_56" value="8.2 Return persisted submission" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="512" y="965" as="sourcePoint" /><mxPoint x="740" y="965" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_57" value="9.2 Display offline safe-save status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="995" as="sourcePoint" /><mxPoint x="280" y="995" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_58" value="10.2 Retry upload when online" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="1025" as="sourcePoint" /><mxPoint x="978" y="1025" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_59" value="11.2 Confirm audio file stored" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="978" y="1055" as="sourcePoint" /><mxPoint x="750" y="1055" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_60" value="12.2 Resend submission payload" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="750" y="1085" as="sourcePoint" /><mxPoint x="1216" y="1085" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_61" value="13.2 Save submission and queue task" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1226" y="1115" as="sourcePoint" /><mxPoint x="1442" y="1115" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_62" value="14.2 Confirm submission saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1442" y="1145" as="sourcePoint" /><mxPoint x="1226" y="1145" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_63" value="15.2 Return submission receipt" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="1175" as="sourcePoint" /><mxPoint x="750" y="1175" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_64" value="23. Log error" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1226" y="1255" as="sourcePoint" /><mxPoint x="1226" y="1271" as="targetPoint" /><Array as="points"><mxPoint x="1260" y="1255" /><mxPoint x="1260" y="1271" /></Array></mxGeometry></mxCell>
+        <mxCell id="msg_65" value="24. Return error response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1216" y="1297" as="sourcePoint" /><mxPoint x="750" y="1297" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="msg_66" value="25. Display error notification" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="740" y="1327" as="sourcePoint" /><mxPoint x="280" y="1327" as="targetPoint" /></mxGeometry></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

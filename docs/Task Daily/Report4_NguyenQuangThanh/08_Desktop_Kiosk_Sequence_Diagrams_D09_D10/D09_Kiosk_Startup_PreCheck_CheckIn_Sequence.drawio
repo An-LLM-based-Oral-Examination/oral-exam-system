@@ -1,234 +1,337 @@
-<mxfile host="app.diagrams.net" version="24.0.0">
-  <diagram name="Sequence Diagram" id="sequence-diagram">
-    <mxGraphModel dx="1125" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1125" pageHeight="830" math="0" shadow="0">
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="D09_Kiosk_Startup_PreCheck_CheckIn_Sequence" name="D09_Kiosk_Startup_PreCheck_CheckIn_Sequence">
+    <mxGraphModel dx="1570" dy="1393" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1570" pageHeight="1393" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <mxCell id="2" value="Candidate" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="-5" y="44" width="130" height="764" as="geometry"/>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fr_26" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="32" y="214" width="1514" height="742" as="geometry" />
         </mxCell>
-        <mxCell id="3" value="ShellLockdown &amp;
-LobbyView [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="130" y="44" width="130" height="764" as="geometry"/>
+        <mxCell id="fr_29" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="187" y="462" width="1336" height="218" as="geometry" />
         </mxCell>
-        <mxCell id="4" value="TicketCheckIn
-Service [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="305" y="44" width="130" height="764" as="geometry"/>
+        <mxCell id="fr_32" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="187" y="716" width="657" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="5" value="MicCalibration
-Service [Kiosk]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="480" y="44" width="130" height="764" as="geometry"/>
+        <mxCell id="fr_35" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="32" y="972" width="1514" height="222" as="geometry" />
         </mxCell>
-        <mxCell id="6" value="OfficialExams &amp;
-Proctor API [BE]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="660" y="44" width="130" height="764" as="geometry"/>
+        <mxCell id="fr_37" value="opt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=46;height=19;fillColor=#F1F5F9;strokeColor=#333333;fontStyle=1;fontSize=10;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="187" y="1210" width="964" height="136" as="geometry" />
         </mxCell>
-        <mxCell id="7" value="AntiCheatHub
-SignalR [BE]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="835" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="8" value="Database
-[PostgreSQL]" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="985" y="44" width="130" height="764" as="geometry"/>
-        </mxCell>
-        <mxCell id="9" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="191" y="102" width="8" height="703" as="geometry"/>
-        </mxCell>
-        <mxCell id="10" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="134" width="8" height="184" as="geometry"/>
-        </mxCell>
-        <mxCell id="11" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="721" y="148" width="8" height="154" as="geometry"/>
-        </mxCell>
-        <mxCell id="12" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1046" y="160" width="8" height="12" as="geometry"/>
-        </mxCell>
-        <mxCell id="13" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="541" y="368" width="8" height="80" as="geometry"/>
-        </mxCell>
-        <mxCell id="14" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="452" width="8" height="58" as="geometry"/>
-        </mxCell>
-        <mxCell id="15" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="721" y="464" width="8" height="38" as="geometry"/>
-        </mxCell>
-        <mxCell id="16" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1046" y="476" width="8" height="14" as="geometry"/>
-        </mxCell>
-        <mxCell id="17" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="562" width="8" height="110" as="geometry"/>
-        </mxCell>
-        <mxCell id="18" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="721" y="576" width="8" height="84" as="geometry"/>
-        </mxCell>
-        <mxCell id="19" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="1046" y="592" width="8" height="20" as="geometry"/>
-        </mxCell>
-        <mxCell id="20" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="896" y="620" width="8" height="22" as="geometry"/>
-        </mxCell>
-        <mxCell id="21" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="366" y="718" width="8" height="67" as="geometry"/>
-        </mxCell>
-        <mxCell id="22" value="" style="html=1;points=[];perimeter=orthogonalPerimeter;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="721" y="718" width="8" height="47" as="geometry"/>
-        </mxCell>
-        <mxCell id="23" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="175" width="935" height="152" as="geometry"/>
-        </mxCell>
-        <mxCell id="24" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="338" width="935" height="182" as="geometry"/>
-        </mxCell>
-        <mxCell id="25" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="532" width="935" height="152" as="geometry"/>
-        </mxCell>
-        <mxCell id="26" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=18;fillColor=#FFFFFF;strokeColor=#000000;" vertex="1" parent="1">
-          <mxGeometry x="155" y="698" width="610" height="95" as="geometry"/>
-        </mxCell>
-        <mxCell id="27" value="1. Launch Kiosk App &amp; sign in" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="dv_line_28" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="60" y="106" as="sourcePoint"/>
-            <mxPoint x="195" y="106" as="targetPoint"/>
+            <mxPoint x="32" y="278" as="sourcePoint" />
+            <mxPoint x="1546" y="278" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="28" value="2. Enable Fullscreen &amp; block OS shortcuts" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="dv_line_31" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="118" as="sourcePoint"/>
-            <mxPoint x="195" y="118" as="targetPoint"/>
+            <mxPoint x="187" y="556" as="sourcePoint" />
+            <mxPoint x="1523" y="556" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="29" value="3. Fetch workstation ticket by ip_address" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="dv_line_34" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#505050;strokeWidth=1.2;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="138" as="sourcePoint"/>
-            <mxPoint x="370" y="138" as="targetPoint"/>
+            <mxPoint x="187" y="782" as="sourcePoint" />
+            <mxPoint x="844" y="782" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="30" value="4. GET /api/v1/official-exams/tickets/current" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="actor_3" value="Candidate" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="40" y="42" width="30" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_5" value="ShellLockdown &amp;&#10;LobbyView" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="197" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_7" value="TicketCheckIn&#10;Service" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="429" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_9" value="MicCalibration&#10;Service" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="667" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_11" value="OfficialExams &amp;&#10;Proctor API" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="905" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_13" value="AntiCheatHub&#10;SignalR" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="1143" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_hdr_15" value="Database" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#1E293B;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;" vertex="1" parent="1">
+          <mxGeometry x="1369" y="42" width="156" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_4" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="152" as="sourcePoint"/>
-            <mxPoint x="725" y="152" as="targetPoint"/>
+            <mxPoint x="55" y="112" as="sourcePoint" />
+            <mxPoint x="55" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="31" value="5. Query ticket by studentId &amp; ip_address" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_6" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="164" as="sourcePoint"/>
-            <mxPoint x="1050" y="164" as="targetPoint"/>
+            <mxPoint x="275" y="86" as="sourcePoint" />
+            <mxPoint x="275" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="32" value="6.1 Return HTTP 403 WrongWorkstation" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_8" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="210" as="sourcePoint"/>
-            <mxPoint x="370" y="210" as="targetPoint"/>
+            <mxPoint x="507" y="86" as="sourcePoint" />
+            <mxPoint x="507" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="33" value="7.1 Display workstation IP mismatch warning" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_10" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="232" as="sourcePoint"/>
-            <mxPoint x="195" y="232" as="targetPoint"/>
+            <mxPoint x="745" y="86" as="sourcePoint" />
+            <mxPoint x="745" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="34" value="6.2 Return ticket (Seat 1..40, SCHEDULED)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_12" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="280" as="sourcePoint"/>
-            <mxPoint x="370" y="280" as="targetPoint"/>
+            <mxPoint x="983" y="86" as="sourcePoint" />
+            <mxPoint x="983" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="35" value="7.2 Open 30s microphone pre-check screen" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_14" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="302" as="sourcePoint"/>
-            <mxPoint x="195" y="302" as="targetPoint"/>
+            <mxPoint x="1221" y="86" as="sourcePoint" />
+            <mxPoint x="1221" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="36" value="8. Speak into microphone for 30s test" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="lf_stem_16" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#6E6E6E;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="60" y="370" as="sourcePoint"/>
-            <mxPoint x="545" y="370" as="targetPoint"/>
+            <mxPoint x="1447" y="86" as="sourcePoint" />
+            <mxPoint x="1447" y="1366" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="37" value="9.1 Peak &lt; 60 dB -&gt; block entry &amp; prompt retry" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="bar_17" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="270" y="142" width="10" height="1190" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_18" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="502" y="342" width="10" height="320" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_19" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="740" y="691" width="10" height="143" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_20" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="978" y="372" width="10" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_21" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1216" y="858" width="10" height="39" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_22" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1216" y="1007" width="10" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_23" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1442" y="406" width="10" height="49" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_24" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1442" y="593" width="10" height="43" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_25" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1442" y="1071" width="10" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_27" value="[Multiple Displays, Forbidden Process or VM Detected]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="216" width="269" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_30" value="[IP Conflict on Seat]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="464" width="105" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_33" value="[Signal Below Threshold or Silent]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="718" width="171" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_36" value="[Shift Exam Published by Examination Officer]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="974" width="230" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_38" value="[Exception occurs]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="1212" width="97" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="dv_txt_28" value="[Workstation Environment Clean]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="281" width="168" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="dv_txt_31" value="[Valid Seat and IP Sealed]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="559" width="131" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="dv_txt_34" value="[Signal Meets Threshold]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;spacingLeft=2;spacingRight=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="785" width="128" height="17" as="geometry" />
+        </mxCell>
+        <mxCell id="msg_39" value="1. Launch Kiosk and sign in" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="545" y="396" as="sourcePoint"/>
-            <mxPoint x="195" y="396" as="targetPoint"/>
+            <mxPoint x="55" y="148" as="sourcePoint" />
+            <mxPoint x="270" y="148" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="38" value="9.2 Peak &gt;= 60 dB verified" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_40" value="2. Enable fullscreen lockdown and keyboard hook" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="545" y="442" as="sourcePoint"/>
-            <mxPoint x="195" y="442" as="targetPoint"/>
+            <mxPoint x="280" y="178" as="sourcePoint" />
+            <mxPoint x="280" y="194" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="314" y="178" />
+              <mxPoint x="314" y="194" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="39" value="10.2 Request ticket check-in" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_41" value="3.1 Block entry and display alert" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="456" as="sourcePoint"/>
-            <mxPoint x="370" y="456" as="targetPoint"/>
+            <mxPoint x="270" y="258" as="sourcePoint" />
+            <mxPoint x="55" y="258" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="40" value="11.2 POST /official-exams/tickets/{id}/check-in" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_42" value="3.2 Select shift and seat number" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="468" as="sourcePoint"/>
-            <mxPoint x="725" y="468" as="targetPoint"/>
+            <mxPoint x="55" y="322" as="sourcePoint" />
+            <mxPoint x="270" y="322" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="41" value="12.2 Update status SCHEDULED -&gt; IN_PROGRESS" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_43" value="4. Request seat check-in with IP" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="482" as="sourcePoint"/>
-            <mxPoint x="1050" y="482" as="targetPoint"/>
+            <mxPoint x="280" y="352" as="sourcePoint" />
+            <mxPoint x="502" y="352" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="42" value="13.2 Return IN_PROGRESS ticket &amp; exam config" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_44" value="5. Send seat check-in request" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="502" as="sourcePoint"/>
-            <mxPoint x="195" y="502" as="targetPoint"/>
+            <mxPoint x="512" y="382" as="sourcePoint" />
+            <mxPoint x="978" y="382" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="43" value="14. Detect blurCount &gt; 3 strikes" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_45" value="6. Verify ticket attendance and workstation IP" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="195" y="564" as="sourcePoint"/>
-            <mxPoint x="370" y="564" as="targetPoint"/>
+            <mxPoint x="988" y="412" as="sourcePoint" />
+            <mxPoint x="1442" y="412" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="44" value="15. POST /official-exams/anti-cheat/log &amp; suspend" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_46" value="7. Return ticket and IP verification status" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="580" as="sourcePoint"/>
-            <mxPoint x="725" y="580" as="targetPoint"/>
+            <mxPoint x="1442" y="442" as="sourcePoint" />
+            <mxPoint x="988" y="442" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="45" value="16. Save anti-cheat log &amp; transition -&gt; LOCKED" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_47" value="8.1 Return seat IP conflict error" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="598" as="sourcePoint"/>
-            <mxPoint x="1050" y="598" as="targetPoint"/>
+            <mxPoint x="978" y="506" as="sourcePoint" />
+            <mxPoint x="512" y="506" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="46" value="17. Broadcast alert to Proctor / Officer" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_48" value="9.1 Display workstation conflict error" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="624" as="sourcePoint"/>
-            <mxPoint x="900" y="624" as="targetPoint"/>
+            <mxPoint x="502" y="536" as="sourcePoint" />
+            <mxPoint x="280" y="536" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="47" value="18. Lock Kiosk screen (Status = LOCKED)" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_49" value="8.2 Seal workstation IP and update check-in status" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="656" as="sourcePoint"/>
-            <mxPoint x="195" y="656" as="targetPoint"/>
+            <mxPoint x="988" y="600" as="sourcePoint" />
+            <mxPoint x="1442" y="600" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="48" value="Log error" style="html=1;verticalAlign=bottom;endArrow=block;endFill=1;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_50" value="9.2 Confirm check-in saved" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="725" as="sourcePoint"/>
-            <mxPoint x="370" y="725" as="targetPoint"/>
+            <mxPoint x="1442" y="630" as="sourcePoint" />
+            <mxPoint x="988" y="630" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="49" value="Return RFC 7807 ProblemDetails" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_51" value="10.2 Return check-in confirmation" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="725" y="755" as="sourcePoint"/>
-            <mxPoint x="370" y="755" as="targetPoint"/>
+            <mxPoint x="978" y="660" as="sourcePoint" />
+            <mxPoint x="512" y="660" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="50" value="Display error dialog" style="html=1;verticalAlign=bottom;dashed=1;endArrow=open;endFill=0;rounded=0;" edge="1" parent="1">
+        <mxCell id="msg_52" value="11. Run thirty-second microphone calibration" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="370" y="780" as="sourcePoint"/>
-            <mxPoint x="195" y="780" as="targetPoint"/>
+            <mxPoint x="280" y="696" as="sourcePoint" />
+            <mxPoint x="740" y="696" as="targetPoint" />
           </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_53" value="12.1 Return low signal warning" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="740" y="760" as="sourcePoint" />
+            <mxPoint x="280" y="760" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_54" value="12.2 Confirm microphone calibrated" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="740" y="826" as="sourcePoint" />
+            <mxPoint x="280" y="826" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_55" value="13. Connect to anti-cheat hub and join shift group" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="280" y="862" as="sourcePoint" />
+            <mxPoint x="1216" y="862" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_56" value="14. Confirm shift room joined" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1216" y="892" as="sourcePoint" />
+            <mxPoint x="280" y="892" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_57" value="15. Display waiting lobby screen" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="922" as="sourcePoint" />
+            <mxPoint x="55" y="922" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_58" value="16. Broadcast exam published event" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1216" y="1016" as="sourcePoint" />
+            <mxPoint x="280" y="1016" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_59" value="17. Request assigned exam paper" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="280" y="1046" as="sourcePoint" />
+            <mxPoint x="978" y="1046" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_60" value="18. Load assigned exam set and questions" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="988" y="1076" as="sourcePoint" />
+            <mxPoint x="1442" y="1076" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_61" value="19. Return exam set questions" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1442" y="1106" as="sourcePoint" />
+            <mxPoint x="988" y="1106" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_62" value="20. Return exam paper payload" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="978" y="1136" as="sourcePoint" />
+            <mxPoint x="280" y="1136" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_63" value="21. Open exam workspace" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="1166" as="sourcePoint" />
+            <mxPoint x="55" y="1166" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_64" value="22. Log error" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="988" y="1254" as="sourcePoint" />
+            <mxPoint x="988" y="1270" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1022" y="1254" />
+              <mxPoint x="1022" y="1270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_65" value="23. Return error response" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="978" y="1296" as="sourcePoint" />
+            <mxPoint x="512" y="1296" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_66" value="24. Display error dialog" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="502" y="1326" as="sourcePoint" />
+            <mxPoint x="280" y="1326" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_18_exc" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="502" y="1286" width="10" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_20_pub" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="978" y="1052" width="10" height="248" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

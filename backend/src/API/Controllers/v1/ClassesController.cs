@@ -6,8 +6,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.AddClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.RemoveClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
@@ -536,6 +538,208 @@ public class ClassesController(ISender sender) : ControllerBase
 
         if (!result.IsSuccess)
         {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên thêm sinh viên vào lớp học phần do mình phụ trách (hỗ trợ MSSV, Email, StudentId hoặc chuỗi định danh).
+    /// </summary>
+    [HttpPost("lecturer/classes/{classId:guid}/students")]
+    [HttpPost("classes/{classId:guid}/students")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> AddStudentToClass(
+        [FromRoute] Guid classId,
+        [FromBody] AddClassStudentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var command = new AddClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: request.StudentId,
+            StudentCode: request.StudentCode,
+            Email: request.Email,
+            Identifier: request.Identifier);
+
+        var result = await _sender.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error["CONFLICT:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên xóa sinh viên khỏi lớp học phần theo StudentId.
+    /// </summary>
+    [HttpDelete("lecturer/classes/{classId:guid}/students/{studentId:guid}")]
+    [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> RemoveStudentFromClass(
+        [FromRoute] Guid classId,
+        [FromRoute] Guid studentId,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var command = new RemoveClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: studentId);
+
+        var result = await _sender.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên xóa sinh viên khỏi lớp học phần bằng thông tin định danh linh hoạt (Query param hoặc Body).
+    /// </summary>
+    [HttpDelete("lecturer/classes/{classId:guid}/students")]
+    [HttpDelete("classes/{classId:guid}/students")]
+    [HttpPost("lecturer/classes/{classId:guid}/students/remove")]
+    [HttpPost("classes/{classId:guid}/students/remove")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    public async Task<IActionResult> RemoveStudentFlexible(
+        [FromRoute] Guid classId,
+        [FromBody] RemoveClassStudentRequest? bodyRequest = null,
+        [FromQuery] Guid? studentId = null,
+        [FromQuery] string? studentCode = null,
+        [FromQuery] string? email = null,
+        [FromQuery] string? identifier = null,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var effectiveStudentId = bodyRequest?.StudentId ?? studentId;
+        var effectiveStudentCode = bodyRequest?.StudentCode ?? studentCode;
+        var effectiveEmail = bodyRequest?.Email ?? email;
+        var effectiveIdentifier = bodyRequest?.Identifier ?? identifier;
+
+        var command = new RemoveClassStudentCommand(
+            ClassId: classId,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole,
+            StudentId: effectiveStudentId,
+            StudentCode: effectiveStudentCode,
+            Email: effectiveEmail,
+            Identifier: effectiveIdentifier);
+
+        var result = await _sender.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
+                    Detail = result.Error["NOT_FOUND:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,

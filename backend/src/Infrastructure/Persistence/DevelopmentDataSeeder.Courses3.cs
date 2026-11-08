@@ -226,32 +226,82 @@ public static partial class DevelopmentDataSeeder
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var existingShifts = (await context.InClassExamShifts.Select(s => s.Id).ToListAsync(cancellationToken)).ToHashSet();
-        var shiftSeeds = new (Guid ShiftId, Guid ClassId, string ShiftName, string SecretSeed)[]
+        var nowUtc = DateTime.UtcNow;
+        var shiftStart = nowUtc.AddHours(-1);
+        var shiftEnd = nowUtc.AddMonths(4);
+
+        var shiftSeeds = new (Guid ShiftId, Guid ClassId, string ShiftName, string SecretSeed, int TotalQuestions, bool HasFollowUp, int MaxFollowUp)[]
         {
-            (InClassShiftPrf192Id, ClassPrf192Id, "Kiểm tra Vấn đáp Quá trình PRF192 - Con trỏ & Quản lý Bộ nhớ C", "PRF192-TOTP-SECRET-FA26-SE1804PRF"),
-            (InClassShiftCsd201Id, ClassCsd201Id, "Kiểm tra Vấn đáp Quá trình CSD201 - Cây AVL, Đồ thị & Bảng băm", "CSD201-TOTP-SECRET-FA26-SE1805CSD"),
-            (InClassShiftDbi202Id, ClassDbi202Id, "Kiểm tra Vấn đáp Quá trình DBI202 - Chuẩn hóa 3NF, SQL & ACID", "DBI202-TOTP-SECRET-FA26-SE1806DBI")
+            (InClassShiftPrn231Id, ClassPrn231Id, "Kiểm tra Vấn đáp Quá trình PRN231 - Clean Architecture & .NET 8 Web API", "PRN231-TOTP-SECRET-FA26-SE1701PRN", 2, true, 2),
+            (InClassShiftSwd392Id, ClassSwd392Id, "Kiểm tra Vấn đáp Quá trình SWD392 - Software Architecture & Microservices", "SWD392-TOTP-SECRET-FA26-SE1702SWD", 3, false, 0),
+            (InClassShiftPrf192Id, ClassPrf192Id, "Kiểm tra Vấn đáp Quá trình PRF192 - Con trỏ & Quản lý Bộ nhớ C", "PRF192-TOTP-SECRET-FA26-SE1804PRF", 2, true, 2),
+            (InClassShiftCsd201Id, ClassCsd201Id, "Kiểm tra Vấn đáp Quá trình CSD201 - Cây AVL, Đồ thị & Bảng băm", "CSD201-TOTP-SECRET-FA26-SE1805CSD", 2, true, 2),
+            (InClassShiftDbi202Id, ClassDbi202Id, "Kiểm tra Vấn đáp Quá trình DBI202 - Chuẩn hóa 3NF, SQL & ACID", "DBI202-TOTP-SECRET-FA26-SE1806DBI", 2, true, 2)
         };
 
-        foreach (var (shiftId, classId, shiftName, secretSeed) in shiftSeeds)
+        foreach (var (shiftId, classId, shiftName, secretSeed, totalQuestions, hasFollowUp, maxFollowUp) in shiftSeeds)
         {
-            if (!existingShifts.Contains(shiftId) && allClasses.Any(c => c.Id == classId))
+            var shift = await context.InClassExamShifts
+                .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken);
+
+            if (shift == null)
             {
-                context.InClassExamShifts.Add(new InClassExamShift
+                if (allClasses.Any(c => c.Id == classId))
                 {
-                    Id = shiftId,
-                    ClassId = classId,
-                    LecturerId = LecturerUserId,
-                    ShiftName = shiftName,
-                    StartTime = SeedTimestampUtc,
-                    EndTime = SeedTimestampUtc.AddMonths(4),
-                    TotpSecretKey = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(secretSeed)),
-                    Status = "IN_PROGRESS",
-                    IsLocked = false,
-                    CreatedAt = SeedTimestampUtc,
-                    UpdatedAt = SeedTimestampUtc
+                    shift = new InClassExamShift
+                    {
+                        Id = shiftId,
+                        ClassId = classId,
+                        LecturerId = LecturerUserId,
+                        ShiftName = shiftName,
+                        QuestionPoolMode = "ALL_COURSE_BANK",
+                        TotalQuestionsPerStudent = totalQuestions,
+                        HasFollowUp = hasFollowUp,
+                        MaxFollowUpQuestions = maxFollowUp,
+                        IsAutoPublishGrades = true,
+                        StartTime = shiftStart,
+                        EndTime = shiftEnd,
+                        TotpSecretKey = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(secretSeed)),
+                        Status = "IN_PROGRESS",
+                        IsLocked = false,
+                        CreatedAt = SeedTimestampUtc,
+                        UpdatedAt = nowUtc
+                    };
+                    context.InClassExamShifts.Add(shift);
+                }
+            }
+            else
+            {
+                // Self-healing: if shift exists but was closed, finalized or expired, reset to IN_PROGRESS
+                shift.Status = "IN_PROGRESS";
+                shift.StartTime = shiftStart;
+                shift.EndTime = shiftEnd;
+                shift.IsLocked = false;
+                shift.FinalizedAt = null;
+                shift.UpdatedAt = nowUtc;
+            }
+
+            // Seed fallback static OTP "123456" into in_class_shift_passwords for instant testing
+            var staticPwd = await context.InClassShiftPasswords
+                .FirstOrDefaultAsync(p => p.ShiftId == shiftId && p.PlainCode == "123456", cancellationToken);
+
+            if (staticPwd == null)
+            {
+                context.InClassShiftPasswords.Add(new InClassShiftPassword
+                {
+                    Id = Guid.NewGuid(),
+                    ShiftId = shiftId,
+                    PlainCode = "123456",
+                    PasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", "123456"),
+                    ValidFrom = nowUtc.AddDays(-1),
+                    ValidTo = nowUtc.AddYears(1),
+                    CreatedAt = SeedTimestampUtc
                 });
+            }
+            else
+            {
+                staticPwd.ValidFrom = nowUtc.AddDays(-1);
+                staticPwd.ValidTo = nowUtc.AddYears(1);
             }
         }
 

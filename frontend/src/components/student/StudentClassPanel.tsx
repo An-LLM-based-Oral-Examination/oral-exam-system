@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Mic2, Search, TimerReset, UserRound, UsersRound, X } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -79,12 +79,17 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
   const [searchFailed, setSearchFailed] = useState(false)
   const [password, setPassword] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [appliedKeyword, setAppliedKeyword] = useState('')
+  const appliedKeyword = keyword.trim()
   const searchRef = useRef<HTMLDivElement>(null)
   const requestId = useRef(0)
   const passwordRef = useRef<HTMLInputElement>(null)
+  const onClassCountRef = useRef(onClassCount)
 
-  const loadMine = async (silent = false) => {
+  useEffect(() => {
+    onClassCountRef.current = onClassCount
+  }, [onClassCount])
+
+  const loadMine = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
     try {
@@ -95,54 +100,57 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
       setSemesters(semesterResult)
       setSemesterId((current) => current || pickCurrentSemester(semesterResult)?.id || '')
       setMine(myResult)
-      onClassCount?.(myResult.length)
+      onClassCountRef.current?.(myResult.length)
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    void loadMine()
   }, [])
 
   useEffect(() => {
-    const trimmed = keyword.trim()
-    setAppliedKeyword(trimmed)
-    if (!semesterId || !trimmed) {
-      requestId.current += 1
-      setDirectory([])
-      setSearched(false)
-      setSearching(false)
-      setSearchFailed(false)
-      return
-    }
-
-    const current = ++requestId.current
-    setSearched(true)
-    setSearchFailed(false)
-    setSearching(true)
     const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const openResult = await classService.searchClasses({
-            keyword: trimmed,
-            semesterId,
-          })
-          if (requestId.current !== current) return
-          setDirectory(openResult)
-          setError('')
-        } catch (searchError) {
-          if (requestId.current !== current) return
+      void loadMine()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadMine])
+
+  useEffect(() => {
+    const trimmed = keyword.trim()
+    const current = ++requestId.current
+    const timer = window.setTimeout(
+      () => {
+        if (!semesterId || !trimmed) {
           setDirectory([])
-          setSearchFailed(true)
-          toast.error(getErrorMessage(searchError))
-        } finally {
-          if (requestId.current === current) setSearching(false)
+          setSearched(false)
+          setSearching(false)
+          setSearchFailed(false)
+          return
         }
-      })()
-    }, 280)
+        setSearched(true)
+        setSearchFailed(false)
+        setSearching(true)
+        void (async () => {
+          try {
+            const openResult = await classService.searchClasses({
+              keyword: trimmed,
+              semesterId,
+            })
+            if (requestId.current !== current) return
+            setDirectory(openResult)
+            setError('')
+          } catch (searchError) {
+            if (requestId.current !== current) return
+            setDirectory([])
+            setSearchFailed(true)
+            toast.error(getErrorMessage(searchError))
+          } finally {
+            if (requestId.current === current) setSearching(false)
+          }
+        })()
+      },
+      !semesterId || !trimmed ? 0 : 280,
+    )
 
     return () => window.clearTimeout(timer)
   }, [keyword, semesterId])

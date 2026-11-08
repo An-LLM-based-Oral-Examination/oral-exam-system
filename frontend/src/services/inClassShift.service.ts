@@ -5,12 +5,14 @@ import type {
   FinalizeInClassGradesResponse,
   GradeInClassAnswerRequest,
   GradeInClassSubmissionRequest,
+  InClassNextFollowUp,
   InClassQuestionAnswer,
   InClassShift,
   InClassSubmission,
   LecturerClassOption,
   StudentExamQuestion,
   StudentExamResult,
+  SubmitStudentInClassAnswerResponse,
 } from '@/types/inClassShift.types'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -483,6 +485,18 @@ export const inClassShiftService = {
   },
 
   async listStudentShifts(): Promise<InClassShift[]> {
+    try {
+      const direct = await apiClient.get<unknown>('/student/in-class-shifts/my')
+      const normalized = unwrapList(direct.data)
+        .map((item) => normalizeShift(item))
+        .filter((item): item is InClassShift => Boolean(item))
+      if (normalized.length > 0) {
+        return normalized
+      }
+    } catch {
+      // Fallback sang truy vấn từng lớp học phần
+    }
+
     const classes = await apiClient.get<unknown>('/student/classes/my-classes')
     const classIds = unwrapList(classes.data)
       .filter(isRecord)
@@ -527,13 +541,54 @@ export const inClassShiftService = {
     }]
   },
 
-  async submitStudentAnswer(shiftId: string, questionId: string, transcript: string): Promise<void> {
-    await apiClient.post(`/student/in-class-shifts/${shiftId}/submit-answer`, {
-      questionId,
-      transcriptText: transcript.trim(),
-      isFollowUp: false,
-      followUpIndex: 0,
-    })
+  async submitStudentAnswer(
+    shiftId: string,
+    questionId: string,
+    transcript: string,
+    options?: {
+      isFollowUp?: boolean
+      parentSubmissionId?: string | null
+      followUpIndex?: number
+    },
+  ): Promise<SubmitStudentInClassAnswerResponse> {
+    const response = await apiClient.post<unknown>(
+      `/student/in-class-shifts/${shiftId}/submit-answer`,
+      {
+        questionId,
+        transcriptText: transcript.trim(),
+        isFollowUp: options?.isFollowUp ?? false,
+        parentSubmissionId: options?.parentSubmissionId ?? null,
+        followUpIndex: options?.followUpIndex ?? 0,
+      },
+    )
+    const record = isRecord(response.data) ? response.data : {}
+    return {
+      submissionId: readString(record, 'submissionId', 'id'),
+      shiftId: readString(record, 'shiftId') || shiftId,
+      questionId: readString(record, 'questionId') || questionId,
+      status: readString(record, 'status') || 'SUBMITTED',
+      isFollowUp: readBool(record, 'isFollowUp'),
+      parentSubmissionId: readString(record, 'parentSubmissionId') || null,
+      followUpIndex: readNumber(record, 'followUpIndex'),
+    }
+  },
+
+  async requestNextFollowUp(
+    shiftId: string,
+    submissionId: string,
+  ): Promise<InClassNextFollowUp> {
+    const response = await apiClient.post<unknown>(
+      `/student/in-class-shifts/${shiftId}/submissions/${submissionId}/next-followup`,
+    )
+    const record = isRecord(response.data) ? response.data : {}
+    return {
+      hasMoreFollowUp: readBool(record, 'hasMoreFollowUp'),
+      followUpIndex: readNumber(record, 'followUpIndex'),
+      maxFollowUpQuestions: readNumber(record, 'maxFollowUpQuestions'),
+      parentSubmissionId: readString(record, 'parentSubmissionId') || submissionId,
+      questionId: readString(record, 'questionId'),
+      followUpPrompt: readString(record, 'followUpPrompt') || null,
+    }
   },
 
   async finishStudentExam(shiftId: string): Promise<void> {
@@ -591,6 +646,9 @@ export const inClassShiftService = {
         finalScore: readNullableNumber(item, 'finalScore'),
         lecturerNotes: readString(item, 'lecturerNotes') || null,
         status: readString(item, 'status'),
+        isFollowUp: readBool(item, 'isFollowUp'),
+        followUpIndex: readNumber(item, 'followUpIndex'),
+        followUpPrompt: readString(item, 'followUpPrompt') || null,
       }))
       .filter((item) => item.submissionId)
   },
@@ -609,4 +667,3 @@ export const inClassShiftService = {
     }
   },
 }
-

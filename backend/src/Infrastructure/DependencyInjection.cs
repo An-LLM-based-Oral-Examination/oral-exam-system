@@ -19,9 +19,14 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is missing.");
 
-        var allowInMemoryFallback = bool.TryParse(
+        var envName = configuration["ASPNETCORE_ENVIRONMENT"]
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? "Production";
+        var isProduction = string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase);
+
+        var allowInMemoryFallback = !isProduction && (bool.TryParse(
             configuration["Database:AllowInMemoryFallback"] ?? configuration["DATABASE_ALLOW_IN_MEMORY_FALLBACK"],
-            out var parsedAllowFallback) && parsedAllowFallback;
+            out var parsedAllowFallback) && parsedAllowFallback);
 
         var usePostgres = !allowInMemoryFallback || IsPostgresEndpointReachable(connectionString);
         if (usePostgres)

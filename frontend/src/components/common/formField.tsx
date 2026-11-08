@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 /** Viền/nền khi input không hợp lệ — dùng với `ds.field`. */
 export const fieldInvalidClass = 'border-[#c2415b] bg-[#fff7f8] focus:ring-[#c2415b]/25'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function fieldLabelClass(invalid?: boolean) {
   return cn(
     'text-xs font-bold tracking-[0.04em] uppercase',

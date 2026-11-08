@@ -17,7 +17,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Sao chép cấu hình và toàn bộ mã nguồn
-COPY tsconfig*.json vite.config.ts index.html .oxlintrc.json ./
+COPY tsconfig*.json vite.config.ts index.html ./
 COPY public/ ./public/
 COPY src/ ./src/
 
@@ -40,8 +40,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
-# Healthcheck xác thực Nginx phục vụ trang chủ
+# Healthcheck xác thực Nginx qua endpoint nội bộ /healthz (không bị chặn bởi HTTPS 301 redirect)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -q -O /dev/null http://localhost/ || exit 1
+    CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

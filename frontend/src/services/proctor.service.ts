@@ -13,6 +13,8 @@ import {
 } from './mf04.response'
 import type {
   ProctorSeatItem,
+  ProctorViolationResponse,
+  RecordProctorViolationRequest,
   ShiftAttendanceMonitor,
   SuspendExamTicketRequest,
   TicketProctorActionResponse,
@@ -95,6 +97,24 @@ export const proctorService = {
   ): Promise<TicketProctorActionResponse> {
     const response = await apiClient.post<unknown>(`/proctor/tickets/${ticketId}/suspend`, payload)
     return normalizeAction(response.data)
+  },
+
+  async recordViolation(
+    shiftId: string,
+    payload: RecordProctorViolationRequest,
+  ): Promise<ProctorViolationResponse> {
+    const response = await apiClient.post<unknown>(`/proctor/shifts/${shiftId}/violations`, payload)
+    const record = requireRecord(unwrapPayload(response.data), 'Phản hồi báo cáo vi phạm không hợp lệ.')
+    return {
+      id: readNullableString(record, 'id') ?? '',
+      shiftId: readNullableString(record, 'shiftId') ?? shiftId,
+      ticketId: readNullableString(record, 'ticketId'),
+      studentId: readNullableString(record, 'studentId'),
+      eventType: readNullableString(record, 'eventType') ?? payload.eventType,
+      severity: readNullableString(record, 'severity') ?? payload.severity,
+      details: readNullableString(record, 'details') ?? payload.details,
+      occurredAt: readNullableString(record, 'occurredAt') ?? new Date().toISOString(),
+    }
   },
 }
 

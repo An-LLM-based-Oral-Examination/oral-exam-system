@@ -137,6 +137,28 @@ export interface StudentExamResult {
   finalScore: number | null
   lecturerNotes: string | null
   status: string
+  isFollowUp?: boolean
+  followUpIndex?: number
+  followUpPrompt?: string | null
+}
+
+export interface InClassNextFollowUp {
+  hasMoreFollowUp: boolean
+  followUpIndex: number
+  maxFollowUpQuestions: number
+  parentSubmissionId: string
+  questionId: string
+  followUpPrompt: string | null
+}
+
+export interface SubmitStudentInClassAnswerResponse {
+  submissionId: string
+  shiftId: string
+  questionId: string
+  status: string
+  isFollowUp: boolean
+  parentSubmissionId: string | null
+  followUpIndex: number
 }
 
 export interface FinalizeInClassGradesResponse {

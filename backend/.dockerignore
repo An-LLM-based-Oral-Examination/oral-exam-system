@@ -4,3 +4,9 @@
 **/.vscode/
 **/*.user
 **/TestResults/
+tests/
+.git
+.gitignore
+.env
+.env.*
+*.log

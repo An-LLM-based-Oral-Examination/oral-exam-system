@@ -229,7 +229,7 @@ function ClockField({
 
   useLayoutEffect(() => {
     if (!open) {
-      setBox(null)
+
       return
     }
     const place = () => {
@@ -368,7 +368,8 @@ function DateField({
   useEffect(() => {
     if (!open || !value) return
     const date = parseDateKey(value)
-    setCursor(new Date(date.getFullYear(), date.getMonth(), 1))
+    const timer = window.setTimeout(() => setCursor(new Date(date.getFullYear(), date.getMonth(), 1)), 0)
+    return () => window.clearTimeout(timer)
   }, [open, value])
 
   useEffect(() => {
@@ -394,7 +395,7 @@ function DateField({
 
   useLayoutEffect(() => {
     if (!open) {
-      setBox(null)
+
       return
     }
     const place = () => {
@@ -606,7 +607,8 @@ function CreateInClassShiftDialog({
   useEffect(() => {
     if (!open) return
     // Cửa sổ ca mặc định 2 giờ — đủ thời gian cấu hình đề trước khi kích hoạt.
-    const start = new Date()
+    const timer = window.setTimeout(() => {
+      const start = new Date()
     const end = new Date(start.getTime() + 2 * 60 * 60_000)
     setStep(1)
     setClassId(classes[0]?.id ?? '')
@@ -623,7 +625,9 @@ function CreateInClassShiftDialog({
     setSelectedQuestionIds([])
     setQuestionOptions([])
     setFieldErrors({})
-    setBusy(false)
+      setBusy(false)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [open, classes])
 
   const selectedCourseId = classes.find((item) => item.id === classId)?.courseId
@@ -631,11 +635,11 @@ function CreateInClassShiftDialog({
   useEffect(() => {
     if (!open || poolMode !== 'SELECTED_POOL') return
     if (!selectedCourseId) {
-      setQuestionOptions([])
-      return
+      const emptyTimer = window.setTimeout(() => setQuestionOptions([]), 0)
+      return () => window.clearTimeout(emptyTimer)
     }
     let cancelled = false
-    setQuestionsLoading(true)
+    const loadingTimer = window.setTimeout(() => setQuestionsLoading(true), 0)
     void questionService
       .getQuestions({
         courseId: selectedCourseId,
@@ -655,6 +659,7 @@ function CreateInClassShiftDialog({
       })
     return () => {
       cancelled = true
+      window.clearTimeout(loadingTimer)
     }
   }, [open, poolMode, selectedCourseId])
 

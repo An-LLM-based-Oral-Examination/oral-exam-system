@@ -1,267 +1,159 @@
-<mxfile host="app.diagrams.net" version="24.0.0">
-  <diagram name="Class Diagram" id="class-diagram">
-    <mxGraphModel dx="1175" dy="860" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1175" pageHeight="860" math="0" shadow="0">
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="cls_DD01_Auth_Class_Diagram.drawio" name="Class Diagram: Dual Authentication, Refresh Token &amp; RBAC (DD01)">
+    <mxGraphModel dx="1810" dy="975" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1810" pageHeight="975" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <mxCell id="2" value="Implements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1">
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c_ctrl_hdr" value="&lt;&lt;Controller&gt;&gt;&#xa;AuthController" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="640" y="32" width="370" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_ctrl_attr" value="- _sender : ISender" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="640" y="76" width="370" height="29" as="geometry" /></mxCell>
+        <mxCell id="c_ctrl_meth" value="+ GoogleLogin(cmd : GoogleLoginCommand) : Task&lt;IActionResult&gt;&#xa;+ PasswordLogin(cmd : PasswordLoginCommand) : Task&lt;IActionResult&gt;&#xa;+ RefreshToken(cmd : RefreshTokenCommand) : Task&lt;IActionResult&gt;&#xa;+ ChangePassword(cmd : ChangePasswordCommand) : Task&lt;IActionResult&gt;&#xa;+ Logout(cmd : LogoutCommand) : Task&lt;IActionResult&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="640" y="105" width="370" height="107" as="geometry" /></mxCell>
+        <mxCell id="c_mw_hdr" value="&lt;&lt;Service&gt;&gt;&#xa;MustChangePasswordMiddleware" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1200" y="32" width="360" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_mw_attr" value="- _next : RequestDelegate&#xa;- AllowedPaths : HashSet&lt;string&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1200" y="76" width="360" height="48" as="geometry" /></mxCell>
+        <mxCell id="c_mw_meth" value="+ InvokeAsync(context : HttpContext) : Task" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1200" y="124" width="360" height="31" as="geometry" /></mxCell>
+        <mxCell id="c_hdl_hdr" value="&lt;&lt;Handler&gt;&gt;&#xa;AuthCommandHandler" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="625" y="265" width="400" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_hdl_attr" value="- _dbContext : IOralExamDbContext&#xa;- _googleTokenValidator : IGoogleTokenValidator&#xa;- _passwordHasher : IPasswordHasherService&#xa;- _accessTokenIssuer : IAccessTokenIssuer" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="625" y="309" width="400" height="86" as="geometry" /></mxCell>
+        <mxCell id="c_hdl_meth" value="+ Handle(cmd : GoogleLoginCommand, ct) : Task&lt;AuthResult&gt;&#xa;+ Handle(cmd : PasswordLoginCommand, ct) : Task&lt;AuthResult&gt;&#xa;+ Handle(cmd : RefreshTokenCommand, ct) : Task&lt;AuthResult&gt;&#xa;+ Handle(cmd : ChangePasswordCommand, ct) : Task&lt;Unit&gt;&#xa;+ Handle(cmd : LogoutCommand, ct) : Task&lt;Unit&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="625" y="395" width="400" height="107" as="geometry" /></mxCell>
+        <mxCell id="c_iggl_hdr" value="&lt;&lt;Interface&gt;&gt;&#xa;IGoogleTokenValidator" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="565" width="365" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_iggl_attr" value=" " style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="609" width="365" height="24" as="geometry" /></mxCell>
+        <mxCell id="c_iggl_meth" value="+ ValidateAsync(idToken : string, ct) : Task&lt;GoogleUserPayload&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="633" width="365" height="31" as="geometry" /></mxCell>
+        <mxCell id="c_ipwd_hdr" value="&lt;&lt;Interface&gt;&gt;&#xa;IPasswordHasherService" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="565" width="345" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_ipwd_attr" value=" " style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="609" width="345" height="24" as="geometry" /></mxCell>
+        <mxCell id="c_ipwd_meth" value="+ HashPassword(password : string) : string&#xa;+ VerifyPassword(password : string, hash : string) : bool" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="633" width="345" height="50" as="geometry" /></mxCell>
+        <mxCell id="c_ijwt_hdr" value="&lt;&lt;Interface&gt;&gt;&#xa;IAccessTokenIssuer" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="565" width="345" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_ijwt_attr" value=" " style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="609" width="345" height="24" as="geometry" /></mxCell>
+        <mxCell id="c_ijwt_meth" value="+ IssueTokenPair(user : User, role : string) : TokenPairResult&#xa;+ HashRefreshToken(rawToken : string) : string" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="633" width="345" height="50" as="geometry" /></mxCell>
+        <mxCell id="c_db_hdr" value="&lt;&lt;Persistence&gt;&gt;&#xa;OralExamDbContext" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1205" y="555" width="430" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_db_attr" value="+ Users : DbSet&lt;User&gt;&#xa;+ Roles : DbSet&lt;Role&gt;&#xa;+ UserRoles : DbSet&lt;UserRole&gt;&#xa;+ RefreshTokens : DbSet&lt;RefreshToken&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1205" y="599" width="430" height="86" as="geometry" /></mxCell>
+        <mxCell id="c_db_meth" value="+ SaveChangesAsync(ct : CancellationToken) : Task&lt;int&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1205" y="685" width="430" height="31" as="geometry" /></mxCell>
+        <mxCell id="c_cggl_hdr" value="&lt;&lt;Service&gt;&gt;&#xa;GoogleAuthTokenValidator" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="780" width="365" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_cggl_attr" value="- _clientId : string&#xa;- _allowedDomains : string[]" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="824" width="365" height="48" as="geometry" /></mxCell>
+        <mxCell id="c_cggl_meth" value="+ ValidateAsync(idToken : string, ct) : Task&lt;GoogleUserPayload&gt;" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="35" y="872" width="365" height="31" as="geometry" /></mxCell>
+        <mxCell id="c_cpwd_hdr" value="&lt;&lt;Service&gt;&gt;&#xa;BCryptPasswordHasherService" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="780" width="345" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_cpwd_attr" value="- WorkFactor : int = 12" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="824" width="345" height="29" as="geometry" /></mxCell>
+        <mxCell id="c_cpwd_meth" value="+ HashPassword(password : string) : string&#xa;+ VerifyPassword(password : string, hash : string) : bool" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="425" y="853" width="345" height="50" as="geometry" /></mxCell>
+        <mxCell id="c_cjwt_hdr" value="&lt;&lt;Service&gt;&gt;&#xa;JwtAccessTokenIssuer" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="780" width="345" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_cjwt_attr" value="- _jwtOptions : JwtSettings" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="824" width="345" height="29" as="geometry" /></mxCell>
+        <mxCell id="c_cjwt_meth" value="+ IssueTokenPair(user : User, role : string) : TokenPairResult&#xa;+ HashRefreshToken(rawToken : string) : string" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="795" y="853" width="345" height="50" as="geometry" /></mxCell>
+        <mxCell id="c_e_role_hdr" value="&lt;&lt;Entity&gt;&gt;&#xa;Role" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1165" y="780" width="150" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_e_role_attr" value="+ Id : Guid&#xa;+ Name : string&#xa;+ Description : string?" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1165" y="824" width="150" height="67" as="geometry" /></mxCell>
+        <mxCell id="c_e_role_meth" value=" " style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1165" y="891" width="150" height="26" as="geometry" /></mxCell>
+        <mxCell id="c_e_user_hdr" value="&lt;&lt;Entity&gt;&gt;&#xa;User" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1365" y="780" width="185" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_e_user_attr" value="+ Id : Guid&#xa;+ Email : string&#xa;+ PasswordHash : string?&#xa;+ MustChangePassword : bool&#xa;+ IsActive : bool" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1365" y="824" width="185" height="105" as="geometry" /></mxCell>
+        <mxCell id="c_e_user_meth" value=" " style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1365" y="929" width="185" height="26" as="geometry" /></mxCell>
+        <mxCell id="c_e_rt_hdr" value="&lt;&lt;Entity&gt;&gt;&#xa;RefreshToken" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#F1F5F9;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;align=center;verticalAlign=middle;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1595" y="780" width="185" height="44" as="geometry" /></mxCell>
+        <mxCell id="c_e_rt_attr" value="+ Id : Guid&#xa;+ UserId : Guid&#xa;+ TokenHash : string&#xa;+ ExpiresAt : DateTimeOffset&#xa;+ RevokedAt : DateTimeOffset?" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1595" y="824" width="185" height="105" as="geometry" /></mxCell>
+        <mxCell id="c_e_rt_meth" value="+ IsActive() : bool" style="rounded=0;whiteSpace=wrap;html=0;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.2;fontSize=10;align=left;verticalAlign=top;spacingLeft=6;spacingTop=4;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1595" y="929" width="185" height="31" as="geometry" /></mxCell>
+        <mxCell id="edge_10" value="Enforces password change" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.0;exitY=0.2917;exitDx=0;exitDy=0;entryX=1.0;entryY=0.4828;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_mw_attr" target="c_ctrl_attr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="415" y="80" as="sourcePoint"/>
-            <mxPoint x="340" y="80" as="targetPoint"/>
-            
+            <mxPoint x="1200" y="90" as="sourcePoint" />
+            <mxPoint x="1010" y="90" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="3" value="Implements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_11" value="Dispatches" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_ctrl_meth" target="c_hdl_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="415" y="220" as="sourcePoint"/>
-            <mxPoint x="340" y="220" as="targetPoint"/>
-            
+            <mxPoint x="825" y="212" as="sourcePoint" />
+            <mxPoint x="825" y="265" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="4" value="Implements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_12" value="Uses" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.15;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_hdl_meth" target="c_iggl_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="415" y="365" as="sourcePoint"/>
-            <mxPoint x="340" y="365" as="targetPoint"/>
-            
+            <mxPoint x="685" y="502" as="sourcePoint" />
+            <mxPoint x="218" y="565" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="685" y="524" />
+              <mxPoint x="218" y="524" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="5" value="Implements" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=block;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_13" value="Uses" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.38;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_hdl_meth" target="c_ipwd_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="505" as="sourcePoint"/>
-            <mxPoint x="725" y="505" as="targetPoint"/>
-            
+            <mxPoint x="777" y="502" as="sourcePoint" />
+            <mxPoint x="598" y="565" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="777" y="542" />
+              <mxPoint x="598" y="542" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="6" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_14" value="Uses" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.62;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_hdl_meth" target="c_ijwt_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="972" y="166" as="sourcePoint"/>
-            <mxPoint x="972" y="210" as="targetPoint"/>
-            
+            <mxPoint x="873" y="502" as="sourcePoint" />
+            <mxPoint x="968" y="565" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="873" y="542" />
+              <mxPoint x="968" y="542" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="7" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_15" value="Uses" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.85;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_hdl_meth" target="c_db_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="240" as="sourcePoint"/>
-            <mxPoint x="185" y="40" as="targetPoint"/>
-            <Array as="points"><mxPoint x="760" y="240"/><mxPoint x="760" y="20"/><mxPoint x="185" y="20"/></Array>
+            <mxPoint x="965" y="502" as="sourcePoint" />
+            <mxPoint x="1420" y="555" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="965" y="524" />
+              <mxPoint x="1420" y="524" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="8" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_16" value="Implements" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=block;endFill=0;endSize=10;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.5014;exitY=0.0;exitDx=0;exitDy=0;entryX=0.5014;entryY=1.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_cggl_hdr" target="c_iggl_meth">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="275" as="sourcePoint"/>
-            <mxPoint x="185" y="175" as="targetPoint"/>
-            <Array as="points"><mxPoint x="745" y="275"/><mxPoint x="745" y="150"/><mxPoint x="185" y="150"/></Array>
+            <mxPoint x="218" y="780" as="sourcePoint" />
+            <mxPoint x="218" y="664" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="9" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_17" value="Implements" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=block;endFill=0;endSize=10;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.5014;exitY=0.0;exitDx=0;exitDy=0;entryX=0.5014;entryY=1.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_cpwd_hdr" target="c_ipwd_meth">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="310" as="sourcePoint"/>
-            <mxPoint x="185" y="325" as="targetPoint"/>
-            <Array as="points"><mxPoint x="745" y="310"/><mxPoint x="745" y="300"/><mxPoint x="185" y="300"/></Array>
+            <mxPoint x="598" y="780" as="sourcePoint" />
+            <mxPoint x="598" y="683" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="10" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_18" value="Implements" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=block;endFill=0;endSize=10;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.5014;exitY=0.0;exitDx=0;exitDy=0;entryX=0.5014;entryY=1.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_cjwt_hdr" target="c_ijwt_meth">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="805" y="330" as="sourcePoint"/>
-            <mxPoint x="570" y="465" as="targetPoint"/>
-            <Array as="points"><mxPoint x="570" y="330"/></Array>
+            <mxPoint x="968" y="780" as="sourcePoint" />
+            <mxPoint x="968" y="683" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="11" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_19" value="Queries" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.15;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_db_meth" target="c_e_role_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="415" y="505" as="sourcePoint"/>
-            <mxPoint x="192" y="545" as="targetPoint"/>
-            <Array as="points"><mxPoint x="192" y="505"/></Array>
+            <mxPoint x="1270" y="716" as="sourcePoint" />
+            <mxPoint x="1240" y="780" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1270" y="742" />
+              <mxPoint x="1240" y="742" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="12" value="Uses" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1">
+        <mxCell id="edge_20" value="Manages" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_db_meth" target="c_e_user_hdr">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="570" y="547" as="sourcePoint"/>
-            <mxPoint x="570" y="600" as="targetPoint"/>
-            
+            <mxPoint x="1420" y="716" as="sourcePoint" />
+            <mxPoint x="1458" y="780" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1420" y="742" />
+              <mxPoint x="1458" y="742" />
+            </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="13" value="&lt;&lt;Interface&gt;&gt;
-IGoogleIdTokenValidator" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="30" y="40" width="310" height="80" as="geometry"/>
+        <mxCell id="edge_21" value="Manages" style="edgeStyle=none;html=1;dashed=1;dashPattern=6 4;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontStyle=2;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.85;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_db_meth" target="c_e_rt_hdr">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1570" y="716" as="sourcePoint" />
+            <mxPoint x="1688" y="780" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1570" y="742" />
+              <mxPoint x="1688" y="742" />
+            </Array>
+          </mxGeometry>
         </mxCell>
-        <mxCell id="14" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="13">
-          <mxGeometry y="38" width="310" height="18" as="geometry"/>
+        <mxCell id="edge_22" value="*..*" style="edgeStyle=none;html=1;dashed=0;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=0.0;exitY=0.3238;exitDx=0;exitDy=0;entryX=1.0;entryY=0.5075;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_e_user_attr" target="c_e_role_attr">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1365" y="858" as="sourcePoint" />
+            <mxPoint x="1315" y="858" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
-        <mxCell id="15" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="13">
-          <mxGeometry y="56" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="16" value="+ValidateAsync(idToken: string): GoogleUserIdentity" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="13">
-          <mxGeometry y="64" width="310" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="17" value="GoogleIdTokenValidator" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="415" y="40" width="310" height="68" as="geometry"/>
-        </mxCell>
-        <mxCell id="18" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="17">
-          <mxGeometry y="26" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="19" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="17">
-          <mxGeometry y="44" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="20" value="+ValidateAsync(idToken: string): GoogleUserIdentity" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="17">
-          <mxGeometry y="52" width="310" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="21" value="AuthController" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="805" y="40" width="335" height="132" as="geometry"/>
-        </mxCell>
-        <mxCell id="22" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="21">
-          <mxGeometry y="26" width="335" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="23" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="21">
-          <mxGeometry y="44" width="335" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="24" value="+GoogleLogin(req: GoogleLoginRequest)
-+PasswordLogin(req: PasswordLoginRequest)
-+ChangePassword(req: ChangePasswordRequest)
-+RefreshToken(req: RefreshTokenRequest)
-+SignOut(req: SignOutRequest)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="21">
-          <mxGeometry y="52" width="335" height="88" as="geometry"/>
-        </mxCell>
-        <mxCell id="25" value="&lt;&lt;Interface&gt;&gt;
-IPasswordHasher" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="30" y="175" width="310" height="96" as="geometry"/>
-        </mxCell>
-        <mxCell id="26" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="25">
-          <mxGeometry y="38" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="27" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="25">
-          <mxGeometry y="56" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="28" value="+Hash(password: string): string
-+Verify(password: string, hash: string): bool" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="25">
-          <mxGeometry y="64" width="310" height="40" as="geometry"/>
-        </mxCell>
-        <mxCell id="29" value="Pbkdf2PasswordHasher" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="415" y="175" width="310" height="84" as="geometry"/>
-        </mxCell>
-        <mxCell id="30" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="29">
-          <mxGeometry y="26" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="31" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="29">
-          <mxGeometry y="44" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="32" value="+Hash(password: string): string
-+Verify(password: string, hash: string): bool" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="29">
-          <mxGeometry y="52" width="310" height="40" as="geometry"/>
-        </mxCell>
-        <mxCell id="33" value="AuthCommandHandler" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="805" y="210" width="335" height="132" as="geometry"/>
-        </mxCell>
-        <mxCell id="34" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="33">
-          <mxGeometry y="26" width="335" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="35" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="33">
-          <mxGeometry y="44" width="335" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="36" value="+Handle(cmd: GoogleLoginCommand): GoogleLoginResponse
-+Handle(cmd: PasswordLoginCommand): PasswordLoginResponse
-+Handle(cmd: ChangePasswordCommand): ChangePasswordResponse
-+Handle(cmd: RefreshTokenCommand): RefreshTokenResponse
-+Handle(cmd: SignOutCommand): bool" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="33">
-          <mxGeometry y="52" width="335" height="88" as="geometry"/>
-        </mxCell>
-        <mxCell id="37" value="&lt;&lt;Interface&gt;&gt;
-IAccessTokenIssuer" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="30" y="325" width="310" height="80" as="geometry"/>
-        </mxCell>
-        <mxCell id="38" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="37">
-          <mxGeometry y="38" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="39" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="37">
-          <mxGeometry y="56" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="40" value="+Issue(userId: Guid, email: string, role: string): IssuedAccessToken" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="37">
-          <mxGeometry y="64" width="310" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="41" value="JwtAccessTokenIssuer" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="415" y="325" width="310" height="68" as="geometry"/>
-        </mxCell>
-        <mxCell id="42" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="41">
-          <mxGeometry y="26" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="43" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="41">
-          <mxGeometry y="44" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="44" value="+Issue(userId: Guid, email: string, role: string): IssuedAccessToken" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="41">
-          <mxGeometry y="52" width="310" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="45" value="&lt;&lt;Interface&gt;&gt;
-IApplicationDbContext" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="415" y="465" width="310" height="80" as="geometry"/>
-        </mxCell>
-        <mxCell id="46" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="45">
-          <mxGeometry y="38" width="310" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="47" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="45">
-          <mxGeometry y="56" width="310" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="48" value="+SaveChangesAsync(): int" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="45">
-          <mxGeometry y="64" width="310" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="49" value="OralExamDbContext" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="805" y="465" width="335" height="68" as="geometry"/>
-        </mxCell>
-        <mxCell id="50" value="" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="49">
-          <mxGeometry y="26" width="335" height="18" as="geometry"/>
-        </mxCell>
-        <mxCell id="51" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="49">
-          <mxGeometry y="44" width="335" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="52" value="+SaveChangesAsync(): int" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="49">
-          <mxGeometry y="52" width="335" height="24" as="geometry"/>
-        </mxCell>
-        <mxCell id="53" value="&lt;&lt;Entity&gt;&gt;
-User" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="75" y="545" width="235" height="262" as="geometry"/>
-        </mxCell>
-        <mxCell id="54" value="-id: Guid
--email: string
--fullName: string
--studentCode: string?
--username: string?
--role: string
--passwordHash: string?
--mustChangePassword: bool
--isActive: bool
--createdAt: DateTime
--updatedAt: DateTime" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="53">
-          <mxGeometry y="38" width="235" height="184" as="geometry"/>
-        </mxCell>
-        <mxCell id="55" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="53">
-          <mxGeometry y="222" width="235" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="56" value="+ getter()
-+ setter()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="53">
-          <mxGeometry y="230" width="235" height="40" as="geometry"/>
-        </mxCell>
-        <mxCell id="57" value="&lt;&lt;Entity&gt;&gt;
-RefreshToken" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=38;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#7EB6FF;strokeColor=#1E293B;fontColor=#0F172A;" vertex="1" parent="1">
-          <mxGeometry x="450" y="600" width="240" height="246" as="geometry"/>
-        </mxCell>
-        <mxCell id="58" value="-id: Guid
--userId: Guid
--tokenHash: string
--expiresAt: DateTime
--revokedAt: DateTime?
--replacedByTokenHash: string?
--createdAt: DateTime
--isExpired: bool
--isRevoked: bool
--isActive: bool" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="57">
-          <mxGeometry y="38" width="240" height="168" as="geometry"/>
-        </mxCell>
-        <mxCell id="59" value="" style="line;strokeWidth=1;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#1E293B;" vertex="1" parent="57">
-          <mxGeometry y="206" width="240" height="8" as="geometry"/>
-        </mxCell>
-        <mxCell id="60" value="+ getter()
-+ setter()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontColor=#0F172A;fontSize=10;" vertex="1" parent="57">
-          <mxGeometry y="214" width="240" height="40" as="geometry"/>
+        <mxCell id="edge_23" value="1..*" style="edgeStyle=none;html=1;dashed=0;endArrow=open;endFill=0;endSize=9;strokeWidth=1.5;strokeColor=#000000;fontColor=#000000;fontSize=10;fontFamily=Segoe UI;labelBackgroundColor=#FFFFFF;rounded=0;curved=0;exitX=1.0;exitY=0.4952;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4952;entryDx=0;entryDy=0;" edge="1" parent="1" source="c_e_user_attr" target="c_e_rt_attr">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1550" y="876" as="sourcePoint" />
+            <mxPoint x="1595" y="876" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>

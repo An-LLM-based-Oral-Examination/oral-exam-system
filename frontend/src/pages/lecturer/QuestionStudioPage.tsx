@@ -257,8 +257,12 @@ export function QuestionStudioPage() {
   useEffect(() => {
     const state = location.state as { openCreate?: boolean } | null
     if (state?.openCreate) {
-      setIsCreateOpen(true)
-      navigate(location.pathname, { replace: true, state: {} })
+      const timer = window.setTimeout(() => {
+        setIsCreateOpen(true)
+        navigate(location.pathname, { replace: true, state: {} })
+      }, 0)
+      return () => window.clearTimeout(timer)
+
     }
   }, [location.pathname, location.state, navigate])
 
@@ -372,8 +376,8 @@ export function QuestionStudioPage() {
 
   useEffect(() => {
     if (workspace !== 'mine' || !user?.id || !isUuid(user.id)) {
-      setStatusCounts({})
-      return
+      const timer = window.setTimeout(() => setStatusCounts({}), 0)
+      return () => window.clearTimeout(timer)
     }
 
     let isActive = true
@@ -595,6 +599,7 @@ export function QuestionStudioPage() {
       unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
 
   const submitForReview = async () => {

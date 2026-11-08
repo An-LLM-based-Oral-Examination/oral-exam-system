@@ -59,11 +59,6 @@ public class OfficialExamsController : ControllerBase
             return id;
         }
 
-        if (User?.Identity?.IsAuthenticated != true && Request?.Headers != null && Request.Headers.TryGetValue("X-User-Id", out var headerVal) && Guid.TryParse(headerVal, out var headerId))
-        {
-            return headerId;
-        }
-
         return Guid.Empty;
     }
 
@@ -311,8 +306,6 @@ public class OfficialExamsController : ControllerBase
         return Ok(result.Value);
     }
 
-    /// <summary>
-    /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã niêm phong SHA-256 (BE-V01).
     /// <summary>
     /// Xuất biên bản bảng điểm khảo thí ca thi ra tệp Excel (.xlsx) kèm mã niêm phong SHA-256 (BE-V01).
     /// </summary>

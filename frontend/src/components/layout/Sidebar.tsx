@@ -43,6 +43,7 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     path: '/dashboard',
     icon: LayoutDashboard,
     end: true,
+    roles: ['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin'],
   },
   {
     label: 'Lớp của tôi',
@@ -55,6 +56,7 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     path: '/question-bank',
     icon: BookOpenCheck,
     end: true,
+    roles: ['Instructor', 'DepartmentHead', 'Admin'],
   },
   {
     label: 'Ca kiểm tra',
@@ -66,31 +68,31 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     label: 'Hậu kiểm điểm',
     path: '/lecturer/audit',
     icon: ClipboardCheck,
-    roles: ['Instructor', 'DepartmentHead'],
+    roles: ['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin'],
   },
   {
     label: 'Kỳ thi chính thức',
     path: '/official-exams/manage',
     icon: TicketCheck,
-    roles: ['DepartmentHead', 'Admin'],
+    roles: ['ExaminationOfficer', 'DepartmentHead', 'Admin'],
   },
   {
     label: 'Phúc khảo',
     path: '/appeals',
     icon: UserRoundCheck,
-    roles: ['Instructor', 'DepartmentHead', 'Admin'],
+    roles: ['ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin'],
   },
   {
     label: 'Điểm danh',
     path: '/proctor/attendance',
     icon: ShieldCheck,
-    roles: ['Proctor', 'Instructor', 'DepartmentHead', 'Admin'],
+    roles: ['Proctor', 'ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin'],
   },
   {
     label: 'Lỗi chấm AI',
     path: '/dlq',
     icon: ServerCog,
-    roles: ['DepartmentHead', 'Admin'],
+    roles: ['ExaminationOfficer', 'Admin', 'DepartmentHead', 'Instructor'],
   },
 ]
 
@@ -171,10 +173,10 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
               collapsed && 'md:hidden',
             )}
           >
-            Nghiệp vụ giảng viên
+            Nghiệp vụ học thuật
           </p>
 
-          <nav className="space-y-1.5" aria-label="Các phân hệ giảng viên">
+          <nav className="space-y-1.5" aria-label="Các phân hệ học thuật">
             {visibleNavigation.map(({ label, path, icon: Icon, end }) => (
               <NavLink
                 key={path}

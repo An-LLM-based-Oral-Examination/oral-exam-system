@@ -1,86 +1,69 @@
 # ==============================================================================
-# Production Docker Compose — LLM Oral Exam System (FA26SE166)
-# ==============================================================================
-# Services:
-#   1. postgres: PostgreSQL 16 Alpine (schema from EF Core migrations, isolated on internal network)
-#   2. backend:  ASP.NET Core 8 Web API (Port 5000, non-root user, healthcheck)
-#   3. frontend: React 19 SPA + Nginx 1.27 Reverse Proxy (Port 80)
+# Oral Exam System — Production Override cho VPS (https://oralexam.io.vn — 103.90.226.9)
+# Cấu hình tối ưu tài nguyên cho VPS 6GB RAM + 4GB Swap (Phục vụ 120 SV đồng thời / 3 lớp)
+# Cách chạy trên VPS (/opt/oralexam):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 # ==============================================================================
 
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: oralexam-postgres-prod
-    restart: unless-stopped
-    command: ["postgres", "-c", "max_connections=300"]
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-oralexam}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in environment}
-      POSTGRES_DB: ${POSTGRES_DB:-oralexam}
-      TZ: Asia/Ho_Chi_Minh
-    volumes:
-      - postgres_prod_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - oralexam-network
+    command: >
+      postgres
+      -c max_connections=220
+      -c shared_buffers=384MB
+      -c effective_cache_size=1024MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c min_wal_size=256MB
+      -c max_wal_size=1GB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+    mem_limit: 1536M
+    mem_reservation: 512M
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
 
-  backend:
-    image: ghcr.io/${GITHUB_REPOSITORY:-an-llm-based-oral-examination/oral-exam-system}/backend:latest
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: oralexam-backend-prod
-    restart: unless-stopped
+  web-api:
     environment:
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=${POSTGRES_DB:-oralexam};Username=${POSTGRES_USER:-oralexam};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_HTTP_PORTS=5000
-      - DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
-      - Gemini__ApiKey=${GEMINI_API_KEY:-}
-      - Cloudflare__AccountId=${CLOUDFLARE_ACCOUNT_ID:-}
-      - Cloudflare__ApiToken=${CLOUDFLARE_API_TOKEN:-}
-      - Storage__AccessKey=${STORAGE_ACCESS_KEY:-}
-      - Storage__SecretKey=${STORAGE_SECRET_KEY:-}
-      - Storage__ServiceUrl=${STORAGE_SERVICE_URL:-}
-      - Storage__BucketName=${STORAGE_BUCKET_NAME:-oral-exam-bucket}
-      - Storage__PublicUrlPrefix=${STORAGE_PUBLIC_URL_PREFIX:-}
-      - Authentication__GoogleClientId=${GOOGLE_OAUTH_CLIENT_ID:?Set GOOGLE_OAUTH_CLIENT_ID in environment}
-      - Authentication__JwtSigningKey=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in environment}
-      - Authentication__JwtIssuer=${JWT_ISSUER:-oral-exam-system}
-      - Authentication__JwtAudience=${JWT_AUDIENCE:-oral-exam-system}
-      - Authentication__AccessTokenMinutes=${ACCESS_TOKEN_MINUTES:-15}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - oralexam-network
+      DOTNET_gcServer: "1"
+      DOTNET_GCHeapHardLimitPercent: "75"
+      DOTNET_GCConserveMemory: "5"
+      DOTNET_TieredPGO: "1"
+    mem_limit: 2560M
+    mem_reservation: 1024M
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: 2560M
+        reservations:
+          cpus: "1.0"
+          memory: 1024M
 
   frontend:
-    image: ghcr.io/${GITHUB_REPOSITORY:-an-llm-based-oral-examination/oral-exam-system}/frontend:latest
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_SIGNALR_HUB_URL: /hubs/practice
-        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-    container_name: oralexam-frontend-prod
-    restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-80}:80"
-    depends_on:
-      - backend
-    networks:
-      - oralexam-network
-
-networks:
-  oralexam-network:
-    driver: bridge
-
-volumes:
-  postgres_prod_data:
-    name: postgres_prod_data
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    mem_limit: 256M
+    mem_reservation: 64M
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M

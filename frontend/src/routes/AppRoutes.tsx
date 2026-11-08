@@ -79,7 +79,7 @@ function InstructorPageFallback() {
     <div className="flex min-h-[55vh] flex-col items-center justify-center" role="status">
       <span className="size-9 animate-spin rounded-full border-[3px] border-[#82aedb]/55 border-t-[#82aedb]/55 motion-reduce:animate-none" />
       <span className="mt-3 text-sm font-semibold text-[#64758c]">
-        Đang mở không gian giảng viên...
+        Đang mở không gian làm việc...
       </span>
     </div>
   )
@@ -118,9 +118,13 @@ export const AppRoutes: React.FC = () => {
           </Route>
         </Route>
 
-        {/* Instructor, Department Head and Admin portal. Proctor has no standalone portal. */}
+        {/* Instructor, Department Head, Examination Officer and Admin portal */}
         <Route
-          element={<ProtectedRoute allowedRoles={['Instructor', 'DepartmentHead', 'Admin']} />}
+          element={
+            <ProtectedRoute
+              allowedRoles={['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin']}
+            />
+          }
         >
           <Route element={<AppLayout />}>
             <Route
@@ -148,8 +152,14 @@ export const AppRoutes: React.FC = () => {
           />
         </Route>
 
-        {/* Proctor portal: attendance, seat monitor and Kiosk suspension. */}
-        <Route element={<ProtectedRoute allowedRoles={['Proctor', 'Instructor', 'DepartmentHead', 'Admin']} />}>
+        {/* Proctor portal: attendance, seat monitor and anti-cheat violation logging */}
+        <Route
+          element={
+            <ProtectedRoute
+              allowedRoles={['Proctor', 'ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin']}
+            />
+          }
+        >
           <Route element={<AppLayout />}>
             <Route
               element={
@@ -163,7 +173,14 @@ export const AppRoutes: React.FC = () => {
           </Route>
         </Route>
 
-        <Route element={<ProtectedRoute allowedRoles={['DepartmentHead', 'Admin']} />}>
+        {/* Dead Letter Queue portal: Examination Officer (MF-04) & Admin (MF-01/02) */}
+        <Route
+          element={
+            <ProtectedRoute
+              allowedRoles={['ExaminationOfficer', 'DepartmentHead', 'Instructor', 'Admin']}
+            />
+          }
+        >
           <Route element={<AppLayout />}>
             <Route
               element={
