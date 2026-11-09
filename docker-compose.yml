@@ -45,7 +45,9 @@ services:
       DATABASE_ENABLE_DEVELOPMENT_SEED: ${DATABASE_ENABLE_DEVELOPMENT_SEED:-true}
       GradingQueue__MaxDegreeOfParallelism: ${GRADING_MAX_PARALLELISM:-12}
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;Timeout=30"
-      Jwt__SecretKey: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      Jwt__SecretKey: ${JWT_SECRET_KEY:-${JWT_SIGNING_KEY:-oralexam_prod_super_secret_signing_key_2026_min_32_chars!}}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-${JWT_SECRET_KEY:-oralexam_prod_super_secret_signing_key_2026_min_32_chars!}}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-${VITE_GOOGLE_CLIENT_ID:-}}
       Jwt__Issuer: ${JWT_ISSUER:-OralExaminationAPI}
       Jwt__Audience: ${JWT_AUDIENCE:-OralExaminationClients}
       Gemini__ApiKey: ${Gemini__ApiKey:-}

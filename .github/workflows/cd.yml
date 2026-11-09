@@ -71,11 +71,24 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Check SSH Deployment Credentials
+        id: check_ssh
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          if [ -n "$SSH_KEY" ]; then
+            echo "has_ssh_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_ssh_key=false" >> "$GITHUB_OUTPUT"
+            echo "Notice: SERVER_SSH_KEY secret is not configured in GitHub repository settings; images are built and pushed to GHCR."
+          fi
+
       - name: Deploy to Remote Server via SSH
+        if: steps.check_ssh.outputs.has_ssh_key == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          host: ${{ secrets.SERVER_HOST || '103.90.226.9' }}
+          username: ${{ secrets.SERVER_USER || 'root' }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
