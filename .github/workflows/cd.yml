@@ -23,13 +23,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Đảm bảo đường dẫn build context tương thích dù chạy từ repository root hay submodule
-      - name: Ensure Directory Structure Compatibility
+      # Chuẩn hóa tên repository chữ thường cho GHCR và xác định đường dẫn context thật (không dùng symlink)
+      - name: Resolve Lowercase Repository & Build Contexts
         run: |
-          if [ ! -d "./05_Source_Code" ]; then
-            mkdir -p ./05_Source_Code
-            ln -s ../backend ./05_Source_Code/backend
-            ln -s ../frontend ./05_Source_Code/frontend
+          echo "REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          if [ -d "./backend" ]; then
+            echo "BACKEND_CONTEXT=./backend" >> $GITHUB_ENV
+            echo "FRONTEND_CONTEXT=./frontend" >> $GITHUB_ENV
+          else
+            echo "BACKEND_CONTEXT=./05_Source_Code/backend" >> $GITHUB_ENV
+            echo "FRONTEND_CONTEXT=./05_Source_Code/frontend" >> $GITHUB_ENV
           fi
 
       - name: Set up Docker Buildx
@@ -45,20 +48,20 @@ jobs:
       - name: Build and Push Backend Docker Image
         uses: docker/build-push-action@v6
         with:
-          context: ./05_Source_Code/backend
+          context: ${{ env.BACKEND_CONTEXT }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/backend:latest
-            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LOWER }}/backend:latest
+            ghcr.io/${{ env.REPO_LOWER }}/backend:${{ github.sha }}
 
       - name: Build and Push Frontend Docker Image
         uses: docker/build-push-action@v6
         with:
-          context: ./05_Source_Code/frontend
+          context: ${{ env.FRONTEND_CONTEXT }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/frontend:latest
-            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LOWER }}/frontend:latest
+            ghcr.io/${{ env.REPO_LOWER }}/frontend:${{ github.sha }}
 
   # =========================================================================
   # Job 2: Remote Deployment via SSH to VPS
@@ -76,12 +79,29 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
+            set -e
+            mkdir -p /opt/oralexam
             cd /opt/oralexam
-            if [ -d ".git" ]; then
-              echo "=== 0. Updating Repository on VPS (/opt/oralexam) ==="
-              git fetch origin
-              git checkout "${{ github.ref_name }}" || true
-              git pull --ff-only origin "${{ github.ref_name }}" || git reset --hard "origin/${{ github.ref_name }}"
+
+            echo "=== 0. Backing up .env and Synchronizing Repository on VPS (/opt/oralexam) ==="
+            if [ -f ".env" ]; then
+              cp .env /tmp/oralexam.env.bak
+            fi
+
+            if [ ! -d ".git" ]; then
+              git init
+              git remote add origin "https://github.com/${{ github.repository }}.git" || git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            else
+              git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            fi
+
+            git fetch origin "${{ github.ref_name }}"
+            git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
+            git reset --hard "origin/${{ github.ref_name }}"
+
+            if [ -f "/tmp/oralexam.env.bak" ]; then
+              cp /tmp/oralexam.env.bak .env
+              rm -f /tmp/oralexam.env.bak
             fi
 
             if [ -f "docker-compose.yml" ] && [ -f "docker-compose.prod.yml" ]; then
@@ -95,9 +115,21 @@ jobs:
             echo "=== 1. Logging into GitHub Container Registry ==="
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
 
-            echo "=== 2. Pulling Base Images & Rebuilding Production Containers ==="
-            docker compose $COMPOSE_ARGS pull --ignore-buildable || true
-            docker compose $COMPOSE_ARGS up -d --build --remove-orphans
+            echo "=== 2. Pulling Pre-built Images or Building Production Containers ==="
+            if docker compose $COMPOSE_ARGS pull web-api frontend; then
+              docker compose $COMPOSE_ARGS up -d --no-build --remove-orphans
+            else
+              docker compose $COMPOSE_ARGS up -d --build --remove-orphans
+            fi
+
+            echo "=== 3. Waiting for API Healthcheck ==="
+            for i in $(seq 1 15); do
+              if wget -q -O - http://127.0.0.1:5000/health >/dev/null 2>&1; then
+                echo "Backend API is healthy!"
+                break
+              fi
+              sleep 2
+            done
 
             echo "=== 4. Pruning Dangling Docker Images ==="
             docker image prune -f
