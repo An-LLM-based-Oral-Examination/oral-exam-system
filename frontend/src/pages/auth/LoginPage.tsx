@@ -76,6 +76,36 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const googleButtonRef = useRef<HTMLDivElement>(null)
   const [googleConfigured, setGoogleConfigured] = useState(Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID))
+  const [googleOriginError, setGoogleOriginError] = useState(false)
+
+  // Intercept GSI_LOGGER warnings/errors to handle origin mismatch gracefully
+  useEffect(() => {
+    const originalError = console.error
+    const originalWarn = console.warn
+
+    const filterGsiLogger = (originalFn: typeof console.error, ...args: unknown[]) => {
+      const text = args
+        .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+        .join(' ')
+      if (
+        text.includes('[GSI_LOGGER]') &&
+        (text.includes('origin is not allowed') || text.includes('The given origin is not allowed'))
+      ) {
+        setGoogleOriginError(true)
+        originalWarn('[GSI Resilience] Đã bắt cảnh báo Google Sign-In origin mismatch:', window.location.origin)
+        return
+      }
+      originalFn(...args)
+    }
+
+    console.error = (...args) => filterGsiLogger(originalError, ...args)
+    console.warn = (...args) => filterGsiLogger(originalWarn, ...args)
+
+    return () => {
+      console.error = originalError
+      console.warn = originalWarn
+    }
+  }, [])
 
   const handlePasswordLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -102,32 +132,52 @@ export function LoginPage() {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
     if (!clientId || !googleButtonRef.current) return
 
+    let isMounted = true
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+
     const renderGoogleButton = () => {
       if (!window.google || !googleButtonRef.current) return
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: ({ credential }) => {
-          setIsLoading(true)
-          void loginWithGoogle(credential)
-            .then(() => navigate('/'))
-            .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
-            .finally(() => setIsLoading(false))
-        },
-      })
-      googleButtonRef.current.replaceChildren()
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: 'outline',
-        size: 'large',
-        width: '360',
-        text: 'signin_with',
-        shape: 'rectangular',
-      })
-      setGoogleConfigured(true)
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: ({ credential }) => {
+            setIsLoading(true)
+            void loginWithGoogle(credential)
+              .then(() => navigate('/'))
+              .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
+              .finally(() => setIsLoading(false))
+          },
+        })
+        googleButtonRef.current.replaceChildren()
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: '360',
+          text: 'signin_with',
+          shape: 'rectangular',
+        })
+        setGoogleConfigured(true)
+
+        // Sau 800ms kiểm tra nếu button không render được iframe do origin mismatch hoặc lỗi script
+        timeoutId = setTimeout(() => {
+          if (isMounted && googleButtonRef.current && googleButtonRef.current.childElementCount === 0) {
+            setGoogleOriginError(true)
+          }
+        }, 800)
+      } catch (renderError) {
+        console.warn('[GSI Resilience] Lỗi khởi tạo Google Identity Services:', renderError)
+        if (isMounted) {
+          setGoogleOriginError(true)
+        }
+      }
     }
 
     if (window.google) {
       renderGoogleButton()
-      return
+      return () => {
+        isMounted = false
+        if (timeoutId) clearTimeout(timeoutId)
+      }
     }
 
     const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-identity]')
@@ -140,7 +190,11 @@ export function LoginPage() {
       document.head.appendChild(script)
     }
     script.addEventListener('load', renderGoogleButton)
-    return () => script.removeEventListener('load', renderGoogleButton)
+    return () => {
+      isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
+      script.removeEventListener('load', renderGoogleButton)
+    }
   }, [loginWithGoogle, navigate])
 
   return (
@@ -364,13 +418,39 @@ export function LoginPage() {
                     <ShieldCheck className="size-3.5" />
                   </span>
                 </div>
-                <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
+
+                {googleOriginError ? (
+                  <div
+                    role="alert"
+                    className="mt-2 rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-900 shadow-sm"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800 font-bold text-[10px]">
+                        !
+                      </span>
+                      <div className="space-y-1">
+                        <p className="font-semibold text-amber-950">
+                          Google Sign-In tạm thời chưa được cấp quyền trên tên miền này
+                        </p>
+                        <p className="leading-relaxed text-amber-800">
+                          Tên miền <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[11px] text-amber-900">{typeof window !== 'undefined' ? window.location.origin : 'https://oralexam.io.vn'}</code> đang chờ cấu hình Authorized Origins trên Google Cloud Console.
+                        </p>
+                        <p className="leading-relaxed font-semibold text-amber-950">
+                          👉 Vui lòng sử dụng <u>Tài khoản Nhà trường cấp</u> (username &amp; mật khẩu) ở form bên trên để đăng nhập.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div ref={googleButtonRef} className="flex min-h-10 justify-center" />
+                )}
+
                 {isLoading && (
                   <p className="mt-2 text-center text-xs font-semibold text-[#1C4D8D]">
                     Đang xác thực tài khoản…
                   </p>
                 )}
-                {!googleConfigured && (
+                {!googleConfigured && !googleOriginError && (
                   <p className="mt-2 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] px-2.5 py-1.5 text-center text-xs font-semibold text-[#9a6414]">
                     Chưa cấu hình VITE_GOOGLE_CLIENT_ID cho môi trường này.
                   </p>

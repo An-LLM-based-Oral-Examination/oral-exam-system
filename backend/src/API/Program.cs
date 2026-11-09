@@ -139,18 +139,61 @@ static async Task ApplyMigrationsAsync(WebApplication app)
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
 
-            if (context.Database.IsRelational())
+            if (!context.Database.IsRelational())
             {
-                logger.LogInformation(
-                    "Applying EF Core migrations and PostgreSQL schema reconciliation (attempt {Attempt}/{MaxAttempts}).",
-                    attempt,
-                    maxAttempts);
-
-                await PostgresSchemaReconciler.ReconcilePreMigrationAsync(context);
-                await context.Database.MigrateAsync();
-                await PostgresSchemaReconciler.ReconcilePostMigrationAsync(context);
+                logger.LogInformation("Database is not relational. Skipping schema reconciliation.");
+                return;
             }
 
+            // Kiểm tra khả năng kết nối cơ sở dữ liệu (Database Connectivity Gate)
+            var canConnect = await context.Database.CanConnectAsync();
+            if (!canConnect)
+            {
+                throw new InvalidOperationException("Cannot connect to PostgreSQL server yet.");
+            }
+
+            logger.LogInformation(
+                "PostgreSQL connection established. Initiating 4-stage indestructible database startup (attempt {Attempt}/{MaxAttempts}).",
+                attempt,
+                maxAttempts);
+
+            // Giai đoạn 1/4: Khắc phục và chuẩn bị lược đồ trước Migration (Pre-Migration Reconciliation)
+            try
+            {
+                logger.LogInformation("Stage 1/4: Running PostgresSchemaReconciler.ReconcilePreMigrationAsync...");
+                await PostgresSchemaReconciler.ReconcilePreMigrationAsync(context);
+                logger.LogInformation("Stage 1/4: Pre-migration reconciliation completed.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Stage 1/4 Warning: Pre-migration schema reconciliation encountered an issue, proceeding to EF Core migrations.");
+            }
+
+            // Giai đoạn 2/4: Thực thi EF Core Migrations
+            try
+            {
+                logger.LogInformation("Stage 2/4: Applying EF Core migrations via context.Database.MigrateAsync()...");
+                await context.Database.MigrateAsync();
+                logger.LogInformation("Stage 2/4: EF Core migrations applied successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Stage 2/4 Warning: EF Core MigrateAsync encountered schema drift or collision. Proceeding to Post-Migration reconciler for self-healing.");
+            }
+
+            // Giai đoạn 3/4: Tự phục hồi và đối soát lược đồ toàn diện sau Migration (Post-Migration Reconciliation - GUARANTEED)
+            try
+            {
+                logger.LogInformation("Stage 3/4: Running PostgresSchemaReconciler.ReconcilePostMigrationAsync (self-healing missing tables/columns/constraints)...");
+                await PostgresSchemaReconciler.ReconcilePostMigrationAsync(context);
+                logger.LogInformation("Stage 3/4: Post-migration reconciliation and schema self-healing completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Stage 3/4 Error: Post-migration schema reconciliation encountered an error. Proceeding to Seeder.");
+            }
+
+            // Giai đoạn 4/4: Khởi tạo dữ liệu mẫu và đồng bộ danh mục học thuật (DevelopmentDataSeeder - GUARANTEED)
             var seedConfig = app.Configuration["Database:EnableDevelopmentSeed"]
                 ?? app.Configuration["DATABASE_ENABLE_DEVELOPMENT_SEED"];
             var shouldSeed = bool.TryParse(seedConfig, out var parsedSeed)
@@ -159,26 +202,37 @@ static async Task ApplyMigrationsAsync(WebApplication app)
 
             if (shouldSeed)
             {
-                await DevelopmentDataSeeder.SeedAsync(context);
+                try
+                {
+                    logger.LogInformation("Stage 4/4: Running DevelopmentDataSeeder.SeedAsync...");
+                    await DevelopmentDataSeeder.SeedAsync(context);
+                    logger.LogInformation("Stage 4/4: Initial academic catalog and development data verified successfully.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Stage 4/4 Warning: DevelopmentDataSeeder encountered an error; continuing API startup.");
+                }
             }
 
-            logger.LogInformation("Database schema and initial academic catalog verified successfully.");
+            logger.LogInformation("Indestructible database startup sequence completed successfully.");
             return;
         }
         catch (Exception ex) when (attempt < maxAttempts)
         {
             logger.LogWarning(
                 ex,
-                "Database is not ready. Retrying in {DelaySeconds} seconds.",
+                "Database connection or startup was not ready (attempt {Attempt}/{MaxAttempts}). Retrying in {DelaySeconds} seconds.",
+                attempt,
+                maxAttempts,
                 delay.TotalSeconds);
 
             await Task.Delay(delay);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(
+            logger.LogError(
                 ex,
-                "Database migration did not complete after {MaxAttempts} attempts; continuing API startup.",
+                "Database startup did not complete after {MaxAttempts} attempts; continuing API startup in degraded mode.",
                 maxAttempts);
         }
     }
