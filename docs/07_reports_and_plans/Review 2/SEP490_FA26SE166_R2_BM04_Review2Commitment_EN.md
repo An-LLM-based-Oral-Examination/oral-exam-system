@@ -1,5 +1,4 @@
-# SWP490 · CAPSTONE PROJECT · REVIEW 2 · BM04
-## Review 2 Commitment (English Submission Version)
+# SEP490 · CAPSTONE PROJECT · REVIEW 2 · BM04 — REVIEW 2 COMMITMENT
 
 ### 1. Project Information
 | Field | Value |
@@ -19,23 +18,23 @@
 | :--- | :--- |
 | **Final version** | 2.0 |
 | **Approved at Review 2 (Yes/No)** | Yes |
-| **Attached file name** | SWP490_FA26SE166_R2_Registration.pdf |
+| **Attached file name** | SEP490_FA26SE166_R2_Registration.pdf |
 
 ### 3. Mandatory Features
 | ID | Feature | Actor | Acceptance criteria | Workflow | Owner |
 | :---: | :--- | :--- | :--- | :---: | :--- |
-| **F-01** | Authentication, 6-role RBAC, and academic class hierarchy | All Users, Administrator, Department Head, Lecturer, Student | Dual Authentication supporting Google OAuth 2.0 PKCE and university-provisioned accounts with mandatory password change on first login, with no public self-registration; 6-role access control (student, lecturer, department head, examination officer, proctor, administrator); 4-tier academic hierarchy management (administrator creates semesters, courses, and assigns department heads -> department head assigns lecturers -> lecturer manages class sections with join credentials); supports in-class formative exam shifts with configurable shift title, question bank pool selection, anti-collision question distribution across students, optional follow-up questions without audio retention, 5-minute rotating OTP security with grace period, automated parallel grading, and real-time grade publishing upon submission. | WF-01 | Nguyễn Quang Thành |
+| **F-01** | Authentication, 6-role RBAC, class hierarchy, and in-class exam shifts | All Users, Administrator, Department Head, Lecturer, Student | Dual Authentication supporting Google OAuth 2.0 PKCE and university-provisioned accounts with mandatory password change on first login, with no public self-registration; 6-role access control (student, lecturer, department head, examination officer, proctor, administrator); 4-tier academic hierarchy management (administrator creates semesters, courses, and assigns department heads → department head assigns lecturers → lecturer manages class sections with join credentials); supports in-class formative exam shifts with configurable shift title, question bank pool selection, anti-collision question distribution across students, optional follow-up questions without audio retention, 5-minute rotating OTP security with grace period, automated parallel grading, and real-time grade publishing upon submission. | WF-01 | Nguyễn Quang Thành |
 | **F-02** | Practice parameter and mock exam quota configuration | Admin, Department Head | Admin configures practice session parameters and daily mock exam limits; Department Head configures question structure and duration for subject mock exams. | WF-02 | Phạm Nguyễn Đăng Hải |
-| **F-03** | Interactive oral practice and technical term editing | Student | Student starts a practice session with approved questions, records spoken answers, and edits technical terms on the transcript before submitting; idle sessions exceeding the timeout auto-close. | WF-01 | Nguyễn Quang Thành |
+| **F-03** | Multimodal oral practice and technical term editing | Student | Student starts a practice session with approved questions; supports flexible dual input modes allowing either direct text entry or voice recording via microphone with technical term editing on the transcript before submission; idle sessions exceeding the timeout auto-close. | WF-01 | Nguyễn Quang Thành |
 | **F-04** | Practice grading, follow-up questions, and history | Student | System returns Rubric-based grading results, generates contextual follow-up questions (used within the session only, not saved to the question bank) when clarification is needed, and saves practice history. | WF-01 | Nguyễn Quang Thành |
 | **F-05** | Quota-controlled timed mock exam | Student | System rejects new attempts if the student has exhausted the daily quota; main questions are drawn from the approved practice pool, require recording spoken answers via microphone before reviewing the transcript, and auto-submit when time expires. | WF-02 | Phạm Nguyễn Đăng Hải |
 | **F-06** | Mock exam scorecard by Course Learning Outcome (CLO) | Student | After submission and completion of automated grading, the system displays a summary scorecard showing achievement by each Course Learning Outcome (CLO). | WF-02 | Phạm Nguyễn Đăng Hải |
-| **F-07** | Two-flow oral question authoring and Rubric design | Lecturer, Department Head | Lecturer authors practice/mock questions independently by course CLO (`practice question bank`) or authors official exam questions strictly following the Department Head's sample exam / structure matrix (`official exam question bank`); saving requires a valid model answer and Rubric criteria weights summing to 10.0 points. | WF-03 | Nguyễn Trọng Tốt |
-| **F-08** | Question review submission and bank approval | Lecturer, Department Head | Questions created by Lecturers must be submitted for review; only questions approved by the Department Head (`APPROVED`) are published into the practice pool (`practice question bank`) or official exam pool (`official exam question bank`). | WF-03 | Nguyễn Trọng Tốt |
-| **F-09** | Official exam session, lab shift setup, and check-in | Department Head, Examination Officer, Proctor | Department Head configures exam Follow-up rules (1–5 questions, default 2); Examination Officer creates exam sessions, lab shifts, assigns Proctors/Examiners, imports rosters, allocates non-duplicate exam sets, and publishes the official shift exam; Proctor only checks in students by seat number (1–40, verifying Student ID/CCCD). | WF-04 | Lê Vũ Hoàng |
-| **F-10** | Official exam on fullscreen-locked kiosk interface | Student, Proctor | Student enters the exam only after Proctor check-in, exam publication by Examination Officer, and passing the microphone check; the kiosk locks fullscreen, auto-suspends and alerts the Proctor to log violations into the exam room anti-cheat violation log if fullscreen exit/blur exceeds 3 times, and seals the audio file with a SHA-256 hash upon submission. | WF-04 | Lê Vũ Hoàng |
-| **F-11** | Post-exam grade verification and shift grade publication | Lecturer, Examination Officer | Lecturer listens to recorded audio, reviews AI feedback, and adjusts scores with a formal justification statement if needed; after 100% of shift submissions are verified, Lecturer / Examination Officer publishes grades once, permanently locking the grades against direct modifications. | WF-04 | Lê Vũ Hoàng |
-| **F-12** | Grade acknowledgement and 5-step internal appeal handling | Student, Examination Officer, Department Head, Lecturer | Student acknowledges published grades or submits an appeal (appeal request) to the Examination Officer (with both Examination Officer and Department Head receiving notifications) -> Examination Officer validates the appeal -> Examination Officer assigns an independent Lecturer (quota <= 24 submissions/Lecturer, excluding 100% initial shift examiners; automated proposal and manual adjustment) -> Lecturer regrades on the Evidence Panel -> Examination Officer approves/rejects the final decision (updating the official score through the approved appeal exception if approved; Department Head receives notification for academic oversight). | WF-04 | Lê Vũ Hoàng |
+| **F-07** | Two-flow oral question authoring and Rubric design | Lecturer, Department Head | Lecturer authors practice and mock questions independently by course CLO for the practice question bank, or authors official exam questions strictly following the Department Head's sample exam and structure matrix for the official exam question bank; saving requires a valid model answer and Rubric criteria weights summing to exactly 10.0 points. | WF-03 | Nguyễn Trọng Tốt |
+| **F-08** | Question review submission and bank approval | Lecturer, Department Head | Questions created by Lecturers must be submitted for review; only questions approved by the Department Head are published into the practice question bank or official exam question bank. | WF-03 | Nguyễn Trọng Tốt |
+| **F-09** | Official exam session, lab shift setup, and check-in | Department Head, Examination Officer, Proctor, Examiner (Lecturer) | Department Head configures exam Follow-up rules (1–5 questions, default 2); Examination Officer creates exam sessions, lab shifts, assigns Proctors/Examiners, imports rosters, allocates non-duplicate exam sets, and publishes the official shift exam; Proctor only checks in students by seat number (1–40, verifying Student ID/CCCD). | WF-04 | Lê Vũ Hoàng |
+| **F-10** | Official exam on fullscreen-locked kiosk interface | Student, Proctor | Student enters the exam only after Proctor check-in, exam publication by Examination Officer, and passing the microphone check; the kiosk locks fullscreen, auto-suspends and alerts the Proctor to log violations into the exam room anti-cheat violation log if fullscreen exit/blur exceeds 3 times, and saves the audio recording with a SHA-256 integrity hash upon submission. | WF-04 | Lê Vũ Hoàng |
+| **F-11** | Post-exam grade verification and shift grade publication | Examiner (Evaluating Lecturer), Examination Officer | Examiner (assigned shift Lecturer) listens to recorded audio, reviews AI feedback, and adjusts scores with a formal justification statement if needed; after 100% of shift submissions are verified, Examiner / Examination Officer publishes grades once, permanently locking the grades against direct modifications. | WF-04 | Lê Vũ Hoàng |
+| **F-12** | Grade acknowledgement and 5-step internal appeal handling | Student, Examination Officer, Department Head, Appeal Examiner (Lecturer) | Student acknowledges published grades or submits a formal appeal request to the Examination Officer (with both Examination Officer and Department Head receiving notifications) → Examination Officer validates the appeal → Examination Officer assigns an independent Lecturer (quota <= 24 submissions/Lecturer, excluding 100% initial shift examiners; automated proposal and manual adjustment) → Lecturer regrades on the Evidence Panel → Examination Officer approves/rejects the final decision (updating the official score through the approved appeal exception if approved; Department Head receives notification for academic oversight). | WF-04 | Lê Vũ Hoàng |
 
 ### 4. Non-Functional Requirements
 | ID | Quality attribute | Metric | Threshold | Measurement method | Owner |
@@ -65,29 +64,29 @@
 | **Actors** | Admin, Student |
 | **Trigger** | Student selects a subject and starts a practice session |
 | **Business outcome** | Spoken answers to approved questions are transcribed, reviewed for technical terms, graded by Rubric with follow-up questions, and saved to history |
-| **Main entity state path** | Session initiated -> Responding and reviewing transcription -> Scorecard and feedback delivered (inactivity timeout auto-closes after 5 minutes) |
+| **Main entity state path** | Session initiated → Responding and reviewing transcription → Scorecard and feedback delivered (inactivity timeout auto-closes after 5 minutes) |
 | **Activity diagram (Report 4 section)** | Report 4 (SDD) – Activity Diagram WF-01 (Interactive Oral Practice) |
 
 **Features in this workflow**
 | Feature ID | Feature | Acceptance criteria | Test case IDs |
 | :---: | :--- | :--- | :--- |
-| **F-01** | Authentication, 6-role RBAC, and academic class hierarchy | Dual Authentication supporting Google OAuth 2.0 PKCE and university-provisioned accounts with mandatory password change on first login, with no public self-registration; 6-role access control; supports 4-tier academic hierarchy and in-class exam shifts with configurable shift title, anti-collision question distribution across students, optional follow-up questions without audio retention, 5-minute rotating OTP security with grace period, automated parallel grading, and real-time grade publishing upon submission. | TC-F01-01..TC-F01-03 |
-| **F-03** | Interactive oral practice and technical term editing | Student starts a practice session with approved questions, records spoken answers, and edits technical terms on the transcript before submitting; idle sessions exceeding the timeout auto-close. | TC-F03-01..TC-F03-03 |
+| **F-01** | Authentication, 6-role RBAC, class hierarchy, and in-class exam shifts | Dual Authentication supporting Google OAuth 2.0 PKCE and university-provisioned accounts with mandatory password change on first login, with no public self-registration; 6-role access control; supports 4-tier academic hierarchy and in-class exam shifts with configurable shift title, anti-collision question distribution across students, optional follow-up questions without audio retention, 5-minute rotating OTP security with grace period, automated parallel grading, and real-time grade publishing upon submission. | TC-F01-01..TC-F01-03 |
+| **F-03** | Multimodal oral practice and technical term editing | Student starts a practice session with approved questions; supports flexible dual input modes allowing either direct text entry or voice recording via microphone with technical term editing on the transcript before submission; idle sessions exceeding the timeout auto-close. | TC-F03-01..TC-F03-03 |
 | **F-04** | Practice grading, follow-up questions, and history | System returns Rubric-based grading results, generates contextual follow-up questions (used within the session only, not saved to the question bank) when clarification is needed, and saves practice history. | TC-F04-01..TC-F04-03 |
 
 **Demo scenarios**
 | Scenario ID | Type | Preconditions and data | Main steps | Expected result | Presenter |
 | :---: | :---: | :--- | :--- | :--- | :--- |
-| **DS-01** (DS-01a) | Main | Student account; subject has approved questions in the practice pool | Select subject & start practice -> Record answer & edit technical terms on transcript -> Receive grading result, answer follow-up question, and finish session | System displays detailed criteria scorecard and saves the practice session as completed | Nguyễn Quang Thành |
+| **DS-01** (DS-01a) | Main | Student account; subject has approved questions in the practice pool | Select subject & start practice → Answer via direct text or voice recording with transcript editing → Receive grading result, answer follow-up question, and finish session | System displays detailed criteria scorecard and saves the practice session as completed | Nguyễn Quang Thành |
 | **DS-02** (DS-01b) | Exception | Practice session is open but left idle by the student beyond the inactivity timeout | Student returns to the timed-out session and clicks to submit an answer or fetch the next question | System auto-closes the session, preserves scores of previously completed questions, and rejects new actions | Nguyễn Quang Thành |
 
 **Committed test cases**
 | Test type | Count | Automated in CI | Responsible member(s) |
 | :--- | :---: | :---: | :--- |
-| Feature tests (>= 3 per feature) | 9 | 5 | Nguyễn Quang Thành |
-| End-to-end workflow test (>= 1) | 1 | 0 | Nguyễn Quang Thành |
-| State transition tests (>= 1 per transition) | 1 | 1 | Nguyễn Quang Thành |
-| NFR tests (>= 1 per NFR: NFR-01) | 1 | 0 | Nguyễn Quang Thành |
+| Feature tests (>= 3 / feature) | 9 | 5 | Nguyễn Quang Thành |
+| End-to-end workflow test (>= 1 / workflow) | 1 | 0 | Nguyễn Quang Thành |
+| State transition tests (>= 1 / transition) | 1 | 1 | Nguyễn Quang Thành |
+| NFR tests (>= 1 / NFR: NFR-01) | 1 | 0 | Nguyễn Quang Thành |
 | **Total for this workflow** | **12** | **6** | **Nguyễn Quang Thành** |
 
 **Pass criteria at Defense 1.1**
@@ -114,7 +113,7 @@
 | **Actors** | Admin, Department Head, Student |
 | **Trigger** | Student registers to start a mock exam attempt within the daily quota |
 | **Business outcome** | System records the attempt, captures spoken answers via microphone within the time limit, and returns a CLO scorecard after grading completes |
-| **Main entity state path** | Timed mock session initiated -> In progress under countdown -> Submitted -> Graded with learning outcome scorecard |
+| **Main entity state path** | Timed mock session initiated → In progress under countdown → Submitted → Graded with learning outcome scorecard |
 | **Activity diagram (Report 4 section)** | Report 4 (SDD) – Activity Diagram WF-02 (Timed Mock Exam) |
 
 **Features in this workflow**
@@ -127,16 +126,16 @@
 **Demo scenarios**
 | Scenario ID | Type | Preconditions and data | Main steps | Expected result | Presenter |
 | :---: | :---: | :--- | :--- | :--- | :--- |
-| **DS-03** (DS-02a) | Main | Subject has mock exam structure configured; student has remaining daily attempts | Start timed mock exam -> Record spoken answers via microphone -> Submit exam and wait for automated grading to complete | System records submission, completes automated grading, displays the CLO evaluation scorecard, and deducts one daily attempt | Phạm Nguyễn Đăng Hải |
+| **DS-03** (DS-02a) | Main | Subject has mock exam structure configured; student has remaining daily attempts | Start timed mock exam → Record spoken answers via microphone → Submit exam and wait for automated grading to complete | System records submission, completes automated grading, displays the CLO evaluation scorecard, and deducts one daily attempt | Phạm Nguyễn Đăng Hải |
 | **DS-04** (DS-02b) | Exception | Student has used all allowed daily mock exam attempts for the subject | Student clicks to start an additional mock exam attempt for that subject on the same day | System rejects creating a new exam session and notifies that the daily mock exam quota has been reached | Phạm Nguyễn Đăng Hải |
 
 **Committed test cases**
 | Test type | Count | Automated in CI | Responsible member(s) |
 | :--- | :---: | :---: | :--- |
-| Feature tests (>= 3 per feature) | 9 | 5 | Phạm Nguyễn Đăng Hải |
-| End-to-end workflow test (>= 1) | 1 | 0 | Phạm Nguyễn Đăng Hải |
-| State transition tests (>= 1 per transition) | 2 | 1 | Phạm Nguyễn Đăng Hải |
-| NFR tests (>= 1 per NFR: NFR-02) | 1 | 1 | Phạm Nguyễn Đăng Hải |
+| Feature tests (>= 3 / feature) | 9 | 5 | Phạm Nguyễn Đăng Hải |
+| End-to-end workflow test (>= 1 / workflow) | 1 | 0 | Phạm Nguyễn Đăng Hải |
+| State transition tests (>= 1 / transition) | 2 | 1 | Phạm Nguyễn Đăng Hải |
+| NFR tests (>= 1 / NFR: NFR-02) | 1 | 1 | Phạm Nguyễn Đăng Hải |
 | **Total for this workflow** | **13** | **7** | **Phạm Nguyễn Đăng Hải** |
 
 **Pass criteria at Defense 1.1**
@@ -162,29 +161,29 @@
 | **Supporting members** | Phạm Nguyễn Đăng Hải, Nguyễn Quang Thành |
 | **Actors** | Lecturer, Department Head |
 | **Trigger** | Lecturer creates a new question (practice flow by CLO or official exam flow following the Department Head's matrix) and submits for review |
-| **Business outcome** | Questions and valid 10.0-point Rubric criteria are approved by the Department Head into `practice question bank` or `official exam question bank` |
-| **Main entity state path** | Question: DRAFT -> SUBMITTED_FOR_REVIEW -> APPROVED \| NEEDS_REVISION \| REJECTED (4 transitions) |
+| **Business outcome** | Questions and valid 10.0-point Rubric criteria are approved by the Department Head into the practice question bank or official exam question bank |
+| **Main entity state path** | Question draft → Submitted for review → Approved into question bank, or Revision requested, or Rejected |
 | **Activity diagram (Report 4 section)** | Report 4 (SDD) – Activity Diagram WF-03 (Question Bank & Rubric Approval) |
 
 **Features in this workflow**
 | Feature ID | Feature | Acceptance criteria | Test case IDs |
 | :---: | :--- | :--- | :--- |
-| **F-07** | Two-flow oral question authoring and Rubric design | Lecturer authors practice/mock questions independently by course CLO (`practice question bank`) or authors official exam questions strictly following the Department Head's sample exam / structure matrix (`official exam question bank`); saving requires a valid model answer and Rubric criteria weights summing to 10.0 points. | TC-F07-01..TC-F07-03 |
-| **F-08** | Question review submission and bank approval | Questions created by Lecturers must be submitted for review; only questions approved by the Department Head (`APPROVED`) are published into the practice pool (`practice question bank`) or official exam pool (`official exam question bank`). | TC-F08-01..TC-F08-03 |
+| **F-07** | Two-flow oral question authoring and Rubric design | Lecturer authors practice and mock questions independently by course CLO for the practice question bank, or authors official exam questions strictly following the Department Head's sample exam and structure matrix for the official exam question bank; saving requires a valid model answer and Rubric criteria weights summing to exactly 10.0 points. | TC-F07-01..TC-F07-03 |
+| **F-08** | Question review submission and bank approval | Questions created by Lecturers must be submitted for review; only questions approved by the Department Head are published into the practice question bank or official exam question bank. | TC-F08-01..TC-F08-03 |
 
 **Demo scenarios**
 | Scenario ID | Type | Preconditions and data | Main steps | Expected result | Presenter |
 | :---: | :---: | :--- | :--- | :--- | :--- |
-| **DS-05** (DS-03a) | Main | Lecturer and Department Head accounts; subject has CLOs and an official exam structure matrix | Lecturer creates a question (practice flow by CLO or official exam flow by structure matrix) with model answer and 10.0-point Rubric and submits for review -> Department Head reviews and clicks Approve | Question transitions to `APPROVED` status and is published into `practice question bank` or `official exam question bank` | Nguyễn Trọng Tốt |
+| **DS-05** (DS-03a) | Main | Lecturer and Department Head accounts; subject has CLOs and an official exam structure matrix | Lecturer creates a question (practice flow by CLO or official exam flow by structure matrix) with model answer and 10.0-point Rubric and submits for review → Department Head reviews and clicks Approve | Question transitions to approved status and is published into the practice question bank or official exam question bank | Nguyễn Trọng Tốt |
 | **DS-06** (DS-03b) | Exception | Lecturer enters a set of Rubric criteria whose component weights do not sum to 10.0 points | Lecturer clicks save or submit for review with an invalid Rubric | System rejects saving and displays a message requiring criteria weights to be adjusted to total 10.0 points | Nguyễn Trọng Tốt |
 
 **Committed test cases**
 | Test type | Count | Automated in CI | Responsible member(s) |
 | :--- | :---: | :---: | :--- |
-| Feature tests (>= 3 per feature) | 6 | 3 | Nguyễn Trọng Tốt |
-| End-to-end workflow test (>= 1) | 1 | 0 | Nguyễn Trọng Tốt |
-| State transition tests (>= 1 per transition) | 4 | 2 | Nguyễn Trọng Tốt |
-| NFR tests (>= 1 per NFR: NFR-03, NFR-04) | 2 | 2 | Nguyễn Trọng Tốt |
+| Feature tests (>= 3 / feature) | 6 | 3 | Nguyễn Trọng Tốt |
+| End-to-end workflow test (>= 1 / workflow) | 1 | 0 | Nguyễn Trọng Tốt |
+| State transition tests (>= 1 / transition) | 4 | 2 | Nguyễn Trọng Tốt |
+| NFR tests (>= 1 / NFR: NFR-03, NFR-04) | 2 | 2 | Nguyễn Trọng Tốt |
 | **Total for this workflow** | **13** | **7** | **Nguyễn Trọng Tốt** |
 
 **Pass criteria at Defense 1.1**
@@ -208,33 +207,33 @@
 | **Workflow name** | Official lab exam, audit, and appeal |
 | **Owner (one member)** | Lê Vũ Hoàng |
 | **Supporting members** | Nguyễn Trọng Tốt, Phạm Nguyễn Đăng Hải |
-| **Actors** | Department Head, Examination Officer, Proctor, Student, Lecturer |
+| **Actors** | Department Head, Examination Officer, Proctor, Examiner (Evaluating Lecturer), Student |
 | **Trigger** | Examination Officer publishes the official shift exam and Proctor checks in students by seat (1–40) |
 | **Business outcome** | Exam submissions and audio files are sealed and stored, pre-graded by AI, verified by the Lecturer, and published once (permanently locking shift grades), supporting 5-step appeal regrading |
-| **Main entity state path** | Exam ticket: Scheduled -> In progress -> Submitted -> AI scored -> Lecturer audited -> Published and locked. Appeal request: Submitted to exam office -> Assigned to independent lecturer -> Regraded -> Decision approved or rejected |
+| **Main entity state path** | Exam ticket: Scheduled → In progress → Submitted → AI scored → Lecturer audited → Published and locked. Appeal request: Submitted to exam office → Assigned to independent lecturer → Regraded → Decision approved or rejected |
 | **Activity diagram (Report 4 section)** | Report 4 (SDD) – Activity Diagram WF-04 (Official Lab Exam, Audit & Appeal) |
 
 **Features in this workflow**
 | Feature ID | Feature | Acceptance criteria | Test case IDs |
 | :---: | :--- | :--- | :--- |
 | **F-09** | Official exam session, lab shift setup, and check-in | Department Head configures exam Follow-up rules (1–5 questions, default 2); Examination Officer creates exam sessions, lab shifts, assigns Proctors/Examiners, imports rosters, allocates non-duplicate exam sets, and publishes the official shift exam; Proctor only checks in students by seat number (1–40, verifying Student ID/CCCD). | TC-F09-01..TC-F09-03 |
-| **F-10** | Official exam on fullscreen-locked kiosk interface | Student enters the exam only after Proctor check-in, exam publication by Examination Officer, and passing the microphone check; the kiosk locks fullscreen, auto-suspends and alerts the Proctor to log violations into the exam room anti-cheat violation log if fullscreen exit/blur exceeds 3 times, and seals the audio file with a SHA-256 hash upon submission. | TC-F10-01..TC-F10-03 |
-| **F-11** | Post-exam grade verification and shift grade publication | Lecturer listens to recorded audio, reviews AI feedback, and adjusts scores with a formal justification statement if needed; after 100% of shift submissions are verified, Lecturer / Examination Officer publishes grades once, permanently locking the grades against direct modifications. | TC-F11-01..TC-F11-03 |
-| **F-12** | Grade acknowledgement and 5-step internal appeal handling | Student acknowledges published grades or submits an appeal (appeal request) to the Examination Officer (with both Examination Officer and Department Head receiving notifications) -> Examination Officer validates the appeal -> Examination Officer assigns an independent Lecturer (quota <= 24 submissions/Lecturer, excluding 100% initial shift examiners; automated proposal and manual adjustment) -> Lecturer regrades on the Evidence Panel -> Examination Officer approves/rejects the final decision (updating the official score through the approved appeal exception if approved; Department Head receives notification for academic oversight). | TC-F12-01..TC-F12-03 |
+| **F-10** | Official exam on fullscreen-locked kiosk interface | Student enters the exam only after Proctor check-in, exam publication by Examination Officer, and passing the microphone check; the kiosk locks fullscreen, auto-suspends and alerts the Proctor to log violations into the exam room anti-cheat violation log if fullscreen exit/blur exceeds 3 times, and saves the audio recording with a SHA-256 integrity hash upon submission. | TC-F10-01..TC-F10-03 |
+| **F-11** | Post-exam grade verification and shift grade publication | Examiner (assigned shift Lecturer) listens to recorded audio, reviews AI feedback, and adjusts scores with a formal justification statement if needed; after 100% of shift submissions are verified, Examiner / Examination Officer publishes grades once, permanently locking the grades against direct modifications. | TC-F11-01..TC-F11-03 |
+| **F-12** | Grade acknowledgement and 5-step internal appeal handling | Student acknowledges published grades or submits a formal appeal request to the Examination Officer (with both Examination Officer and Department Head receiving notifications) → Examination Officer validates the appeal → Examination Officer assigns an independent Lecturer (quota <= 24 submissions/Lecturer, excluding 100% initial shift examiners; automated proposal and manual adjustment) → Lecturer regrades on the Evidence Panel → Examination Officer approves/rejects the final decision (updating the official score through the approved appeal exception if approved; Department Head receives notification for academic oversight). | TC-F12-01..TC-F12-03 |
 
 **Demo scenarios**
 | Scenario ID | Type | Preconditions and data | Main steps | Expected result | Presenter |
 | :---: | :---: | :--- | :--- | :--- | :--- |
-| **DS-07** (DS-04a) | Main | Lab exam shift is scheduled with assigned students, Examination Officer, Proctor, and Lecturer | Examination Officer publishes shift exam & Proctor checks in seats (1–40) -> Student checks mic, completes exam on locked kiosk, and submits -> Lecturer verifies all submissions and Lecturer / Examination Officer clicks Publish Grades | Exam is saved with SHA-256 audio recording, pre-graded, verified, and published once successfully (permanently locking shift grades) | Lê Vũ Hoàng |
-| **DS-08** (DS-04b) | Exception | Shift grades have been published and direct grade editing is locked | Attempt to directly edit a published grade (blocked) -> Student submits appeal to Examination Officer -> Examination Officer & Department Head receive notifications; Examination Officer validates & assigns independent Lecturer to regrade (<= 24 submissions/Lecturer, excluding 100% initial shift examiners) -> Lecturer regrades and Examination Officer approves final decision | Direct grade edit is rejected due to post-publication grade locking rules; score is updated only after completing the 5-step appeal workflow approved by the Examination Officer | Lê Vũ Hoàng |
+| **DS-07** (DS-04a) | Main | Lab exam shift is scheduled with assigned students, Examination Officer, Proctor, and Lecturer | Examination Officer publishes shift exam & Proctor checks in seats (1–40) → Student checks mic, completes exam on locked kiosk, and submits → Lecturer verifies all submissions and Lecturer / Examination Officer clicks Publish Grades | Exam is saved with audio recording and SHA-256 integrity hash, pre-graded, verified, and published once successfully (permanently locking shift grades) | Lê Vũ Hoàng |
+| **DS-08** (DS-04b) | Exception | Shift grades have been published and direct grade editing is locked | Attempt to directly edit a published grade (blocked) → Student submits appeal to Examination Officer → Examination Officer & Department Head receive notifications; Examination Officer validates & assigns independent Lecturer to regrade (<= 24 submissions/Lecturer, excluding 100% initial shift examiners) → Lecturer regrades and Examination Officer approves final decision | Direct grade edit is rejected due to post-publication grade locking rules; score is updated only after completing the 5-step appeal workflow approved by the Examination Officer | Lê Vũ Hoàng |
 
 **Committed test cases**
 | Test type | Count | Automated in CI | Responsible member(s) |
 | :--- | :---: | :---: | :--- |
-| Feature tests (>= 3 per feature) | 12 | 6 | Lê Vũ Hoàng |
-| End-to-end workflow test (>= 1) | 1 | 0 | Lê Vũ Hoàng |
-| State transition tests (>= 1 per transition) | 8 | 4 | Lê Vũ Hoàng |
-| NFR tests (>= 1 per NFR: NFR-05) | 1 | 0 | Lê Vũ Hoàng |
+| Feature tests (>= 3 / feature) | 12 | 6 | Lê Vũ Hoàng |
+| End-to-end workflow test (>= 1 / workflow) | 1 | 0 | Lê Vũ Hoàng |
+| State transition tests (>= 1 / transition) | 8 | 4 | Lê Vũ Hoàng |
+| NFR tests (>= 1 / NFR: NFR-05) | 1 | 0 | Lê Vũ Hoàng |
 | **Total for this workflow** | **22** | **10** | **Lê Vũ Hoàng** |
 
 **Pass criteria at Defense 1.1**
@@ -264,7 +263,7 @@
 **Ownership**
 | Type | Items (IDs / names) | Notes |
 | :--- | :--- | :--- |
-| **Main workflow(s) owned** | WF-01 — Interactive Oral Practice Workflow | End-to-end practice session lifecycle, STT transcript review, and follow-up flow |
+| **Main workflow(s) owned** | WF-01 — Interactive Oral Practice and In-Class Exam Shifts Workflow | End-to-end practice session lifecycle, STT transcript review, and follow-up flow |
 | **Mandatory features owned** | F-01, F-03, F-04 | Authentication, 6-role RBAC & academic hierarchy, interactive oral practice, Rubric grading & practice history |
 | **Modules / entities owned** | Oral practice subsystem, real-time audio interaction channel, student scorecard reporting | Backend APIs, background grading queue integration, and SignalR Hub |
 | **Design decisions owned (D-IDs)** | D1 (Layered backend server with background grading queue); R2 (Technical term transcript review) | Responsible for layered backend architecture and asynchronous processing |
@@ -441,7 +440,7 @@
 | ID | Item | Related workflow | Owner | Due |
 | :---: | :--- | :---: | :--- | :--- |
 | **RF-01** | Update and commit Mermaid and Draw.io diagram source code for the architecture, Logical ERD, state machine, and business workflow diagrams into the repository matching Report 4 (G1). | WF-01 | Nguyễn Quang Thành | Before Defense 1.1 |
-| **RF-02** | Synchronize detailed specifications of the 6 user roles and the post-exam audit and 5-step appeal workflow across Form BM03, SRS, and SDD (G2). | WF-03 | Nguyễn Trọng Tốt | Before Defense 1.1 |
+| **RF-02** | Synchronize detailed specifications of the 6 user roles and the post-exam audit and 5-step appeal workflow across Form BM03, SRS, and SDD (G2). | Cross-workflow (WF-03 / WF-04) | Nguyễn Trọng Tốt | Before Defense 1.1 |
 | **RF-03** | Verify the centralized Staging deployment environment and automated sample data initialization script for repeatable demo scenarios (G3). | WF-02 | Phạm Nguyễn Đăng Hải | Before Defense 1.1 |
 | **RF-04** | Finalize end-to-end integration rehearsal for the fullscreen-locked kiosk violation counter, audio SHA-256 verification, and post-publication grade lock. | WF-04 | Lê Vũ Hoàng | Before Defense 1.1 |
 
