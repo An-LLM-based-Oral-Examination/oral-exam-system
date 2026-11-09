@@ -7,6 +7,8 @@ function normalizeTask(value: unknown): DeadLetterQueueTask {
   return {
     id: requiredString(record, 'id', 'DLQ task thiếu mã.'),
     taskType: requiredString(record, 'taskType', 'DLQ task thiếu loại task.'),
+    flowType: readNullableString(record, 'flowType'),
+    managedByRole: readNullableString(record, 'managedByRole'),
     payloadJson: requiredString(record, 'payloadJson', 'DLQ task thiếu payload.'),
     errorMessage: requiredString(record, 'errorMessage', 'DLQ task thiếu thông báo lỗi.'),
     retryCount: requiredNumber(record, 'retryCount', 'DLQ task thiếu số lần retry.'),
@@ -17,8 +19,11 @@ function normalizeTask(value: unknown): DeadLetterQueueTask {
 }
 
 export const deadLetterQueueService = {
-  async list(status?: string): Promise<DeadLetterQueueTask[]> {
-    const response = await apiClient.get<unknown>('/dlq/tasks', { params: status ? { status } : undefined })
+  async list(status?: string, flowType?: string): Promise<DeadLetterQueueTask[]> {
+    const params: Record<string, string> = {}
+    if (status) params.status = status
+    if (flowType && flowType !== 'ALL') params.flowType = flowType
+    const response = await apiClient.get<unknown>('/dlq/tasks', { params })
     return asArray(response.data, 'API DLQ không trả về danh sách task.').map(normalizeTask)
   },
 

@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChevronLeft,
   ClipboardCheck,
+  KeyRound,
   LayoutDashboard,
   Mic2,
   PanelLeftClose,
@@ -54,6 +55,11 @@ const STUDENT_NAVIGATION: StudentNavigationItem[] = [
     label: 'Kết quả',
     path: '/results',
     icon: BarChart3,
+  },
+  {
+    label: 'Đổi mật khẩu',
+    path: '/change-password',
+    icon: KeyRound,
   },
 ]
 

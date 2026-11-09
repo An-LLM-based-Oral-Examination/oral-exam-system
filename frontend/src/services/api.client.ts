@@ -116,6 +116,28 @@ apiClient.interceptors.response.use(
       (error.response ? 'Không thể xử lý yêu cầu' : 'Lỗi kết nối hoặc máy chủ')
 
     const problem: ProblemDetails = { ...payload, status: normalizedStatus, title, detail }
+
+    if (
+      normalizedStatus === 403 &&
+      (title.includes('Cần đổi mật khẩu') || detail.includes('Bạn phải đổi mật khẩu'))
+    ) {
+      const rawProfile = sessionStorage.getItem('user_profile')
+      if (rawProfile) {
+        try {
+          const parsedProfile = JSON.parse(rawProfile) as unknown
+          if (isRecord(parsedProfile)) {
+            sessionStorage.setItem(
+              'user_profile',
+              JSON.stringify({ ...parsedProfile, mustChangePassword: true }),
+            )
+          }
+        } catch {
+          // Bỏ qua nếu JSON trong sessionStorage không hợp lệ
+        }
+      }
+      window.dispatchEvent(new Event('auth:must-change-password'))
+    }
+
     console.warn(`[API Error ${normalizedStatus}]: ${detail}`)
     return Promise.reject(problem)
   },

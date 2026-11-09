@@ -1,6 +1,8 @@
 export interface DeadLetterQueueTask {
   id: string
   taskType: string
+  flowType?: string | null
+  managedByRole?: string | null
   payloadJson: string
   errorMessage: string
   retryCount: number

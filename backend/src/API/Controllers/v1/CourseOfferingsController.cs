@@ -43,7 +43,7 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
     }
 
     [HttpGet("/api/v1/lecturer/course-offerings")]
-    [Authorize(Roles = "lecturer,admin")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     public async Task<IActionResult> GetMyOfferings(
         [FromQuery] Guid? lecturerId = null,
         [FromQuery] bool includeInactive = false,

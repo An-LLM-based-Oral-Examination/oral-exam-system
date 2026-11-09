@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -17,6 +17,8 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Upload,
+  ImageIcon,
   WandSparkles,
 } from 'lucide-react'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
@@ -190,6 +192,43 @@ export function CreatePracticeQuestionForm({
   const [manualNotice, setManualNotice] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [savedQuestionId, setSavedQuestionId] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [imageDescription, setImageDescription] = useState('')
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Kích thước tệp vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.')
+      return
+    }
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('Định dạng tệp không được hỗ trợ. Chỉ chấp nhận PNG, JPG, JPEG hoặc WEBP.')
+      return
+    }
+
+    setIsUploadingImage(true)
+    try {
+      const uploadRes = await questionService.uploadQuestionImage(file, imageDescription)
+      setImageUrl(uploadRes.imageUrl)
+      toast.success('Đã tải hình ảnh sơ đồ thành công!')
+    } catch (uploadErr) {
+      toast.error(getErrorMessage(uploadErr) || 'Không thể tải hình ảnh lên.')
+    } finally {
+      setIsUploadingImage(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setImageUrl(null)
+    setImageDescription('')
+  }
 
   const [cloInput, setCloInput] = useState('')
   const [topicsInput, setTopicsInput] = useState('')
@@ -398,6 +437,8 @@ export function CreatePracticeQuestionForm({
         hasFollowUp: false,
         followUpPrompt: null,
         lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
+        imageUrl: imageUrl || null,
+        imageDescription: imageDescription.trim() || null,
         rubric: {
           name: rubricName.trim(),
           description: rubricDescription.trim() || null,
@@ -869,6 +910,82 @@ export function CreatePracticeQuestionForm({
                 />
                 <FieldError message={manualErrors.content} />
               </label>
+
+              {/* Technical Diagram / Image Upload (MF-03) */}
+              <div className="mt-4 rounded-xl border border-dashed border-[#82aedb] bg-[#f8fbfe] p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="size-4 text-[#1C4D8D]" />
+                    <span className="text-xs font-bold text-[#0F2854] uppercase">
+                      Hình ảnh sơ đồ / Kiến trúc kỹ thuật (Tùy chọn)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#63738a]">PNG, JPG, WEBP &le; 5MB</span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageFileChange}
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                />
+
+                {imageUrl ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="relative inline-block overflow-hidden rounded-xl border border-[#82aedb]/55 bg-white shadow-sm">
+                      <img
+                        src={imageUrl}
+                        alt="Sơ đồ câu hỏi"
+                        className="max-h-56 w-auto object-contain"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-lg bg-black/60 text-white transition hover:bg-[#b43d49]"
+                        title="Xóa hình ảnh này"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-[#5b6b84]">
+                        Mô tả hình ảnh (Gemini Multimodal CoT Grading)
+                      </span>
+                      <input
+                        value={imageDescription}
+                        onChange={(e) => setImageDescription(e.target.value)}
+                        placeholder="Ví dụ: Sơ đồ kiến trúc microservices với message broker Kafka..."
+                        className="mt-1 w-full rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="mt-2.5 flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isUploadingImage}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs font-bold text-[#1C4D8D] shadow-sm transition hover:bg-[#edf5fc] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isUploadingImage ? (
+                        <>
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                          Đang tải và kiểm tra Magic Bytes...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-3.5" />
+                          Chọn ảnh sơ đồ đính kèm
+                        </>
+                      )}
+                    </button>
+                    <span className="text-xs text-[#63738a]">
+                      Hỗ trợ thẩm định và chấm điểm đa phương thức CoT tự động
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <label className="mt-4 block">
                 <span

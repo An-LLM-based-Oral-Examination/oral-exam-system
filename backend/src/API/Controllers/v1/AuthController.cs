@@ -148,7 +148,8 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        var sub = User.FindFirst("sub")?.Value;
+        var sub = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                  ?? User.FindFirst("sub")?.Value;
         if (!Guid.TryParse(sub, out var userId))
         {
             return Unauthorized();

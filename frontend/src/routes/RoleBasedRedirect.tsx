@@ -18,10 +18,13 @@ export function RoleBasedRedirect() {
 
   if (
     user?.role === 'Instructor' ||
-    user?.role === 'DepartmentHead' ||
-    user?.role === 'Admin'
+    user?.role === 'DepartmentHead'
   ) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  if (user?.role === 'Admin') {
+    return <Navigate to="/admin" replace />
   }
 
   return <Navigate to="/unauthorized" replace />

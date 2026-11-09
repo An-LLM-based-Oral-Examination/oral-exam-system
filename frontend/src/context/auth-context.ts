@@ -12,6 +12,7 @@ export interface AuthContextType {
   isAdmin: boolean
   loginWithPassword: (username: string, password: string) => Promise<void>
   loginWithGoogle: (idToken: string) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
   hasRole: (roles: UserRole[]) => boolean
 }

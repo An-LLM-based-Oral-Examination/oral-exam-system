@@ -27,6 +27,26 @@ function normalizePortalRole(role: unknown): UserRole | null {
   return null
 }
 
+function extractMustChangePasswordFromJwt(token: string | null | undefined): boolean | undefined {
+  if (!token) return undefined
+  const parts = token.split('.')
+  if (parts.length < 2) return undefined
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(padded)) as { must_change_password?: unknown }
+    if (payload.must_change_password === 'true' || payload.must_change_password === true) {
+      return true
+    }
+    if (payload.must_change_password === 'false' || payload.must_change_password === false) {
+      return false
+    }
+    return false
+  } catch {
+    return undefined
+  }
+}
+
 const LEGACY_DEV_USER_IDS: Record<string, string> = {
   'usr-stu-01': '00000000-0000-0000-0000-000000000005',
   '44444444-4444-4444-4444-444444444444': '00000000-0000-0000-0000-000000000005',
@@ -44,7 +64,13 @@ function normalizeResponse(data: LoginResponse): LoginResponse {
     } satisfies ProblemDetails
   }
 
-  return { ...data, user: { ...data.user, role } }
+  const jwtMustChange = extractMustChangePasswordFromJwt(data.accessToken)
+  const mustChange = Boolean(
+    data.mustChangePassword ??
+      jwtMustChange ??
+      (data.user as { mustChangePassword?: boolean })?.mustChangePassword,
+  )
+  return { ...data, mustChangePassword: mustChange, user: { ...data.user, role, mustChangePassword: mustChange } }
 }
 
 function persistSession(data: LoginResponse): LoginResponse {
@@ -67,6 +93,25 @@ export const authService = {
     const response = await apiClient.post<LoginResponse>('/auth/google-login', request)
     clearMockExamSession()
     return persistSession(response.data)
+  },
+
+  async changePassword(request: { currentPassword: string; newPassword: string }): Promise<void> {
+    const response = await apiClient.post<{
+      accessToken: string
+      refreshToken: string
+      tokenType: string
+      expiresIn: number
+      mustChangePassword?: boolean
+      message?: string
+    }>('/auth/change-password', request)
+
+    sessionStorage.setItem('access_token', response.data.accessToken)
+    sessionStorage.setItem('refresh_token', response.data.refreshToken)
+    const currentUser = this.getCurrentUser()
+    if (currentUser) {
+      const updatedUser: User = { ...currentUser, mustChangePassword: false }
+      sessionStorage.setItem('user_profile', JSON.stringify(updatedUser))
+    }
   },
 
   async refreshToken(): Promise<LoginResponse> {
@@ -139,8 +184,14 @@ export const authService = {
       const migratedId = import.meta.env.DEV
         ? (LEGACY_DEV_USER_IDS[parsed.id] ?? parsed.id)
         : parsed.id
-      const user: User = { ...parsed, id: migratedId, role } as User
-      if (migratedId !== parsed.id || role !== parsed.role) {
+      const jwtMustChange = extractMustChangePasswordFromJwt(sessionStorage.getItem('access_token'))
+      const mustChangePassword = Boolean(jwtMustChange ?? parsed.mustChangePassword)
+      const user: User = { ...parsed, id: migratedId, role, mustChangePassword } as User
+      if (
+        migratedId !== parsed.id ||
+        role !== parsed.role ||
+        mustChangePassword !== Boolean(parsed.mustChangePassword)
+      ) {
         sessionStorage.setItem('user_profile', JSON.stringify(user))
       }
       return user

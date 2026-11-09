@@ -32,6 +32,7 @@ services:
       - oralexam-net
 
   web-api:
+    image: ${BACKEND_IMAGE:-ghcr.io/an-llm-based-oral-examination/oral-exam-system/backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -42,11 +43,11 @@ services:
       ASPNETCORE_HTTP_PORTS: "5000"
       DATABASE_ALLOW_IN_MEMORY_FALLBACK: "false"
       DATABASE_ENABLE_DEVELOPMENT_SEED: ${DATABASE_ENABLE_DEVELOPMENT_SEED:-true}
-      GradingQueue__MaxDegreeOfParallelism: ${GRADING_QUEUE_MAX_PARALLELISM:-12}
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;
-      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://oralexam.io.vn,http://localhost:3000,http://localhost:5173}
+      GradingQueue__MaxDegreeOfParallelism: ${GRADING_MAX_PARALLELISM:-12}
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=200;Minimum Pool Size=10;Timeout=30"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      Jwt__Issuer: ${JWT_ISSUER:-OralExaminationAPI}
+      Jwt__Audience: ${JWT_AUDIENCE:-OralExaminationClients}
       Gemini__ApiKey: ${Gemini__ApiKey:-}
       Gemini__FallbackApiKey: ${Gemini__FallbackApiKey:-}
       Gemini__ApiKeys: ${Gemini__ApiKeys:-}
@@ -78,6 +79,7 @@ services:
           - web-api
 
   frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/an-llm-based-oral-examination/oral-exam-system/frontend:latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile

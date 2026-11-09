@@ -10,6 +10,7 @@ import { StudentLayout } from '@/components/layout/StudentLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 import {
+  AdminDashboardPage,
   AppealManagementPage,
   AuditEvidencePage,
   CreateQuestionPage,
@@ -26,6 +27,7 @@ import {
 } from '@/routes/AppRoutePages'
 
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
 import { UnauthorizedPage } from '@/pages/auth/UnauthorizedPage'
 import { StudentDashboardPage } from '@/pages/student/StudentDashboardPage'
 import { PracticePage } from '@/pages/student/PracticePage'
@@ -46,6 +48,7 @@ export const appRoutes = createRoutesFromElements(
     {/* Route each authenticated role to its own portal. */}
     <Route element={<ProtectedRoute />}>
       <Route path="/" element={<RoleBasedRedirect />} />
+      <Route path="/change-password" element={<ChangePasswordPage />} />
 
       {/* Student Portal */}
       <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
@@ -103,7 +106,7 @@ export const appRoutes = createRoutesFromElements(
       <Route
         element={
           <ProtectedRoute
-            allowedRoles={['Proctor', 'ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin']}
+            allowedRoles={['Proctor']}
           />
         }
       >
@@ -124,7 +127,7 @@ export const appRoutes = createRoutesFromElements(
       <Route
         element={
           <ProtectedRoute
-            allowedRoles={['ExaminationOfficer', 'DepartmentHead', 'Instructor', 'Admin']}
+            allowedRoles={['ExaminationOfficer', 'Admin']}
           />
         }
       >
@@ -137,6 +140,27 @@ export const appRoutes = createRoutesFromElements(
             }
           >
             <Route path="/dlq" element={<DeadLetterQueuePage />} />
+          </Route>
+        </Route>
+      </Route>
+
+      {/* Admin Portal: User management, system configs & audit logs */}
+      <Route
+        element={
+          <ProtectedRoute
+            allowedRoles={['Admin']}
+          />
+        }
+      >
+        <Route element={<AppLayout />}>
+          <Route
+            element={
+              <Suspense fallback={<InstructorPageFallback />}>
+                <Outlet />
+              </Suspense>
+            }
+          >
+            <Route path="/admin" element={<AdminDashboardPage />} />
           </Route>
         </Route>
       </Route>

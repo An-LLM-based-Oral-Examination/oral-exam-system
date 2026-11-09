@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerCourseOfferings;
 
@@ -13,10 +14,12 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
         GetLecturerCourseOfferingsQuery request,
         CancellationToken cancellationToken)
     {
-        var lecturerExists = await context.Users
+        var user = await context.Users
             .AsNoTracking()
-            .AnyAsync(u => u.Id == request.LecturerUserId, cancellationToken);
-        if (!lecturerExists)
+            .Where(u => u.Id == request.LecturerUserId)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (user is null)
         {
             return Result<IReadOnlyList<LecturerCourseOfferingDto>>.Failure(
                 "NOT_FOUND: Không tìm thấy giảng viên.");
@@ -44,6 +47,41 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
                 a.IsActive,
                 a.CourseOffering.IsEnabled))
             .ToListAsync(cancellationToken);
+
+        if (offerings.Count == 0 &&
+            (user.Role == UserRole.DepartmentHead || user.Role == UserRole.Admin))
+        {
+            var offeringQuery = context.CourseOfferings
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (!request.IncludeInactive)
+            {
+                offeringQuery = offeringQuery.Where(o => o.IsEnabled && o.Course.IsActive);
+            }
+
+            if (user.Role == UserRole.DepartmentHead)
+            {
+                offeringQuery = offeringQuery.Where(o =>
+                    o.Course.DepartmentHeadUserId == user.Id ||
+                    (o.Course.AcademicProgram != null && o.Course.AcademicProgram.DepartmentHeadUserId == user.Id));
+            }
+
+            offerings = await offeringQuery
+                .OrderByDescending(o => o.Semester.StartDate)
+                .ThenBy(o => o.Course.Code)
+                .Select(o => new LecturerCourseOfferingDto(
+                    o.Id,
+                    o.CourseId,
+                    o.Course.Code,
+                    o.Course.Name,
+                    o.SemesterId,
+                    o.Semester.Code,
+                    o.CreatedAt,
+                    true,
+                    o.IsEnabled))
+                .ToListAsync(cancellationToken);
+        }
 
         return Result<IReadOnlyList<LecturerCourseOfferingDto>>.Success(offerings);
     }

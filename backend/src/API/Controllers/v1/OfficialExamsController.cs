@@ -110,7 +110,7 @@ public class OfficialExamsController : ControllerBase
     [HttpGet("shifts/{shiftId:guid}/audit-evidence")]
     [HttpGet("shifts/{shiftId:guid}/audit-submissions")]
     [HttpGet("/api/v1/audit/shifts/{shiftId:guid}/submissions")]
-    [Authorize(Roles = "lecturer,department_head")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
     public async Task<IActionResult> GetAuditEvidence(Guid shiftId)
     {
         var query = new GetAuditEvidenceQuery(shiftId);
@@ -134,7 +134,7 @@ public class OfficialExamsController : ControllerBase
     /// Alias truy xuất bằng chứng hậu kiểm theo query parameter shiftId.
     /// </summary>
     [HttpGet("/api/v1/audit/submissions")]
-    [Authorize(Roles = "lecturer,department_head")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
     public Task<IActionResult> GetAuditEvidenceByQuery([FromQuery] Guid shiftId)
     {
         return GetAuditEvidence(shiftId);

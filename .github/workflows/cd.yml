@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - develop
     tags:
       - 'v*.*.*'
 
@@ -76,19 +77,27 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
             cd /opt/oralexam
-            COMPOSE_FILE="docker-compose.prod.yml"
-            if [ ! -f "$COMPOSE_FILE" ]; then
-              COMPOSE_FILE="docker-compose.yml"
+            if [ -d ".git" ]; then
+              echo "=== 0. Updating Repository on VPS (/opt/oralexam) ==="
+              git fetch origin
+              git checkout "${{ github.ref_name }}" || true
+              git pull --ff-only origin "${{ github.ref_name }}" || git reset --hard "origin/${{ github.ref_name }}"
+            fi
+
+            if [ -f "docker-compose.yml" ] && [ -f "docker-compose.prod.yml" ]; then
+              COMPOSE_ARGS="-f docker-compose.yml -f docker-compose.prod.yml"
+            elif [ -f "docker-compose.prod.yml" ]; then
+              COMPOSE_ARGS="-f docker-compose.prod.yml"
+            else
+              COMPOSE_ARGS="-f docker-compose.yml"
             fi
 
             echo "=== 1. Logging into GitHub Container Registry ==="
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
 
-            echo "=== 2. Pulling Latest Production Images ==="
-            docker compose -f "$COMPOSE_FILE" pull
-
-            echo "=== 3. Starting Production Containers in Background ==="
-            docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
+            echo "=== 2. Pulling Base Images & Rebuilding Production Containers ==="
+            docker compose $COMPOSE_ARGS pull --ignore-buildable || true
+            docker compose $COMPOSE_ARGS up -d --build --remove-orphans
 
             echo "=== 4. Pruning Dangling Docker Images ==="
             docker image prune -f

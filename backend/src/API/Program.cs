@@ -44,14 +44,20 @@ builder.Services.AddCors(options =>
 
         policy.AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials()
-              .WithExposedHeaders("X-STT-Confidence", "X-STT-Provider", "X-TTS-Provider", "X-TTS-Voice", "X-TTS-Rate", "X-TTS-Fallback", "X-TTS-Cache");
+              .AllowCredentials();
     });
 });
 
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Oral Examination API",
+        Version = "v1"
+    });
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -59,8 +65,9 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Dán accessToken lấy từ password-login. Không gõ thêm chữ Bearer."
+        Description = "Enter JWT access token."
     });
+
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -76,57 +83,51 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
-builder.Services.AddControllers();
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-builder.Services.AddScoped<OralExamination.Application.Common.Interfaces.IAntiCheatNotifier, OralExamination.API.Services.AntiCheatSignalRNotifier>();
 
 var app = builder.Build();
 
-app.UseForwardedHeaders();
+await ApplyMigrationsAsync(app);
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
+// Thứ tự Middleware bắt buộc: UseCors() phải nằm trước UseStaticFiles() để không bị chặn CORS trên tài nguyên tĩnh (ảnh/audio).
+app.UseCors("AllowFrontend");
+
+var wwwrootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(wwwrootPath))
+{
+    Directory.CreateDirectory(wwwrootPath);
+}
+app.UseStaticFiles();
+
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-app.UseSwagger();
-app.UseSwaggerUI();
-
-app.UseCors("AllowFrontend");
-app.UseHttpsRedirection();
-app.UseStaticFiles();
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
-app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/in-class");
 app.MapHub<OralExamination.API.Hubs.AntiCheatHub>("/hubs/anti-cheat");
-
-app.MapGet("/health", () => Results.Ok(new
-{
-    status = "Healthy",
-    service = "OralExamination.API",
-    timestamp = DateTime.UtcNow
-}))
-.AllowAnonymous()
-.WithName("GetHealthStatus")
-.WithOpenApi();
-
-await ApplyMigrationsAsync(app);
-
-if (args.Contains("--seed-only", StringComparer.OrdinalIgnoreCase))
-{
-    return;
-}
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 app.Run();
 
 static async Task ApplyMigrationsAsync(WebApplication app)
 {
-    const int maxAttempts = 5;
+    const int maxAttempts = 10;
     var delay = TimeSpan.FromSeconds(2);
     var logger = app.Services.GetRequiredService<ILoggerFactory>()
         .CreateLogger("DatabaseMigration");
@@ -141,11 +142,13 @@ static async Task ApplyMigrationsAsync(WebApplication app)
             if (context.Database.IsRelational())
             {
                 logger.LogInformation(
-                    "Applying EF Core migrations (attempt {Attempt}/{MaxAttempts}).",
+                    "Applying EF Core migrations and PostgreSQL schema reconciliation (attempt {Attempt}/{MaxAttempts}).",
                     attempt,
                     maxAttempts);
 
+                await PostgresSchemaReconciler.ReconcilePreMigrationAsync(context);
                 await context.Database.MigrateAsync();
+                await PostgresSchemaReconciler.ReconcilePostMigrationAsync(context);
             }
 
             var seedConfig = app.Configuration["Database:EnableDevelopmentSeed"]

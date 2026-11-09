@@ -697,7 +697,7 @@ public class ClassesController(ISender sender) : ControllerBase
 
     private IActionResult RosterFailure(string error)
     {
-        var detail = error.Contains(':') ? error[(error.IndexOf(':') + 1)..].Trim() : error;
+        var detail = error;
         if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", detail));
@@ -713,7 +713,7 @@ public class ClassesController(ISender sender) : ControllerBase
             return Conflict(ClassProblem(409, "Conflict", detail));
         }
 
-        return UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", detail));
+        return BadRequest(ClassProblem(400, "Bad Request", detail));
     }
 
     private static ProblemDetails ClassProblem(int status, string title, string detail) => new()
@@ -721,7 +721,7 @@ public class ClassesController(ISender sender) : ControllerBase
         Status = status,
         Title = title,
         Detail = detail,
-        Type = $"https://oralexam.fpt.edu.vn/errors/class-{status}"
+        Type = "https://tools.ietf.org/html/rfc7807"
     };
 }
 

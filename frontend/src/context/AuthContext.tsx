@@ -25,8 +25,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setAuthState({ user: null, token: null })
     }
 
+    const handleMustChangePassword = () => {
+      setAuthState((prev) => {
+        if (!prev.user) return prev
+        const updatedUser: User = { ...prev.user, mustChangePassword: true }
+        sessionStorage.setItem('user_profile', JSON.stringify(updatedUser))
+        return { ...prev, user: updatedUser }
+      })
+    }
+
     window.addEventListener('auth:session-expired', handleSessionExpired)
-    return () => window.removeEventListener('auth:session-expired', handleSessionExpired)
+    window.addEventListener('auth:must-change-password', handleMustChangePassword)
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired)
+      window.removeEventListener('auth:must-change-password', handleMustChangePassword)
+    }
   }, [])
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
@@ -37,6 +50,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithPassword = useCallback(async (username: string, password: string) => {
     const data = await authService.passwordLogin({ username, password })
     setAuthState({ user: data.user, token: data.accessToken })
+  }, [])
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    await authService.changePassword({ currentPassword, newPassword })
+    const currentUser = authService.getCurrentUser()
+    const token = authService.getToken()
+    setAuthState({ user: currentUser, token })
   }, [])
 
   const logout = async () => {
@@ -69,6 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isAdmin,
         loginWithPassword,
         loginWithGoogle,
+        changePassword,
         logout,
         hasRole,
       }}

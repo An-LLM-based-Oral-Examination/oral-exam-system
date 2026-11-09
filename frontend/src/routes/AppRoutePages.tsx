@@ -56,6 +56,11 @@ export const InClassShiftResultsPage = lazy(() =>
     default: module.InClassShiftResultsPage,
   })),
 )
+export const AdminDashboardPage = lazy(() =>
+  import('@/pages/admin/AdminDashboardPage').then((module) => ({
+    default: module.AdminDashboardPage,
+  })),
+)
 
 export function InstructorPageFallback() {
   return (

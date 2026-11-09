@@ -200,6 +200,15 @@ export interface BatchApproveQuestionsResult {
   approvedCount: number
 }
 
+export interface UploadQuestionImageResponse {
+  imageUrl: string
+  objectKey: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+  description?: string | null
+}
+
 /** Compatibility aliases for components that use shorter rubric names. */
 export type RubricCriterion = RubricCriterionDetail
 export type Question = QuestionDetail

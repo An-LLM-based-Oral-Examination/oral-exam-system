@@ -27,6 +27,7 @@ export interface User {
   role: UserRole
   studentCode?: string
   createdAt?: string
+  mustChangePassword?: boolean
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   BarChart3,
   Bell,
   ClipboardCheck,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -25,6 +26,7 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/mock-exam/session': { label: 'Phiên thi thử', icon: TimerReset },
   '/exam': { label: 'Phòng thi chính thức', icon: ClipboardCheck },
   '/results': { label: 'Lịch sử & Kết quả', icon: BarChart3 },
+  '/change-password': { label: 'Đổi mật khẩu', icon: KeyRound },
 }
 
 function getInitials(fullName: string) {
@@ -104,6 +106,17 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
               {getInitials(user?.fullName ?? 'Sinh viên') || 'SV'}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/change-password')}
+            title="Đổi mật khẩu"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+            aria-label="Đổi mật khẩu"
+          >
+            <KeyRound className="size-4 shrink-0" aria-hidden="true" />
+            <span className="hidden lg:inline">Đổi mật khẩu</span>
+          </button>
 
           <button
             type="button"

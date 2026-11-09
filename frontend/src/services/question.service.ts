@@ -13,6 +13,7 @@ import type {
   QuestionFilters,
   QuestionSummary,
   ReviewQuestionDecisionRequest,
+  UploadQuestionImageResponse,
 } from '@/types/rubric.types'
 
 type JsonRecord = Record<string, unknown>
@@ -158,6 +159,28 @@ export const questionService = {
    * Luồng MF-03 / R8 — Giảng viên tạo câu hỏi thẳng vào kho luyện tập & thi thử.
    * Backend cố định usageScope = "practice" trên bảng practice_questions.
    */
+  async uploadQuestionImage(
+    file: File,
+    description?: string,
+  ): Promise<UploadQuestionImageResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (description?.trim()) {
+      formData.append('description', description.trim())
+    }
+
+    const response = await apiClient.post<UploadQuestionImageResponse>(
+      '/questions/upload-image',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      },
+    )
+    return response.data
+  },
+
   async createPracticeQuestion(
     payload: CreateDraftQuestionRequest,
   ): Promise<CreateDraftQuestionResponse> {
