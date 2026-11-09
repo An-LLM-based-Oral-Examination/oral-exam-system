@@ -84,11 +84,12 @@ public static class PostgresSchemaReconciler
 
             -- 5. class_enrollments
             ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS joined_via_code boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS join_method character varying(30) NOT NULL DEFAULT 'ADMIN_IMPORT';
+            ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS join_method character varying(30) NOT NULL DEFAULT 'assigned';
 
             -- 6. practice_questions & exam_questions
             ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
             CREATE INDEX IF NOT EXISTS "IX_practice_questions_clo_id" ON practice_questions (clo_id);
+            CREATE INDEX IF NOT EXISTS ix_practice_questions_clo ON practice_questions (clo_id);
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_practice_questions_course_clos_clo_id') THEN
                 ALTER TABLE practice_questions ADD CONSTRAINT "FK_practice_questions_course_clos_clo_id"
                     FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
@@ -97,7 +98,9 @@ public static class PostgresSchemaReconciler
             ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
             ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS structure_id uuid NULL;
             CREATE INDEX IF NOT EXISTS "IX_exam_questions_clo_id" ON exam_questions (clo_id);
+            CREATE INDEX IF NOT EXISTS ix_exam_questions_clo ON exam_questions (clo_id);
             CREATE INDEX IF NOT EXISTS "IX_exam_questions_structure_id" ON exam_questions (structure_id);
+            CREATE INDEX IF NOT EXISTS ix_exam_questions_structure ON exam_questions (structure_id);
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_exam_questions_course_clos_clo_id') THEN
                 ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_course_clos_clo_id"
                     FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
@@ -113,18 +116,27 @@ public static class PostgresSchemaReconciler
             ALTER TABLE exam_sets ADD COLUMN IF NOT EXISTS is_sample_set boolean NOT NULL DEFAULT FALSE;
 
             -- 8. dead_letter_queues
-            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS flow_type character varying(30) NOT NULL DEFAULT 'MF04_OFFICIAL_EXAM';
+            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS flow_type character varying(30) NOT NULL DEFAULT 'OFFICIAL_EXAM';
+            ALTER TABLE dead_letter_queues ALTER COLUMN flow_type SET DEFAULT 'OFFICIAL_EXAM';
             ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS managed_by_role character varying(30) NOT NULL DEFAULT 'examination_officer';
             ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolved_by_user_id uuid NULL;
             ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolution_notes text NULL;
 
+            UPDATE dead_letter_queues SET flow_type = 'PRACTICE' WHERE flow_type = 'MF01_PRACTICE';
+            UPDATE dead_letter_queues SET flow_type = 'MOCK_EXAM' WHERE flow_type = 'MF02_MOCK_EXAM';
+            UPDATE dead_letter_queues SET flow_type = 'OFFICIAL_EXAM' WHERE flow_type = 'MF04_OFFICIAL_EXAM';
+            UPDATE dead_letter_queues SET flow_type = 'IN_CLASS_EXAM' WHERE flow_type = 'MF05_IN_CLASS';
+
             CREATE INDEX IF NOT EXISTS ix_dlq_role_flow_status ON dead_letter_queues (managed_by_role, flow_type, status);
+            CREATE INDEX IF NOT EXISTS ix_dlq_flow_status ON dead_letter_queues (flow_type, status);
+            CREATE INDEX IF NOT EXISTS ix_dlq_managed_role ON dead_letter_queues (managed_by_role, status);
             ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
             ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
-                CHECK (flow_type IN ('MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
+                CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM', 'MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
             ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_by_role;
-            ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_managed_by_role
-                CHECK (managed_by_role IN ('admin', 'examination_officer'));
+            ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_role;
+            ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_managed_role
+                CHECK (managed_by_role IN ('admin', 'examination_officer', 'lecturer'));
             IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_dead_letter_queues_users_resolved_by_user_id') THEN
                 ALTER TABLE dead_letter_queues ADD CONSTRAINT "FK_dead_letter_queues_users_resolved_by_user_id"
                     FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL;

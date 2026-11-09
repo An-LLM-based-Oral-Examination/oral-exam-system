@@ -42,6 +42,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [])
 
+  useEffect(() => {
+    if (!user?.mustChangePassword || !sessionStorage.getItem('refresh_token')) return
+
+    let active = true
+    void authService
+      .refreshToken()
+      .then((refreshed) => {
+        if (!active) return
+        setAuthState({ user: refreshed.user, token: refreshed.accessToken })
+      })
+      .catch(() => {
+        // Giữ nguyên trạng thái hiện tại nếu không làm mới được token
+      })
+
+    return () => {
+      active = false
+    }
+  }, [user?.id, user?.mustChangePassword])
+
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const data = await authService.googleLogin({ idToken })
     setAuthState({ user: data.user, token: data.accessToken })

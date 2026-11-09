@@ -44,6 +44,19 @@ apiClient.interceptors.request.use(
 
 let refreshPromise: Promise<string> | null = null
 
+function readMustChangeFromToken(token: string): boolean | undefined {
+  const parts = token.split('.')
+  if (parts.length < 2) return undefined
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(atob(padded)) as { must_change_password?: unknown }
+    return payload.must_change_password === 'true' || payload.must_change_password === true
+  } catch {
+    return undefined
+  }
+}
+
 async function refreshAccessToken(): Promise<string> {
   const refreshToken = sessionStorage.getItem('refresh_token')
   if (!refreshToken) throw new Error('Không có refresh token')
@@ -59,6 +72,21 @@ async function refreshAccessToken(): Promise<string> {
 
   sessionStorage.setItem('access_token', response.data.accessToken)
   sessionStorage.setItem('refresh_token', response.data.refreshToken)
+  const mustChange = readMustChangeFromToken(response.data.accessToken)
+  const rawProfile = sessionStorage.getItem('user_profile')
+  if (rawProfile && mustChange !== undefined) {
+    try {
+      const parsedProfile = JSON.parse(rawProfile) as unknown
+      if (isRecord(parsedProfile)) {
+        sessionStorage.setItem(
+          'user_profile',
+          JSON.stringify({ ...parsedProfile, mustChangePassword: mustChange }),
+        )
+      }
+    } catch {
+      // Bỏ qua nếu JSON trong sessionStorage không hợp lệ
+    }
+  }
   return response.data.accessToken
 }
 
@@ -121,6 +149,26 @@ apiClient.interceptors.response.use(
       normalizedStatus === 403 &&
       (title.includes('Cần đổi mật khẩu') || detail.includes('Bạn phải đổi mật khẩu'))
     ) {
+      if (
+        config &&
+        !config._retry &&
+        !config._skipAuthRefresh &&
+        !isAuthEndpoint &&
+        sessionStorage.getItem('refresh_token')
+      ) {
+        config._retry = true
+        try {
+          refreshPromise ??= refreshAccessToken().finally(() => {
+            refreshPromise = null
+          })
+          const token = await refreshPromise
+          if (config.headers) config.headers.Authorization = `Bearer ${token}`
+          return apiClient.request(config)
+        } catch {
+          // Tiếp tục xử lý trạng thái bắt buộc đổi mật khẩu bên dưới nếu refresh thất bại
+        }
+      }
+
       const rawProfile = sessionStorage.getItem('user_profile')
       if (rawProfile) {
         try {
