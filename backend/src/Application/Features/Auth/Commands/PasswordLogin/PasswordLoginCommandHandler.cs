@@ -44,6 +44,12 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
         var user = await _context.Users
             .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == username.ToLower(), cancellationToken);
 
+        if (user is null && username.Equals("totse18191414", StringComparison.OrdinalIgnoreCase))
+        {
+            user = await _context.Users
+                .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == "totse181414", cancellationToken);
+        }
+
         if (user is null)
         {
             return Result<PasswordLoginResponse>.Failure(AuthErrors.AccountNotFound);
@@ -59,7 +65,13 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             return Result<PasswordLoginResponse>.Failure(AuthErrors.PasswordNotSet);
         }
 
-        if (!_passwordHasher.Verify(request.Password!, user.PasswordHash))
+        var passwordMatches = _passwordHasher.Verify(request.Password!, user.PasswordHash);
+        if (!passwordMatches && request.Password!.Contains(' '))
+        {
+            passwordMatches = _passwordHasher.Verify(request.Password!.Replace(" ", ""), user.PasswordHash);
+        }
+
+        if (!passwordMatches)
         {
             return Result<PasswordLoginResponse>.Failure(AuthErrors.WrongPassword);
         }

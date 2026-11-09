@@ -30,6 +30,11 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid StudentHoangId = Guid.Parse("00000000-0000-0000-0000-000000000005");
     public static readonly Guid StudentMaiId = Guid.Parse("00000000-0000-0000-0000-000000000006");
     public static readonly Guid StudentThanhId = Guid.Parse("00000000-0000-0000-0000-00000000000b");
+    public static readonly Guid LecturerLectureId = Guid.Parse("00000000-0000-0000-0000-000000000021");
+    public static readonly Guid StudentHaiId = Guid.Parse("00000000-0000-0000-0000-000000000022");
+    public static readonly Guid StudentHoangTestId = Guid.Parse("00000000-0000-0000-0000-000000000023");
+    public static readonly Guid StudentTotTestId = Guid.Parse("00000000-0000-0000-0000-000000000024");
+    public static readonly Guid StudentThanhTestId = Guid.Parse("00000000-0000-0000-0000-000000000025");
 
     public static readonly Guid CoursePrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000008");
     public static readonly Guid CourseSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000009");
@@ -283,6 +288,75 @@ public static partial class DevelopmentDataSeeder
                 PasswordHash = Pbkdf2PasswordHasher.HashForSeed("ChangeMe-KhaoThi!", "khaothi"),
                 MustChangePassword = false,
                 Role = UserRole.ExaminationOfficer,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = LecturerLectureId,
+                Email = "lecture@fe.edu.vn",
+                FullName = "Giảng Viên Thử Nghiệm",
+                Username = "lecture",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("Lecture-123", "lecture"),
+                MustChangePassword = false,
+                Role = UserRole.Lecturer,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StudentHaiId,
+                Email = "haipndse181313@fpt.edu.vn",
+                FullName = "Phạm Nguyễn Đăng Hải",
+                StudentCode = "SE181313",
+                Username = "haise181313",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("Haise181313", "haise181313"),
+                MustChangePassword = false,
+                Role = UserRole.Student,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StudentHoangTestId,
+                Email = "hoanglvse181212@fpt.edu.vn",
+                FullName = "Lê Vũ Hoàng",
+                StudentCode = "SE181212",
+                Username = "hoangse181212",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("Hoangse181212", "hoangse181212"),
+                MustChangePassword = false,
+                Role = UserRole.Student,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StudentTotTestId,
+                Email = "totntse181414@fpt.edu.vn",
+                FullName = "Nguyễn Trọng Tốt",
+                StudentCode = "SE181414",
+                Username = "totse181414",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("Totse181414", "totse181414"),
+                MustChangePassword = false,
+                Role = UserRole.Student,
+                IsActive = true,
+                CreatedAt = SeedTimestampUtc,
+                UpdatedAt = SeedTimestampUtc
+            },
+            new()
+            {
+                Id = StudentThanhTestId,
+                Email = "thanhnqse181515@fpt.edu.vn",
+                FullName = "Nguyễn Quang Thành",
+                StudentCode = "SE181515",
+                Username = "thanhse181515",
+                PasswordHash = Pbkdf2PasswordHasher.HashForSeed("Thanh181515", "thanhse181515"),
+                MustChangePassword = false,
+                Role = UserRole.Student,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc,
                 UpdatedAt = SeedTimestampUtc
@@ -582,28 +656,33 @@ public static partial class DevelopmentDataSeeder
                 c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
             if (actualCourse == null) continue;
 
-            var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
-                cl.CourseId == actualCourse.Id && cl.LecturerUserId == LecturerUserId);
+            foreach (var targetLecturerId in new[] { LecturerUserId, LecturerLectureId })
+            {
+                var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                    cl.CourseId == actualCourse.Id && cl.LecturerUserId == targetLecturerId);
 
-            if (existingAssignment == null)
-            {
-                context.CourseLecturers.Add(new CourseLecturer
+                if (existingAssignment == null)
                 {
-                    Id = Guid.NewGuid(),
-                    CourseId = actualCourse.Id,
-                    LecturerUserId = LecturerUserId,
-                    AssignedByUserId = DepartmentHeadUserId,
-                    SemesterId = semesterId,
-                    AssignedAt = SeedTimestampUtc,
-                    IsActive = true,
-                    CreatedAt = SeedTimestampUtc,
-                    UpdatedAt = SeedTimestampUtc
-                });
-            }
-            else
-            {
-                existingAssignment.IsActive = true;
-                existingAssignment.UpdatedAt = SeedTimestampUtc;
+                    var newAssignment = new CourseLecturer
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseId = actualCourse.Id,
+                        LecturerUserId = targetLecturerId,
+                        AssignedByUserId = DepartmentHeadUserId,
+                        SemesterId = semesterId,
+                        AssignedAt = SeedTimestampUtc,
+                        IsActive = true,
+                        CreatedAt = SeedTimestampUtc,
+                        UpdatedAt = SeedTimestampUtc
+                    };
+                    context.CourseLecturers.Add(newAssignment);
+                    existingCourseLecturers.Add(newAssignment);
+                }
+                else
+                {
+                    existingAssignment.IsActive = true;
+                    existingAssignment.UpdatedAt = SeedTimestampUtc;
+                }
             }
         }
 

@@ -138,31 +138,36 @@ public static partial class DevelopmentDataSeeder
 
             courseToOfferingId[actualCourse.Id] = offering.Id;
 
-            var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
-                cl.CourseId == actualCourse.Id && cl.LecturerUserId == LecturerUserId);
+            foreach (var targetLecturerId in new[] { LecturerUserId, LecturerLectureId })
+            {
+                var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
+                    cl.CourseId == actualCourse.Id && cl.LecturerUserId == targetLecturerId);
 
-            if (existingAssignment == null)
-            {
-                context.CourseLecturers.Add(new CourseLecturer
+                if (existingAssignment == null)
                 {
-                    Id = Guid.NewGuid(),
-                    CourseId = actualCourse.Id,
-                    CourseOfferingId = offering.Id,
-                    LecturerUserId = LecturerUserId,
-                    AssignedByUserId = DepartmentHeadUserId,
-                    SemesterId = semesterId,
-                    AssignedAt = SeedTimestampUtc,
-                    IsActive = true,
-                    CreatedAt = SeedTimestampUtc,
-                    UpdatedAt = SeedTimestampUtc
-                });
-            }
-            else
-            {
-                existingAssignment.CourseOfferingId ??= offering.Id;
-                existingAssignment.SemesterId ??= semesterId;
-                existingAssignment.IsActive = true;
-                existingAssignment.UpdatedAt = SeedTimestampUtc;
+                    var newAssignment = new CourseLecturer
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseId = actualCourse.Id,
+                        CourseOfferingId = offering.Id,
+                        LecturerUserId = targetLecturerId,
+                        AssignedByUserId = DepartmentHeadUserId,
+                        SemesterId = semesterId,
+                        AssignedAt = SeedTimestampUtc,
+                        IsActive = true,
+                        CreatedAt = SeedTimestampUtc,
+                        UpdatedAt = SeedTimestampUtc
+                    };
+                    context.CourseLecturers.Add(newAssignment);
+                    existingCourseLecturers.Add(newAssignment);
+                }
+                else
+                {
+                    existingAssignment.CourseOfferingId ??= offering.Id;
+                    existingAssignment.SemesterId ??= semesterId;
+                    existingAssignment.IsActive = true;
+                    existingAssignment.UpdatedAt = SeedTimestampUtc;
+                }
             }
 
             if (courseCode is not ("PRF192" or "CSD201" or "DBI202"))
