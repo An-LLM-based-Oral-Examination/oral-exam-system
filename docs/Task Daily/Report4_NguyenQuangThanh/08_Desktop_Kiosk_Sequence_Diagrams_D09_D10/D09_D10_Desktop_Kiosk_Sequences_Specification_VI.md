@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** 02 Sơ đồ Tuần tự Desktop Kiosk (`D-09` & `D-10`) gắn nhãn minh bạch **`[Target Design / Proposed]`** cho phần Kiosk Client (`OralExam.DesktopKiosk`) kết nối trực tiếp với hệ thống Backend API thật đã triển khai trong `05_Source_Code`.
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `D-09 Sequence Diagram`: [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio) | [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.png`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.png)
->   - `D-10 Sequence Diagram`: [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio) | [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.png`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `D-09 Sequence Diagrams`: [`D09_01_Kiosk_Startup_Mic_Calibration_Sequence.drawio`](./D09_01_Kiosk_Startup_Mic_Calibration_Sequence.drawio) | [`D09_02_Kiosk_IP_Binding_CheckIn_Sequence.drawio`](./D09_02_Kiosk_IP_Binding_CheckIn_Sequence.drawio) | [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio)
+>   - `D-10 Sequence Diagrams`: [`D10_01_Kiosk_Lockdown_Sealed_Submission_Sequence.drawio`](./D10_01_Kiosk_Lockdown_Sealed_Submission_Sequence.drawio) | [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio)
 
 ---
 
@@ -28,7 +28,10 @@ Sơ đồ `D-09` mô tả luồng tương tác từ lúc thí sinh khởi chạy
 
 ### 2.9.2. Sơ Đồ Tuần Tự `D-09` (`D-09 Sequence Diagram`)
 
-> **Tệp Draw.io & PNG:** [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio) | [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.png`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.png)
+> **Tệp sơ đồ Draw.io (Phân rã & Tổng quan):**
+> - Phân rã 1: [`D09_01_Kiosk_Startup_Mic_Calibration_Sequence.drawio`](./D09_01_Kiosk_Startup_Mic_Calibration_Sequence.drawio) (Kiosk Startup Lockdown & Mic Calibration >= 60dB)
+> - Phân rã 2: [`D09_02_Kiosk_IP_Binding_CheckIn_Sequence.drawio`](./D09_02_Kiosk_IP_Binding_CheckIn_Sequence.drawio) (Kiosk Seat STT Matching & IP Address Binding)
+> - Tổng quan kế thừa: [`D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio`](./D09_Kiosk_Startup_PreCheck_CheckIn_Sequence.drawio)
 
 ```mermaid
 sequenceDiagram
@@ -114,7 +117,9 @@ Sơ đồ `D-10` đặc tả luồng làm bài vấn đáp chính thức trên *
 
 ### 2.10.2. Sơ Đồ Tuần Tự `D-10` (`D-10 Sequence Diagram`)
 
-> **Tệp Draw.io & PNG:** [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio) | [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.png`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.png)
+> **Tệp sơ đồ Draw.io (Phân rã & Tổng quan):**
+> - Phân rã 1: [`D10_01_Kiosk_Lockdown_Sealed_Submission_Sequence.drawio`](./D10_01_Kiosk_Lockdown_Sealed_Submission_Sequence.drawio) (Kiosk Audio Sealing SHA-256 & R2 Persist-First Submission)
+> - Tổng quan kế thừa: [`D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio`](./D10_Kiosk_Exam_Execution_Persist_First_Sequence.drawio)
 
 ```mermaid
 sequenceDiagram

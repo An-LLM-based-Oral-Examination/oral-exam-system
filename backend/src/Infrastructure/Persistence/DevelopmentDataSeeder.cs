@@ -302,10 +302,7 @@ public static partial class DevelopmentDataSeeder
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(existing.PasswordHash) || existing.PasswordHash == user.PasswordHash)
-                {
-                    existing.MustChangePassword = user.MustChangePassword;
-                }
+                existing.MustChangePassword = user.MustChangePassword;
                 existing.IsActive = true;
                 if (string.IsNullOrWhiteSpace(existing.Username))
                 {

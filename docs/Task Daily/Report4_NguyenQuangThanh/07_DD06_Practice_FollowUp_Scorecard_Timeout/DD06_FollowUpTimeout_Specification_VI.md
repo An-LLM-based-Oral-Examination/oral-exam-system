@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-06`:** Contextual Follow-up, Scorecard, History & Session Timeout (`MF-01`)
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-06 Class Diagram`: [`DD06_FollowUpTimeout_Class_Diagram.drawio`](./DD06_FollowUpTimeout_Class_Diagram.drawio) | [`DD06_FollowUpTimeout_Class_Diagram.png`](./DD06_FollowUpTimeout_Class_Diagram.png)
->   - `DD-06 Sequence Diagram`: [`DD06_FollowUpTimeout_Sequence_Diagram.drawio`](./DD06_FollowUpTimeout_Sequence_Diagram.drawio) | [`DD06_FollowUpTimeout_Sequence_Diagram.png`](./DD06_FollowUpTimeout_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-06 Sequence Diagrams`: [`DD06_01_Contextual_FollowUp_QA_Sequence.drawio`](./DD06_01_Contextual_FollowUp_QA_Sequence.drawio) | [`DD06_02_Session_Timeout_Scorecard_Sequence.drawio`](./DD06_02_Session_Timeout_Scorecard_Sequence.drawio) | [`DD06_FollowUpTimeout_Sequence_Diagram.drawio`](./DD06_FollowUpTimeout_Sequence_Diagram.drawio)
+>   - `DD-06 Class Diagram`: [`DD06_FollowUpTimeout_Class_Diagram.drawio`](./DD06_FollowUpTimeout_Class_Diagram.drawio)
 
 ---
 
@@ -27,9 +27,80 @@ Gói `DD-06` hoàn thiện vòng đời phiên luyện tập tương tác tự d
 
 ---
 
-### 3.6.2. Sơ Đồ Lớp (`DD-06 Class Diagram`)
+### 3.6.2. Sơ Đồ Tuần Tự (`DD-06 Sequence Diagrams — Các Tính Năng / Use Case Con Độc Lập`)
 
-> **Tệp Draw.io & PNG:** [`DD06_FollowUpTimeout_Class_Diagram.drawio`](./DD06_FollowUpTimeout_Class_Diagram.drawio) | [`DD06_FollowUpTimeout_Class_Diagram.png`](./DD06_FollowUpTimeout_Class_Diagram.png)
+Gói `DD-06` được phân rã thành **2 sơ đồ Use Case con độc lập** và 01 sơ đồ tổng quan kế thừa:
+
+1. **Contextual Follow-up Q&A (`DD06_01`):**
+   - **Tệp sơ đồ Draw.io:** [`DD06_01_Contextual_FollowUp_QA_Sequence.drawio`](./DD06_01_Contextual_FollowUp_QA_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Áp dụng riêng cho chế độ `per_question`. Sau khi câu trả lời chính có điểm, nếu tổng điểm rơi vào khoảng biên $4.0 \le 	ext{Score} \le 8.0$ và số câu phụ chưa vượt quá `MaxPracticeFollowUpQuestions` (1–5 câu do Admin cấu hình, mặc định 2 câu): `FollowUpPromptBuilder` xác định tiêu chí Rubric có tỷ lệ điểm thấp nhất (`WeakestCriterion`) để sinh câu hỏi phụ xoáy sâu vào lỗ hổng kiến thức của sinh viên. Điểm các câu phụ đóng góp tối đa $+20\%$ điểm thưởng vào điểm hiệu lực cuối cùng của câu hỏi: $S_{\text{effective}} = \min(10.0, \text{round}(S_{\text{main}} + \overline{S}_{\text{followUp}} \times 0.20, 2))$.
+
+2. **Session Inactivity Timeout & Scorecard Generation (`DD06_02`):**
+   - **Tệp sơ đồ Draw.io:** [`DD06_02_Session_Timeout_Scorecard_Sequence.drawio`](./DD06_02_Session_Timeout_Scorecard_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Khi điểm số nằm ngoài khoảng $[4.0, 8.0]$ hoặc đã hoàn tất số câu phụ tối đa, hệ thống đóng chu trình và hiển thị đầy đủ Scorecard (điểm thành phần, nhận xét AI, CoT trace, model answer). Khi sinh viên bấm hoàn thành hoặc khi ngừng tương tác quá `SessionInactivityTimeoutMinutes` (mặc định 5 phút), `PracticeSessionTimeoutHelper` tự động đóng phiên (`status = "completed"`), tính điểm trung bình các câu đã làm (các câu chưa làm ở chế độ `full_session` tính 0 điểm) và trả mã `HTTP 410 Gone` nếu có thao tác tiếp theo. Lịch sử luyện tập được lưu trữ và truy vấn phục vụ Student Portal (`FE-02`).
+
+- **Sơ đồ tổng quan kế thừa:** [`DD06_FollowUpTimeout_Sequence_Diagram.drawio`](./DD06_FollowUpTimeout_Sequence_Diagram.drawio)
+
+```mermaid
+sequenceDiagram
+    actor Student as Student
+    participant UI as Practice UI
+    participant Ctrl as PracticeController
+    participant Helper as FollowUpBuilder & TimeoutHelper
+    participant Handler as Session / Complete / History Handlers
+    participant DB as Database
+
+    Student->>UI: 1. View answer, finish or open history
+    alt Borderline Score and Follow-up Limit Not Reached
+        UI->>Ctrl: 2.1 Send get session request
+        Ctrl->>Handler: 3.1 Forward get session query
+        Handler->>DB: 4.1 Load session, answers and config
+        DB-->>Handler: 5.1 Return session details
+        Handler->>Helper: 6.1 Build follow-up prompt for weakest criterion
+        Helper-->>Handler: 7.1 Return follow-up prompt
+        Handler-->>Ctrl: 8.1 Return session detail with follow-up
+        Ctrl-->>UI: 9.1 Display follow-up question
+    else Score Outside Range or Follow-up Limit Reached
+        Handler->>Helper: 6.2 Calculate effective question score
+        Helper-->>Handler: 7.2 Return effective score
+        Handler-->>Ctrl: 8.2 Return completed question scorecard
+        Ctrl-->>UI: 9.2 Display detailed scorecard
+    end
+
+    alt Complete Session or Auto-Close on Timeout
+        UI->>Ctrl: 2.3 Send complete session request
+        Ctrl->>Handler: 3.3 Forward complete session command
+        Handler->>Helper: 4.3 Calculate final session score
+        Helper-->>Handler: 5.3 Return calculated total score
+        Handler->>DB: 6.3 Update session status and total score
+        DB-->>Handler: 7.3 Confirm session updated
+        Handler-->>Ctrl: 8.3 Return completion response
+        Ctrl-->>UI: 9.3 Display final session scorecard
+    else View Student Practice History
+        UI->>Ctrl: 2.4 Send practice history request
+        Ctrl->>Handler: 3.4 Forward practice history query
+        Handler->>Helper: 4.4 Close expired active sessions
+        Helper-->>Handler: 5.4 Return cleanup status
+        Handler->>DB: 6.4 Query student practice history
+        DB-->>Handler: 7.4 Return history records
+        Handler-->>Ctrl: 8.4 Return practice history response
+        Ctrl-->>UI: 9.4 Display practice history
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 10.5 Log error
+        Handler-->>Ctrl: 11.5 Return error response
+        Ctrl-->>UI: 12.5 Display error message
+    end
+```
+
+*Hình 3.6.2 — Sơ đồ tuần tự gói `DD-06` (Câu hỏi phụ ngữ cảnh, Đóng phiên quá hạn & Bảng điểm Scorecard).*
+
+---
+
+### 3.6.3. Sơ Đồ Lớp (`DD-06 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD06_FollowUpTimeout_Class_Diagram.drawio`](./DD06_FollowUpTimeout_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -142,68 +213,7 @@ classDiagram
     IApplicationDbContext ..> AiEvaluation : Uses
 ```
 
-*Hình 3.6.1 — Sơ đồ lớp gói `DD-06` (Câu hỏi phụ ngữ cảnh, Tổng hợp Scorecard, Lịch sử luyện tập & Tự động đóng phiên quá hạn).*
-
----
-
-### 3.6.3. Sơ Đồ Tuần Tự (`DD-06 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD06_FollowUpTimeout_Sequence_Diagram.drawio`](./DD06_FollowUpTimeout_Sequence_Diagram.drawio) | [`DD06_FollowUpTimeout_Sequence_Diagram.png`](./DD06_FollowUpTimeout_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor Student as Student
-    participant UI as Practice UI
-    participant Ctrl as PracticeController
-    participant Helper as FollowUpBuilder & TimeoutHelper
-    participant Handler as Session / Complete / History Handlers
-    participant DB as Database
-
-    Student->>UI: 1. View answer, finish or open history
-    alt Borderline Score and Follow-up Limit Not Reached
-        UI->>Ctrl: 2.1 Send get session request
-        Ctrl->>Handler: 3.1 Forward get session query
-        Handler->>DB: 4.1 Load session, answers and config
-        DB-->>Handler: 5.1 Return session details
-        Handler->>Helper: 6.1 Build follow-up prompt for weakest criterion
-        Helper-->>Handler: 7.1 Return follow-up prompt
-        Handler-->>Ctrl: 8.1 Return session detail with follow-up
-        Ctrl-->>UI: 9.1 Display follow-up question
-    else Score Outside Range or Follow-up Limit Reached
-        Handler->>Helper: 6.2 Calculate effective question score
-        Helper-->>Handler: 7.2 Return effective score
-        Handler-->>Ctrl: 8.2 Return completed question scorecard
-        Ctrl-->>UI: 9.2 Display detailed scorecard
-    end
-
-    alt Complete Session or Auto-Close on Timeout
-        UI->>Ctrl: 2.3 Send complete session request
-        Ctrl->>Handler: 3.3 Forward complete session command
-        Handler->>Helper: 4.3 Calculate final session score
-        Helper-->>Handler: 5.3 Return calculated total score
-        Handler->>DB: 6.3 Update session status and total score
-        DB-->>Handler: 7.3 Confirm session updated
-        Handler-->>Ctrl: 8.3 Return completion response
-        Ctrl-->>UI: 9.3 Display final session scorecard
-    else View Student Practice History
-        UI->>Ctrl: 2.4 Send practice history request
-        Ctrl->>Handler: 3.4 Forward practice history query
-        Handler->>Helper: 4.4 Close expired active sessions
-        Helper-->>Handler: 5.4 Return cleanup status
-        Handler->>DB: 6.4 Query student practice history
-        DB-->>Handler: 7.4 Return history records
-        Handler-->>Ctrl: 8.4 Return practice history response
-        Ctrl-->>UI: 9.4 Display practice history
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 10.5 Log error
-        Handler-->>Ctrl: 11.5 Return error response
-        Ctrl-->>UI: 12.5 Display error message
-    end
-```
-
-*Hình 3.6.2 — Sơ đồ tuần tự gói `DD-06` (Xét điều kiện câu hỏi phụ $4.0..8.0$, Mở Scorecard, Kết thúc phiên / Timeout 5 phút & Xem lịch sử).*
+*Hình 3.6.3 — Sơ đồ lớp gói `DD-06` (Câu hỏi phụ ngữ cảnh, Tổng hợp Scorecard, Lịch sử luyện tập & Tự động đóng phiên).*
 
 ---
 

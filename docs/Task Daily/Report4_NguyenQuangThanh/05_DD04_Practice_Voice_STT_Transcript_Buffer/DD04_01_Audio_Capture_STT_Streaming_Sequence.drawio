@@ -1,0 +1,198 @@
+<mxfile host="Electron" agent="Mozilla/5.0">
+  <diagram id="DD04_01_Audio_Capture_STT_Streaming_Sequence" name="DD04_01_Audio_Capture_STT_Streaming_Sequence">
+    <mxGraphModel dx="1520" dy="1150" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1520" pageHeight="1150" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="actor_student" value=": &lt;u&gt;Sinh viên&lt;/u&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;strokeColor=#000000;fillColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="30" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_actor_student" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="55" y="110" as="sourcePoint" />
+            <mxPoint x="55" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_cli" value=": &lt;u&gt;Student Client&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="150" y="40" width="160" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_cli" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="230" y="84" as="sourcePoint" />
+            <mxPoint x="230" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_ctrl" value=": &lt;u&gt;SpeechController&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="160" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_ctrl" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="84" as="sourcePoint" />
+            <mxPoint x="480" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_hnd" value=": &lt;u&gt;TranscribeSpeechCommandHandler&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="680" y="40" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_hnd" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="84" as="sourcePoint" />
+            <mxPoint x="780" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_stt" value=": &lt;u&gt;ISpeechToTextService&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="960" y="40" width="180" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_stt" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1050" y="84" as="sourcePoint" />
+            <mxPoint x="1050" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_whisper" value=": &lt;u&gt;CloudflareWhisperService&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="40" width="180" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_whisper" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1290" y="84" as="sourcePoint" />
+            <mxPoint x="1290" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lf_hdr_gemini" value=": &lt;u&gt;GeminiSpeechToTextService&lt;/u&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=11;fontFamily=Segoe UI;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="40" width="180" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="lf_stem_gemini" value="" style="endArrow=none;dashed=1;html=1;strokeColor=#000000;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1490" y="84" as="sourcePoint" />
+            <mxPoint x="1490" y="1110" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_cli_140" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="225" y="140" width="10" height="890" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_ctrl_190" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="475" y="190" width="10" height="810" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_hnd_230" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="775" y="230" width="10" height="740" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_stt_270" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1045" y="270" width="10" height="670" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_whisper_310" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1285" y="310" width="10" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="bar_gemini_490" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1485" y="490" width="10" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="msg_1" value="1: MediaRecorder thu âm audio/webm theo chunks" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="230" y="140" as="sourcePoint" />
+            <mxPoint x="230" y="164" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="258" y="140" />
+              <mxPoint x="258" y="164" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_2" value="2: POST /api/v1/speech/stt (multipart audio/webm + vocabularyHint)" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="230" y="190" as="sourcePoint" />
+            <mxPoint x="480" y="190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_3" value="3: Send(TranscribeSpeechCommand)" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="230" as="sourcePoint" />
+            <mxPoint x="780" y="230" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_4" value="4: TranscribeAsync(stream, fileName, vocabularyHint)" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="270" as="sourcePoint" />
+            <mxPoint x="1050" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_5" value="5: [Primary Option 1] Gọi Cloudflare Whisper API" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1050" y="310" as="sourcePoint" />
+            <mxPoint x="1290" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fr_25" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=48;height=20;fillColor=none;strokeColor=#000000;strokeWidth=1.2;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fontColor=#000000;swimlaneFillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="120" y="360" width="1380" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="tg_fr_25" value="[Whisper Thành Công]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;strokeColor=none;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="175" y="362" width="146" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="msg_6" value="5.1: Return raw Vietnamese transcript" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1290" y="400" as="sourcePoint" />
+            <mxPoint x="1050" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dv_28" value="" style="endArrow=none;dashed=1;dashPattern=6 4;html=1;strokeColor=#666666;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="120" y="440" as="sourcePoint" />
+            <mxPoint x="1500" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dvt_dv_28" value="[Whisper Lỗi / Quá Tải 503 / Timeout]" style="text;html=1;align=left;verticalAlign=middle;fontStyle=1;fontSize=10;fontFamily=Segoe UI;fillColor=#FFFFFF;labelBackgroundColor=#FFFFFF;strokeColor=none;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="135" y="442" width="265" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="msg_7" value="5.2: Throws WhisperApiException" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1290" y="470" as="sourcePoint" />
+            <mxPoint x="1050" y="470" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_8" value="6: [Fallback Option 2] Gọi Gemini 1.5 Flash Audio STT" style="endArrow=block;endFill=1;dashed=0;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1050" y="500" as="sourcePoint" />
+            <mxPoint x="1490" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_9" value="7: Return transcript từ Gemini Multimodal" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1490" y="540" as="sourcePoint" />
+            <mxPoint x="1050" y="540" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_10" value="8: SE Vocabulary Normalization (Code-Switching correction)" style="edgeStyle=none;rounded=0;html=1;endArrow=block;endFill=1;dashed=0;fontSize=10;fontFamily=Segoe UI;align=left;verticalAlign=middle;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1050" y="620" as="sourcePoint" />
+            <mxPoint x="1050" y="644" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="1078" y="620" />
+              <mxPoint x="1078" y="644" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_11" value="9: Return SttResult(transcript, provider, confidence)" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1050" y="680" as="sourcePoint" />
+            <mxPoint x="780" y="680" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_12" value="10: Result.Success(sttDto)" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="780" y="730" as="sourcePoint" />
+            <mxPoint x="480" y="730" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_13" value="11: 200 OK { transcript, provider, confidence, durationSeconds }" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="780" as="sourcePoint" />
+            <mxPoint x="230" y="780" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg_14" value="12: Điền transcript vào ô xem trước văn bản (Review Buffer)" style="endArrow=open;endFill=0;dashed=1;dashPattern=6 4;html=1;rounded=0;fontSize=10;fontFamily=Segoe UI;verticalAlign=bottom;labelBackgroundColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="230" y="830" as="sourcePoint" />
+            <mxPoint x="55" y="830" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -214,6 +214,36 @@ static async Task ApplyMigrationsAsync(WebApplication app)
                 }
             }
 
+            // Schema Health Check Probe (Kiểm tra sự hiện diện vật lý của 5 bảng cốt lõi)
+            try
+            {
+                using var conn = context.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    SELECT COUNT(*)
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name IN ('academic_programs', 'course_offerings', 'in_class_exam_shifts', 'notifications', 'course_clos')
+                    """;
+                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                if (count < 5)
+                {
+                    logger.LogWarning("Schema Health Check Probe: Found {FoundCount}/5 key tables. Some tables might still be missing on PostgreSQL.", count);
+                }
+                else
+                {
+                    logger.LogInformation("Schema Health Check Probe: Verified physical presence of all {FoundCount}/5 key academic and in-class exam tables.", count);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Schema Health Check Probe could not execute query against PostgreSQL.");
+            }
+
             logger.LogInformation("Indestructible database startup sequence completed successfully.");
             return;
         }

@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-03`:** Practice Mode & Question Selection: Per-Question / Full Progressive (`MF-01`)
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-03 Class Diagram`: [`DD03_QuestionSelection_Class_Diagram.drawio`](./DD03_QuestionSelection_Class_Diagram.drawio) | [`DD03_QuestionSelection_Class_Diagram.png`](./DD03_QuestionSelection_Class_Diagram.png)
->   - `DD-03 Sequence Diagram`: [`DD03_QuestionSelection_Sequence_Diagram.drawio`](./DD03_QuestionSelection_Sequence_Diagram.drawio) | [`DD03_QuestionSelection_Sequence_Diagram.png`](./DD03_QuestionSelection_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-03 Sequence Diagrams`: [`DD03_01_OnDemand_Question_Selection_Sequence.drawio`](./DD03_01_OnDemand_Question_Selection_Sequence.drawio) | [`DD03_02_FullSession_Progressive_Selection_Sequence.drawio`](./DD03_02_FullSession_Progressive_Selection_Sequence.drawio) | [`DD03_QuestionSelection_Sequence_Diagram.drawio`](./DD03_QuestionSelection_Sequence_Diagram.drawio)
+>   - `DD-03 Class Diagram`: [`DD03_QuestionSelection_Class_Diagram.drawio`](./DD03_QuestionSelection_Class_Diagram.drawio)
 
 ---
 
@@ -30,9 +30,79 @@ Gói `DD-03` xử lý việc lấy câu hỏi tiếp theo và tải chi tiết p
 
 ---
 
-### 3.3.2. Sơ Đồ Lớp (`DD-03 Class Diagram`)
+### 3.3.2. Sơ Đồ Tuần Tự (`DD-03 Sequence Diagrams — Các Tính Năng / Use Case Con Độc Lập`)
 
-> **Tệp Draw.io & PNG:** [`DD03_QuestionSelection_Class_Diagram.drawio`](./DD03_QuestionSelection_Class_Diagram.drawio) | [`DD03_QuestionSelection_Class_Diagram.png`](./DD03_QuestionSelection_Class_Diagram.png)
+Nhằm phân rã trực quan các ca sử dụng bốc câu hỏi theo đặc thù nghiệp vụ, gói `DD-03` được cấu trúc thành **2 sơ đồ Use Case con độc lập** và 01 sơ đồ tổng quan kế thừa:
+
+1. **On-Demand Question Selection & Anti-3-Consecutive (`DD03_01`):**
+   - **Tệp sơ đồ Draw.io:** [`DD03_01_OnDemand_Question_Selection_Sequence.drawio`](./DD03_01_OnDemand_Question_Selection_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Sinh viên gọi `POST /api/v1/practice/sessions/{sessionId}/next-question`. `NextQuestionCommandHandler` thực hiện kiểm tra hạn chờ 5 phút qua `PracticeSessionTimeoutHelper` (nếu quá hạn tự động đóng phiên và trả `HTTP 410 Gone`). Nếu phiên còn hiệu lực, thuật toán Anti-3-Consecutive kiểm tra 2 câu hỏi gần nhất: nếu 2 câu liên tiếp có cùng độ khó $D$, câu tiếp theo sẽ được ưu tiên bốc ở độ khó khác nhằm đa dạng hóa câu hỏi, loại trừ các câu hỏi đã xuất hiện trong `SelectedQuestionIds` và `practice_answers`. Khi toàn bộ câu hỏi thuộc các độ khó đã chọn đều đã làm hết, hệ thống trả về `hasMoreQuestions: false`.
+
+2. **Full-Session Progressive Question Selection (`DD03_02`):**
+   - **Tệp sơ đồ Draw.io:** [`DD03_02_FullSession_Progressive_Selection_Sequence.drawio`](./DD03_02_FullSession_Progressive_Selection_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Xử lý lựa chọn trọn gói 3–10 câu hỏi theo ma trận độ khó lũy tiến (Dễ $	o$ Trung bình $	o$ Khó). Hệ thống kiểm đếm số lượng câu hỏi khả dụng theo từng mức độ trong ngân hàng `practice_questions` đã duyệt (`APPROVED`). Nếu thiếu câu hỏi, hệ thống trả về thông báo lỗi `HTTP 400 Bad Request`. Nếu đủ, hệ thống nạp toàn bộ danh sách câu hỏi theo thứ tự phát vấn tăng dần, gán vào `SelectedQuestionIds` và khóa lộ trình phiên luyện tập.
+
+- **Sơ đồ tổng quan kế thừa:** [`DD03_QuestionSelection_Sequence_Diagram.drawio`](./DD03_QuestionSelection_Sequence_Diagram.drawio)
+
+```mermaid
+sequenceDiagram
+    actor Student as Student
+    participant UI as Practice UI
+    participant Ctrl as PracticeController
+    participant TO as PracticeSessionTimeoutHelper
+    participant Handler as Session / NextQuestion Handler
+    participant DB as Database
+
+    Student->>UI: 1. Request next question
+
+    alt Next Question Request
+        UI->>Ctrl: 2.1 Send next question request
+        Ctrl->>Handler: 3.1 Forward next question command
+        Handler->>DB: 4.1 Get practice session
+        DB-->>Handler: 5.1 Return session record
+        Handler->>TO: 6.1 Check session timeout
+        TO-->>Handler: 7.1 Return timeout status
+
+        alt Session Timed Out
+            Handler->>DB: 8.1 Close expired session and save score
+            DB-->>Handler: 9.1 Confirm session closed
+            Handler-->>Ctrl: 10.1 Return session expired error
+            Ctrl-->>UI: 11.1 Display session expired message
+        else Questions Available
+            Handler->>DB: 8.2 Select next question by difficulty
+            DB-->>Handler: 9.2 Return question and rubric
+            Handler->>DB: 10.2 Update selected question list
+            DB-->>Handler: 11.2 Confirm session updated
+            Handler-->>Ctrl: 12.2 Return next question response
+            Ctrl-->>UI: 13.2 Display next question
+        end
+    else Get Session Detail
+        UI->>Ctrl: 2.3 Send get session request
+        Ctrl->>Handler: 3.3 Forward get session query
+        Handler->>DB: 4.3 Get session with answers
+        DB-->>Handler: 5.3 Return session record
+        Handler->>TO: 6.3 Verify session timeout
+        TO-->>Handler: 7.3 Return timeout status
+        Handler->>DB: 8.3 Load ordered questions and rubric
+        DB-->>Handler: 9.3 Return ordered questions
+        Handler-->>Ctrl: 10.3 Return session detail response
+        Ctrl-->>UI: 11.3 Display session progress
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 12.4 Log error
+        Handler-->>Ctrl: 13.4 Return error response
+        Ctrl-->>UI: 14.4 Display error message
+    end
+```
+
+*Hình 3.3.2 — Sơ đồ tuần tự gói `DD-03` (Bốc câu hỏi On-Demand & Full-Session Progressive).*
+
+---
+
+### 3.3.3. Sơ Đồ Lớp (`DD-03 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD03_QuestionSelection_Class_Diagram.drawio`](./DD03_QuestionSelection_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -138,67 +208,7 @@ classDiagram
     PracticeQuestion "1" --> "*" PracticeAnswer : PracticeAnswers
 ```
 
-*Hình 3.3.2 — Sơ đồ lớp gói `DD-03` (Chế độ Luyện tập, Bốc câu hỏi On-Demand / Progressive & Kiểm tra Quá hạn 5 phút).*
-
----
-
-### 3.3.3. Sơ Đồ Tuần Tự (`DD-03 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD03_QuestionSelection_Sequence_Diagram.drawio`](./DD03_QuestionSelection_Sequence_Diagram.drawio) | [`DD03_QuestionSelection_Sequence_Diagram.png`](./DD03_QuestionSelection_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor Student as Student
-    participant UI as Practice UI
-    participant Ctrl as PracticeController
-    participant TO as PracticeSessionTimeoutHelper
-    participant Handler as Session / NextQuestion Handler
-    participant DB as Database
-
-    Student->>UI: 1. Request next question
-
-    alt Next Question Request
-        UI->>Ctrl: 2.1 Send next question request
-        Ctrl->>Handler: 3.1 Forward next question command
-        Handler->>DB: 4.1 Get practice session
-        DB-->>Handler: 5.1 Return session record
-        Handler->>TO: 6.1 Check session timeout
-        TO-->>Handler: 7.1 Return timeout status
-
-        alt Session Timed Out
-            Handler->>DB: 8.1 Close expired session and save score
-            DB-->>Handler: 9.1 Confirm session closed
-            Handler-->>Ctrl: 10.1 Return session expired error
-            Ctrl-->>UI: 11.1 Display session expired message
-        else Questions Available
-            Handler->>DB: 8.2 Select next question by difficulty
-            DB-->>Handler: 9.2 Return question and rubric
-            Handler->>DB: 10.2 Update selected question list
-            DB-->>Handler: 11.2 Confirm session updated
-            Handler-->>Ctrl: 12.2 Return next question response
-            Ctrl-->>UI: 13.2 Display next question
-        end
-    else Get Session Detail
-        UI->>Ctrl: 2.3 Send get session request
-        Ctrl->>Handler: 3.3 Forward get session query
-        Handler->>DB: 4.3 Get session with answers
-        DB-->>Handler: 5.3 Return session record
-        Handler->>TO: 6.3 Verify session timeout
-        TO-->>Handler: 7.3 Return timeout status
-        Handler->>DB: 8.3 Load ordered questions and rubric
-        DB-->>Handler: 9.3 Return ordered questions
-        Handler-->>Ctrl: 10.3 Return session detail response
-        Ctrl-->>UI: 11.3 Display session progress
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 12.4 Log error
-        Handler-->>Ctrl: 13.4 Return error response
-        Ctrl-->>UI: 14.4 Display error message
-    end
-```
-
-*Hình 3.3.3 — Sơ đồ tuần tự gói `DD-03` (Bốc câu hỏi On-Demand, Chống 3 câu cùng độ khó liên tiếp & Tự đóng phiên quá hạn 5 phút).*
+*Hình 3.3.3 — Sơ đồ lớp gói `DD-03` (Chế độ luyện tập, bốc câu hỏi & kiểm tra quá hạn).*
 
 ---
 

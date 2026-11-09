@@ -4,6 +4,10 @@ import { useAuth } from '@/hooks/useAuth'
 export function RoleBasedRedirect() {
   const { user } = useAuth()
 
+  if (user?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />
+  }
+
   if (user?.role === 'Student') {
     return <Navigate to="/student/overview" replace />
   }

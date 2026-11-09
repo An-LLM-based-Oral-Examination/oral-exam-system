@@ -29,6 +29,8 @@ public class MustChangePasswordMiddleware
                 Detail = "Bạn phải đổi mật khẩu trước khi dùng các chức năng khác.",
                 Type = "https://tools.ietf.org/html/rfc7231"
             };
+            problem.Extensions["code"] = "MUST_CHANGE_PASSWORD";
+            problem.Extensions["errorCode"] = "MUST_CHANGE_PASSWORD";
             await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
             return;
         }
@@ -41,7 +43,9 @@ public class MustChangePasswordMiddleware
         return path.StartsWithSegments("/api/v1/auth/change-password")
             || path.StartsWithSegments("/api/v1/auth/refresh-token")
             || path.StartsWithSegments("/api/v1/auth/sign-out")
+            || path.StartsWithSegments("/api/v1/auth/me")
             || path.StartsWithSegments("/health")
+            || path.StartsWithSegments("/healthz")
             || path.StartsWithSegments("/swagger");
     }
 }

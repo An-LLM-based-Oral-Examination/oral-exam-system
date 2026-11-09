@@ -145,30 +145,14 @@ apiClient.interceptors.response.use(
 
     const problem: ProblemDetails = { ...payload, status: normalizedStatus, title, detail }
 
-    if (
+    const isMustChangePasswordError =
       normalizedStatus === 403 &&
-      (title.includes('Cần đổi mật khẩu') || detail.includes('Bạn phải đổi mật khẩu'))
-    ) {
-      if (
-        config &&
-        !config._retry &&
-        !config._skipAuthRefresh &&
-        !isAuthEndpoint &&
-        sessionStorage.getItem('refresh_token')
-      ) {
-        config._retry = true
-        try {
-          refreshPromise ??= refreshAccessToken().finally(() => {
-            refreshPromise = null
-          })
-          const token = await refreshPromise
-          if (config.headers) config.headers.Authorization = `Bearer ${token}`
-          return apiClient.request(config)
-        } catch {
-          // Tiếp tục xử lý trạng thái bắt buộc đổi mật khẩu bên dưới nếu refresh thất bại
-        }
-      }
+      (payload.code === 'MUST_CHANGE_PASSWORD' ||
+        payload.errorCode === 'MUST_CHANGE_PASSWORD' ||
+        title.includes('Cần đổi mật khẩu') ||
+        detail.includes('Bạn phải đổi mật khẩu'))
 
+    if (isMustChangePasswordError) {
       const rawProfile = sessionStorage.getItem('user_profile')
       if (rawProfile) {
         try {
@@ -184,6 +168,8 @@ apiClient.interceptors.response.use(
         }
       }
       window.dispatchEvent(new Event('auth:must-change-password'))
+      console.warn(`[API Error 403 MUST_CHANGE_PASSWORD]: ${detail}`)
+      return Promise.reject(problem)
     }
 
     console.warn(`[API Error ${normalizedStatus}]: ${detail}`)

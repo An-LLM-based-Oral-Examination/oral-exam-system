@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-01`:** Sign in, Dual Authentication, Refresh Token Rotation & RBAC 6 Roles
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-01 Class Diagram`: [`DD01_Auth_Class_Diagram.drawio`](./DD01_Auth_Class_Diagram.drawio) | [`DD01_Auth_Class_Diagram.png`](./DD01_Auth_Class_Diagram.png)
->   - `DD-01 Sequence Diagram`: [`DD01_Auth_Sequence_Diagram.drawio`](./DD01_Auth_Sequence_Diagram.drawio) | [`DD01_Auth_Sequence_Diagram.png`](./DD01_Auth_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-01 Sequence Diagrams`: [`DD01_01_Google_Login_Sequence.drawio`](./DD01_01_Google_Login_Sequence.drawio) | [`DD01_02_Password_Login_Sequence.drawio`](./DD01_02_Password_Login_Sequence.drawio) | [`DD01_03_Must_Change_Password_Sequence.drawio`](./DD01_03_Must_Change_Password_Sequence.drawio) | [`DD01_04_Refresh_Token_Rotation_Sequence.drawio`](./DD01_04_Refresh_Token_Rotation_Sequence.drawio) | [`DD01_Auth_Sequence_Diagram.drawio`](./DD01_Auth_Sequence_Diagram.drawio)
+>   - `DD-01 Class Diagram`: [`DD01_Auth_Class_Diagram.drawio`](./DD01_Auth_Class_Diagram.drawio)
 
 ---
 
@@ -26,9 +26,91 @@ Gói `DD-01` xử lý đăng nhập, quản lý phiên truy cập và phân quy�
 
 ---
 
-### 3.1.2. Sơ Đồ Lớp (`DD-01 Class Diagram`)
+### 3.1.2. Sơ Đồ Tuần Tự (`DD-01 Sequence Diagrams — Các Tính Năng / Use Case Con Độc Lập`)
 
-> **Tệp Draw.io & PNG:** [`DD01_Auth_Class_Diagram.drawio`](./DD01_Auth_Class_Diagram.drawio) | [`DD01_Auth_Class_Diagram.png`](./DD01_Auth_Class_Diagram.png)
+Nhằm đảm bảo tính trực quan và khả năng truy vết kiến trúc, luồng tuần tự của gói `DD-01` được phân rã thành **4 sơ đồ Use Case / sub-flow con độc lập** và 01 sơ đồ tổng quan kế thừa, toàn bộ tuân thủ quy chuẩn đơn sắc (Monochrome Grayscale) và cú pháp lifeline chuẩn UML (`: <u>Tên Đối Tượng</u>`):
+
+1. **Google OAuth 2.0 PKCE Login (`DD01_01`):**
+   - **Tệp sơ đồ Draw.io:** [`DD01_01_Google_Login_Sequence.drawio`](./DD01_01_Google_Login_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Xử lý đăng nhập thông qua Google Identity Services. Client gửi `IdToken` qua `POST /api/v1/auth/google-login`. `GoogleLoginCommandHandler` phối hợp cùng `IGoogleIdTokenValidator` (`GoogleJsonWebSignature.ValidateAsync`) để xác thực chữ ký số RSA. Nếu email thuộc định dạng `@fpt.edu.vn`, hệ thống tự động bóc tách mã sinh viên (`StudentCode`), tự động kích hoạt tài khoản `student` trong CSDL nếu chưa tồn tại. Sau đó, `IAccessTokenIssuer` phát hành JWT Access Token (15 phút) kèm Refresh Token mới (7 ngày) được băm một chiều `SHA-256` trước khi lưu vào bảng `refresh_tokens`.
+
+2. **School Account Password Login (`DD01_02`):**
+   - **Tệp sơ đồ Draw.io:** [`DD01_02_Password_Login_Sequence.drawio`](./DD01_02_Password_Login_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Xử lý đăng nhập bằng tài khoản nhà trường cấp cho 6 vai trò RBAC qua `POST /api/v1/auth/password-login`. `PasswordLoginCommandHandler` chuẩn hóa tên đăng nhập, truy vấn tài khoản từ bảng `users`, xác thực mật khẩu qua `IPasswordHasher.Verify` sử dụng thuật toán `PBKDF2-HMAC-SHA256` (210.000 vòng lặp) kết hợp hàm so sánh hằng thời gian `CryptographicOperations.FixedTimeEquals` chống tấn công đo thời gian (Timing Attack). Nếu tài khoản có cờ `MustChangePassword == true`, hệ thống nhúng claim tương ứng vào JWT để buộc đổi mật khẩu.
+
+3. **Mandatory First-Time Password Change (`DD01_03`):**
+   - **Tệp sơ đồ Draw.io:** [`DD01_03_Must_Change_Password_Sequence.drawio`](./DD01_03_Must_Change_Password_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Cơ chế bảo vệ cưỡng chế thông qua `MustChangePasswordMiddleware`. Khi người dùng sở hữu token có claim `must_change_password == "true"`, middleware chặn mọi yêu cầu tới các endpoint nghiệp vụ khác với mã lỗi `HTTP 403 Forbidden` (`application/problem+json`). Người dùng bắt buộc gửi yêu cầu tới `POST /api/v1/auth/change-password`. `ChangePasswordCommandHandler` kiểm tra mật khẩu hiện tại, bắt buộc mật khẩu mới phải khác mật khẩu cũ, băm lại bằng PBKDF2, cập nhật `MustChangePassword = false` và cấp phát cặp token mới để gỡ bỏ hạn chế.
+
+4. **Refresh Token Rotation — RTR (`DD01_04`):**
+   - **Tệp sơ đồ Draw.io:** [`DD01_04_Refresh_Token_Rotation_Sequence.drawio`](./DD01_04_Refresh_Token_Rotation_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Cơ chế xoay vòng Refresh Token phòng chống tấn công phát lại theo chuẩn `RFC 6819 §5.2.2.3` qua `POST /api/v1/auth/refresh-token`. Khi nhận Refresh Token, `RefreshTokenCommandHandler` băm SHA-256 và tìm trong bảng `refresh_tokens`. Nếu phát hiện token đã từng bị thu hồi trước đó (`IsRevoked == true`), hệ thống xác định đây là hành vi chiếm đoạt token (Replay Attack), lập tức thu hồi toàn bộ các Refresh Token đang hoạt động của người dùng đó và từ chối với `HTTP 401 Unauthorized`. Nếu token hợp lệ, hệ thống đánh dấu thu hồi token cũ (`RevokedAt = UtcNow`, gán `ReplacedByTokenHash`) và phát hành một cặp Access Token + Refresh Token mới hoàn toàn.
+
+- **Sơ đồ tổng quan kế thừa:** [`DD01_Auth_Sequence_Diagram.drawio`](./DD01_Auth_Sequence_Diagram.drawio)
+
+```mermaid
+sequenceDiagram
+    actor User as User
+    participant UI as Login UI
+    participant Ctrl as AuthController
+    participant Handler as AuthCommandHandler
+    participant Infra as AuthSecurityService
+    participant DB as Database
+
+    User->>UI: 1. Enter login credentials
+
+    alt Google OAuth Login
+        UI->>Ctrl: 2.1 Send Google login request
+        Ctrl->>Handler: 3.1 Forward Google login command
+        Handler->>Infra: 4.1 Validate Google ID token
+        Infra-->>Handler: 5.1 Return token validation status
+        alt Invalid Token or Account Locked
+            Handler-->>Ctrl: 6.1 Return failure message
+            Ctrl-->>UI: 7.1 Display failure message
+        else Valid Google Account
+            Handler->>DB: 6.2 Find or create student account
+            DB-->>Handler: 7.2 Return user account
+            Handler->>Infra: 8.2 Issue access and refresh tokens
+            Infra-->>Handler: 9.2 Return token pair
+            Handler->>DB: 10.2 Save refresh token
+            DB-->>Handler: 11.2 Confirm token saved
+            Handler-->>Ctrl: 12.2 Return login response
+            Ctrl-->>UI: 13.2 Display login success
+        end
+    else Password Login
+        UI->>Ctrl: 2.3 Send password login request
+        Ctrl->>Handler: 3.3 Forward password login command
+        Handler->>DB: 4.3 Find user by username or email
+        DB-->>Handler: 5.3 Return user record
+        Handler->>Infra: 6.3 Verify password hash
+        Infra-->>Handler: 7.3 Return verification result
+        alt Invalid Credentials
+            Handler-->>Ctrl: 8.3 Return failure message
+            Ctrl-->>UI: 9.3 Display failure message
+        else Valid Credentials
+            Handler->>Infra: 8.4 Issue access and refresh tokens
+            Infra-->>Handler: 9.4 Return token pair
+            Handler->>DB: 10.4 Save refresh token
+            DB-->>Handler: 11.4 Confirm token saved
+            Handler-->>Ctrl: 12.4 Return login response
+            Ctrl-->>UI: 13.4 Display login success
+        end
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 14.5 Log error
+        Handler-->>Ctrl: 15.5 Return error response
+        Ctrl-->>UI: 16.5 Display error message
+    end
+```
+
+*Hình 3.1.2 — Sơ đồ tuần tự gói `DD-01` (Xác thực Kép, Cưỡng chế đổi mật khẩu lần đầu & Xoay vòng Refresh Token).*
+
+---
+
+### 3.1.3. Sơ Đồ Lớp (`DD-01 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD01_Auth_Class_Diagram.drawio`](./DD01_Auth_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -202,71 +284,7 @@ classDiagram
     User "1" --> "*" RefreshToken : RefreshTokens
 ```
 
-*Hình 3.1.2 — Sơ đồ lớp gói `DD-01` (Xác thực Kép, Xoay vòng Refresh Token & Phân quyền 6 Roles).*
-
----
-
-### 3.1.3. Sơ Đồ Tuần Tự (`DD-01 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD01_Auth_Sequence_Diagram.drawio`](./DD01_Auth_Sequence_Diagram.drawio) | [`DD01_Auth_Sequence_Diagram.png`](./DD01_Auth_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor User as User
-    participant UI as Login UI
-    participant Ctrl as AuthController
-    participant Handler as AuthCommandHandler
-    participant Infra as AuthSecurityService
-    participant DB as Database
-
-    User->>UI: 1. Enter login credentials
-
-    alt Google OAuth Login
-        UI->>Ctrl: 2.1 Send Google login request
-        Ctrl->>Handler: 3.1 Forward Google login command
-        Handler->>Infra: 4.1 Validate Google ID token
-        Infra-->>Handler: 5.1 Return token validation status
-        alt Invalid Token or Account Locked
-            Handler-->>Ctrl: 6.1 Return failure message
-            Ctrl-->>UI: 7.1 Display failure message
-        else Valid Google Account
-            Handler->>DB: 6.2 Find or create student account
-            DB-->>Handler: 7.2 Return user account
-            Handler->>Infra: 8.2 Issue access and refresh tokens
-            Infra-->>Handler: 9.2 Return token pair
-            Handler->>DB: 10.2 Save refresh token
-            DB-->>Handler: 11.2 Confirm token saved
-            Handler-->>Ctrl: 12.2 Return login response
-            Ctrl-->>UI: 13.2 Display login success
-        end
-    else Password Login
-        UI->>Ctrl: 2.3 Send password login request
-        Ctrl->>Handler: 3.3 Forward password login command
-        Handler->>DB: 4.3 Find user by username or email
-        DB-->>Handler: 5.3 Return user record
-        Handler->>Infra: 6.3 Verify password hash
-        Infra-->>Handler: 7.3 Return verification result
-        alt Invalid Credentials
-            Handler-->>Ctrl: 8.3 Return failure message
-            Ctrl-->>UI: 9.3 Display failure message
-        else Valid Credentials
-            Handler->>Infra: 8.4 Issue access and refresh tokens
-            Infra-->>Handler: 9.4 Return token pair
-            Handler->>DB: 10.4 Save refresh token
-            DB-->>Handler: 11.4 Confirm token saved
-            Handler-->>Ctrl: 12.4 Return login response
-            Ctrl-->>UI: 13.4 Display login success
-        end
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 14.5 Log error
-        Handler-->>Ctrl: 15.5 Return error response
-        Ctrl-->>UI: 16.5 Display error message
-    end
-```
-
-*Hình 3.1.3 — Sơ đồ tuần tự gói `DD-01` (Xác thực Kép, Cưỡng chế đổi mật khẩu lần đầu & Xoay vòng Refresh Token).*
+*Hình 3.1.3 — Sơ đồ lớp gói `DD-01` (Xác thực Kép, Xoay vòng Refresh Token & Phân quyền 6 Roles).*
 
 ---
 

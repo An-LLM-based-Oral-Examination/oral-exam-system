@@ -24,7 +24,7 @@ public static class PostgresSchemaReconciler
                 RETURN;
             END IF;
 
-            -- 1. users: mở rộng ck_users_role cho đủ 6 roles RBAC
+            -- 1. users: mở rộng ck_users_role cho đủ 6 roles RBAC và các cột bắt buộc
             BEGIN
                 ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_role;
                 ALTER TABLE users ADD CONSTRAINT ck_users_role
@@ -32,30 +32,39 @@ public static class PostgresSchemaReconciler
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+
             -- 2. courses: các cột bổ sung trong đợt R1-R8 (trước academic_program_id)
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS description text NULL;
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS department_head_user_id uuid NULL;
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS description text NULL;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS department_head_user_id uuid NULL;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
 
-            CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
+                CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
 
-            BEGIN
-                ALTER TABLE courses ADD CONSTRAINT "FK_courses_users_department_head_user_id"
-                    FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            BEGIN
-                ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_mock_duration;
-                ALTER TABLE courses ADD CONSTRAINT ck_courses_mock_duration CHECK (mock_exam_duration_minutes > 0);
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            BEGIN
-                ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_mock_questions;
-                ALTER TABLE courses ADD CONSTRAINT ck_courses_mock_questions CHECK (mock_exam_total_questions > 0);
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
+                BEGIN
+                    ALTER TABLE courses ADD CONSTRAINT "FK_courses_users_department_head_user_id"
+                        FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                BEGIN
+                    ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_mock_duration;
+                    ALTER TABLE courses ADD CONSTRAINT ck_courses_mock_duration CHECK (mock_exam_duration_minutes > 0);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                BEGIN
+                    ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_mock_questions;
+                    ALTER TABLE courses ADD CONSTRAINT ck_courses_mock_questions CHECK (mock_exam_total_questions > 0);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
 
             -- 3. course_lecturers (phiên bản trước 20261105073054 chưa có course_offering_id)
             CREATE TABLE IF NOT EXISTS course_lecturers (
@@ -97,88 +106,109 @@ public static class PostgresSchemaReconciler
             END;
 
             -- 4. classes: các cột bổ sung trước 20261105073054 và 20261107111940
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS name character varying(150) NOT NULL DEFAULT '';
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_code character varying(20) NULL;
-            BEGIN
-                UPDATE classes SET join_code = UPPER(SUBSTRING(REPLACE(id::text, '-', ''), 1, 8)) WHERE join_code IS NULL OR join_code = '';
-                ALTER TABLE classes ALTER COLUMN join_code SET NOT NULL;
-                CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_join_code ON classes (join_code);
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'classes') THEN
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS name character varying(150) NOT NULL DEFAULT '';
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_code character varying(20) NULL;
+                BEGIN
+                    EXECUTE 'UPDATE classes SET join_code = UPPER(SUBSTRING(REPLACE(id::text, ''-'', ''''), 1, 8)) WHERE join_code IS NULL OR join_code = ''''';
+                    ALTER TABLE classes ALTER COLUMN join_code SET NOT NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_join_code ON classes (join_code);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
+            END IF;
 
             -- 5. class_enrollments
-            ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS joined_via_code boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS join_method character varying(30) NOT NULL DEFAULT 'assigned';
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'class_enrollments') THEN
+                ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS joined_via_code boolean NOT NULL DEFAULT FALSE;
+                ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS join_method character varying(30) NOT NULL DEFAULT 'assigned';
+            END IF;
 
             -- 6. practice_questions & exam_questions
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
-            CREATE INDEX IF NOT EXISTS "IX_practice_questions_clo_id" ON practice_questions (clo_id);
-            CREATE INDEX IF NOT EXISTS ix_practice_questions_clo ON practice_questions (clo_id);
-            BEGIN
-                ALTER TABLE practice_questions ADD CONSTRAINT "FK_practice_questions_course_clos_clo_id"
-                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_questions') THEN
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
+                CREATE INDEX IF NOT EXISTS "IX_practice_questions_clo_id" ON practice_questions (clo_id);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_clo ON practice_questions (clo_id);
+                BEGIN
+                    ALTER TABLE practice_questions ADD CONSTRAINT "FK_practice_questions_course_clos_clo_id"
+                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
 
-            ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
-            ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS structure_id uuid NULL;
-            CREATE INDEX IF NOT EXISTS "IX_exam_questions_clo_id" ON exam_questions (clo_id);
-            CREATE INDEX IF NOT EXISTS ix_exam_questions_clo ON exam_questions (clo_id);
-            CREATE INDEX IF NOT EXISTS "IX_exam_questions_structure_id" ON exam_questions (structure_id);
-            CREATE INDEX IF NOT EXISTS ix_exam_questions_structure ON exam_questions (structure_id);
-            BEGIN
-                ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_course_clos_clo_id"
-                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            BEGIN
-                ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_exam_structures_structure_id"
-                    FOREIGN KEY (structure_id) REFERENCES exam_structures(id) ON DELETE SET NULL;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_questions') THEN
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS structure_id uuid NULL;
+                CREATE INDEX IF NOT EXISTS "IX_exam_questions_clo_id" ON exam_questions (clo_id);
+                CREATE INDEX IF NOT EXISTS ix_exam_questions_clo ON exam_questions (clo_id);
+                CREATE INDEX IF NOT EXISTS "IX_exam_questions_structure_id" ON exam_questions (structure_id);
+                CREATE INDEX IF NOT EXISTS ix_exam_questions_structure ON exam_questions (structure_id);
+                BEGIN
+                    ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_course_clos_clo_id"
+                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                BEGIN
+                    ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_exam_structures_structure_id"
+                        FOREIGN KEY (structure_id) REFERENCES exam_structures(id) ON DELETE SET NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
 
             -- 7. practice_sessions, practice_answers & exam_sets
-            ALTER TABLE practice_sessions ADD COLUMN IF NOT EXISTS total_score numeric(4,2) NULL;
-            ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 1;
-            ALTER TABLE exam_sets ADD COLUMN IF NOT EXISTS is_sample_set boolean NOT NULL DEFAULT FALSE;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_sessions') THEN
+                ALTER TABLE practice_sessions ADD COLUMN IF NOT EXISTS total_score numeric(4,2) NULL;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_answers') THEN
+                ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 1;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_sets') THEN
+                ALTER TABLE exam_sets ADD COLUMN IF NOT EXISTS is_sample_set boolean NOT NULL DEFAULT FALSE;
+            END IF;
 
             -- 8. dead_letter_queues
-            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS flow_type character varying(30) NOT NULL DEFAULT 'OFFICIAL_EXAM';
-            ALTER TABLE dead_letter_queues ALTER COLUMN flow_type SET DEFAULT 'OFFICIAL_EXAM';
-            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS managed_by_role character varying(30) NOT NULL DEFAULT 'examination_officer';
-            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolved_by_user_id uuid NULL;
-            ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolution_notes text NULL;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'dead_letter_queues') THEN
+                ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS flow_type character varying(30) NOT NULL DEFAULT 'OFFICIAL_EXAM';
+                ALTER TABLE dead_letter_queues ALTER COLUMN flow_type SET DEFAULT 'OFFICIAL_EXAM';
+                ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS managed_by_role character varying(30) NOT NULL DEFAULT 'examination_officer';
+                ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolved_by_user_id uuid NULL;
+                ALTER TABLE dead_letter_queues ADD COLUMN IF NOT EXISTS resolution_notes text NULL;
 
-            UPDATE dead_letter_queues SET flow_type = 'PRACTICE' WHERE flow_type = 'MF01_PRACTICE';
-            UPDATE dead_letter_queues SET flow_type = 'MOCK_EXAM' WHERE flow_type = 'MF02_MOCK_EXAM';
-            UPDATE dead_letter_queues SET flow_type = 'OFFICIAL_EXAM' WHERE flow_type = 'MF04_OFFICIAL_EXAM';
-            UPDATE dead_letter_queues SET flow_type = 'IN_CLASS_EXAM' WHERE flow_type = 'MF05_IN_CLASS';
+                BEGIN
+                    EXECUTE 'UPDATE dead_letter_queues SET flow_type = ''PRACTICE'' WHERE flow_type = ''MF01_PRACTICE''';
+                    EXECUTE 'UPDATE dead_letter_queues SET flow_type = ''MOCK_EXAM'' WHERE flow_type = ''MF02_MOCK_EXAM''';
+                    EXECUTE 'UPDATE dead_letter_queues SET flow_type = ''OFFICIAL_EXAM'' WHERE flow_type = ''MF04_OFFICIAL_EXAM''';
+                    EXECUTE 'UPDATE dead_letter_queues SET flow_type = ''IN_CLASS_EXAM'' WHERE flow_type = ''MF05_IN_CLASS''';
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
 
-            CREATE INDEX IF NOT EXISTS ix_dlq_role_flow_status ON dead_letter_queues (managed_by_role, flow_type, status);
-            CREATE INDEX IF NOT EXISTS ix_dlq_flow_status ON dead_letter_queues (flow_type, status);
-            CREATE INDEX IF NOT EXISTS ix_dlq_managed_role ON dead_letter_queues (managed_by_role, status);
+                CREATE INDEX IF NOT EXISTS ix_dlq_role_flow_status ON dead_letter_queues (managed_by_role, flow_type, status);
+                CREATE INDEX IF NOT EXISTS ix_dlq_flow_status ON dead_letter_queues (flow_type, status);
+                CREATE INDEX IF NOT EXISTS ix_dlq_managed_role ON dead_letter_queues (managed_by_role, status);
 
-            BEGIN
-                ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
-                ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
-                    CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM', 'MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            BEGIN
-                ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_by_role;
-                ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_role;
-                ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_managed_role
-                    CHECK (managed_by_role IN ('admin', 'examination_officer', 'lecturer'));
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-            BEGIN
-                ALTER TABLE dead_letter_queues ADD CONSTRAINT "FK_dead_letter_queues_users_resolved_by_user_id"
-                    FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
+                BEGIN
+                    ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
+                    ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
+                        CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM', 'MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                BEGIN
+                    ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_by_role;
+                    ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_managed_role;
+                    ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_managed_role
+                        CHECK (managed_by_role IN ('admin', 'examination_officer', 'lecturer'));
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+                BEGIN
+                    ALTER TABLE dead_letter_queues ADD CONSTRAINT "FK_dead_letter_queues_users_resolved_by_user_id"
+                        FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
         END
         $reconcile_pre$;
         """;
@@ -194,10 +224,6 @@ public static class PostgresSchemaReconciler
 
         DO $reconcile_post$
         BEGIN
-            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
-                RETURN;
-            END IF;
-
             -----------------------------------------------------------------------
             -- 1. TẠO 10 BẢNG BẮT BUỘC (IDEMPOTENT TABLE CREATION)
             -----------------------------------------------------------------------
@@ -394,40 +420,54 @@ public static class PostgresSchemaReconciler
             -----------------------------------------------------------------------
 
             -- users
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
-            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;
-            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+            END IF;
 
             -- courses
-            ALTER TABLE courses ADD COLUMN IF NOT EXISTS academic_program_id uuid NULL;
-            CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS academic_program_id uuid NULL;
+                CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
+            END IF;
 
             -- classes
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;
-            ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_plain character varying(128) NULL;
-            CREATE INDEX IF NOT EXISTS ix_classes_course_offering ON classes (course_offering_id);
-            CREATE INDEX IF NOT EXISTS ix_classes_active_semester_course_created ON classes (is_active, semester_id, course_id, created_at);
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'classes') THEN
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_plain character varying(128) NULL;
+                CREATE INDEX IF NOT EXISTS ix_classes_course_offering ON classes (course_offering_id);
+                CREATE INDEX IF NOT EXISTS ix_classes_active_semester_course_created ON classes (is_active, semester_id, course_id, created_at);
+            END IF;
 
             -- class_enrollments
-            ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS status character varying(20) NOT NULL DEFAULT 'enrolled';
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'class_enrollments') THEN
+                ALTER TABLE class_enrollments ADD COLUMN IF NOT EXISTS status character varying(20) NOT NULL DEFAULT 'enrolled';
+            END IF;
 
             -- real_exam_session_shifts
-            ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
-            ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'real_exam_session_shifts') THEN
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+            END IF;
 
             -- practice_questions
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'APPROVED';
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_by uuid NULL;
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS review_notes text NULL;
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS source character varying(50) NOT NULL DEFAULT 'manual';
-            ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS submitted_by uuid NULL;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_questions') THEN
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'APPROVED';
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_by uuid NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS review_notes text NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS source character varying(50) NOT NULL DEFAULT 'manual';
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS submitted_by uuid NULL;
+            END IF;
 
             -- exam_questions
-            ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'DRAFT';
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_questions') THEN
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'DRAFT';
+            END IF;
 
             -----------------------------------------------------------------------
             -- 3. BỌC TOÀN BỘ RÀNG BUỘC RỦI RO BẰNG SUBTRANSACTION PL/PGSQL
@@ -662,67 +702,89 @@ public static class PostgresSchemaReconciler
             END;
 
             -----------------------------------------------------------------------
-            -- 4. ĐỒNG BỘ DỮ LIỆU NỀN HỌC THUẬT & TÀI KHOẢN MẪU
+            -- 4. ĐỒNG BỘ DỮ LIỆU NỀN HỌC THUẬT & TÀI KHOẢN MẪU (DYNAMIC DML)
             -----------------------------------------------------------------------
             BEGIN
-                IF EXISTS (SELECT 1 FROM users WHERE id = '00000000-0000-0000-0000-000000000002') THEN
-                    INSERT INTO academic_programs (id, code, name, department_head_user_id, is_active, created_at, updated_at)
-                    VALUES ('00000000-0000-0000-0000-000000000010', 'SE', 'Kỹ thuật Phần mềm', '00000000-0000-0000-0000-000000000002', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ON CONFLICT DO NOTHING;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'academic_programs') THEN
+                    IF EXISTS (SELECT 1 FROM users WHERE id = '00000000-0000-0000-0000-000000000002') THEN
+                        EXECUTE 'INSERT INTO academic_programs (id, code, name, department_head_user_id, is_active, created_at, updated_at)
+                        VALUES (''00000000-0000-0000-0000-000000000010'', ''SE'', ''Kỹ thuật Phần mềm'', ''00000000-0000-0000-0000-000000000002'', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        ON CONFLICT DO NOTHING';
 
-                    UPDATE courses
-                    SET department_head_user_id = COALESCE(department_head_user_id, '00000000-0000-0000-0000-000000000002'),
-                        academic_program_id = COALESCE(academic_program_id, (SELECT id FROM academic_programs WHERE code = 'SE' LIMIT 1))
-                    WHERE academic_program_id IS NULL OR department_head_user_id IS NULL;
+                        EXECUTE 'UPDATE courses
+                        SET department_head_user_id = COALESCE(department_head_user_id, ''00000000-0000-0000-0000-000000000002''::uuid),
+                            academic_program_id = COALESCE(academic_program_id, (SELECT id FROM academic_programs WHERE code = ''SE'' LIMIT 1))
+                        WHERE academic_program_id IS NULL OR department_head_user_id IS NULL';
+                    END IF;
                 END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
             BEGIN
-                INSERT INTO course_offerings (id, course_id, semester_id, is_enabled, created_at, updated_at)
-                SELECT gen_random_uuid(), c.id, c.semester_id, c.is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM courses c
-                ON CONFLICT DO NOTHING;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_offerings') THEN
+                    EXECUTE 'INSERT INTO course_offerings (id, course_id, semester_id, is_enabled, created_at, updated_at)
+                    SELECT gen_random_uuid(), c.id, c.semester_id, c.is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    FROM courses c
+                    ON CONFLICT DO NOTHING';
+                END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
             BEGIN
-                UPDATE course_lecturers AS cl
-                SET course_offering_id = co.id,
-                    semester_id = COALESCE(cl.semester_id, co.semester_id)
-                FROM course_offerings AS co
-                WHERE cl.course_offering_id IS NULL
-                  AND co.course_id = cl.course_id;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_offerings')
+                   AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_lecturers') THEN
+                    EXECUTE 'UPDATE course_lecturers AS cl
+                    SET course_offering_id = co.id,
+                        semester_id = COALESCE(cl.semester_id, co.semester_id)
+                    FROM course_offerings AS co
+                    WHERE cl.course_offering_id IS NULL
+                      AND co.course_id = cl.course_id';
+                END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
             BEGIN
-                UPDATE classes AS cls
-                SET course_offering_id = co.id
-                FROM course_offerings AS co
-                WHERE cls.course_offering_id IS NULL
-                  AND co.course_id = cls.course_id
-                  AND co.semester_id = cls.semester_id;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_offerings')
+                   AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'classes') THEN
+                    EXECUTE 'UPDATE classes AS cls
+                    SET course_offering_id = co.id
+                    FROM course_offerings AS co
+                    WHERE cls.course_offering_id IS NULL
+                      AND co.course_id = cls.course_id
+                      AND co.semester_id = cls.semester_id';
+                END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
             BEGIN
-                -- Đảm bảo các tài khoản demo không bị kẹt cờ must_change_password
-                UPDATE users
-                SET must_change_password = FALSE
-                WHERE id IN (
-                    '00000000-0000-0000-0000-000000000001',
-                    '00000000-0000-0000-0000-000000000002',
-                    '00000000-0000-0000-0000-000000000003',
-                    '00000000-0000-0000-0000-000000000004',
-                    '00000000-0000-0000-0000-000000000005',
-                    '00000000-0000-0000-0000-000000000006',
-                    '00000000-0000-0000-0000-00000000000b',
-                    '00000000-0000-0000-0000-00000000000c',
-                    '00000000-0000-0000-0000-00000000000d',
-                    '00000000-0000-0000-0000-00000000000e',
-                    '00000000-0000-0000-0000-00000000000f'
-                );
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
+                    -- Tự chữa lành: Gán must_change_password = FALSE cho 100% tài khoản seed mẫu (theo ID, username và email)
+                    EXECUTE 'UPDATE users
+                    SET must_change_password = FALSE
+                    WHERE id IN (
+                        ''00000000-0000-0000-0000-000000000001'',
+                        ''00000000-0000-0000-0000-000000000002'',
+                        ''00000000-0000-0000-0000-000000000003'',
+                        ''00000000-0000-0000-0000-000000000004'',
+                        ''00000000-0000-0000-0000-000000000005'',
+                        ''00000000-0000-0000-0000-000000000006'',
+                        ''00000000-0000-0000-0000-00000000000b'',
+                        ''00000000-0000-0000-0000-00000000000c'',
+                        ''00000000-0000-0000-0000-00000000000d'',
+                        ''00000000-0000-0000-0000-00000000000e'',
+                        ''00000000-0000-0000-0000-00000000000f''
+                    )
+                    OR username IN (
+                        ''admin'', ''headse'', ''totnt'', ''lecturer2'', ''lecturer3'', ''lecturer4'',
+                        ''haind'', ''hoalvse170001'', ''maittse170002'', ''thanhnqse184236'', ''khaothi''
+                    )
+                    OR email IN (
+                        ''admin@fpt.edu.vn'', ''headse@fe.edu.vn'', ''totnt@fe.edu.vn'',
+                        ''lecturer2@fe.edu.vn'', ''lecturer3@fe.edu.vn'', ''lecturer4@fe.edu.vn'',
+                        ''haind@fe.edu.vn'', ''hoanglvse170001@fpt.edu.vn'', ''maittse170002@fpt.edu.vn'',
+                        ''thanhnqse184236@fpt.edu.vn'', ''khaothi@fe.edu.vn''
+                    )';
+                END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -736,20 +798,20 @@ public static class PostgresSchemaReconciler
                     CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
                 );
 
-                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                EXECUTE 'INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
                 VALUES
-                    ('20261022125559_InitialDB', '8.0.11'),
-                    ('20261022214810_AddMockExamAnswerFollowUp', '8.0.11'),
-                    ('20261030041911_OptimizePostgresIndexesAndConstraints', '8.0.11'),
-                    ('20261102150149_AddCourseClosAndAntiCheatLogsAndExpandRoles', '8.0.11'),
-                    ('20261104062322_AddDlqFlowTypeAndRoleSeparation', '8.0.11'),
-                    ('20261105061650_AddInClassExamShiftsAndNotifications3NF', '8.0.11'),
-                    ('20261105064957_AddAcademicProgramAndCourseOfferings', '8.0.11'),
-                    ('20261105073054_AddCourseOfferingLecturerAndClassOwnership', '8.0.11'),
-                    ('20261107111940_AddClassJoinPasswordAndShiftExamWindow', '8.0.11'),
-                    ('20261108131126_SeedALT', '8.0.11'),
-                    ('20261108141117_UpdateDB', '8.0.11')
-                ON CONFLICT ("MigrationId") DO NOTHING;
+                    (''20261022125559_InitialDB'', ''8.0.11''),
+                    (''20261022214810_AddMockExamAnswerFollowUp'', ''8.0.11''),
+                    (''20261030041911_OptimizePostgresIndexesAndConstraints'', ''8.0.11''),
+                    (''20261102150149_AddCourseClosAndAntiCheatLogsAndExpandRoles'', ''8.0.11''),
+                    (''20261104062322_AddDlqFlowTypeAndRoleSeparation'', ''8.0.11''),
+                    (''20261105061650_AddInClassExamShiftsAndNotifications3NF'', ''8.0.11''),
+                    (''20261105064957_AddAcademicProgramAndCourseOfferings'', ''8.0.11''),
+                    (''20261105073054_AddCourseOfferingLecturerAndClassOwnership'', ''8.0.11''),
+                    (''20261107111940_AddClassJoinPasswordAndShiftExamWindow'', ''8.0.11''),
+                    (''20261108131126_SeedALT'', ''8.0.11''),
+                    (''20261108141117_UpdateDB'', ''8.0.11'')
+                ON CONFLICT ("MigrationId") DO NOTHING';
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 

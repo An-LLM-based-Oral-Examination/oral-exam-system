@@ -41,7 +41,7 @@ function extractMustChangePasswordFromJwt(token: string | null | undefined): boo
     if (payload.must_change_password === 'false' || payload.must_change_password === false) {
       return false
     }
-    return false
+    return undefined
   } catch {
     return undefined
   }

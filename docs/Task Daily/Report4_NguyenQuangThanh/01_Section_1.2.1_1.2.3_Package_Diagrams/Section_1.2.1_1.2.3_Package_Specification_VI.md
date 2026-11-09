@@ -5,8 +5,8 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `D-03` (`1.2.1`): [`D03_Backend_Package_Diagram.drawio`](./D03_Backend_Package_Diagram.drawio) | [`D03_Backend_Package_Diagram.png`](./D03_Backend_Package_Diagram.png)
->   - `D-05` (`1.2.3`): [`D05_Desktop_Kiosk_Package_Diagram.drawio`](./D05_Desktop_Kiosk_Package_Diagram.drawio) | [`D05_Desktop_Kiosk_Package_Diagram.png`](./D05_Desktop_Kiosk_Package_Diagram.png)
+>   - `D-03` (`1.2.1`): [`D03_Backend_Package_Diagram.drawio`](./D03_Backend_Package_Diagram.drawio)
+>   - `D-05` (`1.2.3`): [`D05_Desktop_Kiosk_Package_Diagram.drawio`](./D05_Desktop_Kiosk_Package_Diagram.drawio)
 
 ---
 
@@ -46,7 +46,7 @@ Hệ thống **Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM (`FA26SE166`)** 
 
 #### c) Sơ Đồ Backend Package Diagram (`Figure 1.2.1` / `D-03`)
 
-> **Tệp Draw.io & PNG:** [`D03_Backend_Package_Diagram.drawio`](./D03_Backend_Package_Diagram.drawio) | [`D03_Backend_Package_Diagram.png`](./D03_Backend_Package_Diagram.png)
+> **Tệp Draw.io:** [`D03_Backend_Package_Diagram.drawio`](./D03_Backend_Package_Diagram.drawio)
 
 ```mermaid
 flowchart TB
@@ -172,7 +172,7 @@ flowchart TB
 
 #### a) Sơ Đồ Desktop Kiosk Package Diagram (`Figure 1.2.3` / `D-05`)
 
-> **Tệp Draw.io & PNG:** [`D05_Desktop_Kiosk_Package_Diagram.drawio`](./D05_Desktop_Kiosk_Package_Diagram.drawio) | [`D05_Desktop_Kiosk_Package_Diagram.png`](./D05_Desktop_Kiosk_Package_Diagram.png)
+> **Tệp Draw.io:** [`D05_Desktop_Kiosk_Package_Diagram.drawio`](./D05_Desktop_Kiosk_Package_Diagram.drawio)
 
 ```mermaid
 flowchart TB

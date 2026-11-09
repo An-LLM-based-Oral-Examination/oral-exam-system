@@ -19,6 +19,7 @@ import { toast } from '@/components/common/toastStore'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { useAuth } from '@/hooks/useAuth'
+import { authService } from '@/services/auth.service'
 import './LoginPage.css'
 
 declare global {
@@ -61,6 +62,16 @@ const FEATURE_ITEMS = [
   },
 ]
 
+function safeSerialize(val: unknown): string {
+  if (typeof val === 'string') return val
+  if (val instanceof Error) return `${val.name}: ${val.message}`
+  try {
+    return JSON.stringify(val) ?? String(val)
+  } catch {
+    return String(val)
+  }
+}
+
 function getLoginErrorMessage(error: unknown): string {
   return userMessage(error, DEFAULT_LOGIN_ERROR)
 }
@@ -78,21 +89,21 @@ export function LoginPage() {
   const [googleConfigured, setGoogleConfigured] = useState(Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID))
   const [googleOriginError, setGoogleOriginError] = useState(false)
 
-  // Intercept GSI_LOGGER warnings/errors to handle origin mismatch gracefully
+  // Intercept GSI_LOGGER warnings/errors to handle origin mismatch gracefully (with safeSerialize against circular structures)
   useEffect(() => {
     const originalError = console.error
     const originalWarn = console.warn
 
     const filterGsiLogger = (originalFn: typeof console.error, ...args: unknown[]) => {
-      const text = args
-        .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
-        .join(' ')
+      const text = args.map(safeSerialize).join(' ').toLowerCase()
       if (
-        text.includes('[GSI_LOGGER]') &&
-        (text.includes('origin is not allowed') || text.includes('The given origin is not allowed'))
+        text.includes('[gsi_logger]') &&
+        (text.includes('origin is not allowed') ||
+          text.includes('the given origin is not allowed') ||
+          text.includes('not allowed for the given client id'))
       ) {
         setGoogleOriginError(true)
-        originalWarn('[GSI Resilience] Đã bắt cảnh báo Google Sign-In origin mismatch:', window.location.origin)
+        originalWarn('[GSI Resilience] Đã bắt ngoại lệ Google Sign-In origin mismatch an toàn:', window.location.origin)
         return
       }
       originalFn(...args)
@@ -120,7 +131,13 @@ export function LoginPage() {
     setIsLoading(true)
     try {
       await loginWithPassword(normalizedUsername, password)
-      navigate('/')
+      const currentUser = authService.getCurrentUser()
+      if (currentUser?.mustChangePassword) {
+        toast.info('Bạn cần đổi mật khẩu trước khi tiếp tục.')
+        navigate('/change-password', { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
     } catch (loginError: unknown) {
       toast.error(getLoginErrorMessage(loginError))
     } finally {
@@ -143,7 +160,15 @@ export function LoginPage() {
           callback: ({ credential }) => {
             setIsLoading(true)
             void loginWithGoogle(credential)
-              .then(() => navigate('/'))
+              .then(() => {
+                const currentUser = authService.getCurrentUser()
+                if (currentUser?.mustChangePassword) {
+                  toast.info('Bạn cần đổi mật khẩu trước khi tiếp tục.')
+                  navigate('/change-password', { replace: true })
+                } else {
+                  navigate('/', { replace: true })
+                }
+              })
               .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
               .finally(() => setIsLoading(false))
           },
@@ -172,16 +197,33 @@ export function LoginPage() {
       }
     }
 
+    // Fallback timer 2.5s: tự động kích hoạt chế độ fallback an toàn nếu nút Google không thể render sau 2.5s
+    const globalFallbackTimer = setTimeout(() => {
+      if (isMounted && googleButtonRef.current && googleButtonRef.current.childElementCount === 0) {
+        console.warn('[GSI Resilience] Google Sign-In không phản hồi sau 2.5s. Kích hoạt fallback an toàn.')
+        setGoogleOriginError(true)
+      }
+    }, 2500)
+
     if (window.google) {
       renderGoogleButton()
       return () => {
         isMounted = false
         if (timeoutId) clearTimeout(timeoutId)
+        if (globalFallbackTimer) clearTimeout(globalFallbackTimer)
       }
     }
 
     const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-identity]')
     const script = existingScript ?? document.createElement('script')
+
+    const handleScriptError = () => {
+      console.warn('[GSI Resilience] Không thể nạp script Google Identity Services (bị chặn mạng hoặc adblocker).')
+      if (isMounted) {
+        setGoogleOriginError(true)
+      }
+    }
+
     if (!existingScript) {
       script.src = 'https://accounts.google.com/gsi/client'
       script.async = true
@@ -190,10 +232,13 @@ export function LoginPage() {
       document.head.appendChild(script)
     }
     script.addEventListener('load', renderGoogleButton)
+    script.addEventListener('error', handleScriptError)
     return () => {
       isMounted = false
       if (timeoutId) clearTimeout(timeoutId)
+      if (globalFallbackTimer) clearTimeout(globalFallbackTimer)
       script.removeEventListener('load', renderGoogleButton)
+      script.removeEventListener('error', handleScriptError)
     }
   }, [loginWithGoogle, navigate])
 
@@ -428,15 +473,15 @@ export function LoginPage() {
                       <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-amber-200 text-amber-800 font-bold text-[10px]">
                         !
                       </span>
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         <p className="font-semibold text-amber-950">
-                          Google Sign-In tạm thời chưa được cấp quyền trên tên miền này
+                          Đăng nhập Google hiện chưa khả dụng trên tên miền này. Vui lòng đăng nhập bằng tài khoản nhà trường cấp bên dưới.
                         </p>
                         <p className="leading-relaxed text-amber-800">
                           Tên miền <code className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[11px] text-amber-900">{typeof window !== 'undefined' ? window.location.origin : 'https://oralexam.io.vn'}</code> đang chờ cấu hình Authorized Origins trên Google Cloud Console.
                         </p>
                         <p className="leading-relaxed font-semibold text-amber-950">
-                          👉 Vui lòng sử dụng <u>Tài khoản Nhà trường cấp</u> (username &amp; mật khẩu) ở form bên trên để đăng nhập.
+                          👉 Vui lòng sử dụng <u>Tài khoản Nhà trường cấp</u> (username &amp; mật khẩu) ở form đăng nhập để tiếp tục.
                         </p>
                       </div>
                     </div>

@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-05`:** Practice Answer Submission, Background AI Grading & SignalR Result (`MF-01`)
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-05 Class Diagram`: [`DD05_PracticeGrading_Class_Diagram.drawio`](./DD05_PracticeGrading_Class_Diagram.drawio) | [`DD05_PracticeGrading_Class_Diagram.png`](./DD05_PracticeGrading_Class_Diagram.png)
->   - `DD-05 Sequence Diagram`: [`DD05_PracticeGrading_Sequence_Diagram.drawio`](./DD05_PracticeGrading_Sequence_Diagram.drawio) | [`DD05_PracticeGrading_Sequence_Diagram.png`](./DD05_PracticeGrading_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-05 Sequence Diagrams`: [`DD05_01_Answer_Submission_PersistFirst_Sequence.drawio`](./DD05_01_Answer_Submission_PersistFirst_Sequence.drawio) | [`DD05_02_Background_AI_Grading_SignalR_Sequence.drawio`](./DD05_02_Background_AI_Grading_SignalR_Sequence.drawio) | [`DD05_PracticeGrading_Sequence_Diagram.drawio`](./DD05_PracticeGrading_Sequence_Diagram.drawio)
+>   - `DD-05 Class Diagram`: [`DD05_PracticeGrading_Class_Diagram.drawio`](./DD05_PracticeGrading_Class_Diagram.drawio)
 
 ---
 
@@ -27,9 +27,79 @@ Gói `DD-05` thực thi cơ chế **Persist-First (< 100ms)** kết hợp hàng 
 
 ---
 
-### 3.5.2. Sơ Đồ Lớp (`DD-05 Class Diagram`)
+### 3.5.2. Sơ Đồ Tuần Tự (`DD-05 Sequence Diagrams — Các Tính Năng / Use Case Con Độc Lập`)
 
-> **Tệp Draw.io & PNG:** [`DD05_PracticeGrading_Class_Diagram.drawio`](./DD05_PracticeGrading_Class_Diagram.drawio) | [`DD05_PracticeGrading_Class_Diagram.png`](./DD05_PracticeGrading_Class_Diagram.png)
+Gói `DD-05` được phân rã thành **2 sơ đồ Use Case con độc lập** và 01 sơ đồ tổng quan kế thừa:
+
+1. **Answer Submission Persist-First & BoundedChannel (`DD05_01`):**
+   - **Tệp sơ đồ Draw.io:** [`DD05_01_Answer_Submission_PersistFirst_Sequence.drawio`](./DD05_01_Answer_Submission_PersistFirst_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Thí sinh nộp câu trả lời đơn lẻ qua `POST /api/v1/practice/sessions/{id}/answers` hoặc nộp trọn gói qua `POST .../batch-answers`. `SubmitPracticeAnswerCommandHandler` kiểm tra hạn chờ 5 phút qua `PracticeSessionTimeoutHelper` (nếu quá hạn trả `HTTP 410 Gone`). Nếu hợp lệ, hệ thống áp dụng cơ chế Persist-First: lưu bản ghi `PracticeAnswer` (`status = "pending"`) xuống PostgreSQL trong $< 100	ext{ms}$ (không lưu audio lên R2), đẩy tác vụ `GradingTask` vào hàng đợi RAM `BoundedChannel` 1.000 slots (`BoundedChannelFullMode.Wait`) và phản hồi ngay `HTTP 202 Accepted`.
+
+2. **Background Gemini CoT Grading & SignalR Notification (`DD05_02`):**
+   - **Tệp sơ đồ Draw.io:** [`DD05_02_Background_AI_Grading_SignalR_Sequence.drawio`](./DD05_02_Background_AI_Grading_SignalR_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Tiến trình nền `GradingQueueWorker` vận hành song song đa luồng (`MaxDegreeOfParallelism = 12`) tiêu thụ các tác vụ từ `BoundedChannel`. Worker nạp tiêu chí Rubric ($\sum = 10.0$) và lịch sử câu trả lời, gọi `GeminiAiGradingService` thực hiện chấm điểm theo chuỗi suy luận CoT. Cơ chế Polly Retry tự động thử lại 3 lần (khoảng cách 2s, 4s, 8s). Nếu thành công, kết quả được lưu vào `ai_evaluations` và `ai_evaluation_details`, cập nhật `PracticeAnswer.Status = "graded"`, đồng thời phát sự kiện `ReceiveGradingResult` qua SignalR `PracticeHub` (`/hubs/practice`) đến nhóm `session_{sessionId}`. Nếu lỗi kéo dài, tác vụ được cách ly an toàn vào Dead-Letter Queue `dead_letter_queues` (`Status = "pending"`, `NextRetryAt = UtcNow + 5 minutes`) để Admin xử lý sau (Zero Data Loss).
+
+- **Sơ đồ tổng quan kế thừa:** [`DD05_PracticeGrading_Sequence_Diagram.drawio`](./DD05_PracticeGrading_Sequence_Diagram.drawio)
+
+```mermaid
+sequenceDiagram
+    actor Student as Student
+    participant UI as Practice UI & PracticeHub
+    participant Ctrl as PracticeController
+    participant Handler as SubmitAnswer / BatchHandler
+    participant Worker as BoundedChannel & GradingWorker
+    participant AI as GeminiAiGradingService
+    participant DB as Database & DLQ
+
+    Student->>UI: 1. Submit answer transcript
+    alt Single Answer Submission
+        UI->>Ctrl: 2.1 Send single answer request
+        Ctrl->>Handler: 3.1 Forward single answer command
+        Handler->>DB: 4.1 Save pending practice answer
+        DB-->>Handler: 5.1 Confirm answer saved
+        Handler->>Worker: 6.1 Enqueue grading task
+        Handler-->>Ctrl: 7.1 Return answer ID
+        Ctrl-->>UI: 8.1 Return accepted status
+    else Batch Submission
+        UI->>Ctrl: 2.2 Send batch answers request
+        Ctrl->>Handler: 3.2 Forward batch answers command
+        Handler->>DB: 4.2 Save batch answers and zero scores
+        DB-->>Handler: 5.2 Confirm batch saved
+        Handler->>Worker: 6.2 Enqueue grading tasks
+        Ctrl-->>UI: 7.2 Return accepted status
+    end
+
+    alt AI Grading Succeeds
+        Worker->>DB: 8.3 Load question, rubric and context
+        DB-->>Worker: 9.3 Return grading context
+        Worker->>AI: 10.3 Evaluate answer with AI service
+        AI-->>Worker: 11.3 Return score and feedback
+        Worker->>DB: 12.3 Save AI evaluation and update status
+        DB-->>Worker: 13.3 Confirm evaluation saved
+        Worker->>UI: 14.3 Push grading result via SignalR
+        UI-->>Student: 15.3 Display AI feedback
+    else AI Grading Fails After Retries
+        Worker->>AI: 8.4 Evaluate answer with AI service
+        AI-->>Worker: 9.4 Return AI service error
+        Worker->>DB: 10.4 Save failed task to Dead Letter Queue
+        DB-->>Worker: 11.4 Confirm task queued
+        Worker->>UI: 12.4 Push grading error notification
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 13.5 Log error
+        Handler-->>Ctrl: 14.5 Return error response
+        Ctrl-->>UI: 15.5 Display error message
+    end
+```
+
+*Hình 3.5.2 — Sơ đồ tuần tự gói `DD-05` (Nộp bài Persist-First, Chấm điểm AI ngầm & Đẩy SignalR).*
+
+---
+
+### 3.5.3. Sơ Đồ Lớp (`DD-05 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD05_PracticeGrading_Class_Diagram.drawio`](./DD05_PracticeGrading_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -165,67 +235,7 @@ classDiagram
     GradingQueueWorker ..> DeadLetterQueue : Uses
 ```
 
-*Hình 3.5.1 — Sơ đồ lớp gói `DD-05` (Nộp bài luyện tập Persist-First, Hàng đợi `BoundedChannel`, Chấm điểm AI & SignalR).*
-
----
-
-### 3.5.3. Sơ Đồ Tuần Tự (`DD-05 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD05_PracticeGrading_Sequence_Diagram.drawio`](./DD05_PracticeGrading_Sequence_Diagram.drawio) | [`DD05_PracticeGrading_Sequence_Diagram.png`](./DD05_PracticeGrading_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor Student as Student
-    participant UI as Practice UI & PracticeHub
-    participant Ctrl as PracticeController
-    participant Handler as SubmitAnswer / BatchHandler
-    participant Worker as BoundedChannel & GradingWorker
-    participant AI as GeminiAiGradingService
-    participant DB as Database & DLQ
-
-    Student->>UI: 1. Submit answer transcript
-    alt Single Answer Submission
-        UI->>Ctrl: 2.1 Send single answer request
-        Ctrl->>Handler: 3.1 Forward single answer command
-        Handler->>DB: 4.1 Save pending practice answer
-        DB-->>Handler: 5.1 Confirm answer saved
-        Handler->>Worker: 6.1 Enqueue grading task
-        Handler-->>Ctrl: 7.1 Return answer ID
-        Ctrl-->>UI: 8.1 Return accepted status
-    else Batch Submission
-        UI->>Ctrl: 2.2 Send batch answers request
-        Ctrl->>Handler: 3.2 Forward batch answers command
-        Handler->>DB: 4.2 Save batch answers and zero scores
-        DB-->>Handler: 5.2 Confirm batch saved
-        Handler->>Worker: 6.2 Enqueue grading tasks
-        Ctrl-->>UI: 7.2 Return accepted status
-    end
-
-    alt AI Grading Succeeds
-        Worker->>DB: 8.3 Load question, rubric and context
-        DB-->>Worker: 9.3 Return grading context
-        Worker->>AI: 10.3 Evaluate answer with AI service
-        AI-->>Worker: 11.3 Return score and feedback
-        Worker->>DB: 12.3 Save AI evaluation and update status
-        DB-->>Worker: 13.3 Confirm evaluation saved
-        Worker->>UI: 14.3 Push grading result via SignalR
-        UI-->>Student: 15.3 Display AI feedback
-    else AI Grading Fails After Retries
-        Worker->>AI: 8.4 Evaluate answer with AI service
-        AI-->>Worker: 9.4 Return AI service error
-        Worker->>DB: 10.4 Save failed task to Dead Letter Queue
-        DB-->>Worker: 11.4 Confirm task queued
-        Worker->>UI: 12.4 Push grading error notification
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 13.5 Log error
-        Handler-->>Ctrl: 14.5 Return error response
-        Ctrl-->>UI: 15.5 Display error message
-    end
-```
-
-*Hình 3.5.2 — Sơ đồ tuần tự gói `DD-05` (Nộp câu trả lời, Chấm điểm ngầm qua `BoundedChannel`, Cô lập lỗi DLQ & Đẩy kết quả SignalR).*
+*Hình 3.5.3 — Sơ đồ lớp gói `DD-05` (Nộp bài luyện tập Persist-First, Hàng đợi BoundedChannel, Chấm điểm AI & SignalR).*
 
 ---
 

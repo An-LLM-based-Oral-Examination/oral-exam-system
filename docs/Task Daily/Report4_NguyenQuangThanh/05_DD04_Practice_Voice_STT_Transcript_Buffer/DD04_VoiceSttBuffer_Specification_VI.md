@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-04`:** Practice Voice/Text Capture, STT & Transcript Review Buffer (`MF-01`)
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-04 Class Diagram`: [`DD04_VoiceSttBuffer_Class_Diagram.drawio`](./DD04_VoiceSttBuffer_Class_Diagram.drawio) | [`DD04_VoiceSttBuffer_Class_Diagram.png`](./DD04_VoiceSttBuffer_Class_Diagram.png)
->   - `DD-04 Sequence Diagram`: [`DD04_VoiceSttBuffer_Sequence_Diagram.drawio`](./DD04_VoiceSttBuffer_Sequence_Diagram.drawio) | [`DD04_VoiceSttBuffer_Sequence_Diagram.png`](./DD04_VoiceSttBuffer_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-04 Sequence Diagrams`: [`DD04_01_Audio_Capture_STT_Streaming_Sequence.drawio`](./DD04_01_Audio_Capture_STT_Streaming_Sequence.drawio) | [`DD04_02_Transcript_Buffer_CodeSwitching_Sequence.drawio`](./DD04_02_Transcript_Buffer_CodeSwitching_Sequence.drawio) | [`DD04_VoiceSttBuffer_Sequence_Diagram.drawio`](./DD04_VoiceSttBuffer_Sequence_Diagram.drawio)
+>   - `DD-04 Class Diagram`: [`DD04_VoiceSttBuffer_Class_Diagram.drawio`](./DD04_VoiceSttBuffer_Class_Diagram.drawio)
 
 ---
 
@@ -32,9 +32,79 @@ Gói `DD-04` xử lý chức năng đọc câu hỏi tự động (TTS), nhận 
 
 ---
 
-### 3.4.2. Sơ Đồ Lớp (`DD-04 Class Diagram`)
+### 3.4.2. Sơ Đồ Tuần Tự (`DD-04 Sequence Diagrams — Các Tính Năng / Use Case Con Độc Lập`)
 
-> **Tệp Draw.io & PNG:** [`DD04_VoiceSttBuffer_Class_Diagram.drawio`](./DD04_VoiceSttBuffer_Class_Diagram.drawio) | [`DD04_VoiceSttBuffer_Class_Diagram.png`](./DD04_VoiceSttBuffer_Class_Diagram.png)
+Gói `DD-04` được phân rã thành **2 sơ đồ Use Case con độc lập** và 01 sơ đồ tổng quan kế thừa:
+
+1. **Voice Audio Capture & Whisper STT Streaming (`DD04_01`):**
+   - **Tệp sơ đồ Draw.io:** [`DD04_01_Audio_Capture_STT_Streaming_Sequence.drawio`](./DD04_01_Audio_Capture_STT_Streaming_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Thí sinh trả lời câu hỏi bằng giọng nói qua micro, trình duyệt thu âm và gửi luồng âm thanh RAM ($\le 25	ext{ MB}$) lên `POST /api/v1/speech/stt`. `TranscribeSpeechCommandHandler` gọi `ISpeechToTextService` (`ResilientSpeechToTextService`). Hệ thống ưu tiên gọi dịch vụ Cloudflare Whisper (`whisper-large-v3-turbo`) xử lý bóc băng STT tốc độ cao; nếu gặp sự cố kết nối, tự động chuyển đổi dự phòng sang Gemini Multimodal STT. Sau khi nhận văn bản thô, `SeTerminologyNormalizer` tự động nhận diện và sửa lỗi các thuật ngữ chuyên ngành SE (Code-Switching). Tuyệt đối không lưu tệp ghi âm lên Cloudflare R2 đối với luồng luyện tập (Zero-R2 Invariant).
+
+2. **Transcript Buffer Countdown & SE Code-Switching (`DD04_02`):**
+   - **Tệp sơ đồ Draw.io:** [`DD04_02_Transcript_Buffer_CodeSwitching_Sequence.drawio`](./DD04_02_Transcript_Buffer_CodeSwitching_Sequence.drawio)
+   - **Mô tả kỹ thuật:** Sau khi nhận diện giọng nói hoàn tất, giao diện kích hoạt đồng hồ đếm ngược `TranscriptBufferSeconds` (10–300 giây, mặc định 60 giây theo `system_configs`). Trong khoảng thời gian đệm này, thí sinh có thể nghe lại câu hỏi bằng giọng đọc TTS AI (`ResilientTextToSpeechService` đọc tự động bằng `vi-VN-HoaiMyNeural`/`vi-VN-NamMinhNeural`), đối soát bản bóc băng và trực tiếp chỉnh sửa các thuật ngữ chuyên ngành Kỹ thuật Phần mềm bị nhận dạng sai trước khi bấm xác nhận nộp bài.
+
+- **Sơ đồ tổng quan kế thừa:** [`DD04_VoiceSttBuffer_Sequence_Diagram.drawio`](./DD04_VoiceSttBuffer_Sequence_Diagram.drawio)
+
+```mermaid
+sequenceDiagram
+    actor Student as Student
+    participant UI as Practice UI
+    participant Ctrl as SpeechController
+    participant Handler as SynthesizeSpeech / TranscribeHandler
+    participant Svc as ResilientTextToSpeech / SpeechToTextService
+    participant Ext as Cloud AI & SE Normalizer
+
+    Student->>UI: 1. Listen question or record answer
+
+    alt Synthesize Question Speech
+        UI->>Ctrl: 2.1 Send text-to-speech request
+        Ctrl->>Handler: 3.1 Forward speech synthesis query
+        Handler->>Svc: 4.1 Request speech synthesis
+        alt Audio Cached
+            Svc-->>Handler: 5.1 Return cached audio bytes
+            Handler-->>Ctrl: 6.1 Return synthesis response
+            Ctrl-->>UI: 7.1 Play question audio
+        else Audio Not Cached
+            Svc->>Ext: 5.2 Generate neural speech audio
+            Ext-->>Svc: 6.2 Return audio bytes
+            Svc-->>Handler: 7.2 Return synthesis result
+            Handler-->>Ctrl: 8.2 Return success response
+            Ctrl-->>UI: 9.2 Play question audio
+        end
+    else Transcribe Recorded Answer
+        UI->>Ctrl: 2.3 Send recorded audio stream
+        Ctrl->>Handler: 3.3 Forward transcription command
+        Handler->>Svc: 4.3 Request audio transcription
+        alt Invalid Audio File
+            Svc-->>Handler: 5.3 Return invalid file message
+            Handler-->>Ctrl: 6.3 Return failure response
+            Ctrl-->>UI: 7.3 Display failure message
+        else Valid Audio File
+            Svc->>Ext: 5.4 Transcribe audio with AI service
+            Ext-->>Svc: 6.4 Return raw transcript
+            Svc->>Ext: 7.4 Normalize technical terms
+            Ext-->>Svc: 8.4 Return normalized transcript
+            Svc-->>Handler: 9.4 Return transcription result
+            Handler-->>Ctrl: 10.4 Return success response
+            Ctrl-->>UI: 11.4 Display transcript and countdown
+        end
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 12.5 Log error
+        Handler-->>Ctrl: 13.5 Return error response
+        Ctrl-->>UI: 14.5 Display error message
+    end
+```
+
+*Hình 3.4.2 — Sơ đồ tuần tự gói `DD-04` (Thu âm, Bóc băng STT & Bộ đệm chỉnh sửa văn bản).*
+
+---
+
+### 3.4.3. Sơ Đồ Lớp (`DD-04 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD04_VoiceSttBuffer_Class_Diagram.drawio`](./DD04_VoiceSttBuffer_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -132,67 +202,7 @@ classDiagram
     ResilientSpeechToTextService ..> GeminiSpeechToTextService : Uses
 ```
 
-*Hình 3.4.2 — Sơ đồ lớp gói `DD-04` (Thu âm trên RAM, Tổng hợp giọng đọc TTS, Bóc băng STT dự phòng kép & Chuẩn hóa thuật ngữ SE).*
-
----
-
-### 3.4.3. Sơ Đồ Tuần Tự (`DD-04 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD04_VoiceSttBuffer_Sequence_Diagram.drawio`](./DD04_VoiceSttBuffer_Sequence_Diagram.drawio) | [`DD04_VoiceSttBuffer_Sequence_Diagram.png`](./DD04_VoiceSttBuffer_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor Student as Student
-    participant UI as Practice UI
-    participant Ctrl as SpeechController
-    participant Handler as SynthesizeSpeech / TranscribeHandler
-    participant Svc as ResilientTextToSpeech / SpeechToTextService
-    participant Ext as Cloud AI & SE Normalizer
-
-    Student->>UI: 1. Listen question or record answer
-
-    alt Synthesize Question Speech
-        UI->>Ctrl: 2.1 Send text-to-speech request
-        Ctrl->>Handler: 3.1 Forward speech synthesis query
-        Handler->>Svc: 4.1 Request speech synthesis
-        alt Audio Cached
-            Svc-->>Handler: 5.1 Return cached audio bytes
-            Handler-->>Ctrl: 6.1 Return synthesis response
-            Ctrl-->>UI: 7.1 Play question audio
-        else Audio Not Cached
-            Svc->>Ext: 5.2 Generate neural speech audio
-            Ext-->>Svc: 6.2 Return audio bytes
-            Svc-->>Handler: 7.2 Return synthesis result
-            Handler-->>Ctrl: 8.2 Return success response
-            Ctrl-->>UI: 9.2 Play question audio
-        end
-    else Transcribe Recorded Answer
-        UI->>Ctrl: 2.3 Send recorded audio stream
-        Ctrl->>Handler: 3.3 Forward transcription command
-        Handler->>Svc: 4.3 Request audio transcription
-        alt Invalid Audio File
-            Svc-->>Handler: 5.3 Return invalid file message
-            Handler-->>Ctrl: 6.3 Return failure response
-            Ctrl-->>UI: 7.3 Display failure message
-        else Valid Audio File
-            Svc->>Ext: 5.4 Transcribe audio with AI service
-            Ext-->>Svc: 6.4 Return raw transcript
-            Svc->>Ext: 7.4 Normalize technical terms
-            Ext-->>Svc: 8.4 Return normalized transcript
-            Svc-->>Handler: 9.4 Return transcription result
-            Handler-->>Ctrl: 10.4 Return success response
-            Ctrl-->>UI: 11.4 Display transcript and countdown
-        end
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 12.5 Log error
-        Handler-->>Ctrl: 13.5 Return error response
-        Ctrl-->>UI: 14.5 Display error message
-    end
-```
-
-*Hình 3.4.3 — Sơ đồ tuần tự gói `DD-04` (Tổng hợp giọng đọc TTS có bộ nhớ đệm, Bóc băng STT dự phòng kép trên RAM & Đếm ngược sửa thuật ngữ SE).*
+*Hình 3.4.3 — Sơ đồ lớp gói `DD-04` (Thu âm trên RAM, TTS, STT & Chuẩn hóa thuật ngữ SE).*
 
 ---
 

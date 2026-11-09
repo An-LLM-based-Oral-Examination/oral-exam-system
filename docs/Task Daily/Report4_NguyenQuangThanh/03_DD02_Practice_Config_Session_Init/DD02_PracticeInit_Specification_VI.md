@@ -5,9 +5,9 @@
 > - **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (`FA26SE166`)
 > - **Người thực hiện:** Nguyễn Quang Thành | **Người review chéo:** Phạm Nguyễn Đăng Hải
 > - **Phạm vi bàn giao:** **`DD-02`:** Practice Configuration & Session Initialization (`MF-01`)
-> - **Tệp sơ đồ Draw.io & PNG trong cùng thư mục:**
->   - `DD-02 Class Diagram`: [`DD02_PracticeInit_Class_Diagram.drawio`](./DD02_PracticeInit_Class_Diagram.drawio) | [`DD02_PracticeInit_Class_Diagram.png`](./DD02_PracticeInit_Class_Diagram.png)
->   - `DD-02 Sequence Diagram`: [`DD02_PracticeInit_Sequence_Diagram.drawio`](./DD02_PracticeInit_Sequence_Diagram.drawio) | [`DD02_PracticeInit_Sequence_Diagram.png`](./DD02_PracticeInit_Sequence_Diagram.png)
+> - **Tệp sơ đồ Draw.io trong cùng thư mục:**
+>   - `DD-02 Sequence Diagram`: [`DD02_PracticeInit_Sequence_Diagram.drawio`](./DD02_PracticeInit_Sequence_Diagram.drawio)
+>   - `DD-02 Class Diagram`: [`DD02_PracticeInit_Class_Diagram.drawio`](./DD02_PracticeInit_Class_Diagram.drawio)
 
 ---
 
@@ -29,9 +29,71 @@ Gói `DD-02` quản lý các tham số cấu hình của luồng **Luyện tập
 
 ---
 
-### 3.2.2. Sơ Đồ Lớp (`DD-02 Class Diagram`)
+### 3.2.2. Sơ Đồ Tuần Tự (`DD-02 Sequence Diagram — Khởi Tạo Phiên Luyện Tập MF-01`)
 
-> **Tệp Draw.io & PNG:** [`DD02_PracticeInit_Class_Diagram.drawio`](./DD02_PracticeInit_Class_Diagram.drawio) | [`DD02_PracticeInit_Class_Diagram.png`](./DD02_PracticeInit_Class_Diagram.png)
+- **Tệp sơ đồ Draw.io:** [`DD02_PracticeInit_Sequence_Diagram.drawio`](./DD02_PracticeInit_Sequence_Diagram.drawio)
+- **Mô tả kỹ thuật:** Đặc tả chi tiết luồng khởi tạo phiên luyện tập tương tác tự do (`MF-01`). Sinh viên lựa chọn môn học, chế độ (`per_question` hoặc `full_session`) và mức độ khó (`easy`, `medium`, `hard`). `StartPracticeSessionCommandHandler` tiếp nhận yêu cầu, nạp các tham số cấu hình từ bảng `system_configs` (`TranscriptBufferSeconds`, `MaxPracticeFollowUpQuestions`, `SessionInactivityTimeoutMinutes`). Nếu chọn chế độ `per_question`, hệ thống kiểm tra và bốc ngẫu nhiên câu hỏi mở đầu từ ngân hàng `practice_questions` đã duyệt (`APPROVED`). Nếu chọn chế độ `full_session`, hệ thống kiểm tra số lượng câu hỏi khả dụng theo cấu trúc lũy tiến Dễ $	o$ Trung bình $	o$ Khó (3–10 câu); nếu không đủ câu hỏi sẽ trả về lỗi `HTTP 400 Bad Request`. Sau khi chọn thành công, phiên `practice_sessions` được khởi tạo ở trạng thái `in_progress` kèm tiêu chí Rubric 10.0đ.
+
+```mermaid
+sequenceDiagram
+    actor Student as Student
+    participant UI as Practice UI
+    participant Ctrl as PracticeController
+    participant Val as StartPracticeSessionValidator
+    participant Handler as StartPracticeSessionCommandHandler
+    participant DB as Database
+
+    Student->>UI: 1. Select course, mode and difficulty
+    UI->>Ctrl: 2. Send start session request
+
+    alt Per-Question Mode
+        Ctrl->>Val: 3.1 Validate request
+        Val-->>Ctrl: 4.1 Return validation status
+        Ctrl->>Handler: 5.1 Forward start session command
+        Handler->>DB: 6.1 Check approved questions by difficulty
+        DB-->>Handler: 7.1 Return question list
+        alt No Questions Found
+            Handler-->>Ctrl: 8.1 Return empty pool message
+            Ctrl-->>UI: 9.1 Display failure message
+        else Questions Available
+            Handler->>DB: 8.2 Select first question and rubric
+            DB-->>Handler: 9.2 Return question details
+            Handler->>DB: 10.2 Insert new practice session
+            DB-->>Handler: 11.2 Return created session
+            Handler-->>Ctrl: 12.2 Return success response
+            Ctrl-->>UI: 13.2 Display first question
+        end
+    else Full-Session Mode
+        Ctrl->>Handler: 3.3 Forward start session command
+        Handler->>DB: 4.3 Count Easy, Medium and Hard questions
+        DB-->>Handler: 5.3 Return question counts
+        alt Not Enough Questions
+            Handler-->>Ctrl: 6.3 Return insufficient pool message
+            Ctrl-->>UI: 7.3 Display failure message
+        else Enough Questions
+            Handler->>DB: 6.4 Select progressive questions
+            DB-->>Handler: 7.4 Return ordered questions
+            Handler->>DB: 8.4 Insert new practice session
+            DB-->>Handler: 9.4 Return created session
+            Handler-->>Ctrl: 10.4 Return success response
+            Ctrl-->>UI: 11.4 Display practice session
+        end
+    end
+
+    opt Exception occurs
+        Handler->>Handler: 12.5 Log error
+        Handler-->>Ctrl: 13.5 Return error response
+        Ctrl-->>UI: 14.5 Display error message
+    end
+```
+
+*Hình 3.2.2 — Sơ đồ tuần tự gói `DD-02` (Khởi tạo phiên luyện tập tương tác tự do).*
+
+---
+
+### 3.2.3. Sơ Đồ Lớp (`DD-02 Class Diagram`)
+
+> **Tệp Draw.io:** [`DD02_PracticeInit_Class_Diagram.drawio`](./DD02_PracticeInit_Class_Diagram.drawio)
 
 ```mermaid
 classDiagram
@@ -177,68 +239,7 @@ classDiagram
     Course "1" --> "*" PracticeSession : PracticeSessions
 ```
 
-*Hình 3.2.2 — Sơ đồ lớp gói `DD-02` (Cấu hình Tham số Luyện tập & Khởi tạo Phiên Luyện tập).*
-
----
-
-### 3.2.3. Sơ Đồ Tuần Tự (`DD-02 Sequence Diagram — Luồng Chính & Luồng Lỗi/Rẽ Nhánh`)
-
-> **Tệp Draw.io & PNG:** [`DD02_PracticeInit_Sequence_Diagram.drawio`](./DD02_PracticeInit_Sequence_Diagram.drawio) | [`DD02_PracticeInit_Sequence_Diagram.png`](./DD02_PracticeInit_Sequence_Diagram.png)
-
-```mermaid
-sequenceDiagram
-    actor Student as Student
-    participant UI as Practice UI
-    participant Ctrl as PracticeController
-    participant Val as StartPracticeSessionValidator
-    participant Handler as StartPracticeSessionCommandHandler
-    participant DB as Database
-
-    Student->>UI: 1. Select course, mode and difficulty
-    UI->>Ctrl: 2. Send start session request
-
-    alt Per-Question Mode
-        Ctrl->>Val: 3.1 Validate request
-        Val-->>Ctrl: 4.1 Return validation status
-        Ctrl->>Handler: 5.1 Forward start session command
-        Handler->>DB: 6.1 Check approved questions by difficulty
-        DB-->>Handler: 7.1 Return question list
-        alt No Questions Found
-            Handler-->>Ctrl: 8.1 Return empty pool message
-            Ctrl-->>UI: 9.1 Display failure message
-        else Questions Available
-            Handler->>DB: 8.2 Select first question and rubric
-            DB-->>Handler: 9.2 Return question details
-            Handler->>DB: 10.2 Insert new practice session
-            DB-->>Handler: 11.2 Return created session
-            Handler-->>Ctrl: 12.2 Return success response
-            Ctrl-->>UI: 13.2 Display first question
-        end
-    else Full-Session Mode
-        Ctrl->>Handler: 3.3 Forward start session command
-        Handler->>DB: 4.3 Count Easy, Medium and Hard questions
-        DB-->>Handler: 5.3 Return question counts
-        alt Not Enough Questions
-            Handler-->>Ctrl: 6.3 Return insufficient pool message
-            Ctrl-->>UI: 7.3 Display failure message
-        else Enough Questions
-            Handler->>DB: 6.4 Select progressive questions
-            DB-->>Handler: 7.4 Return ordered questions
-            Handler->>DB: 8.4 Insert new practice session
-            DB-->>Handler: 9.4 Return created session
-            Handler-->>Ctrl: 10.4 Return success response
-            Ctrl-->>UI: 11.4 Display practice session
-        end
-    end
-
-    opt Exception occurs
-        Handler->>Handler: 12.5 Log error
-        Handler-->>Ctrl: 13.5 Return error response
-        Ctrl-->>UI: 14.5 Display error message
-    end
-```
-
-*Hình 3.2.3 — Sơ đồ tuần tự gói `DD-02` (Cấu hình Tham số Luyện tập bởi Admin & Khởi tạo Phiên Luyện tập 2 chế độ).*
+*Hình 3.2.3 — Sơ đồ lớp gói `DD-02` (Cấu hình tham số luyện tập & Khởi tạo phiên luyện tập).*
 
 ---
 
