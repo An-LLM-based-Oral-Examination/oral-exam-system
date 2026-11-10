@@ -549,15 +549,21 @@ export const PracticeSessionPage: React.FC = () => {
     const parts = [
       runtime?.config.courseCode?.trim(),
       runtime?.config.courseName?.trim(),
-      activePrompt.trim(),
-      currentQuestion?.content?.trim(),
-      currentQuestion?.rubricCriteria?.join(', ').trim(),
     ].filter((part): part is string => Boolean(part))
-    return parts.length > 0 ? parts.join(' - ').slice(0, 320) : undefined
+
+    // Thêm các tiêu chí rubric ngắn gọn (không phải câu hỏi) làm keyword tags
+    if (currentQuestion?.rubricCriteria && currentQuestion.rubricCriteria.length > 0) {
+      const cleanCriteria = currentQuestion.rubricCriteria
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0 && c.length <= 50 && !c.includes('?'))
+      if (cleanCriteria.length > 0) {
+        parts.push(cleanCriteria.join(', '))
+      }
+    }
+
+    return parts.length > 0 ? parts.join(' - ').slice(0, 240) : undefined
   }, [
-    activePrompt,
-    currentQuestion?.content,
-    currentQuestion?.rubricCriteria,
+    currentQuestion,
     runtime?.config.courseCode,
     runtime?.config.courseName,
   ])
@@ -1223,14 +1229,18 @@ export const PracticeSessionPage: React.FC = () => {
         finalTranscript = response.transcript.trim()
       }
 
+      const PICTURE_HALLUCINATION_REGEX =
+        /(?:looking\s+at\s+the\s+picture\s*,?\s*i\s+see\s+a\s+family|they\s+are\s+in\s+the\s+kitchen(?:\s+room)?|demonstrate\s+the\s+wearing\s+t-?shirt\s+and\s+jeans)/iu
+
       if (
         isLikelySilentOrInvalidTranscript(finalTranscript, recordedSeconds) ||
+        PICTURE_HALLUCINATION_REGEX.test(finalTranscript) ||
         looksLikeQuestionEcho(finalTranscript, echoTarget)
       ) {
         throw {
           status: 422,
           detail:
-            'Không nhận diện được giọng nói rõ ràng (hoặc micro thu ngược tiếng loa đọc đề). Vui lòng nói gần micro hơn và ghi âm lại.',
+            'Không nhận diện được giọng nói hoặc âm thanh quá nhỏ. Vui lòng kiểm tra micro hoặc bấm Thu âm lại để trả lời lại.',
         }
       }
       const nextDeadline = Date.now() + runtime.transcriptBufferSeconds * 1_000
@@ -3044,6 +3054,18 @@ export const PracticeSessionPage: React.FC = () => {
             }
             setHideRecognizedAnswerHeader(true)
             setSessionNotice('')
+          }}
+          onReRecord={() => {
+            setShowBuffer(false)
+            setBufferDeadlineTimestamp(null)
+            setBufferError('')
+            if (answerInputMode === 'voice') {
+              setTranscript('')
+              setVoiceBaselineTranscript('')
+              persistAnswerDraft('', 'voice', false, null, '')
+            }
+            setHideRecognizedAnswerHeader(true)
+            setSessionNotice('Đã hủy bản ghi âm cũ. Hãy bấm phím Cách hoặc nút Micro để thu âm lại.')
           }}
           isSubmitting={isSubmitting}
           errorMessage={bufferError}

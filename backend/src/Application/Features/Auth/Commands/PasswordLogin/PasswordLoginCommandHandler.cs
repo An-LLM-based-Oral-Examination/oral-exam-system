@@ -40,14 +40,39 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             return Result<PasswordLoginResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
-        var username = StudentUsername.Normalize(request.Username);
-        var user = await _context.Users
-            .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == username.ToLower(), cancellationToken);
+        var rawInput = request.Username?.Trim() ?? string.Empty;
+        var normalizedUsername = StudentUsername.Normalize(rawInput);
+        var inputLower = rawInput.ToLowerInvariant();
+        var normalizedLower = normalizedUsername.ToLowerInvariant();
 
-        if (user is null && username.Equals("totse18191414", StringComparison.OrdinalIgnoreCase))
+        var user = await _context.Users
+            .FirstOrDefaultAsync(item =>
+                (item.Username != null && (item.Username.ToLower() == normalizedLower || item.Username.ToLower() == inputLower)) ||
+                (item.Email != null && (item.Email.ToLower() == inputLower || item.Email.ToLower() == normalizedLower)),
+                cancellationToken);
+
+        if (user is null && (normalizedLower == "totse18191414" || inputLower == "totse18191414"))
         {
             user = await _context.Users
                 .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == "totse181414", cancellationToken);
+        }
+
+        if (user is null && inputLower.Contains('@'))
+        {
+            var localPart = inputLower.Split('@')[0].Trim();
+            if (localPart == "totse18191414")
+            {
+                user = await _context.Users
+                    .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == "totse181414", cancellationToken);
+            }
+            else if (!string.IsNullOrWhiteSpace(localPart))
+            {
+                user = await _context.Users
+                    .FirstOrDefaultAsync(item =>
+                        (item.Username != null && item.Username.ToLower() == localPart) ||
+                        (item.Email != null && (item.Email.ToLower() == $"{localPart}@fe.edu.vn" || item.Email.ToLower() == $"{localPart}@fpt.edu.vn")),
+                        cancellationToken);
+            }
         }
 
         if (user is null)

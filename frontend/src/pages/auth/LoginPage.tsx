@@ -20,21 +20,8 @@ import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { useAuth } from '@/hooks/useAuth'
 import { authService } from '@/services/auth.service'
+import { googleAuthManager } from '@/services/googleAuth.service'
 import './LoginPage.css'
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void
-          renderButton: (element: HTMLElement, options: Record<string, string | number>) => void
-          cancel: () => void
-        }
-      }
-    }
-  }
-}
 const LoginThreeScene = lazy(() =>
   import('./LoginThreeScene').then((module) => ({ default: module.LoginThreeScene })),
 )
@@ -152,29 +139,27 @@ export function LoginPage() {
     let isMounted = true
     let timeoutId: ReturnType<typeof setTimeout> | undefined
 
-    const renderGoogleButton = () => {
-      if (!window.google || !googleButtonRef.current) return
-      try {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: ({ credential }) => {
-            setIsLoading(true)
-            void loginWithGoogle(credential)
-              .then(() => {
-                const currentUser = authService.getCurrentUser()
-                if (currentUser?.mustChangePassword) {
-                  toast.info('Bạn cần đổi mật khẩu trước khi tiếp tục.')
-                  navigate('/change-password', { replace: true })
-                } else {
-                  navigate('/', { replace: true })
-                }
-              })
-              .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
-              .finally(() => setIsLoading(false))
-          },
+    const handleGoogleCredential = ({ credential }: { credential: string }) => {
+      setIsLoading(true)
+      void loginWithGoogle(credential)
+        .then(() => {
+          const currentUser = authService.getCurrentUser()
+          if (currentUser?.mustChangePassword) {
+            toast.info('Bạn cần đổi mật khẩu trước khi tiếp tục.')
+            navigate('/change-password', { replace: true })
+          } else {
+            navigate('/', { replace: true })
+          }
         })
-        googleButtonRef.current.replaceChildren()
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
+        .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
+        .finally(() => setIsLoading(false))
+    }
+
+    const renderGoogleButton = () => {
+      if (!googleAuthManager.isLoaded() || !googleButtonRef.current) return
+      try {
+        googleAuthManager.initialize(clientId, handleGoogleCredential)
+        googleAuthManager.renderButton(googleButtonRef.current, {
           theme: 'outline',
           size: 'large',
           width: '360',
@@ -205,7 +190,7 @@ export function LoginPage() {
       }
     }, 2500)
 
-    if (window.google) {
+    if (googleAuthManager.isLoaded()) {
       renderGoogleButton()
       return () => {
         isMounted = false
@@ -214,7 +199,9 @@ export function LoginPage() {
       }
     }
 
-    const existingScript = document.querySelector<HTMLScriptElement>('script[data-google-identity]')
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[data-google-identity], script[src*="accounts.google.com/gsi/client"]',
+    )
     const script = existingScript ?? document.createElement('script')
 
     const handleScriptError = () => {

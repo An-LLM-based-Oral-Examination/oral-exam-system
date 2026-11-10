@@ -9,6 +9,7 @@ import type {
 } from '@/types/auth.types'
 import { clearMockExamSession } from '@/utils/mockExamSessionStorage'
 import { clearPracticeRuntimes } from '@/utils/practiceSessionStorage'
+import { safeJsonParse } from '@/utils/json.utils'
 
 function normalizePortalRole(role: unknown): UserRole | null {
   if (role === 'Student' || role === 'student') return 'Student'
@@ -34,7 +35,8 @@ function extractMustChangePasswordFromJwt(token: string | null | undefined): boo
   try {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
-    const payload = JSON.parse(atob(padded)) as { must_change_password?: unknown }
+    const decoded = atob(padded)
+    const payload = safeJsonParse<{ must_change_password?: unknown }>(decoded, {})
     if (payload.must_change_password === 'true' || payload.must_change_password === true) {
       return true
     }
@@ -170,7 +172,8 @@ export const authService = {
     if (!userStr) return null
 
     try {
-      const parsed = JSON.parse(userStr) as Partial<User> & { role?: unknown }
+      const parsed = safeJsonParse<(Partial<User> & { role?: unknown }) | null>(userStr, null)
+      if (!parsed) return null
       const role = normalizePortalRole(parsed.role)
       if (
         !role ||

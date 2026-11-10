@@ -138,7 +138,12 @@ public static partial class DevelopmentDataSeeder
 
             courseToOfferingId[actualCourse.Id] = offering.Id;
 
-            foreach (var targetLecturerId in new[] { LecturerUserId, LecturerLectureId })
+            var effectiveLectureId = context.Users.Local.FirstOrDefault(u => string.Equals(u.Username, "lecture", StringComparison.OrdinalIgnoreCase))?.Id ?? LecturerLectureId;
+            var lecturerIdsToAssign = effectiveLectureId == LecturerLectureId
+                ? new[] { LecturerUserId, LecturerLectureId }
+                : new[] { LecturerUserId, LecturerLectureId, effectiveLectureId };
+
+            foreach (var targetLecturerId in lecturerIdsToAssign)
             {
                 var existingAssignment = existingCourseLecturers.FirstOrDefault(cl =>
                     cl.CourseId == actualCourse.Id && cl.LecturerUserId == targetLecturerId);

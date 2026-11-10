@@ -121,8 +121,8 @@ public static partial class DevelopmentDataSeeder
         await EnsurePracticeQuestionsAsync(context, cancellationToken);
         await EnsureExamQuestionsAsync(context, cancellationToken);
         await EnsureClassesAndEnrollmentsAsync(context, cancellationToken);
-        await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
         await SeedAdditionalThreeCoursesAndClosAsync(context, cancellationToken);
+        await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
     }
 
     private static async Task EnsureSemesterAndUsersAsync(OralExamDbContext context, CancellationToken cancellationToken)
@@ -365,30 +365,74 @@ public static partial class DevelopmentDataSeeder
 
         var existingUsers = await context.Users.ToListAsync(cancellationToken);
 
+        var testUserIds = new HashSet<Guid>
+        {
+            LecturerLectureId,
+            StudentHaiId,
+            StudentHoangTestId,
+            StudentTotTestId,
+            StudentThanhTestId
+        };
+
+        var testUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "lecture",
+            "haise181313",
+            "hoangse181212",
+            "totse181414",
+            "thanhse181515"
+        };
+
         foreach (var user in defaultUsers)
         {
             var existing = existingUsers.FirstOrDefault(u =>
-                u.Id == user.Id || string.Equals(u.Email, user.Email, StringComparison.OrdinalIgnoreCase));
+                u.Id == user.Id ||
+                (!string.IsNullOrWhiteSpace(user.Email) && string.Equals(u.Email, user.Email, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(user.Username) && string.Equals(u.Username, user.Username, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(user.StudentCode) && string.Equals(u.StudentCode, user.StudentCode, StringComparison.OrdinalIgnoreCase)));
 
             if (existing == null)
             {
                 context.Users.Add(user);
+                existingUsers.Add(user);
             }
             else
             {
+                var isTestAccount = testUserIds.Contains(user.Id) ||
+                                   testUserIds.Contains(existing.Id) ||
+                                   (user.Username != null && testUsernames.Contains(user.Username)) ||
+                                   (existing.Username != null && testUsernames.Contains(existing.Username));
+
                 existing.MustChangePassword = user.MustChangePassword;
                 existing.IsActive = true;
+
                 if (string.IsNullOrWhiteSpace(existing.Username))
                 {
                     existing.Username = user.Username;
                 }
+
                 if (user.Id == Lecturer2UserId ||
                     string.IsNullOrWhiteSpace(existing.FullName) ||
-                    existing.FullName == "Giang vien CSD DBI PRF")
+                    existing.FullName == "Giang vien CSD DBI PRF" ||
+                    isTestAccount)
                 {
                     existing.FullName = user.FullName;
                 }
-                if (string.IsNullOrWhiteSpace(existing.PasswordHash))
+
+                if (isTestAccount)
+                {
+                    existing.PasswordHash = user.PasswordHash;
+                    existing.Role = user.Role;
+                    if (!string.IsNullOrWhiteSpace(user.StudentCode))
+                    {
+                        existing.StudentCode = user.StudentCode;
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.Username))
+                    {
+                        existing.Username = user.Username;
+                    }
+                }
+                else if (string.IsNullOrWhiteSpace(existing.PasswordHash))
                 {
                     existing.PasswordHash = user.PasswordHash;
                 }

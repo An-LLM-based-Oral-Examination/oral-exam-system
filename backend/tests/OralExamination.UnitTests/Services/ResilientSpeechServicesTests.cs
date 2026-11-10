@@ -2092,5 +2092,47 @@ public class ResilientSpeechServicesTests
         customVocab.Should().Contain("CleanArchitecture");
         customVocab.Should().Contain("GradingQueueWorker");
     }
-}
+[Fact(DisplayName = "51. BuildContextualWhisperPrompt loại bỏ câu hỏi, dấu hỏi chấm và chỉ dẫn mệnh lệnh tranh ENT001")]
+    public void BuildContextualWhisperPrompt_WhenPromptContainsGuideQuestionsAndInstructions_StripsQuestionsAndKeepsKeywords()
+    {
+        var entPrompt = "ENT001 - Look at the picture and describe what you see using the following guide questions:\n" +
+                         "1. Who are they?\n" +
+                         "2. Where are they?\n" +
+                         "3. What are they wearing?\n" +
+                         "4. What are they doing?";
 
+        var prompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(entPrompt);
+
+        prompt.Should().Contain("ENT001");
+        prompt.Should().NotContain("?");
+        prompt.Should().NotContain("Who are they");
+        prompt.Should().NotContain("Where are they");
+        prompt.Should().NotContain("What are they wearing");
+        prompt.Should().NotContain("Look at the picture");
+        prompt.Should().NotContain("following guide questions");
+    }
+
+    [Fact(DisplayName = "52. SanitizeHallucinations và IsHallucinationOrNoise phát hiện và lọc sạch ảo giác miêu tả tranh tự sinh của Whisper")]
+    public void SanitizeHallucinations_WhenWhisperHallucinatesPictureDescriptionAnswers_ReturnsEmptyAndFlagsHallucination()
+    {
+        var hallucinatedTranscript = "Looking at the picture, I see a family. They are in the kitchen room. Demonstrate the wearing t-shirt and jeans.";
+
+        var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(hallucinatedTranscript);
+        var isHallucination = SeTerminologyNormalizer.IsHallucinationOrNoise(hallucinatedTranscript);
+
+        sanitized.Should().BeEmpty();
+        isHallucination.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "53. CloudflareWhisperService.DetectLanguage tự động nhận diện môn tiếng Anh ENTxxx và mặc định vi cho các môn khác")]
+    public void CloudflareWhisperService_DetectLanguage_IdentifiesEnglishSubjectsAndDefaultsToVietnamese()
+    {
+        CloudflareWhisperService.DetectLanguage("ENT001 - Speaking Part 2").Should().Be("en");
+        CloudflareWhisperService.DetectLanguage("ENT104").Should().Be("en");
+        CloudflareWhisperService.DetectLanguage("DBI202 - Database Systems").Should().Be("vi");
+        CloudflareWhisperService.DetectLanguage("CSD201").Should().Be("vi");
+        CloudflareWhisperService.DetectLanguage("lang:en").Should().Be("vi", "lang:en dùng chế độ song ngữ vi cho Whisper để nhận diện cả tiếng Việt và thuật ngữ");
+        CloudflareWhisperService.DetectLanguage(null).Should().Be("vi");
+        CloudflareWhisperService.DetectLanguage("").Should().Be("vi");
+    }
+}

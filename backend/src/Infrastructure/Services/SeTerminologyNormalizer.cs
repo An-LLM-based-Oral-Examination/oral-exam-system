@@ -219,6 +219,19 @@ public static class SeTerminologyNormalizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(500));
 
+    /// <summary>
+    /// Nhận diện các câu/mẫu ảo giác miêu tả tranh tự sinh của Whisper khi initial_prompt bị nhiễm câu hỏi gợi ý ENT001.
+    /// </summary>
+    private static readonly Regex PictureHallucinationContentRegex = new(
+        @"(?:looking\s+at\s+the\s+picture\s*,?\s*i\s+see\s+a\s+family|they\s+are\s+in\s+the\s+kitchen(?:\s+room)?|demonstrate\s+the\s+wearing\s+t-?shirt\s+and\s+jeans|in\s+(?:the|this)\s+picture\s*,?\s*i\s+see\s+a\s+family|they\s+are\s+wearing\s+t-?shirt\s+and\s+jeans)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+
+    private static readonly Regex PictureHallucinationPhraseRegex = new(
+        @"^(?:(?:looking\s+at\s+the\s+picture|look\s+at\s+the\s+picture|in\s+(?:this|the)\s+picture)\s*,?\s*)?(?:i\s+(?:can\s+)?see\s+a\s+family|they\s+are\s+in\s+the\s+kitchen(?:\s+room)?|demonstrate\s+the\s+wearing\s+t-?shirt\s+and\s+jeans|they\s+are\s+wearing\s+t-?shirt\s+and\s+jeans)(?:.*(?:kitchen|laundry|t-?shirt|jeans|family|room))?$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+
     private static readonly Regex RepeatedPhraseRegex = new(
         @"\b(\w+(?:\s+\w+){1,16})(?:[\s,.!?]+\1){1,}\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -246,6 +259,18 @@ public static class SeTerminologyNormalizer
     private static readonly Regex TechnicalContextTokenRegex = new(
         @"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[A-Z]{2,}[0-9]*(?:-[A-Za-z0-9]+)?|\.[A-Za-z0-9]+)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex QuestionMarkAndClauseRegex = new(
+        @"[^.!?;\r\n]*\?",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex NumberedQuestionListRegex = new(
+        @"(?:\b\d+[\.\)]|\(\d+\))\s*",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(500));
+    private static readonly Regex ImperativeInstructionRegex = new(
+        @"\b(?:look\s+at\s+(?:the\s+)?(?:picture|image)(?:\s+and)?|describe\s+what\s+you\s+see(?:\s+using(?:\s+the\s+following(?:\s+guide\s+questions)?)?)?|using\s+the\s+following(?:\s+guide\s+questions)?|following\s+guide\s+questions|guide\s+questions|answer\s+the\s+questions?|please\s+(?:describe|explain|answer)|describe\s+the\s+(?:picture|image))\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(500));
 
     /// <summary>
@@ -293,7 +318,9 @@ public static class SeTerminologyNormalizer
 
         try
         {
-            return NoiseHallucinationPhraseRegex.IsMatch(input);
+            return NoiseHallucinationPhraseRegex.IsMatch(input)
+                || PictureHallucinationPhraseRegex.IsMatch(input)
+                || PictureHallucinationContentRegex.IsMatch(input);
         }
         catch (RegexMatchTimeoutException)
         {
@@ -302,8 +329,8 @@ public static class SeTerminologyNormalizer
     }
 
     /// <summary>
-    /// Tạo chuỗi initial_prompt tối ưu cho Whisper (< 224 tokens), đặt ngữ cảnh câu hỏi hiện tại ở cuối
-    /// để bộ giải mã Whisper ưu tiên dự đoán chính xác các từ vựng thuộc câu hỏi đang trả lời.
+    /// Tạo chuỗi initial_prompt an toàn cho Whisper (< 224 tokens), loại bỏ hoàn toàn câu hỏi, dấu hỏi chấm (?)
+    /// và các chỉ dẫn mệnh lệnh đề bài để ngăn ngừa triệt để ảo giác tiếp diễn tự sinh (autoregressive continuation).
     /// </summary>
     public static string BuildContextualWhisperPrompt(string? vocabularyHint)
     {
@@ -312,20 +339,39 @@ public static class SeTerminologyNormalizer
             return string.Empty;
         }
 
-        var cleanedHint = MultiWhitespaceRegex.Replace(vocabularyHint.Trim(), " ");
-        if (cleanedHint.Length > 360)
+        var trimmed = vocabularyHint.Trim();
+        if (string.Equals(trimmed, "lang:en", StringComparison.OrdinalIgnoreCase))
         {
-            cleanedHint = cleanedHint[..360].Trim();
+            return string.Empty;
         }
 
-        if (!ContainsVietnameseDiacritics(cleanedHint))
+        // 1. Loại bỏ các câu/mệnh đề kết thúc bằng dấu hỏi chấm (?)
+        var noQuestions = QuestionMarkAndClauseRegex.Replace(trimmed, " ");
+
+        // 2. Loại bỏ các ký tự số thứ tự danh sách câu hỏi (1., 2., (1)...)
+        var noNumberedLists = NumberedQuestionListRegex.Replace(noQuestions, " ");
+
+        // 3. Loại bỏ các câu lệnh/chỉ dẫn mệnh lệnh đề bài
+        var noInstructions = ImperativeInstructionRegex.Replace(noNumberedLists, " ");
+
+        // 4. Loại bỏ các dấu hỏi còn sót lại nếu có
+        var cleaned = noInstructions.Replace("?", " ");
+
+        // 5. Chuẩn hóa khoảng trắng và dấu phân cách đầu cuối
+        cleaned = Regex.Replace(cleaned, @"^[,\s\-:;]+|[,\s\-:;]+$", string.Empty).Trim();
+        cleaned = MultiWhitespaceRegex.Replace(cleaned, " ").Trim();
+
+        if (string.IsNullOrWhiteSpace(cleaned))
         {
-            return string.Equals(cleanedHint, "lang:en", StringComparison.OrdinalIgnoreCase)
-                ? string.Empty
-                : $"{DefaultSeWhisperPrompt} Câu hỏi hiện tại: {cleanedHint}";
+            return string.Empty;
         }
 
-        return $"{DefaultSeWhisperPrompt} Câu hỏi hiện tại: {cleanedHint}";
+        if (cleaned.Length > 360)
+        {
+            cleaned = cleaned[..360].Trim();
+        }
+
+        return $"{DefaultSeWhisperPrompt} Câu hỏi hiện tại: {cleaned}";
     }
 
     /// <summary>
@@ -351,6 +397,16 @@ public static class SeTerminologyNormalizer
         if (string.IsNullOrWhiteSpace(rawTranscript))
         {
             return string.Empty;
+        }
+
+        // Khử nhanh mẫu ảo giác miêu tả tranh tự sinh của Whisper từ đề bài ENT001
+        if (PictureHallucinationContentRegex.IsMatch(rawTranscript))
+        {
+            rawTranscript = PictureHallucinationContentRegex.Replace(rawTranscript, " ").Trim();
+            if (string.IsNullOrWhiteSpace(rawTranscript))
+            {
+                return string.Empty;
+            }
         }
 
         var trimmed = Regex.Replace(

@@ -202,6 +202,26 @@ public class CloudflareWhisperService : ISpeechToTextService
     /// <summary>
     /// Gọi mô hình @cf/openai/whisper-large-v3-turbo hỗ trợ song ngữ Việt - Anh (Code-Switching) cho mọi môn học (cả ENT và SE).
     /// Đặt language = "vi", task = "transcribe" và luôn truyền chuỗi initial_prompt song ngữ khác null (tránh lỗi HTTP 400 code 5006
+    private static readonly System.Text.RegularExpressions.Regex EnglishSubjectRegex = new(
+        @"\bENT\d{3}\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Tự động phát hiện ngôn ngữ: nếu vocabularyHint biểu thị môn tiếng Anh (vd: ENT001, ENT104, lang:en), trả về "en", ngược lại ngầm định "vi".
+    /// </summary>
+    public static string DetectLanguage(string? vocabularyHint)
+    {
+        if (!string.IsNullOrWhiteSpace(vocabularyHint) && EnglishSubjectRegex.IsMatch(vocabularyHint))
+        {
+            return "en";
+        }
+
+        return TranscriptionLanguage;
+    }
+
+    /// <summary>
+    /// Gọi mô hình @cf/openai/whisper-large-v3-turbo hỗ trợ song ngữ Việt - Anh (Code-Switching) cho mọi môn học (cả ENT và SE).
+    /// Đặt language phù hợp ("en" cho ENT, "vi" cho SE), task = "transcribe" và luôn truyền chuỗi initial_prompt sạch khác null (tránh lỗi HTTP 400 code 5006
     /// Type mismatch of '/initial_prompt' trên Cloudflare và chống ảo giác phụ đề khi sinh viên trả lời bằng tiếng Anh ở môn ENT).
     /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter.
     /// </summary>
@@ -212,11 +232,11 @@ public class CloudflareWhisperService : ISpeechToTextService
         bool useVadFilter = true)
     {
         var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
-        var language = TranscriptionLanguage;
+        var language = DetectLanguage(vocabularyHint);
         var contextualPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint);
         var prompt = !string.IsNullOrWhiteSpace(contextualPrompt)
             ? contextualPrompt
-            : SeTerminologyNormalizer.DefaultSeWhisperPrompt;
+            : (language == "en" ? "English vocabulary: clear pronunciation, academic and technical terms." : SeTerminologyNormalizer.DefaultSeWhisperPrompt);
         var enableVadFilter = useVadFilter && audioBytes.Length <= 250_000;
 
         var jsonPayload = JsonSerializer.Serialize(new

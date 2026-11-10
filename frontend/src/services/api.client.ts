@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { ProblemDetails } from '@/types/auth.types'
+import { safeJsonParse } from '@/utils/json.utils'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -27,6 +28,20 @@ export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
+  transformResponse: [
+    (data) => {
+      if (typeof data === 'string') {
+        const trimmed = data.trim()
+        if (!trimmed) return null
+        try {
+          return JSON.parse(trimmed)
+        } catch {
+          return data
+        }
+      }
+      return data
+    },
+  ],
 })
 
 apiClient.interceptors.request.use(
@@ -50,7 +65,8 @@ function readMustChangeFromToken(token: string): boolean | undefined {
   try {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
-    const payload = JSON.parse(atob(padded)) as { must_change_password?: unknown }
+    const decoded = atob(padded)
+    const payload = safeJsonParse<{ must_change_password?: unknown }>(decoded, {})
     return payload.must_change_password === 'true' || payload.must_change_password === true
   } catch {
     return undefined
@@ -75,16 +91,12 @@ async function refreshAccessToken(): Promise<string> {
   const mustChange = readMustChangeFromToken(response.data.accessToken)
   const rawProfile = sessionStorage.getItem('user_profile')
   if (rawProfile && mustChange !== undefined) {
-    try {
-      const parsedProfile = JSON.parse(rawProfile) as unknown
-      if (isRecord(parsedProfile)) {
-        sessionStorage.setItem(
-          'user_profile',
-          JSON.stringify({ ...parsedProfile, mustChangePassword: mustChange }),
-        )
-      }
-    } catch {
-      // Bỏ qua nếu JSON trong sessionStorage không hợp lệ
+    const parsedProfile = safeJsonParse<unknown>(rawProfile, null)
+    if (isRecord(parsedProfile)) {
+      sessionStorage.setItem(
+        'user_profile',
+        JSON.stringify({ ...parsedProfile, mustChangePassword: mustChange }),
+      )
     }
   }
   return response.data.accessToken
@@ -155,16 +167,12 @@ apiClient.interceptors.response.use(
     if (isMustChangePasswordError) {
       const rawProfile = sessionStorage.getItem('user_profile')
       if (rawProfile) {
-        try {
-          const parsedProfile = JSON.parse(rawProfile) as unknown
-          if (isRecord(parsedProfile)) {
-            sessionStorage.setItem(
-              'user_profile',
-              JSON.stringify({ ...parsedProfile, mustChangePassword: true }),
-            )
-          }
-        } catch {
-          // Bỏ qua nếu JSON trong sessionStorage không hợp lệ
+        const parsedProfile = safeJsonParse<unknown>(rawProfile, null)
+        if (isRecord(parsedProfile)) {
+          sessionStorage.setItem(
+            'user_profile',
+            JSON.stringify({ ...parsedProfile, mustChangePassword: true }),
+          )
         }
       }
       window.dispatchEvent(new Event('auth:must-change-password'))

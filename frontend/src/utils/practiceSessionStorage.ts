@@ -5,6 +5,7 @@ import type {
   PracticeQuestion,
   PracticeSessionConfig,
 } from '@/types/practice.types'
+import { safeJsonParse } from '@/utils/json.utils'
 
 const STORAGE_PREFIX = 'mf01_practice_session:'
 
@@ -112,7 +113,7 @@ export function loadPracticeRuntime(sessionId: string): StoredPracticeRuntime | 
   try {
     const rawValue = window.sessionStorage.getItem(storageKey(sessionId))
     if (!rawValue) return null
-    const value: unknown = JSON.parse(rawValue)
+    const value = safeJsonParse<unknown>(rawValue, null)
     if (!isStoredRuntime(value)) return null
     return {
       ...value,

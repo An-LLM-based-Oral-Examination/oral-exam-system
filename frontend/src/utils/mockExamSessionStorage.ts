@@ -3,6 +3,7 @@ import type {
   StoredMockExamAnswer,
   StoredMockExamSession,
 } from '@/types/mockExam.types'
+import { safeJsonParse } from '@/utils/json.utils'
 
 const STORAGE_KEY = 'mf02_mock_exam_sessions'
 const LEGACY_STORAGE_KEY = 'mf02_mock_exam_session'
@@ -50,7 +51,7 @@ function readQueuedFollowUpMap(): Record<string, MockExamActiveFollowUp> {
       sessionStorage.getItem(QUEUED_FOLLOW_UP_KEY) ??
       localStorage.getItem(QUEUED_FOLLOW_UP_KEY)
     if (!raw) return {}
-    const parsed: unknown = JSON.parse(raw)
+    const parsed = safeJsonParse<unknown>(raw, null)
     if (!isRecord(parsed)) return {}
     const next: Record<string, MockExamActiveFollowUp> = {}
     for (const [key, value] of Object.entries(parsed)) {
@@ -97,7 +98,7 @@ function readSessionMap(): Record<string, StoredMockExamSession> {
       sessionStorage.getItem(STORAGE_KEY) ??
       localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const parsed: unknown = JSON.parse(raw)
+      const parsed = safeJsonParse<unknown>(raw, null)
       if (!isRecord(parsed)) return {}
       const next: Record<string, StoredMockExamSession> = {}
       for (const [key, value] of Object.entries(parsed)) {
@@ -111,7 +112,7 @@ function readSessionMap(): Record<string, StoredMockExamSession> {
       sessionStorage.getItem(LEGACY_STORAGE_KEY) ??
       localStorage.getItem(LEGACY_STORAGE_KEY)
     if (!legacyRaw) return {}
-    const legacyParsed: unknown = JSON.parse(legacyRaw)
+    const legacyParsed = safeJsonParse<unknown>(legacyRaw, null)
     if (!isStoredSession(legacyParsed)) {
       sessionStorage.removeItem(LEGACY_STORAGE_KEY)
       localStorage.removeItem(LEGACY_STORAGE_KEY)

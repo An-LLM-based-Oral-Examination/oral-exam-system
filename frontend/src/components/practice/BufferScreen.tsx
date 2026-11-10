@@ -6,8 +6,8 @@ import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { cn } from '@/lib/utils'
-import { checkTranscriptRevision } from '@/lib/transcriptGuards'
-import { Clock, CheckCircle, Edit3 } from 'lucide-react'
+import { checkTranscriptRevision, isWhisperSilenceHallucination } from '@/lib/transcriptGuards'
+import { Clock, CheckCircle, Edit3, AlertTriangle, RotateCcw } from 'lucide-react'
 
 interface BufferScreenProps {
   initialTranscript: string
@@ -16,8 +16,26 @@ interface BufferScreenProps {
   onConfirmSubmit: (finalText: string) => void
   onTranscriptChange?: (text: string) => void
   onCancel?: (currentTranscript: string) => void
+  onReRecord?: () => void
   isSubmitting?: boolean
   errorMessage?: string
+}
+
+const INAUDIBLE_TRANSCRIPT_BANNER =
+  '[Không nhận diện được giọng nói hoặc âm thanh quá nhỏ. Vui lòng kiểm tra micro hoặc bấm Thu âm lại để trả lời lại.]'
+
+const PICTURE_HALLUCINATION_REGEX =
+  /(?:looking\s+at\s+the\s+picture\s*,?\s*i\s+see\s+a\s+family|they\s+are\s+in\s+the\s+kitchen(?:\s+room)?|demonstrate\s+the\s+wearing\s+t-?shirt\s+and\s+jeans)/iu
+
+function isTranscriptInaudibleOrEmpty(text: string | null | undefined): boolean {
+  if (!text) return true
+  const trimmed = text.trim()
+  if (!trimmed) return true
+  if (trimmed === INAUDIBLE_TRANSCRIPT_BANNER) return true
+  if (trimmed.startsWith('[Không nhận diện') || trimmed.includes('Không nhận diện được giọng nói')) return true
+  if (isWhisperSilenceHallucination(trimmed)) return true
+  if (PICTURE_HALLUCINATION_REGEX.test(trimmed)) return true
+  return false
 }
 
 export const BufferScreen: React.FC<BufferScreenProps> = ({
@@ -27,9 +45,11 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
   onConfirmSubmit,
   onTranscriptChange,
   onCancel,
+  onReRecord,
   isSubmitting = false,
   errorMessage,
 }) => {
+  const isInitialInaudible = isTranscriptInaudibleOrEmpty(initialTranscript)
   const safeDuration = Math.min(300, Math.max(10, Math.round(durationSeconds)))
   const getTimeLeft = useCallback(
     () =>
@@ -39,16 +59,28 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
     [deadlineTimestamp, safeDuration],
   )
   const [timeLeft, setTimeLeft] = useState(getTimeLeft)
-  const [transcript, setTranscript] = useState(initialTranscript)
+  const [transcript, setTranscript] = useState(
+    isInitialInaudible && initialTranscript === INAUDIBLE_TRANSCRIPT_BANNER ? '' : initialTranscript,
+  )
   const [validationMessage, setValidationMessage] = useState('')
   const hasSubmittedRef = useRef(false)
   const hasReachedDeadlineRef = useRef(false)
   const baselineTranscriptRef = useRef(initialTranscript)
-  const transcriptRef = useRef(initialTranscript)
+  const transcriptRef = useRef(
+    isInitialInaudible && initialTranscript === INAUDIBLE_TRANSCRIPT_BANNER ? '' : initialTranscript,
+  )
   const isSubmittingRef = useRef(isSubmitting)
   const onConfirmSubmitRef = useRef(onConfirmSubmit)
   const transcriptElementRef = useRef<HTMLTextAreaElement>(null)
   const dialogContainerRef = useRef<HTMLDivElement>(null)
+
+  const handleReRecord = useCallback(() => {
+    if (onReRecord) {
+      onReRecord()
+    } else if (onCancel) {
+      onCancel('')
+    }
+  }, [onCancel, onReRecord])
 
   useEffect(() => {
     isSubmittingRef.current = isSubmitting
@@ -109,23 +141,25 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
       if (hasSubmittedRef.current || isSubmittingRef.current) return
       const finalText = transcriptRef.current.trim()
       const baseline = baselineTranscriptRef.current.trim()
+      const isBaselineInaudible = isTranscriptInaudibleOrEmpty(baseline)
 
       if (finalText.length < 10) {
         if (fromDeadline) {
-          if (baseline.length >= 10) {
+          if (!isBaselineInaudible && baseline.length >= 10) {
             hasSubmittedRef.current = true
             setValidationMessage('')
             onConfirmSubmitRef.current(baseline)
             return
           }
-          onCancel?.(transcriptRef.current)
+          handleReRecord()
           return
         }
         setValidationMessage('Câu trả lời cần ít nhất 10 ký tự trước khi nộp.')
         return
       }
 
-      if (baseline.length >= 10) {
+      // Voice-First Gate: chỉ áp dụng khi bản ghi âm ban đầu là giọng nói hợp lệ (không phải âm thanh im lặng/rỗng)
+      if (!isBaselineInaudible && baseline.length >= 10) {
         const revision = checkTranscriptRevision(baseline, finalText)
         if (!revision.isAllowed) {
           if (fromDeadline) {
@@ -146,7 +180,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
       setValidationMessage('')
       onConfirmSubmitRef.current(finalText)
     },
-    [onCancel],
+    [handleReRecord],
   )
 
   useEffect(() => {
@@ -257,6 +291,23 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-white p-4 sm:p-6">
+          {isInitialInaudible && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm leading-relaxed text-amber-900 shadow-sm"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900">
+                  {INAUDIBLE_TRANSCRIPT_BANNER}
+                </p>
+                <p className="mt-1 text-xs text-amber-800">
+                  Bạn có thể nhập câu trả lời trực tiếp bên dưới hoặc bấm nút <strong>Thu âm lại</strong> để ghi âm lại câu trả lời.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <label
@@ -305,7 +356,11 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
               onCopy={(event) => event.preventDefault()}
               onCut={(event) => event.preventDefault()}
               onDrop={(event) => event.preventDefault()}
-              placeholder="Nội dung câu trả lời…"
+              placeholder={
+                isInitialInaudible
+                  ? 'Nhập nội dung câu trả lời của bạn tại đây hoặc bấm Thu âm lại...'
+                  : 'Nội dung câu trả lời…'
+              }
               disabled={isSubmitting}
             />
           </div>
@@ -329,19 +384,35 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
         </CardContent>
 
         <CardFooter className="mt-0 shrink-0 flex-col-reverse gap-2.5 border-t border-[#82aedb]/55 bg-[#4988C4]/16 p-4 pt-4 sm:flex-row sm:justify-between sm:px-6 sm:py-4">
-          {onCancel ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {onCancel && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onCancel(transcriptRef.current)}
+                disabled={isSubmitting}
+                className="h-10 w-full rounded-xl border-[#4988C4] bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D] sm:w-auto"
+              >
+                Quay lại câu hỏi
+              </Button>
+            )}
             <Button
+              type="button"
               variant="outline"
               size="sm"
-              onClick={() => onCancel(transcriptRef.current)}
+              onClick={handleReRecord}
               disabled={isSubmitting}
-              className="h-10 w-full rounded-xl border-[#4988C4] bg-white px-4 text-[#50627b] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D] sm:w-auto"
+              className={cn(
+                'h-10 w-full rounded-xl px-4 font-semibold sm:w-auto',
+                isInitialInaudible
+                  ? 'border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 focus:ring-amber-500'
+                  : 'border-[#4988C4] bg-white text-[#1C4D8D] hover:bg-[#f1f5fb] focus:ring-[#1C4D8D]',
+              )}
             >
-              Quay lại câu hỏi
+              <RotateCcw className="size-4" aria-hidden="true" />
+              Thu âm lại
             </Button>
-          ) : (
-            <div />
-          )}
+          </div>
           <Button
             variant="primary"
             size="md"

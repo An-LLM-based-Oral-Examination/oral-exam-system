@@ -1,4 +1,5 @@
 import type { InClassShift, StudentExamQuestion } from '@/types/inClassShift.types'
+import { safeJsonParse } from '@/utils/json.utils'
 
 const STORAGE_KEY = 'inClassExam.session.v1'
 const COMPLETED_KEY = 'inClassExam.completedShiftIds.v1'
@@ -32,7 +33,7 @@ export function loadInClassExamSession(): InClassExamSessionPayload | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
+    const parsed = safeJsonParse<unknown>(raw, null)
     if (!isRecord(parsed) || !isRecord(parsed.shift) || !Array.isArray(parsed.questions)) return null
     const startedAt = typeof parsed.startedAt === 'number' ? parsed.startedAt : Date.now()
     const examEndsAt =
@@ -59,7 +60,7 @@ function readDraftMap(): Record<string, InClassExamDraftPayload> {
   try {
     const raw = localStorage.getItem(DRAFT_KEY)
     if (!raw) return {}
-    const parsed: unknown = JSON.parse(raw)
+    const parsed = safeJsonParse<unknown>(raw, null)
     if (!isRecord(parsed)) return {}
     const result: Record<string, InClassExamDraftPayload> = {}
     for (const [shiftId, value] of Object.entries(parsed)) {
@@ -111,7 +112,7 @@ function readCompletedShiftIds(): Set<string> {
   try {
     const raw = localStorage.getItem(COMPLETED_KEY)
     if (!raw) return new Set()
-    const parsed: unknown = JSON.parse(raw)
+    const parsed = safeJsonParse<unknown>(raw, null)
     if (!Array.isArray(parsed)) return new Set()
     return new Set(parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))
   } catch {
