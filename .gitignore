@@ -63,3 +63,6 @@ graphify-out/
 __pycache__/
 *.py[cod]
 backend/wwwroot/uploads/
+
+# Local Documentation & Working Reports (Kept locally, excluded from VPS/Git)
+/docs/

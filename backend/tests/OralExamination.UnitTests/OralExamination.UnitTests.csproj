@@ -28,9 +28,4 @@
     <ProjectReference Include="..\..\src\API\API.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\Application.UnitTests\**\*.cs" Link="Application\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\Infrastructure.UnitTests\**\*.cs" Link="Infrastructure\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-
 </Project>
