@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
@@ -12,18 +13,14 @@ using OralExamination.Application.Features.Practice.DTOs;
 
 namespace OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
 
-public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPracticeSessionQuery, Result<PracticeSessionDetailDto>>
+public sealed class GetPracticeSessionQueryHandler(
+    IApplicationDbContext context,
+    ILogger<GetPracticeSessionQueryHandler>? logger = null)
+    : IRequestHandler<GetPracticeSessionQuery, Result<PracticeSessionDetailDto>>
 {
-    private readonly IApplicationDbContext _context;
-
-    public GetPracticeSessionQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
-
     public async Task<Result<PracticeSessionDetailDto>> Handle(GetPracticeSessionQuery request, CancellationToken cancellationToken)
     {
-        var session = await _context.PracticeSessions
+        var session = await context.PracticeSessions
             .Include(s => s.Course)
             .Include(s => s.Student)
             .Include(s => s.Answers)
@@ -45,15 +42,22 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
 
         if (string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
         {
-            int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
-            await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken);
+            try
+            {
+                int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(context, cancellationToken);
+                await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(context, session, timeoutMinutes, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Lỗi xảy ra trong quá trình tự động đóng phiên luyện tập hết hạn {SessionId}. Tiếp tục trả về thông tin phiên.", session.Id);
+            }
         }
 
         var isFullSession = string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase);
 
         var sessionAnswers = session.Answers ?? Array.Empty<Domain.Entities.PracticeAnswer>();
 
-        var orderedQuestionIds = new List<Guid>(session.SelectedQuestionIds);
+        var orderedQuestionIds = new List<Guid>(session.SelectedQuestionIds ?? new List<Guid>());
         foreach (var answeredQid in sessionAnswers
                      .OrderBy(a => a.OrderIndex > 0 ? a.OrderIndex : int.MaxValue)
                      .ThenBy(a => a.SubmittedAt)
@@ -67,20 +71,20 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
 
         // Lấy danh sách câu hỏi thuộc phiên (nếu đã có danh sách ID) hoặc fallback theo Course để tra cứu Rubric, Criteria và chủ đề câu hỏi
         var courseQuestions = orderedQuestionIds.Count > 0
-            ? await _context.PracticeQuestions
+            ? await context.PracticeQuestions
                 .AsNoTracking()
                 .Include(q => q.Rubric)
                     .ThenInclude(r => r.Criteria)
                 .Where(q => orderedQuestionIds.Contains(q.Id))
                 .ToListAsync(cancellationToken)
-            : await _context.PracticeQuestions
+            : await context.PracticeQuestions
                 .AsNoTracking()
                 .Include(q => q.Rubric)
                     .ThenInclude(r => r.Criteria)
                 .Where(q => q.CourseId == session.CourseId && q.IsActive)
                 .ToListAsync(cancellationToken);
 
-        var questionById = courseQuestions.ToDictionary(q => q.Id);
+        var questionById = courseQuestions?.ToDictionary(q => q.Id) ?? new Dictionary<Guid, Domain.Entities.PracticeQuestion>();
 
         List<PracticeQuestionDto> questions;
         if (orderedQuestionIds.Count > 0)
@@ -104,8 +108,8 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
         }
         else
         {
-            IEnumerable<Domain.Entities.PracticeQuestion> filteredQuestions = courseQuestions;
-            var selectedDiffs = session.DifficultiesList
+            IEnumerable<Domain.Entities.PracticeQuestion> filteredQuestions = courseQuestions ?? new List<Domain.Entities.PracticeQuestion>();
+            var selectedDiffs = (session.DifficultiesList ?? Enumerable.Empty<string>())
                 .Where(d => !string.IsNullOrWhiteSpace(d))
                 .Select(d => d.Trim().ToLowerInvariant())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -135,7 +139,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                 .ToList();
         }
 
-        var maxFollowUpConfig = await _context.SystemConfigs
+        var maxFollowUpConfig = await context.SystemConfigs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
         int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps))
@@ -148,7 +152,9 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
             .ThenBy(a => a.SubmittedAt)
             .Select(a =>
             {
-                var evaluation = a.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+                var evaluation = (a.AiEvaluations ?? Enumerable.Empty<Domain.Entities.AiEvaluation>())
+                    .OrderByDescending(e => e.EvaluatedAt)
+                    .FirstOrDefault();
                 bool isBorderline = !isFullSession &&
                                     evaluation != null &&
                                     evaluation.TotalScore >= 4.0m &&
@@ -161,7 +167,8 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                      (x.QuestionId == a.QuestionId && x.SubmittedAt > a.SubmittedAt)));
                 bool hasProgressedToLaterQuestion = !isFullSession &&
                     (sessionAnswers.Any(x => x.QuestionId != a.QuestionId && x.SubmittedAt > a.SubmittedAt) ||
-                     (session.SelectedQuestionIds.Count > 0 &&
+                     (session.SelectedQuestionIds != null &&
+                      session.SelectedQuestionIds.Count > 0 &&
                       session.SelectedQuestionIds[^1] != a.QuestionId &&
                       session.SelectedQuestionIds.Contains(a.QuestionId)));
                 bool needsFollowUp = isBorderline && !hasChildFollowUp && !hasProgressedToLaterQuestion && followUpsCountForQuestion < maxAllowedFollowUps;
@@ -186,7 +193,7 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                                 .FirstOrDefault();
                             var prevPrompts = sessionAnswers
                                 .Where(x => x.QuestionId == a.QuestionId && x.SubmittedAt < a.SubmittedAt)
-                                .SelectMany(x => x.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).Take(1))
+                                .SelectMany(x => (x.AiEvaluations ?? Enumerable.Empty<Domain.Entities.AiEvaluation>()).OrderByDescending(e => e.EvaluatedAt).Take(1))
                                 .Select(FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt)
                                 .Where(p => !string.IsNullOrWhiteSpace(p))
                                 .Select(p => p!.Trim())
@@ -250,40 +257,42 @@ public sealed class GetPracticeSessionQueryHandler : IRequestHandler<GetPractice
                         : null,
                     NeedsFollowUp = needsFollowUp,
                     FollowUpPrompt = followUpPrompt,
-                    CriteriaScores = evaluation?.Details
-                        .OrderBy(d => d.Criterion != null ? d.Criterion.OrderIndex : 0)
-                        .Select(d =>
-                        {
-                            var critName = d.Criterion?.CriterionName;
-                            var critMaxScore = d.Criterion?.MaxScore ?? 0m;
-                            if ((string.IsNullOrWhiteSpace(critName) || critMaxScore <= 0m) &&
-                                questionById.TryGetValue(a.QuestionId, out var qRef))
+                    CriteriaScores = evaluation?.Details != null
+                        ? evaluation.Details
+                            .OrderBy(d => d.Criterion != null ? d.Criterion.OrderIndex : 0)
+                            .Select(d =>
                             {
-                                var matchedCrit = qRef.Rubric?.Criteria.FirstOrDefault(c => c.Id == d.CriterionId);
-                                if (string.IsNullOrWhiteSpace(critName))
+                                var critName = d.Criterion?.CriterionName;
+                                var critMaxScore = d.Criterion?.MaxScore ?? 0m;
+                                if ((string.IsNullOrWhiteSpace(critName) || critMaxScore <= 0m) &&
+                                    questionById.TryGetValue(a.QuestionId, out var qRef))
                                 {
-                                    critName = matchedCrit?.CriterionName;
+                                    var matchedCrit = qRef.Rubric?.Criteria.FirstOrDefault(c => c.Id == d.CriterionId);
+                                    if (string.IsNullOrWhiteSpace(critName))
+                                    {
+                                        critName = matchedCrit?.CriterionName;
+                                    }
+
+                                    if (critMaxScore <= 0m && matchedCrit != null)
+                                    {
+                                        critMaxScore = matchedCrit.MaxScore;
+                                    }
                                 }
 
-                                if (critMaxScore <= 0m && matchedCrit != null)
+                                return new PracticeEvaluationDetailDto
                                 {
-                                    critMaxScore = matchedCrit.MaxScore;
-                                }
-                            }
-
-                            return new PracticeEvaluationDetailDto
-                            {
-                                CriterionId = d.CriterionId,
-                                CriterionName = critName ?? string.Empty,
-                                Score = d.Score,
-                                MaxScore = critMaxScore > 0m ? critMaxScore : 10.0m,
-                                Comment = d.Comment
-                            };
-                        }).ToList() ?? new()
+                                    CriterionId = d.CriterionId,
+                                    CriterionName = critName ?? string.Empty,
+                                    Score = d.Score,
+                                    MaxScore = critMaxScore > 0m ? critMaxScore : 10.0m,
+                                    Comment = d.Comment
+                                };
+                            }).ToList()
+                        : new List<PracticeEvaluationDetailDto>()
                 };
             }).ToList();
 
-        var sysBufferStr = await _context.SystemConfigs
+        var sysBufferStr = await context.SystemConfigs
             .AsNoTracking()
             .Where(c => c.Key == "TranscriptBufferSeconds")
             .Select(c => c.Value)

@@ -24,16 +24,18 @@ public class GeminiAiGradingService : IAiGradingService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    private const string DefaultGeminiModel = "gemini-flash-lite-latest";
+    private const string DefaultGeminiApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent";
 
     private static readonly string[] FallbackApiUrls =
     [
-        DefaultGeminiApiUrl,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     ];
 
     private static readonly char[] TokenSeparators =
@@ -156,10 +158,26 @@ public class GeminiAiGradingService : IAiGradingService
             _candidateApiKeys = baseKeys;
         }
 
-        _apiUrl = configuration["Gemini:ApiUrl"]
+        var explicitApiUrl = configuration["Gemini:ApiUrl"]
             ?? configuration["Gemini__ApiUrl"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_URL")
-            ?? DefaultGeminiApiUrl;
+            ?? Environment.GetEnvironmentVariable("GEMINI_API_URL");
+
+        if (!string.IsNullOrWhiteSpace(explicitApiUrl))
+        {
+            _apiUrl = explicitApiUrl.Trim();
+        }
+        else
+        {
+            var configuredModel = configuration["Gemini:Model"]
+                ?? configuration["Gemini__Model"]
+                ?? Environment.GetEnvironmentVariable("GEMINI_MODEL");
+
+            var modelToUse = string.IsNullOrWhiteSpace(configuredModel)
+                ? DefaultGeminiModel
+                : configuredModel.Trim();
+
+            _apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{modelToUse}:generateContent";
+        }
         _cloudflareAccountId = configuration["Cloudflare:AccountId"]
             ?? configuration["Cloudflare__AccountId"]
             ?? Environment.GetEnvironmentVariable("CLOUDFLARE_ACCOUNT_ID")
@@ -407,6 +425,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         if (!string.IsNullOrWhiteSpace(_apiUrl) &&
             !_apiUrl.Contains("gemini-3.6-", StringComparison.OrdinalIgnoreCase) &&
+            !_apiUrl.Contains("gemini-3.7-", StringComparison.OrdinalIgnoreCase) &&
             !_apiUrl.Contains("gemini-3.8-", StringComparison.OrdinalIgnoreCase) &&
             !_apiUrl.Contains("gemini-3.5-", StringComparison.OrdinalIgnoreCase))
         {

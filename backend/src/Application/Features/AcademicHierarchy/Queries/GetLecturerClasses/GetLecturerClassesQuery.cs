@@ -64,9 +64,9 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
             query = query.Where(c =>
                 c.Code.ToLower().Contains(kw) ||
                 c.Name.ToLower().Contains(kw) ||
-                c.JoinCode.ToLower().Contains(kw) ||
-                c.Course.Code.ToLower().Contains(kw) ||
-                c.Course.Name.ToLower().Contains(kw));
+                (!string.IsNullOrEmpty(c.JoinCode) && c.JoinCode.ToLower().Contains(kw)) ||
+                (c.Course != null && c.Course.Code.ToLower().Contains(kw)) ||
+                (c.Course != null && c.Course.Name.ToLower().Contains(kw)));
         }
 
         var items = await query
@@ -78,10 +78,10 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
                 c.Name,
                 c.JoinCode,
                 c.CourseId,
-                c.Course.Code,
-                c.Course.Name,
+                c.Course != null ? c.Course.Code : string.Empty,
+                c.Course != null ? c.Course.Name : string.Empty,
                 c.SemesterId,
-                c.Semester.Code,
+                c.Semester != null ? c.Semester.Code : string.Empty,
                 c.CourseOfferingId,
                 c.LecturerId,
                 c.Lecturer != null ? c.Lecturer.FullName : null,

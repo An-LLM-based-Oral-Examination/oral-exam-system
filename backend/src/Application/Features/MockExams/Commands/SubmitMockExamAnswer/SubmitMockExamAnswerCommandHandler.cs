@@ -111,7 +111,25 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 : await TryOpenNextFollowUpAsync(session, answer, cancellationToken);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Xung đột đồng thời khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+            return Result<SubmitMockExamAnswerResponse>.Failure("CONFLICT: Câu trả lời đã được ghi nhận hoặc có xung đột dữ liệu.");
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Lỗi cập nhật CSDL khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+            return Result<SubmitMockExamAnswerResponse>.Failure("Không thể lưu kết quả nộp bài do lỗi cập nhật cơ sở dữ liệu.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi không xác định khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+            return Result<SubmitMockExamAnswerResponse>.Failure("Đã xảy ra lỗi khi lưu kết quả bài thi.");
+        }
 
         var rootParentId = RootParentId(answer);
         var followUpIdx = newFollowUp is null
@@ -842,6 +860,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         StudentId = session.StudentId,
                         PracticeAnswerId = null,
                         ExamSubmissionId = null,
+                        InClassSubmissionId = null,
                         MockExamAnswerId = justAnswered.Id,
                         TotalScore = finalCachedScore,
                         Feedback = aiResult.Feedback,

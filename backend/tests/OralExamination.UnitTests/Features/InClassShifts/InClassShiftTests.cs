@@ -1272,4 +1272,51 @@ public class InClassShiftTests
             It.IsAny<GradingTask>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact(DisplayName = "InClassShiftAutoSubmit: SubmitMissingAsync và SubmitExpiredPersonalExamsAsync lọc sạch terminal participants")]
+    public async Task AutoSubmit_Should_FilterTerminalStatuses_Cleanly()
+    {
+        using var context = CreateDbContext();
+        var gradingQueueMock = new Mock<IGradingQueueChannel>();
+        var shiftId = Guid.NewGuid();
+
+        var shift = new InClassExamShift
+        {
+            Id = shiftId,
+            ClassId = Guid.NewGuid(),
+            LecturerId = Guid.NewGuid(),
+            ShiftName = "Ca test auto submit",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            ExamDurationMinutes = 5,
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED",
+            IsLocked = false
+        };
+        context.InClassExamShifts.Add(shift);
+
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shiftId,
+            StudentId = Guid.NewGuid(),
+            Status = "SUBMITTED"
+        });
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shiftId,
+            StudentId = Guid.NewGuid(),
+            Status = "JOINED"
+        });
+        await context.SaveChangesAsync();
+
+        var missingAction = () => InClassShiftAutoSubmit.SubmitMissingAsync(
+            context, gradingQueueMock.Object, CancellationToken.None, shiftId);
+        await missingAction.Should().NotThrowAsync();
+
+        var expiredAction = () => InClassShiftAutoSubmit.SubmitExpiredPersonalExamsAsync(
+            context, gradingQueueMock.Object, CancellationToken.None, shiftId);
+        await expiredAction.Should().NotThrowAsync();
+    }
 }

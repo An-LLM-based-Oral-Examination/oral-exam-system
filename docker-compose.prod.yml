@@ -35,6 +35,8 @@ services:
       DOTNET_GCHeapHardLimitPercent: "75"
       DOTNET_GCConserveMemory: "5"
       DOTNET_TieredPGO: "1"
+      Gemini__Model: ${GEMINI_MODEL:-gemini-flash-lite-latest}
+      Gemini__FastModel: ${GEMINI_FAST_MODEL:-gemini-3.1-flash-lite}
     mem_limit: 2560M
     mem_reservation: 1024M
     deploy:

@@ -26,6 +26,8 @@ public class GeminiSpeechToTextService
     private static readonly string[] FallbackSttUrls =
     [
         DefaultGeminiSttUrl,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",

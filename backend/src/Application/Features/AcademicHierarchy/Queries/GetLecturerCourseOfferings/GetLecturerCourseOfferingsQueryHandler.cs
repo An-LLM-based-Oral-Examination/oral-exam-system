@@ -34,18 +34,18 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
         }
 
         var offerings = await query
-            .OrderByDescending(a => a.CourseOffering!.Semester.StartDate)
-            .ThenBy(a => a.Course.Code)
+            .OrderByDescending(a => a.CourseOffering != null && a.CourseOffering.Semester != null ? a.CourseOffering.Semester.StartDate : DateOnly.MinValue)
+            .ThenBy(a => a.Course != null ? a.Course.Code : string.Empty)
             .Select(a => new LecturerCourseOfferingDto(
                 a.CourseOfferingId!.Value,
                 a.CourseId,
-                a.Course.Code,
-                a.Course.Name,
-                a.CourseOffering!.SemesterId,
-                a.CourseOffering.Semester.Code,
+                a.Course != null ? a.Course.Code : string.Empty,
+                a.Course != null ? a.Course.Name : string.Empty,
+                a.CourseOffering != null ? a.CourseOffering.SemesterId : Guid.Empty,
+                a.CourseOffering != null && a.CourseOffering.Semester != null ? a.CourseOffering.Semester.Code : string.Empty,
                 a.AssignedAt,
                 a.IsActive,
-                a.CourseOffering.IsEnabled))
+                a.CourseOffering != null && a.CourseOffering.IsEnabled))
             .ToListAsync(cancellationToken);
 
         if (offerings.Count == 0 &&
@@ -68,15 +68,15 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
             }
 
             offerings = await offeringQuery
-                .OrderByDescending(o => o.Semester.StartDate)
-                .ThenBy(o => o.Course.Code)
+                .OrderByDescending(o => o.Semester != null ? o.Semester.StartDate : DateOnly.MinValue)
+                .ThenBy(o => o.Course != null ? o.Course.Code : string.Empty)
                 .Select(o => new LecturerCourseOfferingDto(
                     o.Id,
                     o.CourseId,
-                    o.Course.Code,
-                    o.Course.Name,
+                    o.Course != null ? o.Course.Code : string.Empty,
+                    o.Course != null ? o.Course.Name : string.Empty,
                     o.SemesterId,
-                    o.Semester.Code,
+                    o.Semester != null ? o.Semester.Code : string.Empty,
                     o.CreatedAt,
                     true,
                     o.IsEnabled))

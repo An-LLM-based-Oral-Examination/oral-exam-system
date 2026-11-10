@@ -13,6 +13,14 @@ namespace OralExamination.Application.Features.InClassShifts;
 
 public static class InClassShiftAutoSubmit
 {
+    private static readonly string[] TerminalStatuses =
+    [
+        "SUBMITTED",
+        "GRADED",
+        "FINALIZED",
+        "COMPLETED"
+    ];
+
     public static async Task<int> SubmitMissingAsync(
         IApplicationDbContext context,
         IGradingQueueChannel gradingQueue,
@@ -20,7 +28,7 @@ public static class InClassShiftAutoSubmit
         Guid? shiftId = null)
     {
         var participants = await context.InClassShiftParticipants
-            .Where(participant => !IsTerminalStatus(participant.Status))
+            .Where(participant => !TerminalStatuses.Contains(participant.Status))
             .Where(participant => context.InClassExamShifts.Any(shift =>
                 shift.Id == participant.ShiftId &&
                 shift.Status == "CLOSED" &&
@@ -65,7 +73,7 @@ public static class InClassShiftAutoSubmit
 
         var participantsQuery = context.InClassShiftParticipants
             .Where(participant => openShiftIds.Contains(participant.ShiftId))
-            .Where(participant => !IsTerminalStatus(participant.Status));
+            .Where(participant => !TerminalStatuses.Contains(participant.Status));
         if (studentId.HasValue)
         {
             participantsQuery = participantsQuery.Where(participant => participant.StudentId == studentId.Value);

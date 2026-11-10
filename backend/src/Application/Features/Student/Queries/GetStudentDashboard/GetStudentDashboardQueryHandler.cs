@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
@@ -22,7 +23,9 @@ namespace OralExamination.Application.Features.Student.Queries.GetStudentDashboa
 /// - Mức độ nắm vững tiêu chí Rubric / Bloom Level
 /// - Danh sách ca thi thật phòng Lab & kết quả điểm đã công bố (MF-04)
 /// </summary>
-public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext context)
+public sealed class GetStudentDashboardQueryHandler(
+    IApplicationDbContext context,
+    ILogger<GetStudentDashboardQueryHandler>? logger = null)
     : IRequestHandler<GetStudentDashboardQuery, Result<StudentDashboardDto>>
 {
     public async Task<Result<StudentDashboardDto>> Handle(
@@ -99,76 +102,83 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
 
         // 2. Thống kê Thi thử (MF-02) — Tự động đóng các ca thi thử đã hết giờ
         var nowUtc = DateTime.UtcNow;
-        var expiredMockSessions = await context.MockExamSessions
-            .Include(ms => ms.Answers)
-                .ThenInclude(a => a.AiEvaluations)
-                    .ThenInclude(e => e.Details)
-                        .ThenInclude(d => d.Criterion)
-            .Where(ms => ms.StudentId == request.StudentId &&
-                         ms.Status == "in_progress" &&
-                         nowUtc > ms.ExpiresAt.AddSeconds(10))
-            .ToListAsync(cancellationToken);
-
-        if (expiredMockSessions.Count > 0)
+        try
         {
-            foreach (var expired in expiredMockSessions)
+            var expiredMockSessions = await context.MockExamSessions
+                .Include(ms => ms.Answers)
+                    .ThenInclude(a => a.AiEvaluations)
+                        .ThenInclude(e => e.Details)
+                            .ThenInclude(d => d.Criterion)
+                .Where(ms => ms.StudentId == request.StudentId &&
+                             ms.Status == "in_progress" &&
+                             nowUtc > ms.ExpiresAt.AddSeconds(10))
+                .ToListAsync(cancellationToken);
+
+            if (expiredMockSessions.Count > 0)
             {
-                expired.SubmittedAt ??= expired.ExpiresAt;
-                var mainAnswers = expired.Answers.Where(a => !a.IsFollowUp).ToList();
-                var answeredMains = mainAnswers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
-                var allAnswered = expired.Answers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
-                var hasAnsweredFollowUps = allAnswered.Any(a => a.IsFollowUp);
+                foreach (var expired in expiredMockSessions)
+                {
+                    expired.SubmittedAt ??= expired.ExpiresAt;
+                    var mainAnswers = expired.Answers.Where(a => !a.IsFollowUp).ToList();
+                    var answeredMains = mainAnswers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
+                    var allAnswered = expired.Answers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
+                    var hasAnsweredFollowUps = allAnswered.Any(a => a.IsFollowUp);
 
-                if (allAnswered.Count == 0)
-                {
-                    expired.Status = "graded";
-                    expired.TotalScore ??= 0.0m;
-                }
-                else if (answeredMains.Count > 0 && allAnswered.All(a =>
-                             a.AiEvaluations != null &&
-                             a.AiEvaluations.Any() &&
-                             (!hasAnsweredFollowUps || string.Equals(a.Status, "graded", StringComparison.OrdinalIgnoreCase))))
-                {
-                    int totalMainCount = Math.Max(1, mainAnswers.Count);
-                    decimal sumMainScores = 0.0m;
-                    foreach (var mainAns in answeredMains)
+                    if (allAnswered.Count == 0)
                     {
-                        var mainEval = mainAns.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
-                        var followUpEvals = allAnswered
-                            .Where(f => f.IsFollowUp &&
-                                        ((f.ParentAnswerId.HasValue && f.ParentAnswerId == mainAns.Id) ||
-                                         (!f.ParentAnswerId.HasValue && f.QuestionId == mainAns.QuestionId)))
-                            .Select(f => f.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
-                            .Where(e => e != null)
-                            .Cast<AiEvaluation>()
-                            .ToList();
-
-                        var effectiveQuestionScore = FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainEval, followUpEvals);
-                        if (mainEval != null && followUpEvals.Count > 0)
+                        expired.Status = "graded";
+                        expired.TotalScore ??= 0.0m;
+                    }
+                    else if (answeredMains.Count > 0 && allAnswered.All(a =>
+                                 a.AiEvaluations != null &&
+                                 a.AiEvaluations.Any() &&
+                                 (!hasAnsweredFollowUps || string.Equals(a.Status, "graded", StringComparison.OrdinalIgnoreCase))))
+                    {
+                        int totalMainCount = Math.Max(1, mainAnswers.Count);
+                        decimal sumMainScores = 0.0m;
+                        foreach (var mainAns in answeredMains)
                         {
-                            mainEval.TotalScore = effectiveQuestionScore;
+                            var mainEval = mainAns.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+                            var followUpEvals = allAnswered
+                                .Where(f => f.IsFollowUp &&
+                                            ((f.ParentAnswerId.HasValue && f.ParentAnswerId == mainAns.Id) ||
+                                             (!f.ParentAnswerId.HasValue && f.QuestionId == mainAns.QuestionId)))
+                                .Select(f => f.AiEvaluations!.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault())
+                                .Where(e => e != null)
+                                .Cast<AiEvaluation>()
+                                .ToList();
+
+                            var effectiveQuestionScore = FollowUpPromptBuilder.ComputeEffectiveQuestionScore(mainEval, followUpEvals);
+                            if (mainEval != null && followUpEvals.Count > 0)
+                            {
+                                mainEval.TotalScore = effectiveQuestionScore;
+                            }
+
+                            sumMainScores += effectiveQuestionScore;
                         }
 
-                        sumMainScores += effectiveQuestionScore;
+                        expired.TotalScore = Math.Clamp(
+                            Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
+                            0.0m,
+                            10.0m);
+                        foreach (var ans in allAnswered)
+                        {
+                            ans.Status = "graded";
+                        }
+                        expired.Status = "graded";
                     }
-
-                    expired.TotalScore = Math.Clamp(
-                        Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
-                        0.0m,
-                        10.0m);
-                    foreach (var ans in allAnswered)
+                    else
                     {
-                        ans.Status = "graded";
+                        expired.Status = "submitted";
                     }
-                    expired.Status = "graded";
                 }
-                else
-                {
-                    expired.Status = "submitted";
-                }
-            }
 
-            await context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Lỗi xảy ra trong quá trình tự động đóng phiên thi thử hết hạn của sinh viên {StudentId}. Tiếp tục xử lý dashboard.", request.StudentId);
         }
 
         var mockSessions = await context.MockExamSessions
@@ -241,51 +251,69 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
         }).ToList();
 
         // 4. Phân tích độ thông thạo theo Tiêu chí Rubric & Bloom Level (Tối ưu O(1) qua ix_ai_evaluations_student + tương thích ngược)
-        var evalDetails = await context.AiEvaluationDetails
-            .AsNoTracking()
-            .Include(d => d.Criterion)
-            .Include(d => d.Evaluation)
-            .Where(d =>
-                d.Evaluation.StudentId == request.StudentId ||
-                (d.Evaluation.StudentId == null && (
-                    (d.Evaluation.PracticeAnswer != null && d.Evaluation.PracticeAnswer.StudentId == request.StudentId) ||
-                    (d.Evaluation.MockExamAnswer != null && d.Evaluation.MockExamAnswer.Session.StudentId == request.StudentId))))
-            .ToListAsync(cancellationToken);
+        List<StudentCriterionMasteryDto> criterionMastery;
+        try
+        {
+            var evalDetails = await context.AiEvaluationDetails
+                .AsNoTracking()
+                .Include(d => d.Criterion)
+                .Include(d => d.Evaluation)
+                .Where(d =>
+                    d.Evaluation.StudentId == request.StudentId ||
+                    (d.Evaluation.StudentId == null && (
+                        (d.Evaluation.PracticeAnswer != null && d.Evaluation.PracticeAnswer.StudentId == request.StudentId) ||
+                        (d.Evaluation.MockExamAnswer != null && d.Evaluation.MockExamAnswer.Session.StudentId == request.StudentId))))
+                .ToListAsync(cancellationToken);
 
-        var criterionMastery = evalDetails
-            .Where(d => d.Criterion != null && d.Criterion.MaxScore > 0)
-            .GroupBy(d => new
-            {
-                d.Criterion.CriterionName,
-                BloomLevel = string.IsNullOrWhiteSpace(d.Criterion.BloomLevel) ? "Understand" : d.Criterion.BloomLevel!
-            })
-            .Select(g =>
-            {
-                var avgRatio = g.Average(x => Math.Clamp(x.Score / x.Criterion.MaxScore, 0m, 1m));
-                return new StudentCriterionMasteryDto
+            criterionMastery = evalDetails
+                .Where(d => d.Criterion != null && d.Criterion.MaxScore > 0)
+                .GroupBy(d => new
                 {
-                    CriterionName = g.Key.CriterionName,
-                    BloomLevel = g.Key.BloomLevel,
-                    EvaluatedCount = g.Count(),
-                    AverageScorePercentage = Math.Round(avgRatio * 100m, 2, MidpointRounding.AwayFromZero)
-                };
-            })
-            .OrderByDescending(m => m.EvaluatedCount)
-            .ThenBy(m => m.CriterionName)
-            .ToList();
+                    d.Criterion.CriterionName,
+                    BloomLevel = string.IsNullOrWhiteSpace(d.Criterion.BloomLevel) ? "Understand" : d.Criterion.BloomLevel!
+                })
+                .Select(g =>
+                {
+                    var avgRatio = g.Average(x => Math.Clamp(x.Score / x.Criterion.MaxScore, 0m, 1m));
+                    return new StudentCriterionMasteryDto
+                    {
+                        CriterionName = g.Key.CriterionName,
+                        BloomLevel = g.Key.BloomLevel,
+                        EvaluatedCount = g.Count(),
+                        AverageScorePercentage = Math.Round(avgRatio * 100m, 2, MidpointRounding.AwayFromZero)
+                    };
+                })
+                .OrderByDescending(m => m.EvaluatedCount)
+                .ThenBy(m => m.CriterionName)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Không thể truy vấn AiEvaluationDetails cho sinh viên {StudentId} do lỗi cấu trúc CSDL hoặc dữ liệu. Tạm thời trả về danh sách tiêu chí rỗng.", request.StudentId);
+            criterionMastery = new List<StudentCriterionMasteryDto>();
+        }
 
         // 5. Danh sách ca thi thật phòng Lab & Điểm công bố (MF-04)
-        var examTickets = await context.StudentExamTickets
-            .AsNoTracking()
-            .Include(t => t.Shift)
-                .ThenInclude(s => s.Session)
-                    .ThenInclude(ss => ss.Course)
-            .Include(t => t.LecturerAudit)
-            .Include(t => t.Submissions)
-            .Where(t => t.StudentId == request.StudentId)
-            .OrderByDescending(t => t.Shift.StartTime)
-            .ThenByDescending(t => t.Id)
-            .ToListAsync(cancellationToken);
+        List<StudentExamTicket> examTickets;
+        try
+        {
+            examTickets = await context.StudentExamTickets
+                .AsNoTracking()
+                .Include(t => t.Shift)
+                    .ThenInclude(s => s.Session)
+                        .ThenInclude(ss => ss.Course)
+                .Include(t => t.LecturerAudit)
+                .Include(t => t.Submissions)
+                .Where(t => t.StudentId == request.StudentId)
+                .OrderByDescending(t => t.Shift != null ? t.Shift.StartTime : t.CheckedInAt)
+                .ThenByDescending(t => t.Id)
+                .ToListAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Không thể truy vấn StudentExamTickets cho sinh viên {StudentId}. Tạm thời trả về danh sách vé thi rỗng.", request.StudentId);
+            examTickets = new List<StudentExamTicket>();
+        }
 
         var officialExamDtos = examTickets.Select(t =>
         {
@@ -297,7 +325,7 @@ public sealed class GetStudentDashboardQueryHandler(IApplicationDbContext contex
             if (isGradeVisible)
             {
                 visibleScore = t.LecturerAudit?.AuditedScore
-                    ?? (t.Submissions.Count > 0 && t.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
+                    ?? (t.Submissions != null && t.Submissions.Count > 0 && t.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
                         ? (decimal?)Math.Round(
                             t.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0.0m) / t.Submissions.Count,
                             2,
