@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { User, UserRole } from '@/types/auth.types'
+import { toast } from '@/components/common/toastStore'
 import { authService } from '@/services/auth.service'
+import { browserAuthSession } from '@/services/browserAuthSession'
 import { AuthContext } from '@/context/auth-context'
 
 interface AuthState {
@@ -12,7 +14,9 @@ function getInitialAuthState(): AuthState {
   const user = authService.getCurrentUser()
   const token = authService.getToken()
 
-  return user && token ? { user, token } : { user: null, token: null }
+  if (!user || !token) return { user: null, token: null }
+  if (!browserAuthSession.isIdentityAllowed(user.id)) return { user: null, token: null }
+  return { user, token }
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -21,7 +25,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const handleSessionExpired = () => {
+      const currentUser = authService.getCurrentUser()
       authService.clearSession()
+      if (currentUser) browserAuthSession.deactivateIdentity(currentUser.id)
       setAuthState({ user: null, token: null })
     }
 
@@ -36,9 +42,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     window.addEventListener('auth:session-expired', handleSessionExpired)
     window.addEventListener('auth:must-change-password', handleMustChangePassword)
+
+    const unsubscribeBrowserAuth = browserAuthSession.subscribe((event) => {
+      const activeUser = authService.getCurrentUser()
+      if (!activeUser) return
+
+      const accountChanged = event.type === 'LOGIN' && event.userId !== activeUser.id
+      const accountLoggedOut = event.type === 'LOGOUT' && event.userId === activeUser.id
+      if (!accountChanged && !accountLoggedOut) return
+
+      setAuthState({ user: null, token: null })
+      void authService.logout()
+      toast.warning(
+        accountChanged
+          ? 'Phiên đăng nhập đã chuyển sang tài khoản khác ở một tab khác.'
+          : 'Bạn đã đăng xuất ở một tab khác.',
+      )
+    })
+
+    const currentUser = authService.getCurrentUser()
+    if (currentUser && !browserAuthSession.claimIdentity(currentUser.id)) {
+      queueMicrotask(() => {
+        authService.clearSession()
+        setAuthState({ user: null, token: null })
+        toast.warning('Phiên đăng nhập đang được sử dụng bởi tài khoản khác trong trình duyệt này.')
+      })
+    }
+
     return () => {
       window.removeEventListener('auth:session-expired', handleSessionExpired)
       window.removeEventListener('auth:must-change-password', handleMustChangePassword)
+      unsubscribeBrowserAuth()
     }
   }, [])
 
@@ -63,11 +97,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const data = await authService.googleLogin({ idToken })
+    browserAuthSession.activateIdentity(data.user.id)
     setAuthState({ user: data.user, token: data.accessToken })
   }, [])
 
   const loginWithPassword = useCallback(async (username: string, password: string) => {
     const data = await authService.passwordLogin({ username, password })
+    browserAuthSession.activateIdentity(data.user.id)
     setAuthState({ user: data.user, token: data.accessToken })
   }, [])
 
@@ -79,8 +115,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [])
 
   const logout = async () => {
-    await authService.logout()
+    const currentUser = authService.getCurrentUser()
     setAuthState({ user: null, token: null })
+    if (currentUser) browserAuthSession.deactivateIdentity(currentUser.id)
+    await authService.logout()
   }
 
   const hasRole = (roles: UserRole[]): boolean => {

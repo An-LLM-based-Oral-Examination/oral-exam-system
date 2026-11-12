@@ -74,6 +74,14 @@ function getCurrentTimestampMs() {
   return Date.now()
 }
 
+function officialExamDraftKey(userId: string, ticketId: string) {
+  return `mf04_kiosk_draft_${userId}_${ticketId}`
+}
+
+function legacyOfficialExamDraftKey(ticketId: string) {
+  return `mf04_kiosk_draft_${ticketId}`
+}
+
 function OfficialExamLivePage() {
   const { user } = useAuth()
   const [ticket, setTicket] = useState<StudentWorkstationTicket | null>(null)
@@ -206,7 +214,16 @@ function OfficialExamLivePage() {
           setTicket(currentTicket)
           if (currentTicket.status === 'IN_PROGRESS') {
             try {
-              const rawDraft = localStorage.getItem(`mf04_kiosk_draft_${currentTicket.id}`)
+              const scopedKey = user?.id ? officialExamDraftKey(user.id, currentTicket.id) : null
+              const legacyKey = legacyOfficialExamDraftKey(currentTicket.id)
+              let rawDraft = scopedKey ? localStorage.getItem(scopedKey) : null
+              if (!rawDraft && scopedKey) {
+                rawDraft = localStorage.getItem(legacyKey)
+                if (rawDraft) {
+                  localStorage.setItem(scopedKey, rawDraft)
+                  localStorage.removeItem(legacyKey)
+                }
+              }
               if (rawDraft) {
                 const parsedDraft = JSON.parse(rawDraft) as {
                   answers?: Record<string, string>
@@ -242,13 +259,13 @@ function OfficialExamLivePage() {
       mountedRef.current = false
       stopMicTest()
     }
-  }, [stopMicTest])
+  }, [stopMicTest, user?.id])
 
   useEffect(() => {
-    if (!ticket || ticket.status !== 'IN_PROGRESS') return
+    if (!ticket || ticket.status !== 'IN_PROGRESS' || !user?.id) return
     try {
       localStorage.setItem(
-        `mf04_kiosk_draft_${ticket.id}`,
+        officialExamDraftKey(user.id, ticket.id),
         JSON.stringify({
           answers,
           timestamps: timestampsByQuestion,
@@ -259,7 +276,7 @@ function OfficialExamLivePage() {
     } catch {
       // Ignore quota errors
     }
-  }, [answers, bufferDeadlinesByQuestion, timestampsByQuestion, ticket, voiceBaselinesByQuestion])
+  }, [answers, bufferDeadlinesByQuestion, timestampsByQuestion, ticket, user?.id, voiceBaselinesByQuestion])
 
   useEffect(() => {
     if (!audioRecorder.isRecording) return
@@ -629,7 +646,7 @@ function OfficialExamLivePage() {
       recordedExamAudioRef.current = null
       setHasRecordedAudioBlob(false)
       try {
-        localStorage.removeItem(`mf04_kiosk_draft_${ticket.id}`)
+        if (user?.id) localStorage.removeItem(officialExamDraftKey(user.id, ticket.id))
       } catch {
         // Ignore
       }
@@ -649,7 +666,7 @@ function OfficialExamLivePage() {
     } finally {
       setBusy(false)
     }
-  }, [answers, audioRecorder, buildQuestionVocabularyHint, busy, isInProgress, isVoiceOnly, questionRecorder, questions, recordingQuestionId, recordingSeconds, ticket, timestampsByQuestion, transcribeQuestionAudio, voiceBaselinesByQuestion])
+  }, [answers, audioRecorder, buildQuestionVocabularyHint, busy, isInProgress, isVoiceOnly, questionRecorder, questions, recordingQuestionId, recordingSeconds, ticket, timestampsByQuestion, transcribeQuestionAudio, user?.id, voiceBaselinesByQuestion])
 
   useEffect(() => {
     const onOnline = () => {
