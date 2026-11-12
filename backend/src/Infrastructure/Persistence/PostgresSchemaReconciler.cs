@@ -640,7 +640,7 @@ DO $reconcile_pre$
             -- Table: exam_structures
             CREATE TABLE IF NOT EXISTS exam_structures (
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
-                bloom_distribution jsonb NOT NULL DEFAULT '{}'::jsonb,
+                bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object(),
                 course_id uuid NULL,
                 created_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 created_by uuid NULL,

@@ -4653,7 +4653,7 @@ public static partial class DevelopmentDataSeeder
                 Id = TicketReadyToTestMaiId,
                 ShiftId = readyShift.Id,
                 StudentId = StudentMaiId,
-                ExamSetId = prnSet.Id,
+                ExamSetId = null,
                 SeatNumber = 3,
                 IpAddress = "192.168.1.103",
                 Status = ExamTicketStatus.Scheduled,
@@ -4665,6 +4665,7 @@ public static partial class DevelopmentDataSeeder
         else
         {
             readyTicketMai.Status = ExamTicketStatus.Scheduled;
+            readyTicketMai.ExamSetId = null;
             readyTicketMai.IpAddress = "192.168.1.103";
             readyTicketMai.IsLocked = false;
             readyTicketMai.SubmittedAt = null;

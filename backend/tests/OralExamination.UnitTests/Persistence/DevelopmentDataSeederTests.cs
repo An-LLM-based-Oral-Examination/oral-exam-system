@@ -486,6 +486,15 @@ public class DevelopmentDataSeederTests
         maiTicket.Should().NotBeNull();
         maiTicket!.IpAddress.Should().Be("192.168.1.103", "Vé của Mai phải gắn IP LAN test");
         maiTicket.Status.Should().Be(ExamTicketStatus.Scheduled);
+        maiTicket.ExamSetId.Should().BeNull(
+            "vé chờ phân đề không được tái sử dụng bộ đề đã gán cho sinh viên khác trong cùng ca");
+
+        tickets
+            .Where(t => t.ExamSetId.HasValue)
+            .GroupBy(t => t.ExamSetId)
+            .Should()
+            .OnlyContain(group => group.Count() == 1,
+                "uq_tickets_shift_exam_set cấm hai sinh viên trong cùng ca nhận cùng một bộ đề");
     }
 
     [Fact(DisplayName = "8. SeedAsync khởi tạo Ca thi trong lớp (MF-05) cho PRN231 và SWD392 ở trạng thái IN_PROGRESS kèm mã OTP tĩnh 123456")]

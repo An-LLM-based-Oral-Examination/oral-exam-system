@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq;
 using FluentAssertions;
 using OralExamination.Infrastructure.Persistence;
@@ -81,6 +82,23 @@ public class PostgresSchemaReconcilerTests
             sql.Should().Contain($"CREATE TABLE IF NOT EXISTS {tableName}",
                 because: $"table {tableName} must be created idempotently to avoid schema drift HTTP 500");
         }
+    }
+
+    [Fact]
+    public void GetPostMigrationSql_ShouldBeSafeForExecuteSqlRawCompositeFormatting()
+    {
+        // Arrange
+        var sql = PostgresSchemaReconciler.GetPostMigrationSql();
+
+        // Act
+        Action formatSql = () => string.Format(
+            CultureInfo.InvariantCulture,
+            sql,
+            Array.Empty<object>());
+
+        // Assert
+        formatSql.Should().NotThrow(
+            "ExecuteSqlRawAsync parses braces as composite-format placeholders even when no SQL parameters are supplied");
     }
 
     [Fact]
