@@ -55,11 +55,16 @@ jobs:
           --project backend/src/Infrastructure/Infrastructure.csproj
           --startup-project backend/src/API/API.csproj
 
-      - name: Run Unit Tests with Coverage (542 Tests)
+      - name: Run Unit Tests with Coverage
         run: dotnet test backend/OralExamination.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Scan Vulnerable NuGet Packages
-        run: dotnet list backend/OralExamination.sln package --vulnerable --include-transitive
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet list backend/OralExamination.sln package --vulnerable --include-transitive --format json > nuget-vulnerabilities.json
+          cat nuget-vulnerabilities.json
+          jq -e '[.projects[]?.frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' nuget-vulnerabilities.json
 
   # =========================================================================
   # Job 2: Frontend Quality Gate (React 19 & Vite)
@@ -83,6 +88,9 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Audit High-Severity npm Vulnerabilities
+        run: npm audit --audit-level=high
 
       - name: Lint Source Code (oxlint)
         run: npm run lint

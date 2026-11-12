@@ -39,6 +39,7 @@ export default {
         'practice',      // MF-01 Interactive Practice
         'mock-exam',     // MF-02 Timed Mock Exam
         'official-exam', // MF-04 Official Lab Viva Exam & Internal Appeals
+        'in-class-shifts', // MF-05 In-Class Exam Shifts
         'rubric',        // MF-03 Question Bank & Rubric Studio 10.0
         'auth',          // Authentication & RBAC (5 roles)
         'kiosk',         // Lab Kiosk Lockdown & Hardware Security
