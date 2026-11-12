@@ -17,6 +17,7 @@ using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassS
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.ExpirePersonalInClassExams;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
+using OralExamination.Application.Features.InClassShifts.Commands.FinishStudentInClassExam;
 using OralExamination.Application.Features.InClassShifts.Commands.ResumeInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
 using OralExamination.Application.Features.InClassShifts.DTOs;
@@ -757,7 +758,14 @@ public class InClassShiftTests
             CancellationToken.None);
         validSubRes.IsSuccess.Should().BeTrue();
 
-        // Act 5: Student 1 tries to submit a second time -> blocked by DuplicateSubmission
+        // Act 5: Retry cùng payload phải idempotent để không kẹt bài khi client mất response.
+        var retryRes = await submitHandler.Handle(
+            new SubmitInClassShiftAnswerCommand(student.Id, shift.Id, enterRes1.Value.AssignedQuestionId!.Value, "Em trả lời đúng câu hỏi được giao."),
+            CancellationToken.None);
+        retryRes.IsSuccess.Should().BeTrue();
+        retryRes.Value.SubmissionId.Should().Be(validSubRes.Value.SubmissionId);
+
+        // Nội dung khác vẫn bị chặn để không sửa bài đã nộp.
         var duplicateRes = await submitHandler.Handle(
             new SubmitInClassShiftAnswerCommand(student.Id, shift.Id, enterRes1.Value.AssignedQuestionId!.Value, "Em nộp lần 2."),
             CancellationToken.None);
@@ -1318,5 +1326,145 @@ public class InClassShiftTests
         var expiredAction = () => InClassShiftAutoSubmit.SubmitExpiredPersonalExamsAsync(
             context, gradingQueueMock.Object, CancellationToken.None, shiftId);
         await expiredAction.Should().NotThrowAsync();
+    }
+
+    [Fact(DisplayName = "MF-05: Finish phải tạo submission còn thiếu trước khi đánh dấu đã nộp")]
+    public async Task FinishStudentExam_CreatesMissingMainSubmissionsBeforeCompleting()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var questionIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca kiểm tra finish an toàn",
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            ExamDurationMinutes = 20,
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = questionIds[0],
+            AssignedQuestionIdsJson = $"[\"{questionIds[0]}\",\"{questionIds[1]}\"]",
+            JoinedAt = DateTime.UtcNow.AddMinutes(-2),
+            Status = "IN_PROGRESS"
+        };
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.Add(participant);
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = questionIds[0],
+            Transcript = "Câu trả lời đã lưu",
+            Status = "SUBMITTED",
+            SubmittedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var queue = new Mock<IGradingQueueChannel>();
+        queue.Setup(channel => channel.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        var handler = new FinishStudentInClassExamCommandHandler(context, queue.Object);
+
+        var result = await handler.Handle(
+            new FinishStudentInClassExamCommand(student.Id, shift.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        participant.Status.Should().Be("SUBMITTED");
+        var submissions = await context.InClassExamSubmissions
+            .Where(item => item.ShiftId == shift.Id && item.StudentId == student.Id && !item.IsFollowUp)
+            .ToListAsync();
+        submissions.Should().HaveCount(2);
+        submissions.Single(item => item.QuestionId == questionIds[1]).Transcript.Should().BeEmpty();
+        queue.Verify(channel => channel.EnqueueAsync(
+            It.Is<GradingTask>(task => task.QuestionId == questionIds[1]),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "MF-05: Auto-submit phải phục hồi participant SUBMITTED nhưng chưa có submission")]
+    public async Task AutoSubmit_RepairsSubmittedParticipantWithoutSubmissions()
+    {
+        using var context = CreateDbContext();
+        var questionId = Guid.NewGuid();
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = Guid.NewGuid(),
+            LecturerId = Guid.NewGuid(),
+            ShiftName = "Ca dữ liệu lỗi cần phục hồi",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(-1),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED",
+            IsLocked = false
+        };
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = Guid.NewGuid(),
+            AssignedQuestionId = questionId,
+            AssignedQuestionIdsJson = $"[\"{questionId}\"]",
+            Status = "SUBMITTED"
+        });
+        await context.SaveChangesAsync();
+
+        var queue = new Mock<IGradingQueueChannel>();
+        queue.Setup(channel => channel.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var created = await InClassShiftAutoSubmit.SubmitMissingAsync(
+            context, queue.Object, CancellationToken.None, shift.Id);
+
+        created.Should().Be(1);
+        (await context.InClassExamSubmissions.SingleAsync()).QuestionId.Should().Be(questionId);
+        queue.Verify(channel => channel.EnqueueAsync(
+            It.Is<GradingTask>(task => task.QuestionId == questionId),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact(DisplayName = "MF-05: submissionsCount phải dựa trên bài thực tế, không dựa trên cờ SUBMITTED")]
+    public async Task GetShift_SubmissionsCountDoesNotCountParticipantWithoutSubmission()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca kiểm tra thống kê",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(10),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            Status = "SUBMITTED"
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new GetInClassShiftsByClassQueryHandler(context)
+            .Handle(new GetInClassShiftsByClassQuery(lecturer.Id, classEntity.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value.Single().SubmissionsCount.Should().Be(0);
     }
 }

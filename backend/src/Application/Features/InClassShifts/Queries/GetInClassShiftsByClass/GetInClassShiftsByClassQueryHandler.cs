@@ -109,7 +109,11 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                     s.FinalizedAt,
                     s.CreatedAt,
                     s.Participants.Count,
-                    s.Participants.Count(p => p.Status == "SUBMITTED"),
+                    s.Submissions
+                        .Where(submission => !submission.IsFollowUp)
+                        .Select(submission => submission.StudentId)
+                        .Distinct()
+                        .Count(),
                     s.Description,
                     s.QuestionPoolMode,
                     EnterInClassShiftCommandHandler.ParseGuidList(s.SelectedQuestionIdsJson),

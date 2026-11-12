@@ -647,10 +647,18 @@ function CreateInClassShiftDialog({
         })
         .then((result) => {
           if (cancelled) return
-          setQuestionOptions(result.items.map((item) => ({ id: item.id, title: item.title })))
+          const options = result.items.map((item) => ({ id: item.id, title: item.title }))
+          const validQuestionIds = new Set(options.map((item) => item.id))
+          setQuestionOptions(options)
+          setSelectedQuestionIds((current) =>
+            current.filter((questionId) => validQuestionIds.has(questionId)),
+          )
         })
         .catch(() => {
-          if (!cancelled) setQuestionOptions([])
+          if (!cancelled) {
+            setQuestionOptions([])
+            setSelectedQuestionIds([])
+          }
         })
         .finally(() => {
           if (!cancelled) setQuestionsLoading(false)

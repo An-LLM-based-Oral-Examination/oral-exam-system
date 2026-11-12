@@ -5,12 +5,13 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
-using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
+using OralExamination.Application.Features.InClassShifts;
 
 namespace OralExamination.Application.Features.InClassShifts.Commands.FinishStudentInClassExam;
 
 public sealed class FinishStudentInClassExamCommandHandler(
-    IApplicationDbContext context)
+    IApplicationDbContext context,
+    IGradingQueueChannel gradingQueue)
     : IRequestHandler<FinishStudentInClassExamCommand, Result<FinishStudentInClassExamResponse>>
 {
     public async Task<Result<FinishStudentInClassExamResponse>> Handle(
@@ -35,7 +36,7 @@ public sealed class FinishStudentInClassExamCommandHandler(
             return Result<FinishStudentInClassExamResponse>.Failure(InClassShiftErrors.ParticipantNotFound);
         }
 
-        if (EnterInClassShiftCommandHandler.IsCompletedParticipation(participant.Status))
+        if (participant.Status is "GRADED" or "FINALIZED" or "COMPLETED")
         {
             return Result<FinishStudentInClassExamResponse>.Success(new FinishStudentInClassExamResponse(
                 shift.Id,
@@ -44,8 +45,14 @@ public sealed class FinishStudentInClassExamCommandHandler(
                 DateTime.UtcNow));
         }
 
-        participant.Status = "SUBMITTED";
-        await context.SaveChangesAsync(cancellationToken);
+        // Finish là cổng toàn vẹn cuối cùng: bảo đảm mọi câu chính được giao đều có
+        // submission trước khi participant được xác nhận SUBMITTED. Hàm này cũng
+        // phục hồi dữ liệu cũ bị trạng thái SUBMITTED nhưng thiếu bài.
+        await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+            context,
+            gradingQueue,
+            participant,
+            cancellationToken);
 
         return Result<FinishStudentInClassExamResponse>.Success(new FinishStudentInClassExamResponse(
             shift.Id,

@@ -13,9 +13,11 @@ namespace OralExamination.Application.Features.InClassShifts;
 
 public static class InClassShiftAutoSubmit
 {
-    private static readonly string[] TerminalStatuses =
+    // SUBMITTED vẫn phải được đối soát vì dữ liệu cũ hoặc request finish lỗi có thể
+    // đã đổi trạng thái participant trước khi đủ submission. Chỉ các trạng thái đã
+    // chấm/chốt mới thực sự bất biến.
+    private static readonly string[] ImmutableStatuses =
     [
-        "SUBMITTED",
         "GRADED",
         "FINALIZED",
         "COMPLETED"
@@ -28,7 +30,16 @@ public static class InClassShiftAutoSubmit
         Guid? shiftId = null)
     {
         var participants = await context.InClassShiftParticipants
-            .Where(participant => !TerminalStatuses.Contains(participant.Status))
+            .Where(participant => !ImmutableStatuses.Contains(participant.Status))
+            .Where(participant => participant.Status != "SUBMITTED" ||
+                context.InClassExamSubmissions.Count(submission =>
+                    submission.ShiftId == participant.ShiftId &&
+                    submission.StudentId == participant.StudentId &&
+                    !submission.IsFollowUp) <
+                context.InClassExamShifts
+                    .Where(shift => shift.Id == participant.ShiftId)
+                    .Select(shift => shift.TotalQuestionsPerStudent)
+                    .First())
             .Where(participant => context.InClassExamShifts.Any(shift =>
                 shift.Id == participant.ShiftId &&
                 shift.Status == "CLOSED" &&
@@ -73,7 +84,16 @@ public static class InClassShiftAutoSubmit
 
         var participantsQuery = context.InClassShiftParticipants
             .Where(participant => openShiftIds.Contains(participant.ShiftId))
-            .Where(participant => !TerminalStatuses.Contains(participant.Status));
+            .Where(participant => !ImmutableStatuses.Contains(participant.Status))
+            .Where(participant => participant.Status != "SUBMITTED" ||
+                context.InClassExamSubmissions.Count(submission =>
+                    submission.ShiftId == participant.ShiftId &&
+                    submission.StudentId == participant.StudentId &&
+                    !submission.IsFollowUp) <
+                context.InClassExamShifts
+                    .Where(shift => shift.Id == participant.ShiftId)
+                    .Select(shift => shift.TotalQuestionsPerStudent)
+                    .First());
         if (studentId.HasValue)
         {
             participantsQuery = participantsQuery.Where(participant => participant.StudentId == studentId.Value);
@@ -99,7 +119,7 @@ public static class InClassShiftAutoSubmit
         InClassShiftParticipant participant,
         CancellationToken cancellationToken)
     {
-        if (IsTerminalStatus(participant.Status))
+        if (IsImmutableStatus(participant.Status))
         {
             return 0;
         }
@@ -136,7 +156,7 @@ public static class InClassShiftAutoSubmit
 
         foreach (var participant in participants)
         {
-            if (IsTerminalStatus(participant.Status))
+            if (IsImmutableStatus(participant.Status))
             {
                 continue;
             }
@@ -194,6 +214,7 @@ public static class InClassShiftAutoSubmit
         return created.Count;
     }
 
-    private static bool IsTerminalStatus(string? status) =>
-        EnterInClassShiftCommandHandler.IsCompletedParticipation(status);
+    private static bool IsImmutableStatus(string? status) =>
+        !string.IsNullOrWhiteSpace(status) &&
+        ImmutableStatuses.Contains(status, StringComparer.OrdinalIgnoreCase);
 }

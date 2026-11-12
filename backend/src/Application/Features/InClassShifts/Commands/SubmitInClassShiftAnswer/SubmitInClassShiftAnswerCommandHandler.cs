@@ -95,8 +95,23 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                      s.FollowUpIndex == effectiveFollowUpIndex,
                 cancellationToken);
 
+        var normalizedTranscript = request.TranscriptText.Trim();
         if (existingSubmission is not null && !string.IsNullOrWhiteSpace(existingSubmission.Transcript))
         {
+            if (string.Equals(existingSubmission.Transcript, normalizedTranscript, StringComparison.Ordinal))
+            {
+                return Result<SubmitInClassAnswerResponse>.Success(new SubmitInClassAnswerResponse(
+                    existingSubmission.Id,
+                    existingSubmission.ShiftId,
+                    existingSubmission.StudentId,
+                    existingSubmission.QuestionId,
+                    existingSubmission.Status,
+                    existingSubmission.SubmittedAt,
+                    existingSubmission.IsFollowUp,
+                    existingSubmission.ParentSubmissionId,
+                    existingSubmission.FollowUpIndex));
+            }
+
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.DuplicateSubmission);
         }
 
@@ -136,7 +151,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
         if (existingSubmission is not null)
         {
-            existingSubmission.Transcript = request.TranscriptText.Trim();
+            existingSubmission.Transcript = normalizedTranscript;
             existingSubmission.Status = "SUBMITTED";
             existingSubmission.SubmittedAt = utcNow;
             existingSubmission.AiScore = null;
@@ -159,7 +174,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                 IsFollowUp = request.IsFollowUp,
                 ParentSubmissionId = request.ParentSubmissionId,
                 FollowUpIndex = effectiveFollowUpIndex,
-                Transcript = request.TranscriptText.Trim(),
+                Transcript = normalizedTranscript,
                 Status = "SUBMITTED",
                 SubmittedAt = utcNow
             };

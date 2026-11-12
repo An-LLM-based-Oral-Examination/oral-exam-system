@@ -2148,7 +2148,7 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("in_class_shift_participants", null, t =>
                         {
-                            t.HasCheckConstraint("ck_in_class_shift_participants_status", "status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+                            t.HasCheckConstraint("ck_in_class_shift_participants_status", "status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT')");
                         });
                 });
 

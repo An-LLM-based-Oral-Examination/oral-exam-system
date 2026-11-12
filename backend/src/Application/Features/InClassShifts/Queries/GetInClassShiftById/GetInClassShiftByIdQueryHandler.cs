@@ -126,32 +126,6 @@ public sealed class GetInClassShiftByIdQueryHandler(
 
         var selectedPoolIds = EnterInClassShiftCommandHandler.ParseGuidList(shift.SelectedQuestionIdsJson);
 
-        var shiftDto = new InClassExamShiftResponse(
-            shift.Id,
-            shift.ClassId,
-            shift.Class.Code,
-            shift.Class.Name,
-            shift.LecturerId,
-            shift.Lecturer?.FullName,
-            shift.ShiftName,
-            shift.StartTime,
-            shift.EndTime,
-            shift.Status,
-            shift.IsLocked,
-            shift.FinalizedAt,
-            shift.CreatedAt,
-            shift.Participants.Count,
-            shift.Participants.Count(p => p.Status == "SUBMITTED"),
-            shift.Description,
-            shift.QuestionPoolMode,
-            selectedPoolIds,
-            shift.TotalQuestionsPerStudent,
-            shift.HasFollowUp,
-            shift.MaxFollowUpQuestions,
-            shift.IsAutoPublishGrades,
-            shift.ExamDurationMinutes
-        );
-
         var participants = visibleParticipants
             .OrderBy(p => p.JoinedAt)
             .Select(p =>

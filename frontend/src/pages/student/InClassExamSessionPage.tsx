@@ -39,6 +39,15 @@ interface FollowUpTurnState {
   followUpPrompt: string | null
 }
 
+interface PendingAnswer {
+  turnKey: string
+  questionId: string
+  transcript: string
+  isFollowUp: boolean
+  parentSubmissionId: string | null
+  followUpIndex: number
+}
+
 function getTurnKey(questionId: string, followUpIndex: number) {
   return followUpIndex > 0 ? `${questionId}:fu:${followUpIndex}` : questionId
 }
@@ -203,13 +212,39 @@ export function InClassExamSessionPage() {
       const key = getTurnKey(currentQuestion.questionId, turn?.followUpIndex ?? 0)
       pendingDrafts[key] = speechNow.transcript
     }
-    return questionsRef.current
+    draftsRef.current = pendingDrafts
+
+    const pendingMainAnswers: PendingAnswer[] = questionsRef.current
       .filter((item) => !submittedRef.current[item.questionId])
       .map((item) => ({
+        turnKey: item.questionId,
         questionId: item.questionId,
         transcript: (pendingDrafts[item.questionId] ?? '').trim(),
+        isFollowUp: false,
+        parentSubmissionId: null,
+        followUpIndex: 0,
       }))
       .filter((item) => item.transcript.length > 0)
+
+    if (currentQuestion) {
+      const currentTurn = followUpTurnsRef.current[currentQuestion.questionId]
+      if (currentTurn?.followUpIndex > 0) {
+        const currentTurnKey = getTurnKey(currentQuestion.questionId, currentTurn.followUpIndex)
+        const currentTranscript = (pendingDrafts[currentTurnKey] ?? '').trim()
+        if (currentTranscript && !submittedRef.current[currentTurnKey]) {
+          pendingMainAnswers.push({
+            turnKey: currentTurnKey,
+            questionId: currentQuestion.questionId,
+            transcript: currentTranscript,
+            isFollowUp: true,
+            parentSubmissionId: currentTurn.parentSubmissionId,
+            followUpIndex: currentTurn.followUpIndex,
+          })
+        }
+      }
+    }
+
+    return pendingMainAnswers
   }, [])
 
   const persistDrafts = useCallback(() => {
@@ -241,22 +276,45 @@ export function InClassExamSessionPage() {
     const speechNow = speechRef.current
     if (speechNow.isListening) speechNow.stopListening()
     const answers = collectPendingAnswers()
-    await Promise.all(
-      answers.map(async (item) => {
-        try {
-          await inClassShiftService.submitStudentAnswer(shift.id, item.questionId, item.transcript)
-        } catch {
-          // Máy chủ vẫn nộp các câu chưa có bài khi ca đóng.
+    for (const item of answers) {
+      try {
+        await inClassShiftService.submitStudentAnswer(
+          shift.id,
+          item.questionId,
+          item.transcript,
+          {
+            isFollowUp: item.isFollowUp,
+            parentSubmissionId: item.parentSubmissionId,
+            followUpIndex: item.followUpIndex,
+          },
+        )
+        submittedRef.current = {
+          ...submittedRef.current,
+          [item.turnKey]: true,
+          ...(!item.isFollowUp ? { [item.questionId]: true } : {}),
         }
-      }),
-    )
+        setSubmitted(submittedRef.current)
+      } catch (submitError) {
+        saveInClassExamDrafts(shift.id, {
+          drafts: draftsRef.current,
+          questionIndex: questionIndexRef.current,
+        })
+        setAnswerError(getErrorMessage(submitError))
+        return false
+      }
+    }
     try {
       await inClassShiftService.finishStudentExam(shift.id)
       markInClassShiftCompleted(shift.id)
       clearInClassExamDrafts(shift.id)
       clearInClassExamSession()
       return true
-    } catch {
+    } catch (finishError) {
+      saveInClassExamDrafts(shift.id, {
+        drafts: draftsRef.current,
+        questionIndex: questionIndexRef.current,
+      })
+      setAnswerError(getErrorMessage(finishError))
       return false
     }
   }, [collectPendingAnswers, shift, stopReadingQuestion])
