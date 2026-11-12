@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowRight,
@@ -258,6 +258,7 @@ function canViewScorecard(status: string) {
 
 export function MockExamPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [courses, setCourses] = useState<CourseDto[]>([])
   const [openCourseId, setOpenCourseId] = useState<string | null>(null)
   const [quotas, setQuotas] = useState<Record<string, MockExamQuota>>({})
@@ -336,13 +337,22 @@ export function MockExamPage() {
     try {
       const nextCourses = await courseService.getEnrolledCourses()
       setCourses(nextCourses)
+      const requestedCourse = searchParams.get('course')?.trim().toLowerCase()
+      const requestedCourseMatch = requestedCourse
+        ? nextCourses.find(
+            (course) =>
+              course.id.toLowerCase() === requestedCourse ||
+              course.code.trim().toLowerCase() === requestedCourse,
+          )
+        : undefined
+      setOpenCourseId(requestedCourseMatch?.id ?? null)
       void loadQuotas(nextCourses.map((course) => course.id))
     } catch (error) {
       toast.error(getMockExamErrorDetail(error, 'Không thể tải danh sách môn học.'))
     } finally {
       setIsLoadingCourses(false)
     }
-  }, [loadQuotas])
+  }, [loadQuotas, searchParams])
 
   const loadHistory = useCallback(async () => {
     setIsLoadingHistory(true)

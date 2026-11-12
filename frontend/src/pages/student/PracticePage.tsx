@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
   AudioLines,
@@ -168,6 +168,7 @@ function getPracticeModeLabel(mode: PracticeHistoryItem['practiceMode']) {
 
 export function PracticePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [courses, setCourses] = useState<CourseDto[]>([])
   const [practiceHistory, setPracticeHistory] = useState<PracticeHistoryItem[]>([])
@@ -237,17 +238,25 @@ export function PracticePage() {
           ),
         )
       }
+      const requestedCourse = searchParams.get('course')?.trim().toLowerCase()
+      const requestedCourseMatch = requestedCourse
+        ? availableCourses.find(
+            (course) =>
+              course.id.toLowerCase() === requestedCourse ||
+              course.code.trim().toLowerCase() === requestedCourse,
+          )
+        : undefined
       setSelectedCourseId((current) =>
         availableCourses.some((course) => course.id === current)
           ? current
-          : (availableCourses[0]?.id ?? ''),
+          : (requestedCourseMatch?.id ?? availableCourses[0]?.id ?? ''),
       )
     } catch (loadError) {
       toast.error(userMessage(loadError, 'Không tải được dữ liệu luyện tập. Vui lòng thử lại.'))
     } finally {
       setIsLoadingData(false)
     }
-  }, [user])
+  }, [searchParams, user])
 
   useEffect(() => {
     const loadTimer = window.setTimeout(() => void loadPracticeData(), 0)

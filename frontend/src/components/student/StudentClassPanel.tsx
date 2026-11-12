@@ -361,10 +361,16 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
                         <h3 className="mt-3 truncate text-xl leading-snug font-bold text-[#0F2854]">{item.className}</h3>
                         <p className="mt-1 truncate text-sm font-semibold text-[#3d5270]">{item.courseName}</p>
                         <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
-                          <Link to="/practice" className={ds.outlineButton}>
+                          <Link
+                            to={`/practice?course=${encodeURIComponent(item.courseCode)}`}
+                            className={ds.outlineButton}
+                          >
                             <Mic2 className="size-3.5" /> Luyện tập
                           </Link>
-                          <Link to="/mock-exam" className={ds.outlineButton}>
+                          <Link
+                            to={`/mock-exam?course=${encodeURIComponent(item.courseCode)}`}
+                            className={ds.outlineButton}
+                          >
                             <TimerReset className="size-3.5" /> Thi thử
                           </Link>
                         </div>

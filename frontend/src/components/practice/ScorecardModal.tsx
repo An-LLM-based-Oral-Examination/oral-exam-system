@@ -18,6 +18,15 @@ interface ScorecardModalProps {
   isActionPending?: boolean
 }
 
+const formatStudentFeedback = (feedback: string) => {
+  const sentences = feedback
+    .split(/(?<=[.!?])\s+|\r?\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !/\brubric\b/i.test(sentence))
+
+  return sentences.join(' ') || 'Chưa có nhận xét bổ sung.'
+}
+
 export const ScorecardModal: React.FC<ScorecardModalProps> = ({
   scorecard,
   onClose,
@@ -264,10 +273,10 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
               id="scorecard-feedback-title"
               className="text-xs font-bold tracking-[0.08em] text-[#1C4D8D] uppercase"
             >
-              Nhận xét sư phạm
+              Nhận xét
             </h4>
             <p className="mt-2 text-xs leading-relaxed whitespace-pre-line text-[#4e617a]">
-              {scorecard.feedback}
+              {formatStudentFeedback(scorecard.feedback)}
             </p>
           </section>
 
