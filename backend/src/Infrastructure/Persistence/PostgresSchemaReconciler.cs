@@ -1311,7 +1311,7 @@ DO $reconcile_pre$
             BEGIN
                 ALTER TABLE in_class_shift_participants DROP CONSTRAINT IF EXISTS ck_in_class_shift_participants_status;
                 ALTER TABLE in_class_shift_participants ADD CONSTRAINT ck_in_class_shift_participants_status
-                    CHECK (status IN ('JOINED', 'SUBMITTED', 'ABSENT'));
+                    CHECK (status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT'));
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 

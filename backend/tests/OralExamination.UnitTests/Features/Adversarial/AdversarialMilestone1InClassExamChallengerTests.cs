@@ -76,7 +76,7 @@ public class AdversarialMilestone1InClassExamChallengerTests
         var statusConstraint = entityType!.GetCheckConstraints()
             .FirstOrDefault(c => c.Name == "ck_in_class_shift_participants_status");
         statusConstraint.Should().NotBeNull("ck_in_class_shift_participants_status phải tồn tại");
-        statusConstraint!.Sql.Should().Be("status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+        statusConstraint!.Sql.Should().Be("status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT')");
 
         // 2. Unique Constraint (uq_in_class_shift_participants_shift_student)
         var runtimeEntityType = context.Model.FindEntityType(typeof(InClassShiftParticipant))!;

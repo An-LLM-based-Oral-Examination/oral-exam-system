@@ -302,8 +302,59 @@ function groupStudents(
     const answeredIds = new Set(row.answers.map((item) => item.questionId))
     const pending = row.assigned.filter((item) => !answeredIds.has(item.questionId))
     const answers = [...row.answers, ...pending].sort((a, b) => a.orderIndex - b.orderIndex)
-    const aiScore = average(answers.map((item) => item.aiScore))
-    const finalScore = average(answers.map((item) => item.lecturerScore ?? item.aiScore))
+
+    // Gom nhóm theo từng câu hỏi chính: câu phụ dùng để kéo điểm cao hơn (bù điểm), không kéo tụt điểm câu chính
+    const questionGroups = new Map<string, InClassQuestionAnswer[]>()
+    answers.forEach((ans) => {
+      const list = questionGroups.get(ans.questionId) || []
+      list.push(ans)
+      questionGroups.set(ans.questionId, list)
+    })
+
+    const effectiveAiScores: number[] = []
+    const effectiveFinalScores: number[] = []
+
+    questionGroups.forEach((groupAnswers) => {
+      const mainAns = groupAnswers.find((item) => !item.isFollowUp) || groupAnswers[0]
+      const followUps = groupAnswers.filter((item) => item.isFollowUp && item.answerId !== mainAns.answerId)
+
+      if (mainAns.aiScore != null) {
+        let bestAi = mainAns.aiScore
+        followUps.forEach((fu) => {
+          if (fu.aiScore != null && fu.aiScore > bestAi) {
+            bestAi = fu.aiScore
+          }
+        })
+        effectiveAiScores.push(bestAi)
+      } else {
+        const anyFu = followUps.map((f) => f.aiScore).filter((s): s is number => s != null)
+        if (anyFu.length > 0) {
+          effectiveAiScores.push(Math.max(...anyFu))
+        }
+      }
+
+      const mainFinal = mainAns.lecturerScore ?? mainAns.aiScore
+      if (mainFinal != null) {
+        let bestFinal = mainFinal
+        followUps.forEach((fu) => {
+          const fuFinal = fu.lecturerScore ?? fu.aiScore
+          if (fuFinal != null && fuFinal > bestFinal) {
+            bestFinal = fuFinal
+          }
+        })
+        effectiveFinalScores.push(bestFinal)
+      } else {
+        const anyFuFinal = followUps
+          .map((f) => f.lecturerScore ?? f.aiScore)
+          .filter((s): s is number => s != null)
+        if (anyFuFinal.length > 0) {
+          effectiveFinalScores.push(Math.max(...anyFuFinal))
+        }
+      }
+    })
+
+    const aiScore = average(effectiveAiScores)
+    const finalScore = average(effectiveFinalScores)
     const overridden = answers.some((item) => item.lecturerScore != null)
     const allDone = answers.length > 0 && answers.every((item) => item.status !== 'PENDING')
     const anyGraded = answers.some((item) => item.status === 'GRADED')

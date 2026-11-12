@@ -2170,7 +2170,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("in_class_shift_participants", t =>
             {
-                t.HasCheckConstraint("ck_in_class_shift_participants_status", "status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+                t.HasCheckConstraint("ck_in_class_shift_participants_status", "status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT')");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");

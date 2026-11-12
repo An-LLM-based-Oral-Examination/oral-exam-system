@@ -641,6 +641,7 @@ function CreateInClassShiftDialog({
         .getQuestions({
           courseId: selectedCourseId,
           approvalStatus: 'APPROVED',
+          usageScope: 'practice',
           pageNumber: 1,
           pageSize: 100,
         })

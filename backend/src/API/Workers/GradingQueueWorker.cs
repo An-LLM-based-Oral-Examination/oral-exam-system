@@ -953,28 +953,76 @@ public class GradingQueueWorker : BackgroundService
                 .Where(s => s.ShiftId == submission.ShiftId && s.StudentId == submission.StudentId && s.Id != submission.Id)
                 .ToListAsync(cancellationToken);
 
-            var aiScores = otherSubs
-                .Select(s => s.AiScore)
-                .Append(submission.AiScore)
-                .Where(sc => sc.HasValue)
-                .Select(sc => sc!.Value)
-                .ToList();
+            var allSubs = otherSubs.Append(submission).ToList();
+            var questionGroups = allSubs.GroupBy(s => s.QuestionId).ToList();
 
-            var finalScores = otherSubs
-                .Select(s => s.FinalScore ?? s.AiScore)
-                .Append(submission.FinalScore)
-                .Where(sc => sc.HasValue)
-                .Select(sc => sc!.Value)
-                .ToList();
+            var effectiveAiScores = new List<decimal>();
+            var effectiveFinalScores = new List<decimal>();
 
-            if (aiScores.Count > 0)
+            foreach (var group in questionGroups)
             {
-                participant.TotalAiScore = Math.Round(aiScores.Average(), 2, MidpointRounding.AwayFromZero);
+                var mainSub = group.FirstOrDefault(s => !s.IsFollowUp) ?? group.First();
+                var followUps = group.Where(s => s.IsFollowUp && s.Id != mainSub.Id).ToList();
+
+                // Điểm AI: Nếu trả lời câu phụ tốt hơn thì kéo điểm cao hơn; nếu câu phụ thấp hơn thì bảo toàn điểm câu chính
+                if (mainSub.AiScore.HasValue)
+                {
+                    decimal bestAi = mainSub.AiScore.Value;
+                    foreach (var fu in followUps)
+                    {
+                        if (fu.AiScore.HasValue && fu.AiScore.Value > bestAi)
+                        {
+                            bestAi = fu.AiScore.Value;
+                        }
+                    }
+                    effectiveAiScores.Add(bestAi);
+                }
+                else
+                {
+                    var anyFuAi = followUps.Where(f => f.AiScore.HasValue).Select(f => f.AiScore!.Value).ToList();
+                    if (anyFuAi.Count > 0)
+                    {
+                        effectiveAiScores.Add(anyFuAi.Max());
+                    }
+                }
+
+                // Điểm cuối (Giảng viên chấm lại hoặc điểm AI)
+                decimal? mainFinal = mainSub.FinalScore ?? mainSub.AiScore;
+                if (mainFinal.HasValue)
+                {
+                    decimal bestFinal = mainFinal.Value;
+                    foreach (var fu in followUps)
+                    {
+                        var fuFinal = fu.FinalScore ?? fu.AiScore;
+                        if (fuFinal.HasValue && fuFinal.Value > bestFinal)
+                        {
+                            bestFinal = fuFinal.Value;
+                        }
+                    }
+                    effectiveFinalScores.Add(bestFinal);
+                }
+                else
+                {
+                    var anyFuFinal = followUps
+                        .Select(f => f.FinalScore ?? f.AiScore)
+                        .Where(sc => sc.HasValue)
+                        .Select(sc => sc!.Value)
+                        .ToList();
+                    if (anyFuFinal.Count > 0)
+                    {
+                        effectiveFinalScores.Add(anyFuFinal.Max());
+                    }
+                }
             }
 
-            if (finalScores.Count > 0)
+            if (effectiveAiScores.Count > 0)
             {
-                participant.TotalFinalScore = Math.Round(finalScores.Average(), 2, MidpointRounding.AwayFromZero);
+                participant.TotalAiScore = Math.Round(effectiveAiScores.Average(), 2, MidpointRounding.AwayFromZero);
+            }
+
+            if (effectiveFinalScores.Count > 0)
+            {
+                participant.TotalFinalScore = Math.Round(effectiveFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
             }
         }
 

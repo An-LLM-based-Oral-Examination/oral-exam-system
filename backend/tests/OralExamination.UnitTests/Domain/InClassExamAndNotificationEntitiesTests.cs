@@ -114,7 +114,7 @@ public class InClassExamAndNotificationEntitiesTests
         var statusConstraint = designEntityType.GetCheckConstraints()
             .FirstOrDefault(c => c.Name == "ck_in_class_shift_participants_status");
         statusConstraint.Should().NotBeNull();
-        statusConstraint!.Sql.Should().Be("status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+        statusConstraint!.Sql.Should().Be("status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT')");
     }
 
     [Fact(DisplayName = "M1-04. InClassExamSubmission maps to in_class_exam_submissions without audio_r2_url")]

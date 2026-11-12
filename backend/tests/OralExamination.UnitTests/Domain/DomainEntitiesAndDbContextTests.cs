@@ -266,7 +266,7 @@ public class DomainEntitiesAndDbContextTests
         var inClassPartType = model.FindEntityType(typeof(InClassShiftParticipant))!;
         var inClassPartCheck = inClassPartType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_shift_participants_status");
         inClassPartCheck.Should().NotBeNull();
-        inClassPartCheck!.Sql.Should().Be("status IN ('JOINED', 'SUBMITTED', 'ABSENT')");
+        inClassPartCheck!.Sql.Should().Be("status IN ('JOINED', 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'FINALIZED', 'ABSENT')");
 
         var inClassSubmType = model.FindEntityType(typeof(InClassExamSubmission))!;
         var inClassSubmCheck = inClassSubmType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_submissions_status");
