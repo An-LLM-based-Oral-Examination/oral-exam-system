@@ -271,7 +271,10 @@ public class CourseCloOwnershipTests
     {
         using var db = new OralExamDbContext(new DbContextOptionsBuilder<OralExamDbContext>()
             .UseNpgsql("Host=127.0.0.1;Database=offline_script_only;Username=offline").Options);
-        const string before = "20261112063950_FixInClassParticipantStatusCheckConstraint";
+        // The legacy baseline is intentionally not reversible because it repairs a shared
+        // schema. Validate the CLO migration's own Up/Down contract without attempting
+        // to roll that baseline back.
+        const string before = "20261113235959_RepairLegacySchemaBaseline";
         const string after = "20261114010000_RestrictQuestionCloDeletion";
         db.Database.GetMigrations().Should().Contain(after);
         var migrator = db.GetService<IMigrator>();

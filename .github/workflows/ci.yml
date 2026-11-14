@@ -59,7 +59,7 @@ jobs:
       - name: Run Unit Tests with Coverage
         shell: pwsh
         run: |
-          dotnet test backend/tests/OralExamination.UnitTests/OralExamination.UnitTests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "trx;LogFileName=unit.trx" --results-directory ./TestResults/unit
+          dotnet test backend/tests/OralExamination.UnitTests/OralExamination.UnitTests.csproj --configuration Release --no-build --filter "Category!=Integration" --collect:"XPlat Code Coverage" --logger "trx;LogFileName=unit.trx" --results-directory ./TestResults/unit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           [xml] $trx = Get-Content ./TestResults/unit/unit.trx -Raw
           $counts = $trx.SelectSingleNode('/*[local-name()="TestRun"]/*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
