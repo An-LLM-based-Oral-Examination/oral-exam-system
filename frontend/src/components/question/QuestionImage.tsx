@@ -15,6 +15,7 @@ interface QuestionImageProps {
   showCaption?: boolean
   /** Draw own border/background. Turn off when nested inside a shared frame. */
   framed?: boolean
+  triggerLabel?: string
 }
 
 export function QuestionImage({
@@ -24,6 +25,7 @@ export function QuestionImage({
   fillHeight = false,
   showCaption = true,
   framed = true,
+  triggerLabel,
 }: QuestionImageProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -36,14 +38,16 @@ export function QuestionImage({
     if (!isExpanded) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsExpanded(false)
+      if (event.key !== 'Escape') return
+      event.stopImmediatePropagation()
+      setIsExpanded(false)
     }
     const unlock = lockBodyScroll()
-    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown, true)
 
     return () => {
       unlock()
-      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keydown', handleKeyDown, true)
     }
   }, [isExpanded])
 
@@ -51,7 +55,16 @@ export function QuestionImage({
 
   return (
     <>
-      <figure
+      {triggerLabel ? (
+        <button
+          type="button"
+          onClick={() => setIsExpanded(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#c4d8ec] px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D] hover:bg-[#f4faff] focus-visible:outline-2"
+        >
+          <Maximize2 className="size-3.5" aria-hidden="true" />
+          {triggerLabel}
+        </button>
+      ) : <figure
         className={cn(
           'overflow-hidden',
           framed &&
@@ -101,7 +114,7 @@ export function QuestionImage({
             {caption}
           </figcaption>
         ) : null}
-      </figure>
+      </figure>}
 
       {isExpanded &&
         createPortal(

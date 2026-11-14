@@ -282,7 +282,6 @@ export function MockExamPage() {
   const [archiveStatus, setArchiveStatus] = useState('')
   const [archivePage, setArchivePage] = useState(1)
   const [archiveItems, setArchiveItems] = useState<MockExamHistoryItem[]>([])
-  const [archiveTotal, setArchiveTotal] = useState(0)
   const [archiveTotalPages, setArchiveTotalPages] = useState(0)
   const [isLoadingArchive, setIsLoadingArchive] = useState(false)
   const [archiveError, setArchiveError] = useState('')
@@ -384,7 +383,6 @@ export function MockExamPage() {
         pageSize: ARCHIVE_PAGE_SIZE,
       })
       setArchiveItems(page.items)
-      setArchiveTotal(page.totalCount)
       setArchiveTotalPages(page.totalPages)
     } catch (error) {
       setArchiveItems([])
@@ -1109,7 +1107,6 @@ export function MockExamPage() {
           titleId="mock-history-title"
           eyebrow="Thi thử"
           title="Lịch sử thi thử"
-          subtitle={`${archiveTotal} phiên`}
           icon={History}
           onClose={() => setArchiveOpen(false)}
           size="2xl"
@@ -1270,7 +1267,6 @@ export function MockExamPage() {
           titleId="mock-course-title"
           eyebrow={modalCourse.code}
           title={modalCourse.name}
-          subtitle={`${modalCourse.credits} tín chỉ`}
           icon={GraduationCap}
           onClose={closeCourseModal}
           busy={isStarting}

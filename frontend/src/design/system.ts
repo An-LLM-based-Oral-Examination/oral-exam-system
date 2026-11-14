@@ -93,7 +93,6 @@ export const overlay = {
     'flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[#1C4D8D] text-white',
   eyebrow: 'text-[11px] font-bold tracking-[0.08em] text-[#1C4D8D] uppercase',
   title: 'mt-0.5 text-lg font-bold tracking-[-0.02em] text-[#0F2854]',
-  subtitle: 'mt-0.5 text-sm text-[#5b6b84]',
   z: {
     drawer: 'z-40',
     modal: 'z-50',

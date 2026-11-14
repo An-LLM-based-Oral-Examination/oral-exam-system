@@ -283,7 +283,7 @@ function StudentRoster({
         <div className={ds.sectionHeading}>
           <div className={ds.sectionTitleRow}>
             <span className={ds.sectionIconWrap}><Users className={ds.sectionIcon} /></span>
-            <h2 className={ds.sectionTitle}>Sinh viên</h2>
+            <h2 className={ds.sectionTitle}>Danh sách sinh viên</h2>
             <span className={ds.sectionBadge}>{students.length} sinh viên</span>
           </div>
         </div>
@@ -393,7 +393,6 @@ function AddStudentDialog({
       titleId="add-student-title"
       eyebrow="Sinh viên"
       title="Thêm sinh viên"
-      subtitle="Nhập đủ mã sinh viên hoặc email."
       icon={Users}
       onClose={onClose}
       busy={adding}

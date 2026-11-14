@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, Gavel, LoaderCircle, RefreshCw, Sparkles, UserRoundCog } from 'lucide-react'
+import { Gavel, LoaderCircle, RefreshCw, Sparkles, UserRoundCog } from 'lucide-react'
 import { appealsService } from '@/services/appeals.service'
 import { useAuth } from '@/hooks/useAuth'
 import type { Appeal, AppealAllocationProposal } from '@/types/appeal.types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
-import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
+import { SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 
 function getErrorMessage(error: unknown) {
@@ -160,23 +160,6 @@ export function AppealManagementPage() {
 
   return (
     <div className={ds.page}>
-      <LecturerPageBanner
-        icon={ClipboardCheck}
-        eyebrow="Phúc khảo 5 bước (R2/R7)"
-        title="Quản lý & Thẩm định Phúc khảo"
-        description="Cán bộ Khảo thí tiếp nhận đơn, phân công Giảng viên chấm lại độc lập (định mức <= 24 bài/GV, loại trừ giám khảo ban đầu) và phê duyệt quyết định cuối cùng. Trưởng bộ môn giám sát chuyên môn học thuật."
-        extras={
-          <>
-            <BannerFact icon={Gavel}>Khảo thí phê duyệt</BannerFact>
-            <BannerFact icon={UserRoundCog} tone="green">
-              Định mức &le; 24 bài/GV
-            </BannerFact>
-            <BannerFact icon={ClipboardCheck} tone="violet">
-              Chấm lại độc lập
-            </BannerFact>
-          </>
-        }
-      />
       {(error || notice) && (
         <div
           role={error ? 'alert' : 'status'}

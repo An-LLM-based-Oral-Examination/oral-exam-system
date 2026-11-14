@@ -1,9 +1,9 @@
+import { TwoStepProgress } from '@/design/TwoStepProgress'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -26,7 +26,6 @@ import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { DialogFooter, FormDialog } from '@/design/overlays'
-import { InClassShiftPageBanner } from '@/pages/lecturer/InClassShiftPageBanner'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
@@ -141,12 +140,6 @@ function toOffsetIso(dateKey: string, clock: string) {
 function parseDateKey(value: string) {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, (month || 1) - 1, day || 1)
-}
-
-function shiftDateKey(value: string, days: number) {
-  const date = parseDateKey(value)
-  date.setDate(date.getDate() + days)
-  return toDateKey(date)
 }
 
 function formatExamDay(value: string) {
@@ -569,7 +562,7 @@ function SliderField({
   )
 }
 
-type FieldErrors = Partial<Record<'classId' | 'title' | 'examDate' | 'time' | 'examMinutes' | 'pool', string>>
+type FieldErrors = Partial<Record<'classId' | 'title' | 'startDateKey' | 'endDateKey' | 'time' | 'examMinutes' | 'pool', string>>
 
 function CreateInClassShiftDialog({
   open,
@@ -587,7 +580,8 @@ function CreateInClassShiftDialog({
   const [step, setStep] = useState<1 | 2>(1)
   const [classId, setClassId] = useState('')
   const [title, setTitle] = useState('')
-  const [examDate, setExamDate] = useState('')
+  const [startDateKey, setStartDateKey] = useState('')
+  const [endDateKey, setEndDateKey] = useState('')
   const [startClock, setStartClock] = useState('')
   const [endClock, setEndClock] = useState('')
   const [examMinutes, setExamMinutes] = useState(20)
@@ -611,7 +605,7 @@ function CreateInClassShiftDialog({
       setStep(1)
       setClassId(fixedClassId || classes[0]?.id || '')
       setTitle('')
-      setExamDate(toDateKey(start))
+      setStartDateKey(toDateKey(start))
       setStartClock(toClock(start))
       setEndClock(toClock(end))
       setExamMinutes(20)
@@ -677,9 +671,7 @@ function CreateInClassShiftDialog({
     value: item.id,
     label: item.name,
   }))
-  const crossesMidnight = Boolean(examDate && startClock && endClock && endClock < startClock)
-  const endDateKey = examDate ? (crossesMidnight ? shiftDateKey(examDate, 1) : examDate) : ''
-  const startTime = examDate && startClock ? `${examDate}T${startClock}` : ''
+  const startTime = startDateKey && startClock ? `${startDateKey}T${startClock}` : ''
   const endTime = endDateKey && endClock ? `${endDateKey}T${endClock}` : ''
   const startDate = startTime ? new Date(startTime) : null
   const endDate = endTime ? new Date(endTime) : null
@@ -688,7 +680,7 @@ function CreateInClassShiftDialog({
       endDate &&
       !Number.isNaN(startDate.getTime()) &&
       !Number.isNaN(endDate.getTime()) &&
-      endDate.getTime() >= startDate.getTime(),
+      endDate.getTime() > startDate.getTime(),
   )
   const windowMinutes = timeValid && startDate && endDate
     ? Math.round((endDate.getTime() - startDate.getTime()) / 60_000)
@@ -710,9 +702,10 @@ function CreateInClassShiftDialog({
     if (!classId) next.classId = 'Vui lòng chọn lớp.'
     if (!trimmedTitle) next.title = 'Vui lòng nhập tên ca.'
     else if (trimmedTitle.length > 255) next.title = 'Tên ca tối đa 255 ký tự.'
-    if (!examDate) next.examDate = 'Vui lòng chọn ngày kiểm tra.'
+    if (!startDateKey) next.startDateKey = 'Vui lòng chọn ngày mở ca.'
+    if (!endDateKey) next.endDateKey = 'Vui lòng chọn ngày đóng ca.'
     if (!startClock || !endClock) next.time = 'Vui lòng chọn giờ mở và giờ đóng ca.'
-    else if (examDate && !timeValid) next.time = 'Khung giờ ca không hợp lệ. Hãy chọn lại ngày và giờ.'
+    else if (startDateKey && endDateKey && !timeValid) next.time = 'Thời điểm đóng ca phải sau thời điểm mở ca.'
     return next
   }
 
@@ -756,8 +749,8 @@ function CreateInClassShiftDialog({
       setFieldErrors(step2Errors)
       return
     }
-    if (!examDate || !startClock || !endClock) return
-    const startIso = toOffsetIso(examDate, startClock)
+    if (!startDateKey || !endDateKey || !startClock || !endClock) return
+    const startIso = toOffsetIso(startDateKey, startClock)
     const endIso = toOffsetIso(endDateKey, endClock)
     const startMs = startIso ? new Date(startIso).getTime() : NaN
     const endMs = endIso ? new Date(endIso).getTime() : NaN
@@ -821,50 +814,17 @@ function CreateInClassShiftDialog({
       titleId="create-inclass-title"
       eyebrow="Ca kiểm tra"
       title="Tạo ca kiểm tra"
-      subtitle={step === 1 ? (fixedClassId ? 'Đặt tên ca và khung giờ.' : 'Chọn lớp, tên ca và khung giờ.') : 'Chọn số câu và thời gian làm bài.'}
       icon={ClipboardList}
       onClose={onClose}
       busy={busy}
       beforeBody={
-        <nav className="shrink-0 border-b border-[#82aedb]/55 bg-white px-5 py-3" aria-label="Tiến độ tạo ca">
-          <ol className="relative flex w-full items-start justify-between">
-            <span aria-hidden="true" className="absolute top-3.5 right-[22%] left-[22%] h-0.5 rounded-full bg-[#c5d6ea]" />
-            <span
-              aria-hidden="true"
-              className={cn(
-                'absolute top-3.5 left-[22%] h-0.5 rounded-full bg-[#1C4D8D] transition-all duration-300',
-                step >= 2 ? 'w-[56%]' : 'w-0',
-              )}
-            />
-            {steps.map((item) => {
-              const visual = step > item.id ? 'done' : step === item.id ? 'current' : 'upcoming'
-              return (
-                <li key={item.id} className="relative z-[1] flex w-[38%] flex-col items-center">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      if (item.id === 1) goBack()
-                      else goNext()
-                    }}
-                    aria-current={visual === 'current' ? 'step' : undefined}
-                    className={cn(
-                      'flex size-7 items-center justify-center rounded-full text-xs font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed',
-                      visual === 'done' && 'bg-[#1C4D8D] text-white',
-                      visual === 'current' && 'bg-[#1C4D8D] text-white ring-[3px] ring-[#1C4D8D]/22',
-                      visual === 'upcoming' && 'border-2 border-[#82aedb]/55 bg-white text-[#1C4D8D]',
-                    )}
-                  >
-                    {visual === 'done' ? <Check className="size-3.5 stroke-[3]" aria-hidden="true" /> : item.id}
-                  </button>
-                  <p className={cn('mt-2 text-center text-xs font-bold', visual === 'current' ? 'text-[#1C4D8D]' : 'text-[#5b6b84]')}>
-                    {item.title}
-                  </p>
-                </li>
-              )
-            })}
-          </ol>
-        </nav>
+        <TwoStepProgress
+          label="Tiến độ tạo ca"
+          step={step}
+          steps={steps}
+          disabled={busy}
+          onStepChange={(target) => target === 1 ? goBack() : goNext()}
+        />
       }
       footer={(
         <DialogFooter className="bg-white sm:items-center sm:justify-between">
@@ -941,22 +901,22 @@ function CreateInClassShiftDialog({
                   />
                   <FieldError message={fieldErrors.title} />
                 </label>
-                <div>
-                  <DateField
-                    label="Ngày kiểm tra"
-                    value={examDate}
-                    invalid={Boolean(fieldErrors.examDate)}
-                    onChange={(value) => {
-                      setExamDate(value)
-                      clearFieldError('examDate', 'time', 'examMinutes')
-                    }}
-                  />
-                  <FieldError message={fieldErrors.examDate} />
-                </div>
-                <div>
+                <div className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <DateField
+                        label="Ngày mở ca"
+                        value={startDateKey}
+                        invalid={Boolean(fieldErrors.startDateKey || fieldErrors.time)}
+                        onChange={(value) => {
+                          setStartDateKey(value)
+                          clearFieldError('startDateKey', 'time', 'examMinutes')
+                        }}
+                      />
+                      <FieldError message={fieldErrors.startDateKey} />
+                    </div>
                     <ClockField
-                      label="Ca mở"
+                      label="Giờ mở ca"
                       value={startClock}
                       invalid={Boolean(fieldErrors.time)}
                       onChange={(value) => {
@@ -964,8 +924,22 @@ function CreateInClassShiftDialog({
                         clearFieldError('time', 'examMinutes')
                       }}
                     />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <DateField
+                        label="Ngày đóng ca"
+                        value={endDateKey}
+                        invalid={Boolean(fieldErrors.endDateKey || fieldErrors.time)}
+                        onChange={(value) => {
+                          setEndDateKey(value)
+                          clearFieldError('endDateKey', 'time', 'examMinutes')
+                        }}
+                      />
+                      <FieldError message={fieldErrors.endDateKey} />
+                    </div>
                     <ClockField
-                      label="Ca đóng"
+                      label="Giờ đóng ca"
                       value={endClock}
                       invalid={Boolean(fieldErrors.time)}
                       onChange={(value) => {
@@ -976,9 +950,6 @@ function CreateInClassShiftDialog({
                   </div>
                   <FieldError message={fieldErrors.time} />
                 </div>
-                {fieldErrors.time ? null : crossesMidnight ? (
-                  <p className="text-xs font-semibold text-[#5b6b84]">Ca đóng vào ngày hôm sau.</p>
-                ) : null}
               </section>
             ) : (
               <>
@@ -990,8 +961,7 @@ function CreateInClassShiftDialog({
                     <p className="truncate text-sm font-bold text-[#0F2854]">{title.trim() || 'Chưa đặt tên'}</p>
                     <p className="truncate text-xs font-semibold text-[#5b6b84]">
                       {selectedClass?.name || 'Chưa chọn lớp'}
-                      {examDate ? ` · ${examDate.split('-').reverse().join('/')}` : ''}
-                      {startClock && endClock ? ` · Ca ${startClock}–${endClock}` : ''}
+                      {timeValid ? ` · Ca ${startClock} ${startDateKey.split('-').reverse().join('/')} – ${endClock} ${endDateKey.split('-').reverse().join('/')}` : ''}
                       {examMinutesValid ? ` · Làm bài ${formatDuration(examMinutes)}` : ''}
                     </p>
                   </div>
@@ -1262,7 +1232,6 @@ export function InClassShiftHubPage({
 
   return (
     <div lang="vi" className={embedded ? 'space-y-3' : cn(ds.page, 'pb-8')}>
-      {embedded ? null : <InClassShiftPageBanner />}
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between')}>
@@ -1271,7 +1240,7 @@ export function InClassShiftHubPage({
                 <span className={ds.sectionIconWrap}>
                   <ClipboardList className={ds.sectionIcon} />
                 </span>
-                <h2 className={ds.sectionTitle}>Các ca kiểm tra</h2>
+                <h2 className={ds.sectionTitle}>Danh sách ca</h2>
                 <span className={ds.sectionBadge}>
                   {loading ? '…' : `${filtered.length} ca`}
                 </span>

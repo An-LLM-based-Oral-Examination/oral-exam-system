@@ -4,7 +4,6 @@ import {
   AlertCircle,
   BadgeCheck,
   Bot,
-  ClipboardCheck,
   FileSearch,
   Filter,
   Fingerprint,
@@ -31,7 +30,7 @@ import type { AuditEvidenceItem, ExamTicketStatus } from '@/types/officialExam.t
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { EmptyState } from '@/components/common/EmptyState'
-import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
+import { SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 
@@ -321,24 +320,6 @@ export function AuditEvidencePage() {
 
   return (
     <div className={ds.page}>
-      <LecturerPageBanner
-        icon={ClipboardCheck}
-        eyebrow="Hậu kiểm điểm"
-        title="Hậu kiểm và công bố điểm ca thi"
-        description="Ưu tiên bài được hệ thống đánh dấu nghi ngờ, điểm dưới 5.0 hoặc độ tin cậy dưới 0.70. Đối chiếu bằng chứng trước khi công bố điểm một lần cho toàn ca."
-        extras={
-          <>
-            <BannerFact icon={ShieldAlert}>Bài nghi ngờ</BannerFact>
-            <BannerFact icon={FileSearch} tone="green">
-              Đối chiếu bằng chứng
-            </BannerFact>
-            <BannerFact icon={LockKeyhole} tone="violet">
-              Công bố một lần
-            </BannerFact>
-          </>
-        }
-      />
-
       <section className={ds.section}>
         <SectionHeader
           icon={Fingerprint}
