@@ -1068,7 +1068,6 @@ export function PracticePage() {
           titleId="practice-scorecard-title"
           eyebrow="Bảng điểm"
           title="Chi tiết phiên luyện tập"
-          subtitle="Câu hỏi, trả lời & nhận xét"
           icon={Award}
           onClose={() => setSelectedScorecardId(null)}
           size="2xl"

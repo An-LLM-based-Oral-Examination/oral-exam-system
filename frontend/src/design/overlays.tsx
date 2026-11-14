@@ -89,7 +89,6 @@ export function FormDialog({
   titleId: titleIdProp,
   eyebrow,
   title,
-  subtitle,
   icon: Icon,
   iconNode,
   headerExtra,
@@ -110,7 +109,6 @@ export function FormDialog({
   titleId?: string
   eyebrow?: ReactNode
   title?: ReactNode
-  subtitle?: ReactNode
   icon?: LucideIcon
   iconNode?: ReactNode
   /** Chip/tag hiển thị trên header, cạnh nút đóng. */
@@ -172,7 +170,6 @@ export function FormDialog({
                       {title}
                     </h2>
                   ) : null}
-                  {subtitle != null ? <p className={overlay.subtitle}>{subtitle}</p> : null}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -241,7 +238,6 @@ export function SideDrawer({
   titleId: titleIdProp,
   eyebrow,
   title,
-  subtitle,
   meta,
   actions,
   header,
@@ -258,7 +254,6 @@ export function SideDrawer({
   titleId?: string
   eyebrow?: ReactNode
   title?: ReactNode
-  subtitle?: ReactNode
   meta?: ReactNode
   actions?: ReactNode
   /** Thay toàn bộ nội dung header (vẫn giữ khung header chuẩn). */
@@ -303,7 +298,6 @@ export function SideDrawer({
                     {title}
                   </h2>
                 ) : null}
-                {subtitle != null ? <p className={overlay.subtitle}>{subtitle}</p> : null}
                 {meta}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">

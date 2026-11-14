@@ -48,7 +48,7 @@ const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
     roles: ['Instructor', 'DepartmentHead', 'Admin'],
   },
   {
-    label: 'Lớp của tôi',
+    label: 'Quản lý lớp học',
     path: '/lecturer/classes',
     icon: UsersRound,
     roles: ['Instructor'],

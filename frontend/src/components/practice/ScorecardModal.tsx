@@ -107,7 +107,6 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="scorecard-modal-title"
-      aria-describedby="scorecard-modal-description"
       aria-busy={isActionPending}
       tabIndex={-1}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#0F2854]/70 px-3 py-4 backdrop-blur-[3px] outline-none sm:p-6"
@@ -142,14 +141,6 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
                 >
                   {title}
                 </CardTitle>
-                <p
-                  id="scorecard-modal-description"
-                  className="mt-1.5 text-xs leading-relaxed text-[#c7d9ee]"
-                >
-                  {hasFollowUpUpdate
-                    ? 'Điểm toàn câu đã được cập nhật dựa trên kết quả trả lời câu hỏi phụ đào sâu vào tiêu chí yếu.'
-                    : 'Đối chiếu điểm theo từng tiêu chí và nhận xét để cải thiện câu trả lời tiếp theo.'}
-                </p>
               </div>
             </div>
 

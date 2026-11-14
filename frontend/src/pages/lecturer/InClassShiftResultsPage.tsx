@@ -875,7 +875,6 @@ export function InClassShiftResultsPage() {
           titleId="grade-exam-dialog-title"
           eyebrow="Chỉnh điểm"
           title={selected.studentName}
-          subtitle={`${selected.studentEmail || selected.studentCode} · AI chấm điểm cho cả bài`}
           icon={Pencil}
           onClose={closeGradeDialog}
           busy={busy}

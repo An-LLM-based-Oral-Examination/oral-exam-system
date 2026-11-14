@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Plus, Users, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, LoaderCircle, Plus, Users, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
@@ -8,7 +8,6 @@ import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { DialogFooter, FormDialog } from '@/design/overlays'
-import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
@@ -124,28 +123,9 @@ export function LecturerClassManagementPage() {
     ]
   }, [visibleOfferings])
   const visibleClasses = classes.filter((item) => courseCode === 'ALL' || item.courseCode === courseCode)
-  const semesterLabel = semesterCatalog.find((item) => item.id === semesterId)?.name || classes[0]?.semesterCode || 'hiện tại'
 
   return (
     <div lang="vi" className={ds.page}>
-      <LecturerPageBanner
-        icon={GraduationCap}
-        eyebrow={`Học kỳ ${semesterLabel}`}
-        title="Lớp của tôi"
-        description="Tạo lớp cho môn đã được phân công. Sinh viên tham gia bằng mật khẩu lớp."
-        extras={
-          <>
-            <BannerFact icon={KeyRound}>Mật khẩu lớp</BannerFact>
-            <BannerFact icon={Users} tone="green">
-              Sinh viên tự tham gia
-            </BannerFact>
-            <BannerFact icon={UsersRound} tone="violet">
-              Theo dõi sĩ số
-            </BannerFact>
-          </>
-        }
-      />
-
       <StatusToast
         notice={notice}
         error={error}
@@ -162,7 +142,7 @@ export function LecturerClassManagementPage() {
                 <span className={ds.sectionIconWrap}>
                   <UsersRound className={ds.sectionIcon} />
                 </span>
-                <h2 className={ds.sectionTitle}>Các lớp của tôi</h2>
+                <h2 className={ds.sectionTitle}>Lớp học của tôi</h2>
                 <span className={ds.sectionBadge}>{visibleClasses.length} lớp</span>
               </div>
               <p className={ds.sectionHint}>Quản lý lớp theo học kỳ và môn được phân công</p>
@@ -427,7 +407,6 @@ function CreateClassDialog({
       titleId="create-class-title"
       eyebrow="Lớp học phần"
       title="Tạo lớp mới"
-      subtitle="Sinh viên tham gia bằng mật khẩu lớp."
       icon={Plus}
       onClose={onClose}
       busy={busy}

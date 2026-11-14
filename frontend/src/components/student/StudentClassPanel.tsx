@@ -388,7 +388,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
           titleId="join-class-title"
           eyebrow={`${joinTarget.courseCode} · ${joinTarget.semesterCode}`}
           title={joinTarget.courseName}
-          subtitle={joinTarget.className}
           icon={BookOpen}
           onClose={() => setJoinTarget(null)}
           busy={joining}

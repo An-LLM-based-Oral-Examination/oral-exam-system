@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BookOpenCheck,
   CheckCircle2,
   ChevronRight,
   FilePenLine,
@@ -352,33 +351,6 @@ export function LecturerDashboardPage() {
             </ul>
           )}
         </div>
-      </section>
-
-      <section aria-label="Lối tắt" className="grid gap-3 sm:grid-cols-3">
-        <Link to="/lecturer/classes" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#74a3d3]/55 bg-[linear-gradient(145deg,#f7fbfe_0%,#d7ebf8_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
-          <span className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#1C4D8D] text-white">
-              <UsersRound className="size-4" aria-hidden="true" />
-            </span>
-            <span>
-              <span className="block text-sm font-bold text-[#0F2854]">Lớp của tôi</span>
-              <span className="mt-0.5 block text-xs text-[#5b6b84]">Mở lớp và sĩ số</span>
-            </span>
-          </span>
-          <ChevronRight className="size-4 text-[#1C4D8D] transition group-hover:translate-x-0.5" />
-        </Link>
-        <Link to="/question-bank" className={cn('group flex items-center justify-between gap-3 rounded-2xl border border-[#b29ce6]/55 bg-[linear-gradient(145deg,#faf7fe_0%,#e7defb_100%)] px-4 py-3.5 transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,40,84,0.2)]', ds.panelShadow)}>
-          <span className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-[#6d4cc4] text-white">
-              <BookOpenCheck className="size-4" aria-hidden="true" />
-            </span>
-            <span>
-              <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi luyện tập</span>
-              <span className="mt-0.5 block text-xs text-[#5b6b84]">Soạn câu và gửi duyệt</span>
-            </span>
-          </span>
-          <ChevronRight className="size-4 text-[#6d4cc4] transition group-hover:translate-x-0.5" />
-        </Link>
       </section>
     </div>
   )

@@ -20,7 +20,7 @@ interface NavbarProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard': { label: 'Tổng quan', icon: LayoutDashboard },
-  '/lecturer/classes': { label: 'Lớp của tôi', icon: UsersRound },
+  '/lecturer/classes': { label: 'Quản lý lớp học', icon: UsersRound },
   '/question-bank': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/question-bank/create': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/lecturer/audit': { label: 'Hậu kiểm điểm', icon: ClipboardCheck },
@@ -54,7 +54,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const page =
     PAGE_META[location.pathname] ??
     (location.pathname.startsWith('/lecturer/classes') || location.pathname.startsWith('/in-class-shifts')
-      ? { label: 'Lớp của tôi', icon: UsersRound }
+      ? { label: 'Quản lý lớp học', icon: UsersRound }
       : { label: 'Cổng giảng viên', icon: LayoutDashboard })
   const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()

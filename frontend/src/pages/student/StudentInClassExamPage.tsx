@@ -805,11 +805,6 @@ export function StudentInClassExamPage() {
           titleId="join-inclass-title"
           eyebrow={`${joinTarget.courseCode || 'Ca kiểm tra'} · ${joinTarget.className}`}
           title={joinMode === 'resume' ? 'Tiếp tục làm bài' : 'Vào ca kiểm tra'}
-          subtitle={
-            joinMode === 'resume'
-              ? 'Thời gian vẫn chạy từ lúc bạn vào phòng. Kiểm tra micro rồi làm tiếp.'
-              : joinTarget.title
-          }
           icon={KeyRound}
           onClose={closeJoin}
           busy={entering}
@@ -984,7 +979,6 @@ export function StudentInClassExamPage() {
           titleId="in-class-results-title"
           eyebrow="Kết quả kiểm tra"
           title={resultsShift.title}
-          subtitle={resultsShift.className}
           icon={ClipboardCheck}
           onClose={() => setResultsShift(null)}
           size="md"

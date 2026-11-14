@@ -1125,13 +1125,6 @@ function LiveExamHistoryPage() {
                 ? 'Chi tiết ca thi thử'
                 : 'Chi tiết thi chính thức'
           }
-          subtitle={
-            activeModal.category === 'practice'
-              ? 'Câu hỏi, trả lời & nhận xét'
-              : activeModal.category === 'mock'
-                ? 'Bảng điểm & nhận xét theo CLO'
-                : 'Bảng điểm & phúc khảo'
-          }
           icon={Award}
           onClose={closeDetailModal}
           size="2xl"

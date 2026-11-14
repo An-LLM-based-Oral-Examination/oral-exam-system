@@ -4,7 +4,6 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  BookOpenCheck,
   Check,
   CheckCircle2,
   CircleDashed,
@@ -41,7 +40,6 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
-import { BannerFact, LecturerPageBanner } from '@/design/ui'
 import { ds, overlay } from '@/design/system'
 
 type WorkspaceTab = 'mine' | 'bank'
@@ -725,24 +723,6 @@ export function QuestionStudioPage() {
 
   return (
     <div lang="vi" className={cn(ds.page, 'pb-8')}>
-      <LecturerPageBanner
-        icon={BookOpenCheck}
-        eyebrow="Câu hỏi luyện tập"
-        title="Câu hỏi luyện tập"
-        description="Quản lý bản nháp của bạn và xem ngân hàng câu hỏi theo môn được phân công. Chỉ câu hỏi đã duyệt mới dùng cho luyện tập, thi thử và ca thi trên lớp."
-        extras={
-          <>
-            <BannerFact icon={UserRound}>Bản nháp của bạn</BannerFact>
-            <BannerFact icon={Library} tone="green">
-              Ngân hàng câu hỏi
-            </BannerFact>
-            <BannerFact icon={ShieldCheck} tone="violet">
-              Gửi trưởng bộ môn
-            </BannerFact>
-          </>
-        }
-      />
-
       {showSelectionActions && selectedIds.size > 0 && (
         <section
           className="rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
