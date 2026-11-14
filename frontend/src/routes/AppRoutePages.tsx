@@ -61,6 +61,67 @@ export const AdminDashboardPage = lazy(() =>
     default: module.AdminDashboardPage,
   })),
 )
+export const DepartmentHeadDashboardPage = lazy(() =>
+  import('@/pages/department-head/DepartmentHeadDashboardPage').then((module) => ({
+    default: module.DepartmentHeadDashboardPage,
+  })),
+)
+
+export const ExaminationOfficerDashboardPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerDashboardPage').then((module) => ({
+    default: module.ExaminationOfficerDashboardPage,
+  })),
+)
+export const ExaminationOfficerExamListPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerExamListPage').then((module) => ({
+    default: module.ExaminationOfficerExamListPage,
+  })),
+)
+export const ExaminationOfficerExamDetailPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerExamDetailPage').then((module) => ({
+    default: module.ExaminationOfficerExamDetailPage,
+  })),
+)
+export const ExaminationOfficerTicketAssignmentPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerTicketAssignmentPage').then((module) => ({
+    default: module.ExaminationOfficerTicketAssignmentPage,
+  })),
+)
+export const ExaminationOfficerMonitorSelectorPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerMonitorSelectorPage').then((module) => ({
+    default: module.ExaminationOfficerMonitorSelectorPage,
+  })),
+)
+export const ExaminationOfficerShiftMonitorPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerShiftMonitorPage').then((module) => ({
+    default: module.ExaminationOfficerShiftMonitorPage,
+  })),
+)
+export const ExaminationOfficerGradeSelectorPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerGradeSelectorPage').then((module) => ({
+    default: module.ExaminationOfficerGradeSelectorPage,
+  })),
+)
+export const ExaminationOfficerGradePublicationPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerGradePublicationPage').then((module) => ({
+    default: module.ExaminationOfficerGradePublicationPage,
+  })),
+)
+export const ExaminationOfficerAppealListPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerAppealListPage').then((module) => ({
+    default: module.ExaminationOfficerAppealListPage,
+  })),
+)
+export const ExaminationOfficerAppealDetailPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerAppealDetailPage').then((module) => ({
+    default: module.ExaminationOfficerAppealDetailPage,
+  })),
+)
+export const ExaminationOfficerDlqPage = lazy(() =>
+  import('@/pages/examination-officer/ExaminationOfficerDlqPage').then((module) => ({
+    default: module.ExaminationOfficerDlqPage,
+  })),
+)
 
 export function InstructorPageFallback() {
   return (

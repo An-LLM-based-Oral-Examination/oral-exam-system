@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   ChevronLeft,
   ClipboardCheck,
+  FileCheck2,
   KeyRound,
   LayoutDashboard,
   PanelLeftClose,
@@ -11,8 +12,6 @@ import {
   Scale,
   ServerCog,
   ShieldAlert,
-  ShieldCheck,
-  TicketCheck,
   UserRoundCheck,
   UsersRound,
   X,
@@ -22,7 +21,8 @@ import universityTechLogo from '@/assets/university-tech-logo.png'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
-import type { UserRole } from '@/types/auth.types'
+import { canonicalRole, type CanonicalRole } from '@/routes/routeAccess'
+import { ROUTE_PATHS } from '@/routes/routePaths'
 
 interface SidebarProps {
   collapsed: boolean
@@ -36,78 +36,48 @@ interface InstructorNavigationItem {
   path: string
   icon: LucideIcon
   end?: boolean
-  roles?: UserRole[]
 }
 
-const INSTRUCTOR_NAVIGATION: InstructorNavigationItem[] = [
-  {
-    label: 'Tổng quan',
-    path: '/dashboard',
-    icon: LayoutDashboard,
-    end: true,
-    roles: ['Instructor', 'DepartmentHead', 'Admin'],
-  },
-  {
-    label: 'Quản lý lớp học',
-    path: '/lecturer/classes',
-    icon: UsersRound,
-    roles: ['Instructor'],
-  },
-  {
-    label: 'Câu hỏi luyện tập',
-    path: '/question-bank',
-    icon: BookOpenCheck,
-    end: true,
-    roles: ['Instructor', 'DepartmentHead', 'Admin'],
-  },
-  {
-    label: 'Hậu kiểm điểm',
-    path: '/lecturer/audit',
-    icon: ClipboardCheck,
-    roles: ['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin'],
-  },
-  {
-    label: 'Kỳ thi chính thức',
-    path: '/official-exams/manage',
-    icon: TicketCheck,
-    roles: ['ExaminationOfficer', 'DepartmentHead', 'Admin'],
-  },
-  {
-    label: 'Phúc khảo',
-    path: '/appeals',
-    icon: UserRoundCheck,
-    roles: ['ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin'],
-  },
-  {
-    label: 'Điểm danh',
-    path: '/proctor/attendance',
-    icon: ShieldCheck,
-    roles: ['Proctor'],
-  },
-  {
-    label: 'Lỗi chấm AI',
-    path: '/dlq',
-    icon: ServerCog,
-    roles: ['ExaminationOfficer', 'Admin'],
-  },
-  {
-    label: 'Quản trị hệ thống',
-    path: '/admin',
-    icon: ShieldAlert,
-    roles: ['Admin'],
-  },
-  {
-    label: 'Đổi mật khẩu',
-    path: '/change-password',
-    icon: KeyRound,
-  },
-]
+const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
+  Student: [],
+  Instructor: [
+    { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
+    { label: 'Quản lý lớp học', path: ROUTE_PATHS.lecturer.classes, icon: UsersRound },
+    { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
+    { label: 'Hậu kiểm điểm', path: ROUTE_PATHS.lecturer.audit, icon: ClipboardCheck },
+    { label: 'Phúc khảo được giao', path: ROUTE_PATHS.lecturer.appeals, icon: UserRoundCheck },
+  ],
+  DepartmentHead: [
+    { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
+    { label: 'Duyệt câu hỏi và đề', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
+    { label: 'Quản lý phúc khảo', path: ROUTE_PATHS.departmentHead.appeals, icon: UserRoundCheck },
+  ],
+  ExaminationOfficer: [],
+  Proctor: [
+    { label: 'Điểm danh', path: ROUTE_PATHS.proctor.attendance, icon: ClipboardCheck, end: true },
+  ],
+  Admin: [
+    { label: 'Quản trị hệ thống', path: ROUTE_PATHS.admin.dashboard, icon: ShieldAlert, end: true },
+    { label: 'Lỗi chấm MF-01/02', path: ROUTE_PATHS.admin.dlq, icon: ServerCog },
+  ],
+}
 
 export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: SidebarProps) {
-  const { hasRole } = useAuth()
-  const visibleNavigation = INSTRUCTOR_NAVIGATION.filter(
-    (item) => !item.roles || hasRole(item.roles),
-  )
+  const { user } = useAuth()
+  const portalRole = user ? canonicalRole(user.role) : null
+  const visibleNavigation = portalRole ? PORTAL_NAVIGATION[portalRole] : []
+  const portalTitle =
+    portalRole === 'DepartmentHead'
+      ? 'Cổng Trưởng Bộ môn'
+      : portalRole === 'Admin'
+        ? 'Cổng quản trị'
+        : portalRole === 'Proctor'
+          ? 'Cổng Giám thị'
+          : 'Cổng giảng viên'
+  const navigationWithPassword = [
+    ...visibleNavigation,
+    { label: 'Đổi mật khẩu', path: '/change-password', icon: KeyRound },
+  ]
   useEffect(() => {
     if (!mobileOpen) return
 
@@ -137,7 +107,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
       />
 
       <aside
-        aria-label="Điều hướng giảng viên"
+        aria-label="Điều hướng portal"
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
           collapsed ? 'md:w-20' : 'md:w-[220px] xl:w-[240px]',
@@ -156,7 +126,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
 
           <div className={cn('min-w-0', collapsed && 'md:hidden')}>
             <p className="text-xs font-bold tracking-[0.14em] text-[#1C4D8D] uppercase">
-              Cổng giảng viên
+              {portalTitle}
             </p>
             <p className="mt-0.5 truncate text-sm font-bold tracking-[-0.02em] text-[#0F2854]">
               OralExam AI
@@ -183,8 +153,8 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
             Nghiệp vụ học thuật
           </p>
 
-          <nav className="space-y-1.5" aria-label="Các phân hệ học thuật">
-            {visibleNavigation.map(({ label, path, icon: Icon, end }) => (
+          <nav className="space-y-1.5" aria-label="Các phân hệ portal">
+            {navigationWithPassword.map(({ label, path, icon: Icon, end }) => (
               <NavLink
                 key={path}
                 to={path}

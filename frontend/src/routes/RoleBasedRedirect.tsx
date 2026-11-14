@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { getRoleHomePath } from '@/routes/routeAccess'
 
 export function RoleBasedRedirect() {
   const { user } = useAuth()
@@ -8,30 +9,9 @@ export function RoleBasedRedirect() {
     return <Navigate to="/change-password" replace />
   }
 
-  if (user?.role === 'Student') {
-    return <Navigate to="/student/overview" replace />
-  }
+  if (!user) return <Navigate to="/unauthorized" replace />
 
-  if (user?.role === 'Proctor') {
-    return <Navigate to="/proctor/attendance" replace />
-  }
-
-  if (user?.role === 'ExaminationOfficer') {
-    return <Navigate to="/official-exams/manage" replace />
-  }
-
-  if (
-    user?.role === 'Instructor' ||
-    user?.role === 'DepartmentHead'
-  ) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  if (user?.role === 'Admin') {
-    return <Navigate to="/admin" replace />
-  }
-
-  return <Navigate to="/unauthorized" replace />
+  return <Navigate to={getRoleHomePath(user.role)} replace />
 }
 
 export { RoleBasedRedirect as RoleHomeRedirect }

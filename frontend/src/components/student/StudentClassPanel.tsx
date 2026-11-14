@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Mic2, Search, TimerReset, UserRound, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Mic2, Search, TimerReset, UserRound, UsersRound, X } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass } from '@/components/common/formFieldClasses'
@@ -77,8 +77,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
   const [searchFailed, setSearchFailed] = useState(false)
   const [password, setPassword] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [appliedKeyword, setAppliedKeyword] = useState('')
-  const searchRef = useRef<HTMLDivElement>(null)
   const requestId = useRef(0)
   const passwordRef = useRef<HTMLInputElement>(null)
 
@@ -112,7 +110,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
     if (!semesterId || !trimmed) {
       requestId.current += 1
       return scheduleUi(() => {
-        setAppliedKeyword(trimmed)
         setDirectory([])
         setSearched(false)
         setSearching(false)
@@ -122,7 +119,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
 
     const current = ++requestId.current
     const timer = window.setTimeout(() => {
-      setAppliedKeyword(trimmed)
       setSearched(true)
       setSearchFailed(false)
       setSearching(true)
@@ -158,22 +154,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [joinTarget, joining])
-
-  useEffect(() => {
-    if (!searched || joinTarget) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (!searchRef.current?.contains(event.target as Node)) setSearched(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSearched(false)
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [searched, joinTarget])
 
   const semesterOptions = useMemo(
     () => semesters.map((item) => ({ value: item.id, label: item.name || item.code })),
@@ -212,7 +192,13 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
       setNotice(`Đã tham gia ${joinTarget.className}. Môn này đã có trong Luyện tập và Thi thử.`)
       setJoinTarget(null)
       setPassword('')
-      setSearched(false)
+      setDirectory((current) =>
+        current.map((item) =>
+          item.classId === joinTarget.classId
+            ? { ...item, isAlreadyEnrolled: true, canJoin: false }
+            : item,
+        ),
+      )
       await loadMine(true)
     } catch (joinFailure) {
       toast.error(getErrorMessage(joinFailure))
@@ -235,7 +221,7 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
           className="flex flex-col gap-2 sm:flex-row sm:items-center"
           onSubmit={(event: FormEvent) => event.preventDefault()}
         >
-          <div ref={searchRef} className="relative min-w-0 sm:w-72">
+          <div className="relative min-w-0 sm:w-72">
             <label className="relative block">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" />
               <input
@@ -257,50 +243,6 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
                 </button>
               )}
             </label>
-            {searched && (
-              <div
-                id="class-search-results"
-                className="absolute top-[calc(100%+8px)] left-0 z-40 max-h-80 w-full min-w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-[#4988C4] bg-white p-2 shadow-[0_16px_36px_rgba(15,40,84,0.18)]"
-              >
-                <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                  <p className="text-xs font-bold text-[#5b6b84]">
-                    {searching ? 'Đang tìm...' : `${openClasses.length} lớp cho “${appliedKeyword}”`}
-                  </p>
-                  <button type="button" aria-label="Đóng kết quả" onClick={() => setSearched(false)} className="flex size-7 items-center justify-center rounded-lg text-[#5b6b84] hover:bg-[#F4FBFD]">
-                    <X className="size-3.5" />
-                  </button>
-                </div>
-                {searching ? (
-                  <p className="flex items-center gap-2 px-2 py-3 text-sm text-[#5b6b84]"><LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" /> Đang tìm lớp...</p>
-                ) : searchFailed ? (
-                  <p className="px-2 py-3 text-sm text-[#5b6b84]">Không thể tải kết quả tìm kiếm. Vui lòng thử lại.</p>
-                ) : openClasses.length === 0 ? (
-                  <p className="px-2 py-3 text-sm text-[#5b6b84]">Không có lớp khớp. Thử tên lớp hoặc mã môn khác.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {openClasses.map((item) => (
-                        <li key={item.classId} className="rounded-xl px-2 py-2 hover:bg-[#F4FBFD]">
-                          <div className="flex items-start gap-3">
-                            <span className={cn('mt-0.5 inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-bold', courseCodeTone(item.courseCode))}>{item.courseCode}</span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold text-[#0F2854]">{item.className}</p>
-                              <p className="truncate text-xs text-[#5b6b84]">{item.courseName} · {item.semesterCode} · {item.enrolledCount}/{item.maxStudents} SV</p>
-                            </div>
-                            {item.isAlreadyEnrolled ? (
-                              <span className="shrink-0 rounded-full border border-[#b7e4cf] bg-[#e8f8f3] px-2 py-0.5 text-[11px] font-bold text-[#16836a]">Đã tham gia</span>
-                            ) : (
-                              <button type="button" disabled={!item.canJoin} onClick={() => openJoin(item)} className={cn(ds.primaryButton, 'min-h-8 shrink-0 px-2.5 text-xs')}>
-                                <KeyRound className="size-3.5" />
-                                {item.canJoin ? 'Tham gia' : 'Đầy'}
-                              </button>
-                            )}
-                          </div>
-                        </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </div>
           <FilterDropMenu
             label="Học kỳ"
@@ -326,6 +268,95 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
         {loading ? (
           <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[#5b6b84]">
             <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" /> Đang tải lớp...
+          </div>
+        ) : keyword.trim() ? (
+          <div id="class-search-results" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="inline-flex items-center gap-2 text-xl font-bold text-[#1C4D8D] transition-colors hover:text-[#123866] sm:text-2xl"
+              >
+                <ArrowLeft className="size-6 shrink-0 sm:size-7" aria-hidden="true" />
+                <span>Về danh sách</span>
+              </button>
+              <p className="text-sm font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">
+                Kết quả tìm kiếm · {searching || !searched ? '...' : openClasses.length}
+              </p>
+            </div>
+            {searching || !searched ? (
+              <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[#5b6b84]">
+                <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" /> Đang tìm lớp...
+              </div>
+            ) : searchFailed ? (
+              <p className="rounded-xl border border-[#f0c5c9] bg-[#fff5f6] px-4 py-4 text-sm text-[#a43c47]">
+                Không thể tải kết quả tìm kiếm. Vui lòng thử lại.
+              </p>
+            ) : openClasses.length === 0 ? (
+              <EmptyState
+                icon={UsersRound}
+                title="Không tìm thấy lớp phù hợp"
+                description="Thử tìm theo tên lớp hoặc mã môn khác."
+              />
+            ) : (
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {openClasses.map((item) => (
+                  <li key={item.classId} className={studentCardShellClass(item.courseCode)}>
+                    <StudentColorCardAccent seed={item.courseCode} />
+                    <div className="relative flex h-full flex-1 flex-col p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <span className={cn('inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]', courseCodeTone(item.courseCode))}>
+                            {item.courseCode}
+                          </span>
+                          <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[#4988C4]/55 bg-white/85 px-2 text-xs font-semibold text-[#5b6b84] backdrop-blur-[2px]">
+                            <GraduationCap className="size-3 shrink-0 text-[#1C4D8D]" />
+                            {item.semesterCode}
+                          </span>
+                        </div>
+                        {item.isAlreadyEnrolled ? (
+                          <span className="inline-flex h-6 max-w-[42%] shrink-0 items-center gap-1 rounded-full border border-[#b7e4cf] bg-white/85 px-2 text-xs font-semibold text-[#16836a]">
+                            <UserRound className="size-3 shrink-0" />
+                            <span className="truncate">{item.lecturerName || 'Giảng viên'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex h-6 max-w-[42%] shrink-0 items-center gap-1 rounded-full border border-[#f2d3aa] bg-white/85 px-2 text-xs font-semibold text-[#c26a12]">
+                            Chưa tham gia
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="mt-3 truncate text-xl leading-snug font-bold text-[#0F2854]">{item.className}</h3>
+                      <p className="mt-1 truncate text-sm font-semibold text-[#3d5270]">{item.courseName}</p>
+                      {!item.isAlreadyEnrolled && (
+                        <p className="mt-1 truncate text-xs text-[#5b6b84]">
+                          {item.lecturerName || 'Chưa phân công giảng viên'} · {item.enrolledCount}/{item.maxStudents} sinh viên
+                        </p>
+                      )}
+                      {item.isAlreadyEnrolled ? (
+                        <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
+                          <Link to={`/practice?course=${encodeURIComponent(item.courseCode)}`} className={ds.outlineButton}>
+                            <Mic2 className="size-3.5" /> Luyện tập
+                          </Link>
+                          <Link to={`/mock-exam?course=${encodeURIComponent(item.courseCode)}`} className={ds.outlineButton}>
+                            <TimerReset className="size-3.5" /> Thi thử
+                          </Link>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!item.canJoin}
+                          onClick={() => openJoin(item)}
+                          className={cn(ds.primaryButton, 'mt-auto w-full translate-y-1')}
+                        >
+                          <KeyRound className="size-4" />
+                          {item.canJoin ? 'Tham gia lớp' : 'Lớp đã đầy'}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -361,16 +392,10 @@ export function StudentClassPanel({ onClassCount }: { onClassCount?: (count: num
                         <h3 className="mt-3 truncate text-xl leading-snug font-bold text-[#0F2854]">{item.className}</h3>
                         <p className="mt-1 truncate text-sm font-semibold text-[#3d5270]">{item.courseName}</p>
                         <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
-                          <Link
-                            to={`/practice?course=${encodeURIComponent(item.courseCode)}`}
-                            className={ds.outlineButton}
-                          >
+                          <Link to={`/practice?course=${encodeURIComponent(item.courseCode)}`} className={ds.outlineButton}>
                             <Mic2 className="size-3.5" /> Luyện tập
                           </Link>
-                          <Link
-                            to={`/mock-exam?course=${encodeURIComponent(item.courseCode)}`}
-                            className={ds.outlineButton}
-                          >
+                          <Link to={`/mock-exam?course=${encodeURIComponent(item.courseCode)}`} className={ds.outlineButton}>
                             <TimerReset className="size-3.5" /> Thi thử
                           </Link>
                         </div>

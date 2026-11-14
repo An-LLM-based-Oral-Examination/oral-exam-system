@@ -1,16 +1,14 @@
 import { Suspense } from 'react'
-import {
-  Navigate,
-  Outlet,
-  Route,
-  createRoutesFromElements,
-} from 'react-router-dom'
+import { Navigate, Outlet, Route, createRoutesFromElements } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { StudentLayout } from '@/components/layout/StudentLayout'
+import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
+import { LegacyRoleRouteLayout } from '@/routes/LegacyRoleRouteLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 import {
   AdminDashboardPage,
+  DepartmentHeadDashboardPage,
   AppealManagementPage,
   AuditEvidencePage,
   CreateQuestionPage,
@@ -21,10 +19,21 @@ import {
   LecturerClassDetailPage,
   LecturerClassManagementPage,
   LecturerDashboardPage,
-  OfficialExamManagementPage,
   ProctorAttendancePage,
   QuestionStudioPage,
+  ExaminationOfficerDashboardPage,
+  ExaminationOfficerExamListPage,
+  ExaminationOfficerExamDetailPage,
+  ExaminationOfficerTicketAssignmentPage,
+  ExaminationOfficerMonitorSelectorPage,
+  ExaminationOfficerShiftMonitorPage,
+  ExaminationOfficerGradeSelectorPage,
+  ExaminationOfficerGradePublicationPage,
+  ExaminationOfficerAppealListPage,
+  ExaminationOfficerAppealDetailPage,
+  ExaminationOfficerDlqPage,
 } from '@/routes/AppRoutePages'
+import { ROUTE_PATHS } from '@/routes/routePaths'
 
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
@@ -66,14 +75,123 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      {/* Instructor, Department Head, Examination Officer and Admin portal */}
+      {/* Cổng riêng Cán bộ Khảo thí: chỉ vận hành MF-04 */}
+      <Route element={<ProtectedRoute allowedRoles={['ExaminationOfficer']} />}>
+        <Route element={<ExaminationOfficerLayout />}>
+          <Route
+            path="/examination-officer/dashboard"
+            element={<ExaminationOfficerDashboardPage />}
+          />
+          <Route path="/examination-officer/exams" element={<ExaminationOfficerExamListPage />} />
+          <Route
+            path="/examination-officer/exams/:sessionId"
+            element={<ExaminationOfficerExamDetailPage />}
+          />
+          <Route
+            path="/examination-officer/tickets/assign"
+            element={<ExaminationOfficerTicketAssignmentPage />}
+          />
+          <Route
+            path="/examination-officer/monitor"
+            element={<ExaminationOfficerMonitorSelectorPage />}
+          />
+          <Route
+            path="/examination-officer/monitor/:shiftId"
+            element={<ExaminationOfficerShiftMonitorPage />}
+          />
+          <Route
+            path="/examination-officer/grades"
+            element={<ExaminationOfficerGradeSelectorPage />}
+          />
+          <Route
+            path="/examination-officer/grades/:shiftId"
+            element={<ExaminationOfficerGradePublicationPage />}
+          />
+          <Route
+            path="/examination-officer/appeals"
+            element={<ExaminationOfficerAppealListPage />}
+          />
+          <Route
+            path="/examination-officer/appeals/:appealId"
+            element={<ExaminationOfficerAppealDetailPage />}
+          />
+          <Route path="/examination-officer/dlq" element={<ExaminationOfficerDlqPage />} />
+        </Route>
+      </Route>
+
+      {/* Legacy URLs: redirect to the canonical portal without widening permissions. */}
       <Route
+        path="/dashboard"
+        element={<RoleBasedRedirect />}
+      />
+      <Route
+        path="/question-bank"
         element={
-          <ProtectedRoute
-            allowedRoles={['Instructor', 'DepartmentHead', 'ExaminationOfficer', 'Admin']}
+          <LegacyRoleRouteLayout
+            redirects={{
+              Instructor: ROUTE_PATHS.lecturer.questionBank,
+              DepartmentHead: ROUTE_PATHS.departmentHead.questionReview,
+              Admin: '/unauthorized',
+              ExaminationOfficer: '/unauthorized',
+            }}
           />
         }
-      >
+      />
+      <Route
+        path="/question-bank/create"
+        element={
+          <LegacyRoleRouteLayout
+            redirects={{
+              Instructor: ROUTE_PATHS.lecturer.createQuestion,
+              DepartmentHead: '/unauthorized',
+              Admin: '/unauthorized',
+              ExaminationOfficer: '/unauthorized',
+            }}
+          />
+        }
+      />
+      <Route
+        path="/official-exams/manage"
+        element={
+          <LegacyRoleRouteLayout
+            redirects={{
+              ExaminationOfficer: ROUTE_PATHS.examinationOfficer.exams,
+              Instructor: '/unauthorized',
+              DepartmentHead: '/unauthorized',
+              Admin: '/unauthorized',
+            }}
+          />
+        }
+      />
+      <Route
+        path="/appeals"
+        element={
+          <LegacyRoleRouteLayout
+            redirects={{
+              Instructor: ROUTE_PATHS.lecturer.appeals,
+              DepartmentHead: ROUTE_PATHS.departmentHead.appeals,
+              ExaminationOfficer: ROUTE_PATHS.examinationOfficer.appeals,
+              Admin: '/unauthorized',
+            }}
+          />
+        }
+      />
+      <Route
+        path="/dlq"
+        element={
+          <LegacyRoleRouteLayout
+            redirects={{
+              Admin: ROUTE_PATHS.admin.dlq,
+              ExaminationOfficer: ROUTE_PATHS.examinationOfficer.dlq,
+              Instructor: '/unauthorized',
+              DepartmentHead: '/unauthorized',
+            }}
+          />
+        }
+      />
+
+      {/* Instructor portal: teaching, in-class shifts, question authoring and assigned review. */}
+      <Route element={<ProtectedRoute allowedRoles={['Instructor']} />}>
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -82,34 +200,43 @@ export const appRoutes = createRoutesFromElements(
               </Suspense>
             }
           >
-            <Route path="/dashboard" element={<LecturerDashboardPage />} />
-            <Route path="/lecturer/classes" element={<LecturerClassManagementPage />} />
-            <Route path="/lecturer/classes/:classId" element={<LecturerClassDetailPage />} />
-            <Route path="/lecturer/classes/:classId/shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
-            <Route path="/question-bank" element={<QuestionStudioPage />} />
-            <Route path="/question-bank/create" element={<CreateQuestionPage />} />
-            <Route path="/in-class-shifts" element={<Navigate to="/lecturer/classes" replace />} />
-            <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
-            <Route path="/lecturer/audit" element={<AuditEvidencePage />} />
-            <Route path="/official-exams/manage" element={<OfficialExamManagementPage />} />
-            <Route path="/appeals" element={<AppealManagementPage />} />
+            <Route path={ROUTE_PATHS.lecturer.dashboard} element={<LecturerDashboardPage />} />
+            <Route path={ROUTE_PATHS.lecturer.classes} element={<LecturerClassManagementPage />} />
+            <Route path={`${ROUTE_PATHS.lecturer.classes}/:classId`} element={<LecturerClassDetailPage />} />
+            <Route
+              path={`${ROUTE_PATHS.lecturer.classes}/:classId/shifts/:shiftId/results`}
+              element={<InClassShiftResultsPage />}
+            />
+            <Route path={ROUTE_PATHS.lecturer.questionBank} element={<QuestionStudioPage />} />
+            <Route path={ROUTE_PATHS.lecturer.createQuestion} element={<CreateQuestionPage />} />
+            <Route path={ROUTE_PATHS.lecturer.audit} element={<AuditEvidencePage />} />
+            <Route path={ROUTE_PATHS.lecturer.appeals} element={<AppealManagementPage />} />
           </Route>
         </Route>
-        {/* Legacy live URL → bảng điểm (chiếu mã giờ là popup) */}
-        <Route
-          path="/in-class-shifts/:shiftId/live"
-          element={<InClassLiveRedirect />}
-        />
+        <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
+        <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
+        <Route path="/in-class-shifts/:shiftId/live" element={<InClassLiveRedirect />} />
+      </Route>
+
+      {/* Department Head portal: academic review and appeal governance. */}
+      <Route element={<ProtectedRoute allowedRoles={['DepartmentHead']} />}>
+        <Route element={<AppLayout />}>
+          <Route
+            element={
+              <Suspense fallback={<InstructorPageFallback />}>
+                <Outlet />
+              </Suspense>
+            }
+          >
+            <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionStudioPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.appeals} element={<AppealManagementPage />} />
+          </Route>
+        </Route>
       </Route>
 
       {/* Proctor portal: attendance, seat monitor and anti-cheat violation logging */}
-      <Route
-        element={
-          <ProtectedRoute
-            allowedRoles={['Proctor']}
-          />
-        }
-      >
+      <Route element={<ProtectedRoute allowedRoles={['Proctor']} />}>
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -123,35 +250,8 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      {/* Dead Letter Queue portal: Examination Officer (MF-04) & Admin (MF-01/02) */}
-      <Route
-        element={
-          <ProtectedRoute
-            allowedRoles={['ExaminationOfficer', 'Admin']}
-          />
-        }
-      >
-        <Route element={<AppLayout />}>
-          <Route
-            element={
-              <Suspense fallback={<InstructorPageFallback />}>
-                <Outlet />
-              </Suspense>
-            }
-          >
-            <Route path="/dlq" element={<DeadLetterQueuePage />} />
-          </Route>
-        </Route>
-      </Route>
-
       {/* Admin Portal: User management, system configs & audit logs */}
-      <Route
-        element={
-          <ProtectedRoute
-            allowedRoles={['Admin']}
-          />
-        }
-      >
+      <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -160,7 +260,8 @@ export const appRoutes = createRoutesFromElements(
               </Suspense>
             }
           >
-            <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path={ROUTE_PATHS.admin.dashboard} element={<AdminDashboardPage />} />
+            <Route path={ROUTE_PATHS.admin.dlq} element={<DeadLetterQueuePage />} />
           </Route>
         </Route>
       </Route>

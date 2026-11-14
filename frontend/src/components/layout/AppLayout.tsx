@@ -16,7 +16,7 @@ export function AppLayout() {
   return (
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
       <a
-        href="#instructor-main-content"
+        href="#portal-main-content"
         className="fixed top-3 left-3 z-[70] -translate-y-20 rounded-lg bg-[#1C4D8D] px-4 py-2 text-sm font-bold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none"
       >
         Chuyển đến nội dung chính
@@ -38,7 +38,7 @@ export function AppLayout() {
         <Navbar onOpenSidebar={() => setIsMobileSidebarOpen(true)} />
 
         <main
-          id="instructor-main-content"
+          id="portal-main-content"
           tabIndex={-1}
           className="px-4 py-5 focus:outline-none sm:px-6 sm:py-5 xl:px-8"
         >

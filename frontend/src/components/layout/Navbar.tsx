@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { ROUTE_PATHS } from '@/routes/routePaths'
 
 interface NavbarProps {
   onOpenSidebar: () => void
@@ -20,15 +21,24 @@ interface NavbarProps {
 
 const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/dashboard': { label: 'Tổng quan', icon: LayoutDashboard },
+  [ROUTE_PATHS.lecturer.dashboard]: { label: 'Tổng quan', icon: LayoutDashboard },
   '/lecturer/classes': { label: 'Quản lý lớp học', icon: UsersRound },
+  [ROUTE_PATHS.lecturer.questionBank]: { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
+  [ROUTE_PATHS.lecturer.createQuestion]: { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/question-bank': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/question-bank/create': { label: 'Câu hỏi luyện tập', icon: BookOpenCheck },
   '/lecturer/audit': { label: 'Hậu kiểm điểm', icon: ClipboardCheck },
+  [ROUTE_PATHS.lecturer.appeals]: { label: 'Phúc khảo được giao', icon: ClipboardCheck },
+  [ROUTE_PATHS.departmentHead.dashboard]: { label: 'Tổng quan', icon: LayoutDashboard },
+  [ROUTE_PATHS.departmentHead.questionReview]: { label: 'Duyệt câu hỏi và đề', icon: BookOpenCheck },
+  [ROUTE_PATHS.departmentHead.appeals]: { label: 'Quản lý phúc khảo', icon: ClipboardCheck },
   '/official-exams/manage': { label: 'Kỳ thi chính thức', icon: TicketCheck },
   '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
   '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
   '/dlq': { label: 'Lỗi chấm AI', icon: ServerCog },
   '/admin': { label: 'Quản trị hệ thống', icon: ShieldAlert },
+  [ROUTE_PATHS.admin.dashboard]: { label: 'Quản trị hệ thống', icon: ShieldAlert },
+  [ROUTE_PATHS.admin.dlq]: { label: 'Lỗi chấm MF-01/02', icon: ServerCog },
   '/change-password': { label: 'Đổi mật khẩu', icon: KeyRound },
 }
 
