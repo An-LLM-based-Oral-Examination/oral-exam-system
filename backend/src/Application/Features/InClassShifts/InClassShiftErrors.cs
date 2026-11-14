@@ -22,6 +22,12 @@ public static class InClassShiftErrors
     public const string InsufficientQuestionPool = "Ngân hàng câu hỏi luyện tập của môn học chưa đủ số lượng câu hỏi đã duyệt (APPROVED) để phân bổ cho ca thi.";
     public const string InvalidScoreRange = "Điểm số phải nằm trong khoảng từ 0.00 đến 10.00 điểm.";
     public const string EmptyTranscript = "Nội dung bài nói không được để trống.";
+    public const string FollowUpDisabled = "Ca thi không bật câu hỏi phụ.";
+    public const string InvalidFollowUpRequest = "Dữ liệu câu trả lời chính không được chứa thông tin câu hỏi phụ.";
+    public const string InvalidFollowUpParent = "Câu trả lời cha không hợp lệ hoặc không thuộc chuỗi câu hỏi của sinh viên.";
+    public const string InvalidFollowUpIndex = "Thứ tự câu hỏi phụ không hợp lệ hoặc vượt quá giới hạn của ca thi.";
     public const string ExamTimeExpired = "Đã hết thời gian làm bài. Bài làm được nộp tự động để AI chấm.";
+    public const string ShiftMustBeClosedBeforeFinalizing = "Phải đóng ca thi trước khi chốt sổ điểm.";
+    public const string PendingGradingBeforeFinalizing = "Chưa thể chốt sổ vì vẫn còn bài chưa nộp đủ hoặc đang chờ chấm điểm.";
 }
 

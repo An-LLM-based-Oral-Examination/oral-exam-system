@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -28,6 +28,7 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
+import { createInClassShiftHubConnection } from '@/services/signalr.service'
 import type { InClassShift, InClassSubmission } from '@/types/inClassShift.types'
 
 type SubmissionFilter = 'ALL' | 'PENDING' | 'AI' | 'OVERRIDE' | 'LOCKED'
@@ -161,13 +162,13 @@ export function InClassShiftResultsPage() {
 
   const locked = shift?.status === 'FINALIZED'
 
-  const load = async () => {
+  const load = useCallback(async (showLoading = true) => {
     if (!shiftId) {
       toast.error('Thiếu mã ca thi. Hãy mở lại từ danh sách ca.')
       setLoading(false)
       return
     }
-    setLoading(true)
+    if (showLoading) setLoading(true)
     try {
       const [shiftResult, submissionResult] = await Promise.all([
         inClassShiftService.getShift(shiftId),
@@ -181,17 +182,53 @@ export function InClassShiftResultsPage() {
         return firstReady?.id ?? submissionResult[0]?.id ?? null
       })
     } catch (loadError) {
-      toast.error(getErrorMessage(loadError))
+      if (showLoading) toast.error(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
-  }
+  }, [shiftId])
 
   useEffect(() => {
     return scheduleUi(() => {
       void load()
     })
-  }, [shiftId])
+  }, [load])
+
+  useEffect(() => {
+    if (!shiftId) return
+
+    let disposed = false
+    const hubUrl = import.meta.env.VITE_IN_CLASS_SIGNALR_HUB_URL || '/hubs/in-class-shift'
+    const connection = createInClassShiftHubConnection(
+      hubUrl,
+      () => sessionStorage.getItem('access_token') ?? '',
+    )
+    const refresh = () => {
+      if (!disposed) void load(false)
+    }
+
+    connection.on('InClassSubmissionGraded', refresh)
+    connection.on('ReceiveGradingResult', refresh)
+    connection.on('InClassShiftGradesFinalized', refresh)
+    connection.onreconnected(() => {
+      if (!disposed) void connection.invoke('JoinShift', shiftId).catch(() => undefined)
+    })
+
+    void connection
+      .start()
+      .then(() => connection.invoke('JoinShift', shiftId))
+      .catch(() => undefined)
+
+    const pollTimer = window.setInterval(refresh, 10_000)
+    return () => {
+      disposed = true
+      window.clearInterval(pollTimer)
+      connection.off('InClassSubmissionGraded', refresh)
+      connection.off('ReceiveGradingResult', refresh)
+      connection.off('InClassShiftGradesFinalized', refresh)
+      void connection.stop().catch(() => undefined)
+    }
+  }, [load, shiftId])
 
   const selected = useMemo(() => {
     const found = submissions.find((item) => item.id === selectedId) ?? null
@@ -244,6 +281,12 @@ export function InClassShiftResultsPage() {
     }
   }, [submissions])
 
+  const canFinalize =
+    shift?.status === 'CLOSED' &&
+    stats.total > 0 &&
+    stats.inProgressCount === 0 &&
+    stats.graded === stats.total
+
   const filterCounts = useMemo(() => {
     const counts: Record<SubmissionFilter, number> = {
       ALL: submissions.length,
@@ -273,10 +316,10 @@ export function InClassShiftResultsPage() {
     setReviewOpen(false)
   }
 
-  const openAdjacentReview = (direction: -1 | 1) => {
+  const openAdjacentReview = useCallback((direction: -1 | 1) => {
     const next = filtered[reviewIndex + direction]
     if (next) setSelectedId(next.id)
-  }
+  }, [filtered, reviewIndex])
 
   useEffect(() => {
     if (!reviewOpen) return
@@ -318,7 +361,7 @@ export function InClassShiftResultsPage() {
       unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [reviewOpen, gradeDialogOpen, busy, hasPrevReview, hasNextReview, reviewIndex, filtered])
+  }, [reviewOpen, gradeDialogOpen, busy, hasPrevReview, hasNextReview, openAdjacentReview])
 
   const openGradeDialog = () => {
     if (!selected || locked || viewingInProgress) return
@@ -859,7 +902,7 @@ export function InClassShiftResultsPage() {
             </p>
             <button
               type="button"
-              disabled={busy || stats.total === 0}
+              disabled={busy || !canFinalize}
               onClick={() => setConfirmFinalize(true)}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#16836a] px-4 text-sm font-bold text-white shadow-[0_8px_18px_rgba(22,131,106,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#136f5a] disabled:opacity-50 motion-reduce:transform-none"
             >

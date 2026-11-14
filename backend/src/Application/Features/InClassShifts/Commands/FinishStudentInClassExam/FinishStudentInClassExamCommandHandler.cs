@@ -19,11 +19,20 @@ public sealed class FinishStudentInClassExamCommandHandler(
         CancellationToken cancellationToken)
     {
         var shift = await context.InClassExamShifts
+            .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
             return Result<FinishStudentInClassExamResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Result<FinishStudentInClassExamResponse>.Failure(InClassShiftErrors.ClassNotFound);
         }
 
         var participant = await context.InClassShiftParticipants

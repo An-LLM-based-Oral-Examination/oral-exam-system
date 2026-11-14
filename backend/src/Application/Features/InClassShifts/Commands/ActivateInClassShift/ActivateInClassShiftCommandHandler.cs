@@ -28,11 +28,19 @@ public sealed class ActivateInClassShiftCommandHandler(
 
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
             return Result<ActivateInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Result<ActivateInClassShiftResponse>.Failure(InClassShiftErrors.ClassNotFound);
         }
 
         if (actor.Role == UserRole.Lecturer)

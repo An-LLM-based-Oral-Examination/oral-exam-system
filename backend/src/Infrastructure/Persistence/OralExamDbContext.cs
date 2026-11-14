@@ -2235,7 +2235,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AiFeedback).HasColumnName("ai_feedback");
             entity.Property(e => e.FinalScore).HasColumnName("final_score").HasPrecision(4, 2);
             entity.Property(e => e.LecturerNotes).HasColumnName("lecturer_notes");
-            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SUBMITTED").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SUBMITTED").IsRequired().IsConcurrencyToken();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.GradedAt).HasColumnName("graded_at");
 
@@ -2305,5 +2305,35 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+    }
+
+    public async Task<IAsyncDisposable?> BeginShiftAllocationLockScopeAsync(Guid shiftId, CancellationToken cancellationToken = default)
+    {
+        if (!Database.IsRelational())
+        {
+            return null;
+        }
+
+        var transaction = await Database.BeginTransactionAsync(cancellationToken);
+        var shiftHash = BitConverter.ToInt64(shiftId.ToByteArray(), 0);
+        await Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({shiftHash})", cancellationToken);
+
+        return new TransactionLockScope(transaction);
+    }
+
+    private sealed class TransactionLockScope : IAsyncDisposable
+    {
+        private readonly Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction _transaction;
+
+        public TransactionLockScope(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
+        {
+            _transaction = transaction;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _transaction.CommitAsync();
+            await _transaction.DisposeAsync();
+        }
     }
 }

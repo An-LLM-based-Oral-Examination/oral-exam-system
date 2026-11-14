@@ -32,6 +32,7 @@ export interface InClassShift {
   questionCount: number
   hasFollowUp: boolean
   maxFollowUpQuestions: number
+  isAutoPublishGrades: boolean
   questionPoolMode: InClassQuestionPoolMode
   passwordRotationSeconds: number
   gracePeriodSeconds: number

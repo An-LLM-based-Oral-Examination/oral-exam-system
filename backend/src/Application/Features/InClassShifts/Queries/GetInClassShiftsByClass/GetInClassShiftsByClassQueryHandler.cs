@@ -24,9 +24,10 @@ public sealed class GetInClassShiftsByClassQueryHandler(
         var classEntity = await context.Classes
             .AsNoTracking()
             .Include(c => c.Course)
+            .Include(c => c.CourseOffering)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
 
-        if (classEntity is null)
+        if (!InClassShiftAcademicContext.IsOperational(classEntity))
         {
             return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.ClassNotFound);
         }

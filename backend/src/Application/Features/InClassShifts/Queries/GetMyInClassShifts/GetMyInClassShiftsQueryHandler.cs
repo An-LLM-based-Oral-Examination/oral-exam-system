@@ -22,8 +22,16 @@ public sealed class GetMyInClassShiftsQueryHandler(
     {
         var enrolledClasses = await context.ClassEnrollments
             .AsNoTracking()
-            .Where(e => e.StudentId == request.StudentUserId && (e.Status == "enrolled" || e.Status == "ACTIVE"))
+            .Where(e =>
+                e.StudentId == request.StudentUserId &&
+                (e.Status == "enrolled" || e.Status == "ACTIVE") &&
+                e.Class.IsActive &&
+                e.Class.Course.IsActive &&
+                (e.Class.CourseOffering == null || e.Class.CourseOffering.IsEnabled))
             .Include(e => e.Class)
+                .ThenInclude(c => c.Course)
+            .Include(e => e.Class)
+                .ThenInclude(c => c.CourseOffering)
             .Select(e => new
             {
                 e.ClassId,

@@ -34,11 +34,19 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ClassNotFound);
         }
 
         if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
@@ -84,7 +92,48 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
         }
 
-        int effectiveFollowUpIndex = request.IsFollowUp ? Math.Max(1, request.FollowUpIndex) : 0;
+        if (!request.IsFollowUp && (request.ParentSubmissionId.HasValue || request.FollowUpIndex != 0))
+        {
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidFollowUpRequest);
+        }
+
+        if (request.IsFollowUp && (!shift.HasFollowUp || shift.MaxFollowUpQuestions <= 0))
+        {
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.FollowUpDisabled);
+        }
+
+        if (request.IsFollowUp &&
+            (request.FollowUpIndex < 1 || request.FollowUpIndex > shift.MaxFollowUpQuestions))
+        {
+            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidFollowUpIndex);
+        }
+
+        InClassExamSubmission? followUpParent = null;
+        if (request.IsFollowUp)
+        {
+            if (!request.ParentSubmissionId.HasValue)
+            {
+                return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidFollowUpParent);
+            }
+
+            followUpParent = await context.InClassExamSubmissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Id == request.ParentSubmissionId.Value &&
+                    s.ShiftId == shift.Id &&
+                    s.StudentId == request.StudentId &&
+                    s.QuestionId == request.QuestionId,
+                    cancellationToken);
+
+            if (followUpParent is null ||
+                followUpParent.FollowUpIndex != request.FollowUpIndex - 1 ||
+                string.IsNullOrWhiteSpace(followUpParent.FollowUpPrompt))
+            {
+                return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidFollowUpParent);
+            }
+        }
+
+        int effectiveFollowUpIndex = request.IsFollowUp ? request.FollowUpIndex : 0;
 
         // 1. Chặn nộp trùng lặp cùng 1 câu hỏi / lượt follow-up trong cùng 1 ca thi
         var existingSubmission = await context.InClassExamSubmissions
@@ -128,23 +177,18 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         }
 
         // 3. Kiểm tra câu hỏi nộp lên bắt buộc phải tồn tại, đã được duyệt (APPROVED) trong PracticeQuestions của môn học (cô lập R8)
-        var questionInfo = await context.PracticeQuestions
+        var isValidQuestion = await context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.Id == request.QuestionId &&
-                        q.CourseId == shift.Class.CourseId &&
-                        q.ApprovalStatus == ApprovalStatus.Approved &&
-                        q.IsActive)
-            .Select(q => new { q.Content, q.SampleAnswer, q.KeyPoints })
-            .FirstOrDefaultAsync(cancellationToken);
+            .AnyAsync(q => q.Id == request.QuestionId &&
+                           q.CourseId == shift.Class.CourseId &&
+                           q.ApprovalStatus == ApprovalStatus.Approved &&
+                           q.IsActive,
+                cancellationToken);
 
-        if (questionInfo is null)
+        if (!isValidQuestion)
         {
             return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidCourseQuestion);
         }
-
-        string questionContent = questionInfo.Content;
-        string sampleAnswer = questionInfo.SampleAnswer ?? string.Empty;
-        string keyPoints = questionInfo.KeyPoints ?? "[]";
 
         DateTime utcNow = DateTime.UtcNow;
         InClassExamSubmission submission;
@@ -213,7 +257,42 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             }
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            var concurrentSubmission = await context.InClassExamSubmissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    s => s.ShiftId == shift.Id &&
+                         s.StudentId == request.StudentId &&
+                         s.QuestionId == request.QuestionId &&
+                         s.FollowUpIndex == effectiveFollowUpIndex,
+                    cancellationToken);
+
+            if (concurrentSubmission is not null)
+            {
+                if (string.Equals(concurrentSubmission.Transcript, normalizedTranscript, StringComparison.Ordinal))
+                {
+                    return Result<SubmitInClassAnswerResponse>.Success(new SubmitInClassAnswerResponse(
+                        concurrentSubmission.Id,
+                        concurrentSubmission.ShiftId,
+                        concurrentSubmission.StudentId,
+                        concurrentSubmission.QuestionId,
+                        concurrentSubmission.Status,
+                        concurrentSubmission.SubmittedAt,
+                        concurrentSubmission.IsFollowUp,
+                        concurrentSubmission.ParentSubmissionId,
+                        concurrentSubmission.FollowUpIndex));
+                }
+
+                return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.DuplicateSubmission);
+            }
+
+            throw;
+        }
         if (closed)
         {
             await InClassShiftAutoSubmit.SubmitMissingAsync(context, gradingQueueChannel, cancellationToken, shift.Id);

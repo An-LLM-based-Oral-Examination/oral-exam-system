@@ -120,6 +120,7 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     questionCount: readNumber(raw, 'totalQuestionsPerStudent', 'questionCount') || 1,
     hasFollowUp: readBool(raw, 'hasFollowUp'),
     maxFollowUpQuestions: readNumber(raw, 'maxFollowUpQuestions'),
+    isAutoPublishGrades: readBool(raw, 'isAutoPublishGrades'),
     questionPoolMode: readString(raw, 'questionPoolMode') === 'SELECTED_POOL' ? 'SELECTED_POOL' : 'ALL_COURSE_BANK',
     passwordRotationSeconds: 300,
     gracePeriodSeconds: 0,

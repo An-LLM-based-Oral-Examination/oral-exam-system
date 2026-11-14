@@ -1,10 +1,12 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -22,13 +24,16 @@ public sealed class FinalizeInClassShiftGradesCommandHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
 
-        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
         {
             return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
 
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Participants)
+            .Include(s => s.Submissions)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
@@ -41,18 +46,75 @@ public sealed class FinalizeInClassShiftGradesCommandHandler(
             return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        if (actor.Role == UserRole.Lecturer)
+        if (shift.Status != "CLOSED")
         {
-            bool isAssigned = shift.LecturerId == actor.Id ||
-                shift.Class.LecturerId == actor.Id ||
-                await context.CourseLecturers.AnyAsync(
-                    cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                    cancellationToken);
+            return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.ShiftMustBeClosedBeforeFinalizing);
+        }
 
-            if (!isAssigned)
+        bool isAssigned = shift.LecturerId == actor.Id ||
+            shift.Class.LecturerId == actor.Id ||
+            await context.CourseLecturers.AnyAsync(
+                cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
+                cancellationToken);
+
+        if (!isAssigned)
+        {
+            return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
+        }
+
+        var hasPendingSubmission = shift.Submissions.Any(submission => !submission.FinalScore.HasValue);
+        var hasIncompleteParticipant = shift.Participants
+            .Where(participant => !string.Equals(participant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+            .Any(participant =>
             {
-                return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
+                var assignedIds = EnterInClassShiftCommandHandler.ParseGuidList(participant.AssignedQuestionIdsJson);
+                if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+                {
+                    assignedIds.Add(participant.AssignedQuestionId.Value);
+                }
+
+                if (assignedIds.Count == 0)
+                {
+                    return !shift.Submissions.Any(submission =>
+                        submission.StudentId == participant.StudentId && !submission.IsFollowUp);
+                }
+
+                var submittedMainIds = shift.Submissions
+                    .Where(submission => submission.StudentId == participant.StudentId && !submission.IsFollowUp)
+                    .Select(submission => submission.QuestionId)
+                    .Distinct()
+                    .ToHashSet();
+
+                return assignedIds.Any(questionId => !submittedMainIds.Contains(questionId));
+            });
+
+        if (hasPendingSubmission || hasIncompleteParticipant)
+        {
+            return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.PendingGradingBeforeFinalizing);
+        }
+
+        foreach (var participant in shift.Participants)
+        {
+            if (string.Equals(participant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
             }
+
+            var effectiveQuestionScores = shift.Submissions
+                .Where(submission => submission.StudentId == participant.StudentId)
+                .GroupBy(submission => submission.QuestionId)
+                .Select(group => group
+                    .Select(submission => submission.FinalScore ?? submission.AiScore)
+                    .Where(score => score.HasValue)
+                    .Select(score => score!.Value)
+                    .DefaultIfEmpty(0m)
+                    .Max())
+                .ToList();
+
+            participant.TotalFinalScore = effectiveQuestionScores.Count == 0
+                ? 0m
+                : Math.Round(effectiveQuestionScores.Average(), 2, MidpointRounding.AwayFromZero);
+            participant.Status = "FINALIZED";
         }
 
         shift.Status = "FINALIZED";

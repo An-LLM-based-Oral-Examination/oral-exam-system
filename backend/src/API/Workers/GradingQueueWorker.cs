@@ -23,6 +23,7 @@ public class GradingQueueWorker : BackgroundService
     private readonly IGradingQueueChannel _queueChannel;
     private readonly IServiceProvider _serviceProvider;
     private readonly IHubContext<PracticeHub, IPracticeClient> _hubContext;
+    private readonly IHubContext<InClassShiftHub, IInClassShiftClient>? _inClassHubContext;
     private readonly ILogger<GradingQueueWorker> _logger;
     private readonly int _maxDegreeOfParallelism;
 
@@ -42,11 +43,13 @@ public class GradingQueueWorker : BackgroundService
         IServiceProvider serviceProvider,
         IHubContext<PracticeHub, IPracticeClient> hubContext,
         ILogger<GradingQueueWorker> logger,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        IHubContext<InClassShiftHub, IInClassShiftClient>? inClassHubContext = null)
     {
         _queueChannel = queueChannel;
         _serviceProvider = serviceProvider;
         _hubContext = hubContext;
+        _inClassHubContext = inClassHubContext;
         _logger = logger;
 
         var configuredParallelism = configuration?["GradingQueue:MaxDegreeOfParallelism"]
@@ -217,7 +220,24 @@ public class GradingQueueWorker : BackgroundService
                             // 2. Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt
                             try
                             {
-                                await _hubContext.Clients.Group($"session_{task.SessionId}").ReceiveGradingError(task.AnswerId, "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.");
+                                const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
+                                if (task.InClassSubmissionId.HasValue && _inClassHubContext is not null)
+                                {
+                                    await _inClassHubContext.Clients
+                                        .Group(InClassShiftHub.StaffGroupName(task.SessionId))
+                                        .ReceiveGradingError(task.AnswerId, gradingError);
+                                    if (task.StudentId != Guid.Empty)
+                                    {
+                                        await _inClassHubContext.Clients
+                                            .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
+                                            .ReceiveGradingError(task.AnswerId, gradingError);
+                                    }
+                                }
+                                else
+                                {
+                                    await _hubContext.Clients.Group($"session_{task.SessionId}")
+                                        .ReceiveGradingError(task.AnswerId, gradingError);
+                                }
                             }
                             catch (Exception signalrEx)
                             {
@@ -751,6 +771,12 @@ public class GradingQueueWorker : BackgroundService
             return;
         }
 
+        if (submission.Status == "AUDITED" || submission.Shift?.IsLocked == true || submission.Shift?.Status == "FINALIZED")
+        {
+            _logger.LogInformation("Bỏ qua chấm AI cho InClassExamSubmission {SubmissionId} vì bài đã được hậu kiểm hoặc ca đã khóa.", submissionId);
+            return;
+        }
+
         // 1. Tải câu hỏi và barem Rubric chuẩn 10.0đ từ kho PracticeQuestions (Cô lập R8)
         var practiceQ = await dbContext.PracticeQuestions
             .Include(q => q.Course)
@@ -920,6 +946,18 @@ public class GradingQueueWorker : BackgroundService
             Details = evalDetails
         };
 
+        // Tải lại trạng thái mới nhất từ CSDL để chống race condition khi giảng viên đã hậu kiểm trong lúc AI đang chấm
+        var freshSubmission = await dbContext.InClassExamSubmissions
+            .AsNoTracking()
+            .Include(s => s.Shift)
+            .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+
+        if (freshSubmission == null || freshSubmission.Status == "AUDITED" || freshSubmission.Shift?.IsLocked == true || freshSubmission.Shift?.Status == "FINALIZED")
+        {
+            _logger.LogInformation("Bỏ qua cập nhật điểm AI cho InClassExamSubmission {SubmissionId} vì bài đã được hậu kiểm (AUDITED) hoặc ca đã khóa trong lúc AI đang chấm.", submissionId);
+            return;
+        }
+
         dbContext.AiEvaluations.Add(inClassEvaluation);
 
         submission.AiScore = score;
@@ -1038,7 +1076,15 @@ public class GradingQueueWorker : BackgroundService
             dlq.ResolutionNotes ??= "Auto-resolved after successful in-class submission grading.";
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _logger.LogInformation("Phát hiện xung đột đồng thời (DbUpdateConcurrencyException) cho InClassExamSubmission {SubmissionId}. Bỏ qua cập nhật vì bản ghi đã bị thay đổi (giảng viên đã hậu kiểm AUDITED hoặc ca thi đã chốt sổ).", submissionId);
+            return;
+        }
 
         // Publish điểm song song theo thời gian thực (Parallel Real-time Grade Publishing) qua SignalR Group của Ca thi
         try
@@ -1060,7 +1106,15 @@ public class GradingQueueWorker : BackgroundService
                 FollowUpPrompt = submission.FollowUpPrompt
             };
 
-            await _hubContext.Clients.Group($"session_{submission.ShiftId}").ReceiveGradingResult(realtimeDto);
+            if (_inClassHubContext is not null)
+            {
+                if (submission.Shift?.IsAutoPublishGrades == true)
+                {
+                    await _inClassHubContext.Clients
+                        .Group(InClassShiftHub.StudentGroupName(submission.ShiftId, submission.StudentId))
+                        .ReceiveGradingResult(realtimeDto);
+                }
+            }
 
             var inClassEventDto = new
             {
@@ -1085,7 +1139,12 @@ public class GradingQueueWorker : BackgroundService
                     : null
             };
 
-            await _hubContext.Clients.Group($"session_{submission.ShiftId}").InClassSubmissionGraded(inClassEventDto);
+            if (_inClassHubContext is not null)
+            {
+                await _inClassHubContext.Clients
+                    .Group(InClassShiftHub.StaffGroupName(submission.ShiftId))
+                    .InClassSubmissionGraded(inClassEventDto);
+            }
         }
         catch (Exception signalrEx)
         {

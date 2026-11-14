@@ -40,7 +40,7 @@ namespace API.Controllers.v1;
 [Authorize]
 public class InClassShiftsController(
     ISender sender,
-    IHubContext<PracticeHub, IPracticeClient>? hubContext = null) : ControllerBase
+    IHubContext<InClassShiftHub, IInClassShiftClient>? inClassHubContext = null) : ControllerBase
 {
     private Guid GetAuthenticatedUserId()
     {
@@ -373,7 +373,7 @@ public class InClassShiftsController(
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/grade")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/audit")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/submissions/{submissionId}/adjust-score")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer")]
     [ProducesResponseType(typeof(InClassExamSubmissionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -399,7 +399,7 @@ public class InClassShiftsController(
         var result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error == InClassShiftErrors.ShiftLocked)
+            if (result.Error == InClassShiftErrors.ShiftLocked || result.Error == InClassShiftErrors.LecturerNotAuthorized)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {
@@ -417,11 +417,21 @@ public class InClassShiftsController(
             });
         }
 
-        if (hubContext is not null)
+        if (inClassHubContext is not null)
         {
             try
             {
-                await hubContext.Clients.Group($"session_{result.Value.ShiftId:D}").InClassSubmissionGraded(result.Value);
+                await inClassHubContext.Clients
+                    .Group(InClassShiftHub.StaffGroupName(result.Value.ShiftId))
+                    .InClassSubmissionGraded(result.Value);
+                await inClassHubContext.Clients
+                    .Group(InClassShiftHub.StudentGroupName(result.Value.ShiftId, result.Value.StudentId))
+                    .InClassSubmissionGraded(new
+                    {
+                        shiftId = result.Value.ShiftId,
+                        submissionId = result.Value.Id,
+                        status = result.Value.Status
+                    });
             }
             catch
             {
@@ -437,7 +447,7 @@ public class InClassShiftsController(
     /// </summary>
     [HttpPost("{id}/finalize-grades")]
     [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/finalize-grades")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer")]
     [ProducesResponseType(typeof(FinalizeInClassGradesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -456,7 +466,7 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            if (result.Error == InClassShiftErrors.ShiftLocked)
+            if (result.Error == InClassShiftErrors.ShiftLocked || result.Error == InClassShiftErrors.LecturerNotAuthorized)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {
@@ -474,15 +484,17 @@ public class InClassShiftsController(
             });
         }
 
-        if (hubContext is not null)
+        if (inClassHubContext is not null)
         {
             try
             {
-                await hubContext.Clients.Group($"session_{id:D}").InClassShiftGradesFinalized(result.Value);
+                await inClassHubContext.Clients
+                    .Group(InClassShiftHub.AudienceGroupName(id))
+                    .InClassShiftGradesFinalized(result.Value);
             }
             catch
             {
-                // Không chặn phản hồi HTTP nếu kết nối SignalR tạm thời gián đoạn
+                // Không chặn phản hồi HTTP nếu kết nối SignalR MF-05 tạm thời gián đoạn
             }
         }
 
@@ -684,7 +696,7 @@ public class InClassShiftsController(
         var result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error == InClassShiftErrors.ShiftLocked)
+            if (result.Error == InClassShiftErrors.ShiftLocked || result.Error == InClassShiftErrors.LecturerNotAuthorized)
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
                 {

@@ -14,7 +14,7 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
-import { createPracticeHubConnection } from '@/services/signalr.service'
+import { createInClassShiftHubConnection } from '@/services/signalr.service'
 import type { EnterInClassExamResult, InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import {
   applyCompletedInClassShifts,
@@ -564,8 +564,8 @@ export function StudentInClassExamPage() {
     if (!resultsShift) return
     const activeShiftId = resultsShift.id
     let disposed = false
-    const hubUrl = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice'
-    const connection = createPracticeHubConnection(
+    const hubUrl = import.meta.env.VITE_IN_CLASS_SIGNALR_HUB_URL || '/hubs/in-class-shift'
+    const connection = createInClassShiftHubConnection(
       hubUrl,
       () => sessionStorage.getItem('access_token') ?? '',
     )
@@ -591,14 +591,18 @@ export function StudentInClassExamPage() {
       void refreshResults()
       void load()
     })
+    connection.onreconnected(() => {
+      if (disposed) return
+      void connection.invoke('JoinShift', activeShiftId)
+        .then(() => Promise.all([refreshResults(), load()]))
+        .catch(() => undefined)
+    })
 
     void connection
       .start()
       .then(() => {
         if (disposed) return
-        return connection.invoke('JoinInClassShiftGroup', activeShiftId).catch(() =>
-          connection.invoke('JoinShift', activeShiftId),
-        )
+        return connection.invoke('JoinShift', activeShiftId)
       })
       .catch(() => undefined)
 
@@ -612,7 +616,9 @@ export function StudentInClassExamPage() {
       connection.off('InClassSubmissionGraded')
       connection.off('ReceiveGradingResult')
       connection.off('InClassShiftGradesFinalized')
-      void connection.stop().catch(() => undefined)
+      void connection.invoke('LeaveShift', activeShiftId)
+        .catch(() => undefined)
+        .finally(() => connection.stop().catch(() => undefined))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultsShift?.id])
@@ -756,7 +762,7 @@ export function StudentInClassExamPage() {
 
                     {alreadyDone ? (
                       <div className="mt-auto flex flex-col gap-2 pt-3">
-                        {shift.status === 'FINALIZED' || shift.status === 'CLOSED' ? (
+                        {shift.isAutoPublishGrades || shift.status === 'FINALIZED' ? (
                           <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
                             <Lock className="size-3.5" />
                             Xem kết quả
@@ -764,7 +770,7 @@ export function StudentInClassExamPage() {
                         ) : (
                           <div className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-4 text-sm font-bold text-[#16836a]">
                             <CheckCircle2 className="size-3.5 shrink-0" />
-                            Đã nộp bài
+                            Đã nộp bài · Chờ giảng viên chốt điểm
                           </div>
                         )}
                       </div>
@@ -780,12 +786,9 @@ export function StudentInClassExamPage() {
                         </button>
                       </div>
                     ) : shift.status === 'FINALIZED' ? (
-                      <div className="mt-auto pt-3">
-                        <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
-                          <Lock className="size-3.5" />
-                          Xem kết quả
-                        </button>
-                      </div>
+                      <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
+                        Bạn không tham gia ca kiểm tra này
+                      </p>
                     ) : (
                       <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
                         {shift.status === 'SCHEDULED' ? 'Chờ giảng viên kích hoạt ca' : 'Ca đã kết thúc'}

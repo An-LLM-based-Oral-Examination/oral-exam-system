@@ -31,7 +31,7 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
 
-        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
         {
             return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
@@ -52,18 +52,15 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
             return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        if (actor.Role == UserRole.Lecturer)
-        {
-            bool isAssigned = submission.Shift.LecturerId == actor.Id ||
-                submission.Shift.Class.LecturerId == actor.Id ||
-                await context.CourseLecturers.AnyAsync(
-                    cl => cl.CourseId == submission.Shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                    cancellationToken);
+        bool isAssigned = submission.Shift.LecturerId == actor.Id ||
+            submission.Shift.Class.LecturerId == actor.Id ||
+            await context.CourseLecturers.AnyAsync(
+                cl => cl.CourseId == submission.Shift.Class.CourseId && cl.LecturerUserId == actor.Id,
+                cancellationToken);
 
-            if (!isAssigned)
-            {
-                return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
-            }
+        if (!isAssigned)
+        {
+            return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
 
         submission.FinalScore = Math.Round(request.FinalScore, 2, MidpointRounding.AwayFromZero);
@@ -81,16 +78,21 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
                 .Where(s => s.ShiftId == submission.ShiftId && s.StudentId == submission.StudentId && s.Id != submission.Id)
                 .ToListAsync(cancellationToken);
 
-            var allFinalScores = studentSubmissions
-                .Select(s => s.FinalScore ?? s.AiScore)
-                .Append(submission.FinalScore)
-                .Where(sc => sc.HasValue)
-                .Select(sc => sc!.Value)
+            var allSubmissions = studentSubmissions.Append(submission).ToList();
+
+            var effectiveQuestionScores = allSubmissions
+                .GroupBy(s => s.QuestionId)
+                .Select(group => group
+                    .Select(s => s.FinalScore ?? s.AiScore)
+                    .Where(score => score.HasValue)
+                    .Select(score => score!.Value)
+                    .DefaultIfEmpty(0m)
+                    .Max())
                 .ToList();
 
-            if (allFinalScores.Count > 0)
+            if (effectiveQuestionScores.Count > 0)
             {
-                participant.TotalFinalScore = Math.Round(allFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
+                participant.TotalFinalScore = Math.Round(effectiveQuestionScores.Average(), 2, MidpointRounding.AwayFromZero);
             }
         }
 

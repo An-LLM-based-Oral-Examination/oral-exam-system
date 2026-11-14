@@ -42,9 +42,10 @@ public sealed class CreateInClassShiftCommandHandler(
 
         var classEntity = await context.Classes
             .Include(c => c.Course)
+            .Include(c => c.CourseOffering)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
 
-        if (classEntity is null || !classEntity.IsActive)
+        if (!InClassShiftAcademicContext.IsOperational(classEntity))
         {
             return Result<InClassExamShiftResponse>.Failure(InClassShiftErrors.ClassNotFound);
         }
