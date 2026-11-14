@@ -261,12 +261,12 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
+    /// Cán bộ Khảo thí hoặc Quản trị viên thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
     /// BẮT BUỘC: 100% sinh viên trong ca thi phải có điểm hoàn chỉnh.
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
     /// </summary>
     [HttpPost("shifts/{shiftId:guid}/publish-grades")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer,admin")]
     public async Task<IActionResult> PublishGrades(Guid shiftId, CancellationToken cancellationToken = default)
     {
         var lecturerId = GetAuthenticatedUserId();

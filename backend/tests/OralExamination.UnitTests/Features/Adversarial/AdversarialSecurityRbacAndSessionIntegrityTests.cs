@@ -115,6 +115,94 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
         groupsMock.Verify(g => g.AddToGroupAsync("conn-owner", $"session_{session.Id:D}", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact(DisplayName = "CORE-01C: InClassShiftHub tách group Student khỏi group Staff để không lộ điểm giữa sinh viên")]
+    public async Task InClassShiftHub_JoinShift_IsolatesStudentResultsFromStaffFeed()
+    {
+        using var context = CreateDbContext();
+        var lecturerId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWP391",
+            Name = "Software Development Project",
+            IsActive = true
+        };
+        var classEntity = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1701",
+            Name = "Lớp SE1701",
+            CourseId = course.Id,
+            LecturerId = lecturerId,
+            IsActive = true
+        };
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturerId,
+            ShiftName = "Ca kiểm tra bảo mật realtime",
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            TotpSecretKey = "test-secret",
+            Status = "IN_PROGRESS"
+        };
+        context.Courses.Add(course);
+        context.Classes.Add(classEntity);
+        context.InClassExamShifts.Add(shift);
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            StudentId = studentId,
+            Status = "enrolled"
+        });
+        await context.SaveChangesAsync();
+
+        var groupsMock = new Mock<IGroupManager>();
+        var hub = new InClassShiftHub(context) { Groups = groupsMock.Object };
+        var studentContext = new Mock<HubCallerContext>();
+        studentContext.Setup(c => c.ConnectionId).Returns("conn-student");
+        studentContext.Setup(c => c.ConnectionAborted).Returns(CancellationToken.None);
+        studentContext.Setup(c => c.User).Returns(new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, studentId.ToString()),
+            new Claim(ClaimTypes.Role, "student")
+        }, "TestAuth")));
+        hub.Context = studentContext.Object;
+
+        await hub.JoinShift(shift.Id.ToString());
+
+        groupsMock.Verify(g => g.AddToGroupAsync(
+            "conn-student",
+            $"inclass:{shift.Id:D}:audience",
+            It.IsAny<CancellationToken>()), Times.Once);
+        groupsMock.Verify(g => g.AddToGroupAsync(
+            "conn-student",
+            $"inclass:{shift.Id:D}:student:{studentId:D}",
+            It.IsAny<CancellationToken>()), Times.Once);
+        groupsMock.Verify(g => g.AddToGroupAsync(
+            "conn-student",
+            $"inclass:{shift.Id:D}:staff",
+            It.IsAny<CancellationToken>()), Times.Never);
+        groupsMock.Verify(g => g.AddToGroupAsync(
+            "conn-student",
+            $"session_{shift.Id:D}",
+            It.IsAny<CancellationToken>()), Times.Never);
+
+        var legacyGroupsMock = new Mock<IGroupManager>();
+        var practiceHub = new PracticeHub(context)
+        {
+            Context = studentContext.Object,
+            Groups = legacyGroupsMock.Object
+        };
+        var legacyJoin = async () => await practiceHub.JoinSession(shift.Id.ToString());
+        await legacyJoin.Should().ThrowAsync<HubException>().WithMessage("*NOT_FOUND*");
+        legacyGroupsMock.Verify(g => g.AddToGroupAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact(DisplayName = "CORE-01B: SpeechController tuyệt đối không gắn [AllowAnonymous] trên các endpoints TTS và STT")]
     public void SpeechController_TtsAndSttEndpoints_MustNotAllowAnonymous()
     {
