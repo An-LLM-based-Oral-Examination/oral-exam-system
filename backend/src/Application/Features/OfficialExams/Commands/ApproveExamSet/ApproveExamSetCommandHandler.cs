@@ -16,17 +16,10 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.ApproveExa
 public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
     : IRequestHandler<ApproveExamSetCommand, Result<ApproveExamSetResultDto>>
 {
-    private static readonly string[] AllowedRoles =
-    [
-        UserRole.DepartmentHead,
-        UserRole.ExaminationOfficer,
-        UserRole.Admin
-    ];
-
     public async Task<Result<ApproveExamSetResultDto>> Handle(ApproveExamSetCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !AllowedRoles.Contains(request.ActorRole, StringComparer.OrdinalIgnoreCase))
+        if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(
+                context, request.ActorUserId, request.ActorRole, UserRole.DepartmentHead, cancellationToken))
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -39,6 +32,11 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
         if (examSet is null)
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetNotFound);
+        }
+
+        if (!await OfficialExamAuthorization.OwnsAcademicCourseAsync(context, examSet.CourseId, request.ActorUserId, cancellationToken))
+        {
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
         if (examSet.Status == ExamSetStatus.Official)

@@ -35,7 +35,8 @@ const LEGACY_PREFIXES: Record<string, UserRole[]> = {
   '/in-class-shifts': ['Instructor'],
   '/official-exams/manage': ['ExaminationOfficer'],
   '/appeals': ['Instructor', 'DepartmentHead', 'ExaminationOfficer'],
-  '/dlq': ['ExaminationOfficer', 'Admin'],
+  '/dlq': ['ExaminationOfficer', 'Admin', 'Instructor'],
+  '/department/clos': ['DepartmentHead'],
 }
 
 function matchesPrefix(pathname: string, prefix: string): boolean {

@@ -515,12 +515,13 @@ public class DomainEntitiesAndDbContextTests
         UserRole.All.Should().BeEquivalentTo(new[] { "admin", "department_head", "examination_officer", "lecturer", "proctor", "student" });
 
         // 2. AppealStatus constants
-        AppealStatus.Pending.Should().Be("PENDING");
-        AppealStatus.InReview.Should().Be("IN_REVIEW");
+        AppealStatus.SubmittedToExamOffice.Should().Be("SUBMITTED_TO_EXAM_OFFICE");
+        AppealStatus.AssignedToLecturer.Should().Be("ASSIGNED_TO_LECTURER");
+        AppealStatus.RegradedByLecturer.Should().Be("REGRADED_BY_LECTURER");
         AppealStatus.Approved.Should().Be("APPROVED");
         AppealStatus.Rejected.Should().Be("REJECTED");
         AppealStatus.Cancelled.Should().Be("CANCELLED");
-        AppealStatus.All.Should().BeEquivalentTo(new[] { "PENDING", "IN_REVIEW", "APPROVED", "REJECTED", "CANCELLED" });
+        AppealStatus.All.Should().BeEquivalentTo(new[] { "SUBMITTED_TO_EXAM_OFFICE", "ASSIGNED_TO_LECTURER", "REGRADED_BY_LECTURER", "APPROVED", "REJECTED", "CANCELLED" });
     }
 
     [Fact(DisplayName = "12. Cấu hình động Course và CotTrace AiEvaluation lưu trữ và ánh xạ chính xác")]
@@ -578,7 +579,7 @@ public class DomainEntitiesAndDbContextTests
             AssignedTo = Guid.NewGuid()
         };
 
-        appeal.Status.Should().Be("PENDING");
+        appeal.Status.Should().Be("SUBMITTED_TO_EXAM_OFFICE");
         appeal.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
 
         var appealType = context.Model.FindEntityType(typeof(AppealRequest))!;
@@ -622,7 +623,7 @@ public class DomainEntitiesAndDbContextTests
         var appealType = model.FindEntityType(typeof(AppealRequest))!;
         var appealStatusCheck = appealType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_appeal_requests_status");
         appealStatusCheck.Should().NotBeNull("AppealRequest phải có ck_appeal_requests_status");
-        appealStatusCheck!.Sql.Should().Be("status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+        appealStatusCheck!.Sql.Should().Be("status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED')");
 
         var appealScoresCheck = appealType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_appeal_requests_scores");
         appealScoresCheck.Should().NotBeNull("AppealRequest phải có ck_appeal_requests_scores");

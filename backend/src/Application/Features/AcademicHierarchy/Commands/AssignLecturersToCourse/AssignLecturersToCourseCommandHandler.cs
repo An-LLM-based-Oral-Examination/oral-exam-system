@@ -7,6 +7,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Domain.Entities;
@@ -71,24 +72,15 @@ public class AssignLecturersToCourseCommandHandler(
                 "VALIDATION: Tài khoản người thực hiện phân công đang bị khóa hoặc vô hiệu hóa.");
         }
 
-        var isCallerAdmin = string.Equals(assigningUser.Role, UserRole.Admin, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(request.ActorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase);
-
-        if (!isCallerAdmin)
+        if (!string.Equals(assigningUser.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
         {
-            if (!string.Equals(assigningUser.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
-            {
-                return Result<AssignLecturersToCourseResponseDto>.Failure(
-                    "FORBIDDEN: Chỉ có Trưởng bộ môn hoặc Admin mới có quyền phân công giảng viên.");
-            }
-
-            var owningDepartmentHeadId = course.AcademicProgram?.DepartmentHeadUserId ?? course.DepartmentHeadUserId;
-            if (owningDepartmentHeadId.HasValue && owningDepartmentHeadId.Value != request.AssignedByUserId)
-            {
-                return Result<AssignLecturersToCourseResponseDto>.Failure(
-                    "FORBIDDEN: Trưởng bộ môn chỉ được phép phân công giảng viên cho môn học do mình quản lý.");
-            }
+            return Result<AssignLecturersToCourseResponseDto>.Failure(
+                "FORBIDDEN: Chỉ Trưởng bộ môn mới có quyền phân công giảng viên.");
         }
+
+        if (!AcademicCourseOwnership.IsOwnedBy(course, request.AssignedByUserId))
+            return Result<AssignLecturersToCourseResponseDto>.Failure(
+                "FORBIDDEN: Trưởng bộ môn chỉ được phép phân công giảng viên cho môn học do mình quản lý.");
 
         var uniqueLecturerIds = request.LecturerUserIds.Distinct().ToList();
 

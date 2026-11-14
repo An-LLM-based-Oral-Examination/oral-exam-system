@@ -164,6 +164,7 @@ public class AdversarialMilestone5ChallengerTests
             SeatNumber = 10,
             IpAddress = "192.168.1.110",
             Status = ticketStatus,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = isLocked
         };
 

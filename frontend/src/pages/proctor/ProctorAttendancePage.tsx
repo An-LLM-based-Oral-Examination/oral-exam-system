@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { attendanceRoles } from '@/lib/task09Permissions'
 
 interface Seat {
   seatNumber: number
@@ -64,9 +65,12 @@ export function ProctorAttendancePage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const canSuspendTicket = user?.role === 'ExaminationOfficer' || user?.role === 'Admin'
+  const canView = Boolean(user && attendanceRoles.includes(user.role))
+  const canRecordAttendance = user?.role === 'Proctor'
+  const canSuspendTicket = user?.role === 'ExaminationOfficer'
 
   const loadAttendance = async () => {
+    if (!canView) return
     if (!shiftId.trim()) {
       setShiftIdError('Vui lòng nhập Shift ID của ca thi.')
       return
@@ -75,6 +79,7 @@ export function ProctorAttendancePage() {
     setLoading(true); setError('')
     try {
       setMonitor(await proctorService.getShiftAttendance(shiftId.trim()))
+      setSelectedSeat(null)
     } catch (loadError) {
       setMonitor(null)
       setError(getErrorMessage(loadError))
@@ -84,6 +89,7 @@ export function ProctorAttendancePage() {
   }
 
   useEffect(() => {
+    if (!canView) return
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search)
       const initial = params.get('shiftId') ?? ''
@@ -92,10 +98,10 @@ export function ProctorAttendancePage() {
       void proctorService.getShiftAttendance(initial).then(setMonitor).catch((loadErr) => setError(getErrorMessage(loadErr)))
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [canView])
 
   const updateSeat = async (seat: Seat, present: boolean) => {
-    if (!seat.ticketId) return
+    if (!seat.ticketId || !canRecordAttendance) return
     setBusy(true); setError(''); setNotice('')
     try {
       await proctorService.updateTicketAttendance(seat.ticketId, {
@@ -112,7 +118,7 @@ export function ProctorAttendancePage() {
   }
 
   const reportViolation = async () => {
-    if (!monitor?.shiftId || !selectedSeat?.ticketId) return
+    if (!monitor?.shiftId || !selectedSeat?.ticketId || !canRecordAttendance) return
     if (violationDetails.trim().length < 5) {
       setViolationDetailsError('Chi tiết biên bản vi phạm cần ít nhất 5 ký tự.')
       return
@@ -137,7 +143,7 @@ export function ProctorAttendancePage() {
   }
 
   const suspendSeat = async () => {
-    if (!selectedSeat?.ticketId) return
+    if (!selectedSeat?.ticketId || !canSuspendTicket) return
     const reasonError = suspendReason.trim().length < 5 ? 'Lý do đình chỉ cần ít nhất 5 ký tự.' : ''
     const countError =
       !Number.isInteger(blurViolationCount) || blurViolationCount < 0
@@ -164,6 +170,8 @@ export function ProctorAttendancePage() {
       setBusy(false)
     }
   }
+
+  if (!canView) return <div role="alert">Chỉ Giám thị được phân công và Khảo thí được truy cập ca thi.</div>
 
   return (
     <div className={ds.page}>
@@ -302,7 +310,7 @@ export function ProctorAttendancePage() {
                     Trạng thái: {selectedSeat.status || 'SCHEDULED'} · IP: {selectedSeat.ipAddress || '—'}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                {canRecordAttendance && <div className="flex gap-2">
                   <button
                     type="button"
                     disabled={busy || selectedSeat.isCheckedIn}
@@ -319,10 +327,10 @@ export function ProctorAttendancePage() {
                   >
                     <UserX className="size-4" /> Ghi vắng
                   </button>
-                </div>
+                </div>}
               </div>
 
-              <div className="rounded-xl border border-[#d6e4f2] bg-[#f8fbfd] p-4">
+              {canRecordAttendance && <div className="rounded-xl border border-[#d6e4f2] bg-[#f8fbfd] p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1C4D8D]">
                   Báo cáo vi phạm quy chế phòng thi (Lưu vào exam_anti_cheat_logs)
                 </h3>
@@ -375,12 +383,12 @@ export function ProctorAttendancePage() {
                     <ShieldAlert className="size-4" /> Báo cáo vi phạm
                   </button>
                 </div>
-              </div>
+              </div>}
 
               {canSuspendTicket && (
                 <div className="grid gap-3 border-t border-[#e8edf3] pt-4 sm:grid-cols-[1fr_auto_auto] sm:items-start">
                   <label className={fieldLabelClass(Boolean(suspendReasonError))}>
-                    Lý do đình chỉ vé thi (Thẩm quyền Cán bộ Khảo thí / Admin)
+                    Lý do đình chỉ vé thi (Thẩm quyền Cán bộ Khảo thí)
                     <input
                       className={cn(ds.field, 'mt-1', suspendReasonError && fieldInvalidClass)}
                       value={suspendReason}

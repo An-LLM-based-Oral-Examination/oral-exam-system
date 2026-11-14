@@ -461,15 +461,18 @@ public class SatelliteModulesTests
         checkInResult.Value.Status.Should().Be(ExamTicketStatus.InProgress);
 
         var suspendHandler = new SuspendExamTicketCommandHandler(context);
+        var officer = new User { Id = Guid.NewGuid(), Email = "suspend.qa@qa.invalid", FullName = "QA Officer", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var suspendResult = await suspendHandler.Handle(
-            new SuspendExamTicketCommand(proctor.Id, ticket.Id, "Sinh viên cố tình thoát Fullscreen quá 3 lần trong ca thi", 4),
+            new SuspendExamTicketCommand(officer.Id, ticket.Id, "Sinh viên cố tình thoát Fullscreen quá 3 lần trong ca thi", 4),
             CancellationToken.None);
         suspendResult.IsSuccess.Should().BeTrue();
         suspendResult.Value.IsSuspended.Should().BeTrue();
         suspendResult.Value.Status.Should().Be(ExamTicketStatus.Audited);
 
         var monitorHandler = new GetShiftAttendanceQueryHandler(context);
-        var monitor = await monitorHandler.Handle(new GetShiftAttendanceQuery(shift.Id), CancellationToken.None);
+        var monitor = await monitorHandler.Handle(new GetShiftAttendanceQuery(shift.Id, proctor.Id), CancellationToken.None);
         monitor.IsSuccess.Should().BeTrue();
         monitor.Value.TotalSeats.Should().Be(40);
         monitor.Value.Seats.Should().HaveCount(40);

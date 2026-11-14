@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CalendarPlus, ClipboardList, LoaderCircle, Plus, RefreshCw, Ticket, UsersRound } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { officialExamService } from '@/services/officialExam.service'
@@ -9,6 +9,7 @@ import { toast } from '@/components/common/toastStore'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { userMessage } from '@/lib/userMessage'
+import { officialManagementRoles } from '@/lib/task09Permissions'
 
 interface ExamSession {
   id: string
@@ -50,7 +51,7 @@ const emptySession = {
   examStructureId: '',
   title: '',
   examDate: '',
-  hasFollowUp: true,
+  hasFollowUp: false,
   maxFollowUpQuestions: 2,
   examInputMode: 'VoiceWithTranscriptEdit',
   transcriptBufferSeconds: 60,
@@ -76,6 +77,9 @@ const emptyStructure = {
 
 export function OfficialExamManagementPage() {
   const { user } = useAuth()
+  const canOperate = user?.role === 'ExaminationOfficer'
+  const canManageStructures = user?.role === 'DepartmentHead'
+  const canView = Boolean(user && officialManagementRoles.includes(user.role))
   const [sessions, setSessions] = useState<ExamSession[]>([])
   const [shifts, setShifts] = useState<ExamShift[]>([])
   const [structures, setStructures] = useState<ExamStructure[]>([])
@@ -91,13 +95,20 @@ export function OfficialExamManagementPage() {
     [sessions, shiftForm.sessionId],
   )
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!canView) return
     setLoading(true)
     try {
+      const structureRequest = canManageStructures
+        ? Promise.all([
+          service.getExamStructures({ isActive: true }),
+          service.getExamStructures({ isActive: false }),
+        ]).then((results) => [...new Map(results.flat().map((item) => [item.id, item])).values()])
+        : service.getExamStructures({ isActive: true })
       const [sessionResult, shiftResult, structureResult] = await Promise.all([
         service.getSessions(),
         service.getShifts(),
-        service.getExamStructures({ isActive: false }),
+        structureRequest,
       ])
       setSessions(Array.isArray(sessionResult) ? sessionResult : [])
       setShifts(Array.isArray(shiftResult) ? shiftResult : [])
@@ -107,15 +118,16 @@ export function OfficialExamManagementPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [canView, canManageStructures])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadData() }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [loadData])
 
   const submitSession = async (event: FormEvent) => {
     event.preventDefault()
+    if (!canOperate) return
     setBusy(true)
     try {
       await service.createSession({
@@ -123,7 +135,8 @@ export function OfficialExamManagementPage() {
         courseId: sessionForm.courseId,
         examStructureId: sessionForm.examStructureId,
         actorUserId: user?.id,
-        maxFollowUpQuestions: Number(sessionForm.maxFollowUpQuestions),
+        hasFollowUp: false,
+        maxFollowUpQuestions: 2,
         transcriptBufferSeconds: Number(sessionForm.transcriptBufferSeconds),
       })
       setSessionForm(emptySession)
@@ -134,6 +147,7 @@ export function OfficialExamManagementPage() {
 
   const submitShift = async (event: FormEvent) => {
     event.preventDefault()
+    if (!canOperate) return
     setBusy(true)
     try {
       await service.createShift({
@@ -149,6 +163,7 @@ export function OfficialExamManagementPage() {
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault()
+    if (!canOperate) return
     setBusy(true)
     try {
       await service.assignTicket({ ...ticketForm, seatNumber: Number(ticketForm.seatNumber) })
@@ -159,6 +174,7 @@ export function OfficialExamManagementPage() {
 
   const submitStructure = async (event: FormEvent) => {
     event.preventDefault()
+    if (!canManageStructures) return
     setBusy(true)
     try {
       await service.createExamStructure({
@@ -173,6 +189,7 @@ export function OfficialExamManagementPage() {
   }
 
   const toggleStructure = async (structure: ExamStructure) => {
+    if (!canManageStructures) return
     setBusy(true)
     try {
       await service.updateExamStructure(structure.id, {
@@ -186,6 +203,8 @@ export function OfficialExamManagementPage() {
       await loadData()
     } catch (updateError) { toast.error(userMessage(updateError, 'Không cập nhật được cấu trúc đề thi. Vui lòng thử lại.')) } finally { setBusy(false) }
   }
+
+  if (!canView) return <div role="alert">Chỉ Khảo thí và Trưởng bộ môn được truy cập phân hệ này.</div>
 
   return (
     <div className={ds.page}>
@@ -207,7 +226,7 @@ export function OfficialExamManagementPage() {
         }
       />
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      {canOperate && <section className="grid gap-4 xl:grid-cols-3">
         <form onSubmit={submitSession} className={ds.section}>
           <SectionHeader icon={CalendarPlus} title="Tạo kỳ thi" hint="Cấu hình kỳ thi chính thức" />
           <div className="space-y-3 p-4">
@@ -215,8 +234,8 @@ export function OfficialExamManagementPage() {
             {structures.length > 0 ? <select required className={ds.field} value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })}><option value="">Chọn cấu trúc đề thi</option>{structures.filter((structure) => structure.isActive).map((structure) => <option key={structure.id} value={structure.id}>{structure.name} · {structure.courseCode}</option>)}</select> : <input required className={ds.field} placeholder="Exam Structure ID" value={sessionForm.examStructureId} onChange={(e) => setSessionForm({ ...sessionForm, examStructureId: e.target.value })} />}
             <input required className={ds.field} placeholder="Tên kỳ thi" value={sessionForm.title} onChange={(e) => setSessionForm({ ...sessionForm, title: e.target.value })} />
             <input required type="date" className={ds.field} value={sessionForm.examDate} onChange={(e) => setSessionForm({ ...sessionForm, examDate: e.target.value })} />
-            <div className="grid grid-cols-2 gap-2"><input required type="number" min="1" max="5" className={ds.field} placeholder="Follow-up" value={sessionForm.maxFollowUpQuestions} onChange={(e) => setSessionForm({ ...sessionForm, maxFollowUpQuestions: Number(e.target.value) })} /><input required type="number" min="10" max="300" className={ds.field} placeholder="Buffer (s)" value={sessionForm.transcriptBufferSeconds} onChange={(e) => setSessionForm({ ...sessionForm, transcriptBufferSeconds: Number(e.target.value) })} /></div>
-            <label className="flex items-center gap-2 text-xs font-semibold text-[#52657d]"><input type="checkbox" checked={sessionForm.hasFollowUp} onChange={(e) => setSessionForm({ ...sessionForm, hasFollowUp: e.target.checked })} /> Cho phép follow-up</label>
+            <input required type="number" min="10" max="300" className={ds.field} placeholder="Buffer (s)" value={sessionForm.transcriptBufferSeconds} onChange={(e) => setSessionForm({ ...sessionForm, transcriptBufferSeconds: Number(e.target.value) })} />
+            <p className="text-xs text-[#52657d]">Follow-up mặc định tắt, tối đa 2 câu. Chỉ Trưởng bộ môn phụ trách được thay đổi cấu hình học thuật.</p>
             <select className={ds.field} value={sessionForm.examInputMode} onChange={(e) => setSessionForm({ ...sessionForm, examInputMode: e.target.value })}><option value="VoiceOnly">VoiceOnly</option><option value="VoiceWithTranscriptEdit">VoiceWithTranscriptEdit</option></select>
             <button disabled={busy} className={ds.primaryButton}><Plus className="size-4" /> Tạo kỳ thi</button>
           </div>
@@ -244,10 +263,10 @@ export function OfficialExamManagementPage() {
             <button disabled={busy} className={ds.primaryButton}><Ticket className="size-4" /> Cấp vé thi</button>
           </div>
         </form>
-      </section>
+      </section>}
 
       <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        <form onSubmit={submitStructure} className={ds.section}>
+        {canManageStructures && <form onSubmit={submitStructure} className={ds.section}>
           <SectionHeader icon={ClipboardList} title="Cấu trúc đề thi" hint="Cấu hình số câu và bậc Bloom" />
           <div className="space-y-3 p-4">
             <input required className={ds.field} placeholder="Course ID" value={structureForm.courseId} onChange={(e) => setStructureForm({ ...structureForm, courseId: e.target.value })} />
@@ -256,10 +275,19 @@ export function OfficialExamManagementPage() {
             <input className={ds.field} placeholder='Bloom JSON, ví dụ {"Remember":2}' value={structureForm.bloomDistribution} onChange={(e) => setStructureForm({ ...structureForm, bloomDistribution: e.target.value })} />
             <button disabled={busy} className={ds.primaryButton}><Plus className="size-4" /> Tạo cấu trúc</button>
           </div>
-        </form>
+        </form>}
         <section className={ds.section}>
           <SectionHeader icon={ClipboardList} title="Danh sách cấu trúc" hint="Bật/tắt cấu trúc đề đang có" />
-          <div className="grid gap-3 p-4 md:grid-cols-2">{structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#82aedb]/55 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} · {structure.totalQuestions} câu · {structure.durationMinutes} phút</p></div><span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span></div><button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#82aedb]/55 px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Tắt cấu trúc' : 'Bật cấu trúc'}</button></article>)}{structures.length === 0 && <EmptyState compact icon={ClipboardList} title="Chưa có cấu trúc đề thi" description="Tạo cấu trúc ở form bên trái để bắt đầu." />}</div>
+          <div className="grid gap-3 p-4 md:grid-cols-2">
+            {structures.map((structure) => <article key={structure.id} className="rounded-xl border border-[#82aedb]/55 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div><h3 className="font-bold text-[#0F2854]">{structure.name}</h3><p className="mt-1 text-xs text-[#687a91]">{structure.courseCode} · {structure.totalQuestions} câu · {structure.durationMinutes} phút</p></div>
+                <span className={ds.infoChip}>{structure.isActive ? 'ACTIVE' : 'INACTIVE'}</span>
+              </div>
+              {canManageStructures && <button type="button" disabled={busy} onClick={() => void toggleStructure(structure)} className="mt-3 rounded-lg border border-[#82aedb]/55 px-3 py-2 text-xs font-bold text-[#1C4D8D]">{structure.isActive ? 'Tắt cấu trúc' : 'Bật cấu trúc'}</button>}
+            </article>)}
+            {structures.length === 0 && <EmptyState compact icon={ClipboardList} title="Chưa có cấu trúc đề thi" description="Cấu trúc đề thi do Trưởng bộ môn phụ trách quản lý." />}
+          </div>
         </section>
       </section>
 

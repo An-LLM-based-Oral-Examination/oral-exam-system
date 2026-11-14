@@ -31,6 +31,10 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head" && lecturer.Role != "admin"))
             return Result<Guid>.Failure("Người dùng không có quyền biên soạn câu hỏi.");
 
+        if (request.CloId.HasValue && !await _context.CourseClos.AsNoTracking()
+            .AnyAsync(c => c.Id == request.CloId.Value && c.CourseId == request.CourseId && c.IsActive, cancellationToken))
+            return Result<Guid>.Failure("VALIDATION: CLO không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.");
+
         if (lecturer.Role == "lecturer")
         {
             bool courseHasLecturerAssignments = await _context.CourseLecturers

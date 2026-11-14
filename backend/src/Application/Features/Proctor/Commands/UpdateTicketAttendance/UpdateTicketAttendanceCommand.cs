@@ -17,7 +17,8 @@ public sealed record UpdateTicketAttendanceCommand(
     bool IsPresent = true,
     string? IpAddress = null,
     string? Note = null,
-    int? SeatNumber = null) : IRequest<Result<TicketProctorActionResponseDto>>;
+    int? SeatNumber = null,
+    Guid? ExpectedShiftId = null) : IRequest<Result<TicketProctorActionResponseDto>>;
 
 public sealed class UpdateTicketAttendanceCommandHandler
     : IRequestHandler<UpdateTicketAttendanceCommand, Result<TicketProctorActionResponseDto>>
@@ -43,6 +44,10 @@ public sealed class UpdateTicketAttendanceCommandHandler
             return Result<TicketProctorActionResponseDto>.Failure(
                 "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
         }
+
+        if ((request.ExpectedShiftId.HasValue && request.ExpectedShiftId != ticket.ShiftId)
+            || !await ProctorAuthorization.CanAccessShiftAsync(_context, request.ActorUserId, ticket.ShiftId, false, cancellationToken))
+            return Result<TicketProctorActionResponseDto>.Failure(ProctorAuthorization.Forbidden);
 
         if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
         {

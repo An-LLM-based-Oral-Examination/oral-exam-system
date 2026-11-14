@@ -18,13 +18,26 @@ namespace OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamCommand, Result<StartMockExamResponse>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly TimeProvider _clock;
 
-    public StartMockExamCommandHandler(IApplicationDbContext context)
+    public StartMockExamCommandHandler(IApplicationDbContext context, TimeProvider? clock = null)
     {
         _context = context;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<Result<StartMockExamResponse>> Handle(StartMockExamCommand request, CancellationToken cancellationToken)
+    {
+        // One instant defines the accepted operation's day and all its timestamps,
+        // even if a lock wait crosses midnight in Vietnam.
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var todayVn = DateOnly.FromDateTime(now.AddHours(7));
+        return await _context.ExecuteMockExamStartAsync(request.StudentId, request.CourseId, todayVn,
+            ct => HandleLocked(request, now, todayVn, ct), cancellationToken);
+    }
+
+    private async Task<Result<StartMockExamResponse>> HandleLocked(StartMockExamCommand request, DateTime now,
+        DateOnly todayVn, CancellationToken cancellationToken)
     {
         // 1. Kiểm tra môn học tồn tại và đang hoạt động
         var course = await _context.Courses
@@ -37,7 +50,6 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         }
 
         // 2. Kiểm tra Daily Quota Guard do Quản trị viên (Admin) cấu hình (Múi giờ GMT+7)
-        var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         var sysQuotaStr = await _context.SystemConfigs
             .AsNoTracking()
             .Where(c => c.Key == "max_mock_exams_per_day" || c.Key == "MaxMockExamsPerDay")
@@ -91,7 +103,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 DurationMinutes = defaultDurationMinutes,
                 BloomDistribution = defaultBloomDistribution,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = now
             };
             _context.ExamStructures.Add(structure);
         }
@@ -212,14 +224,14 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 CourseId = request.CourseId,
                 QuotaDate = todayVn,
                 UsedCount = 1,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = now
             };
             _context.MockExamQuotas.Add(quota);
         }
         else
         {
             quota.UsedCount++;
-            quota.UpdatedAt = DateTime.UtcNow;
+            quota.UpdatedAt = now;
         }
 
         // 8. Tính toán thời lượng làm bài
@@ -227,7 +239,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // Có Follow-up: cộng thêm 15 phút (tối thiểu 45 phút).
         var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
         var durationMinutes = request.HasFollowUp ? Math.Max(45, baseDuration + 15) : baseDuration;
-        var startedAt = DateTime.UtcNow;
+        var startedAt = now;
         var expiresAt = startedAt.AddMinutes(durationMinutes);
 
         // 9. Khởi tạo ExamSet & MockExamSession & MockExamAnswer
@@ -237,7 +249,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             Id = Guid.NewGuid(),
             StructureId = structure.Id,
             CourseId = request.CourseId,
-            SetCode = $"MOCK-{course.Code}-{DateTime.UtcNow:yyyyMMddHHmmss}-{uniqueSuffix}",
+            SetCode = $"MOCK-{course.Code}-{now:yyyyMMddHHmmss}-{uniqueSuffix}",
             GeneratedAt = startedAt,
             IsActive = true
         };

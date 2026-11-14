@@ -62,6 +62,7 @@ public class ProctorHardeningTests
             Status = ExamTicketStatus.Scheduled
         };
 
+        context.Users.Add(new User { Id = proctorId, Email = "proctor.qa@qa.invalid", FullName = "QA Proctor", Role = UserRole.Proctor, IsActive = true });
         context.RealExamSessionShifts.Add(shift);
         context.Users.Add(student);
         context.StudentExamTickets.Add(ticket);
@@ -102,11 +103,14 @@ public class ProctorHardeningTests
     public async Task UpdateAttendance_WithInvalidSeatNumber_ShouldFailValidation()
     {
         await using var context = CreateDbContext();
+        var proctorId = Guid.NewGuid();
+        context.Users.Add(new User { Id = proctorId, Email = "proctor.seat@qa.invalid", FullName = "QA Proctor", Role = UserRole.Proctor, IsActive = true });
         var shift = new RealExamSessionShift
         {
             Id = Guid.NewGuid(),
             SessionId = Guid.NewGuid(),
             ShiftName = "Ca thi kiểm thử",
+            ProctorUserId = proctorId,
             RoomLab = "Lab 101",
             Status = "scheduled"
         };
@@ -135,14 +139,14 @@ public class ProctorHardeningTests
 
         // Ghế số 0
         var zeroSeatResult = await handler.Handle(
-            new UpdateTicketAttendanceCommand(Guid.NewGuid(), ticket.Id, true, SeatNumber: 0),
+            new UpdateTicketAttendanceCommand(proctorId, ticket.Id, true, SeatNumber: 0),
             CancellationToken.None);
         zeroSeatResult.IsSuccess.Should().BeFalse();
         zeroSeatResult.Error.Should().StartWith("VALIDATION:");
 
         // Ghế số 45
         var overSeatResult = await handler.Handle(
-            new UpdateTicketAttendanceCommand(Guid.NewGuid(), ticket.Id, true, SeatNumber: 45),
+            new UpdateTicketAttendanceCommand(proctorId, ticket.Id, true, SeatNumber: 45),
             CancellationToken.None);
         overSeatResult.IsSuccess.Should().BeFalse();
         overSeatResult.Error.Should().StartWith("VALIDATION:");
@@ -158,6 +162,7 @@ public class ProctorHardeningTests
             Id = Guid.NewGuid(),
             SessionId = Guid.NewGuid(),
             ShiftName = "Ca 2 - Lab 301",
+            ProctorUserId = proctorId,
             RoomLab = "Lab 301",
             Status = "in_progress"
         };
@@ -180,6 +185,7 @@ public class ProctorHardeningTests
             Status = ExamTicketStatus.InProgress
         };
         context.RealExamSessionShifts.Add(shift);
+        context.Users.Add(new User { Id = proctorId, Email = "proctor.violation@qa.invalid", FullName = "QA Proctor", Role = UserRole.Proctor, IsActive = true });
         context.Users.Add(student);
         context.StudentExamTickets.Add(ticket);
         await context.SaveChangesAsync();
@@ -244,7 +250,7 @@ public class ProctorHardeningTests
         audit.Should().NotBeNull();
     }
 
-    [Fact(DisplayName = "R4.3-04: ProctorController.SuspendTicket chỉ cho phép examination_officer và admin; cấm proctor")]
+    [Fact(DisplayName = "R4.3-04: ProctorController.SuspendTicket chỉ cho phép examination_officer; cấm proctor/admin")]
     public void ProctorController_SuspendEndpoint_ShouldRestrictRoles_ExcludingProctor()
     {
         var controllerType = typeof(global::API.Controllers.v1.ProctorController);
@@ -256,14 +262,14 @@ public class ProctorHardeningTests
 
         var allowedRoles = authAttr!.Roles?.Split(',', StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
         allowedRoles.Should().Contain("examination_officer");
-        allowedRoles.Should().Contain("admin");
+        allowedRoles.Should().NotContain("admin");
         allowedRoles.Should().NotContain("proctor", "Proctor tuyệt đối không có quyền gọi endpoint đình chỉ điểm thi");
         allowedRoles.Should().NotContain("student");
         allowedRoles.Should().NotContain("lecturer");
     }
 
-    [Fact(DisplayName = "R4.3-05: ProctorController.RecordViolation cho phép proctor và admin")]
-    public void ProctorController_RecordViolationEndpoint_ShouldAllowProctorAndAdmin()
+    [Fact(DisplayName = "R4.3-05: ProctorController.RecordViolation chỉ cho phép proctor")]
+    public void ProctorController_RecordViolationEndpoint_ShouldAllowOnlyProctor()
     {
         var controllerType = typeof(global::API.Controllers.v1.ProctorController);
         var violationMethod = controllerType.GetMethod(nameof(global::API.Controllers.v1.ProctorController.RecordViolation));
@@ -274,7 +280,7 @@ public class ProctorHardeningTests
 
         var allowedRoles = authAttr!.Roles?.Split(',', StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
         allowedRoles.Should().Contain("proctor");
-        allowedRoles.Should().Contain("admin");
+        allowedRoles.Should().NotContain("admin");
     }
 
     private sealed class FakeAntiCheatNotifier : IAntiCheatNotifier

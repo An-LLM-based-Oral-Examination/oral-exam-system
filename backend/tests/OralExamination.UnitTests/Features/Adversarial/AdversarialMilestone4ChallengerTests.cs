@@ -73,7 +73,7 @@ public class AdversarialMilestone4ChallengerTests
             Id = Guid.NewGuid(),
             Email = $"lecturer.{Guid.NewGuid():N}@fpt.edu.vn",
             FullName = "TS. Giảng Viên Trưởng Ban Chấm",
-            Role = UserRole.Lecturer,
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 
@@ -274,7 +274,7 @@ public class AdversarialMilestone4ChallengerTests
             Id = Guid.NewGuid(),
             Email = "empty.lecturer@fpt.edu.vn",
             FullName = "GV Empty Shift",
-            Role = UserRole.Lecturer,
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 

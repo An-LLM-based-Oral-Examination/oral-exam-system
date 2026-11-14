@@ -24,6 +24,7 @@ import {
 } from '@/services/admin.service'
 import { toast } from '@/components/common/toastStore'
 import { cn } from '@/lib/utils'
+import { AbuseMetricsPanel } from '@/components/admin/AbuseMetricsPanel'
 
 const SYSTEM_ROLES = [
   { value: 'student', label: 'Sinh viên (student)' },
@@ -255,6 +256,7 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
+      <AbuseMetricsPanel />
       {/* Top Banner */}
       <div className="rounded-3xl border border-[#82aedb]/50 bg-gradient-to-r from-[#0F2854] via-[#1C4D8D] to-[#4988C4] p-6 text-white shadow-xl sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

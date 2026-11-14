@@ -21,6 +21,13 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
         GetAppealAllocationProposalQuery request,
         CancellationToken cancellationToken)
     {
+        var actor = await AppealAuthorization.ActiveClaimedActorAsync(
+            _context, request.ActorUserId, request.ActorRole, cancellationToken);
+        if (actor is null || actor.Role != UserRole.ExaminationOfficer)
+        {
+            return Result<AppealAllocationProposalDto>.Failure(AppealAuthorization.Forbidden);
+        }
+
         var lecturers = await _context.Users.AsNoTracking()
             .Where(u => u.Role == UserRole.Lecturer && u.IsActive)
             .OrderBy(u => u.FullName)
@@ -39,7 +46,7 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             .Include(a => a.Ticket)
                 .ThenInclude(t => t.Shift)
                     .ThenInclude(s => s.ExaminerUser)
-            .Where(a => a.Status == AppealStatus.Pending);
+            .Where(a => a.Status == AppealStatus.SubmittedToExamOffice);
 
         if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
         {
@@ -52,20 +59,19 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
 
         int totalAppeals = pendingAppeals.Count;
         int totalLecturers = lecturers.Count;
-        bool exceedsStandardQuota = totalAppeals > totalLecturers * 24;
+        var lecturerIds = lecturers.Select(lecturer => lecturer.Id).ToList();
+        var activeLoads = await _context.AppealRequests.AsNoTracking()
+            .Where(a => lecturerIds.Contains(a.AssignedTo) &&
+                (a.Status == AppealStatus.AssignedToLecturer || a.Status == AppealStatus.RegradedByLecturer))
+            .GroupBy(a => a.AssignedTo)
+            .Select(group => new { LecturerId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.LecturerId, item => item.Count, cancellationToken);
+        bool exceedsStandardQuota = totalAppeals > lecturers.Sum(lecturer =>
+            Math.Max(0, AppealWorkflowEffects.MaxActiveAppealsPerLecturer - activeLoads.GetValueOrDefault(lecturer.Id)));
 
         // Định mức phân bổ cân bằng:
         // Nếu tổng bài > N_GV * 24: chia đều số bài cho các GV
         // Nếu tổng bài <= N_GV * 24: gán tối đa 24 bài/GV và chia đều cân bằng (targetCap)
-        int targetCap = totalLecturers > 0 
-            ? (int)Math.Ceiling((double)totalAppeals / totalLecturers) 
-            : 0;
-
-        if (!exceedsStandardQuota)
-        {
-            targetCap = Math.Min(24, targetCap);
-        }
-
         var lecturerAssignments = lecturers.ToDictionary(l => l.Id, _ => new List<Guid>());
 
         // Thuật toán Greedy Min-Load kết hợp Ràng buộc Độc lập (Không gán bài cho GV trùng shift.ExaminerUserId)
@@ -96,21 +102,15 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             if (candidates.Count > 0)
             {
                 var underCapCandidates = candidates
-                    .Where(c => lecturerAssignments[c.Id].Count < targetCap)
-                    .OrderBy(c => lecturerAssignments[c.Id].Count)
+                    .Where(c => activeLoads.GetValueOrDefault(c.Id) + lecturerAssignments[c.Id].Count <
+                        AppealWorkflowEffects.MaxActiveAppealsPerLecturer)
+                    .OrderBy(c => activeLoads.GetValueOrDefault(c.Id) + lecturerAssignments[c.Id].Count)
                     .ThenBy(c => c.FullName)
                     .ToList();
 
                 if (underCapCandidates.Count > 0)
                 {
                     chosenLecturer = underCapCandidates[0];
-                }
-                else
-                {
-                    chosenLecturer = candidates
-                        .OrderBy(c => lecturerAssignments[c.Id].Count)
-                        .ThenBy(c => c.FullName)
-                        .First();
                 }
             }
 

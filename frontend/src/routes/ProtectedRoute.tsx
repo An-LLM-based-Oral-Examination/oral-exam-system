@@ -8,8 +8,14 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-  const { isAuthenticated, user, hasRole } = useAuth()
+  const { isAuthenticated, user, hasRole, isLoading, authError, retryAuthentication } = useAuth()
   const location = useLocation()
+
+  if (isLoading) return <div role="status" className="p-8 text-center">Đang xác minh phiên đăng nhập…</div>
+  if (authError) return <div role="alert" className="p-8 text-center space-y-4">
+    <p>{authError}</p>
+    <button type="button" onClick={retryAuthentication} className="rounded border px-4 py-2">Thử lại</button>
+  </div>
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />

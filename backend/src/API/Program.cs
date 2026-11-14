@@ -26,6 +26,13 @@ if (OperatingSystem.IsWindows())
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOralExamAuthentication(builder.Configuration);
+builder.Services.AddApiErrorContracts();
+builder.Services.AddApiAbuseProtection(builder.Configuration);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(15);
+    options.Limits.MinRequestBodyDataRate = new Microsoft.AspNetCore.Server.Kestrel.Core.MinDataRate(240, TimeSpan.FromSeconds(10));
+});
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
@@ -105,13 +112,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-var forwardedHeadersOptions = new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-};
-forwardedHeadersOptions.KnownNetworks.Clear();
-forwardedHeadersOptions.KnownProxies.Clear();
-app.UseForwardedHeaders(forwardedHeadersOptions);
+app.UseForwardedHeaders();
 
 // Thứ tự Middleware bắt buộc: UseCors() phải nằm trước UseStaticFiles() để không bị chặn CORS trên tài nguyên tĩnh (ảnh/audio).
 app.UseCors("AllowFrontend");
@@ -123,13 +124,21 @@ if (!Directory.Exists(wwwrootPath))
 }
 app.UseStaticFiles();
 
-app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseRouting();
+app.UseApiErrorContracts();
 
 app.UseAuthentication();
+app.UseApiAbuseProtection();
 app.UseMiddleware<MustChangePasswordMiddleware>();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers().Add(endpoint =>
+{
+    var action = endpoint.Metadata.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>().FirstOrDefault();
+    if (action is not null && (action.ControllerName == "Speech" || action.ActionName.Contains("Upload", StringComparison.OrdinalIgnoreCase)
+        || action.ActionName.Contains("Generate", StringComparison.OrdinalIgnoreCase)))
+        endpoint.Metadata.Add(new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutAttribute("expensive"));
+});
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
 app.MapHub<OralExamination.API.Hubs.InClassShiftHub>("/hubs/in-class-shift");
 app.MapHub<OralExamination.API.Hubs.AntiCheatHub>("/hubs/anti-cheat");
@@ -227,6 +236,23 @@ static async Task ApplyMigrationsAsync(WebApplication app)
             }
 
             // Schema Health Check Probe (Kiểm tra sự hiện diện vật lý của 5 bảng cốt lõi)
+            var reviewSeedConfig = app.Configuration["Database:EnableTask04ReviewSeed"]
+                ?? app.Configuration["DATABASE_ENABLE_TASK04_REVIEW_SEED"];
+            var shouldSeedTask04Review = bool.TryParse(reviewSeedConfig, out var parsedReviewSeed) && parsedReviewSeed;
+            if (app.Environment.IsDevelopment() && shouldSeedTask04Review)
+            {
+                try
+                {
+                    logger.LogInformation("Running isolated Task 04 review fixture...");
+                    await Task04ReviewDataSeeder.SeedAsync(context);
+                    logger.LogInformation("Task 04 review fixture is ready.");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Task 04 review fixture could not be created; continuing API startup.");
+                }
+            }
+
             try
             {
                 using var conn = context.Database.GetDbConnection();

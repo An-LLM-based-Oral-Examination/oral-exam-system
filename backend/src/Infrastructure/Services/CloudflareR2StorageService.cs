@@ -4,7 +4,9 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Infrastructure.Resilience;
 
 namespace OralExamination.Infrastructure.Services;
 
@@ -14,11 +16,16 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
     private const string ImmutableUploadHeaderValue = "*";
     private static readonly TimeSpan MaximumPresignedUrlLifetime = TimeSpan.FromDays(7);
 
-    private readonly AmazonS3Client _s3Client;
+    private readonly IAmazonS3 _s3Client;
+    private readonly ExternalDependencyResilience _resilience;
+    private readonly bool _ownsResilience;
     private readonly string _bucketName;
     private readonly string? _configurationError;
 
-    public CloudflareR2StorageService(IConfiguration configuration)
+    public CloudflareR2StorageService(
+        IConfiguration configuration,
+        ExternalDependencyResilience? resilience = null,
+        IAmazonS3? s3Client = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
@@ -47,10 +54,15 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
         {
             ServiceURL = serviceUri.AbsoluteUri.TrimEnd('/'),
             ForcePathStyle = true,
-            AuthenticationRegion = "auto"
+            AuthenticationRegion = "auto",
+            // Application pipeline owns retries; avoid SDK × service × worker attempt multiplication.
+            MaxErrorRetry = 0
         };
 
-        _s3Client = new AmazonS3Client(accessKey, secretKey, config);
+        _s3Client = s3Client ?? new AmazonS3Client(accessKey, secretKey, config);
+        _ownsResilience = resilience is null;
+        _resilience = resilience ?? new ExternalDependencyResilience(
+            configuration, NullLogger<ExternalDependencyResilience>.Instance);
     }
 
     public async Task<string> UploadFileAsync(Stream fileStream, string objectKey, string contentType)
@@ -69,7 +81,11 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
             ContentType = contentType
         };
 
-        await fileTransferUtility.UploadAsync(uploadRequest);
+        await _resilience.ExecuteAsync(ExternalDependency.R2, async ct =>
+        {
+            await fileTransferUtility.UploadAsync(uploadRequest, ct);
+            return true;
+        }, retry: false); // A streaming write must not be blindly replayed after an ambiguous network result.
 
         // Bucket thi thật là private; Application chỉ lưu object key.
         return objectKey;
@@ -156,14 +172,14 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
 
         try
         {
-            var response = await _s3Client.GetObjectMetadataAsync(
+            var response = await _resilience.ExecuteAsync(ExternalDependency.R2, ct => _s3Client.GetObjectMetadataAsync(
                 new GetObjectMetadataRequest
                 {
                     BucketName = _bucketName,
                     Key = objectKey,
                     ChecksumMode = ChecksumMode.ENABLED
                 },
-                cancellationToken);
+                ct), cancellationToken);
 
             return new StorageObjectMetadata(
                 objectKey,
@@ -216,21 +232,19 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
                 nameof(expectedSha256Hex));
         }
 
-        using var response = await _s3Client.GetObjectAsync(
-            new GetObjectRequest
-            {
-                BucketName = _bucketName,
-                Key = objectKey
-            },
-            cancellationToken);
-
-        var actualHash = await SHA256.HashDataAsync(response.ResponseStream, cancellationToken);
-        return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+        return await _resilience.ExecuteAsync(ExternalDependency.R2, async ct =>
+        {
+            using var response = await _s3Client.GetObjectAsync(
+                new GetObjectRequest { BucketName = _bucketName, Key = objectKey }, ct);
+            var actualHash = await SHA256.HashDataAsync(response.ResponseStream, ct);
+            return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+        }, cancellationToken);
     }
 
     public void Dispose()
     {
         _s3Client.Dispose();
+        if (_ownsResilience) _resilience.Dispose();
     }
 
     private void EnsureConfigured()

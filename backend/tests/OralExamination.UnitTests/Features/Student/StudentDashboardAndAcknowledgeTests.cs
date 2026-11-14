@@ -267,6 +267,7 @@ public class StudentDashboardAndAcknowledgeTests
                 StudentId = studentId,
                 SeatNumber = 5,
                 Status = ExamTicketStatus.Published,
+                GradesPublishedAt = DateTime.UtcNow,
                 IsLocked = true,
                 StudentAcknowledgementStatus = "PENDING"
             });

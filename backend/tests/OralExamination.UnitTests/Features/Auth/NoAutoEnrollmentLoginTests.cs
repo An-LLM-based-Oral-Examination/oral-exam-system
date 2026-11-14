@@ -26,8 +26,10 @@ public class NoAutoEnrollmentLoginTests
         return new OralExamDbContext(options);
     }
 
-    [Fact(DisplayName = "R4.2-01: GoogleLogin không tự động ghi danh sinh viên vào bất kỳ lớp học active nào")]
-    public async Task GoogleLogin_ShouldNotAutoEnroll_StudentInActiveClasses()
+    [Theory(DisplayName = "R4.2-01: GoogleLogin không tự động ghi danh sinh viên mới hoặc đã có vào lớp active")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GoogleLogin_ShouldNotAutoEnroll_StudentInActiveClasses(bool existingStudent)
     {
         await using var context = CreateDbContext();
 
@@ -53,6 +55,14 @@ public class NoAutoEnrollmentLoginTests
                 JoinCode = "SE1702_CODE",
                 JoinPasswordHash = "HASH"
             });
+        if (existingStudent)
+            context.Users.Add(new User
+            {
+                Email = "student.test@fpt.edu.vn",
+                FullName = "Sinh Viên Test",
+                Role = UserRole.Student,
+                IsActive = true
+            });
         await context.SaveChangesAsync();
 
         var google = new FakeGoogle
@@ -60,12 +70,13 @@ public class NoAutoEnrollmentLoginTests
             Identity = new GoogleUserIdentity("student.test@fpt.edu.vn", "Sinh Viên Test")
         };
         var issuer = new FakeIssuer();
-        var handler = new GoogleLoginCommandHandler(context, google, issuer, new GoogleLoginCommandValidator());
+        var handler = new GoogleLoginCommandHandler(context, google, issuer, new GoogleLoginCommandValidator(), new AuthTestNonceStore());
 
-        var result = await handler.Handle(new GoogleLoginCommand("valid-token"), CancellationToken.None);
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.User.Role.Should().Be(UserRole.Student);
+        (await context.Users.CountAsync()).Should().Be(1);
 
         // Kiểm tra cam kết: ClassEnrollments BẮT BUỘC bằng 0 (không tự động ghi danh)
         var enrollmentsCount = await context.ClassEnrollments.CountAsync();
@@ -136,7 +147,7 @@ public class NoAutoEnrollmentLoginTests
 
         public Task<GoogleUserIdentity> ValidateAsync(string idToken, CancellationToken cancellationToken)
         {
-            return Task.FromResult(Identity!);
+            return Task.FromResult(Identity! with { Nonce = AuthTestNonceStore.Value });
         }
     }
 

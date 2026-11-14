@@ -15,13 +15,20 @@ namespace OralExamination.Application.Features.Appeals.Commands.CreateAppeal;
 public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCommand, Result<AppealResponseDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly AppealWindowOptions _window;
+    private readonly TimeProvider _clock;
 
-    public CreateAppealCommandHandler(IApplicationDbContext context)
+    public CreateAppealCommandHandler(IApplicationDbContext context, AppealWindowOptions? window = null, TimeProvider? clock = null)
     {
         _context = context;
+        _window = window ?? new AppealWindowOptions();
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<Result<AppealResponseDto>> Handle(CreateAppealCommand request, CancellationToken cancellationToken)
+        => await _context.ExecuteTicketDecisionAsync(request.TicketId, ct => HandleLocked(request, ct), cancellationToken);
+
+    private async Task<Result<AppealResponseDto>> HandleLocked(CreateAppealCommand request, CancellationToken cancellationToken)
     {
         var ticket = await _context.StudentExamTickets
             .Include(t => t.Shift)
@@ -57,11 +64,17 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             }
         }
 
+        var restriction = AppealWindowPolicy.Restriction(ticket, _clock.GetUtcNow().UtcDateTime, _window.Hours);
+        if (restriction != null)
+            return Result<AppealResponseDto>.Failure("CONFLICT: " + restriction);
+
         // Kiểm tra xem đã có đơn phúc khảo cho vé / câu này đang chờ hoặc đang xử lý chưa
         var hasPendingAppeal = await _context.AppealRequests.AnyAsync(a =>
             a.TicketId == request.TicketId &&
             a.SubmissionId == request.SubmissionId &&
-            (a.Status == AppealStatus.Pending || a.Status == AppealStatus.InReview),
+            (a.Status == AppealStatus.SubmittedToExamOffice ||
+             a.Status == AppealStatus.AssignedToLecturer ||
+             a.Status == AppealStatus.RegradedByLecturer),
             cancellationToken);
 
         if (hasPendingAppeal)
@@ -117,7 +130,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             SessionId = sessionId,
             SubmissionId = request.SubmissionId,
             Reason = request.Reason.Trim(),
-            Status = AppealStatus.Pending,
+            Status = AppealStatus.SubmittedToExamOffice,
             AssignedTo = assignedUser.Id,
             OriginalScore = originalScore,
             CreatedAt = DateTime.UtcNow,
@@ -159,6 +172,8 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         }
 
         var deptHeadTargetId = course?.DepartmentHeadUserId ?? assignedUser.Id;
+        if (examOfficers.All(officer => officer.Id != deptHeadTargetId))
+        {
         _context.Notifications.Add(new Notification
         {
             Id = Guid.NewGuid(),
@@ -171,7 +186,9 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             RelatedEntityName = "AppealRequest",
             RelatedEntityId = appeal.Id
         });
+        }
 
+        AppealWorkflowEffects.AddTransitionAudit(_context, request.StudentId, appeal, null, appeal.Status);
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new AppealResponseDto

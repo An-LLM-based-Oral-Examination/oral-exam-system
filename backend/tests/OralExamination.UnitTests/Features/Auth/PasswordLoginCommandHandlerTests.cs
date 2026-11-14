@@ -14,6 +14,7 @@ using OralExamination.API.Middlewares;
 using OralExamination.Infrastructure.Authentication;
 using OralExamination.Infrastructure.Persistence;
 using Xunit;
+using OralExamination.Application.Common.Auth;
 
 namespace OralExamination.UnitTests.Features.Auth;
 
@@ -247,6 +248,40 @@ public class PasswordLoginCommandHandlerTests
         context.Users.Add(user);
         await context.SaveChangesAsync();
         return user;
+    }
+
+    [Fact]
+    public async Task RepeatedFailures_LockSameAccountAcrossEmailAndUsername_AuditAndNeverIssueToken()
+    {
+        await using var context = CreateDbContext();
+        var user = await SeedStudent(context, SampleCode, "MatKhau-Tam-1!", false);
+        var guard = new LoginAttemptGuard(new LoginProtectionOptions { FailedAttemptLimit = 2 });
+        var handler = new PasswordLoginCommandHandler(context, _hasher, new RecordingIssuer(), new PasswordLoginCommandValidator(), guard);
+        (await handler.Handle(new PasswordLoginCommand(SampleUsername, "Wrong-password!"), default)).Error.Should().Be(AuthErrors.WrongPassword);
+        (await handler.Handle(new PasswordLoginCommand(user.Email, "Wrong-password!"), default)).Error.Should().Be(AuthErrors.LoginTemporarilyLocked);
+        (await handler.Handle(new PasswordLoginCommand(SampleUsername, "MatKhau-Tam-1!"), default)).Error.Should().Be(AuthErrors.LoginTemporarilyLocked);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+        (await context.AuditLogs.Select(x => x.Action).ToListAsync()).Should().BeEquivalentTo("LOGIN_FAILED", "LOGIN_TEMPORARILY_LOCKED");
+    }
+
+    [Fact]
+    public async Task TemporaryLock_ExpiresAndValidLoginSucceeds()
+    {
+        await using var context = CreateDbContext();
+        await SeedStudent(context, SampleCode, "MatKhau-Tam-1!", false);
+        var clock = new LoginTestClock();
+        var guard = new LoginAttemptGuard(new LoginProtectionOptions { FailedAttemptLimit = 1, LockoutSeconds = 10 }, clock);
+        var handler = new PasswordLoginCommandHandler(context, _hasher, new RecordingIssuer(), new PasswordLoginCommandValidator(), guard);
+        (await handler.Handle(new PasswordLoginCommand(SampleUsername, "Wrong-password!"), default)).Error.Should().Be(AuthErrors.LoginTemporarilyLocked);
+        clock.Now = clock.Now.AddSeconds(11);
+        (await handler.Handle(new PasswordLoginCommand(SampleUsername, "MatKhau-Tam-1!"), default)).IsSuccess.Should().BeTrue();
+        (await context.RefreshTokens.CountAsync()).Should().Be(1);
+    }
+
+    private sealed class LoginTestClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     private PasswordLoginCommandHandler CreateLoginHandler(OralExamDbContext context, RecordingIssuer issuer)

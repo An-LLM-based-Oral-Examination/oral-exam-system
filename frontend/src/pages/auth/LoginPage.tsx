@@ -75,6 +75,8 @@ export function LoginPage() {
   const googleButtonRef = useRef<HTMLDivElement>(null)
   const [googleConfigured, setGoogleConfigured] = useState(Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID))
   const [googleOriginError, setGoogleOriginError] = useState(false)
+  const [googleChallengeError, setGoogleChallengeError] = useState(false)
+  const [googleAttempt, setGoogleAttempt] = useState(0)
 
   // Intercept GSI_LOGGER warnings/errors to handle origin mismatch gracefully (with safeSerialize against circular structures)
   useEffect(() => {
@@ -138,11 +140,17 @@ export function LoginPage() {
 
     let isMounted = true
     let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let renewalId: ReturnType<typeof setTimeout> | undefined
+    let preparing = false
+    const challengeRequest = new AbortController()
 
     const handleGoogleCredential = ({ credential }: { credential: string }) => {
+      if (!isMounted) return
+      if (renewalId) clearTimeout(renewalId)
       setIsLoading(true)
-      void loginWithGoogle(credential)
+      void loginWithGoogle(credential, challengeRequest.signal)
         .then(() => {
+          if (!isMounted) return
           const currentUser = authService.getCurrentUser()
           if (currentUser?.mustChangePassword) {
             toast.info('Bạn cần đổi mật khẩu trước khi tiếp tục.')
@@ -151,14 +159,21 @@ export function LoginPage() {
             navigate('/', { replace: true })
           }
         })
-        .catch((loginError: unknown) => toast.error(getLoginErrorMessage(loginError)))
-        .finally(() => setIsLoading(false))
+        .catch((loginError: unknown) => {
+          if (!isMounted) return
+          toast.error(getLoginErrorMessage(loginError))
+          void renderGoogleButton()
+        })
+        .finally(() => { if (isMounted) setIsLoading(false) })
     }
 
-    const renderGoogleButton = () => {
-      if (!googleAuthManager.isLoaded() || !googleButtonRef.current) return
+    const renderGoogleButton = async () => {
+      if (!isMounted || preparing || !googleAuthManager.isLoaded() || !googleButtonRef.current) return
+      preparing = true
       try {
-        googleAuthManager.initialize(clientId, handleGoogleCredential)
+        const challenge = await authService.createGoogleChallenge(challengeRequest.signal)
+        if (!isMounted || !googleButtonRef.current) return
+        googleAuthManager.initialize(clientId, handleGoogleCredential, challenge.nonce)
         googleAuthManager.renderButton(googleButtonRef.current, {
           theme: 'outline',
           size: 'large',
@@ -167,6 +182,9 @@ export function LoginPage() {
           shape: 'rectangular',
         })
         setGoogleConfigured(true)
+        setGoogleChallengeError(false)
+        if (renewalId) clearTimeout(renewalId)
+        renewalId = setTimeout(() => { void renderGoogleButton() }, Math.max(1, challenge.expiresIn - 15) * 1000)
 
         // Sau 800ms kiểm tra nếu button không render được iframe do origin mismatch hoặc lỗi script
         timeoutId = setTimeout(() => {
@@ -174,26 +192,28 @@ export function LoginPage() {
             setGoogleOriginError(true)
           }
         }, 800)
-      } catch (renderError) {
-        console.warn('[GSI Resilience] Lỗi khởi tạo Google Identity Services:', renderError)
-        if (isMounted) {
-          setGoogleOriginError(true)
-        }
+      } catch {
+        // Do not log credential/nonce or arbitrary SDK/server error payloads.
+        if (isMounted && !challengeRequest.signal.aborted) setGoogleChallengeError(true)
+      } finally {
+        preparing = false
       }
     }
 
-    // Fallback timer 2.5s: tự động kích hoạt chế độ fallback an toàn nếu nút Google không thể render sau 2.5s
+    // SDK chưa tải sau 10 giây: giữ password login khả dụng, không suy luận lỗi từ challenge API.
     const globalFallbackTimer = setTimeout(() => {
-      if (isMounted && googleButtonRef.current && googleButtonRef.current.childElementCount === 0) {
-        console.warn('[GSI Resilience] Google Sign-In không phản hồi sau 2.5s. Kích hoạt fallback an toàn.')
+      if (isMounted && !googleAuthManager.isLoaded()) {
+        console.warn('[GSI Resilience] Google Sign-In SDK chưa tải sau 10s.')
         setGoogleOriginError(true)
       }
-    }, 2500)
+    }, 10000)
 
     if (googleAuthManager.isLoaded()) {
-      renderGoogleButton()
+      void renderGoogleButton()
       return () => {
         isMounted = false
+        challengeRequest.abort()
+        if (renewalId) clearTimeout(renewalId)
         if (timeoutId) clearTimeout(timeoutId)
         if (globalFallbackTimer) clearTimeout(globalFallbackTimer)
       }
@@ -222,12 +242,14 @@ export function LoginPage() {
     script.addEventListener('error', handleScriptError)
     return () => {
       isMounted = false
+      challengeRequest.abort()
+      if (renewalId) clearTimeout(renewalId)
       if (timeoutId) clearTimeout(timeoutId)
       if (globalFallbackTimer) clearTimeout(globalFallbackTimer)
       script.removeEventListener('load', renderGoogleButton)
       script.removeEventListener('error', handleScriptError)
     }
-  }, [loginWithGoogle, navigate])
+  }, [loginWithGoogle, navigate, googleAttempt])
 
   return (
     <main className="login-page-shell h-dvh w-full overflow-hidden bg-[#0F2854] p-0.5">
@@ -443,7 +465,7 @@ export function LoginPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-[#0F2854]">Đăng nhập bằng Google</p>
                     <p className="mt-0.5 text-xs leading-relaxed text-[#6d7f97]">
-                      Tài khoản được cấp quyền bởi nhà trường.
+                      Sinh viên có thể đăng nhập Google để bắt đầu.
                     </p>
                   </div>
                   <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[#82aedb]/40 bg-white text-[#1C4D8D]">
@@ -451,7 +473,14 @@ export function LoginPage() {
                   </span>
                 </div>
 
-                {googleOriginError ? (
+                {googleChallengeError ? (
+                  <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                    <p>Không tạo được phiên đăng nhập Google. Vui lòng thử lại.</p>
+                    <button type="button" className="mt-2 rounded-lg border px-3 py-2 font-semibold" onClick={() => {
+                      setGoogleChallengeError(false); setGoogleOriginError(false); setGoogleAttempt(value => value + 1)
+                    }}>Thử lại Google</button>
+                  </div>
+                ) : googleOriginError ? (
                   <div
                     role="alert"
                     className="mt-2 rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-900 shadow-sm"

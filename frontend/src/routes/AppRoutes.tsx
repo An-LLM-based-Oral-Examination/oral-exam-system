@@ -9,6 +9,9 @@ import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 import {
   AdminDashboardPage,
   DepartmentHeadDashboardPage,
+  DepartmentLecturerAssignmentPage,
+  DepartmentCourseClosPage,
+  OfficialExamManagementPage,
   AppealManagementPage,
   AuditEvidencePage,
   CreateQuestionPage,
@@ -183,7 +186,7 @@ export const appRoutes = createRoutesFromElements(
             redirects={{
               Admin: ROUTE_PATHS.admin.dlq,
               ExaminationOfficer: ROUTE_PATHS.examinationOfficer.dlq,
-              Instructor: '/unauthorized',
+              Instructor: '/lecturer/dlq',
               DepartmentHead: '/unauthorized',
             }}
           />
@@ -211,6 +214,7 @@ export const appRoutes = createRoutesFromElements(
             <Route path={ROUTE_PATHS.lecturer.createQuestion} element={<CreateQuestionPage />} />
             <Route path={ROUTE_PATHS.lecturer.audit} element={<AuditEvidencePage />} />
             <Route path={ROUTE_PATHS.lecturer.appeals} element={<AppealManagementPage />} />
+            <Route path="/lecturer/dlq" element={<DeadLetterQueuePage />} />
           </Route>
         </Route>
         <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
@@ -228,6 +232,10 @@ export const appRoutes = createRoutesFromElements(
               </Suspense>
             }
           >
+            <Route path="/department-head/lecturer-assignments" element={<DepartmentLecturerAssignmentPage />} />
+            <Route path="/department-head/clos" element={<DepartmentCourseClosPage />} />
+            <Route path="/department-head/exam-structures" element={<OfficialExamManagementPage />} />
+            <Route path="/department/clos" element={<Navigate to="/department-head/clos" replace />} />
             <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />
             <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionStudioPage />} />
             <Route path={ROUTE_PATHS.departmentHead.appeals} element={<AppealManagementPage />} />

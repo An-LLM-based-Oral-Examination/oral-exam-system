@@ -32,9 +32,9 @@ public class PublishGradesCommandHandlerTests
         var lecturer = new User
         {
             Id = Guid.NewGuid(),
-            Email = "lecturer.exam@fpt.edu.vn",
-            FullName = "ThS. Giảng Viên Khảo Thí",
-            Role = UserRole.Lecturer,
+            Email = "publisher.exam@fpt.edu.vn",
+            FullName = "Cán bộ Khảo thí công bố điểm",
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 
@@ -163,6 +163,7 @@ public class PublishGradesCommandHandlerTests
         updatedTickets.Should().HaveCount(3);
         updatedTickets.Should().OnlyContain(t => t.IsLocked == true);
         updatedTickets.Should().OnlyContain(t => t.Status == ExamTicketStatus.Published);
+        updatedTickets.Should().OnlyContain(t => t.GradesPublishedAt == result.Value.PublishedAt);
 
         var updatedShift = await context.RealExamSessionShifts.FindAsync(shift.Id);
         updatedShift!.Status.Should().Be("completed");
@@ -264,7 +265,7 @@ public class PublishGradesCommandHandlerTests
             Id = Guid.NewGuid(),
             Email = "lecturer.empty@fpt.edu.vn",
             FullName = "GV Empty",
-            Role = UserRole.Lecturer,
+            Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
 
@@ -322,12 +323,17 @@ public class PublishGradesCommandHandlerTests
         var (lecturer, shift, tickets) = await SeedShiftDataAsync(context, ticketCount: 1, allScored: false);
 
         var ticket = tickets[0];
+        var auditor = new User
+        {
+            Email = "auditor@publishgrades.test", FullName = "Assigned examiner", Role = UserRole.Lecturer, IsActive = true
+        };
+        context.Users.Add(auditor);
         // Thêm LecturerAudit cho vé thi này
         var audit = new LecturerAudit
         {
             Id = Guid.NewGuid(),
             TicketId = ticket.Id,
-            LecturerId = lecturer.Id,
+            LecturerId = auditor.Id,
             OriginalAiScore = 0m,
             AuditedScore = 9.00m,
             OverrideReason = "Giảng viên đã nghe lại audio và chấm 9.00 điểm trực tiếp.",
@@ -349,8 +355,8 @@ public class PublishGradesCommandHandlerTests
         updatedAudit!.IsLocked.Should().BeTrue();
     }
 
-    [Fact(DisplayName = "9. ExaminationOfficer và Admin có quyền công bố điểm ca thi (RBAC 6 roles)")]
-    public async Task Handle_Should_Pass_When_Actor_Is_ExaminationOfficer_Or_Admin()
+    [Fact(DisplayName = "9. ExaminationOfficer có quyền công bố điểm ca thi (RBAC 6 roles)")]
+    public async Task Handle_Should_Pass_When_Actor_Is_ExaminationOfficer()
     {
         using var context = CreateDbContext();
         var (_, shift, _) = await SeedShiftDataAsync(context, ticketCount: 2, allScored: true);

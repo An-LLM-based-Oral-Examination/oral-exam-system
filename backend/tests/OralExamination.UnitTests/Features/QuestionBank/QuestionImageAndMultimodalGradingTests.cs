@@ -398,7 +398,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
 
         context.Courses.Add(new Course { Id = courseId, Code = "SWD392", Name = "Software Architecture", Credits = 3, IsActive = true });
         context.Users.AddRange(
-            new User { Id = headId, Email = "head@fpt.edu.vn", FullName = "Trưởng BM", Role = UserRole.DepartmentHead, IsActive = true },
+            new User { Id = headId, Email = "officer@fpt.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true },
             new User { Id = studentId, Email = "sv@fpt.edu.vn", StudentCode = "SE170999", FullName = "Nguyễn Văn A", Role = UserRole.Student, IsActive = true });
         context.Rubrics.Add(new Rubric { Id = rubricId, CourseId = courseId, Name = "Rubric 10", TotalMaxScore = 10m, IsActive = true });
         context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, CreatedBy = headId, Name = "Cấu trúc Kiosk", TotalQuestions = 1, DurationMinutes = 15, IsActive = true });

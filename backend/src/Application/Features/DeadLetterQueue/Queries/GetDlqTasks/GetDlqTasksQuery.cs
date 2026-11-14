@@ -9,4 +9,5 @@ public record GetDlqTasksQuery(
     string? Status = null,
     string? FlowType = null,
     string? ManagedByRole = null,
-    List<string>? FlowTypes = null) : IRequest<Result<List<DeadLetterQueueDto>>>;
+    List<string>? FlowTypes = null,
+    System.Guid? ActorUserId = null) : IRequest<Result<List<DeadLetterQueueDto>>>;

@@ -21,7 +21,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/proctor")]
-[Authorize(Roles = "proctor,examination_officer,lecturer,department_head,admin")]
+[Authorize(Roles = "proctor,examination_officer")]
 public class ProctorController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
@@ -45,7 +45,9 @@ public class ProctorController(ISender sender) : ControllerBase
         [FromRoute] Guid shiftId,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetShiftAttendanceQuery(shiftId), cancellationToken);
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var result = await _sender.Send(new GetShiftAttendanceQuery(shiftId, actorId), cancellationToken);
         if (!result.IsSuccess)
         {
             return ProctorProblem(result.Error);
@@ -56,16 +58,18 @@ public class ProctorController(ISender sender) : ControllerBase
 
     [HttpPost("shifts/{shiftId:guid}/attendance")]
     [HttpPost("shifts/{shiftId:guid}/check-in")]
+    [Authorize(Roles = "proctor")]
     public async Task<IActionResult> UpdateShiftAttendance(
         [FromRoute] Guid shiftId,
         [FromBody] UpdateTicketAttendanceRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         var ticketId = request?.TicketId ?? Guid.Empty;
-        return await UpdateAttendance(ticketId, request, cancellationToken);
+        return await UpdateAttendanceCore(ticketId, request, cancellationToken, shiftId);
     }
 
     [HttpPost("check-in")]
+    [Authorize(Roles = "proctor")]
     public async Task<IActionResult> CheckInByTicketBody(
         [FromBody] UpdateTicketAttendanceRequest? request = null,
         CancellationToken cancellationToken = default)
@@ -76,10 +80,15 @@ public class ProctorController(ISender sender) : ControllerBase
 
     [HttpPut("tickets/{ticketId:guid}/attendance")]
     [HttpPost("tickets/{ticketId:guid}/check-in")]
+    [Authorize(Roles = "proctor")]
     public async Task<IActionResult> UpdateAttendance(
         [FromRoute] Guid ticketId,
         [FromBody] UpdateTicketAttendanceRequest? request = null,
         CancellationToken cancellationToken = default)
+        => await UpdateAttendanceCore(ticketId, request, cancellationToken);
+
+    private async Task<IActionResult> UpdateAttendanceCore(Guid ticketId, UpdateTicketAttendanceRequest? request,
+        CancellationToken cancellationToken, Guid? expectedShiftId = null)
     {
         var actorId = GetCurrentUserId();
         if (actorId == Guid.Empty)
@@ -94,7 +103,8 @@ public class ProctorController(ISender sender) : ControllerBase
                 request?.IsPresent ?? true,
                 request?.IpAddress,
                 request?.Note,
-                request?.SeatNumber),
+                request?.SeatNumber,
+                expectedShiftId),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -106,7 +116,7 @@ public class ProctorController(ISender sender) : ControllerBase
     }
 
     [HttpPost("tickets/{ticketId:guid}/suspend")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> SuspendTicket(
         [FromRoute] Guid ticketId,
         [FromBody] SuspendExamTicketRequest request,
@@ -131,7 +141,7 @@ public class ProctorController(ISender sender) : ControllerBase
     }
 
     [HttpPost("shifts/{shiftId:guid}/violations")]
-    [Authorize(Roles = "proctor,examination_officer,admin")]
+    [Authorize(Roles = "proctor")]
     public async Task<IActionResult> RecordViolation(
         [FromRoute] Guid shiftId,
         [FromBody] RecordProctorViolationRequest request,
@@ -166,6 +176,7 @@ public class ProctorController(ISender sender) : ControllerBase
     {
         var statusCode = error switch
         {
+            var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
             var err when err.StartsWith("LOCKED:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,

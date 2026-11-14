@@ -23,6 +23,7 @@ public partial class StudentExamTicket : ILockableEntity
     public bool IsLocked { get; set; } = false;
     public DateTime CheckedInAt { get; set; } = DateTime.UtcNow;
     public DateTime? SubmittedAt { get; set; }
+    public DateTime? GradesPublishedAt { get; set; }
 
     public virtual RealExamSessionShift Shift { get; set; } = null!;
     public virtual User Student { get; set; } = null!;

@@ -73,8 +73,7 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
                 .Any(a => a.State == EntityState.Modified
                           && a.Entity.TicketId == lockedAudit.TicketId
                           && a.Property(nameof(AppealRequest.Status)).OriginalValue is string origStatus
-                          && (string.Equals(origStatus, AppealStatus.Pending, StringComparison.OrdinalIgnoreCase)
-                              || string.Equals(origStatus, AppealStatus.InReview, StringComparison.OrdinalIgnoreCase))
+                          && string.Equals(origStatus, AppealStatus.RegradedByLecturer, StringComparison.OrdinalIgnoreCase)
                           && string.Equals(a.Entity.Decision, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
                           && string.Equals(a.Entity.Status, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
                           && a.Entity.ProposedScore.HasValue
@@ -246,8 +245,7 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
             appealEntry.State == EntityState.Modified
             && appealEntry.Entity.TicketId == submissionEntry.Entity.TicketId
             && appealEntry.Property(nameof(AppealRequest.Status)).OriginalValue is string origStatus
-            && (string.Equals(origStatus, AppealStatus.Pending, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(origStatus, AppealStatus.InReview, StringComparison.OrdinalIgnoreCase))
+            && string.Equals(origStatus, AppealStatus.RegradedByLecturer, StringComparison.OrdinalIgnoreCase)
             && string.Equals(appealEntry.Entity.Status, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
             && string.Equals(appealEntry.Entity.Decision, AppealStatus.Approved, StringComparison.OrdinalIgnoreCase)
             && ((!appealEntry.Entity.SubmissionId.HasValue && appealEntry.Entity.ProposedScore == submissionEntry.Entity.FinalScore)

@@ -9,13 +9,14 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Student.DTOs;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Features.Appeals;
 
 namespace OralExamination.Application.Features.Student.Queries.GetOfficialExamGrade;
 
 /// <summary>
 /// Handler truy xuất kết quả điểm thi thật chính thức và Scorecard chi tiết theo CLO/Rubric cho sinh viên trên Student Portal (MF-04).
 /// </summary>
-public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext context)
+public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext context, AppealWindowOptions? window = null, TimeProvider? clock = null)
     : IRequestHandler<GetOfficialExamGradeQuery, Result<StudentOfficialExamGradeDto>>
 {
     private readonly IApplicationDbContext _context = context;
@@ -51,9 +52,7 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
             return Result<StudentOfficialExamGradeDto>.Failure("FORBIDDEN: Bạn không có quyền xem điểm vé thi của sinh viên khác.");
         }
 
-        bool isPublishedOrLocked = ticket.IsLocked
-            || string.Equals(ticket.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+        bool isPublishedOrLocked = AppealWindowPolicy.IsPublished(ticket);
 
         if (!isPublishedOrLocked)
         {
@@ -119,9 +118,16 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
             })
             .ToList();
 
-        var publishedAt = ticket.LecturerAudit?.AuditedAt
-            ?? ticket.SubmittedAt
-            ?? ticket.CheckedInAt;
+        var publishedAt = ticket.GradesPublishedAt;
+        var hours = (window ?? new AppealWindowOptions()).Hours;
+        var restriction = AppealWindowPolicy.Restriction(ticket, (clock ?? TimeProvider.System).GetUtcNow().UtcDateTime, hours);
+        var hasOpenAppeal = await _context.AppealRequests.AsNoTracking().AnyAsync(a => a.TicketId == ticket.Id &&
+            (a.Status == AppealStatus.SubmittedToExamOffice ||
+             a.Status == AppealStatus.AssignedToLecturer ||
+             a.Status == AppealStatus.RegradedByLecturer), cancellationToken);
+        if (hasOpenAppeal) restriction = "Đang có đơn phúc khảo được xử lý.";
+        var canAcknowledge = publishedAt.HasValue && !hasOpenAppeal &&
+            !ticket.StudentAcknowledgementStatus.Equals("ACKNOWLEDGED", StringComparison.OrdinalIgnoreCase);
 
         var publishedBy = ticket.LecturerAudit?.Lecturer?.Email
             ?? ticket.LecturerAudit?.Lecturer?.FullName
@@ -141,10 +147,12 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
             StudentAcknowledgementStatus = ticket.StudentAcknowledgementStatus ?? "PENDING",
             DetailedScorecard = detailedScorecard,
             InternalAppeal = new StudentInternalAppealInfoDto(
-                true,
-                "Nếu không đồng ý với kết quả, sinh viên có quyền nộp đơn phúc khảo trực tiếp trên cổng thông tin này.",
-                3,
-                "/api/v1/appeals")
+                restriction == null,
+                restriction ?? "Bạn có thể gửi phúc khảo trước thời điểm hết hạn.",
+                (int)Math.Ceiling(hours / 24d),
+                "/api/v1/appeals",
+                publishedAt?.AddHours(hours),
+                canAcknowledge)
         });
     }
 }

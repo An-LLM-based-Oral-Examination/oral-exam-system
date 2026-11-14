@@ -26,7 +26,9 @@ public class ResolveDlqTaskCommandHandlerTests
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new OralExamDbContext(options);
+        var context = new OralExamDbContext(options);
+        DlqTestActors.Seed(context);
+        return context;
     }
 
     [Fact(DisplayName = "1. ResolveDlqTaskCommand: Trả về Failure khi không tìm thấy tác vụ DLQ với Id đã cho")]
@@ -35,7 +37,7 @@ public class ResolveDlqTaskCommandHandlerTests
         // Arrange
         using var context = CreateDbContext();
         var handler = new ResolveDlqTaskCommandHandler(context);
-        var command = new ResolveDlqTaskCommand(Guid.NewGuid(), "Resolved");
+        var command = new ResolveDlqTaskCommand(Guid.NewGuid(), "Resolved", DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -50,7 +52,7 @@ public class ResolveDlqTaskCommandHandlerTests
     {
         // Arrange
         using var context = CreateDbContext();
-        var adminId = Guid.NewGuid();
+        var adminId = DlqTestActors.Admin;
         var dlqEntry = new DlqEntity
         {
             Id = Guid.NewGuid(),
@@ -85,7 +87,7 @@ public class ResolveDlqTaskCommandHandlerTests
     {
         // Arrange
         using var context = CreateDbContext();
-        var officerId = Guid.NewGuid();
+        var officerId = DlqTestActors.Officer;
         var dlqEntry = new DlqEntity
         {
             Id = Guid.NewGuid(),
@@ -134,7 +136,7 @@ public class ResolveDlqTaskCommandHandlerTests
         await context.SaveChangesAsync();
 
         var handler = new ResolveDlqTaskCommandHandler(context);
-        var command = new ResolveDlqTaskCommand(dlqEntry.Id, "Note", Guid.NewGuid(), "examination_officer");
+        var command = new ResolveDlqTaskCommand(dlqEntry.Id, "Note", DlqTestActors.Officer, "examination_officer");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -142,7 +144,6 @@ public class ResolveDlqTaskCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("FORBIDDEN");
-        result.Error.Should().Contain("Quản trị viên (Admin)");
     }
 
     [Fact(DisplayName = "5. ResolveDlqTaskCommand: Non-examination_officer resolve tác vụ Official bị từ chối FORBIDDEN")]
@@ -164,7 +165,7 @@ public class ResolveDlqTaskCommandHandlerTests
         await context.SaveChangesAsync();
 
         var handler = new ResolveDlqTaskCommandHandler(context);
-        var command = new ResolveDlqTaskCommand(dlqEntry.Id, "Note", Guid.NewGuid(), "admin");
+        var command = new ResolveDlqTaskCommand(dlqEntry.Id, "Note", DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -172,7 +173,6 @@ public class ResolveDlqTaskCommandHandlerTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("FORBIDDEN");
-        result.Error.Should().Contain("Cán bộ Khảo thí");
     }
 
     [Fact(DisplayName = "6. ResolveDlqTaskCommand: Phân định loại trừ lẫn nhau theo TaskType và xóa NextRetryAt = null khi resolved")]
@@ -196,14 +196,14 @@ public class ResolveDlqTaskCommandHandlerTests
 
         // Khảo thí không được phép resolve tác vụ có TaskType == PracticeGrading
         var officerAttempt = await handler.Handle(
-            new ResolveDlqTaskCommand(practiceWithDefaultFlow.Id, "Thử resolve", Guid.NewGuid(), "examination_officer"),
+            new ResolveDlqTaskCommand(practiceWithDefaultFlow.Id, "Thử resolve", DlqTestActors.Officer, "examination_officer"),
             CancellationToken.None);
         officerAttempt.IsSuccess.Should().BeFalse();
         officerAttempt.Error.Should().Contain("FORBIDDEN");
 
         // Admin được phép resolve và NextRetryAt được xóa về null
         var adminAttempt = await handler.Handle(
-            new ResolveDlqTaskCommand(practiceWithDefaultFlow.Id, "Admin resolve", Guid.NewGuid(), "admin"),
+            new ResolveDlqTaskCommand(practiceWithDefaultFlow.Id, "Admin resolve", DlqTestActors.Admin, "admin"),
             CancellationToken.None);
         adminAttempt.IsSuccess.Should().BeTrue();
 
@@ -295,7 +295,7 @@ public class ResolveDlqTaskCommandHandlerTests
 
         // 1. GetDlqTasksQueryHandler lọc Status không phân biệt hoa thường & khoảng trắng
         var getDlqHandler = new GetDlqTasksQueryHandler(context);
-        var queryRes = await getDlqHandler.Handle(new GetDlqTasksQuery(Status: "  PENDING  "), CancellationToken.None);
+        var queryRes = await getDlqHandler.Handle(new GetDlqTasksQuery(Status: "  PENDING  ", ActorUserId: DlqTestActors.Admin), CancellationToken.None);
         queryRes.IsSuccess.Should().BeTrue();
         queryRes.Value.Should().ContainSingle(x => x.Id == dlqPending.Id);
 

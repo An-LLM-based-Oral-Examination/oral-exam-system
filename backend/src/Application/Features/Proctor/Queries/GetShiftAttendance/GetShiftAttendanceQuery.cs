@@ -12,7 +12,7 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Proctor.Queries.GetShiftAttendance;
 
-public sealed record GetShiftAttendanceQuery(Guid ShiftId)
+public sealed record GetShiftAttendanceQuery(Guid ShiftId, Guid ActorUserId = default)
     : IRequest<Result<ShiftAttendanceMonitorResponseDto>>;
 
 public sealed class GetShiftAttendanceQueryHandler
@@ -29,6 +29,9 @@ public sealed class GetShiftAttendanceQueryHandler
         GetShiftAttendanceQuery request,
         CancellationToken cancellationToken)
     {
+        if (!await ProctorAuthorization.CanAccessShiftAsync(_context, request.ActorUserId, request.ShiftId, true, cancellationToken))
+            return Result<ShiftAttendanceMonitorResponseDto>.Failure(ProctorAuthorization.Forbidden);
+
         var shift = await _context.RealExamSessionShifts
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);

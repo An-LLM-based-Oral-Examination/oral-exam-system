@@ -14,6 +14,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using OralExamination.Infrastructure.Resilience;
 
 namespace OralExamination.Infrastructure.Services;
 
@@ -443,11 +444,14 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         HttpResponseMessage? response = null;
         string lastError = string.Empty;
         System.Net.HttpStatusCode? lastTransientStatusCode = null;
+        var dependencyBudgetExhausted = false;
 
         foreach (var activeApiKey in _candidateApiKeys) foreach (var targetUrl in candidateUrls)
         {
-            if (response is { IsSuccessStatusCode: true }) break; try
+            if (dependencyBudgetExhausted || response is { IsSuccessStatusCode: true }) break; try
             {
+                response?.Dispose();
+                response = null;
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
 
@@ -479,6 +483,8 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                     || (int)response.StatusCode >= 500)
                 {
                     lastTransientStatusCode = response.StatusCode;
+                    dependencyBudgetExhausted = true;
+                    break;
                 }
 
                 if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized
@@ -491,6 +497,8 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 lastError = $"Gemini API request timed out after 12s ({targetUrl}).";
+                lastTransientStatusCode = System.Net.HttpStatusCode.RequestTimeout;
+                dependencyBudgetExhausted = true;
                 _logger.LogWarning("Gemini API request timed out after 12s on {TargetUrl}.", targetUrl);
             }
             catch (HttpRequestException ex)
@@ -498,9 +506,11 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 lastTransientStatusCode ??= ex.StatusCode;
                 lastError = $"Gemini API network error ({targetUrl}): {ex.Message}";
                 _logger.LogError(ex, "Gemini API network error on {TargetUrl}: {Message}", targetUrl, ex.Message);
+                dependencyBudgetExhausted = ExternalDependencyResilience.IsTransient(ex);
             }
         }
 
+        using var ownedResponse = response;
         if (response == null || !response.IsSuccessStatusCode)
         {
             _logger.LogWarning("Gemini API candidate URLs exhausted. Attempting fallback to Cloudflare Llama. LastError: {LastError}", lastError);
@@ -553,6 +563,10 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 request);
         }
         catch (HttpRequestException) when (request.ThrowOnTransientFailure)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
@@ -794,6 +808,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 AiGradingBulkhead.Release();
             }
 
+            using var ownedResponse = resp;
             if (!resp.IsSuccessStatusCode)
             {
                 var cfErr = await resp.Content.ReadAsStringAsync(timeoutCts.Token);
@@ -830,6 +845,10 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
 
             return ParseCleanAiGradingJson(rawContent);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

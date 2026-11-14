@@ -1,6 +1,9 @@
 import { lazy } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 
+export const DepartmentLecturerAssignmentPage = lazy(() => import('@/pages/lecturer/DepartmentLecturerAssignmentPage'))
+export const DepartmentCourseClosPage = lazy(() => import('@/pages/lecturer/DepartmentCourseClosPage'))
+
 export const LecturerDashboardPage = lazy(() =>
   import('@/pages/lecturer/LecturerDashboardPage').then((module) => ({
     default: module.LecturerDashboardPage,

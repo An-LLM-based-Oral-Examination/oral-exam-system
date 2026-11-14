@@ -8,4 +8,5 @@ namespace OralExamination.Application.Features.Courses.Queries.GetCourseClos;
 
 public sealed record GetCourseClosQuery(
     Guid CourseId,
-    bool? ActiveOnly = null) : IRequest<Result<List<CourseCloDto>>>;
+    bool? ActiveOnly = null,
+    string? ActorRole = null) : IRequest<Result<List<CourseCloDto>>>;

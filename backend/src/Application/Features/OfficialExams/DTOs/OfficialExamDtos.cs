@@ -56,7 +56,7 @@ public sealed class CreateOfficialExamSessionRequest
     public string? Title { get; set; }
     public DateOnly ExamDate { get; set; }
     public bool HasFollowUp { get; set; }
-    public int MaxFollowUpQuestions { get; set; } = 2;
+    public int MaxFollowUpQuestions { get; set; } = OfficialExamRules.DefaultFollowUpQuestions;
     public string? ExamInputMode { get; set; }
     public int TranscriptBufferSeconds { get; set; } = 60;
 }
@@ -100,7 +100,7 @@ public sealed record ExamShiftResponse(
 public sealed class ConfigureOfficialExamFollowUpRequest
 {
     public bool HasFollowUp { get; set; }
-    public int MaxFollowUpQuestions { get; set; } = 2;
+    public int MaxFollowUpQuestions { get; set; } = OfficialExamRules.DefaultFollowUpQuestions;
 }
 
 public sealed class AssignExamTicketRequest

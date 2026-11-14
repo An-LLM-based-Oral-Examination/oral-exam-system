@@ -8,25 +8,35 @@ import { toast } from '@/components/common/toastStore'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { userMessage } from '@/lib/userMessage'
+import { useAuth } from '@/hooks/useAuth'
+import { dlqFlowsFor } from '@/lib/task09Permissions'
 
 function errorMessage(error: unknown) {
   return userMessage(error, 'Không chạy lại được bài chấm lỗi. Vui lòng thử lại.')
 }
 
 export function DeadLetterQueuePage() {
+  const { user } = useAuth()
+  const role = user?.role
+  const allowedFlows = dlqFlowsFor(role)
+  const canView = allowedFlows.length > 0
   const [tasks, setTasks] = useState<DeadLetterQueueTask[]>([])
   const [status, setStatus] = useState('pending')
-  const [flowType, setFlowType] = useState('ALL')
+  const [selectedFlow, setFlowType] = useState('')
+  const flowType = allowedFlows.includes(selectedFlow) ? selectedFlow : allowedFlows[0]
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
+    const flows = dlqFlowsFor(role)
+    if (flows.length === 0) return
+    const requestedFlow = flows.includes(selectedFlow) ? selectedFlow : flows[0]
     setLoading(true)
     setError('')
     try {
-      setTasks(await deadLetterQueueService.list(status || undefined, flowType))
+      setTasks(await deadLetterQueueService.list(status || undefined, requestedFlow))
     } catch (requestError) {
       const msg = errorMessage(requestError)
       setError(msg)
@@ -34,7 +44,7 @@ export function DeadLetterQueuePage() {
     } finally {
       setLoading(false)
     }
-  }, [status, flowType])
+  }, [status, selectedFlow, role])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -44,6 +54,7 @@ export function DeadLetterQueuePage() {
   }, [load])
 
   const replay = async (task: DeadLetterQueueTask) => {
+    if (!canView || !task.flowType || !allowedFlows.includes(task.flowType)) return
     setBusyId(task.id)
     setError('')
     setNotice('')
@@ -62,13 +73,15 @@ export function DeadLetterQueuePage() {
     }
   }
 
+  if (!canView) return <div role="alert">Vai trò hiện tại không được truy cập hàng đợi lỗi AI.</div>
+
   return (
     <div className={ds.page}>
       <LecturerPageBanner
         icon={AlertTriangle}
         eyebrow="Dead-Letter Queue (Zero Data Loss)"
         title="Theo dõi & Replay Hàng đợi lỗi AI"
-        description="Admin giám sát & replay DLQ cho Luyện tập (MF-01) và Thi thử (MF-02); Cán bộ Khảo thí giám sát & replay DLQ cho Thi thật (MF-04)."
+        description="Admin xử lý luyện tập, thi thử và ca lớp; Khảo thí xử lý thi thật; Giảng viên chỉ xử lý ca lớp mình phụ trách. Phạm vi tài nguyên được kiểm tra tại API."
         extras={
           <>
             <BannerFact icon={AlertTriangle}>Cách ly task lỗi</BannerFact>
@@ -102,14 +115,16 @@ export function DeadLetterQueuePage() {
           action={
             <div className="flex flex-wrap items-center gap-2">
               <select
+                aria-label="Luồng nghiệp vụ"
                 className={ds.field}
                 value={flowType}
                 onChange={(event) => setFlowType(event.target.value)}
               >
-                <option value="ALL">Tất cả luồng</option>
-                <option value="PRACTICE">Luyện tập (MF-01)</option>
-                <option value="MOCK_EXAM">Thi thử (MF-02)</option>
-                <option value="IN_CLASS_EXAM">Ca thi lớp (MF-05)</option>
+                {allowedFlows.includes('ALL') && <option value="ALL">Tất cả luồng được phép</option>}
+                {allowedFlows.includes('PRACTICE') && <option value="PRACTICE">Luyện tập (MF-01)</option>}
+                {allowedFlows.includes('MOCK_EXAM') && <option value="MOCK_EXAM">Thi thử (MF-02)</option>}
+                {allowedFlows.includes('IN_CLASS_EXAM') && <option value="IN_CLASS_EXAM">Ca thi lớp (MF-05)</option>}
+                {allowedFlows.includes('OFFICIAL_EXAM') && <option value="OFFICIAL_EXAM">Thi thật Kiosk (MF-04)</option>}
               </select>
               <select
                 className={ds.field}
@@ -161,7 +176,7 @@ export function DeadLetterQueuePage() {
                 </div>
                 <button
                   type="button"
-                  disabled={Boolean(busyId) || task.status !== 'pending'}
+                  disabled={Boolean(busyId) || task.status !== 'pending' || !task.flowType || !allowedFlows.includes(task.flowType)}
                   onClick={() => void replay(task)}
                   className={ds.outlineButton}
                 >

@@ -32,7 +32,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }

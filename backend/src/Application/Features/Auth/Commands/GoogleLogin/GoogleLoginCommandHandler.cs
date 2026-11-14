@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,17 +24,20 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
     private readonly IGoogleIdTokenValidator _googleIdTokenValidator;
     private readonly IAccessTokenIssuer _accessTokenIssuer;
     private readonly IValidator<GoogleLoginCommand> _validator;
+    private readonly IGoogleLoginNonceStore _nonceStore;
 
     public GoogleLoginCommandHandler(
         IApplicationDbContext context,
         IGoogleIdTokenValidator googleIdTokenValidator,
         IAccessTokenIssuer accessTokenIssuer,
-        IValidator<GoogleLoginCommand> validator)
+        IValidator<GoogleLoginCommand> validator,
+        IGoogleLoginNonceStore nonceStore)
     {
         _context = context;
         _googleIdTokenValidator = googleIdTokenValidator;
         _accessTokenIssuer = accessTokenIssuer;
         _validator = validator;
+        _nonceStore = nonceStore;
     }
 
     public async Task<Result<GoogleLoginResponse>> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
@@ -45,6 +49,9 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             return Result<GoogleLoginResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
+        if (string.IsNullOrWhiteSpace(request.BrowserNonce) || request.BrowserNonce.Length is < 32 or > 128)
+            return await Failure(AuthErrors.GoogleNonceInvalid, "NONCE_REJECTED", cancellationToken);
+
         // 2. Xác minh chữ ký ID Token của Google
         GoogleUserIdentity identity;
         try
@@ -53,8 +60,13 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
         }
         catch (GoogleIdTokenRejectedException)
         {
-            return Result<GoogleLoginResponse>.Failure("ID Token của Google không hợp lệ.");
+            return await Failure(AuthErrors.GoogleTokenInvalid, "TOKEN_REJECTED", cancellationToken);
         }
+
+        if (identity.Nonce is null || !CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(identity.Nonce), Encoding.UTF8.GetBytes(request.BrowserNonce))
+            || !_nonceStore.TryConsume(request.BrowserNonce))
+            return await Failure(AuthErrors.GoogleNonceInvalid, "NONCE_REJECTED", cancellationToken);
 
         // 3. Tìm user trong bảng users theo email
         var email = identity.Email.Trim().ToLowerInvariant();
@@ -63,30 +75,30 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
 
         if (user is null)
         {
+            // Explicit production-data policy: verified Google newcomers are
+            // students only, never privileged roles and never auto-enrolled.
             user = new User
             {
                 Email = email,
                 FullName = identity.FullName,
                 StudentCode = TryExtractFptStudentCode(email),
-                MustChangePassword = false,
                 Role = UserRole.Student,
-                IsActive = true
+                IsActive = true,
+                MustChangePassword = false
             };
             _context.Users.Add(user);
-            await _context.SaveChangesAsync(cancellationToken);
         }
         else if (!user.IsActive)
         {
-            return Result<GoogleLoginResponse>.Failure("Tài khoản đã bị khóa.");
+            return await Failure(AuthErrors.AccountLocked, "ACCOUNT_LOCKED", cancellationToken, user.Id);
         }
-        else if (user.MustChangePassword)
-        {
-            user.MustChangePassword = false;
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-
         // 4. Cấp access token JWT (15 phút) + refresh token (7 ngày)
-        var accessToken = _accessTokenIssuer.Issue(user.Id, user.Email, user.FullName, user.Role);
+        var accessToken = _accessTokenIssuer.Issue(
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.Role,
+            user.MustChangePassword);
 
         var rawRefreshToken = GenerateRawToken();
         var refreshTokenHash = HashToken(rawRefreshToken);
@@ -109,6 +121,17 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             new GoogleLoginUserDto(user.Id, user.Email, user.FullName, user.StudentCode, user.Role));
 
         return Result<GoogleLoginResponse>.Success(response);
+    }
+
+    private async Task<Result<GoogleLoginResponse>> Failure(string error, string reason, CancellationToken cancellationToken, Guid? userId = null)
+    {
+        _context.AuditLogs.Add(new Domain.Entities.AuditLog
+        {
+            UserId = userId, EntityId = userId, EntityName = "auth_google", Action = "GOOGLE_LOGIN_FAILED",
+            NewValues = JsonSerializer.Serialize(new { reason }), CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+        return Result<GoogleLoginResponse>.Failure(error);
     }
 
     private static string? TryExtractFptStudentCode(string email)

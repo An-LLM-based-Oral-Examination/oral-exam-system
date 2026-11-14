@@ -104,6 +104,8 @@ function StatusBadge({ status }: { status: ExamTicketStatus }) {
 
 export function AuditEvidencePage() {
   const { user } = useAuth()
+  // Match the existing override/lock API contract; publication is EO-only.
+  const canAudit = user?.role === 'Instructor' || user?.role === 'DepartmentHead' || user?.role === 'Admin'
   const [searchParams, setSearchParams] = useSearchParams()
   const routeShiftId = searchParams.get('shiftId') ?? ''
   const [shiftInput, setShiftInput] = useState(routeShiftId)
@@ -189,7 +191,7 @@ export function AuditEvidencePage() {
         candidate.isLocked || candidate.status === 'PUBLISHED' || candidate.status === 'LOCKED',
     )
   const canPublish =
-    allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
+    user?.role === 'ExaminationOfficer' && allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
 
   const filteredEvidence = useMemo(() => {
     if (filter === 'attention') return evidence.filter(needsLecturerAttention)
@@ -249,7 +251,7 @@ export function AuditEvidencePage() {
   }
 
   const saveOverride = async (newScore: number, reason: string) => {
-    if (!activeCandidate) return
+    if (!activeCandidate || !canAudit) return
     setIsSavingOverride(true)
     setError('')
     setNotice('')
@@ -271,7 +273,7 @@ export function AuditEvidencePage() {
   }
 
   const lockTicket = async () => {
-    if (!activeCandidate || activeCandidate.isLocked) return
+    if (!activeCandidate || activeCandidate.isLocked || !canAudit) return
     setIsLocking(true)
     setError('')
     setNotice('')
@@ -499,7 +501,7 @@ export function AuditEvidencePage() {
                 >
                   <RefreshCw className="size-4" />
                 </button>
-                <button
+                {user?.role === 'ExaminationOfficer' && <button
                   type="button"
                   onClick={() => setShowPublishConfirm(true)}
                   disabled={!canPublish}
@@ -511,10 +513,10 @@ export function AuditEvidencePage() {
                     <Send className="size-3.5" />
                   )}
                   {alreadyPublished ? 'Điểm đã khóa' : 'Công bố điểm toàn ca'}
-                </button>
+                </button>}
               </div>
             </div>
-            {!canPublish && !alreadyPublished && (
+            {user?.role === 'ExaminationOfficer' && !canPublish && !alreadyPublished && (
               <div className="flex items-start gap-2 border-b border-[#ead9ae] bg-[#fff9ec] px-4 py-3 text-xs leading-relaxed text-[#805a20] sm:px-5">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                 {!allScoresComplete
@@ -771,15 +773,15 @@ export function AuditEvidencePage() {
                       </section>
                     </div>
 
-                    <ScoreOverrideForm
+                    {canAudit && <ScoreOverrideForm
                       key={activeCandidate.ticketId}
                       initialScore={getDisplayedScore(activeCandidate)}
                       isLocked={activeCandidate.isLocked}
                       persistenceAvailable
                       isSaving={isSavingOverride}
                       onSaveOverride={saveOverride}
-                    />
-                    <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+                    />}
+                    {canAudit && <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
                       <button
                         type="button"
                         disabled={activeCandidate.isLocked || isLocking}
@@ -789,7 +791,7 @@ export function AuditEvidencePage() {
                         <LockKeyhole className="size-4" />
                         {isLocking ? 'Đang khóa...' : 'Khóa điểm vé thi'}
                       </button>
-                    </div>
+                    </div>}
                   </div>
                 ) : (
                   <div className="flex min-h-[560px] flex-col items-center justify-center text-center">
@@ -805,7 +807,7 @@ export function AuditEvidencePage() {
         </>
       ) : null}
 
-      {showPublishConfirm && (
+      {user?.role === 'ExaminationOfficer' && showPublishConfirm && (
         <ConfirmDialog
           tone="danger"
           icon={LockKeyhole}

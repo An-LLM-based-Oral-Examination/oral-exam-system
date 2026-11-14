@@ -20,10 +20,10 @@ public class OfficialExamCheckInTests
 {
     private static readonly DateTime InsideShift = new(2026, 10, 20, 8, 0, 0, DateTimeKind.Utc);
     [Fact]
-    public async Task CreateSession_DepartmentHead_StoresFollowUpAndInputMode()
+    public async Task CreateSession_ExaminationOfficer_StoresSafeDefaultsAndInputMode()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var course = await SeedCourse(context);
         var structure = await SeedStructure(context, course.Id, head.Id);
 
@@ -34,7 +34,7 @@ public class OfficialExamCheckInTests
                 structure.Id,
                 "Vấn đáp PRN231",
                 new DateOnly(2026, 10, 20),
-                true,
+                false,
                 2,
                 ExamInputMode.VoiceOnly,
                 60), CancellationToken.None);
@@ -42,7 +42,7 @@ public class OfficialExamCheckInTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ExamInputMode.Should().Be(ExamInputMode.VoiceOnly);
         result.Value.MaxFollowUpQuestions.Should().Be(2);
-        result.Value.HasFollowUp.Should().BeTrue();
+        result.Value.HasFollowUp.Should().BeFalse();
         (await context.OfficialExamSessions.CountAsync()).Should().Be(1);
     }
 
@@ -96,7 +96,7 @@ public class OfficialExamCheckInTests
     public async Task OpenShift_AssignsLecturerProctor()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var proctor = await SeedUser(context, UserRole.Lecturer);
         var examiner = await SeedUser(context, UserRole.Lecturer);
         var session = await SeedSession(context, head.Id);
@@ -122,7 +122,7 @@ public class OfficialExamCheckInTests
     public async Task AssignTicket_DuplicateSeat_Fails()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var first = await SeedUser(context, UserRole.Student);
         var second = await SeedUser(context, UserRole.Student);
         var session = await SeedSession(context, head.Id);

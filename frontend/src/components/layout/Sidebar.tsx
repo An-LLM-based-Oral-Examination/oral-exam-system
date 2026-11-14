@@ -41,6 +41,7 @@ interface InstructorNavigationItem {
 const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
   Student: [],
   Instructor: [
+    { label: 'Lỗi chấm ca lớp', path: '/lecturer/dlq', icon: ServerCog },
     { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý lớp học', path: ROUTE_PATHS.lecturer.classes, icon: UsersRound },
     { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
@@ -48,6 +49,9 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Phúc khảo được giao', path: ROUTE_PATHS.lecturer.appeals, icon: UserRoundCheck },
   ],
   DepartmentHead: [
+    { label: 'Phân công giảng viên', path: '/department-head/lecturer-assignments', icon: UsersRound },
+    { label: 'Chuẩn đầu ra (CLO)', path: '/department-head/clos', icon: BookOpenCheck },
+    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Duyệt câu hỏi và đề', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
     { label: 'Quản lý phúc khảo', path: ROUTE_PATHS.departmentHead.appeals, icon: UserRoundCheck },
