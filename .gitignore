@@ -66,3 +66,12 @@ backend/wwwroot/uploads/
 
 # Local Documentation & Working Reports (Kept locally, excluded from VPS/Git)
 /docs/
+
+# Database Backups & Dumps
+backups/
+*.dump
+
+# Test Artifacts & Outputs
+test-results/
+frontend/test-results/
+

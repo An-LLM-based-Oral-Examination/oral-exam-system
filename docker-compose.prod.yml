@@ -9,7 +9,7 @@ services:
   postgres:
     command: >
       postgres
-      -c max_connections=220
+      -c max_connections=300
       -c shared_buffers=384MB
       -c effective_cache_size=1024MB
       -c work_mem=4MB
