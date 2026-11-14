@@ -12,6 +12,17 @@ DotEnvLoader.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ASP.NET Core tự đăng ký Windows Event Log provider. Tài khoản dev/CI không có
+// quyền ghi Event Log sẽ khiến một cảnh báo EF Core biến thành AggregateException
+// và làm API dừng khởi động. Console logging vẫn giữ nguyên; chỉ vô hiệu provider
+// đặc thù Windows khi tiến trình không có quyền ghi hệ thống.
+if (OperatingSystem.IsWindows())
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
+
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOralExamAuthentication(builder.Configuration);
@@ -120,6 +131,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");
+app.MapHub<OralExamination.API.Hubs.InClassShiftHub>("/hubs/in-class-shift");
 app.MapHub<OralExamination.API.Hubs.AntiCheatHub>("/hubs/anti-cheat");
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 

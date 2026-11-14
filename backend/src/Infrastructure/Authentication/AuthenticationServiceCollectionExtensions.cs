@@ -43,8 +43,7 @@ public static class AuthenticationServiceCollectionExtensions
                     {
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
-                        if (!string.IsNullOrEmpty(accessToken) &&
-                            (path.StartsWithSegments("/hubs/practice") || path.StartsWithSegments("/hubs/anti-cheat")))
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                         {
                             context.Token = accessToken;
                         }

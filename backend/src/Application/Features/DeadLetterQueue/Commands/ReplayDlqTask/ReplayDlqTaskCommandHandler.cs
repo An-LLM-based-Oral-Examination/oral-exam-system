@@ -251,6 +251,21 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                 return Result<Unit>.Failure("Không tìm thấy InClassExamSubmission tương ứng với tác vụ DLQ này.");
             }
 
+            var shift = await _context.InClassExamShifts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(sh => sh.Id == submission.ShiftId, cancellationToken);
+
+            if (submission.Status == "AUDITED" || shift?.IsLocked == true || shift?.Status == "FINALIZED")
+            {
+                dlqItem.Status = "resolved";
+                dlqItem.ResolvedAt = now;
+                dlqItem.NextRetryAt = null;
+                dlqItem.LastAttemptAt = now;
+
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result<Unit>.Success(Unit.Value);
+            }
+
             submission.Status = "SUBMITTED";
 
             inClassTask ??= new GradingTask

@@ -19,6 +19,7 @@ using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetCourseLecturers;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetStudentMyClasses;
 using OralExamination.Application.Features.Courses.Commands.CreateCourse;
 using OralExamination.Application.Features.Courses.Commands.CreateCourseClo;
@@ -769,6 +770,44 @@ public class AcademicHierarchyTests
         result.Value.Should().HaveCount(1);
         result.Value[0].ClassId.Should().Be(targetClass.Id);
         result.Value[0].ClassCode.Should().Be("SE1809-NET");
+
+        course.IsActive = false;
+        await context.SaveChangesAsync();
+        var afterCourseDisabled = await handler.Handle(query, CancellationToken.None);
+        afterCourseDisabled.Value.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "5.3. GetLecturerClasses ẩn lớp thuộc môn đã ngừng hoạt động")]
+    public async Task GetLecturerClasses_Should_Hide_Inactive_Academic_Context()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, _, lecturer, _) = SeedBaseData(context);
+        var targetClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1810-CSD",
+            Name = "Lớp SE1810-CSD",
+            JoinCode = "SE1810CSD",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            IsActive = true
+        };
+        context.Classes.Add(targetClass);
+        await context.SaveChangesAsync();
+
+        var handler = new GetLecturerClassesQueryHandler(context);
+        var activeResult = await handler.Handle(
+            new GetLecturerClassesQuery(LecturerId: lecturer.Id),
+            CancellationToken.None);
+        activeResult.Value.Should().ContainSingle(item => item.ClassId == targetClass.Id);
+
+        course.IsActive = false;
+        await context.SaveChangesAsync();
+        var inactiveResult = await handler.Handle(
+            new GetLecturerClassesQuery(LecturerId: lecturer.Id),
+            CancellationToken.None);
+        inactiveResult.Value.Should().BeEmpty();
     }
 
     #endregion

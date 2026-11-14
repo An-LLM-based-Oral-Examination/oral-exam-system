@@ -27,9 +27,16 @@ public class GetStudentMyClassesQueryHandler(IApplicationDbContext context)
 
         var classes = await context.ClassEnrollments
             .AsNoTracking()
-            .Where(e => e.StudentId == request.StudentId && e.Status == "enrolled")
+            .Where(e =>
+                e.StudentId == request.StudentId &&
+                e.Status == "enrolled" &&
+                e.Class.IsActive &&
+                e.Class.Course.IsActive &&
+                (e.Class.CourseOffering == null || e.Class.CourseOffering.IsEnabled))
             .Include(e => e.Class)
                 .ThenInclude(c => c.Course)
+            .Include(e => e.Class)
+                .ThenInclude(c => c.CourseOffering)
             .Include(e => e.Class)
                 .ThenInclude(c => c.Semester)
             .Include(e => e.Class)

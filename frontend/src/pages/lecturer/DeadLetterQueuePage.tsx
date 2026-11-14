@@ -110,7 +110,6 @@ export function DeadLetterQueuePage() {
                 <option value="PRACTICE">Luyện tập (MF-01)</option>
                 <option value="MOCK_EXAM">Thi thử (MF-02)</option>
                 <option value="IN_CLASS_EXAM">Ca thi lớp (MF-05)</option>
-                <option value="OFFICIAL_EXAM">Thi thật Kiosk (MF-04)</option>
               </select>
               <select
                 className={ds.field}

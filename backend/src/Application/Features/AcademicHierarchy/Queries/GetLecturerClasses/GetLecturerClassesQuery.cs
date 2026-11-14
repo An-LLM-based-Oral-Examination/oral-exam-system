@@ -29,13 +29,17 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
         var query = context.Classes
             .AsNoTracking()
             .Include(c => c.Course)
+            .Include(c => c.CourseOffering)
             .Include(c => c.Semester)
             .Include(c => c.Lecturer)
             .AsQueryable();
 
         if (!request.IncludeInactive)
         {
-            query = query.Where(c => c.IsActive);
+            query = query.Where(c =>
+                c.IsActive &&
+                c.Course.IsActive &&
+                (c.CourseOffering == null || c.CourseOffering.IsEnabled));
         }
 
         if (request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty)
