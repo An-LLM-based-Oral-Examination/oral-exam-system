@@ -66,7 +66,10 @@ public class PostgresSchemaReconcilerTests
         sql.Should().Contain("proctor");
         sql.Should().Contain("student");
         sql.Should().Contain("EXCEPTION WHEN OTHERS THEN NULL");
-        sql.Should().Contain("EXECUTE 'UPDATE classes SET join_code");
+        sql.Should().Contain("UPDATE classes");
+        sql.Should().Contain("SET join_code = UPPER('CLS' || RIGHT(REPLACE(id::text, '-', ''), 16))");
+        sql.Should().NotContain("SUBSTRING(REPLACE(id::text, ''-'', ''''), 1, 8)",
+            because: "UUID seed data often shares the same leading zeroes, causing the unique join-code index to fail and roll back the repair");
         sql.Should().Contain("EXECUTE 'UPDATE dead_letter_queues SET flow_type");
     }
 

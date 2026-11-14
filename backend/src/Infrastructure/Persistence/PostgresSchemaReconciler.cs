@@ -114,7 +114,7 @@ DO $reconcile_pre$
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS name character varying(150) NOT NULL DEFAULT '';
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_code character varying(20) NULL;
                 BEGIN
-                    EXECUTE 'UPDATE classes SET join_code = UPPER(SUBSTRING(REPLACE(id::text, ''-'', ''''), 1, 8)) WHERE join_code IS NULL OR join_code = ''''';
+                    EXECUTE $repair_join_codes$UPDATE classes SET join_code = UPPER('CLS' || RIGHT(REPLACE(id::text, '-', ''), 16)) WHERE join_code IS NULL OR BTRIM(join_code) = ''$repair_join_codes$;
                     ALTER TABLE classes ALTER COLUMN join_code SET NOT NULL;
                     CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_join_code ON classes (join_code);
                 EXCEPTION WHEN OTHERS THEN NULL;
@@ -1045,7 +1045,7 @@ DO $reconcile_pre$
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS name character varying(150) NOT NULL DEFAULT '';
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_code character varying(20) NULL;
                 BEGIN
-                    EXECUTE 'UPDATE classes SET join_code = UPPER(SUBSTRING(REPLACE(id::text, ''-'', ''''), 1, 8)) WHERE join_code IS NULL OR join_code = ''''';
+                    EXECUTE $repair_join_codes$UPDATE classes SET join_code = UPPER('CLS' || RIGHT(REPLACE(id::text, '-', ''), 16)) WHERE join_code IS NULL OR BTRIM(join_code) = ''$repair_join_codes$;
                     ALTER TABLE classes ALTER COLUMN join_code SET NOT NULL;
                     CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_join_code ON classes (join_code);
                 EXCEPTION WHEN OTHERS THEN NULL;

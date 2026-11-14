@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore.Migrations;
-using OralExamination.Infrastructure.Persistence;
 
 #nullable disable
 
@@ -11,7 +10,10 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(PostgresSchemaReconciler.GetPostMigrationSql());
+            // Không gọi reconciler động từ migration lịch sử. Reconciler hiện tại có
+            // chèn toàn bộ MigrationId, bao gồm chính migration này, làm EF ghi lịch sử
+            // lần hai và lỗi unique key trên database sạch. Startup pipeline chịu trách
+            // nhiệm chạy PostgresSchemaReconciler sau khi migrations hoàn tất.
         }
 
         /// <inheritdoc />

@@ -204,25 +204,18 @@ namespace OralExamination.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.AddColumn<Guid>(
-                name: "student_id",
-                table: "ai_evaluations",
-                type: "uuid",
-                nullable: true);
+            // Migration 20261104062322 chạy PreMigration reconciler trước và có thể đã
+            // bổ sung các cột/index/FK này. Dùng DDL idempotent để cả DB sạch lẫn DB
+            // đã được self-heal đều nâng cấp được, tránh lỗi PostgreSQL 42701/42P07.
+            migrationBuilder.Sql("""
+                ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS student_id uuid NULL;
+                ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS in_class_submission_id uuid NULL;
+                """);
 
-            migrationBuilder.AddColumn<Guid>(
-                name: "in_class_submission_id",
-                table: "ai_evaluations",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_ai_evaluations_type",
-                table: "ai_evaluations");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_ai_evaluations_xor",
-                table: "ai_evaluations");
+            migrationBuilder.Sql("""
+                ALTER TABLE ai_evaluations DROP CONSTRAINT IF EXISTS ck_ai_evaluations_type;
+                ALTER TABLE ai_evaluations DROP CONSTRAINT IF EXISTS ck_ai_evaluations_xor;
+                """);
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_ai_evaluations_type",
@@ -234,36 +227,37 @@ namespace OralExamination.Infrastructure.Migrations
                 table: "ai_evaluations",
                 sql: "(answer_type = 'practice' AND practice_answer_id IS NOT NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR (answer_type = 'mock_exam' AND mock_exam_answer_id IS NOT NULL AND practice_answer_id IS NULL AND exam_submission_id IS NULL AND in_class_submission_id IS NULL) OR (answer_type = 'exam' AND exam_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND in_class_submission_id IS NULL) OR (answer_type = 'in_class' AND in_class_submission_id IS NOT NULL AND practice_answer_id IS NULL AND mock_exam_answer_id IS NULL AND exam_submission_id IS NULL)");
 
-            migrationBuilder.CreateIndex(
-                name: "ix_ai_evaluations_student",
-                table: "ai_evaluations",
-                column: "student_id");
+            migrationBuilder.Sql("""
+                CREATE INDEX IF NOT EXISTS ix_ai_evaluations_student
+                    ON ai_evaluations (student_id);
+                CREATE INDEX IF NOT EXISTS ix_ai_evaluations_in_class_submission
+                    ON ai_evaluations (in_class_submission_id);
+                CREATE INDEX IF NOT EXISTS ix_classes_active_semester_course_created
+                    ON classes (is_active, semester_id, course_id, created_at);
 
-            migrationBuilder.CreateIndex(
-                name: "ix_ai_evaluations_in_class_submission",
-                table: "ai_evaluations",
-                column: "in_class_submission_id");
+                DO $migration$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_ai_evaluations_users_student_id'
+                    ) THEN
+                        ALTER TABLE ai_evaluations
+                            ADD CONSTRAINT "FK_ai_evaluations_users_student_id"
+                            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE;
+                    END IF;
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_ai_evaluations_users_student_id",
-                table: "ai_evaluations",
-                column: "student_id",
-                principalTable: "users",
-                principalColumn: "id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_ai_evaluations_in_class_exam_submissions_in_class_submissio~",
-                table: "ai_evaluations",
-                column: "in_class_submission_id",
-                principalTable: "in_class_exam_submissions",
-                principalColumn: "id",
-                onDelete: ReferentialAction.Cascade);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_classes_active_semester_course_created",
-                table: "classes",
-                columns: new[] { "is_active", "semester_id", "course_id", "created_at" });
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_ai_evaluations_in_class_exam_submissions_in_class_submissio~'
+                    ) THEN
+                        ALTER TABLE ai_evaluations
+                            ADD CONSTRAINT "FK_ai_evaluations_in_class_exam_submissions_in_class_submissio~"
+                            FOREIGN KEY (in_class_submission_id)
+                            REFERENCES in_class_exam_submissions(id) ON DELETE CASCADE;
+                    END IF;
+                END
+                $migration$;
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "ix_in_class_exam_shifts_class_status_created",

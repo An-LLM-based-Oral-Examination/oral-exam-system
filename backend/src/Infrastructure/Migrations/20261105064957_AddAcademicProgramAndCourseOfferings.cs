@@ -13,6 +13,14 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Các model snapshot trước migration đã kỳ vọng cột này nhưng migration
+            // ban đầu không tạo nó và phụ thuộc ngầm vào reconciler. Bổ sung idempotent
+            // để chuỗi migration chạy được trên PostgreSQL sạch.
+            migrationBuilder.Sql("""
+                ALTER TABLE courses
+                    ADD COLUMN IF NOT EXISTS department_head_user_id uuid NULL;
+                """);
+
             migrationBuilder.AddColumn<Guid>(
                 name: "academic_program_id",
                 table: "courses",
