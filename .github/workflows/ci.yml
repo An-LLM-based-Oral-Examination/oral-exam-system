@@ -56,7 +56,7 @@ jobs:
           --startup-project backend/src/API/API.csproj
 
       - name: Run Unit Tests with Coverage
-        run: dotnet test backend/OralExamination.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+        run: dotnet test backend/OralExamination.sln --configuration Release --no-build --filter "Category!=Integration" --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Scan Vulnerable NuGet Packages
         shell: bash

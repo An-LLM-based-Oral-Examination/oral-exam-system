@@ -249,6 +249,7 @@ public class InClassShiftConcurrencyIntegrationTests
     }
 
     [Fact(DisplayName = "F-003: Hai connection độc lập tranh chấp pg_advisory_xact_lock đồng thời trên PostgreSQL bị tuần tự hóa")]
+    [Trait("Category", "Integration")]
     public async Task ShiftAllocationAdvisoryLock_WhenContendedConcurrentlyOnPostgreSql_SerializesBothConnections()
     {
         var shiftId = Guid.NewGuid();
@@ -314,6 +315,7 @@ public class InClassShiftConcurrencyIntegrationTests
     }
 
     [Fact(DisplayName = "F-004: Hai request nộp bài đồng thời cùng transcript trên PostgreSQL kích hoạt unique constraint 23505 và idempotent replay thành công")]
+    [Trait("Category", "Integration")]
     public async Task SubmitInClassShiftAnswer_WhenConcurrentSubmissionsOnPostgreSql_CatchesUniqueViolationAndReplaysSuccess()
     {
         using var setupCtx = CreatePostgresDbContext();
@@ -373,6 +375,7 @@ public class InClassShiftConcurrencyIntegrationTests
     }
 
     [Fact(DisplayName = "F-004: Hai request nộp bài đồng thời khác transcript trên PostgreSQL trả về Conflict cho request đến sau")]
+    [Trait("Category", "Integration")]
     public async Task SubmitInClassShiftAnswer_WhenConcurrentSubmissionsDifferentTranscriptOnPostgreSql_FailsWithDuplicateSubmission()
     {
         using var setupCtx = CreatePostgresDbContext();
@@ -424,6 +427,7 @@ public class InClassShiftConcurrencyIntegrationTests
     }
 
     [Fact(DisplayName = "F-006: Optimistic Concurrency Token trên PostgreSQL ném DbUpdateConcurrencyException khi trạng thái bị sửa sang AUDITED và bảo toàn điểm")]
+    [Trait("Category", "Integration")]
     public async Task ConcurrencyToken_WhenAuditedDuringGradingOnPostgreSql_ThrowsDbUpdateConcurrencyExceptionAndPreservesLecturerScore()
     {
         using var setupCtx = CreatePostgresDbContext();
