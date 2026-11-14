@@ -1006,7 +1006,7 @@ export const PracticeSessionPage: React.FC = () => {
       setIsSubmitting(false)
       setPageError(gradingError.message)
       setSessionNotice(
-        'Câu trả lời đã được lưu để chấm bù. Bạn có thể bấm Bỏ qua để sang câu tiếp theo hoặc Kết thúc phiên.',
+        'Câu trả lời đã được lưu để chấm bù. Bạn có thể chờ hệ thống hoàn tất chấm hoặc kết thúc phiên.',
       )
     }, 0)
     return () => window.clearTimeout(errorTimer)
@@ -1030,7 +1030,7 @@ export const PracticeSessionPage: React.FC = () => {
         'Dịch vụ AI chưa chấm được câu trả lời. Bài làm đã được lưu và đang chờ xử lý lại.',
       )
       setSessionNotice(
-        'Bạn có thể bấm Bỏ qua để chuyển sang câu tiếp theo hoặc Kết thúc phiên bất kỳ lúc nào.',
+        'Bạn có thể chờ hệ thống xử lý lại hoặc kết thúc phiên bất kỳ lúc nào.',
       )
     }, 0)
     return () => window.clearTimeout(failedTimer)
@@ -1894,6 +1894,7 @@ export const PracticeSessionPage: React.FC = () => {
     if (
       !runtime ||
       !user ||
+      mode !== 'FULL_SESSION' ||
       runtime.currentQuestionIndex <= 0 ||
       isRecording ||
       isTranscribing ||
@@ -1971,6 +1972,7 @@ export const PracticeSessionPage: React.FC = () => {
     if (
       !runtime ||
       !user ||
+      mode !== 'FULL_SESSION' ||
       isRecording ||
       isSubmitting ||
       showBuffer ||
@@ -1986,83 +1988,22 @@ export const PracticeSessionPage: React.FC = () => {
     setSessionNotice('')
 
     try {
-      if (mode === 'FULL_SESSION') {
-        const nextIndex = runtime.currentQuestionIndex + 1
-        if (nextIndex >= runtime.questions.length) {
-          requestFullSessionSubmitConfirmation('')
-          return
-        }
-
-        updateRuntime((current) => ({
-          ...current,
-          currentQuestionIndex: nextIndex,
-          activeFollowUp: null,
-          pendingAnswerId: null,
-          resolvedAnswer: null,
-          draftAnswerText: '',
-          showBuffer: false,
-          bufferDeadlineTimestamp: null,
-        }))
-      } else {
-        const loadedNextIndex = runtime.currentQuestionIndex + 1
-        if (loadedNextIndex < runtime.questions.length) {
-          const nextQuestionId = runtime.questions[loadedNextIndex]?.questionId
-          const nextAnswerText = nextQuestionId
-            ? findStoredQuestionAnswer(runtime, nextQuestionId, allResults, transientDraftsRef.current)
-            : ''
-          updateRuntime((current) => ({
-            ...current,
-            currentQuestionIndex: loadedNextIndex,
-            activeFollowUp: null,
-            pendingAnswerId: null,
-            resolvedAnswer: null,
-            draftAnswerText: nextAnswerText,
-            voiceBaselineTranscript: answerInputMode === 'voice' ? nextAnswerText : '',
-            draftAnswerMode: answerInputMode,
-            showBuffer: false,
-            bufferDeadlineTimestamp: null,
-          }))
-          setShowBuffer(false)
-          setBufferDeadlineTimestamp(null)
-          setTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
-          setVoiceBaselineTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
-          setTextAnswer(answerInputMode === 'text' ? nextAnswerText : '')
-          setScorecard(null)
-          setLatestResult(null)
-          return
-        }
-
-        setIsSubmitting(true)
-        const response = await practiceService.getNextQuestion(runtime.sessionId, user.id)
-        if (!response.hasMoreQuestions || !response.question) {
-          await completeAndExit()
-          return
-        }
-
-        const nextQuestion: PracticeQuestion = {
-          questionId: response.question.id,
-          content: response.question.content,
-          imageUrl: response.question.imageUrl,
-          imageAlt: response.question.imageAlt,
-          rubricCriteria: response.question.rubricCriteria,
-        }
-        updateRuntime((current) => ({
-          ...current,
-          questions: [...current.questions, nextQuestion],
-          currentQuestionIndex: current.questions.length,
-          activeFollowUp: null,
-          pendingAnswerId: null,
-          resolvedAnswer: null,
-          draftAnswerText: '',
-          voiceBaselineTranscript: '',
-          showBuffer: false,
-          bufferDeadlineTimestamp: null,
-          questionDifficulties: {
-            ...current.questionDifficulties,
-            [nextQuestion.questionId]: response.question!.difficulty,
-          },
-        }))
+      const nextIndex = runtime.currentQuestionIndex + 1
+      if (nextIndex >= runtime.questions.length) {
+        requestFullSessionSubmitConfirmation('')
+        return
       }
+
+      updateRuntime((current) => ({
+        ...current,
+        currentQuestionIndex: nextIndex,
+        activeFollowUp: null,
+        pendingAnswerId: null,
+        resolvedAnswer: null,
+        draftAnswerText: '',
+        showBuffer: false,
+        bufferDeadlineTimestamp: null,
+      }))
 
       setScorecard(null)
       setTranscript('')
@@ -2829,29 +2770,31 @@ export const PracticeSessionPage: React.FC = () => {
               )}
             </button>
             <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Quay lại câu trước"
-                onClick={handlePreviousQuestion}
-                disabled={
-                  !runtime ||
-                  runtime.currentQuestionIndex <= 0 ||
-                  Boolean(runtime.activeFollowUp) ||
-                  isRecording ||
-                  isSubmitting ||
-                  isTranscribing ||
-                  isAnswerLocked ||
-                  showBuffer ||
-                  showGradingCard ||
-                  isCompleting
-                }
-                className={cn(
-                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3 motion-reduce:transform-none',
-                )}
-              >
-                <ArrowLeft className="size-3.5" /> Quay lại
-              </button>
-              {!isFinalFullSessionQuestion && (
+              {mode === 'FULL_SESSION' && (
+                <button
+                  type="button"
+                  aria-label="Quay lại câu trước"
+                  onClick={handlePreviousQuestion}
+                  disabled={
+                    !runtime ||
+                    runtime.currentQuestionIndex <= 0 ||
+                    Boolean(runtime.activeFollowUp) ||
+                    isRecording ||
+                    isSubmitting ||
+                    isTranscribing ||
+                    isAnswerLocked ||
+                    showBuffer ||
+                    showGradingCard ||
+                    isCompleting
+                  }
+                  className={cn(
+                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3 motion-reduce:transform-none',
+                  )}
+                >
+                  <ArrowLeft className="size-3.5" /> Quay lại
+                </button>
+              )}
+              {mode === 'FULL_SESSION' && !isFinalFullSessionQuestion && (
                 <button
                   type="button"
                   onClick={() => void handleSkipQuestion()}

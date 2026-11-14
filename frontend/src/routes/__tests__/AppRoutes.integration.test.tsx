@@ -1,9 +1,11 @@
 import { render } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextType } from '@/context/auth-context'
 import { appRoutes } from '@/routes/AppRoutes'
 import type { User, UserRole } from '@/types/auth.types'
+import { officialExamService } from '@/services/officialExam.service'
+import { appealsService } from '@/services/appeals.service'
 
 function createAuthValue(role: UserRole, overrides: Partial<AuthContextType> = {}): AuthContextType {
   const user: User = {
@@ -95,5 +97,28 @@ describe('appRoutes integration RBAC', () => {
     })
 
     expect(router.state.location.pathname).toBe('/change-password')
+  })
+
+  it('does not mount the examination-officer page or call its service for an Instructor', async () => {
+    const getSessions = vi.spyOn(officialExamService, 'getSessions').mockResolvedValue([])
+    const getShifts = vi.spyOn(officialExamService, 'getShifts').mockResolvedValue([])
+
+    const router = await renderRoute('/examination-officer/exams', 'Instructor')
+
+    expect(router.state.location.pathname).toBe('/unauthorized')
+    expect(getSessions).not.toHaveBeenCalled()
+    expect(getShifts).not.toHaveBeenCalled()
+    getSessions.mockRestore()
+    getShifts.mockRestore()
+  })
+
+  it('does not mount the lecturer appeal page or call its service for a Student', async () => {
+    const listAppeals = vi.spyOn(appealsService, 'list').mockResolvedValue([])
+
+    const router = await renderRoute('/lecturer/appeals', 'Student')
+
+    expect(router.state.location.pathname).toBe('/unauthorized')
+    expect(listAppeals).not.toHaveBeenCalled()
+    listAppeals.mockRestore()
   })
 })

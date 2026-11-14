@@ -17,5 +17,17 @@ export default defineConfig({
     css: false,
     restoreMocks: true,
     clearMocks: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/main.tsx',
+        'src/**/vite-env.d.ts',
+        'src/test/**',
+      ],
+    },
   },
 })

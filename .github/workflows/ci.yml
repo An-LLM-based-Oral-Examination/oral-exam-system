@@ -101,6 +101,18 @@ jobs:
       - name: Build Production Bundle (Vite)
         run: npm run build
 
+      - name: Run Vitest and React Testing Library
+        run: npm test -- --reporter=dot
+
+      - name: Generate Vitest coverage report
+        run: npm run test:coverage -- --reporter=dot
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright route and workflow tests
+        run: npm run test:e2e
+
   # =========================================================================
   # Job 3: Commit Message Linter (Conventional Commits v1.0.0)
   # =========================================================================

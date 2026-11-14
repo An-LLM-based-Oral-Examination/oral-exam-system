@@ -31,7 +31,11 @@ function normalizeAppeal(value: unknown): Appeal {
     id: requiredString(record, 'id', 'Đơn phúc khảo thiếu mã đơn.'),
     ticketId: requiredString(record, 'ticketId', 'Đơn phúc khảo thiếu mã vé thi.'),
     studentId: requiredString(record, 'studentId', 'Đơn phúc khảo thiếu mã sinh viên.'),
-    studentCode: requiredString(record, 'studentCode', 'Đơn phúc khảo thiếu mã sinh viên hiển thị.'),
+    studentCode: requiredString(
+      record,
+      'studentCode',
+      'Đơn phúc khảo thiếu mã sinh viên hiển thị.',
+    ),
     studentName: requiredString(record, 'studentName', 'Đơn phúc khảo thiếu tên sinh viên.'),
     sessionId: requiredString(record, 'sessionId', 'Đơn phúc khảo thiếu mã kỳ thi.'),
     sessionTitle: requiredString(record, 'sessionTitle', 'Đơn phúc khảo thiếu tên kỳ thi.'),
@@ -102,14 +106,20 @@ export const appealsService = {
   },
 
   async assignLecturer(id: string, payload: AssignAppealLecturerRequest): Promise<Appeal> {
-    const response = await apiClient.put<unknown>(`/appeals/${id}/assign-lecturer`, payload)
+    const response = await apiClient.post<unknown>(
+      `/examination-officer/appeals/${id}/assign-lecturer`,
+      payload,
+    )
     return normalizeAppeal(response.data)
   },
 
   async getAllocationProposal(sessionId?: string): Promise<AppealAllocationProposal> {
-    const response = await apiClient.get<unknown>('/examination-officer/appeals/propose-allocation', {
-      params: sessionId ? { sessionId } : undefined,
-    })
+    const response = await apiClient.get<unknown>(
+      '/examination-officer/appeals/propose-allocation',
+      {
+        params: sessionId ? { sessionId } : undefined,
+      },
+    )
     const record = requireRecord(unwrapPayload(response.data), 'Đề xuất phân bổ không hợp lệ.')
     const summaries = field(record, 'lecturerSummaries')
     const items = field(record, 'items')
@@ -123,8 +133,14 @@ export const appealsService = {
   },
 
   async batchAssign(payload: BatchAssignAppealsRequest): Promise<BatchAssignAppealsResponse> {
-    const response = await apiClient.post<unknown>('/examination-officer/appeals/batch-assign', payload)
-    const record = requireRecord(unwrapPayload(response.data), 'Phản hồi phân công đồng loạt không hợp lệ.')
+    const response = await apiClient.post<unknown>(
+      '/examination-officer/appeals/batch-assign',
+      payload,
+    )
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi phân công đồng loạt không hợp lệ.',
+    )
     const assigned = field(record, 'assignedAppeals')
     const totalAssigned = readNumber(record, 'totalAssigned') ?? 0
     return {
