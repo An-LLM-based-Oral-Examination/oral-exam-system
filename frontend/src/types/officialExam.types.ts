@@ -1,13 +1,7 @@
 /** MF-04 contracts returned by the official-exam, proctor and student APIs. */
 type OfficialExamInputMode = string
 export type ExamTicketStatus =
-  | 'SCHEDULED'
-  | 'IN_PROGRESS'
-  | 'SUBMITTED'
-  | 'AI_GRADED'
-  | 'AUDITED'
-  | 'PUBLISHED'
-  | 'LOCKED'
+  'SCHEDULED' | 'IN_PROGRESS' | 'SUBMITTED' | 'AI_GRADED' | 'AUDITED' | 'PUBLISHED' | 'LOCKED'
 
 export interface AuditEvidenceItem {
   ticketId: string
@@ -32,6 +26,51 @@ export interface AuditEvidenceItem {
   questionImageDescription?: string | null
 }
 
+export interface ExamAntiCheatLog {
+  id: string
+  ticketId: string
+  shiftId: string
+  studentId: string
+  clientEventId: string
+  studentCode: string
+  studentName: string
+  eventType: string
+  severity: string
+  details: string | null
+  violationCount: number
+  occurredAt: string
+}
+
+export interface ExamSetQuestion {
+  questionId: string
+  orderIndex: number
+  title: string
+  content: string
+  bloomLevel: string
+  difficulty: string
+  isDuplicate: boolean
+  duplicateInSets: string[]
+}
+
+export interface ExamSet {
+  id: string
+  structureId: string
+  courseId: string
+  courseCode: string
+  sessionId: string | null
+  createdBy: string | null
+  setCode: string
+  status: string
+  approvedBy: string | null
+  reviewNotes: string | null
+  submittedAt: string | null
+  approvedAt: string | null
+  handedOverAt: string | null
+  generatedAt: string
+  isActive: boolean
+  questions: ExamSetQuestion[]
+}
+
 export interface PublishGradesResponse {
   shiftId: string
   totalPublished: number
@@ -42,6 +81,12 @@ export interface PublishGradesResponse {
 /** Kept for backwards compatibility; the backend derives the actor from the access token. */
 export interface PublishGradesRequest {
   lecturerId?: string
+}
+
+export interface PublishExamShiftResponse {
+  success: boolean
+  shiftId: string
+  message: string
 }
 
 export interface OfficialExamSession {
@@ -80,6 +125,12 @@ export interface GetExamStructuresParams {
   isActive?: boolean
 }
 
+export interface GetExamSetsParams {
+  courseId: string
+  sessionId?: string
+  status?: string
+}
+
 export interface CreateExamStructureRequest {
   courseId: string
   name: string
@@ -116,6 +167,9 @@ export interface ExamShift {
   startTime: string
   endTime: string
   proctorUserId: string | null
+  examinerUserId: string | null
+  examinerName: string | null
+  proctorName: string | null
   status: string
 }
 

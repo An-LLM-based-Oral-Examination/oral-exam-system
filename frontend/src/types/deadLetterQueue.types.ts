@@ -17,3 +17,10 @@ export interface ReplayDeadLetterQueueResponse {
   status: string
   message: string
 }
+
+export interface ResolveDeadLetterQueueResponse {
+  id: string
+  dlqId: string
+  status: string
+  message: string
+}

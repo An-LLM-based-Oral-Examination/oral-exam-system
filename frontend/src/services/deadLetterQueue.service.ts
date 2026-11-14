@@ -1,6 +1,18 @@
 import apiClient from './api.client'
-import { asArray, readNullableString, requiredDateString, requiredNumber, requiredString, requireRecord, unwrapPayload } from './mf04.response'
-import type { DeadLetterQueueTask, ReplayDeadLetterQueueResponse } from '@/types/deadLetterQueue.types'
+import {
+  asArray,
+  readNullableString,
+  requiredDateString,
+  requiredNumber,
+  requiredString,
+  requireRecord,
+  unwrapPayload,
+} from './mf04.response'
+import type {
+  DeadLetterQueueTask,
+  ReplayDeadLetterQueueResponse,
+  ResolveDeadLetterQueueResponse,
+} from '@/types/deadLetterQueue.types'
 
 function normalizeTask(value: unknown): DeadLetterQueueTask {
   const record = requireRecord(value, 'DLQ task không hợp lệ.')
@@ -27,6 +39,15 @@ export const deadLetterQueueService = {
     return asArray(response.data, 'API DLQ không trả về danh sách task.').map(normalizeTask)
   },
 
+  async listForExaminationOfficer(status?: string): Promise<DeadLetterQueueTask[]> {
+    const response = await apiClient.get<unknown>('/examination-officer/dlq/tasks', {
+      params: status ? { status } : undefined,
+    })
+    return asArray(response.data, 'API DLQ Khảo thí không trả về danh sách task.').map(
+      normalizeTask,
+    )
+  },
+
   async replay(id: string): Promise<ReplayDeadLetterQueueResponse> {
     const response = await apiClient.post<unknown>(`/dlq/tasks/${id}/replay`)
     const record = requireRecord(unwrapPayload(response.data), 'Phản hồi replay DLQ không hợp lệ.')
@@ -35,6 +56,52 @@ export const deadLetterQueueService = {
       dlqId: requiredString(record, 'dlqId', 'Phản hồi replay thiếu mã DLQ.'),
       status: requiredString(record, 'status', 'Phản hồi replay thiếu trạng thái.'),
       message: requiredString(record, 'message', 'Phản hồi replay thiếu thông báo.'),
+    }
+  },
+
+  async replayForExaminationOfficer(id: string): Promise<ReplayDeadLetterQueueResponse> {
+    const response = await apiClient.post<unknown>(`/examination-officer/dlq/tasks/${id}/replay`)
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi replay DLQ Khảo thí không hợp lệ.',
+    )
+    return {
+      id: requiredString(record, 'id', 'Phản hồi replay thiếu mã task.'),
+      dlqId: requiredString(record, 'dlqId', 'Phản hồi replay thiếu mã DLQ.'),
+      status: requiredString(record, 'status', 'Phản hồi replay thiếu trạng thái.'),
+      message: requiredString(record, 'message', 'Phản hồi replay thiếu thông báo.'),
+    }
+  },
+
+  async resolve(id: string, resolutionNotes?: string): Promise<ResolveDeadLetterQueueResponse> {
+    const response = await apiClient.post<unknown>(`/dlq/tasks/${id}/resolve`, {
+      resolutionNotes: resolutionNotes?.trim() || undefined,
+    })
+    const record = requireRecord(unwrapPayload(response.data), 'Phản hồi xử lý DLQ không hợp lệ.')
+    return {
+      id: requiredString(record, 'id', 'Phản hồi xử lý DLQ thiếu mã task.'),
+      dlqId: requiredString(record, 'dlqId', 'Phản hồi xử lý DLQ thiếu mã DLQ.'),
+      status: requiredString(record, 'status', 'Phản hồi xử lý DLQ thiếu trạng thái.'),
+      message: requiredString(record, 'message', 'Phản hồi xử lý DLQ thiếu thông báo.'),
+    }
+  },
+
+  async resolveForExaminationOfficer(
+    id: string,
+    resolutionNotes?: string,
+  ): Promise<ResolveDeadLetterQueueResponse> {
+    const response = await apiClient.post<unknown>(`/examination-officer/dlq/tasks/${id}/resolve`, {
+      resolutionNotes: resolutionNotes?.trim() || undefined,
+    })
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi xử lý DLQ Khảo thí không hợp lệ.',
+    )
+    return {
+      id: requiredString(record, 'id', 'Phản hồi xử lý DLQ thiếu mã task.'),
+      dlqId: requiredString(record, 'dlqId', 'Phản hồi xử lý DLQ thiếu mã DLQ.'),
+      status: requiredString(record, 'status', 'Phản hồi xử lý DLQ thiếu trạng thái.'),
+      message: requiredString(record, 'message', 'Phản hồi xử lý DLQ thiếu thông báo.'),
     }
   },
 }

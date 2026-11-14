@@ -24,6 +24,9 @@ import type {
   AudioSealResponse,
   AudioUploadAuthorization,
   AuditEvidenceItem,
+  ExamAntiCheatLog,
+  ExamSet,
+  ExamSetQuestion,
   CreateExamShiftRequest,
   CreateExamStructureRequest,
   CreateOfficialExamSessionRequest,
@@ -32,6 +35,7 @@ import type {
   ExamTicket,
   ExamTicketStatus,
   GetExamStructuresParams,
+  GetExamSetsParams,
   GetExamShiftsParams,
   GetOfficialExamSessionsParams,
   LockExamTicketResponse,
@@ -43,6 +47,7 @@ import type {
   OverrideExamScoreResponse,
   PublishGradesRequest,
   PublishGradesResponse,
+  PublishExamShiftResponse,
   SealOfficialExamAudioRequest,
   StudentOfficialExamCriterionScore,
   StudentOfficialExamGrade,
@@ -85,13 +90,88 @@ function normalizeAuditEvidence(value: unknown): AuditEvidenceItem {
   }
 }
 
+function normalizeAntiCheatLog(value: unknown): ExamAntiCheatLog {
+  const record = requireRecord(value, 'Log chống gian lận không hợp lệ.')
+  return {
+    id: requiredString(record, 'id', 'Log chống gian lận thiếu mã.'),
+    ticketId: requiredString(record, 'ticketId', 'Log chống gian lận thiếu mã vé.'),
+    shiftId: requiredString(record, 'shiftId', 'Log chống gian lận thiếu mã ca.'),
+    studentId: requiredString(record, 'studentId', 'Log chống gian lận thiếu mã sinh viên.'),
+    clientEventId: requiredString(record, 'clientEventId', 'Log chống gian lận thiếu mã sự kiện.'),
+    studentCode: requiredString(record, 'studentCode', 'Log chống gian lận thiếu MSSV.'),
+    studentName: requiredString(record, 'studentName', 'Log chống gian lận thiếu tên sinh viên.'),
+    eventType: requiredString(record, 'eventType', 'Log chống gian lận thiếu loại sự kiện.'),
+    severity: requiredString(record, 'severity', 'Log chống gian lận thiếu mức độ.'),
+    details: readNullableString(record, 'details'),
+    violationCount: readNumber(record, 'violationCount') ?? 0,
+    occurredAt: requiredDateString(record, 'occurredAt', 'Log chống gian lận thiếu thời điểm.'),
+  }
+}
+
+function normalizeExamSetQuestion(value: unknown): ExamSetQuestion {
+  const record = requireRecord(value, 'Câu hỏi trong bộ đề không hợp lệ.')
+  const duplicateInSets = field(record, 'duplicateInSets')
+  return {
+    questionId: requiredString(record, 'questionId', 'Câu hỏi trong bộ đề thiếu mã.'),
+    orderIndex: requiredNumber(record, 'orderIndex', 'Câu hỏi trong bộ đề thiếu thứ tự.'),
+    title: requiredString(record, 'title', 'Câu hỏi trong bộ đề thiếu tiêu đề.'),
+    content: requiredString(record, 'content', 'Câu hỏi trong bộ đề thiếu nội dung.'),
+    bloomLevel: requiredString(record, 'bloomLevel', 'Câu hỏi trong bộ đề thiếu Bloom level.'),
+    difficulty: requiredString(record, 'difficulty', 'Câu hỏi trong bộ đề thiếu độ khó.'),
+    isDuplicate: readBoolean(record, 'isDuplicate') ?? false,
+    duplicateInSets: Array.isArray(duplicateInSets)
+      ? duplicateInSets.filter((item): item is string => typeof item === 'string')
+      : [],
+  }
+}
+
+function normalizeExamSet(value: unknown): ExamSet {
+  const record = requireRecord(value, 'Bộ đề thi thật không hợp lệ.')
+  const questions = field(record, 'questions')
+  return {
+    id: requiredString(record, 'id', 'Bộ đề thiếu mã.'),
+    structureId: requiredString(record, 'structureId', 'Bộ đề thiếu cấu trúc.'),
+    courseId: requiredString(record, 'courseId', 'Bộ đề thiếu mã môn.'),
+    courseCode: requiredString(record, 'courseCode', 'Bộ đề thiếu mã môn hiển thị.'),
+    sessionId: readNullableString(record, 'sessionId'),
+    createdBy: readNullableString(record, 'createdBy'),
+    setCode: requiredString(record, 'setCode', 'Bộ đề thiếu mã bộ đề.'),
+    status: requiredString(record, 'status', 'Bộ đề thiếu trạng thái.'),
+    approvedBy: readNullableString(record, 'approvedBy'),
+    reviewNotes: readNullableString(record, 'reviewNotes'),
+    submittedAt: readNullableString(record, 'submittedAt'),
+    approvedAt: readNullableString(record, 'approvedAt'),
+    handedOverAt: readNullableString(record, 'handedOverAt'),
+    generatedAt: requiredDateString(record, 'generatedAt', 'Bộ đề thiếu thời điểm tạo.'),
+    isActive: readBoolean(record, 'isActive') ?? false,
+    questions: Array.isArray(questions) ? questions.map(normalizeExamSetQuestion) : [],
+  }
+}
+
 function normalizePublishResponse(payload: unknown): PublishGradesResponse {
   const record = requireRecord(unwrapPayload(payload), 'Phản hồi công bố điểm không hợp lệ.')
   return {
     shiftId: requiredString(record, 'shiftId', 'Phản hồi công bố điểm thiếu mã ca thi.'),
-    totalPublished: requiredNumber(record, 'totalPublished', 'Phản hồi công bố điểm thiếu tổng số sinh viên.'),
-    publishedAt: requiredDateString(record, 'publishedAt', 'Phản hồi công bố điểm thiếu thời điểm công bố.'),
+    totalPublished: requiredNumber(
+      record,
+      'totalPublished',
+      'Phản hồi công bố điểm thiếu tổng số sinh viên.',
+    ),
+    publishedAt: requiredDateString(
+      record,
+      'publishedAt',
+      'Phản hồi công bố điểm thiếu thời điểm công bố.',
+    ),
     message: requiredString(record, 'message', 'Phản hồi công bố điểm thiếu thông báo.'),
+  }
+}
+
+function normalizePublishShiftResponse(payload: unknown): PublishExamShiftResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi công bố đề không hợp lệ.')
+  return {
+    success: readBoolean(record, 'success') ?? false,
+    shiftId: requiredString(record, 'shiftId', 'Phản hồi công bố đề thiếu mã ca thi.'),
+    message: requiredString(record, 'message', 'Phản hồi công bố đề thiếu thông báo.'),
   }
 }
 
@@ -104,9 +184,17 @@ function normalizeSession(value: unknown): OfficialExamSession {
     title: requiredString(record, 'title', 'Kỳ thi thật thiếu tiêu đề.'),
     examDate: requiredString(record, 'examDate', 'Kỳ thi thật thiếu ngày thi.'),
     hasFollowUp: requiredBoolean(record, 'hasFollowUp', 'Kỳ thi thật thiếu cấu hình follow-up.'),
-    maxFollowUpQuestions: requiredNumber(record, 'maxFollowUpQuestions', 'Kỳ thi thật thiếu số câu follow-up.'),
+    maxFollowUpQuestions: requiredNumber(
+      record,
+      'maxFollowUpQuestions',
+      'Kỳ thi thật thiếu số câu follow-up.',
+    ),
     examInputMode: requiredString(record, 'examInputMode', 'Kỳ thi thật thiếu chế độ nhập bài.'),
-    transcriptBufferSeconds: requiredNumber(record, 'transcriptBufferSeconds', 'Kỳ thi thật thiếu thời gian đệm transcript.'),
+    transcriptBufferSeconds: requiredNumber(
+      record,
+      'transcriptBufferSeconds',
+      'Kỳ thi thật thiếu thời gian đệm transcript.',
+    ),
     status: requiredString(record, 'status', 'Kỳ thi thật thiếu trạng thái.'),
   }
 }
@@ -121,6 +209,9 @@ function normalizeShift(value: unknown): ExamShift {
     startTime: requiredDateString(record, 'startTime', 'Ca thi thật thiếu thời gian bắt đầu.'),
     endTime: requiredDateString(record, 'endTime', 'Ca thi thật thiếu thời gian kết thúc.'),
     proctorUserId: readNullableString(record, 'proctorUserId'),
+    examinerUserId: readNullableString(record, 'examinerUserId'),
+    examinerName: readNullableString(record, 'examinerName'),
+    proctorName: readNullableString(record, 'proctorName'),
     status: requiredString(record, 'status', 'Ca thi thật thiếu trạng thái.'),
   }
 }
@@ -135,7 +226,11 @@ function normalizeExamStructure(value: unknown): ExamStructure {
     name: requiredString(record, 'name', 'Cấu trúc đề thi thiếu tên.'),
     totalQuestions: requiredNumber(record, 'totalQuestions', 'Cấu trúc đề thi thiếu số câu.'),
     durationMinutes: requiredNumber(record, 'durationMinutes', 'Cấu trúc đề thi thiếu thời lượng.'),
-    bloomDistribution: requiredString(record, 'bloomDistribution', 'Cấu trúc đề thi thiếu phân bổ Bloom.'),
+    bloomDistribution: requiredString(
+      record,
+      'bloomDistribution',
+      'Cấu trúc đề thi thiếu phân bổ Bloom.',
+    ),
     isActive: requiredBoolean(record, 'isActive', 'Cấu trúc đề thi thiếu trạng thái.'),
     createdAt: requiredDateString(record, 'createdAt', 'Cấu trúc đề thi thiếu thời điểm tạo.'),
   }
@@ -150,7 +245,11 @@ function normalizeTicket(value: unknown): ExamTicket {
     seatNumber: requiredNumber(record, 'seatNumber', 'Vé thi thật thiếu số ghế.'),
     ipAddress: readNullableString(record, 'ipAddress'),
     status: normalizeStatus(field(record, 'status')),
-    checkedInAt: requiredDateString(record, 'checkedInAt', 'Vé thi thật thiếu thời điểm điểm danh.'),
+    checkedInAt: requiredDateString(
+      record,
+      'checkedInAt',
+      'Vé thi thật thiếu thời điểm điểm danh.',
+    ),
     examSetId: readNullableString(record, 'examSetId'),
   }
 }
@@ -172,17 +271,22 @@ function normalizeWorkstationQuestion(value: unknown): WorkstationExamQuestion {
 function normalizeWorkstationTicket(payload: unknown): StudentWorkstationTicket {
   const record = requireRecord(unwrapPayload(payload), 'Vé thi tại máy trạm không hợp lệ.')
   const questionsValue = field(record, 'questions')
-  const questions = questionsValue === undefined || questionsValue === null
-    ? []
-    : Array.isArray(questionsValue)
-      ? questionsValue.map(normalizeWorkstationQuestion)
-      : invalidResponse('Danh sách câu hỏi của vé thi không hợp lệ.')
+  const questions =
+    questionsValue === undefined || questionsValue === null
+      ? []
+      : Array.isArray(questionsValue)
+        ? questionsValue.map(normalizeWorkstationQuestion)
+        : invalidResponse('Danh sách câu hỏi của vé thi không hợp lệ.')
   return {
     id: requiredString(record, 'id', 'Vé thi tại máy trạm thiếu mã vé.'),
     shiftId: requiredString(record, 'shiftId', 'Vé thi tại máy trạm thiếu mã ca thi.'),
     shiftName: requiredString(record, 'shiftName', 'Vé thi tại máy trạm thiếu tên ca.'),
     roomLab: requiredString(record, 'roomLab', 'Vé thi tại máy trạm thiếu phòng thi.'),
-    startTime: requiredDateString(record, 'startTime', 'Vé thi tại máy trạm thiếu thời gian bắt đầu.'),
+    startTime: requiredDateString(
+      record,
+      'startTime',
+      'Vé thi tại máy trạm thiếu thời gian bắt đầu.',
+    ),
     endTime: requiredDateString(record, 'endTime', 'Vé thi tại máy trạm thiếu thời gian kết thúc.'),
     shiftStatus: requiredString(record, 'shiftStatus', 'Vé thi tại máy trạm thiếu trạng thái ca.'),
     sessionTitle: requiredString(record, 'sessionTitle', 'Vé thi tại máy trạm thiếu tên kỳ thi.'),
@@ -223,8 +327,16 @@ function normalizeAudioSeal(payload: unknown): AudioSealResponse {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi niêm phong audio thiếu mã vé.'),
     objectKey: requiredString(record, 'objectKey', 'Phản hồi niêm phong audio thiếu object key.'),
     sha256: requiredString(record, 'sha256', 'Phản hồi niêm phong audio thiếu mã SHA-256.'),
-    contentLength: requiredNumber(record, 'contentLength', 'Phản hồi niêm phong audio thiếu dung lượng.'),
-    verifiedAt: requiredDateString(record, 'verifiedAt', 'Phản hồi niêm phong audio thiếu thời điểm xác minh.'),
+    contentLength: requiredNumber(
+      record,
+      'contentLength',
+      'Phản hồi niêm phong audio thiếu dung lượng.',
+    ),
+    verifiedAt: requiredDateString(
+      record,
+      'verifiedAt',
+      'Phản hồi niêm phong audio thiếu thời điểm xác minh.',
+    ),
   }
 }
 
@@ -233,8 +345,16 @@ function normalizeSubmit(payload: unknown): SubmitOfficialExamResponse {
   return {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi nộp bài thi thiếu mã vé.'),
     status: requiredString(record, 'status', 'Phản hồi nộp bài thi thiếu trạng thái.'),
-    submittedAt: requiredDateString(record, 'submittedAt', 'Phản hồi nộp bài thi thiếu thời điểm nộp.'),
-    submissionCount: requiredNumber(record, 'submissionCount', 'Phản hồi nộp bài thi thiếu số lượng câu.'),
+    submittedAt: requiredDateString(
+      record,
+      'submittedAt',
+      'Phản hồi nộp bài thi thiếu thời điểm nộp.',
+    ),
+    submissionCount: requiredNumber(
+      record,
+      'submissionCount',
+      'Phản hồi nộp bài thi thiếu số lượng câu.',
+    ),
   }
 }
 
@@ -244,10 +364,26 @@ function normalizeSubmissionStatus(payload: unknown): OfficialExamSubmissionStat
     ticketId: requiredString(record, 'ticketId', 'Trạng thái nộp bài thiếu mã vé.'),
     status: requiredString(record, 'status', 'Trạng thái nộp bài thiếu trạng thái.'),
     submittedAt: readNullableString(record, 'submittedAt'),
-    totalSubmissions: requiredNumber(record, 'totalSubmissions', 'Trạng thái nộp bài thiếu tổng số submission.'),
-    pendingSubmissions: requiredNumber(record, 'pendingSubmissions', 'Trạng thái nộp bài thiếu số submission đang chờ.'),
-    gradedSubmissions: requiredNumber(record, 'gradedSubmissions', 'Trạng thái nộp bài thiếu số submission đã chấm.'),
-    failedSubmissions: requiredNumber(record, 'failedSubmissions', 'Trạng thái nộp bài thiếu số submission lỗi.'),
+    totalSubmissions: requiredNumber(
+      record,
+      'totalSubmissions',
+      'Trạng thái nộp bài thiếu tổng số submission.',
+    ),
+    pendingSubmissions: requiredNumber(
+      record,
+      'pendingSubmissions',
+      'Trạng thái nộp bài thiếu số submission đang chờ.',
+    ),
+    gradedSubmissions: requiredNumber(
+      record,
+      'gradedSubmissions',
+      'Trạng thái nộp bài thiếu số submission đã chấm.',
+    ),
+    failedSubmissions: requiredNumber(
+      record,
+      'failedSubmissions',
+      'Trạng thái nộp bài thiếu số submission lỗi.',
+    ),
   }
 }
 
@@ -257,12 +393,28 @@ function normalizeOverride(payload: unknown): OverrideExamScoreResponse {
     auditId: requiredString(record, 'auditId', 'Phản hồi ghi đè điểm thiếu mã audit.'),
     ticketId: requiredString(record, 'ticketId', 'Phản hồi ghi đè điểm thiếu mã vé.'),
     lecturerId: requiredString(record, 'lecturerId', 'Phản hồi ghi đè điểm thiếu mã giảng viên.'),
-    originalAiScore: requiredNumber(record, 'originalAiScore', 'Phản hồi ghi đè điểm thiếu điểm AI gốc.'),
-    auditedScore: requiredNumber(record, 'auditedScore', 'Phản hồi ghi đè điểm thiếu điểm hậu kiểm.'),
+    originalAiScore: requiredNumber(
+      record,
+      'originalAiScore',
+      'Phản hồi ghi đè điểm thiếu điểm AI gốc.',
+    ),
+    auditedScore: requiredNumber(
+      record,
+      'auditedScore',
+      'Phản hồi ghi đè điểm thiếu điểm hậu kiểm.',
+    ),
     overrideReason: requiredString(record, 'overrideReason', 'Phản hồi ghi đè điểm thiếu lý do.'),
-    ticketStatus: requiredString(record, 'ticketStatus', 'Phản hồi ghi đè điểm thiếu trạng thái vé.'),
+    ticketStatus: requiredString(
+      record,
+      'ticketStatus',
+      'Phản hồi ghi đè điểm thiếu trạng thái vé.',
+    ),
     isLocked: requiredBoolean(record, 'isLocked', 'Phản hồi ghi đè điểm thiếu trạng thái khóa.'),
-    auditedAt: requiredDateString(record, 'auditedAt', 'Phản hồi ghi đè điểm thiếu thời điểm hậu kiểm.'),
+    auditedAt: requiredDateString(
+      record,
+      'auditedAt',
+      'Phản hồi ghi đè điểm thiếu thời điểm hậu kiểm.',
+    ),
   }
 }
 
@@ -309,7 +461,9 @@ function normalizeScorecard(value: unknown): StudentOfficialExamQuestionScorecar
 function normalizeGrade(payload: unknown): StudentOfficialExamGrade {
   const record = requireRecord(unwrapPayload(payload), 'Điểm thi thật không hợp lệ.')
   const scorecards = field(record, 'detailedScorecard')
-  const appeal = isRecord(field(record, 'internalAppeal')) ? field(record, 'internalAppeal') as Record<string, unknown> : {}
+  const appeal = isRecord(field(record, 'internalAppeal'))
+    ? (field(record, 'internalAppeal') as Record<string, unknown>)
+    : {}
   return {
     ticketId: requiredString(record, 'ticketId', 'Điểm thi thật thiếu mã vé.'),
     studentCode: requiredString(record, 'studentCode', 'Điểm thi thật thiếu mã sinh viên.'),
@@ -318,9 +472,17 @@ function normalizeGrade(payload: unknown): StudentOfficialExamGrade {
     status: requiredString(record, 'status', 'Điểm thi thật thiếu trạng thái.'),
     isLocked: requiredBoolean(record, 'isLocked', 'Điểm thi thật thiếu trạng thái khóa.'),
     totalScore: readNullableNumber(record, 'totalScore'),
-    publishedAt: requiredDateString(record, 'publishedAt', 'Điểm thi thật thiếu thời điểm công bố.'),
+    publishedAt: requiredDateString(
+      record,
+      'publishedAt',
+      'Điểm thi thật thiếu thời điểm công bố.',
+    ),
     publishedBy: requiredString(record, 'publishedBy', 'Điểm thi thật thiếu người công bố.'),
-    studentAcknowledgementStatus: requiredString(record, 'studentAcknowledgementStatus', 'Điểm thi thật thiếu trạng thái xác nhận.'),
+    studentAcknowledgementStatus: requiredString(
+      record,
+      'studentAcknowledgementStatus',
+      'Điểm thi thật thiếu trạng thái xác nhận.',
+    ),
     detailedScorecard: Array.isArray(scorecards) ? scorecards.map(normalizeScorecard) : [],
     internalAppeal: {
       canAppeal: readBoolean(appeal, 'canAppeal') ?? false,
@@ -336,8 +498,16 @@ function normalizeAcknowledge(payload: unknown): AcknowledgeOfficialGradeRespons
   return {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi xác nhận điểm thiếu mã vé.'),
     studentId: requiredString(record, 'studentId', 'Phản hồi xác nhận điểm thiếu mã sinh viên.'),
-    studentAcknowledgementStatus: requiredString(record, 'studentAcknowledgementStatus', 'Phản hồi xác nhận điểm thiếu trạng thái.'),
-    acknowledgedAtUtc: requiredDateString(record, 'acknowledgedAtUtc', 'Phản hồi xác nhận điểm thiếu thời điểm.'),
+    studentAcknowledgementStatus: requiredString(
+      record,
+      'studentAcknowledgementStatus',
+      'Phản hồi xác nhận điểm thiếu trạng thái.',
+    ),
+    acknowledgedAtUtc: requiredDateString(
+      record,
+      'acknowledgedAtUtc',
+      'Phản hồi xác nhận điểm thiếu thời điểm.',
+    ),
     message: requiredString(record, 'message', 'Phản hồi xác nhận điểm thiếu thông báo.'),
   }
 }
@@ -345,7 +515,11 @@ function normalizeAcknowledge(payload: unknown): AcknowledgeOfficialGradeRespons
 function exportFile(response: AxiosResponse<Blob>, fallbackName: string): OfficialExamExportFile {
   const readHeader = (name: string): string | undefined => {
     const value = response.headers[name]
-    return typeof value === 'string' ? value : value === undefined || value === null ? undefined : String(value)
+    return typeof value === 'string'
+      ? value
+      : value === undefined || value === null
+        ? undefined
+        : String(value)
   }
   return {
     blob: response.data,
@@ -358,7 +532,9 @@ function exportFile(response: AxiosResponse<Blob>, fallbackName: string): Offici
 export const officialExamService = {
   async getExamStructures(params: GetExamStructuresParams = {}): Promise<ExamStructure[]> {
     const response = await apiClient.get<unknown>('/exam-structures', { params })
-    return asArray(response.data, 'API cấu trúc đề thi không trả về danh sách.').map(normalizeExamStructure)
+    return asArray(response.data, 'API cấu trúc đề thi không trả về danh sách.').map(
+      normalizeExamStructure,
+    )
   },
 
   async getExamStructure(id: string): Promise<ExamStructure> {
@@ -366,19 +542,31 @@ export const officialExamService = {
     return normalizeExamStructure(unwrapPayload(response.data))
   },
 
+  async getExamSets(params: GetExamSetsParams): Promise<ExamSet[]> {
+    const response = await apiClient.get<unknown>('/official-exams/exam-sets', { params })
+    return asArray(response.data, 'API bộ đề thi thật không trả về danh sách.').map(
+      normalizeExamSet,
+    )
+  },
+
   async createExamStructure(payload: CreateExamStructureRequest): Promise<ExamStructure> {
     const response = await apiClient.post<unknown>('/exam-structures', payload)
     return normalizeExamStructure(unwrapPayload(response.data))
   },
 
-  async updateExamStructure(id: string, payload: UpdateExamStructureRequest): Promise<ExamStructure> {
+  async updateExamStructure(
+    id: string,
+    payload: UpdateExamStructureRequest,
+  ): Promise<ExamStructure> {
     const response = await apiClient.put<unknown>(`/exam-structures/${id}`, payload)
     return normalizeExamStructure(unwrapPayload(response.data))
   },
 
   async getSessions(params: GetOfficialExamSessionsParams = {}): Promise<OfficialExamSession[]> {
     const response = await apiClient.get<unknown>('/official-exams/sessions', { params })
-    return asArray(response.data, 'API kỳ thi thật không trả về danh sách kỳ thi.').map(normalizeSession)
+    return asArray(response.data, 'API kỳ thi thật không trả về danh sách kỳ thi.').map(
+      normalizeSession,
+    )
   },
 
   async createSession(payload: CreateOfficialExamSessionRequest): Promise<OfficialExamSession> {
@@ -388,12 +576,19 @@ export const officialExamService = {
 
   async getShifts(params: GetExamShiftsParams = {}): Promise<ExamShift[]> {
     const response = await apiClient.get<unknown>('/official-exams/shifts', { params })
-    return asArray(response.data, 'API ca thi thật không trả về danh sách ca thi.').map(normalizeShift)
+    return asArray(response.data, 'API ca thi thật không trả về danh sách ca thi.').map(
+      normalizeShift,
+    )
   },
 
   async createShift(payload: CreateExamShiftRequest): Promise<ExamShift> {
     const response = await apiClient.post<unknown>('/official-exams/shifts', payload)
     return normalizeShift(unwrapPayload(response.data))
+  },
+
+  async publishShift(shiftId: string): Promise<PublishExamShiftResponse> {
+    const response = await apiClient.post<unknown>(`/official-exams/shifts/${shiftId}/publish`)
+    return normalizePublishShiftResponse(response.data)
   },
 
   async assignTicket(payload: AssignExamTicketRequest): Promise<ExamTicket> {
@@ -435,14 +630,26 @@ export const officialExamService = {
     })
   },
 
-  async sealAudio(ticketId: string, payload: SealOfficialExamAudioRequest): Promise<AudioSealResponse> {
-    const response = await apiClient.put<unknown>(`/official-exams/tickets/${ticketId}/audio`, payload)
+  async sealAudio(
+    ticketId: string,
+    payload: SealOfficialExamAudioRequest,
+  ): Promise<AudioSealResponse> {
+    const response = await apiClient.put<unknown>(
+      `/official-exams/tickets/${ticketId}/audio`,
+      payload,
+    )
     return normalizeAudioSeal(response.data)
   },
 
-  async submitExam(ticketId: string, answers: OfficialExamAnswerSubmissionRequest[]): Promise<SubmitOfficialExamResponse> {
+  async submitExam(
+    ticketId: string,
+    answers: OfficialExamAnswerSubmissionRequest[],
+  ): Promise<SubmitOfficialExamResponse> {
     const payload: SubmitOfficialExamRequest = { answers }
-    const response = await apiClient.put<unknown>(`/official-exams/tickets/${ticketId}/submission`, payload)
+    const response = await apiClient.put<unknown>(
+      `/official-exams/tickets/${ticketId}/submission`,
+      payload,
+    )
     return normalizeSubmit(response.data)
   },
 
@@ -452,20 +659,44 @@ export const officialExamService = {
   },
 
   async getAuditEvidence(shiftId: string): Promise<AuditEvidenceItem[]> {
-    const response = await apiClient.get<unknown>(`/official-exams/shifts/${shiftId}/audit-evidence`)
-    return asArray(response.data, 'API hậu kiểm không trả về danh sách bằng chứng.').map(normalizeAuditEvidence)
+    const response = await apiClient.get<unknown>(
+      `/official-exams/shifts/${shiftId}/audit-evidence`,
+    )
+    return asArray(response.data, 'API hậu kiểm không trả về danh sách bằng chứng.').map(
+      normalizeAuditEvidence,
+    )
   },
 
-  async overrideScore(ticketId: string, payload: OverrideExamScoreRequest): Promise<OverrideExamScoreResponse> {
-    const response = await apiClient.put<unknown>(`/official-exams/tickets/${ticketId}/override-score`, {
-      ...payload,
-      ticketId,
-    })
+  async getAntiCheatLogs(shiftId: string, ticketId?: string): Promise<ExamAntiCheatLog[]> {
+    const response = await apiClient.get<unknown>(
+      `/official-exams/shifts/${shiftId}/anti-cheat/logs`,
+      {
+        params: ticketId ? { ticketId } : undefined,
+      },
+    )
+    return asArray(response.data, 'API log chống gian lận không trả về danh sách.').map(
+      normalizeAntiCheatLog,
+    )
+  },
+
+  async overrideScore(
+    ticketId: string,
+    payload: OverrideExamScoreRequest,
+  ): Promise<OverrideExamScoreResponse> {
+    const response = await apiClient.put<unknown>(
+      `/official-exams/tickets/${ticketId}/override-score`,
+      {
+        ...payload,
+        ticketId,
+      },
+    )
     return normalizeOverride(response.data)
   },
 
   async lockTicket(ticketId: string): Promise<LockExamTicketResponse> {
-    const response = await apiClient.post<unknown>(`/official-exams/tickets/${ticketId}/lock`, { ticketId })
+    const response = await apiClient.post<unknown>(`/official-exams/tickets/${ticketId}/lock`, {
+      ticketId,
+    })
     return normalizeLock(response.data)
   },
 
@@ -473,7 +704,10 @@ export const officialExamService = {
     shiftId: string,
     payload: PublishGradesRequest = {},
   ): Promise<PublishGradesResponse> {
-    const response = await apiClient.post<unknown>(`/official-exams/shifts/${shiftId}/publish-grades`, payload)
+    const response = await apiClient.post<unknown>(
+      `/official-exams/shifts/${shiftId}/publish-grades`,
+      payload,
+    )
     return normalizePublishResponse(response.data)
   },
 
@@ -498,10 +732,17 @@ export const officialExamService = {
     return normalizeGrade(response.data)
   },
 
-  async acknowledgeGrade(ticketId: string, studentId?: string): Promise<AcknowledgeOfficialGradeResponse> {
-    const response = await apiClient.post<unknown>(`/student/official-exams/${ticketId}/acknowledge-grade`, undefined, {
-      params: studentId ? { studentId } : undefined,
-    })
+  async acknowledgeGrade(
+    ticketId: string,
+    studentId?: string,
+  ): Promise<AcknowledgeOfficialGradeResponse> {
+    const response = await apiClient.post<unknown>(
+      `/student/official-exams/${ticketId}/acknowledge-grade`,
+      undefined,
+      {
+        params: studentId ? { studentId } : undefined,
+      },
+    )
     return normalizeAcknowledge(response.data)
   },
 }

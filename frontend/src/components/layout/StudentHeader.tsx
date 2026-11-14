@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import {
   BarChart3,
   Bell,
@@ -12,6 +13,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useStudentNotifications } from '@/hooks/useStudentNotifications'
+import { StudentNotificationDrawer } from '@/components/student/StudentNotificationDrawer'
+import { toast } from '@/components/common/toastStore'
+import { resolveStudentNotificationRoute } from '@/utils/notificationDeepLink'
 
 interface StudentHeaderProps {
   onOpenSidebar: () => void
@@ -48,12 +53,27 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false)
+  const notifications = useStudentNotifications(isNotificationOpen)
   const page = PAGE_META[location.pathname] ?? { label: 'Cổng sinh viên', icon: LayoutDashboard }
   const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()
 
   const handleLogout = () => {
     void logout().finally(() => navigate('/login', { replace: true }))
+  }
+
+  const handleNotificationSelect = async (notification: (typeof notifications.items)[number]) => {
+    try {
+      await notifications.markRead(notification)
+    } catch {
+      toast.error('Không thể cập nhật trạng thái thông báo.')
+      return
+    }
+
+    setIsNotificationOpen(false)
+    const route = resolveStudentNotificationRoute(notification)
+    if (route) navigate(route)
   }
 
   return (
@@ -86,11 +106,18 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setIsNotificationOpen(true)}
             className="relative flex size-10 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
             aria-label="Thông báo"
+            aria-expanded={isNotificationOpen}
+            aria-controls="student-notification-drawer"
           >
             <Bell className="size-[17px]" />
-            <span className="absolute top-2 right-2 size-1.5 rounded-full bg-[#ef5c72] ring-2 ring-white" />
+            {notifications.unreadCount > 0 ? (
+              <span className="absolute -top-1 -right-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ef5c72] px-1 text-[9px] leading-none font-bold text-white ring-2 ring-white">
+                {notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}
+              </span>
+            ) : null}
           </button>
 
           <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3">
@@ -127,6 +154,26 @@ export function StudentHeader({ onOpenSidebar }: StudentHeaderProps) {
             <LogOut className="size-4" />
           </button>
         </div>
+      </div>
+      <div id="student-notification-drawer">
+        <StudentNotificationDrawer
+          open={isNotificationOpen}
+          onClose={() => setIsNotificationOpen(false)}
+          notifications={notifications.items}
+          unreadCount={notifications.unreadCount}
+          isLoading={notifications.isLoading}
+          isLoadingMore={notifications.isLoadingMore}
+          error={notifications.error}
+          hasMore={notifications.hasMore}
+          onRetry={() => void notifications.refresh()}
+          onLoadMore={() => void notifications.loadMore()}
+          onMarkAllRead={() => {
+            void notifications.markAllRead().catch(() => {
+              toast.error('Không thể đánh dấu tất cả thông báo đã đọc.')
+            })
+          }}
+          onSelect={(notification) => void handleNotificationSelect(notification)}
+        />
       </div>
     </header>
   )
