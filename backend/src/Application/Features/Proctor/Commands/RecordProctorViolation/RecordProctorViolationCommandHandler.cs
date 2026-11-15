@@ -20,6 +20,9 @@ public sealed class RecordProctorViolationCommandHandler(
         RecordProctorViolationCommand request,
         CancellationToken cancellationToken)
     {
+        if (!await ProctorAuthorization.CanAccessShiftAsync(context, request.ActorUserId, request.ShiftId, false, cancellationToken))
+            return Result<ExamAntiCheatLogDto>.Failure(ProctorAuthorization.Forbidden);
+
         var shiftExists = await context.RealExamSessionShifts
             .AsNoTracking()
             .AnyAsync(s => s.Id == request.ShiftId, cancellationToken);

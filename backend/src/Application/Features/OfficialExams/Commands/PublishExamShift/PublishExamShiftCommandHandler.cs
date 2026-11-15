@@ -14,17 +14,14 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.PublishExa
 public sealed class PublishExamShiftCommandHandler(IApplicationDbContext context)
     : IRequestHandler<PublishExamShiftCommand, Result>
 {
-    private static readonly string[] AllowedRoles =
-    [
-        UserRole.ExaminationOfficer,
-        UserRole.DepartmentHead,
-        UserRole.Admin
-    ];
+    public Task<Result> Handle(PublishExamShiftCommand request, CancellationToken cancellationToken) =>
+        context.ExecuteShiftMutationAsync(request.ShiftId, true,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
 
-    public async Task<Result> Handle(PublishExamShiftCommand request, CancellationToken cancellationToken)
+    private async Task<Result> HandleLockedAsync(PublishExamShiftCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !AllowedRoles.Contains(request.ActorRole, StringComparer.OrdinalIgnoreCase))
+        if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(
+                context, request.ActorUserId, request.ActorRole, UserRole.ExaminationOfficer, cancellationToken))
         {
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
@@ -49,7 +46,6 @@ public sealed class PublishExamShiftCommandHandler(IApplicationDbContext context
 
         shift.IsExamPublished = true;
         shift.PublishedAt = DateTime.UtcNow;
-        shift.ExaminerUserId = request.ActorUserId;
 
         await context.SaveChangesAsync(cancellationToken);
         return Result.Success();

@@ -499,8 +499,11 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
         }
         await context.SaveChangesAsync();
 
+        var officer = new User { Email = $"officer.{Guid.NewGuid():N}@fe.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var handler = new GetAppealAllocationProposalQueryHandler(context);
-        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id, officer.Id, officer.Role), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TotalAppeals.Should().Be(25);
@@ -585,8 +588,11 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
         }
         await context.SaveChangesAsync();
 
+        var officer = new User { Email = $"officer.{Guid.NewGuid():N}@fe.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var handler = new GetAppealAllocationProposalQueryHandler(context);
-        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id, officer.Id, officer.Role), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TotalAppeals.Should().Be(51);
@@ -594,10 +600,9 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
 
         // 51 bài chia đều cho 2 GV -> 26 bài và 25 bài
         var counts = result.Value.LecturerSummaries.Select(s => s.AssignedCount).ToList();
-        counts.Sum().Should().Be(51);
-        counts.Should().Contain(26);
-        counts.Should().Contain(25);
-        (counts.Max() - counts.Min()).Should().Be(1);
+        counts.Sum().Should().Be(48);
+        counts.Should().OnlyContain(count => count == 24);
+        result.Value.Items.Count(item => item.ProposedLecturerId is null).Should().Be(3);
     }
 
     // =========================================================================
@@ -632,7 +637,7 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProposedScore.Should().Be(9.0m);
-        result.Value.Status.Should().Be(AppealStatus.InReview); // Vẫn là InReview, chưa được Approved!
+        result.Value.Status.Should().Be(AppealStatus.RegradedByLecturer);
 
         // Xác nhận trong CSDL: Điểm chính thức vẫn bảo toàn nguyên vẹn 6.0m!
         var auditInDb = await context.LecturerAudits.FindAsync(audit.Id);
@@ -727,7 +732,7 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
                 SessionId = session.Id,
                 SubmissionId = submission.Id,
                 Reason = "Xin chấm lại",
-                Status = AppealStatus.InReview,
+                Status = AppealStatus.RegradedByLecturer,
                 AssignedTo = independentLecturer.Id,
                 OriginalScore = 6.0m,
                 ProposedScore = 8.5m,

@@ -31,6 +31,9 @@ public sealed class SuspendExamTicketCommandHandler
         SuspendExamTicketCommand request,
         CancellationToken cancellationToken)
     {
+        if (!await ProctorAuthorization.CanSuspendAsync(_context, request.ActorUserId, cancellationToken))
+            return Result<TicketProctorActionResponseDto>.Failure(ProctorAuthorization.Forbidden);
+
         if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length < 10)
         {
             return Result<TicketProctorActionResponseDto>.Failure(

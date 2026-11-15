@@ -19,13 +19,19 @@ public sealed class AssignAppealLecturerCommandHandler
 
     public async Task<Result<AppealResponseDto>> Handle(
         AssignAppealLecturerCommand request,
+        CancellationToken cancellationToken) =>
+        await _context.ExecuteAppealAssignmentAsync([request.AppealId], [request.LecturerId],
+            ct => HandleSerialized(request, ct), cancellationToken);
+
+    private async Task<Result<AppealResponseDto>> HandleSerialized(
+        AssignAppealLecturerCommand request,
         CancellationToken cancellationToken)
     {
         var assigner = await _context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.AssignerId, cancellationToken);
-        if (assigner is null || !assigner.IsActive || (assigner.Role != UserRole.ExaminationOfficer && assigner.Role != UserRole.Admin))
+        if (assigner is null || !assigner.IsActive || assigner.Role != UserRole.ExaminationOfficer)
         {
-            return Result<AppealResponseDto>.Failure("Chỉ Cán bộ Khảo thí hoặc Quản trị viên đang hoạt động mới được phân công giảng viên chấm phúc khảo.");
+            return Result<AppealResponseDto>.Failure(AppealAuthorization.Forbidden);
         }
 
         var lecturer = await _context.Users.AsNoTracking()
@@ -44,7 +50,7 @@ public sealed class AssignAppealLecturerCommandHandler
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
-        if (appeal.Status != AppealStatus.Pending)
+        if (appeal.Status != AppealStatus.SubmittedToExamOffice)
         {
             return Result<AppealResponseDto>.Failure("Chỉ đơn phúc khảo đang ở trạng thái PENDING mới được phân công.");
         }
@@ -56,10 +62,24 @@ public sealed class AssignAppealLecturerCommandHandler
             return Result<AppealResponseDto>.Failure("Giảng viên được phân công chấm lại không được trùng với Giám khảo đã chấm thi ban đầu của ca thi này.");
         }
 
+        var activeWorkload = await _context.AppealRequests.CountAsync(a =>
+            a.AssignedTo == lecturer.Id &&
+            (a.Status == AppealStatus.AssignedToLecturer || a.Status == AppealStatus.RegradedByLecturer),
+            cancellationToken);
+        if (activeWorkload >= AppealWorkflowEffects.MaxActiveAppealsPerLecturer)
+        {
+            return Result<AppealResponseDto>.Failure("CONFLICT: Giảng viên đã đạt định mức tối đa 24 đơn phúc khảo đang xử lý.");
+        }
+
+        var previousStatus = appeal.Status;
         appeal.AssignedTo = lecturer.Id;
         appeal.ReviewedBy = assigner.Id;
-        appeal.Status = AppealStatus.InReview;
+        appeal.Status = AppealStatus.AssignedToLecturer;
         appeal.UpdatedAt = DateTime.UtcNow;
+        AppealWorkflowEffects.AddTransitionAudit(_context, assigner.Id, appeal, previousStatus, appeal.Status);
+        await AppealWorkflowEffects.AddNotificationIfMissingAsync(_context, lecturer.Id, appeal,
+            "APPEAL_ASSIGNED", "Phân công chấm phúc khảo",
+            "Bạn được phân công chấm lại độc lập một đơn phúc khảo.", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result<AppealResponseDto>.Success(new AppealResponseDto

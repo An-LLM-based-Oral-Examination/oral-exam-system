@@ -92,7 +92,7 @@ public class SixRolesRbacTests
             null,
             "Kỳ Thi Vấn Đáp PRN231 - FA26",
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)),
-            true,
+            false,
             2,
             "VoiceOnly",
             60);

@@ -7,6 +7,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Common.Interfaces;
+using API.Common;
+using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamShift;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
@@ -21,6 +25,7 @@ using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
+using OralExamination.Application.Features.OfficialExams.Commands.ImportExamRoster;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
@@ -43,10 +48,12 @@ namespace API.Controllers.v1;
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IExamRosterFileParser? _rosterParser;
 
-    public OfficialExamsController(ISender sender)
+    public OfficialExamsController(ISender sender, IExamRosterFileParser? rosterParser = null)
     {
         _sender = sender;
+        _rosterParser = rosterParser;
     }
 
     private Guid GetCurrentUserId()
@@ -262,11 +269,12 @@ public class OfficialExamsController : ControllerBase
 
     /// <summary>
     /// Cán bộ Khảo thí hoặc Quản trị viên thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
+    /// Cán bộ Khảo thí thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
     /// BẮT BUỘC: 100% sinh viên trong ca thi phải có điểm hoàn chỉnh.
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
     /// </summary>
     [HttpPost("shifts/{shiftId:guid}/publish-grades")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> PublishGrades(Guid shiftId, CancellationToken cancellationToken = default)
     {
         var lecturerId = GetAuthenticatedUserId();
@@ -385,11 +393,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí tạo kỳ thi thật. Role lấy từ tài khoản trong database.
+    /// Khảo thí tạo kỳ thi thật với cấu hình học thuật mặc định an toàn.
     /// </summary>
     [HttpPost("sessions")]
     [HttpPost("seasons")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> CreateSession([FromBody] CreateOfficialExamSessionRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -413,11 +421,45 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
+    /// Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
     /// </summary>
+    [HttpPut("shifts/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateShift(Guid id, [FromBody] UpdateExamShiftRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var result = await _sender.Send(new UpdateExamShiftCommand(actorId.Value, GetActorRole(), id,
+            request.ShiftName, request.RoomLab, request.StartTime, request.EndTime,
+            request.ProctorUserId, request.ExaminerUserId, request.MaxSeats), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
+    [HttpDelete("shifts/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteShift(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var result = await _sender.Send(new DeleteExamShiftCommand(actorId.Value, GetActorRole(), id), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
     [HttpPost("shifts")]
     [HttpPost("seasons/{sessionId:guid}/shifts")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> OpenShift(
         [FromBody] OpenExamShiftRequest request,
         CancellationToken cancellationToken = default,
@@ -441,17 +483,17 @@ public class OfficialExamsController : ControllerBase
             request.StartTime,
             request.EndTime,
             request.ProctorUserId,
-            request.ExaminerUserId), cancellationToken);
+            request.ExaminerUserId,
+            request.MaxSeats), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Quản trị viên cấu hình tính năng Follow-up cho kỳ thi thật (MF-04).
-    /// Cán bộ Khảo thí (examination_officer) bị từ chối 403 Forbidden.
+    /// Chỉ Trưởng bộ môn phụ trách môn cấu hình Follow-up cho kỳ thi thật (MF-04).
     /// </summary>
     [HttpPut("sessions/{id:guid}/follow-up-config")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> ConfigureFollowUp(
         Guid id,
         [FromBody] ConfigureOfficialExamFollowUpRequest request,
@@ -473,10 +515,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
+    /// Khảo thí gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
     /// </summary>
     [HttpPost("tickets")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> AssignTicket([FromBody] AssignExamTicketRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -520,6 +562,46 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Đọc trước danh sách sinh viên từ CSV/XLSX. Preview không ghi dữ liệu; tệp cần có studentCode, seatNumber, ipAddress.
+    /// </summary>
+    [HttpPost("shifts/{shiftId:guid}/tickets/import/preview")]
+    [Authorize(Roles = "examination_officer")]
+    [RequestSizeLimit(1_048_576)]
+    public async Task<IActionResult> PreviewTicketImport(
+        Guid shiftId,
+        [FromForm] IFormFile? file,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var parsed = await ParseRosterFileAsync(file, cancellationToken);
+        if (parsed.Error is not null) return parsed.Error;
+
+        var result = await _sender.Send(new PreviewExamRosterImportQuery(actorId.Value, shiftId, parsed.Rows!), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BulkImportProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Xác nhận nhập cả khối. Hệ thống kiểm tra lại dữ liệu và chỉ tạo vé khi mọi dòng cùng có hiệu lực.
+    /// </summary>
+    [HttpPost("shifts/{shiftId:guid}/tickets/import/commit")]
+    [Authorize(Roles = "examination_officer")]
+    [RequestSizeLimit(1_048_576)]
+    public async Task<IActionResult> CommitTicketImport(
+        Guid shiftId,
+        [FromForm] IFormFile? file,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var parsed = await ParseRosterFileAsync(file, cancellationToken);
+        if (parsed.Error is not null) return parsed.Error;
+
+        var result = await _sender.Send(new CommitExamRosterImportCommand(actorId.Value, shiftId, parsed.Rows!), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BulkImportProblem(result.Error);
+    }
+
+    /// <summary>
     /// Sinh viên tại máy trạm Kiosk lấy thông tin vé thi hiện tại khớp với địa chỉ IP máy trạm (ip_address).
     /// </summary>
     [HttpGet("tickets/current")]
@@ -544,10 +626,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ khảo thí hoặc Trưởng bộ môn công bố đề thi cho ca thi phòng Lab (is_exam_published = true).
+    /// Cán bộ Khảo thí công bố đề thi cho ca thi phòng Lab (is_exam_published = true).
     /// </summary>
     [HttpPost("shifts/{id:guid}/publish")]
-    [Authorize(Roles = "examination_officer,department_head,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> PublishShift(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId();
@@ -672,7 +754,7 @@ public class OfficialExamsController : ControllerBase
     /// Trưởng bộ môn phê duyệt bộ đề thành chính thức (OFFICIAL), cascade duyệt toàn bộ câu hỏi và cắm cờ cảnh báo câu hỏi trùng.
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/approve")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> ApproveExamSet(Guid id, [FromBody] ApproveExamSetRequest? request, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -682,6 +764,11 @@ public class OfficialExamsController : ControllerBase
 
         if (!result.IsSuccess)
         {
+            if (result.Error == OfficialExamErrors.Forbidden)
+            {
+                return OfficialExamProblem(result.Error);
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -695,10 +782,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER).
+    /// Trưởng bộ môn phụ trách môn bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER).
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/hand-over")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> HandOverExamSet(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -737,6 +824,61 @@ public class OfficialExamsController : ControllerBase
         var claim = User.FindFirst("sub")?.Value
             ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
+    }
+
+    private async Task<(IReadOnlyList<BulkExamTicketImportRow>? Rows, IActionResult? Error)> ParseRosterFileAsync(
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return (null, BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Tệp danh sách không hợp lệ.",
+                Detail = "Cần tải lên tệp .csv hoặc .xlsx không rỗng."
+            }));
+        }
+
+        if (_rosterParser is null)
+        {
+            return (null, StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Dịch vụ đọc danh sách chưa được cấu hình."
+            }));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var parsed = await _rosterParser.ParseAsync(stream, file.FileName, cancellationToken);
+        if (parsed.Errors.Count == 0) return (parsed.Rows, null);
+        return (null, BadRequest(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Không thể đọc tệp danh sách.",
+            Detail = string.Join(" ", parsed.Errors)
+        }));
+    }
+
+    private IActionResult BulkImportProblem(string error)
+    {
+        var statusCode = error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+            ? StatusCodes.Status403Forbidden
+            : error == OfficialExamErrors.ShiftNotFound
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status409Conflict;
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status403Forbidden => "Không được phép.",
+                StatusCodes.Status404NotFound => "Không tìm thấy ca thi.",
+                _ => "Không thể nhập danh sách trong trạng thái hiện tại."
+            },
+            Detail = error,
+            Type = $"https://oralexam.fpt.edu.vn/errors/bulk-ticket-import-{statusCode}"
+        });
     }
 
     private IActionResult OfficialExamProblem(string error)

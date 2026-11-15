@@ -28,7 +28,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
 
     public async Task<Result<PublishGradesResponseDto>> Handle(PublishGradesCommand request, CancellationToken cancellationToken)
     {
-        // 1. Kiểm tra giảng viên thực hiện công bố điểm
+        // 1. Only the active examination officer may publish school-wide official grades.
         var lecturer = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
 
@@ -37,7 +37,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ActorNotFound);
         }
 
-        if (!lecturer.IsActive || lecturer.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.ExaminationOfficer or UserRole.Admin))
+        if (!lecturer.IsActive || lecturer.Role != UserRole.ExaminationOfficer)
         {
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.Forbidden);
         }
@@ -103,6 +103,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             }
 
             ticket.Status = ExamTicketStatus.Published;
+            ticket.GradesPublishedAt = publishedAt;
             ticket.IsLocked = true;
 
             if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)

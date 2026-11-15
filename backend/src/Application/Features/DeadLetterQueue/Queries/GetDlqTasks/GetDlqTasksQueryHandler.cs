@@ -21,6 +21,12 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
 
     public async Task<Result<List<DeadLetterQueueDto>>> Handle(GetDlqTasksQuery request, CancellationToken cancellationToken)
     {
+        var actor = await DlqAuthorization.ActorAsync(_context, request.ActorUserId, null, false, cancellationToken);
+        if (actor is null) return Result<List<DeadLetterQueueDto>>.Failure(DlqAuthorization.Forbidden);
+        if ((!string.IsNullOrWhiteSpace(request.FlowType) && !DlqAuthorization.CanManageFlow(actor.Role, request.FlowType))
+            || (request.FlowTypes is not null && request.FlowTypes.Any(f => !DlqAuthorization.CanManageFlow(actor.Role, f))))
+            return Result<List<DeadLetterQueueDto>>.Failure(DlqAuthorization.Forbidden);
+
         var query = _context.DeadLetterQueues
             .AsNoTracking()
             .AsQueryable();
@@ -53,9 +59,12 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
             }
         }
 
-        var tasks = await query
-            .OrderByDescending(q => q.CreatedAt)
-            .Select(q => new DeadLetterQueueDto
+        var candidates = await query.OrderByDescending(q => q.CreatedAt).ToListAsync(cancellationToken);
+        var tasks = new List<DeadLetterQueueDto>();
+        foreach (var q in candidates)
+        {
+            if (!await DlqAuthorization.CanAccessAsync(_context, actor, q, cancellationToken)) continue;
+            tasks.Add(new DeadLetterQueueDto
             {
                 Id = q.Id,
                 TaskType = q.TaskType,
@@ -69,8 +78,8 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
                 ResolutionNotes = q.ResolutionNotes,
                 CreatedAt = q.CreatedAt,
                 ResolvedAt = q.ResolvedAt
-            })
-            .ToListAsync(cancellationToken);
+            });
+        }
 
         return Result<List<DeadLetterQueueDto>>.Success(tasks);
     }

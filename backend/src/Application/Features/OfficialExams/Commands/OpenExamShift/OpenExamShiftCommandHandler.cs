@@ -32,7 +32,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer && actor.Role != UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
         {
             return Result<ExamShiftResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -71,6 +71,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             SessionId = request.SessionId,
             ShiftName = request.ShiftName!.Trim(),
             RoomLab = request.RoomLab!.Trim(),
+            MaxSeats = request.MaxSeats,
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             ProctorUserId = proctor.Id,
@@ -92,6 +93,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             shift.Status,
             shift.ExaminerUserId,
             examiner.FullName,
-            proctor.FullName));
+            proctor.FullName,
+            shift.MaxSeats));
     }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Gavel, LoaderCircle, RefreshCw, Sparkles, UserRoundCog } from 'lucide-react'
 import { appealsService } from '@/services/appeals.service'
 import { useAuth } from '@/hooks/useAuth'
@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
 import { SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { appealManagementRoles } from '@/lib/task09Permissions'
 
 function getErrorMessage(error: unknown) {
   if (typeof error === 'object' && error !== null && 'detail' in error) {
@@ -34,8 +35,11 @@ export function AppealManagementPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const canManageAppeals = user?.role === 'ExaminationOfficer' || user?.role === 'Admin'
-  const canRegradeAppeal = user?.role === 'Instructor'
+  const canView = Boolean(user && appealManagementRoles.includes(user.role))
+  const canManageAppeals = user?.role === 'ExaminationOfficer'
+  const canAssignAppeal = canManageAppeals && selected?.status === 'SUBMITTED_TO_EXAM_OFFICE'
+  const canDecideAppeal = canManageAppeals && selected?.status === 'REGRADED_BY_LECTURER'
+  const canRegradeAppeal = user?.role === 'Instructor' && selected?.assignedTo === user.id && selected?.status === 'ASSIGNED_TO_LECTURER'
 
   const resetFieldErrors = () => {
     setScoreError('')
@@ -59,7 +63,8 @@ export function AppealManagementPage() {
     return !nextScoreError && !nextNotesError
   }
 
-  const loadAppeals = async () => {
+  const loadAppeals = useCallback(async () => {
+    if (!canView) return
     setLoading(true); setError('')
     try {
       const result = await appealsService.list()
@@ -70,12 +75,12 @@ export function AppealManagementPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [canView])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadAppeals() }, 0)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [loadAppeals])
 
   const runAction = async (action: () => Promise<unknown>, successMessage: string) => {
     setBusy(true); setError(''); setNotice('')
@@ -91,7 +96,7 @@ export function AppealManagementPage() {
   }
 
   const review = () => {
-    if (!selected) return
+    if (!selected || !canDecideAppeal) return
     setLecturerIdError('')
     if (!validateReviewFields(false)) return
     void runAction(
@@ -101,7 +106,7 @@ export function AppealManagementPage() {
   }
 
   const assign = () => {
-    if (!selected) return
+    if (!selected || !canAssignAppeal) return
     resetFieldErrors()
     if (!lecturerId.trim()) {
       setLecturerIdError('Vui lòng nhập Lecturer user ID.')
@@ -114,7 +119,7 @@ export function AppealManagementPage() {
   }
 
   const regrade = () => {
-    if (!selected) return
+    if (!selected || !canRegradeAppeal) return
     setLecturerIdError('')
     if (!validateReviewFields(true)) return
     void runAction(
@@ -124,6 +129,7 @@ export function AppealManagementPage() {
   }
 
   const previewAutoAllocation = async () => {
+    if (!canManageAppeals) return
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await appealsService.getAllocationProposal()
@@ -138,6 +144,7 @@ export function AppealManagementPage() {
   }
 
   const confirmBatchAssign = () => {
+    if (!canManageAppeals) return
     const validItems = (proposal?.items ?? []).filter(
       (item): item is typeof item & { proposedLecturerId: string } => Boolean(item.proposedLecturerId)
     )
@@ -157,6 +164,8 @@ export function AppealManagementPage() {
   }
 
   const assignableItems = (proposal?.items ?? []).filter((item) => Boolean(item.proposedLecturerId))
+
+  if (!canView) return <div role="alert">Chỉ Khảo thí, Giảng viên được phân công và Trưởng bộ môn được truy cập phúc khảo.</div>
 
   return (
     <div className={ds.page}>
@@ -277,10 +286,10 @@ export function AppealManagementPage() {
                   )}
                 </div>
 
-                {(canManageAppeals || canRegradeAppeal) ? (
+                {(canAssignAppeal || canDecideAppeal || canRegradeAppeal) ? (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {canManageAppeals && (
+                      {canDecideAppeal && (
                         <label className="text-xs font-bold text-[#63758e]">
                           Quyết định của Khảo thí
                           <select className={cn(ds.field, 'mt-1')} value={decision} onChange={(event) => setDecision(event.target.value)}>
@@ -324,7 +333,7 @@ export function AppealManagementPage() {
                     <div className="flex flex-wrap gap-2">
                       {canManageAppeals && (
                         <>
-                          <button type="button" disabled={busy} onClick={review} className={ds.primaryButton}>
+                          <button type="button" disabled={busy || !canDecideAppeal} onClick={review} className={ds.primaryButton}>
                             <Gavel className="size-4" /> Phê duyệt quyết định cuối
                           </button>
                           <div className="max-w-[220px]">
@@ -341,7 +350,7 @@ export function AppealManagementPage() {
                             />
                             <FieldError message={lecturerIdError} />
                           </div>
-                          <button type="button" disabled={busy} onClick={assign} className={ds.outlineButton}>
+                          <button type="button" disabled={busy || !canAssignAppeal} onClick={assign} className={ds.outlineButton}>
                             <UserRoundCog className="size-4" /> Phân công GV chấm lại
                           </button>
                         </>
@@ -355,7 +364,7 @@ export function AppealManagementPage() {
                   </>
                 ) : (
                   <div className="rounded-xl border border-[#d6e4f2] bg-[#f4f8fc] p-3 text-xs font-semibold text-[#1C4D8D]">
-                    Chế độ giám sát học thuật (Trưởng bộ môn): Theo dõi tiến trình phúc khảo môn học. Quyền phân công và phê duyệt quyết định cuối cùng thuộc Cán bộ Khảo thí.
+                    Chế độ chỉ xem: Trưởng bộ môn giám sát môn phụ trách; Giảng viên chỉ chấm lại đơn được phân công. Quyền phân công và phê duyệt quyết định cuối cùng thuộc Cán bộ Khảo thí.
                   </div>
                 )}
               </div>

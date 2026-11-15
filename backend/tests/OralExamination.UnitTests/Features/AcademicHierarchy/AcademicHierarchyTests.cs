@@ -184,6 +184,7 @@ public class AcademicHierarchyTests
     {
         await using var context = CreateDbContext();
         var (semester, course, deptHead, lecturer, _) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
 
         var lecturer2 = new User
         {
@@ -226,6 +227,8 @@ public class AcademicHierarchyTests
     {
         await using var context = CreateDbContext();
         var (semester, course, deptHead, lecturer, student) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
+        await context.SaveChangesAsync();
 
         var validator = new AssignLecturersToCourseCommandValidator();
         var handler = new AssignLecturersToCourseCommandHandler(context, validator);
@@ -248,6 +251,8 @@ public class AcademicHierarchyTests
     {
         await using var context = CreateDbContext();
         var (semester, course, deptHead, _, _) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
+        await context.SaveChangesAsync();
 
         var validator = new AssignLecturersToCourseCommandValidator();
         var handler = new AssignLecturersToCourseCommandHandler(context, validator);
@@ -270,6 +275,7 @@ public class AcademicHierarchyTests
     {
         await using var context = CreateDbContext();
         var (semester, course, deptHead, lecturer, _) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
 
         var existingCl = new CourseLecturer
         {
@@ -709,6 +715,7 @@ public class AcademicHierarchyTests
     {
         await using var context = CreateDbContext();
         var (semester, course, deptHead, lecturer, _) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
 
         var cl = new CourseLecturer
         {
@@ -723,7 +730,7 @@ public class AcademicHierarchyTests
         await context.SaveChangesAsync();
 
         var handler = new GetCourseLecturersQueryHandler(context);
-        var query = new GetCourseLecturersQuery(course.Id);
+        var query = new GetCourseLecturersQuery(course.Id, deptHead.Id, semester.Id);
         var result = await handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

@@ -109,7 +109,9 @@ public sealed record StudentInternalAppealInfoDto(
     bool CanAppeal,
     string Instruction,
     int AppealDeadlineDays,
-    string AppealEndpoint);
+    string AppealEndpoint,
+    DateTime? AppealDeadlineAtUtc = null,
+    bool CanAcknowledge = false);
 
 public sealed class StudentOfficialExamGradeDto
 {
@@ -120,13 +122,13 @@ public sealed class StudentOfficialExamGradeDto
     public string Status { get; init; } = string.Empty;
     public bool IsLocked { get; init; }
     public decimal? TotalScore { get; init; }
-    public DateTime PublishedAt { get; init; }
+    public DateTime? PublishedAt { get; init; }
     public string PublishedBy { get; init; } = string.Empty;
     public string StudentAcknowledgementStatus { get; init; } = "PENDING";
     public List<StudentOfficialExamQuestionScorecardDto> DetailedScorecard { get; init; } = new();
     public StudentInternalAppealInfoDto InternalAppeal { get; init; } = new(
-        true,
-        "Nếu không đồng ý với kết quả, sinh viên có quyền nộp đơn phúc khảo trực tiếp trên cổng thông tin này.",
-        3,
+        false,
+        "Chưa xác minh quyền phúc khảo.",
+        OralExamination.Application.Features.Appeals.AppealWindowOptions.DefaultHours / 24,
         "/api/v1/appeals");
 }

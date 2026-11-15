@@ -68,10 +68,11 @@ public class DeadLetterQueueController : ControllerBase
             Status: status,
             FlowType: flowType?.Trim().ToUpperInvariant(),
             ManagedByRole: "admin",
-            FlowTypes: flowTypes);
+            FlowTypes: flowTypes,
+            ActorUserId: GetCurrentUserId());
 
         var result = await _sender.Send(query);
-        return Ok(result.Value);
+        return result.IsSuccess ? Ok(result.Value) : DlqForbidden(result.Error);
     }
 
     /// <summary>
@@ -116,10 +117,11 @@ public class DeadLetterQueueController : ControllerBase
         var query = new GetDlqTasksQuery(
             Status: status,
             FlowType: "OFFICIAL_EXAM",
-            ManagedByRole: "examination_officer");
+            ManagedByRole: "examination_officer",
+            ActorUserId: GetCurrentUserId());
 
         var result = await _sender.Send(query);
-        return Ok(result.Value);
+        return result.IsSuccess ? Ok(result.Value) : DlqForbidden(result.Error);
     }
 
     /// <summary>
@@ -225,10 +227,11 @@ public class DeadLetterQueueController : ControllerBase
             Status: status,
             FlowType: effectiveFlowType,
             ManagedByRole: managedByRole,
-            FlowTypes: flowTypes);
+            FlowTypes: flowTypes,
+            ActorUserId: GetCurrentUserId());
 
         var result = await _sender.Send(query);
-        return Ok(result.Value);
+        return result.IsSuccess ? Ok(result.Value) : DlqForbidden(result.Error);
     }
 
     /// <summary>
@@ -260,6 +263,12 @@ public class DeadLetterQueueController : ControllerBase
     #endregion
 
     #region Private Helper Methods
+
+    private IActionResult DlqForbidden(string error) => StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+    {
+        Status = StatusCodes.Status403Forbidden, Title = "Forbidden", Detail = error,
+        Type = "https://tools.ietf.org/html/rfc7807"
+    });
 
     private async Task<IActionResult> ExecuteReplayCommandAsync(Guid id, ReplayDlqTaskCommand command)
     {

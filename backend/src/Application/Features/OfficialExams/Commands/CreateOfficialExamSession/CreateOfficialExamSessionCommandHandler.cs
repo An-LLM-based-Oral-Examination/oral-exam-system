@@ -32,7 +32,13 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.DepartmentHead or UserRole.ExaminationOfficer))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
+        {
+            return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        // Operational creation must not become an alternate academic configuration endpoint.
+        if (request.HasFollowUp || request.MaxFollowUpQuestions != OfficialExamRules.DefaultFollowUpQuestions)
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -64,8 +70,8 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             ExamStructureId = request.ExamStructureId,
             Title = request.Title!.Trim(),
             ExamDate = request.ExamDate,
-            HasFollowUp = request.HasFollowUp,
-            MaxFollowUpQuestions = request.MaxFollowUpQuestions,
+            HasFollowUp = false,
+            MaxFollowUpQuestions = OfficialExamRules.DefaultFollowUpQuestions,
             ExamInputMode = request.ExamInputMode!,
             TranscriptBufferSeconds = request.TranscriptBufferSeconds,
             Status = "scheduled",

@@ -109,13 +109,22 @@ public static class AntiCheatSeverity
 
 public static class AppealStatus
 {
-    public const string Pending = "PENDING";
-    public const string InReview = "IN_REVIEW";
+    public const string SubmittedToExamOffice = "SUBMITTED_TO_EXAM_OFFICE";
+    public const string AssignedToLecturer = "ASSIGNED_TO_LECTURER";
+    public const string RegradedByLecturer = "REGRADED_BY_LECTURER";
     public const string Approved = "APPROVED";
     public const string Rejected = "REJECTED";
     public const string Cancelled = "CANCELLED";
 
-    public static readonly string[] All = { Pending, InReview, Approved, Rejected, Cancelled };
+    // Source compatibility only. Persisted values follow the mandatory five-step workflow above.
+    public const string Pending = SubmittedToExamOffice;
+    public const string InReview = AssignedToLecturer;
+
+    public static readonly string[] All =
+        { SubmittedToExamOffice, AssignedToLecturer, RegradedByLecturer, Approved, Rejected, Cancelled };
+
+    public static bool IsOpen(string? status) =>
+        status is SubmittedToExamOffice or AssignedToLecturer or RegradedByLecturer;
 }
 
 public static class StudentAcknowledgementStatus

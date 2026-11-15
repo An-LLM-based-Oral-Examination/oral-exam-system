@@ -6,4 +6,5 @@ namespace OralExamination.Application.Features.AcademicHierarchy.Queries.GetLect
 
 public sealed record GetLecturerCourseOfferingsQuery(
     Guid LecturerUserId,
-    bool IncludeInactive = false) : IRequest<Result<IReadOnlyList<LecturerCourseOfferingDto>>>;
+    bool IncludeInactive = false,
+    Guid? SemesterId = null) : IRequest<Result<IReadOnlyList<LecturerCourseOfferingDto>>>;

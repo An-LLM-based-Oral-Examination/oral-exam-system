@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using OralExamination.Application.Features.OfficialExams;
 
 namespace OralExamination.Application.Features.Proctor.DTOs;
 
@@ -28,7 +29,7 @@ public sealed record ShiftAttendanceMonitorResponseDto
     public string ShiftStatus { get; init; } = string.Empty;
     public DateTime StartTime { get; init; }
     public DateTime EndTime { get; init; }
-    public int TotalSeats { get; init; } = 40;
+    public int TotalSeats { get; init; } = OfficialExamRules.DefaultShiftCapacity;
     public int AssignedTicketsCount { get; init; }
     public int CheckedInCount { get; init; }
     public int InProgressCount { get; init; }

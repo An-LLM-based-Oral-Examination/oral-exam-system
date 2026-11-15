@@ -20,10 +20,10 @@ public class OfficialExamCheckInTests
 {
     private static readonly DateTime InsideShift = new(2026, 10, 20, 8, 0, 0, DateTimeKind.Utc);
     [Fact]
-    public async Task CreateSession_DepartmentHead_StoresFollowUpAndInputMode()
+    public async Task CreateSession_ExaminationOfficer_StoresSafeDefaultsAndInputMode()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var course = await SeedCourse(context);
         var structure = await SeedStructure(context, course.Id, head.Id);
 
@@ -34,7 +34,7 @@ public class OfficialExamCheckInTests
                 structure.Id,
                 "Vấn đáp PRN231",
                 new DateOnly(2026, 10, 20),
-                true,
+                false,
                 2,
                 ExamInputMode.VoiceOnly,
                 60), CancellationToken.None);
@@ -42,7 +42,7 @@ public class OfficialExamCheckInTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ExamInputMode.Should().Be(ExamInputMode.VoiceOnly);
         result.Value.MaxFollowUpQuestions.Should().Be(2);
-        result.Value.HasFollowUp.Should().BeTrue();
+        result.Value.HasFollowUp.Should().BeFalse();
         (await context.OfficialExamSessions.CountAsync()).Should().Be(1);
     }
 
@@ -96,7 +96,7 @@ public class OfficialExamCheckInTests
     public async Task OpenShift_AssignsLecturerProctor()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var proctor = await SeedUser(context, UserRole.Lecturer);
         var examiner = await SeedUser(context, UserRole.Lecturer);
         var session = await SeedSession(context, head.Id);
@@ -116,13 +116,30 @@ public class OfficialExamCheckInTests
         result.Value.ProctorUserId.Should().Be(proctor.Id);
         result.Value.ExaminerUserId.Should().Be(examiner.Id);
         result.Value.RoomLab.Should().Be("Lab 7.1");
+        result.Value.MaxSeats.Should().Be(OfficialExamRules.DefaultShiftCapacity);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(41)]
+    public void OpenShift_CapacityOutsideHardLimit_FailsValidation(int maxSeats)
+    {
+        var command = new OpenExamShiftCommand(
+            Guid.NewGuid(), Guid.NewGuid(), "Morning", "Lab",
+            DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1),
+            Guid.NewGuid(), Guid.NewGuid(), maxSeats);
+
+        var result = new OpenExamShiftCommandValidator().Validate(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error => error.PropertyName == nameof(OpenExamShiftCommand.MaxSeats));
     }
 
     [Fact]
     public async Task AssignTicket_DuplicateSeat_Fails()
     {
         await using var context = CreateDbContext();
-        var head = await SeedUser(context, UserRole.DepartmentHead);
+        var head = await SeedUser(context, UserRole.ExaminationOfficer);
         var first = await SeedUser(context, UserRole.Student);
         var second = await SeedUser(context, UserRole.Student);
         var session = await SeedSession(context, head.Id);
@@ -139,6 +156,25 @@ public class OfficialExamCheckInTests
         created.IsSuccess.Should().BeTrue();
         duplicate.IsSuccess.Should().BeFalse();
         duplicate.Error.Should().Be(OfficialExamErrors.SeatTaken);
+    }
+
+    [Fact]
+    public async Task AssignTicket_SeatAboveConfiguredCapacity_FailsWithoutCreatingTicket()
+    {
+        await using var context = CreateDbContext();
+        var officer = await SeedUser(context, UserRole.ExaminationOfficer);
+        var student = await SeedUser(context, UserRole.Student);
+        var session = await SeedSession(context, officer.Id);
+        var shift = await SeedShift(context, session.Id, officer.Id);
+        shift.MaxSeats = 24;
+        await context.SaveChangesAsync();
+
+        var result = await new AssignExamTicketCommandHandler(context, new AssignExamTicketCommandValidator())
+            .Handle(new AssignExamTicketCommand(officer.Id, shift.Id, student.Id, 25, "192.168.1.125"), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("1 đến 24");
+        (await context.StudentExamTickets.CountAsync()).Should().Be(0);
     }
 
     [Fact]

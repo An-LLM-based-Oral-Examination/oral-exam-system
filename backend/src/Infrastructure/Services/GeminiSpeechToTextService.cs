@@ -256,7 +256,18 @@ public class GeminiSpeechToTextService
             };
             request.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
 
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeoutCts.CancelAfter(TimeSpan.FromSeconds(15)); HttpResponseMessage response; try { response = await _httpClient.SendAsync(request, timeoutCts.Token); } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { lastHttpException = new HttpRequestException($"Gemini Multimodal STT timed out after 15s ({candidateUrl}).", null, System.Net.HttpStatusCode.RequestTimeout); continue; }
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.SendAsync(request, timeoutCts.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new HttpRequestException("Gemini Multimodal STT exceeded its timeout budget.", null, System.Net.HttpStatusCode.RequestTimeout);
+            }
+            using var ownedResponse = response;
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -270,6 +281,8 @@ public class GeminiSpeechToTextService
                     $"Gemini Multimodal STT failed: {response.StatusCode} - {responseBody}",
                     null,
                     response.StatusCode);
+                if (OralExamination.Infrastructure.Resilience.ExternalDependencyResilience.IsTransientStatus(response.StatusCode))
+                    throw lastHttpException;
                 if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase))) break; continue;
             }
 

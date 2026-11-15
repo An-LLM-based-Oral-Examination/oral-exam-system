@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Appeals.Queries.GetAppeals;
 
@@ -21,6 +22,13 @@ public sealed class GetAppealsQueryHandler : IRequestHandler<GetAppealsQuery, Re
 
     public async Task<Result<List<AppealResponseDto>>> Handle(GetAppealsQuery request, CancellationToken cancellationToken)
     {
+        var actor = await AppealAuthorization.ActiveClaimedActorAsync(
+            _context, request.RequesterId, request.RequesterRole, cancellationToken);
+        if (actor is null || !AppealAuthorization.IsReadRole(actor.Role))
+        {
+            return Result<List<AppealResponseDto>>.Failure(AppealAuthorization.Forbidden);
+        }
+
         var query = _context.AppealRequests
             .AsNoTracking()
             .Include(a => a.Ticket)
@@ -31,16 +39,24 @@ public sealed class GetAppealsQueryHandler : IRequestHandler<GetAppealsQuery, Re
             .Include(a => a.ReviewedByUser)
             .AsQueryable();
 
-        if (request.RequesterId.HasValue)
+        var ownedCourseIds = _context.Courses.AsNoTracking()
+            .Where(course =>
+                (course.AcademicProgram != null && course.AcademicProgram.DepartmentHeadUserId == actor.Id)
+                || ((course.AcademicProgram == null
+                        || course.AcademicProgram.DepartmentHeadUserId == null
+                        || course.AcademicProgram.DepartmentHeadUserId == Guid.Empty)
+                    && course.DepartmentHeadUserId == actor.Id))
+            .Select(course => course.Id);
+
+        query = actor.Role switch
         {
-            query = request.RequesterRole switch
-            {
-                "student" => query.Where(a => a.StudentId == request.RequesterId.Value),
-                "lecturer" => query.Where(a => a.AssignedTo == request.RequesterId.Value),
-                "department_head" or "examination_officer" or "admin" => query,
-                _ => query.Where(_ => false)
-            };
-        }
+            UserRole.Student => query.Where(appeal => appeal.StudentId == actor.Id),
+            UserRole.Lecturer => query.Where(appeal => appeal.AssignedTo == actor.Id),
+            UserRole.DepartmentHead => query.Where(appeal =>
+                ownedCourseIds.Contains(appeal.Ticket.Shift.Session.CourseId)),
+            UserRole.ExaminationOfficer or UserRole.Admin => query,
+            _ => query.Where(_ => false)
+        };
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {

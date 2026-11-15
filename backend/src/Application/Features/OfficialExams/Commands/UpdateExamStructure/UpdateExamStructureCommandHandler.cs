@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
@@ -15,7 +16,7 @@ using OralExamination.Domain.Enums;
 namespace OralExamination.Application.Features.OfficialExams.Commands.UpdateExamStructure;
 
 /// <summary>
-/// Handler cập nhật thông tin cấu trúc đề thi (ExamStructure) của Trưởng Bộ Môn / Quản trị viên.
+/// Handler cập nhật cấu trúc đề thi của Trưởng Bộ Môn phụ trách môn.
 /// </summary>
 public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext context)
     : IRequestHandler<UpdateExamStructureCommand, Result<ExamStructureDto>>
@@ -44,19 +45,25 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
                 "FORBIDDEN: Không xác định được danh tính người thực hiện thao tác.");
         }
 
-        if (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.Admin)
+        if (actor.Role != UserRole.DepartmentHead)
         {
             return Result<ExamStructureDto>.Failure(
-                "FORBIDDEN: Chỉ Trưởng Bộ Môn hoặc Quản trị viên mới có quyền cấu hình đề thi.");
+                "FORBIDDEN: Chỉ Trưởng Bộ Môn phụ trách môn mới có quyền cấu hình đề thi.");
         }
 
         var structure = await _context.ExamStructures
             .Include(e => e.Course)
+                .ThenInclude(course => course.AcademicProgram)
             .FirstOrDefaultAsync(e => e.Id == request.StructureId, cancellationToken);
 
         if (structure is null)
         {
             return Result<ExamStructureDto>.Failure("NOT_FOUND: Không tìm thấy cấu trúc đề thi.");
+        }
+
+        if (structure.Course is null || !AcademicCourseOwnership.IsOwnedBy(structure.Course, actor.Id))
+        {
+            return Result<ExamStructureDto>.Failure("FORBIDDEN: Môn học không thuộc phạm vi phụ trách.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name) ||

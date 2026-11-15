@@ -12,4 +12,5 @@ public sealed record OpenExamShiftCommand(
     DateTime StartTime,
     DateTime EndTime,
     Guid ProctorUserId,
-    Guid ExaminerUserId) : IRequest<Result<ExamShiftResponse>>;
+    Guid ExaminerUserId,
+    int MaxSeats = OfficialExamRules.DefaultShiftCapacity) : IRequest<Result<ExamShiftResponse>>;

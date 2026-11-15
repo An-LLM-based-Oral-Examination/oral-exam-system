@@ -141,6 +141,7 @@ public class AdversarialMilestone3ChallengerTests
             SeatNumber = 10,
             IpAddress = "192.168.1.110",
             Status = ExamTicketStatus.Published,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = false
         };
 

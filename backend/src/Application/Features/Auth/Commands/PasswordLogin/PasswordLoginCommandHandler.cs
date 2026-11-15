@@ -19,17 +19,20 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
     private readonly IPasswordHasher _passwordHasher;
     private readonly IAccessTokenIssuer _accessTokenIssuer;
     private readonly IValidator<PasswordLoginCommand> _validator;
+    private readonly ILoginAttemptGuard _loginAttempts;
 
     public PasswordLoginCommandHandler(
         IApplicationDbContext context,
         IPasswordHasher passwordHasher,
         IAccessTokenIssuer accessTokenIssuer,
-        IValidator<PasswordLoginCommand> validator)
+        IValidator<PasswordLoginCommand> validator,
+        ILoginAttemptGuard? loginAttempts = null)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _accessTokenIssuer = accessTokenIssuer;
         _validator = validator;
+        _loginAttempts = loginAttempts ?? LoginAttemptGuard.Shared;
     }
 
     public async Task<Result<PasswordLoginResponse>> Handle(PasswordLoginCommand request, CancellationToken cancellationToken)
@@ -85,6 +88,9 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             return Result<PasswordLoginResponse>.Failure(AuthErrors.AccountLocked);
         }
 
+        if (_loginAttempts.RemainingLockout(user.Id) > TimeSpan.Zero)
+            return Result<PasswordLoginResponse>.Failure(AuthErrors.LoginTemporarilyLocked);
+
         if (string.IsNullOrWhiteSpace(user.PasswordHash))
         {
             return Result<PasswordLoginResponse>.Failure(AuthErrors.PasswordNotSet);
@@ -98,8 +104,19 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
 
         if (!passwordMatches)
         {
+            var locked = _loginAttempts.RecordFailure(user.Id);
+            _context.AuditLogs.Add(new AuditLog
+            {
+                UserId = user.Id, EntityName = "users", EntityId = user.Id,
+                Action = locked ? "LOGIN_TEMPORARILY_LOCKED" : "LOGIN_FAILED",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+            if (locked) return Result<PasswordLoginResponse>.Failure(AuthErrors.LoginTemporarilyLocked);
             return Result<PasswordLoginResponse>.Failure(AuthErrors.WrongPassword);
         }
+
+        _loginAttempts.RecordSuccess(user.Id);
 
         var accessToken = _accessTokenIssuer.Issue(
             user.Id,

@@ -889,7 +889,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.Clo)
                 .WithMany()
                 .HasForeignKey(d => d.CloId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasData(
                 new PracticeQuestion
@@ -1052,7 +1052,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.Clo)
                 .WithMany()
                 .HasForeignKey(d => d.CloId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.Structure)
                 .WithMany()
@@ -1588,12 +1588,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
                 t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+                t.HasCheckConstraint("ck_shifts_max_seats", "max_seats >= 1 AND max_seats <= 40");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
             entity.Property(e => e.ShiftName).HasColumnName("shift_name").HasMaxLength(100).IsRequired();
             entity.Property(e => e.RoomLab).HasColumnName("room_lab").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.MaxSeats).HasColumnName("max_seats").HasDefaultValue(24).IsRequired();
             entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
             entity.Property(e => e.EndTime).HasColumnName("end_time").IsRequired();
             entity.Property(e => e.ProctorUserId).HasColumnName("proctor_user_id");
@@ -1657,6 +1659,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AudioVerifiedAt).HasColumnName("audio_verified_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("SCHEDULED");
             entity.Property(e => e.StudentAcknowledgementStatus).HasColumnName("student_acknowledgement_status").HasMaxLength(20).HasDefaultValue("PENDING").IsRequired();
+            entity.Property(e => e.GradesPublishedAt).HasColumnName("grades_published_at");
             entity.Property(e => e.IsLocked).HasColumnName("is_locked").HasDefaultValue(false);
             entity.Property(e => e.CheckedInAt).HasColumnName("checked_in_at").HasDefaultValueSql("CURRENT_TIMESTAMP").IsRequired();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
@@ -1950,7 +1953,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("appeal_requests", t =>
             {
-                t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED')");
                 t.HasCheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
             });
             entity.HasKey(e => e.Id);
@@ -1960,7 +1963,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
             entity.Property(e => e.SubmissionId).HasColumnName("submission_id");
             entity.Property(e => e.Reason).HasColumnName("reason").IsRequired();
-            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("PENDING").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(40).HasDefaultValue("SUBMITTED_TO_EXAM_OFFICE").IsRequired();
             entity.Property(e => e.AssignedTo).HasColumnName("assigned_to").IsRequired();
             entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
             entity.Property(e => e.Decision).HasColumnName("decision").HasMaxLength(50);

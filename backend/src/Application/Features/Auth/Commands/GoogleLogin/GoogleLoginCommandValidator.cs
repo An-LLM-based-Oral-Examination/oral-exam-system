@@ -9,5 +9,6 @@ public sealed class GoogleLoginCommandValidator : AbstractValidator<GoogleLoginC
         RuleFor(command => command.IdToken)
             .NotEmpty()
             .WithMessage("idToken không được để trống.");
+        RuleFor(command => command.IdToken).MaximumLength(8192);
     }
 }

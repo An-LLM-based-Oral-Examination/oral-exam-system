@@ -187,8 +187,8 @@ public class AppealsControllerTests
         okResult.Value.Should().BeEquivalentTo(responseDto);
     }
 
-    [Fact(DisplayName = "7. ReviewAppeal trả về 422 UnprocessableEntity khi Command thất bại")]
-    public async Task ReviewAppeal_Should_Return_422_When_Failed()
+    [Fact(DisplayName = "7. ReviewAppeal trả về 409 Conflict khi trạng thái không hợp lệ")]
+    public async Task ReviewAppeal_Should_Return_409_When_Failed()
     {
         var reviewerId = Guid.NewGuid();
         SetUserContext(reviewerId, role: "examination_officer");
@@ -206,7 +206,7 @@ public class AppealsControllerTests
 
         var actionResult = await _controller.ReviewAppeal(appealId, request);
 
-        var unprocResult = actionResult.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
-        unprocResult.StatusCode.Should().Be(StatusCodes.Status422UnprocessableEntity);
+        var conflictResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        conflictResult.StatusCode.Should().Be(StatusCodes.Status409Conflict);
     }
 }

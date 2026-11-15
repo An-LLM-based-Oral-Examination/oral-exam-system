@@ -43,7 +43,7 @@ public class NonDuplicateExamSetAssignmentTests
 
         var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = "Cross-Platform", IsActive = true };
         var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Structure 1", IsActive = true };
-        var head = new User { Id = Guid.NewGuid(), Email = "head@fe.edu.vn", FullName = "Trưởng BM", Role = UserRole.DepartmentHead, IsActive = true };
+        var head = new User { Id = Guid.NewGuid(), Email = "officer@fe.edu.vn", FullName = "Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
         var student1 = new User { Id = Guid.NewGuid(), Email = "sv1@fe.edu.vn", FullName = "Sinh viên 1", StudentCode = "SE180001", Role = UserRole.Student, IsActive = true };
         var student2 = new User { Id = Guid.NewGuid(), Email = "sv2@fe.edu.vn", FullName = "Sinh viên 2", StudentCode = "SE180002", Role = UserRole.Student, IsActive = true };
 
@@ -112,7 +112,7 @@ public class NonDuplicateExamSetAssignmentTests
 
         var course = new Course { Id = Guid.NewGuid(), Code = "CSD201", Name = "Algorithms", IsActive = true };
         var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Structure 1", IsActive = true };
-        var head = new User { Id = Guid.NewGuid(), Email = "head@fe.edu.vn", FullName = "Trưởng BM", Role = UserRole.DepartmentHead, IsActive = true };
+        var head = new User { Id = Guid.NewGuid(), Email = "officer@fe.edu.vn", FullName = "Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
         var student1 = new User { Id = Guid.NewGuid(), Email = "sv1@fe.edu.vn", FullName = "Sinh viên 1", StudentCode = "SE180001", Role = UserRole.Student, IsActive = true };
         var student2 = new User { Id = Guid.NewGuid(), Email = "sv2@fe.edu.vn", FullName = "Sinh viên 2", StudentCode = "SE180002", Role = UserRole.Student, IsActive = true };
 

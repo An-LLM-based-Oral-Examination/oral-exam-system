@@ -4,4 +4,4 @@ using OralExamination.Application.Features.Auth.DTOs;
 
 namespace OralExamination.Application.Features.Auth.Commands.GoogleLogin;
 
-public sealed record GoogleLoginCommand(string? IdToken) : IRequest<Result<GoogleLoginResponse>>;
+public sealed record GoogleLoginCommand(string? IdToken, string? BrowserNonce = null) : IRequest<Result<GoogleLoginResponse>>;

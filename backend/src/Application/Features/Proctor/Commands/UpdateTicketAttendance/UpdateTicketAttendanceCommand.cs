@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.Proctor.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -17,7 +18,8 @@ public sealed record UpdateTicketAttendanceCommand(
     bool IsPresent = true,
     string? IpAddress = null,
     string? Note = null,
-    int? SeatNumber = null) : IRequest<Result<TicketProctorActionResponseDto>>;
+    int? SeatNumber = null,
+    Guid? ExpectedShiftId = null) : IRequest<Result<TicketProctorActionResponseDto>>;
 
 public sealed class UpdateTicketAttendanceCommandHandler
     : IRequestHandler<UpdateTicketAttendanceCommand, Result<TicketProctorActionResponseDto>>
@@ -33,16 +35,36 @@ public sealed class UpdateTicketAttendanceCommandHandler
         UpdateTicketAttendanceCommand request,
         CancellationToken cancellationToken)
     {
+        var shiftId = await _context.StudentExamTickets.AsNoTracking()
+            .Where(ticket => ticket.Id == request.TicketId)
+            .Select(ticket => (Guid?)ticket.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!shiftId.HasValue)
+        {
+            return Result<TicketProctorActionResponseDto>.Failure(
+                "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
+        }
+
+        return await _context.ExecuteShiftMutationAsync(shiftId.Value, true,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
+    }
+
+    private async Task<Result<TicketProctorActionResponseDto>> HandleLockedAsync(
+        UpdateTicketAttendanceCommand request,
+        CancellationToken cancellationToken)
+    {
         var ticket = await _context.StudentExamTickets
             .Include(t => t.Student)
             .Include(t => t.Shift)
             .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
 
         if (ticket is null)
-        {
-            return Result<TicketProctorActionResponseDto>.Failure(
-                "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
-        }
+            return Result<TicketProctorActionResponseDto>.Failure("NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
+
+        if ((request.ExpectedShiftId.HasValue && request.ExpectedShiftId != ticket.ShiftId)
+            || !await ProctorAuthorization.CanAccessShiftAsync(_context, request.ActorUserId, ticket.ShiftId, false, cancellationToken))
+            return Result<TicketProctorActionResponseDto>.Failure(ProctorAuthorization.Forbidden);
 
         if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
         {
@@ -58,10 +80,10 @@ public sealed class UpdateTicketAttendanceCommandHandler
 
         if (request.SeatNumber.HasValue)
         {
-            if (request.SeatNumber.Value is < 1 or > 40)
+            if (request.SeatNumber.Value < OfficialExamRules.MinSeat || request.SeatNumber.Value > ticket.Shift.MaxSeats)
             {
                 return Result<TicketProctorActionResponseDto>.Failure(
-                    "VALIDATION: Số ghế phải nằm trong khoảng 1 đến 40.");
+                    $"VALIDATION: Số ghế phải nằm trong khoảng {OfficialExamRules.MinSeat} đến {ticket.Shift.MaxSeats} của ca thi.");
             }
 
             var isSeatTaken = await _context.StudentExamTickets.AsNoTracking().AnyAsync(t => t.ShiftId == ticket.ShiftId && t.Id != ticket.Id && t.SeatNumber == request.SeatNumber.Value, cancellationToken);

@@ -27,6 +27,7 @@ import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
+import { isPublishedOfficialTicket } from '@/lib/officialExamStatus'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
@@ -101,6 +102,10 @@ interface UnifiedHistoryRow {
   continueUrl: string | null
 }
 
+/**
+ * The official-grade endpoint deliberately rejects every state before publication.
+ * Keep those tickets in the exam workspace, not in this published-results view.
+ */
 function unwrapDashboardPayload<T>(payload: unknown): T {
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>
@@ -139,7 +144,7 @@ function averageScore(values: number[]): number | null {
   return Math.round((sum / values.length) * 100) / 100
 }
 
-function OfficialExamScorecardView({
+export function OfficialExamScorecardView({
   ticket,
   grade,
   appeal,
@@ -163,6 +168,16 @@ function OfficialExamScorecardView({
   const [openQuestionId, setOpenQuestionId] = useState<string | null>(
     () => grade.detailedScorecard[0]?.questionId ?? null,
   )
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const deadline = grade.internalAppeal.appealDeadlineAtUtc
+    ? Date.parse(grade.internalAppeal.appealDeadlineAtUtc) : Number.NaN
+  const deadlineExpired = Number.isFinite(deadline) && now >= deadline
+  const canAppeal = grade.internalAppeal.canAppeal && Number.isFinite(deadline) && !deadlineExpired
+    && grade.studentAcknowledgementStatus !== 'ACKNOWLEDGED'
 
   return (
     <div className="space-y-3">
@@ -216,7 +231,7 @@ function OfficialExamScorecardView({
               {grade.studentAcknowledgementStatus !== 'ACKNOWLEDGED' && (
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || !grade.internalAppeal.canAcknowledge}
                   onClick={onAcknowledge}
                   className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-[#0F2854] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] disabled:opacity-60 motion-reduce:transform-none"
                 >
@@ -360,12 +375,16 @@ function OfficialExamScorecardView({
         )}
       </div>
 
-      {grade.internalAppeal.canAppeal && (
+      {(
         <section className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4">
           <p className="text-sm font-bold text-[#0F2854]">
             Phúc khảo nội bộ (Thời hạn {grade.internalAppeal.appealDeadlineDays} ngày)
           </p>
           <p className="mt-1 text-xs text-[#5b6b84]">{grade.internalAppeal.instruction}</p>
+          <p className="mt-1 text-xs text-[#5b6b84]">
+            Hạn gửi phúc khảo: {formatDateTime(grade.internalAppeal.appealDeadlineAtUtc)} (giờ Việt Nam)
+          </p>
+          {deadlineExpired && <p role="status" className="mt-2 text-sm">Đã hết hạn gửi phúc khảo.</p>}
           {appeal ? (
             <div className="mt-3 rounded-xl border border-[#82aedb]/55 bg-white p-3 text-xs text-[#0F2854]">
               Trạng thái đơn phúc khảo: <strong className="text-[#1C4D8D]">{appeal.status}</strong>{' '}
@@ -392,11 +411,11 @@ function OfficialExamScorecardView({
               </div>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || !canAppeal}
                 onClick={onCreateAppeal}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 py-2 text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-60 motion-reduce:transform-none"
               >
-                Gửi đơn phúc khảo tới Trưởng Bộ môn
+                Gửi đơn phúc khảo
               </button>
             </div>
           )}
@@ -628,6 +647,8 @@ function LiveExamHistoryPage() {
               [ticketId]: {
                 ...current[ticketId],
                 studentAcknowledgementStatus: 'ACKNOWLEDGED',
+                internalAppeal: { ...current[ticketId].internalAppeal, canAppeal: false, canAcknowledge: false,
+                  instruction: 'Bạn đã xác nhận đồng ý điểm thi.' },
               },
             }
           : current,
@@ -650,8 +671,14 @@ function LiveExamHistoryPage() {
     try {
       const created = await appealsService.create({ ticketId, reason: appealReason.trim() })
       setAppeals((current) => [created, ...current])
+      setOfficialGrades((current) => current[ticketId] ? {
+        ...current, [ticketId]: { ...current[ticketId], internalAppeal: {
+          ...current[ticketId].internalAppeal, canAppeal: false, canAcknowledge: false,
+          instruction: 'Đơn phúc khảo đang được xử lý; không thể xác nhận đồng ý điểm.',
+        } },
+      } : current)
       setAppealReason('')
-      setNotice('Đã gửi đơn phúc khảo. Trưởng Bộ môn sẽ tiếp nhận và phân công chấm lại.')
+      setNotice('Đã gửi đơn phúc khảo để tiếp nhận và xử lý.')
     } catch (requestError) {
       toast.error(extractErrorMessage(requestError))
     } finally {
@@ -715,8 +742,9 @@ function LiveExamHistoryPage() {
     })
 
     officialItems.forEach((item) => {
-      const canViewGrade =
-        item.isLocked || item.status === 'PUBLISHED' || item.status === 'LOCKED' || item.finalScore !== null
+      if (!isPublishedOfficialTicket(item.status)) return
+
+      const canViewGrade = true
       rows.push({
         uid: `official-${item.ticketId}`,
         rawId: item.ticketId,
@@ -957,7 +985,11 @@ function LiveExamHistoryPage() {
                 { id: 'all', label: 'Tất cả', count: unifiedRows.length },
                 { id: 'practice', label: 'Luyện tập', count: practiceItems.length },
                 { id: 'mock', label: 'Thi thử', count: mockItems.length },
-                { id: 'official', label: 'Thi chính thức', count: officialItems.length },
+                {
+                  id: 'official',
+                  label: 'Thi chính thức',
+                  count: unifiedRows.filter((row) => row.category === 'official').length,
+                },
               ] as const
             ).map((tab) => {
               const active = categoryFilter === tab.id
@@ -1160,9 +1192,9 @@ function LiveExamHistoryPage() {
                   sessionTitle: '',
                   shiftName: 'Ca thi chính thức',
                   roomLab: 'Lab',
-                  examDate: officialGrades[activeModal.id].publishedAt,
-                  startTime: officialGrades[activeModal.id].publishedAt,
-                  endTime: officialGrades[activeModal.id].publishedAt,
+                  examDate: officialGrades[activeModal.id].publishedAt ?? '',
+                  startTime: officialGrades[activeModal.id].publishedAt ?? '',
+                  endTime: officialGrades[activeModal.id].publishedAt ?? '',
                   seatNumber: 1,
                   status: officialGrades[activeModal.id].status,
                   finalScore: officialGrades[activeModal.id].totalScore,

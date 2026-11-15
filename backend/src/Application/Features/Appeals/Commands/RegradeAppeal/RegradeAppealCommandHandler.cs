@@ -18,6 +18,12 @@ public sealed class RegradeAppealCommandHandler(IApplicationDbContext context)
 
     public async Task<Result<AppealResponseDto>> Handle(
         RegradeAppealCommand request,
+        CancellationToken cancellationToken) =>
+        await _context.ExecuteAppealTransitionAsync(request.AppealId,
+            ct => HandleSerialized(request, ct), cancellationToken);
+
+    private async Task<Result<AppealResponseDto>> HandleSerialized(
+        RegradeAppealCommand request,
         CancellationToken cancellationToken)
     {
         var lecturer = await _context.Users.AsNoTracking()
@@ -36,7 +42,7 @@ public sealed class RegradeAppealCommandHandler(IApplicationDbContext context)
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
-        if (appeal.Status != AppealStatus.InReview)
+        if (appeal.Status != AppealStatus.AssignedToLecturer)
         {
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo chưa được phân công hoặc đã xử lý xong.");
         }
@@ -48,9 +54,23 @@ public sealed class RegradeAppealCommandHandler(IApplicationDbContext context)
 
         // Quy định R2: Giảng viên chấm lại chỉ nhập ProposedScore và ReviewNotes.
         // TUYỆT ĐỐI KHÔNG tự ý set Approved và KHÔNG tự ý ghi đè LecturerAudit.AuditedScore.
+        var previousStatus = appeal.Status;
         appeal.ProposedScore = request.NewScore;
         appeal.ReviewNotes = request.ReviewNotes.Trim();
+        appeal.Status = AppealStatus.RegradedByLecturer;
         appeal.UpdatedAt = DateTime.UtcNow;
+
+        AppealWorkflowEffects.AddTransitionAudit(_context, lecturer.Id, appeal, previousStatus, appeal.Status);
+        var officerIds = await _context.Users.AsNoTracking()
+            .Where(u => u.IsActive && u.Role == UserRole.ExaminationOfficer)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var officerId in officerIds)
+        {
+            await AppealWorkflowEffects.AddNotificationIfMissingAsync(_context, officerId, appeal,
+                "APPEAL_REGRADED", "Đơn phúc khảo đã chấm lại",
+                "Giảng viên độc lập đã gửi điểm chấm lại; đơn đang chờ quyết định cuối.", cancellationToken);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
 

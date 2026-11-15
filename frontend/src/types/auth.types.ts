@@ -30,6 +30,18 @@ export interface User {
   mustChangePassword?: boolean
 }
 
+/** Fresh database profile from GET /auth/me; never contains session secrets. */
+export interface CurrentUserResponse {
+  id: string
+  email: string
+  username: string | null
+  fullName: string
+  studentCode: string | null
+  role: UserRole
+  isActive: boolean
+  mustChangePassword: boolean
+}
+
 /**
  * Login Request Payload
  */
@@ -90,5 +102,8 @@ export interface ProblemDetails {
   status: number
   detail: string
   instance?: string
+  errorCode?: string
+  code?: string
+  traceId?: string
   errors?: Record<string, string[]>
 }

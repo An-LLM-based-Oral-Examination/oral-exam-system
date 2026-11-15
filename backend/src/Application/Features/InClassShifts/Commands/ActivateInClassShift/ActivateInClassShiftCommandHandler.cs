@@ -13,7 +13,12 @@ public sealed class ActivateInClassShiftCommandHandler(
     IApplicationDbContext context)
     : IRequestHandler<ActivateInClassShiftCommand, Result<ActivateInClassShiftResponse>>
 {
-    public async Task<Result<ActivateInClassShiftResponse>> Handle(
+    public Task<Result<ActivateInClassShiftResponse>> Handle(
+        ActivateInClassShiftCommand request, CancellationToken cancellationToken) =>
+        context.ExecuteShiftMutationAsync(request.ShiftId, false,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
+
+    private async Task<Result<ActivateInClassShiftResponse>> HandleLockedAsync(
         ActivateInClassShiftCommand request,
         CancellationToken cancellationToken)
     {

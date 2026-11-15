@@ -164,6 +164,10 @@ public class R1OfficialExamShiftAndFollowUpTests
         };
 
         context.Users.Add(deptHead);
+        context.Courses.Add(new Course
+        {
+            Id = session.CourseId, Code = "R1", Name = "Owned course", DepartmentHeadUserId = deptHead.Id
+        });
         context.OfficialExamSessions.Add(session);
         await context.SaveChangesAsync();
 

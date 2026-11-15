@@ -14,17 +14,10 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.HandOverEx
 public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
     : IRequestHandler<HandOverExamSetCommand, Result>
 {
-    private static readonly string[] AllowedRoles =
-    [
-        UserRole.DepartmentHead,
-        UserRole.ExaminationOfficer,
-        UserRole.Admin
-    ];
-
     public async Task<Result> Handle(HandOverExamSetCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !AllowedRoles.Contains(request.ActorRole, StringComparer.OrdinalIgnoreCase))
+        if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(
+                context, request.ActorUserId, request.ActorRole, UserRole.DepartmentHead, cancellationToken))
         {
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
@@ -35,6 +28,11 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
         if (examSet is null)
         {
             return Result.Failure(OfficialExamErrors.ExamSetNotFound);
+        }
+
+        if (!await OfficialExamAuthorization.OwnsAcademicCourseAsync(context, examSet.CourseId, request.ActorUserId, cancellationToken))
+        {
+            return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
         if (examSet.Status != ExamSetStatus.Official)

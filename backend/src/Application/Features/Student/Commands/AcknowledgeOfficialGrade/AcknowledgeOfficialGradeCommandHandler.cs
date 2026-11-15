@@ -7,6 +7,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Student.DTOs;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Features.Appeals;
 
 namespace OralExamination.Application.Features.Student.Commands.AcknowledgeOfficialGrade;
 
@@ -20,6 +21,10 @@ public sealed class AcknowledgeOfficialGradeCommandHandler(IApplicationDbContext
     public async Task<Result<AcknowledgeOfficialGradeResponseDto>> Handle(
         AcknowledgeOfficialGradeCommand request,
         CancellationToken cancellationToken)
+        => await context.ExecuteTicketDecisionAsync(request.TicketId, ct => HandleLocked(request, ct), cancellationToken);
+
+    private async Task<Result<AcknowledgeOfficialGradeResponseDto>> HandleLocked(
+        AcknowledgeOfficialGradeCommand request, CancellationToken cancellationToken)
     {
         var ticket = await context.StudentExamTickets
             .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
@@ -34,9 +39,7 @@ public sealed class AcknowledgeOfficialGradeCommandHandler(IApplicationDbContext
             return Result<AcknowledgeOfficialGradeResponseDto>.Failure("Bạn không có quyền xác nhận điểm cho vé thi của sinh viên khác.");
         }
 
-        bool isPublishedOrLocked = ticket.IsLocked
-            || string.Equals(ticket.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+        bool isPublishedOrLocked = AppealWindowPolicy.IsPublished(ticket) && ticket.GradesPublishedAt.HasValue;
 
         if (!isPublishedOrLocked)
         {
@@ -44,6 +47,11 @@ public sealed class AcknowledgeOfficialGradeCommandHandler(IApplicationDbContext
         }
 
         var nowUtc = DateTime.UtcNow;
+        if (await context.AppealRequests.AnyAsync(a => a.TicketId == ticket.Id &&
+            (a.Status == AppealStatus.SubmittedToExamOffice ||
+             a.Status == AppealStatus.AssignedToLecturer ||
+             a.Status == AppealStatus.RegradedByLecturer), cancellationToken))
+            return Result<AcknowledgeOfficialGradeResponseDto>.Failure("CONFLICT: Đang có đơn phúc khảo xử lý nên không thể xác nhận đồng ý điểm.");
         if (!string.Equals(ticket.StudentAcknowledgementStatus, "ACKNOWLEDGED", StringComparison.OrdinalIgnoreCase))
         {
             ticket.StudentAcknowledgementStatus = "ACKNOWLEDGED";

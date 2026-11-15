@@ -274,9 +274,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("PENDING")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("SUBMITTED_TO_EXAM_OFFICE")
                         .HasColumnName("status");
 
                     b.Property<Guid>("StudentId")
@@ -322,7 +322,7 @@ namespace OralExamination.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
 
-                            t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                            t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED')");
                         });
 
                     b.HasData(
@@ -3161,6 +3161,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_exam_published");
 
+                    b.Property<int>("MaxSeats")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(24)
+                        .HasColumnName("max_seats");
+
                     b.Property<Guid?>("ProctorUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("proctor_user_id");
@@ -3210,6 +3216,8 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("real_exam_session_shifts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_shifts_max_seats", "max_seats >= 1 AND max_seats <= 40");
+
                             t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
 
                             t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
@@ -3222,6 +3230,7 @@ namespace OralExamination.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             EndTime = new DateTime(2026, 10, 15, 2, 30, 0, 0, DateTimeKind.Utc),
                             IsExamPublished = false,
+                            MaxSeats = 24,
                             ProctorUserId = new Guid("00000000-0000-0000-0000-000000000004"),
                             RoomLab = "Lab 301",
                             SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
@@ -3542,6 +3551,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Property<Guid?>("ExamSetId")
                         .HasColumnType("uuid")
                         .HasColumnName("exam_set_id");
+
+                    b.Property<DateTime?>("GradesPublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grades_published_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
@@ -4256,7 +4269,7 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
                         .WithMany()
                         .HasForeignKey("CloId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamQuestions")
@@ -4687,7 +4700,7 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
                         .WithMany()
                         .HasForeignKey("CloId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("PracticeQuestions")

@@ -74,10 +74,10 @@ public class ExamStructuresController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng Bộ Môn hoặc Quản trị viên tạo mới cấu trúc đề thi cho môn học.
+    /// Trưởng Bộ Môn phụ trách môn tạo mới cấu trúc đề thi.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> CreateExamStructure(
         [FromBody] CreateExamStructureRequest request,
         CancellationToken cancellationToken = default)
@@ -102,10 +102,10 @@ public class ExamStructuresController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng Bộ Môn hoặc Quản trị viên cập nhật cấu trúc đề thi.
+    /// Trưởng Bộ Môn phụ trách môn cập nhật cấu trúc đề thi.
     /// </summary>
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> UpdateExamStructure(
         [FromRoute] Guid id,
         [FromBody] UpdateExamStructureRequest request,

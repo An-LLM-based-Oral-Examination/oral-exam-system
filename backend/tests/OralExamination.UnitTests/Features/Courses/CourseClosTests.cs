@@ -31,11 +31,13 @@ public class CourseClosTests
     {
         await using var context = CreateDbContext();
 
+        var ownerId = Guid.NewGuid();
         var course = new Course
         {
             Id = Guid.NewGuid(),
             Code = "PRN231",
             Name = "Building Cross-Platform Apps",
+            DepartmentHeadUserId = ownerId,
             IsActive = true
         };
         context.Courses.Add(course);
@@ -48,7 +50,7 @@ public class CourseClosTests
             "Hiểu kiến trúc RESTful Web API trong .NET 8",
             BloomLevel.Understand,
             1,
-            UserRole.DepartmentHead);
+            $"{UserRole.DepartmentHead}:{ownerId}");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -95,7 +97,7 @@ public class CourseClosTests
             "Mô tả mới trùng mã",
             BloomLevel.Understand,
             2,
-            UserRole.ExaminationOfficer);
+            UserRole.Admin);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -139,6 +141,7 @@ public class CourseClosTests
         await using var context = CreateDbContext();
 
         var courseId = Guid.NewGuid();
+        context.Courses.Add(new Course { Id = courseId, Code = "SORT", Name = "Sort CLOs" });
         context.CourseClos.AddRange(
             new CourseClo { Id = Guid.NewGuid(), CourseId = courseId, CloCode = "CLO3", Description = "Desc 3", BloomLevel = BloomLevel.Analyze, OrderIndex = 3, IsActive = true },
             new CourseClo { Id = Guid.NewGuid(), CourseId = courseId, CloCode = "CLO1", Description = "Desc 1", BloomLevel = BloomLevel.Remember, OrderIndex = 1, IsActive = true },
@@ -149,13 +152,13 @@ public class CourseClosTests
         var handler = new GetCourseClosQueryHandler(context);
 
         // All CLOs
-        var allResult = await handler.Handle(new GetCourseClosQuery(courseId, false), CancellationToken.None);
+        var allResult = await handler.Handle(new GetCourseClosQuery(courseId, false, UserRole.Admin), CancellationToken.None);
         allResult.IsSuccess.Should().BeTrue();
         allResult.Value.Should().HaveCount(3);
         allResult.Value.Select(c => c.CloCode).Should().ContainInOrder("CLO1", "CLO2", "CLO3");
 
         // Active only
-        var activeResult = await handler.Handle(new GetCourseClosQuery(courseId, true), CancellationToken.None);
+        var activeResult = await handler.Handle(new GetCourseClosQuery(courseId, true, UserRole.Admin), CancellationToken.None);
         activeResult.IsSuccess.Should().BeTrue();
         activeResult.Value.Should().HaveCount(2);
         activeResult.Value.Select(c => c.CloCode).Should().ContainInOrder("CLO1", "CLO3");
@@ -167,6 +170,8 @@ public class CourseClosTests
         await using var context = CreateDbContext();
 
         var courseId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        context.Courses.Add(new Course { Id = courseId, Code = "EDIT", Name = "Edit CLOs", DepartmentHeadUserId = ownerId });
         var clo = new CourseClo
         {
             Id = Guid.NewGuid(),
@@ -190,7 +195,7 @@ public class CourseClosTests
             BloomLevel.Apply,
             5,
             true,
-            UserRole.DepartmentHead), CancellationToken.None);
+            $"{UserRole.DepartmentHead}:{ownerId}"), CancellationToken.None);
 
         updateResult.IsSuccess.Should().BeTrue();
         updateResult.Value.CloCode.Should().Be("CLO1_UPDATED");
@@ -198,7 +203,7 @@ public class CourseClosTests
 
         // Delete
         var deleteHandler = new DeleteCourseCloCommandHandler(context);
-        var deleteResult = await deleteHandler.Handle(new DeleteCourseCloCommand(courseId, clo.Id, UserRole.DepartmentHead), CancellationToken.None);
+        var deleteResult = await deleteHandler.Handle(new DeleteCourseCloCommand(courseId, clo.Id, $"{UserRole.DepartmentHead}:{ownerId}"), CancellationToken.None);
 
         deleteResult.IsSuccess.Should().BeTrue();
         var remaining = await context.CourseClos.FirstOrDefaultAsync(c => c.Id == clo.Id);

@@ -150,6 +150,9 @@ public class ReviewAppealDecisionCommandHandlerTests
     {
         using var context = CreateDbContext();
         var (_, deptHead, _, _, submission, appeal) = await SeedDataAsync(context);
+        appeal.Status = AppealStatus.RegradedByLecturer;
+        appeal.ProposedScore = 8.5m;
+        await context.SaveChangesAsync();
 
         var handler = new ReviewAppealDecisionCommandHandler(context);
         var command = new ReviewAppealDecisionCommand(
@@ -183,6 +186,8 @@ public class ReviewAppealDecisionCommandHandlerTests
     {
         using var context = CreateDbContext();
         var (_, deptHead, _, _, _, appeal) = await SeedDataAsync(context);
+        appeal.Status = AppealStatus.RegradedByLecturer;
+        await context.SaveChangesAsync();
 
         var handler = new ReviewAppealDecisionCommandHandler(context);
         var command = new ReviewAppealDecisionCommand(
@@ -270,7 +275,7 @@ public class ReviewAppealDecisionCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("không có quyền thẩm định");
+        result.Error.Should().StartWith("FORBIDDEN:");
     }
 
     [Fact(DisplayName = "BE-12: Cán bộ khảo thí phân công giảng viên và chuyển đơn sang IN_REVIEW")]
@@ -296,7 +301,7 @@ public class ReviewAppealDecisionCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Status.Should().Be(AppealStatus.InReview);
+        result.Value!.Status.Should().Be(AppealStatus.AssignedToLecturer);
         result.Value.AssignedTo.Should().Be(lecturer.Id);
         appeal.ReviewedBy.Should().Be(officer.Id);
     }
@@ -346,7 +351,7 @@ public class ReviewAppealDecisionCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Status.Should().Be(AppealStatus.InReview);
+        result.Value!.Status.Should().Be(AppealStatus.RegradedByLecturer);
         result.Value.ProposedScore.Should().Be(8.25m);
 
         // Khảo thí phê duyệt quyết định mới cập nhật FinalScore
@@ -408,7 +413,7 @@ public class ReviewAppealDecisionCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value!.Status.Should().Be(AppealStatus.InReview);
+        result.Value!.Status.Should().Be(AppealStatus.RegradedByLecturer);
         result.Value.ProposedScore.Should().Be(8.75m);
 
         // Khảo thí phê duyệt
@@ -462,7 +467,7 @@ public class ReviewAppealDecisionCommandHandlerTests
         context.ExamQuestionSubmissions.Add(sub2);
         context.LecturerAudits.Add(audit);
 
-        appeal.Status = AppealStatus.InReview;
+        appeal.Status = AppealStatus.AssignedToLecturer;
         appeal.AssignedTo = lecturer.Id;
         appeal.ReviewedBy = officer.Id;
         await context.SaveChangesAsync();

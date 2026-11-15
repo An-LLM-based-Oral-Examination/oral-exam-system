@@ -56,7 +56,7 @@ public sealed class CreateOfficialExamSessionRequest
     public string? Title { get; set; }
     public DateOnly ExamDate { get; set; }
     public bool HasFollowUp { get; set; }
-    public int MaxFollowUpQuestions { get; set; } = 2;
+    public int MaxFollowUpQuestions { get; set; } = OfficialExamRules.DefaultFollowUpQuestions;
     public string? ExamInputMode { get; set; }
     public int TranscriptBufferSeconds { get; set; } = 60;
 }
@@ -82,6 +82,7 @@ public sealed class OpenExamShiftRequest
     public DateTime EndTime { get; set; }
     public Guid ProctorUserId { get; set; }
     public Guid ExaminerUserId { get; set; }
+    public int MaxSeats { get; set; } = OfficialExamRules.DefaultShiftCapacity;
 }
 
 public sealed record ExamShiftResponse(
@@ -95,12 +96,13 @@ public sealed record ExamShiftResponse(
     string Status,
     Guid? ExaminerUserId = null,
     string? ExaminerName = null,
-    string? ProctorName = null);
+    string? ProctorName = null,
+    int MaxSeats = OfficialExamRules.DefaultShiftCapacity);
 
 public sealed class ConfigureOfficialExamFollowUpRequest
 {
     public bool HasFollowUp { get; set; }
-    public int MaxFollowUpQuestions { get; set; } = 2;
+    public int MaxFollowUpQuestions { get; set; } = OfficialExamRules.DefaultFollowUpQuestions;
 }
 
 public sealed class AssignExamTicketRequest
@@ -130,6 +132,42 @@ public sealed record ExamTicketResponse(
     string Status,
     DateTime CheckedInAt,
     Guid? ExamSetId = null);
+
+/// <summary>One imported roster row. SourceRow is the human-facing spreadsheet/CSV row number.</summary>
+public sealed record BulkExamTicketImportRow(
+    int SourceRow,
+    string StudentCode,
+    int SeatNumber,
+    string IpAddress);
+
+public sealed record BulkExamTicketImportIssue(int? SourceRow, string Message);
+
+public sealed record BulkExamTicketImportPreviewRow(
+    int SourceRow,
+    string StudentCode,
+    string? FullName,
+    int SeatNumber,
+    string IpAddress,
+    IReadOnlyList<string> Issues)
+{
+    public bool IsValid => Issues.Count == 0;
+}
+
+public sealed record BulkExamTicketImportPreview(
+    Guid ShiftId,
+    int ValidRowCount,
+    int AvailableHandedOverSetCount,
+    IReadOnlyList<BulkExamTicketImportIssue> Issues,
+    IReadOnlyList<string> ReservedExamSetCodes,
+    IReadOnlyList<BulkExamTicketImportPreviewRow>? Rows = null)
+{
+    public bool CanCommit => Issues.Count == 0;
+}
+
+public sealed record BulkExamTicketImportCommitResult(
+    Guid ShiftId,
+    int CreatedTicketCount,
+    IReadOnlyList<ExamTicketResponse> Tickets);
 
 public sealed record StudentWorkstationTicketResponse(
     Guid Id,

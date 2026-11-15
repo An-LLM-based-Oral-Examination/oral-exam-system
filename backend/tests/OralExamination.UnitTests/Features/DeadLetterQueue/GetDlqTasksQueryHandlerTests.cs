@@ -19,7 +19,9 @@ public class GetDlqTasksQueryHandlerTests
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new OralExamDbContext(options);
+        var context = new OralExamDbContext(options);
+        DlqTestActors.Seed(context);
+        return context;
     }
 
     [Fact(DisplayName = "1. GetDlqTasksQuery: Trả về toàn bộ danh sách các tác vụ DLQ sắp xếp giảm dần theo thời gian tạo")]
@@ -53,7 +55,7 @@ public class GetDlqTasksQueryHandlerTests
         await context.SaveChangesAsync();
 
         var handler = new GetDlqTasksQueryHandler(context);
-        var query = new GetDlqTasksQuery();
+        var query = new GetDlqTasksQuery(ActorUserId: DlqTestActors.Admin);
 
         // Act
         var result = await handler.Handle(query, CancellationToken.None);
@@ -96,7 +98,7 @@ public class GetDlqTasksQueryHandlerTests
         await context.SaveChangesAsync();
 
         var handler = new GetDlqTasksQueryHandler(context);
-        var query = new GetDlqTasksQuery(Status: "pending");
+        var query = new GetDlqTasksQuery(Status: "pending", ActorUserId: DlqTestActors.Admin);
 
         // Act
         var result = await handler.Handle(query, CancellationToken.None);
@@ -114,7 +116,7 @@ public class GetDlqTasksQueryHandlerTests
         // Arrange
         using var context = CreateDbContext();
         var handler = new GetDlqTasksQueryHandler(context);
-        var query = new GetDlqTasksQuery();
+        var query = new GetDlqTasksQuery(ActorUserId: DlqTestActors.Admin);
 
         // Act
         var result = await handler.Handle(query, CancellationToken.None);
@@ -166,7 +168,7 @@ public class GetDlqTasksQueryHandlerTests
         var handler = new GetDlqTasksQueryHandler(context);
 
         // Act 1: FlowTypes list contains PRACTICE and MOCK_EXAM
-        var resultAdminFlows = await handler.Handle(new GetDlqTasksQuery(FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM" }), CancellationToken.None);
+        var resultAdminFlows = await handler.Handle(new GetDlqTasksQuery(FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM" }, ActorUserId: DlqTestActors.Admin), CancellationToken.None);
 
         // Assert 1
         resultAdminFlows.IsSuccess.Should().BeTrue();
@@ -174,7 +176,7 @@ public class GetDlqTasksQueryHandlerTests
         resultAdminFlows.Value.Select(x => x.FlowType).Should().Contain(new[] { "PRACTICE", "MOCK_EXAM" });
 
         // Act 2: FlowType = OFFICIAL_EXAM
-        var resultOfficial = await handler.Handle(new GetDlqTasksQuery(FlowType: "OFFICIAL_EXAM"), CancellationToken.None);
+        var resultOfficial = await handler.Handle(new GetDlqTasksQuery(FlowType: "OFFICIAL_EXAM", ActorUserId: DlqTestActors.Officer), CancellationToken.None);
 
         // Assert 2
         resultOfficial.IsSuccess.Should().BeTrue();
@@ -214,7 +216,7 @@ public class GetDlqTasksQueryHandlerTests
         var handler = new GetDlqTasksQueryHandler(context);
 
         // Act
-        var result = await handler.Handle(new GetDlqTasksQuery(ManagedByRole: "examination_officer"), CancellationToken.None);
+        var result = await handler.Handle(new GetDlqTasksQuery(ManagedByRole: "examination_officer", ActorUserId: DlqTestActors.Officer), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();

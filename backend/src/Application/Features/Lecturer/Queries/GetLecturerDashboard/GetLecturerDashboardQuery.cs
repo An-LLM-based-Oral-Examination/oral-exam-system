@@ -280,8 +280,10 @@ public sealed class GetLecturerDashboardQueryHandler
             .Include(a => a.Student)
             .Include(a => a.Session)
             .Where(a => isDeptHeadOrAdmin
-                ? (a.Status == AppealStatus.Pending || a.Status == AppealStatus.InReview)
-                : (a.AssignedTo == user.Id && a.Status == AppealStatus.InReview))
+                ? (a.Status == AppealStatus.SubmittedToExamOffice ||
+                   a.Status == AppealStatus.AssignedToLecturer ||
+                   a.Status == AppealStatus.RegradedByLecturer)
+                : (a.AssignedTo == user.Id && a.Status == AppealStatus.AssignedToLecturer))
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Take(20)
@@ -289,11 +291,11 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var assignedPendingCount = await _context.AppealRequests
             .AsNoTracking()
-            .CountAsync(a => a.AssignedTo == user.Id && a.Status == AppealStatus.InReview, cancellationToken);
+            .CountAsync(a => a.AssignedTo == user.Id && a.Status == AppealStatus.AssignedToLecturer, cancellationToken);
 
         var departmentPendingCount = await _context.AppealRequests
             .AsNoTracking()
-            .CountAsync(a => a.Status == AppealStatus.Pending, cancellationToken);
+            .CountAsync(a => a.Status == AppealStatus.SubmittedToExamOffice, cancellationToken);
 
         var activeAppealItems = appeals
             .Select(a => new LecturerAppealQueueItemDto

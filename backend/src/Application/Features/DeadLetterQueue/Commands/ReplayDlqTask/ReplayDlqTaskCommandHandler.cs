@@ -28,6 +28,9 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
 
     public async Task<Result<Unit>> Handle(ReplayDlqTaskCommand request, CancellationToken cancellationToken)
     {
+        var actor = await DlqAuthorization.ActorAsync(_context, request.ActorUserId, request.ActorRole, true, cancellationToken);
+        if (actor is null) return Result<Unit>.Failure(DlqAuthorization.Forbidden);
+
         var dlqItem = await _context.DeadLetterQueues
             .FirstOrDefaultAsync(q => q.Id == request.Id, cancellationToken);
 
@@ -35,6 +38,9 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
         {
             return Result<Unit>.Failure("Không tìm thấy tác vụ DLQ với Id đã cho.");
         }
+
+        if (!await DlqAuthorization.CanAccessAsync(_context, actor, dlqItem, cancellationToken))
+            return Result<Unit>.Failure(DlqAuthorization.Forbidden);
 
         if (dlqItem.Status == "resolved")
         {
@@ -216,6 +222,8 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
 
         if (isInClassTask)
         {
+            var canonicalSubmission = await DlqAuthorization.InClassSubmissionAsync(_context, dlqItem, cancellationToken);
+            if (canonicalSubmission is null) return Result<Unit>.Failure(DlqAuthorization.Forbidden);
             GradingTask? inClassTask = null;
             Guid submissionId = dlqItem.CorrelationId ?? Guid.Empty;
 
@@ -279,6 +287,16 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                 IsFullSession = false,
                 InClassSubmissionId = submission.Id
             };
+
+            // Never enqueue client/payload resource identities after authorizing a different record.
+            inClassTask.AnswerId = submission.Id;
+            inClassTask.SessionId = submission.ShiftId;
+            inClassTask.QuestionId = submission.QuestionId;
+            inClassTask.StudentId = submission.StudentId;
+            inClassTask.InClassSubmissionId = submission.Id;
+            inClassTask.AnswerText = submission.Transcript ?? string.Empty;
+            inClassTask.IsFollowUp = submission.IsFollowUp;
+            inClassTask.ParentAnswerId = submission.ParentSubmissionId;
 
             await _gradingQueueChannel.EnqueueAsync(inClassTask, cancellationToken);
 

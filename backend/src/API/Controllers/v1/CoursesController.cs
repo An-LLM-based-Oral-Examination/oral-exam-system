@@ -227,21 +227,23 @@ public class CoursesController : ControllerBase
     [HttpGet("{id:guid}/clos")]
     public async Task<IActionResult> GetCourseClos(Guid id, [FromQuery] bool? activeOnly)
     {
-        var query = new OralExamination.Application.Features.Courses.Queries.GetCourseClos.GetCourseClosQuery(id, activeOnly);
+        var query = new OralExamination.Application.Features.Courses.Queries.GetCourseClos.GetCourseClosQuery(id, activeOnly, GetActorRoleWithId());
         var result = await _sender.Send(query);
 
         if (!result.IsSuccess)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return CloProblem(result.Error);
         }
 
         return Ok(result.Value);
+    }
+
+    [Authorize(Roles = "department_head,admin")]
+    [HttpGet("managed-for-clos")]
+    public async Task<IActionResult> GetManagedCloCourses(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new OralExamination.Application.Features.Courses.Queries.GetManagedCloCourses.GetManagedCloCoursesQuery(GetActorRoleWithId()), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : CloProblem(result.Error);
     }
 
     /// <summary>
@@ -263,27 +265,22 @@ public class CoursesController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Unprocessable Entity",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return CloProblem(result.Error);
         }
 
         return CreatedAtAction(nameof(GetCourseClos), new { id }, result.Value);
+    }
+
+    private IActionResult CloProblem(string error)
+    {
+        var status = error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ? 403
+            : error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ? 404
+            : error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ? 409 : 422;
+        return StatusCode(status, new ProblemDetails
+        {
+            Status = status, Title = status switch { 403 => "Forbidden", 404 => "Not Found", 409 => "Conflict", _ => "Unprocessable Entity" },
+            Detail = error, Type = "https://tools.ietf.org/html/rfc7807",
+        });
     }
 
     /// <summary>
@@ -307,24 +304,7 @@ public class CoursesController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Unprocessable Entity",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return CloProblem(result.Error);
         }
 
         return Ok(result.Value);
@@ -343,24 +323,7 @@ public class CoursesController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Unprocessable Entity",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return CloProblem(result.Error);
         }
 
         return NoContent();
@@ -406,8 +369,8 @@ public class CoursesController : ControllerBase
     /// <summary>
     /// Phân công danh sách giảng viên phụ trách môn học (Trưởng bộ môn / Admin).
     /// </summary>
-    [Authorize(Roles = "department_head,admin")]
     [HttpPost("/api/v1/department-head/courses/{id:guid}/lecturers")]
+    [Authorize(Roles = "department_head")]
     [HttpPost("{id:guid}/lecturers")]
     public async Task<IActionResult> AssignLecturers(Guid id, [FromBody] AssignLecturersToCourseRequest request)
     {
@@ -460,16 +423,21 @@ public class CoursesController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách giảng viên phụ trách môn học (Mọi role đã đăng nhập).
+    /// Lấy phân công theo quyền sở hữu môn học hoặc giảng viên được phân công.
     /// </summary>
     [HttpGet("{id:guid}/lecturers")]
-    public async Task<IActionResult> GetLecturers(Guid id)
+    public async Task<IActionResult> GetLecturers(Guid id, [FromQuery] Guid? semesterId = null)
     {
-        var query = new GetCourseLecturersQuery(id);
+        var query = new GetCourseLecturersQuery(id, GetCurrentUserId(), semesterId);
         var result = await _sender.Send(query);
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden, Title = "Forbidden", Detail = result.Error
+                });
             return NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,

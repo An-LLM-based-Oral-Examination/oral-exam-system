@@ -23,7 +23,11 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         _validator = validator;
     }
 
-    public async Task<Result<ExamTicketResponse>> Handle(AssignExamTicketCommand request, CancellationToken cancellationToken)
+    public Task<Result<ExamTicketResponse>> Handle(AssignExamTicketCommand request, CancellationToken cancellationToken) =>
+        _context.ExecuteShiftMutationAsync(request.ShiftId, true,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
+
+    private async Task<Result<ExamTicketResponse>> HandleLockedAsync(AssignExamTicketCommand request, CancellationToken cancellationToken)
     {
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
@@ -32,7 +36,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.ExaminationOfficer))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -43,6 +47,19 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         if (shift is null)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftNotFound);
+        }
+
+        if (request.SeatNumber > shift.MaxSeats)
+        {
+            return Result<ExamTicketResponse>.Failure(
+                $"Số ghế phải nằm trong khoảng {OfficialExamRules.MinSeat} đến {shift.MaxSeats} của ca thi.");
+        }
+
+        var assignedTicketCount = await _context.StudentExamTickets.CountAsync(
+            ticket => ticket.ShiftId == request.ShiftId, cancellationToken);
+        if (assignedTicketCount >= shift.MaxSeats)
+        {
+            return Result<ExamTicketResponse>.Failure("CONFLICT: Ca thi đã đủ số lượng vé theo sức chứa được cấu hình.");
         }
 
         var student = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);

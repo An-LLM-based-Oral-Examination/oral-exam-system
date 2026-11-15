@@ -74,20 +74,33 @@ const allowedHomeCases: Array<{ role: E2eRole; path: string }> = [
   { role: 'Admin', path: '/admin/dashboard' },
 ]
 
-async function seedAuthenticatedRole(page: Page, role: E2eRole): Promise<void> {
-  await page.addInitScript((seededRole: E2eRole) => {
-    const user = {
-      id: `e2e-${seededRole.toLowerCase()}`,
-      email: `${seededRole.toLowerCase()}@e2e.test`,
-      fullName: 'E2E Route Matrix User',
-      role: seededRole,
-      mustChangePassword: false,
-    }
+interface SeedRoleOptions {
+  mustChangePassword?: boolean
+}
+
+async function seedAuthenticatedRole(page: Page, role: E2eRole, options: SeedRoleOptions = {}): Promise<void> {
+  const profile = {
+    id: `e2e-${role.toLowerCase()}`,
+    email: `${role.toLowerCase()}@e2e.test`,
+    fullName: 'E2E Route Matrix User',
+    role,
+    mustChangePassword: options.mustChangePassword ?? false,
+  }
+  const currentUser = {
+    ...profile,
+    isActive: true,
+    ...(role === 'Student' ? { studentCode: 'SE170001' } : {}),
+  }
+  await page.route('**/api/v1/auth/me**', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(currentUser) })
+  })
+  await page.addInitScript((seededProfile) => {
 
     sessionStorage.setItem('access_token', 'e2e-access-token')
     sessionStorage.setItem('refresh_token', 'e2e-refresh-token')
-    sessionStorage.setItem('user_profile', JSON.stringify(user))
-  }, role)
+    sessionStorage.setItem('user_profile', JSON.stringify(seededProfile))
+  }, profile)
 }
 
 test.describe('RBAC route matrix', () => {
@@ -101,7 +114,7 @@ test.describe('RBAC route matrix', () => {
       await page.goto(routeCase.path)
 
       await expect(page).toHaveURL(/\/unauthorized$/)
-      expect(apiRequests).toEqual([])
+      expect(apiRequests.filter((url) => !url.includes('/api/v1/auth/me'))).toEqual([])
     })
   }
 
@@ -158,10 +171,10 @@ test.describe('RBAC route matrix', () => {
   })
 
   test('keeps an authenticated role on a dynamic deep link with query and hash', async ({ page }) => {
-    await seedAuthenticatedRole(page, 'ExaminationOfficer')
     await page.route('**/api/v1/**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
+    await seedAuthenticatedRole(page, 'ExaminationOfficer')
 
     await page.goto('/examination-officer/exams/session-123?tab=shifts#tickets')
     await expect(page).toHaveURL(/\/examination-officer\/exams\/session-123\?tab=shifts#tickets$/)
@@ -176,11 +189,7 @@ test.describe('RBAC route matrix', () => {
   })
 
   test('mustChangePassword takes precedence over a permitted business route', async ({ page }) => {
-    await seedAuthenticatedRole(page, 'Instructor')
-    await page.addInitScript(() => {
-      const profile = JSON.parse(sessionStorage.getItem('user_profile') ?? '{}')
-      sessionStorage.setItem('user_profile', JSON.stringify({ ...profile, mustChangePassword: true }))
-    })
+    await seedAuthenticatedRole(page, 'Instructor', { mustChangePassword: true })
     await page.goto('/lecturer/dashboard')
     await expect(page).toHaveURL(/\/change-password$/)
   })

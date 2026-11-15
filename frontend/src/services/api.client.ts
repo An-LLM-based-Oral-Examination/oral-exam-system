@@ -57,7 +57,7 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error),
 )
 
-let refreshPromise: Promise<string> | null = null
+let refreshInFlight: { refreshToken: string; promise: Promise<string> } | null = null
 
 function readMustChangeFromToken(token: string): boolean | undefined {
   const parts = token.split('.')
@@ -84,6 +84,11 @@ async function refreshAccessToken(): Promise<string> {
   )
   if (!response.data.accessToken || !response.data.refreshToken) {
     throw new Error('Backend không trả về token mới hợp lệ')
+  }
+
+  // A response from an old session must never resurrect logout or replace a new login.
+  if (sessionStorage.getItem('refresh_token') !== refreshToken) {
+    throw new Error('Phiên đăng nhập đã thay đổi trong khi làm mới token')
   }
 
   sessionStorage.setItem('access_token', response.data.accessToken)
@@ -121,32 +126,40 @@ apiClient.interceptors.response.use(
       !config._retry &&
       !config._skipAuthRefresh &&
       !isAuthEndpoint &&
+      config.headers.Authorization === `Bearer ${sessionStorage.getItem('access_token')}` &&
       sessionStorage.getItem('refresh_token')
     ) {
       config._retry = true
+      const originalRefreshToken = sessionStorage.getItem('refresh_token')!
       try {
-        refreshPromise ??= refreshAccessToken().finally(() => {
-          refreshPromise = null
-        })
-        const token = await refreshPromise
+        if (!refreshInFlight || refreshInFlight.refreshToken !== originalRefreshToken) {
+          const entry = { refreshToken: originalRefreshToken, promise: Promise.resolve('') }
+          entry.promise = refreshAccessToken().finally(() => {
+            if (refreshInFlight === entry) refreshInFlight = null
+          })
+          refreshInFlight = entry
+        }
+        const token = await refreshInFlight.promise
+        if (sessionStorage.getItem('access_token') !== token) throw new Error('Phiên đăng nhập đã thay đổi')
         if (config.headers) config.headers.Authorization = `Bearer ${token}`
         return apiClient.request(config)
-      } catch {
-        sessionStorage.removeItem('access_token')
-        sessionStorage.removeItem('refresh_token')
-        sessionStorage.removeItem('user_profile')
-        window.dispatchEvent(new Event('auth:session-expired'))
+      } catch (refreshError) {
+        const failureStatus = isRecord(refreshError) ? refreshError.status : undefined
+        if (sessionStorage.getItem('refresh_token') === originalRefreshToken &&
+          (failureStatus === 401 || failureStatus === 403)) {
+          sessionStorage.removeItem('access_token')
+          sessionStorage.removeItem('refresh_token')
+          sessionStorage.removeItem('user_profile')
+          window.dispatchEvent(new Event('auth:session-expired'))
+        }
       }
     }
 
     const responseStatus = error.response?.status ?? 500
     const responseData = error.response?.data
     const payload = isRecord(responseData) ? responseData : {}
-    const payloadStatus = payload.status ?? payload.Status
-    const normalizedStatus =
-      typeof payloadStatus === 'number' && Number.isFinite(payloadStatus)
-        ? payloadStatus
-        : responseStatus
+    // Transport status is authoritative, including during mixed-version rollout.
+    const normalizedStatus = responseStatus
     const detail =
       readString(payload, 'detail', 'Detail', 'error', 'Error', 'message', 'Message') ??
       error.message ??

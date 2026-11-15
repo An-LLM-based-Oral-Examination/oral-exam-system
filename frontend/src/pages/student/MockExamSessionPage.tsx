@@ -62,8 +62,7 @@ type RoomPhase = 'exam' | 'submitting-exam' | 'scorecard'
 
 /** Đang ghi âm lại đáp án nào khi xem lại (null = lần ghi đầu / chưa mở mic). */
 type ReRecordTarget =
-  | { kind: 'main'; questionId: string }
-  | { kind: 'followUp'; answerId: string; questionId: string }
+  { kind: 'main'; questionId: string } | { kind: 'followUp'; answerId: string; questionId: string }
 
 interface ExamWarning {
   title: string
@@ -131,11 +130,11 @@ function buildVocabularyHint(
   return parts.length > 0 ? parts.join(' - ').slice(0, 320) : undefined
 }
 
-
-
 function initialQuestionIndex(session: StoredMockExamSession) {
   if (session?.activeFollowUp?.questionId) {
-    const activeIdx = session.questions.findIndex((q) => q.id === session.activeFollowUp!.questionId)
+    const activeIdx = session.questions.findIndex(
+      (q) => q.id === session.activeFollowUp!.questionId,
+    )
     if (activeIdx >= 0) return activeIdx
   }
   const queuedQuestionId = readMockExamQueuedFollowUp(session.sessionId)?.questionId
@@ -161,7 +160,10 @@ function initialFurthestIndex(session: StoredMockExamSession) {
   const stored =
     typeof session.furthestQuestionIndex === 'number' &&
     Number.isFinite(session.furthestQuestionIndex)
-      ? Math.max(0, Math.min(session.questions.length - 1, Math.floor(session.furthestQuestionIndex)))
+      ? Math.max(
+          0,
+          Math.min(session.questions.length - 1, Math.floor(session.furthestQuestionIndex)),
+        )
       : -1
   return Math.max(0, start, maxAnswered, stored)
 }
@@ -196,7 +198,10 @@ export function MockExamSessionPage() {
         if (cancelled) return
         setSession(null)
         setRestoreError(
-          getMockExamErrorDetail(error, 'Không thể khôi phục ca thi. Ca có thể đã hết hạn hoặc đã nộp.'),
+          getMockExamErrorDetail(
+            error,
+            'Không thể khôi phục ca thi. Ca có thể đã hết hạn hoặc đã nộp.',
+          ),
         )
       })
       .finally(() => {
@@ -265,7 +270,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     }).catch(() => null)
     segmentPromisesRef.current.push(promise)
   }, [])
-  const { isRecording, startRecording, stopRecording, error: recorderError } = useAudioRecorder({
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
+    error: recorderError,
+  } = useAudioRecorder({
     segmentDurationMs: 20_000,
     onSegment: handleRecorderSegment,
   })
@@ -388,7 +398,8 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const settingsRef = useRef<HTMLDivElement>(null)
   const runtimeRef = useRef<ExamRuntime>({
     phase: 'exam',
-    questionId: session.questions[initialQuestionIndex(session)]?.id ?? session.questions[0]?.id ?? '',
+    questionId:
+      session.questions[initialQuestionIndex(session)]?.id ?? session.questions[0]?.id ?? '',
     audioBlob: null,
     recordedSeconds: 0,
     answers: Object.fromEntries(
@@ -438,9 +449,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   const question = session.questions[questionIndex] ?? null
   const savedAnswer = question ? answers[question.id] : undefined
-  const savedFollowUpAnswer = activeFollowUp
-    ? followUpAnswers[activeFollowUp.answerId]
-    : undefined
+  const savedFollowUpAnswer = activeFollowUp ? followUpAnswers[activeFollowUp.answerId] : undefined
   /** Câu phụ đã trả lời của câu chính đang xem (để hiện khi quay lại). */
   const reviewedFollowUps = question
     ? Object.values(followUpAnswers)
@@ -449,14 +458,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             item.isFollowUp &&
             item.questionId === question.id &&
             (item.transcript.trim().length > 0 ||
-              (reRecordTarget?.kind === 'followUp' &&
-                reRecordTarget.answerId === item.answerId)) &&
+              (reRecordTarget?.kind === 'followUp' && reRecordTarget.answerId === item.answerId)) &&
             (!activeFollowUp || item.answerId !== activeFollowUp.answerId),
         )
         .map((item) => ({
           ...item,
-          promptText:
-            item.promptText?.trim() || followUpPromptByAnswerId[item.answerId] || null,
+          promptText: item.promptText?.trim() || followUpPromptByAnswerId[item.answerId] || null,
         }))
         .sort((left, right) => left.answeredAt.localeCompare(right.answeredAt))
     : []
@@ -537,7 +544,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   useLayoutEffect(() => {
     const root = transcriptFitRootRef.current
     if (!root) return
-    root.querySelectorAll<HTMLTextAreaElement>('[data-transcript-fit]').forEach(fitTranscriptTextarea)
+    root
+      .querySelectorAll<HTMLTextAreaElement>('[data-transcript-fit]')
+      .forEach(fitTranscriptTextarea)
   }, [
     drafts,
     followUpDrafts,
@@ -728,11 +737,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       saveMockExamAnswer(storedFollowUp, session.sessionId)
       replacePlayback(null)
 
-      if (
-        response.needsFollowUp &&
-        response.followUpAnswerId &&
-        response.followUpPrompt?.trim()
-      ) {
+      if (response.needsFollowUp && response.followUpAnswerId && response.followUpPrompt?.trim()) {
         // Giữ câu phụ vừa trả lời để SV chỉnh transcript; câu phụ tiếp xếp hàng.
         rememberFollowUpPrompt(response.followUpAnswerId, response.followUpPrompt)
         updateQueuedFollowUp({
@@ -916,8 +921,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       segmentPromisesRef.current = []
       lastSegmentBlobRef.current = null
 
-      const uploadBlob =
-        tailBlob.size >= 1_024 ? tailBlob : (fallbackSegmentBlob ?? tailBlob)
+      const uploadBlob = tailBlob.size >= 1_024 ? tailBlob : (fallbackSegmentBlob ?? tailBlob)
 
       if (preTranscribedPromises.length > 0) {
         const tailPromise =
@@ -975,8 +979,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     async (blob: Blob) => {
       const questionId = runtimeRef.current.questionId
       if (!questionId) return
-      const currentQuestion =
-        session.questions.find((item) => item.id === questionId) ?? null
+      const currentQuestion = session.questions.find((item) => item.id === questionId) ?? null
       const recordedSeconds = Math.max(1, recordingSecondsRef.current)
       sendingRef.current = true
       setIsSendingAnswer(true)
@@ -1226,8 +1229,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       setSubmitError('')
 
       const submitPendingAudio = async (blob: Blob, questionId: string, seconds: number) => {
-        const currentQuestion =
-          session.questions.find((item) => item.id === questionId) ?? null
+        const currentQuestion = session.questions.find((item) => item.id === questionId) ?? null
         const { speech, uploadBlob } = await transcribeAudioWithSegments(
           blob,
           questionId,
@@ -1415,12 +1417,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     const tick = () => {
       const next = secondsUntilExpiry(session.expiresAt)
       setSecondsLeft(next)
-      if (
-        next > 0 &&
-        next <= 60 &&
-        !urgentWarnedRef.current &&
-        !warningOpenRef.current
-      ) {
+      if (next > 0 && next <= 60 && !urgentWarnedRef.current && !warningOpenRef.current) {
         urgentWarnedRef.current = true
         warningOpenRef.current = true
         setWarning({
@@ -1539,10 +1536,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return targetIndex === questionIndex + 1 && questionIndex === furthestIndex
   }
 
-  const moveToQuestion = async (
-    nextIndex: number,
-    options?: { skipFollowUpWarning?: boolean },
-  ) => {
+  const moveToQuestion = async (nextIndex: number, options?: { skipFollowUpWarning?: boolean }) => {
     if (isRecording || isSendingAnswer || nextIndex === questionIndex) return
     if (!canNavigateTo(nextIndex)) return
     if (activeFollowUp) {
@@ -1754,7 +1748,9 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         void finalizeExam('timeout')
         return
       }
-      setAnswerError(getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa trước khi nộp.'))
+      setAnswerError(
+        getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa trước khi nộp.'),
+      )
       return
     } finally {
       setIsSendingAnswer(false)
@@ -1874,40 +1870,40 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       >
         <header className="relative z-20 shrink-0 bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] text-white">
           <div className="flex items-center justify-between gap-2.5 px-4 py-3.5 sm:px-5">
-          <div className="min-w-0">
-            <p className="text-xs font-bold tracking-[0.08em] text-white/75 uppercase">
-              {session.courseCode}
-            </p>
-            <h1 id="mock-session-title" className="truncate text-base font-bold sm:text-lg">
-              {session.courseName}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <div
-              role="timer"
-              aria-live="off"
-              aria-label={`Thời gian còn lại ${formatClock(secondsLeft)}`}
-              className={cn(
-                'inline-flex min-h-10 items-center gap-2 rounded-full px-3.5 text-sm font-bold',
-                isUrgent
-                  ? 'animate-pulse bg-[#c2415b] text-white motion-reduce:animate-none'
-                  : 'bg-white text-[#0F2854]',
-              )}
-            >
-              <Clock3 className="size-4" />
-              {formatClock(secondsLeft)}
+            <div className="min-w-0">
+              <p className="text-xs font-bold tracking-[0.08em] text-white/75 uppercase">
+                {session.courseCode}
+              </p>
+              <h1 id="mock-session-title" className="truncate text-base font-bold sm:text-lg">
+                {session.courseName}
+              </h1>
             </div>
-            <div className="relative" ref={settingsRef}>
-              <button
-                type="button"
-                data-space-ignore="true"
-                aria-label="Cài đặt phòng thi"
-                aria-expanded={settingsOpen}
-                onClick={() => setSettingsOpen((current) => !current)}
-                className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"
+            <div className="flex shrink-0 items-center gap-2">
+              <div
+                role="timer"
+                aria-live="off"
+                aria-label={`Thời gian còn lại ${formatClock(secondsLeft)}`}
+                className={cn(
+                  'inline-flex min-h-10 items-center gap-2 rounded-full px-3.5 text-sm font-bold',
+                  isUrgent
+                    ? 'animate-pulse bg-[#c2415b] text-white motion-reduce:animate-none'
+                    : 'bg-white text-[#0F2854]',
+                )}
               >
-                <Settings className="size-5" />
-              </button>
+                <Clock3 className="size-4" />
+                {formatClock(secondsLeft)}
+              </div>
+              <div className="relative" ref={settingsRef}>
+                <button
+                  type="button"
+                  data-space-ignore="true"
+                  aria-label="Cài đặt phòng thi"
+                  aria-expanded={settingsOpen}
+                  onClick={() => setSettingsOpen((current) => !current)}
+                  className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"
+                >
+                  <Settings className="size-5" />
+                </button>
               {settingsOpen && (
                 <div
                   data-space-ignore="true"
@@ -1961,7 +1957,8 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           </div>
           <div className="flex items-center gap-2.5 border-t border-white/15 px-4 py-2.5 sm:px-5">
             <span className="text-xs font-bold text-white/90">
-              Câu {session.questions.length === 0 ? 0 : questionIndex + 1}/{session.questions.length}
+              Câu {session.questions.length === 0 ? 0 : questionIndex + 1}/
+              {session.questions.length}
             </span>
             <div className="flex h-2.5 min-w-0 flex-1 gap-1.5">
               {session.questions.map((item, index) => {
@@ -1972,17 +1969,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     type="button"
                     data-space-ignore="true"
                     aria-label={
-                      unlocked
-                        ? `Chuyển tới câu ${index + 1}`
-                        : `Câu ${index + 1} chưa mở`
+                      unlocked ? `Chuyển tới câu ${index + 1}` : `Câu ${index + 1} chưa mở`
                     }
                     aria-current={index === questionIndex ? 'step' : undefined}
-                    disabled={
-                      !unlocked ||
-                      isRecording ||
-                      isSendingAnswer ||
-                      secondsLeft <= 0
-                    }
+                    disabled={!unlocked || isRecording || isSendingAnswer || secondsLeft <= 0}
                     onClick={() => void moveToQuestion(index)}
                     className={cn(
                       'h-full min-w-0 flex-1 rounded-full transition enabled:hover:opacity-90 disabled:cursor-not-allowed',
@@ -2002,10 +1992,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
         </header>
 
         {question ? (
-          <section
-            ref={transcriptFitRootRef}
-            className="flex flex-col gap-3 px-4 py-4 sm:px-5"
-          >
+          <section ref={transcriptFitRootRef} className="flex flex-col gap-3 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
               <p className="text-sm font-semibold text-[#5b6b84]">
                 {activeFollowUp
@@ -2024,7 +2011,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     : 'border-[#4988C4] bg-white text-[#1C4D8D] hover:bg-[#F4FBFD]',
                 )}
               >
-                {isReadingQuestion ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                {isReadingQuestion ? (
+                  <VolumeX className="size-4" />
+                ) : (
+                  <Volume2 className="size-4" />
+                )}
                 {isReadingQuestion ? 'Tắt đọc' : 'Đọc câu hỏi'}
               </button>
             </div>
@@ -2035,7 +2026,8 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             )}
             {!activeFollowUp && savedAnswer && queuedFollowUp && (
               <p className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2.5 text-sm leading-relaxed text-[#1C4D8D]">
-                Hãy kiểm tra và chỉnh transcript câu chính, rồi chọn <span className="font-bold">Câu hỏi phụ</span> hoặc bỏ qua để sang câu kế.
+                Hãy kiểm tra và chỉnh transcript câu chính, rồi chọn{' '}
+                <span className="font-bold">Câu hỏi phụ</span> hoặc bỏ qua để sang câu kế.
               </p>
             )}
             <div className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white">
@@ -2083,7 +2075,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             {isReviewingAnsweredMain && (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="mock-transcript-main" className="text-sm font-semibold text-[#0F2854]">
+                  <label
+                    htmlFor="mock-transcript-main"
+                    className="text-sm font-semibold text-[#0F2854]"
+                  >
                     Câu trả lời chính
                   </label>
                   <p className="text-xs leading-relaxed text-[#5b6b84]">
@@ -2092,7 +2087,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   {isSendingAnswer && isMicOpenForMain && !savedAnswer ? (
                     <div className="flex min-h-10 items-center gap-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2 text-sm text-[#5b6b84]">
                       <LoaderCircle className="size-4 animate-spin" />
-                      Đang nhận diện giọng nói (Việt / Anh)…
+                      Đang nhận diện giọng nói …
                     </div>
                   ) : savedAnswer || isMicOpenForMain ? (
                     <textarea
@@ -2131,25 +2126,21 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     />
                   ) : (
                     <p className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-3 text-sm text-[#5b6b84]">
-                      Chưa có transcript câu chính trên máy này. Hãy ghi âm lại hoặc tiếp tục câu khác.
+                      Chưa có transcript câu chính trên máy này. Hãy ghi âm lại hoặc tiếp tục câu
+                      khác.
                     </p>
                   )}
-                  {savedAnswer &&
-                    !isMicOpenForMain &&
-                    !isRecording &&
-                    !isSendingAnswer && (
-                      <button
-                        type="button"
-                        data-space-ignore="true"
-                        onClick={() =>
-                          setReRecordTarget({ kind: 'main', questionId: question.id })
-                        }
-                        className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
-                      >
-                        <Mic className="size-4" />
-                        Ghi âm lại câu trả lời
-                      </button>
-                    )}
+                  {savedAnswer && !isMicOpenForMain && !isRecording && !isSendingAnswer && (
+                    <button
+                      type="button"
+                      data-space-ignore="true"
+                      onClick={() => setReRecordTarget({ kind: 'main', questionId: question.id })}
+                      className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
+                    >
+                      <Mic className="size-4" />
+                      Ghi âm lại câu trả lời
+                    </button>
+                  )}
                   {isMicOpenForMain && (
                     <div className="flex flex-col items-center gap-2 pt-1">
                       <button
@@ -2353,9 +2344,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                       rows={1}
                       value={draft}
                       data-space-ignore="true"
-                      disabled={
-                        isRecording && isMicOpenForFollowUp(activeFollowUp.answerId)
-                      }
+                      disabled={isRecording && isMicOpenForFollowUp(activeFollowUp.answerId)}
                       onChange={(event) => {
                         fitTranscriptTextarea(event.currentTarget)
                         const value = event.target.value
@@ -2485,7 +2474,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     : isSendingAnswer
                       ? activeFollowUp
                         ? 'Đang nhận diện câu trả lời phụ…'
-                        : 'Đang nhận diện giọng nói (Việt / Anh)…'
+                        : 'Đang nhận diện giọng nói …'
                       : 'Nhấn để bắt đầu ghi âm'}
                 </p>
                 <p className="text-center text-xs leading-relaxed text-[#5b6b84]">
@@ -2547,10 +2536,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                             return
                           }
                           setAnswerError(
-                            getMockExamErrorDetail(
-                              error,
-                              'Không thể lưu transcript đã chỉnh sửa.',
-                            ),
+                            getMockExamErrorDetail(error, 'Không thể lưu transcript đã chỉnh sửa.'),
                           )
                         })
                       }}
@@ -2560,15 +2546,12 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                   {savedAnswer &&
                     !isSendingAnswer &&
                     !(
-                      reRecordTarget?.kind === 'main' &&
-                      reRecordTarget.questionId === question.id
+                      reRecordTarget?.kind === 'main' && reRecordTarget.questionId === question.id
                     ) && (
                       <button
                         type="button"
                         data-space-ignore="true"
-                        onClick={() =>
-                          setReRecordTarget({ kind: 'main', questionId: question.id })
-                        }
+                        onClick={() => setReRecordTarget({ kind: 'main', questionId: question.id })}
                         className="inline-flex min-h-10 w-fit items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-3.5 text-sm font-bold text-[#1C4D8D] hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] motion-reduce:transform-none"
                       >
                         <Mic className="size-4" />
@@ -2619,9 +2602,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 {answerError || recorderError}
               </p>
             )}
-            {submitError && (
-              <p className="text-sm leading-relaxed text-[#c2415b]">{submitError}</p>
-            )}
+            {submitError && <p className="text-sm leading-relaxed text-[#c2415b]">{submitError}</p>}
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
               <button
@@ -2655,11 +2636,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     disabled={isRecording || isSendingAnswer || secondsLeft <= 0}
                     className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[#f5c518] px-4 text-sm font-bold text-[#1b1600] disabled:opacity-40"
                   >
-                    {queuedFollowUp
-                      ? 'Câu phụ tiếp'
-                      : isLastQuestion
-                        ? 'Xong câu phụ'
-                        : 'Câu tiếp'}
+                    {queuedFollowUp ? 'Câu phụ tiếp' : isLastQuestion ? 'Xong câu phụ' : 'Câu tiếp'}
                     <ArrowRight className="size-4" />
                   </button>
                 )}

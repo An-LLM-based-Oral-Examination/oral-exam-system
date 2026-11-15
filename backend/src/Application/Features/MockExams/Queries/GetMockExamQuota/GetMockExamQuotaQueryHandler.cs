@@ -14,10 +14,11 @@ namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamQuot
 /// Handler xử lý nghiệp vụ tra cứu hạn ngạch thi thử trong ngày (MF-02).
 /// Áp dụng Daily Quota Guard do Admin cấu hình theo môn học hoặc cấu hình hệ thống.
 /// </summary>
-public class GetMockExamQuotaQueryHandler(IApplicationDbContext context) : IRequestHandler<GetMockExamQuotaQuery, Result<MockExamQuotaDto>>
+public class GetMockExamQuotaQueryHandler(IApplicationDbContext context, TimeProvider? clock = null) : IRequestHandler<GetMockExamQuotaQuery, Result<MockExamQuotaDto>>
 {
     public async Task<Result<MockExamQuotaDto>> Handle(GetMockExamQuotaQuery request, CancellationToken cancellationToken)
     {
+        var today = DateOnly.FromDateTime((clock ?? TimeProvider.System).GetUtcNow().UtcDateTime.AddHours(7));
         var course = await context.Courses
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
@@ -34,7 +35,6 @@ public class GetMockExamQuotaQueryHandler(IApplicationDbContext context) : IRequ
             .FirstOrDefaultAsync(cancellationToken);
         var fallbackQuota = int.TryParse(sysQuotaStr, out var parsedSysQuota) && parsedSysQuota > 0 ? parsedSysQuota : 3;
         var maxDailyQuota = course.MaxMockExamsPerDay > 0 ? course.MaxMockExamsPerDay : fallbackQuota;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
 
         var quota = await context.MockExamQuotas
             .AsNoTracking()

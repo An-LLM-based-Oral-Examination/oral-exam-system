@@ -229,40 +229,30 @@ public class AdversarialMilestone2TtsRateAndCooldownChallengerTests
     public void EdgeCooldown_HighConcurrencyStress_ThreadSafeWithoutExceptions()
     {
         var exceptions = new ConcurrentBag<Exception>();
-        var countdown = new CountdownEvent(50);
 
-        for (int i = 0; i < 50; i++)
+        Parallel.For(0, 50, index =>
         {
-            int index = i;
-            ThreadPool.QueueUserWorkItem(_ =>
+            try
             {
-                try
+                if (index % 2 == 0)
                 {
-                    if (index % 2 == 0)
-                    {
-                        ResilientTextToSpeechService.SetEdgeCooldown(TimeSpan.FromSeconds(index + 1));
-                        _ = ResilientTextToSpeechService.IsEdgeInCooldown;
-                        _ = ResilientTextToSpeechService.EdgeCooldownUntilUtc;
-                    }
-                    else
-                    {
-                        ResilientTextToSpeechService.ResetEdgeCooldown();
-                        _ = ResilientTextToSpeechService.IsEdgeInCooldown;
-                        _ = ResilientTextToSpeechService.EdgeCooldownUntilUtc;
-                    }
+                    ResilientTextToSpeechService.SetEdgeCooldown(TimeSpan.FromSeconds(index + 1));
+                    _ = ResilientTextToSpeechService.IsEdgeInCooldown;
+                    _ = ResilientTextToSpeechService.EdgeCooldownUntilUtc;
                 }
-                catch (Exception ex)
+                else
                 {
-                    exceptions.Add(ex);
+                    ResilientTextToSpeechService.ResetEdgeCooldown();
+                    _ = ResilientTextToSpeechService.IsEdgeInCooldown;
+                    _ = ResilientTextToSpeechService.EdgeCooldownUntilUtc;
                 }
-                finally
-                {
-                    countdown.Signal();
-                }
-            });
-        }
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+        });
 
-        countdown.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("50 luồng concurrency phải hoàn thành trong 5 giây");
         exceptions.Should().BeEmpty("Không có bất kỳ ngoại lệ Race Condition nào xảy ra");
 
         // Dọn dẹp trạng thái

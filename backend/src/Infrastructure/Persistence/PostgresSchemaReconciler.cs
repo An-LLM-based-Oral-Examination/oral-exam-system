@@ -147,7 +147,7 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_practice_questions_clo ON practice_questions (clo_id);
                 BEGIN
                     ALTER TABLE practice_questions ADD CONSTRAINT "FK_practice_questions_course_clos_clo_id"
-                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE RESTRICT;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
             END IF;
@@ -162,7 +162,7 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_questions_structure ON exam_questions (structure_id);
                 BEGIN
                     ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_course_clos_clo_id"
-                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                        FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE RESTRICT;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 BEGIN
@@ -295,6 +295,15 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                    EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
+                END IF;
+                BEGIN
+                    ALTER TABLE real_exam_session_shifts ADD CONSTRAINT ck_shifts_max_seats
+                        CHECK (max_seats >= 1 AND max_seats <= 40);
+                EXCEPTION WHEN duplicate_object THEN NULL;
+                END;
                 BEGIN
                     ALTER TABLE real_exam_session_shifts ADD CONSTRAINT "FK_real_exam_session_shifts_users_examiner_user_id"
                         FOREIGN KEY (examiner_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -911,6 +920,7 @@ DO $reconcile_pre$
                 proctor_user_id uuid NULL,
                 published_at timestamp with time zone NULL,
                 room_lab character varying(50) NOT NULL,
+                max_seats integer NOT NULL DEFAULT 24,
                 session_id uuid NULL,
                 shift_name character varying(100) NOT NULL,
                 start_time timestamp with time zone NULL,
@@ -1163,6 +1173,10 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                    EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
+                END IF;
             END IF;
 
             -- dead_letter_queues
@@ -1408,13 +1422,13 @@ DO $reconcile_pre$
             -- practice_questions & exam_questions constraints to course_clos
             BEGIN
                 ALTER TABLE practice_questions ADD CONSTRAINT "FK_practice_questions_course_clos_clo_id"
-                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE RESTRICT;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
             BEGIN
                 ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_course_clos_clo_id"
-                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE SET NULL;
+                    FOREIGN KEY (clo_id) REFERENCES course_clos(id) ON DELETE RESTRICT;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1520,6 +1534,9 @@ DO $reconcile_pre$
                     EXECUTE 'INSERT INTO course_offerings (id, course_id, semester_id, is_enabled, created_at, updated_at)
                     SELECT gen_random_uuid(), c.id, c.semester_id, c.is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     FROM courses c
+                    WHERE c.semester_id IS NOT NULL AND NOT EXISTS (
+                        SELECT 1 FROM course_offerings existing
+                        WHERE existing.course_id = c.id AND existing.semester_id = c.semester_id)
                     ON CONFLICT DO NOTHING';
                 END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
@@ -1533,7 +1550,8 @@ DO $reconcile_pre$
                         semester_id = COALESCE(cl.semester_id, co.semester_id)
                     FROM course_offerings AS co
                     WHERE cl.course_offering_id IS NULL
-                      AND co.course_id = cl.course_id';
+                      AND co.course_id = cl.course_id
+                      AND (cl.semester_id IS NULL OR co.semester_id = cl.semester_id)';
                 END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;

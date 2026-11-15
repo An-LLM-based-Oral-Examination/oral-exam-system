@@ -2,9 +2,9 @@ name: Enterprise CI Quality Gate
 
 on:
   push:
-    branches: [ develop, main, 'feature/**' ]
+    branches: [develop, main, "feature/**"]
   pull_request:
-    branches: [ develop, main ]
+    branches: [develop, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +21,7 @@ jobs:
   backend-ci:
     name: Backend Quality Gate (.NET 8 Clean Architecture)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -28,7 +29,7 @@ jobs:
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Cache NuGet Packages
         uses: actions/cache@v4
@@ -56,7 +57,23 @@ jobs:
           --startup-project backend/src/API/API.csproj
 
       - name: Run Unit Tests with Coverage
-        run: dotnet test backend/OralExamination.sln --configuration Release --no-build --filter "Category!=Integration" --collect:"XPlat Code Coverage" --results-directory ./TestResults
+        shell: pwsh
+        run: |
+          dotnet test backend/tests/OralExamination.UnitTests/OralExamination.UnitTests.csproj --configuration Release --no-build --filter "Category!=Integration" --collect:"XPlat Code Coverage" --logger "trx;LogFileName=unit.trx" --results-directory ./TestResults/unit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml] $trx = Get-Content ./TestResults/unit/unit.trx -Raw
+          $counts = $trx.SelectSingleNode('/*[local-name()="TestRun"]/*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+          if ($null -eq $counts -or [int] $counts.total -le 0 -or [int] $counts.executed -ne [int] $counts.total -or [int] $counts.passed -ne [int] $counts.total -or [int] $counts.failed -ne 0 -or [int] $counts.notExecuted -ne 0) {
+            throw 'Unit tests must execute at least one test and pass all tests without skips.'
+          }
+
+      - name: Upload Unit Test Results and Coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-test-evidence
+          path: TestResults/unit/
+          retention-days: 14
 
       - name: Scan Vulnerable NuGet Packages
         shell: bash
@@ -65,6 +82,45 @@ jobs:
           dotnet list backend/OralExamination.sln package --vulnerable --include-transitive --format json > nuget-vulnerabilities.json
           cat nuget-vulnerabilities.json
           jq -e '[.projects[]?.frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' nuget-vulnerabilities.json
+
+  backend-integration:
+    name: PostgreSQL 16 Integration Gate (3 consecutive runs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Integration Dependencies
+        run: dotnet restore backend/tests/OralExamination.IntegrationTests/OralExamination.IntegrationTests.csproj --locked-mode
+
+      - name: Build Integration Tests (Zero Warnings, Zero Errors)
+        run: dotnet build backend/tests/OralExamination.IntegrationTests/OralExamination.IntegrationTests.csproj --configuration Release --no-restore -warnaserror -nowarn:NU1900
+
+      - name: Run Isolated PostgreSQL Integration Tests Three Times
+        shell: pwsh
+        run: ./backend/scripts/Test-PostgresIntegration.ps1 -Iterations 3 -Configuration Release -NoBuild -NoRestore
+
+      - name: Upload Integration TRX, Coverage and Diagnostic Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-postgres-integration-evidence
+          path: TestResults/integration/
+          retention-days: 14
 
   # =========================================================================
   # Job 2: Frontend Quality Gate (React 19 & Vite)
@@ -83,8 +139,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
 
       - name: Install Dependencies
         run: npm ci
