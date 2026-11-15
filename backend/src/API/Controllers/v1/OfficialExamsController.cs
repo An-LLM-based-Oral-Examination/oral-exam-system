@@ -438,7 +438,7 @@ public class OfficialExamsController : ControllerBase
         if (actorId is null) return Unauthorized();
         var result = await _sender.Send(new UpdateExamShiftCommand(actorId.Value, GetActorRole(), id,
             request.ShiftName, request.RoomLab, request.StartTime, request.EndTime,
-            request.ProctorUserId, request.ExaminerUserId), cancellationToken);
+            request.ProctorUserId, request.ExaminerUserId, request.MaxSeats), cancellationToken);
         return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
     }
 
@@ -483,7 +483,8 @@ public class OfficialExamsController : ControllerBase
             request.StartTime,
             request.EndTime,
             request.ProctorUserId,
-            request.ExaminerUserId), cancellationToken);
+            request.ExaminerUserId,
+            request.MaxSeats), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
     }

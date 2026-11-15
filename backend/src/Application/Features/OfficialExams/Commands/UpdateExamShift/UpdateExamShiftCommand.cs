@@ -5,4 +5,5 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.UpdateExam
 
 public sealed record UpdateExamShiftCommand(Guid ActorUserId, string? ActorRole, Guid ShiftId,
     string? ShiftName, string? RoomLab, DateTime StartTime, DateTime EndTime,
-    Guid ProctorUserId, Guid ExaminerUserId) : IRequest<Result>;
+    Guid ProctorUserId, Guid ExaminerUserId,
+    int? MaxSeats = null) : IRequest<Result>;

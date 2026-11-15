@@ -49,6 +49,19 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftNotFound);
         }
 
+        if (request.SeatNumber > shift.MaxSeats)
+        {
+            return Result<ExamTicketResponse>.Failure(
+                $"Số ghế phải nằm trong khoảng {OfficialExamRules.MinSeat} đến {shift.MaxSeats} của ca thi.");
+        }
+
+        var assignedTicketCount = await _context.StudentExamTickets.CountAsync(
+            ticket => ticket.ShiftId == request.ShiftId, cancellationToken);
+        if (assignedTicketCount >= shift.MaxSeats)
+        {
+            return Result<ExamTicketResponse>.Failure("CONFLICT: Ca thi đã đủ số lượng vé theo sức chứa được cấu hình.");
+        }
+
         var student = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);
         if (student is null || !student.IsActive || student.Role != UserRole.Student)
         {

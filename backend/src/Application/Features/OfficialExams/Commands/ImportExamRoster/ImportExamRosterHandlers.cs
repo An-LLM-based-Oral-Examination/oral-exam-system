@@ -118,8 +118,9 @@ internal static class BulkExamRosterImport
             var studentCode = row.StudentCode?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(studentCode))
                 issues.Add(new(row.SourceRow, "MSSV không được để trống."));
-            if (row.SeatNumber is < OfficialExamRules.MinSeat or > OfficialExamRules.MaxSeat)
-                issues.Add(new(row.SourceRow, OfficialExamErrors.SeatOutOfRange));
+            if (row.SeatNumber < OfficialExamRules.MinSeat || row.SeatNumber > shift.MaxSeats)
+                issues.Add(new(row.SourceRow,
+                    $"Số ghế phải nằm trong khoảng {OfficialExamRules.MinSeat} đến {shift.MaxSeats} của ca thi."));
             if (!WorkstationAddress.TryNormalize(row.IpAddress, out var ipAddress))
             {
                 issues.Add(new(row.SourceRow, OfficialExamErrors.IpInvalid));
@@ -137,7 +138,7 @@ internal static class BulkExamRosterImport
             .Select(item => item.StudentCode).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var students = await context.Users.AsNoTracking()
             .Where(user => user.StudentCode != null && studentCodes.Contains(user.StudentCode))
-            .Select(user => new { user.Id, user.StudentCode, user.Role, user.IsActive })
+            .Select(user => new { user.Id, user.StudentCode, user.FullName, user.Role, user.IsActive })
             .ToListAsync(cancellationToken);
         var studentsByCode = students.ToDictionary(user => user.StudentCode!, StringComparer.OrdinalIgnoreCase);
 
@@ -145,6 +146,9 @@ internal static class BulkExamRosterImport
             .Where(ticket => ticket.ShiftId == shiftId)
             .Select(ticket => new { ticket.StudentId, ticket.SeatNumber, ticket.IpAddress, ticket.ExamSetId })
             .ToListAsync(cancellationToken);
+        if (existingTickets.Count + normalized.Count > shift.MaxSeats)
+            issues.Add(new(null,
+                $"Import vượt sức chứa ca thi: đã có {existingTickets.Count} vé, tệp có {normalized.Count} dòng, tối đa {shift.MaxSeats}."));
         var validRows = new List<ValidatedRow>();
         foreach (var row in normalized)
         {
@@ -174,9 +178,19 @@ internal static class BulkExamRosterImport
         if (issues.Count == 0 && availableSets.Count < validRows.Count)
             issues.Add(new(null, $"Thiếu bộ đề HANDED_OVER chưa gán: cần {validRows.Count}, hiện có {availableSets.Count}. Không tạo vé một phần."));
 
+        var orderedIssues = issues.OrderBy(issue => issue.SourceRow ?? 0).ToList();
+        var previewRows = normalized.Select(row => new BulkExamTicketImportPreviewRow(
+            row.SourceRow,
+            row.StudentCode,
+            studentsByCode.TryGetValue(row.StudentCode, out var student) ? student.FullName : null,
+            row.SeatNumber,
+            row.IpAddress,
+            orderedIssues.Where(issue => issue.SourceRow == row.SourceRow)
+                .Select(issue => issue.Message).ToList())).ToList();
         var preview = new BulkExamTicketImportPreview(shiftId, validRows.Count, availableSets.Count,
-            issues.OrderBy(issue => issue.SourceRow ?? 0).ToList(),
-            availableSets.Take(validRows.Count).Select(set => set.SetCode).ToList());
+            orderedIssues,
+            availableSets.Take(validRows.Count).Select(set => set.SetCode).ToList(),
+            previewRows);
         return Result<ValidationState>.Success(new ValidationState(preview, validRows, availableSets.Take(validRows.Count).ToList()));
     }
 

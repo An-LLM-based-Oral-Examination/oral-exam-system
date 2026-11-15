@@ -41,5 +41,9 @@ public sealed class OpenExamShiftCommandValidator : AbstractValidator<OpenExamSh
         RuleFor(command => command.EndTime)
             .GreaterThan(command => command.StartTime)
             .WithMessage("Giờ kết thúc phải sau giờ bắt đầu.");
+
+        RuleFor(command => command.MaxSeats)
+            .InclusiveBetween(OfficialExamRules.MinSeat, OfficialExamRules.MaxSeat)
+            .WithMessage($"Sức chứa ca thi phải từ {OfficialExamRules.MinSeat} đến {OfficialExamRules.MaxSeat}.");
     }
 }

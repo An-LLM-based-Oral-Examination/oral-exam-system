@@ -1587,12 +1587,14 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             {
                 t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
                 t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+                t.HasCheckConstraint("ck_shifts_max_seats", "max_seats >= 1 AND max_seats <= 40");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.SessionId).HasColumnName("session_id").IsRequired();
             entity.Property(e => e.ShiftName).HasColumnName("shift_name").HasMaxLength(100).IsRequired();
             entity.Property(e => e.RoomLab).HasColumnName("room_lab").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.MaxSeats).HasColumnName("max_seats").HasDefaultValue(24).IsRequired();
             entity.Property(e => e.StartTime).HasColumnName("start_time").IsRequired();
             entity.Property(e => e.EndTime).HasColumnName("end_time").IsRequired();
             entity.Property(e => e.ProctorUserId).HasColumnName("proctor_user_id");

@@ -9,6 +9,7 @@ public partial class RealExamSessionShift
     public Guid SessionId { get; set; }
     public string ShiftName { get; set; } = null!;
     public string RoomLab { get; set; } = null!;
+    public int MaxSeats { get; set; } = 24;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public Guid? ProctorUserId { get; set; }

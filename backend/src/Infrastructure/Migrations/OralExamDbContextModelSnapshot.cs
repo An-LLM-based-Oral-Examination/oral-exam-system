@@ -2035,6 +2035,7 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("shift_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
@@ -3155,6 +3156,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_exam_published");
 
+                    b.Property<int>("MaxSeats")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(24)
+                        .HasColumnName("max_seats");
+
                     b.Property<Guid?>("ProctorUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("proctor_user_id");
@@ -3204,6 +3211,8 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("real_exam_session_shifts", null, t =>
                         {
+                            t.HasCheckConstraint("ck_shifts_max_seats", "max_seats >= 1 AND max_seats <= 40");
+
                             t.HasCheckConstraint("ck_shifts_status", "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
 
                             t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
@@ -3216,6 +3225,7 @@ namespace OralExamination.Infrastructure.Migrations
                             CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             EndTime = new DateTime(2026, 10, 15, 2, 30, 0, 0, DateTimeKind.Utc),
                             IsExamPublished = false,
+                            MaxSeats = 24,
                             ProctorUserId = new Guid("00000000-0000-0000-0000-000000000004"),
                             RoomLab = "Lab 301",
                             SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
@@ -3537,6 +3547,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("exam_set_id");
 
+                    b.Property<DateTime?>("GradesPublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grades_published_at");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)")
@@ -3571,10 +3585,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("PENDING")
                         .HasColumnName("student_acknowledgement_status");
-
-                    b.Property<DateTime?>("GradesPublishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("grades_published_at");
 
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")

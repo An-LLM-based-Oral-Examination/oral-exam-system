@@ -65,13 +65,13 @@ public sealed class GetShiftAttendanceQueryHandler
             .GroupBy(t => t.SeatNumber)
             .ToDictionary(g => g.Key, g => g.First());
 
-        var seats = new List<ProctorSeatItemDto>(40);
+        var seats = new List<ProctorSeatItemDto>(shift.MaxSeats);
         int checkedInCount = 0;
         int inProgressCount = 0;
         int submittedCount = 0;
         int suspendedCount = 0;
 
-        for (int seatNumber = 1; seatNumber <= 40; seatNumber++)
+        for (int seatNumber = 1; seatNumber <= shift.MaxSeats; seatNumber++)
         {
             if (ticketBySeat.TryGetValue(seatNumber, out var ticket))
             {
@@ -136,7 +136,7 @@ public sealed class GetShiftAttendanceQueryHandler
             ShiftStatus = shift.Status,
             StartTime = shift.StartTime,
             EndTime = shift.EndTime,
-            TotalSeats = 40,
+            TotalSeats = shift.MaxSeats,
             AssignedTicketsCount = tickets.Count,
             CheckedInCount = checkedInCount,
             InProgressCount = inProgressCount,

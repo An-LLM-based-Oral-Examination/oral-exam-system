@@ -105,6 +105,41 @@ public class ShiftMutationTests
         (await context.StudentExamTickets.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task Update_CapacityBelowExistingHighestSeat_IsRejectedWithoutMutation()
+    {
+        await using var context = Context();
+        var (actor, shift) = await Seed(context);
+        context.StudentExamTickets.Add(new StudentExamTicket
+        {
+            ShiftId = shift.Id,
+            StudentId = Guid.NewGuid(),
+            SeatNumber = 20
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new UpdateExamShiftCommandHandler(context)
+            .Handle(Update(actor, shift) with { MaxSeats = 19 }, default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(ShiftMutationErrors.CapacityBelowAllocation);
+        shift.MaxSeats.Should().Be(24);
+        shift.ShiftName.Should().Be("Morning");
+    }
+
+    [Fact]
+    public async Task Update_ValidCapacity_PersistsNewValue()
+    {
+        await using var context = Context();
+        var (actor, shift) = await Seed(context);
+
+        var result = await new UpdateExamShiftCommandHandler(context)
+            .Handle(Update(actor, shift) with { MaxSeats = 40 }, default);
+
+        result.IsSuccess.Should().BeTrue();
+        shift.MaxSeats.Should().Be(40);
+    }
+
     [Theory]
     [InlineData("status=IN_PROGRESS", "status=SCHEDULED;seat_number=1", false)]
     [InlineData("status=SCHEDULED", "status=IN_PROGRESS;seat_number=1", false)]

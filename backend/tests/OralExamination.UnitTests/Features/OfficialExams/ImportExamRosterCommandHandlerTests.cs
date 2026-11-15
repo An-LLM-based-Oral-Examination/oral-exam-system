@@ -102,4 +102,45 @@ public sealed class ImportExamRosterCommandHandlerTests
             .Select(set => set.Status).ToListAsync()).Should().OnlyContain(status => status == ExamSetStatus.HandedOver);
         (await context.AuditLogs.CountAsync(log => log.Action == "BULK_EXAM_TICKETS_IMPORTED" && log.EntityId == shift.Id)).Should().Be(1);
     }
+
+    [Fact]
+    public async Task Preview_ResolvesFullNameFromStudentCodeWithoutRequiringItInFile()
+    {
+        await using var context = CreateContext();
+        var (officer, shift) = await SeedAsync(context, handedOverSetCount: 1);
+        await AddStudentsAsync(context, "SE100001");
+
+        var preview = await new PreviewExamRosterImportQueryHandler(context).Handle(
+            new PreviewExamRosterImportQuery(officer.Id, shift.Id,
+                [new BulkExamTicketImportRow(2, "SE100001", 1, "10.0.0.1")]), default);
+
+        preview.IsSuccess.Should().BeTrue();
+        preview.Value.Rows.Should().ContainSingle();
+        preview.Value.Rows![0].StudentCode.Should().Be("SE100001");
+        preview.Value.Rows[0].FullName.Should().Be("Student 1");
+        preview.Value.Rows[0].IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Preview_WhenSeatOrBatchExceedsConfiguredCapacity_RejectsWholeImport()
+    {
+        await using var context = CreateContext();
+        var (officer, shift) = await SeedAsync(context, handedOverSetCount: 2);
+        shift.MaxSeats = 1;
+        await AddStudentsAsync(context, "SE100001", "SE100002");
+        var rows = new[]
+        {
+            new BulkExamTicketImportRow(2, "SE100001", 1, "10.0.0.1"),
+            new BulkExamTicketImportRow(3, "SE100002", 2, "10.0.0.2")
+        };
+
+        var preview = await new PreviewExamRosterImportQueryHandler(context)
+            .Handle(new PreviewExamRosterImportQuery(officer.Id, shift.Id, rows), default);
+
+        preview.IsSuccess.Should().BeTrue();
+        preview.Value.CanCommit.Should().BeFalse();
+        preview.Value.Issues.Should().Contain(issue => issue.SourceRow == 3 && issue.Message.Contains("1 đến 1"));
+        preview.Value.Issues.Should().Contain(issue => issue.SourceRow == null && issue.Message.Contains("vượt sức chứa"));
+        (await context.StudentExamTickets.CountAsync()).Should().Be(0);
+    }
 }

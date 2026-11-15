@@ -71,6 +71,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             SessionId = request.SessionId,
             ShiftName = request.ShiftName!.Trim(),
             RoomLab = request.RoomLab!.Trim(),
+            MaxSeats = request.MaxSeats,
             StartTime = request.StartTime,
             EndTime = request.EndTime,
             ProctorUserId = proctor.Id,
@@ -92,6 +93,7 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             shift.Status,
             shift.ExaminerUserId,
             examiner.FullName,
-            proctor.FullName));
+            proctor.FullName,
+            shift.MaxSeats));
     }
 }

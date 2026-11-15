@@ -14,6 +14,7 @@ public static class ShiftMutationErrors
     public const string HasSubmissions = "Ca thi đã có bài làm của sinh viên. Không thể sửa hoặc xóa; cần giữ bài làm và dữ liệu chấm điểm.";
     public const string HasAntiCheatLogs = "Ca thi đã có nhật ký giám sát hoặc vi phạm. Không thể sửa hoặc xóa; cần giữ bằng chứng thi.";
     public const string HasPasswords = "Ca thi đã phát sinh mật khẩu vào thi. Không thể sửa hoặc xóa ca đã có lịch sử mở thi.";
+    public const string CapacityBelowAllocation = "Sức chứa mới không được thấp hơn số vé hoặc số ghế cao nhất đã cấp.";
 
     public static string? Code(string error) => error switch
     {
@@ -28,6 +29,7 @@ public static class ShiftMutationErrors
         HasSubmissions => "SHIFT_HAS_SUBMISSIONS",
         HasAntiCheatLogs => "SHIFT_HAS_ANTI_CHEAT_LOGS",
         HasPasswords => "SHIFT_HAS_PASSWORDS",
+        CapacityBelowAllocation => "SHIFT_CAPACITY_BELOW_ALLOCATION",
         _ => null
     };
 }
