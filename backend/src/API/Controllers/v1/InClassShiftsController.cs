@@ -4,6 +4,9 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using API.Common;
+using OralExamination.Application.Features.InClassShifts.Commands.UpdateInClassShift;
+using OralExamination.Application.Features.InClassShifts.Commands.DeleteInClassShift;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -42,6 +45,40 @@ public class InClassShiftsController(
     ISender sender,
     IHubContext<InClassShiftHub, IInClassShiftClient>? inClassHubContext = null) : ControllerBase
 {
+    [HttpPut("{id:guid}")]
+    [HttpPut("/api/v1/lecturer/in-class-shifts/{id:guid}")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateShift(Guid id, [FromBody] UpdateInClassShiftRequest request, CancellationToken cancellationToken)
+    {
+        var actorId = GetAuthenticatedUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var result = await sender.Send(new UpdateInClassShiftCommand(actorId, id, request.ShiftName,
+            request.StartTime, request.EndTime, request.Description, request.QuestionPoolMode,
+            request.SelectedQuestionIds, request.TotalQuestionsPerStudent, request.HasFollowUp,
+            request.MaxFollowUpQuestions, request.IsAutoPublishGrades, request.ExamDurationMinutes), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [HttpDelete("/api/v1/lecturer/in-class-shifts/{id:guid}")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteShift(Guid id, CancellationToken cancellationToken)
+    {
+        var actorId = GetAuthenticatedUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var result = await sender.Send(new DeleteInClassShiftCommand(actorId, id), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
     private Guid GetAuthenticatedUserId()
     {
         var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -840,6 +877,12 @@ public sealed record CreateInClassShiftRequest(
 );
 
 public sealed record EnterInClassShiftRequest(string OtpCode);
+
+public sealed record UpdateInClassShiftRequest(
+    string ShiftName, DateTime StartTime, DateTime EndTime, string? Description = null,
+    string QuestionPoolMode = "ALL_COURSE_BANK", IReadOnlyList<Guid>? SelectedQuestionIds = null,
+    int TotalQuestionsPerStudent = 1, bool HasFollowUp = false, int MaxFollowUpQuestions = 2,
+    bool IsAutoPublishGrades = true, int ExamDurationMinutes = 20);
 
 public sealed record SubmitInClassAnswerRequest(
     Guid QuestionId,

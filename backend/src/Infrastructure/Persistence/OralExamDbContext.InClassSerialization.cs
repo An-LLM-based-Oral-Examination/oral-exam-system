@@ -7,14 +7,14 @@ public partial class OralExamDbContext
 {
     public Task<T> ExecuteInClassJoinAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> join,
         CancellationToken cancellationToken = default) =>
-        ExecuteTransactionLockAsync($"oes:in-class:join:{shiftId:N}", join, cancellationToken);
+        ExecuteTransactionLockAsync($"oes:in-class:join:{shiftId:N}", join, cancellationToken, shiftId);
 
     public Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId,
         Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default) =>
         ExecuteTransactionLockAsync($"oes:in-class:submit:{shiftId:N}:{studentId:N}", submit, cancellationToken);
 
     private async Task<T> ExecuteTransactionLockAsync<T>(string key, Func<CancellationToken, Task<T>> mutation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Guid? joiningShiftId = null)
     {
         if (!Database.IsRelational())
         {
@@ -38,6 +38,9 @@ public partial class OralExamDbContext
             // complete transaction and reacquires the lock before rerunning any database mutation.
             await Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", cancellationToken);
+
+            if (joiningShiftId.HasValue)
+                await LockShiftRowAsync(joiningShiftId.Value, false, cancellationToken);
 
             var result = await mutation(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

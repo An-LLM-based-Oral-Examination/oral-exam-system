@@ -18,6 +18,7 @@ public partial class OralExamDbContext
             var key = $"oes:bulk-ticket-import:{shiftId:N}";
             await Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", cancellationToken);
+            await LockShiftRowAsync(shiftId, true, cancellationToken);
             var result = await import(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return result;

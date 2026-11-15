@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using API.Controllers.v1;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -12,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OralExamination.Application;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Authentication;
 using OralExamination.Infrastructure.Persistence;
@@ -129,6 +132,75 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
             "/api/v1/examination-officer/appeals/allocation-proposal");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    public static IEnumerable<object[]> ShiftMutationRoleCases()
+    {
+        foreach (var method in new[] { "PUT", "DELETE" })
+        foreach (var official in new[] { true, false })
+        foreach (var role in new[] { "student", "lecturer", "department_head", "examination_officer", "proctor", "admin" })
+        {
+            var allowed = official ? role == "examination_officer" : role is "lecturer" or "department_head" or "admin";
+            yield return new object[] { method, official, role, allowed ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden };
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ShiftMutationRoleCases))]
+    public async Task ShiftMutations_RealRoutesEnforceRoleMatrix(string method, bool official, string role, HttpStatusCode expected)
+    {
+        Authenticate(_actors[role], role);
+        using var request = ShiftRequest(method, official, Guid.NewGuid());
+        using var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("PUT", true)]
+    [InlineData("DELETE", true)]
+    [InlineData("PUT", false)]
+    [InlineData("DELETE", false)]
+    public async Task ShiftMutations_AnonymousRequestIsUnauthorized(string method, bool official)
+    {
+        using var request = ShiftRequest(method, official, Guid.NewGuid());
+        using var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task DeleteOfficialShift_RealHttpReturnsSpecificConflictAndPreservesTicket()
+    {
+        var shift = new RealExamSessionShift { SessionId = Guid.NewGuid(), ShiftName = "Future", RoomLab = "Lab",
+            StartTime = DateTime.UtcNow.AddDays(1), EndTime = DateTime.UtcNow.AddDays(1).AddHours(1) };
+        var ticket = new StudentExamTicket { ShiftId = shift.Id, StudentId = _actors["student"], SeatNumber = 1 };
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            db.AddRange(shift, ticket);
+            await db.SaveChangesAsync();
+        }
+        Authenticate(_actors["examination_officer"], "examination_officer");
+        using var response = await _client.DeleteAsync($"/api/v1/official-exams/shifts/{shift.Id}");
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("code").GetString().Should().Be("SHIFT_HAS_TICKETS");
+        body.GetProperty("detail").GetString().Should().Be(ShiftMutationErrors.HasTickets);
+        using var verifyScope = _app.Services.CreateScope();
+        var verify = verifyScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+        (await verify.StudentExamTickets.AnyAsync(x => x.Id == ticket.Id)).Should().BeTrue();
+        (await verify.RealExamSessionShifts.AnyAsync(x => x.Id == shift.Id)).Should().BeTrue();
+    }
+
+    private static HttpRequestMessage ShiftRequest(string method, bool official, Guid id)
+    {
+        var prefix = official ? "official-exams/shifts" : "in-class-shifts";
+        var request = new HttpRequestMessage(new HttpMethod(method), $"/api/v1/{prefix}/{id}");
+        if (method == "PUT") request.Content = JsonContent.Create(new
+        {
+            shiftName = "Future shift", roomLab = "Lab", startTime = DateTime.UtcNow.AddDays(1),
+            endTime = DateTime.UtcNow.AddDays(1).AddHours(1), proctorUserId = Guid.NewGuid(), examinerUserId = Guid.NewGuid()
+        });
+        return request;
     }
 
     private void Authenticate(Guid actorId, string role)

@@ -13,6 +13,8 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.AdjustInClassSubmissionScore;
 using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassShift;
+using OralExamination.Application.Features.InClassShifts.Commands.DeleteInClassShift;
+using OralExamination.Application.Features.InClassShifts.Commands.UpdateInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
@@ -50,6 +52,34 @@ public class InClassShiftsControllerTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+    }
+
+    [Theory]
+    [InlineData("participant")]
+    [InlineData("password")]
+    public async Task DeleteShift_ReturnsSpecificConflictProblem(string scenario)
+    {
+        SetUserContext(Guid.NewGuid());
+        var error = scenario == "participant" ? ShiftMutationErrors.HasParticipants : ShiftMutationErrors.HasPasswords;
+        _senderMock.Setup(x => x.Send(It.IsAny<DeleteInClassShiftCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(error));
+        var response = await _controller.DeleteShift(Guid.NewGuid(), default);
+        var result = response.Should().BeOfType<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(409);
+        var problem = result.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().Be(error);
+        problem.Extensions["code"].Should().Be(ShiftMutationErrors.Code(error));
+    }
+
+    [Fact]
+    public async Task UpdateShift_Returns204OnSuccess()
+    {
+        SetUserContext(Guid.NewGuid());
+        _senderMock.Setup(x => x.Send(It.IsAny<UpdateInClassShiftCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+        var response = await _controller.UpdateShift(Guid.NewGuid(),
+            new UpdateInClassShiftRequest("Future", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1)), default);
+        response.Should().BeOfType<NoContentResult>();
     }
 
     [Fact(DisplayName = "1. CreateShift returns 201 Created on success")]

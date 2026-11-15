@@ -23,7 +23,11 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         _validator = validator;
     }
 
-    public async Task<Result<ExamTicketResponse>> Handle(AssignExamTicketCommand request, CancellationToken cancellationToken)
+    public Task<Result<ExamTicketResponse>> Handle(AssignExamTicketCommand request, CancellationToken cancellationToken) =>
+        _context.ExecuteShiftMutationAsync(request.ShiftId, true,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
+
+    private async Task<Result<ExamTicketResponse>> HandleLockedAsync(AssignExamTicketCommand request, CancellationToken cancellationToken)
     {
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)

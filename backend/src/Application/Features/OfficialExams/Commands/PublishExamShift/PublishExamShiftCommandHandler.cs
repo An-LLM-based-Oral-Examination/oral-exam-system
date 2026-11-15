@@ -14,7 +14,11 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.PublishExa
 public sealed class PublishExamShiftCommandHandler(IApplicationDbContext context)
     : IRequestHandler<PublishExamShiftCommand, Result>
 {
-    public async Task<Result> Handle(PublishExamShiftCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(PublishExamShiftCommand request, CancellationToken cancellationToken) =>
+        context.ExecuteShiftMutationAsync(request.ShiftId, true,
+            ct => HandleLockedAsync(request, ct), cancellationToken);
+
+    private async Task<Result> HandleLockedAsync(PublishExamShiftCommand request, CancellationToken cancellationToken)
     {
         if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(
                 context, request.ActorUserId, request.ActorRole, UserRole.ExaminationOfficer, cancellationToken))
