@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Common.Interfaces;
+using API.Common;
+using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamShift;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
@@ -420,6 +423,40 @@ public class OfficialExamsController : ControllerBase
     /// <summary>
     /// Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
     /// </summary>
+    [HttpPut("shifts/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateShift(Guid id, [FromBody] UpdateExamShiftRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var result = await _sender.Send(new UpdateExamShiftCommand(actorId.Value, GetActorRole(), id,
+            request.ShiftName, request.RoomLab, request.StartTime, request.EndTime,
+            request.ProctorUserId, request.ExaminerUserId), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
+    [HttpDelete("shifts/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteShift(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var result = await _sender.Send(new DeleteExamShiftCommand(actorId.Value, GetActorRole(), id), cancellationToken);
+        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
+    }
+
     [HttpPost("shifts")]
     [HttpPost("seasons/{sessionId:guid}/shifts")]
     [Authorize(Roles = "examination_officer")]

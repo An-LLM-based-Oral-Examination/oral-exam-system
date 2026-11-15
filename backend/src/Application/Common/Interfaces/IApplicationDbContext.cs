@@ -53,6 +53,9 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Lock the shift row before fresh reads and persist one atomic management operation.</summary>
+    Task<T> ExecuteShiftMutationAsync<T>(Guid shiftId, bool isOfficial, Func<CancellationToken, Task<T>> mutation, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Bắt đầu phạm vi khóa phân bổ câu hỏi bằng Advisory Lock trên PostgreSQL (hoặc no-op nếu là InMemory).
     /// </summary>
