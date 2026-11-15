@@ -6,6 +6,7 @@ import { DeadLetterQueuePage } from './DeadLetterQueuePage'
 import { ProctorAttendancePage } from '../proctor/ProctorAttendancePage'
 import { MemoryRouter } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
 import { AuditEvidencePage } from './AuditEvidencePage'
 
 const mocks = vi.hoisted(() => ({
@@ -109,10 +110,19 @@ describe('Task 09 official exam action boundaries', () => {
 })
 
 describe('Task 09 appeal action boundaries', () => {
-  it('EO can assign and decide', async () => {
+  it('EO can assign a submitted appeal to a lecturer', async () => {
+    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'SUBMITTED_TO_EXAM_OFFICE' }])
+    render(<AppealManagementPage />)
+    expect(await screen.findByRole('button', { name: 'Phân công GV chấm lại' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Phân công GV chấm lại' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Phê duyệt quyết định cuối' })).toBeDisabled()
+  })
+  it('EO can make the final decision after lecturer regrade', async () => {
+    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'REGRADED_BY_LECTURER' }])
     render(<AppealManagementPage />)
     expect(await screen.findByRole('button', { name: 'Phê duyệt quyết định cuối' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Phân công GV chấm lại' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Phê duyệt quyết định cuối' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Phân công GV chấm lại' })).toBeDisabled()
   })
   it('Admin does not inherit assignment or final-decision authority', async () => {
     mocks.role = 'Admin'
@@ -124,7 +134,7 @@ describe('Task 09 appeal action boundaries', () => {
   })
   it.each([['actor', true], ['other-lecturer', false]])('lecturer regrade is gated by assignment %s', async (assignedTo, allowed) => {
     mocks.role = 'Instructor'
-    mocks.appeals.mockResolvedValue([{ ...appeal, assignedTo }])
+    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'ASSIGNED_TO_LECTURER', assignedTo }])
     render(<AppealManagementPage />)
     await screen.findByText('Lý do khiếu nại:')
     expect(Boolean(screen.queryByRole('button', { name: 'Gửi biên bản & điểm chấm lại' }))).toBe(allowed)
@@ -194,12 +204,25 @@ describe('Task 09 publish controls', () => {
 })
 
 describe('Task 09 sidebar portal boundaries', () => {
-  it.each(['ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin', 'Proctor', 'Student'])('%s sees only permitted task 09 portals', (role) => {
+  it.each([
+    ['Instructor', 'Phúc khảo được giao', 'Lỗi chấm ca lớp'],
+    ['DepartmentHead', 'Quản lý phúc khảo', 'Cấu trúc đề thi'],
+    ['Admin', 'Lỗi chấm MF-01/02', null],
+    ['Proctor', 'Điểm danh', null],
+  ])('%s sees only its permitted task 09 portals in the shared sidebar', (role, primaryLink, secondaryLink) => {
     mocks.role = role
     render(<MemoryRouter><Sidebar collapsed={false} mobileOpen={false} onCollapse={vi.fn()} onMobileClose={vi.fn()} /></MemoryRouter>)
-    expect(Boolean(screen.queryByRole('link', { name: 'Kỳ thi chính thức' }))).toBe(['ExaminationOfficer', 'DepartmentHead'].includes(role))
-    expect(Boolean(screen.queryByRole('link', { name: 'Phúc khảo' }))).toBe(['ExaminationOfficer', 'DepartmentHead', 'Instructor'].includes(role))
-    expect(Boolean(screen.queryByRole('link', { name: 'Điểm danh' }))).toBe(['Proctor', 'ExaminationOfficer'].includes(role))
-    expect(Boolean(screen.queryByRole('link', { name: 'Lỗi chấm AI' }))).toBe(['Admin', 'Instructor', 'ExaminationOfficer'].includes(role))
+    expect(screen.getByRole('link', { name: primaryLink })).toBeTruthy()
+    if (secondaryLink) expect(screen.getByRole('link', { name: secondaryLink })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Kỳ thi chính thức' })).toBeNull()
+  })
+
+  it('EO uses its dedicated layout and sees only official-exam task 09 portals', () => {
+    mocks.role = 'ExaminationOfficer'
+    render(<MemoryRouter><ExaminationOfficerLayout /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Kỳ thi chính thức' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Phúc khảo' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Lỗi chấm AI' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Phúc khảo được giao' })).toBeNull()
   })
 })
