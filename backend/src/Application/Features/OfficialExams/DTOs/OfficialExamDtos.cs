@@ -131,6 +131,30 @@ public sealed record ExamTicketResponse(
     DateTime CheckedInAt,
     Guid? ExamSetId = null);
 
+/// <summary>One imported roster row. SourceRow is the human-facing spreadsheet/CSV row number.</summary>
+public sealed record BulkExamTicketImportRow(
+    int SourceRow,
+    string StudentCode,
+    int SeatNumber,
+    string IpAddress);
+
+public sealed record BulkExamTicketImportIssue(int? SourceRow, string Message);
+
+public sealed record BulkExamTicketImportPreview(
+    Guid ShiftId,
+    int ValidRowCount,
+    int AvailableHandedOverSetCount,
+    IReadOnlyList<BulkExamTicketImportIssue> Issues,
+    IReadOnlyList<string> ReservedExamSetCodes)
+{
+    public bool CanCommit => Issues.Count == 0;
+}
+
+public sealed record BulkExamTicketImportCommitResult(
+    Guid ShiftId,
+    int CreatedTicketCount,
+    IReadOnlyList<ExamTicketResponse> Tickets);
+
 public sealed record StudentWorkstationTicketResponse(
     Guid Id,
     Guid ShiftId,

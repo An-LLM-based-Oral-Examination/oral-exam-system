@@ -71,4 +71,6 @@ public interface IApplicationDbContext
     Task<T> ExecuteAppealDecisionAsync<T>(Guid appealId, Guid ticketId, Func<CancellationToken, Task<T>> decision, CancellationToken cancellationToken = default);
     /// <summary>Serialize appeal assignments and lecturer workload checks under the same transaction.</summary>
     Task<T> ExecuteAppealAssignmentAsync<T>(IReadOnlyCollection<Guid> appealIds, IReadOnlyCollection<Guid> lecturerIds, Func<CancellationToken, Task<T>> assignment, CancellationToken cancellationToken = default);
+    /// <summary>Serialize an all-or-nothing roster import for one official-exam shift.</summary>
+    Task<T> ExecuteBulkExamTicketImportAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> import, CancellationToken cancellationToken = default);
 }
