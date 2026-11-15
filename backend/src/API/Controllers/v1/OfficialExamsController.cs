@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
@@ -21,6 +22,7 @@ using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
+using OralExamination.Application.Features.OfficialExams.Commands.ImportExamRoster;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
@@ -43,10 +45,12 @@ namespace API.Controllers.v1;
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IExamRosterFileParser? _rosterParser;
 
-    public OfficialExamsController(ISender sender)
+    public OfficialExamsController(ISender sender, IExamRosterFileParser? rosterParser = null)
     {
         _sender = sender;
+        _rosterParser = rosterParser;
     }
 
     private Guid GetCurrentUserId()
@@ -520,6 +524,46 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Đọc trước danh sách sinh viên từ CSV/XLSX. Preview không ghi dữ liệu; tệp cần có studentCode, seatNumber, ipAddress.
+    /// </summary>
+    [HttpPost("shifts/{shiftId:guid}/tickets/import/preview")]
+    [Authorize(Roles = "examination_officer")]
+    [RequestSizeLimit(1_048_576)]
+    public async Task<IActionResult> PreviewTicketImport(
+        Guid shiftId,
+        [FromForm] IFormFile? file,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var parsed = await ParseRosterFileAsync(file, cancellationToken);
+        if (parsed.Error is not null) return parsed.Error;
+
+        var result = await _sender.Send(new PreviewExamRosterImportQuery(actorId.Value, shiftId, parsed.Rows!), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BulkImportProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Xác nhận nhập cả khối. Hệ thống kiểm tra lại dữ liệu và chỉ tạo vé khi mọi dòng cùng có hiệu lực.
+    /// </summary>
+    [HttpPost("shifts/{shiftId:guid}/tickets/import/commit")]
+    [Authorize(Roles = "examination_officer")]
+    [RequestSizeLimit(1_048_576)]
+    public async Task<IActionResult> CommitTicketImport(
+        Guid shiftId,
+        [FromForm] IFormFile? file,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var parsed = await ParseRosterFileAsync(file, cancellationToken);
+        if (parsed.Error is not null) return parsed.Error;
+
+        var result = await _sender.Send(new CommitExamRosterImportCommand(actorId.Value, shiftId, parsed.Rows!), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BulkImportProblem(result.Error);
+    }
+
+    /// <summary>
     /// Sinh viên tại máy trạm Kiosk lấy thông tin vé thi hiện tại khớp với địa chỉ IP máy trạm (ip_address).
     /// </summary>
     [HttpGet("tickets/current")]
@@ -742,6 +786,61 @@ public class OfficialExamsController : ControllerBase
         var claim = User.FindFirst("sub")?.Value
             ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
+    }
+
+    private async Task<(IReadOnlyList<BulkExamTicketImportRow>? Rows, IActionResult? Error)> ParseRosterFileAsync(
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return (null, BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Tệp danh sách không hợp lệ.",
+                Detail = "Cần tải lên tệp .csv hoặc .xlsx không rỗng."
+            }));
+        }
+
+        if (_rosterParser is null)
+        {
+            return (null, StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Dịch vụ đọc danh sách chưa được cấu hình."
+            }));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var parsed = await _rosterParser.ParseAsync(stream, file.FileName, cancellationToken);
+        if (parsed.Errors.Count == 0) return (parsed.Rows, null);
+        return (null, BadRequest(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Không thể đọc tệp danh sách.",
+            Detail = string.Join(" ", parsed.Errors)
+        }));
+    }
+
+    private IActionResult BulkImportProblem(string error)
+    {
+        var statusCode = error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+            ? StatusCodes.Status403Forbidden
+            : error == OfficialExamErrors.ShiftNotFound
+                ? StatusCodes.Status404NotFound
+                : StatusCodes.Status409Conflict;
+        return StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status403Forbidden => "Không được phép.",
+                StatusCodes.Status404NotFound => "Không tìm thấy ca thi.",
+                _ => "Không thể nhập danh sách trong trạng thái hiện tại."
+            },
+            Detail = error,
+            Type = $"https://oralexam.fpt.edu.vn/errors/bulk-ticket-import-{statusCode}"
+        });
     }
 
     private IActionResult OfficialExamProblem(string error)

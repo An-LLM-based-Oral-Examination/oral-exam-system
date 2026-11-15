@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
         services.AddSingleton<IOfficialExamGradingQueue, OralExamination.Infrastructure.Channels.BoundedOfficialExamGradingQueue>();
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
+        services.AddSingleton<IExamRosterFileParser, OralExamination.Infrastructure.Services.ExamRosterFileParser>();
 
         return services;
     }
