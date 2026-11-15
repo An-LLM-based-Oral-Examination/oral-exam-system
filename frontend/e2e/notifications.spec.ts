@@ -4,6 +4,19 @@ const ticketId = '00000000-0000-4000-8000-000000000003'
 const notificationId = '00000000-0000-4000-8000-000000000004'
 
 async function seedStudent(page: Page) {
+  const user = {
+    id: '00000000-0000-4000-8000-000000000002',
+    email: 'student@e2e.test',
+    fullName: 'E2E Student',
+    studentCode: 'SE170001',
+    role: 'Student',
+    isActive: true,
+    mustChangePassword: false,
+  }
+  await page.route('**/api/v1/auth/me**', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(user) })
+  })
   await page.addInitScript(() => {
     sessionStorage.setItem('access_token', 'e2e-access-token')
     sessionStorage.setItem('refresh_token', 'e2e-refresh-token')

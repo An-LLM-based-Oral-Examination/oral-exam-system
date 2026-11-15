@@ -63,6 +63,26 @@ Kiểm tra kiểu và build:
 npm run build
 ```
 
+## Kiểm thử tự động khi mới pull code
+
+Sau khi clone hoặc pull thay đổi frontend có Playwright, cài dependencies theo `package-lock.json` rồi tải Chromium đúng phiên bản của `@playwright/test`:
+
+```powershell
+npm ci
+npx playwright install chromium
+```
+
+Chromium là browser runtime cho E2E, được Playwright lưu trong cache của từng máy nên thường chỉ cần tải một lần. Khi dự án nâng phiên bản `@playwright/test`, chạy lại lệnh cài browser để đồng bộ phiên bản. Browser cache không thuộc mã nguồn và không được commit.
+
+Các lệnh kiểm tra thường dùng:
+
+```powershell
+npm run test:coverage
+npm run test:e2e
+```
+
+`test:e2e` tự khởi động Vite tại `http://127.0.0.1:4173`. Các fixture E2E mock API theo từng luồng, vì vậy không cần khởi động backend cho suite này. GitHub Actions tự cài Chromium bằng Playwright trước khi chạy E2E; không cần thao tác thủ công trên CI.
+
 ## Image Docker
 
 `frontend/Dockerfile` nhận `VITE_API_BASE_URL`, `VITE_SIGNALR_HUB_URL` và `VITE_GOOGLE_CLIENT_ID` lúc build. `docker-compose.prod.yml` truyền Client ID từ `GOOGLE_OAUTH_CLIENT_ID` trong `.env` gốc. Đổi các biến `VITE_*` xong phải build lại image, vì Vite gắn giá trị vào file tĩnh lúc `npm run build`.

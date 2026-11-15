@@ -4,26 +4,59 @@ const courseId = '00000000-0000-4000-8000-000000000001'
 const sessionId = '00000000-0000-4000-8000-000000000003'
 const appealId = '00000000-0000-4000-8000-000000000010'
 
-async function seedRole(page: Page, role: 'Student' | 'ExaminationOfficer' | 'Instructor') {
-  await page.addInitScript((seededRole) => {
+type E2eRole = 'Student' | 'ExaminationOfficer' | 'Instructor'
+
+interface BatchSubmitRequest {
+  studentId: string
+  answers: Array<{
+    questionId: string
+    answerText: string
+    isFollowUp: boolean
+    parentAnswerId: string | null
+  }>
+}
+
+function createAuthenticatedUser(role: E2eRole) {
+  return {
+    id:
+      role === 'Student'
+        ? '00000000-0000-4000-8000-000000000002'
+        : role === 'Instructor'
+          ? 'lecturer-1'
+          : 'eo-1',
+    email: `${role.toLowerCase()}@e2e.test`,
+    fullName: 'E2E Workflow User',
+    role,
+    isActive: true,
+    mustChangePassword: false,
+    ...(role === 'Student' ? { studentCode: 'SE170001' } : {}),
+  }
+}
+
+async function mockAuthenticatedUser(page: Page, role: E2eRole) {
+  const user = createAuthenticatedUser(role)
+  await page.route('**/api/v1/auth/me**', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(user) })
+  })
+}
+
+async function seedRole(page: Page, role: E2eRole) {
+  await mockAuthenticatedUser(page, role)
+  const user = createAuthenticatedUser(role)
+  const profile = {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+    mustChangePassword: user.mustChangePassword,
+    ...(user.studentCode ? { studentCode: user.studentCode } : {}),
+  }
+  await page.addInitScript((seededProfile) => {
     sessionStorage.setItem('access_token', 'e2e-access-token')
     sessionStorage.setItem('refresh_token', 'e2e-refresh-token')
-    sessionStorage.setItem(
-      'user_profile',
-      JSON.stringify({
-        id:
-          seededRole === 'Student'
-            ? '00000000-0000-4000-8000-000000000002'
-            : seededRole === 'Instructor'
-              ? 'lecturer-1'
-              : 'eo-1',
-        email: `${seededRole.toLowerCase()}@e2e.test`,
-        fullName: 'E2E Workflow User',
-        role: seededRole,
-        mustChangePassword: false,
-      }),
-    )
-  }, role)
+    sessionStorage.setItem('user_profile', JSON.stringify(seededProfile))
+  }, profile)
 }
 
 test.describe('MF-01 practice workflow', () => {
@@ -98,12 +131,13 @@ test.describe('MF-01 practice workflow', () => {
       content: `Explain architecture principle ${orderIndex}.`,
       rubricCriteria: ['Definition'],
     }))
-    let batchRequestBody: Record<string, unknown> | null = null
+    const batchRequest = { body: null as BatchSubmitRequest | null }
 
     await page.route(`**/api/v1/practice/sessions/${fullSessionId}/batch-submit`, async (route) => {
-      batchRequestBody = route.request().postDataJSON() as Record<string, unknown>
+      batchRequest.body = route.request().postDataJSON() as BatchSubmitRequest
       await route.fulfill({ status: 202, body: '' })
     })
+    await mockAuthenticatedUser(page, 'Student')
     await page.addInitScript(({ seededRole, sessionKey, runtime }) => {
       sessionStorage.setItem('access_token', 'e2e-access-token')
       sessionStorage.setItem('refresh_token', 'e2e-refresh-token')
@@ -164,11 +198,13 @@ test.describe('MF-01 practice workflow', () => {
     await page.getByRole('button', { name: 'Nộp bài' }).click()
     await page.getByRole('button', { name: 'Xác nhận nộp bài' }).click()
 
-    await expect.poll(() => batchRequestBody).not.toBeNull()
-    expect(batchRequestBody).toMatchObject({
+    await expect.poll(() => batchRequest.body).not.toBeNull()
+    if (batchRequest.body === null) throw new Error('Expected full-session batch submission request.')
+
+    expect(batchRequest.body).toMatchObject({
       studentId: '00000000-0000-4000-8000-000000000002',
     })
-    expect(batchRequestBody?.answers).toEqual(
+    expect(batchRequest.body.answers).toEqual(
       questions.map((question, index) => ({
         questionId: question.questionId,
         answerText: index === 2
