@@ -1000,7 +1000,7 @@ public class InClassShiftTests
     }
 
     [Fact]
-    public async Task InClassShift_SelectedPool_MultiQuestion_FollowUp_And_AutoPublishGrades_WorksEndToEnd()
+    public async Task InClassShift_SelectedPool_FollowUp_IsAvailableBeforeScoresAreFinalized()
     {
         // Arrange
         using var context = CreateDbContext();
@@ -1116,13 +1116,13 @@ public class InClassShiftTests
         subQ1Entity.Status = "AI_GRADED";
         await context.SaveChangesAsync();
 
-        // 5. Vì IsAutoPublishGrades = true, sinh viên xem được ngay điểm AI và câu hỏi phụ theo thời gian thực (Parallel Real-time Publishing)
+        // 5. Sinh viên thấy câu hỏi phụ, còn điểm chỉ hiển thị sau khi chốt ca.
         var getByIdHandler = new GetInClassShiftByIdQueryHandler(context);
         var studentView = await getByIdHandler.Handle(new GetInClassShiftByIdQuery(student.Id, shiftEntity.Id), CancellationToken.None);
         studentView.IsSuccess.Should().BeTrue();
         var q1Dto = studentView.Value.Submissions.First(s => s.Id == subQ1.Value.SubmissionId);
-        q1Dto.AiScore.Should().Be(8.0m);
-        q1Dto.FinalScore.Should().Be(8.0m);
+        q1Dto.AiScore.Should().BeNull();
+        q1Dto.FinalScore.Should().BeNull();
         q1Dto.FollowUpPrompt.Should().Contain("2 Microservices");
 
         // 6. Sinh viên nộp câu trả lời Follow-up thứ 1 cho Câu 1
@@ -1138,6 +1138,16 @@ public class InClassShiftTests
         subFollowUp1.IsSuccess.Should().BeTrue();
         subFollowUp1.Value.IsFollowUp.Should().BeTrue();
         subFollowUp1.Value.FollowUpIndex.Should().Be(1);
+
+        shiftEntity.Status = "FINALIZED";
+        await context.SaveChangesAsync();
+
+        var finalizedView = await getByIdHandler.Handle(
+            new GetInClassShiftByIdQuery(student.Id, shiftEntity.Id), CancellationToken.None);
+        finalizedView.IsSuccess.Should().BeTrue();
+        var finalizedQ1 = finalizedView.Value.Submissions.First(s => s.Id == subQ1.Value.SubmissionId);
+        finalizedQ1.AiScore.Should().Be(8.0m);
+        finalizedQ1.FinalScore.Should().Be(8.0m);
     }
 
     [Fact]
