@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using Polly;
-using Polly.Retry;
+using OralExamination.Infrastructure.Resilience;
 
 namespace OralExamination.Infrastructure.Services;
 
@@ -37,16 +37,8 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         _configuration = configuration;
         _logger = logger;
 
-        // Cấu hình Polly Resilience Pipeline: Retry 3 lần với Exponential Backoff (2s, 4s, 8s)
-        _resiliencePipeline = new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = 3,
-                Delay = TimeSpan.FromSeconds(2),
-                BackoffType = DelayBackoffType.Exponential,
-                ShouldHandle = new PredicateBuilder().Handle<HttpRequestException>().Handle<TaskCanceledException>()
-            })
-            .Build();
+        // Shared HTTP pipeline owns retries; do not multiply service retries by provider/model failover.
+        _resiliencePipeline = ResiliencePipeline.Empty;
     }
 
     public async Task<List<GeneratedQuestionDraftDto>> GenerateQuestionsAsync(
@@ -101,10 +93,15 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                     return geminiGenerated;
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 lastError = ex.Message;
                 _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang key tiếp theo hoặc Cloudflare Workers AI (Llama 3.1).");
+                if (ExternalDependencyResilience.IsTransient(ex)) break;
             }
         }
 
@@ -155,6 +152,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         };
 
         string lastHttpError = string.Empty;
+        HttpStatusCode? lastStatusCode = null;
 
         foreach (var modelName in candidateModels)
         {
@@ -162,7 +160,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
 
             try
             {
-                var response = await _resiliencePipeline.ExecuteAsync(async state =>
+                using var response = await _resiliencePipeline.ExecuteAsync(async state =>
                 {
                     await AiGenerationBulkhead.WaitAsync(state);
                     try
@@ -202,22 +200,31 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                 else
                 {
                     lastHttpError = $"HTTP {(int)response.StatusCode} ({modelName})";
+                    lastStatusCode = response.StatusCode;
+                    if (ExternalDependencyResilience.IsTransientStatus(response.StatusCode))
+                        throw new HttpRequestException(lastHttpError, null, response.StatusCode);
                     if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.BadRequest) break; if ((int)response.StatusCode == 404 || (int)response.StatusCode == 503)
                     {
                         continue;
                     }
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 lastHttpError = ex.Message;
+                if (ex is HttpRequestException httpError) lastStatusCode = httpError.StatusCode;
                 _logger.LogWarning(ex, "Lỗi khi gọi model {ModelName}, thử model tiếp theo.", modelName);
+                if (ExternalDependencyResilience.IsTransient(ex)) throw;
             }
         }
 
         if (!string.IsNullOrWhiteSpace(lastHttpError))
         {
-            throw new HttpRequestException($"Gemini Question Generation failed: {lastHttpError}");
+            throw new HttpRequestException($"Gemini Question Generation failed: {lastHttpError}", null, lastStatusCode);
         }
 
         return new List<GeneratedQuestionDraftDto>();
@@ -287,6 +294,10 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                     return ParseAiResponse(rawText, parameters);
                 }
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

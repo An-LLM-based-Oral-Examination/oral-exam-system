@@ -8,40 +8,21 @@ namespace OralExamination.Infrastructure.Authentication;
 
 public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 {
-    private const string DevGooglePrefix = "dev-google:";
     private readonly IConfiguration _configuration;
+    private readonly IGoogleTokenSignatureVerifier _signatureVerifier;
 
-    public GoogleIdTokenValidator(IConfiguration configuration)
+    public GoogleIdTokenValidator(IConfiguration configuration, IGoogleTokenSignatureVerifier? signatureVerifier = null)
     {
         _configuration = configuration;
+        _signatureVerifier = signatureVerifier ?? new GoogleTokenSignatureVerifier();
     }
 
     public async Task<GoogleUserIdentity> ValidateAsync(string idToken, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(idToken) &&
-            idToken.StartsWith(DevGooglePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var allowDevEmail = _configuration["Authentication:AllowDevGoogleEmail"]
-                ?? Environment.GetEnvironmentVariable("ALLOW_DEV_GOOGLE_EMAIL")
-                ?? "false";
-
-            var envName = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["DOTNET_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Development";
-            if (!string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase) && string.Equals(allowDevEmail, "true", StringComparison.OrdinalIgnoreCase))
-            {
-                var rawPayload = idToken[DevGooglePrefix.Length..].Trim();
-                var parts = rawPayload.Split('|', 2, StringSplitOptions.TrimEntries);
-                var devEmail = parts[0].ToLowerInvariant();
-                if (!string.IsNullOrWhiteSpace(devEmail) && devEmail.Contains('@'))
-                {
-                    var devFullName = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1])
-                        ? parts[1]
-                        : FormatNameFromEmail(devEmail);
-                    return new GoogleUserIdentity(devEmail, devFullName);
-                }
-            }
-
+        cancellationToken.ThrowIfCancellationRequested();
+        // No unsigned development identity, authorization-code or access-token exchange.
+        if (string.IsNullOrWhiteSpace(idToken) || idToken.StartsWith("dev-google:", StringComparison.OrdinalIgnoreCase))
             throw new GoogleIdTokenRejectedException();
-        }
 
         var clientId = AuthConfiguration.GoogleClientId(_configuration);
         if (string.IsNullOrWhiteSpace(clientId))
@@ -53,25 +34,32 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
         GoogleJsonWebSignature.Payload payload;
         try
         {
-            payload = await GoogleJsonWebSignature.ValidateAsync(
-                idToken,
-                new GoogleJsonWebSignature.ValidationSettings
-                {
-                    Audience = [clientId]
-                });
+            payload = await _signatureVerifier.VerifyAsync(idToken, clientId, cancellationToken);
         }
         catch (Exception exception) when (exception is InvalidJwtException or ArgumentException)
         {
             throw new GoogleIdTokenRejectedException();
         }
 
-        if (string.IsNullOrWhiteSpace(payload.Email) || payload.EmailVerified != true)
+        var email = payload.Email?.Trim().ToLowerInvariant();
+        // Student self-provisioning remains enabled for production data collection.
+        // An explicit allowlist may narrow access; do not silently exclude Gmail students.
+        var domains = _configuration.GetSection("Authentication:GoogleAllowedDomains").Get<string[]>() ?? [];
+        var domain = email is not null && email.Count(character => character == '@') == 1 ? email.Split('@')[1] : null;
+        if (payload.Issuer is not ("accounts.google.com" or "https://accounts.google.com")
+            || !payload.AudienceAsList.Contains(clientId, StringComparer.Ordinal) || payload.ExpirationTimeSeconds is null
+            || payload.ExpirationTimeSeconds <= DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            || payload.EmailVerified != true || string.IsNullOrWhiteSpace(payload.Subject)
+            || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(payload.Nonce) || payload.Nonce.Length > 128
+            || domain is null || domain.Length == 0
+            || (domains.Length > 0 && !domains.Any(allowed => !string.IsNullOrWhiteSpace(allowed) && string.Equals(allowed.Trim(), domain, StringComparison.OrdinalIgnoreCase)))
+            // Google is authoritative for Gmail or a signed Workspace hosted domain.
+            || (domain != "gmail.com" && !string.Equals(payload.HostedDomain, domain, StringComparison.OrdinalIgnoreCase)))
         {
             throw new GoogleIdTokenRejectedException();
         }
 
-        var email = payload.Email.Trim().ToLowerInvariant();
-        return new GoogleUserIdentity(email, ResolveFullName(payload, email));
+        return new GoogleUserIdentity(email, ResolveFullName(payload, email), payload.Nonce, payload.Subject);
     }
 
     private static string ResolveFullName(GoogleJsonWebSignature.Payload payload, string email)

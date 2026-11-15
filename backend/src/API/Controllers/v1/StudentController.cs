@@ -171,6 +171,14 @@ public class StudentController(ISender sender) : ControllerBase
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Không thể xác nhận điểm.",
+                    Detail = result.Error,
+                    Type = "https://oralexam.fpt.edu.vn/errors/acknowledge-conflict"
+                });
             if (result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new ProblemDetails

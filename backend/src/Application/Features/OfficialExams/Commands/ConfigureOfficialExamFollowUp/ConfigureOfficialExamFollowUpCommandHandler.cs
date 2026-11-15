@@ -30,7 +30,7 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
         }
 
         var actor = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive || (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.DepartmentHead)
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -41,6 +41,11 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
         if (session is null)
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.SessionNotFound);
+        }
+
+        if (!await OfficialExamAuthorization.OwnsAcademicCourseAsync(_context, session.CourseId, actor.Id, cancellationToken))
+        {
+            return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
         session.HasFollowUp = request.HasFollowUp;

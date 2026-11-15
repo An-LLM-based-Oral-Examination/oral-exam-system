@@ -1,5 +1,6 @@
 import apiClient from './api.client'
 import type {
+  CurrentUserResponse,
   GoogleLoginRequest,
   LoginRequest,
   LoginResponse,
@@ -85,16 +86,73 @@ function persistSession(data: LoginResponse): LoginResponse {
 }
 
 export const authService = {
+  async fetchCurrentUser(): Promise<CurrentUserResponse> {
+    const { data } = await apiClient.get<CurrentUserResponse>('/auth/me')
+    const role = normalizePortalRole(data.role)
+    if (!role || typeof data.id !== 'string' || !data.id.trim() ||
+      typeof data.email !== 'string' || !data.email.trim() ||
+      typeof data.fullName !== 'string' || !data.fullName.trim() ||
+      typeof data.isActive !== 'boolean' || typeof data.mustChangePassword !== 'boolean') {
+      throw {
+        status: 502,
+        title: 'Hồ sơ người dùng không hợp lệ',
+        detail: 'Backend trả về vai trò không được hỗ trợ.',
+      } satisfies ProblemDetails
+    }
+    return { ...data, role }
+  },
+
+  /** Only persist a profile verified for the session that actually sent this request. */
+  async synchronizeCurrentUser(isCurrent: () => boolean = () => true): Promise<User | null> {
+    const expectedUser = this.getCurrentUser()
+    const initialToken = this.getToken()
+    if (!expectedUser || !initialToken) return null
+    const response = await apiClient.get<CurrentUserResponse>('/auth/me')
+    const data = response.data
+    const role = normalizePortalRole(data?.role)
+    if (!data || !role || typeof data.id !== 'string' || data.id !== expectedUser.id ||
+      typeof data.email !== 'string' || !data.email.trim() ||
+      typeof data.fullName !== 'string' || !data.fullName.trim() || data.isActive !== true ||
+      typeof data.mustChangePassword !== 'boolean' ||
+      (data.studentCode != null && typeof data.studentCode !== 'string')) {
+      throw { status: 403, title: 'Không thể xác minh phiên đăng nhập', detail: 'Hồ sơ máy chủ không hợp lệ, không hoạt động hoặc không khớp tài khoản hiện tại.' } satisfies ProblemDetails
+    }
+    // Axios may have retried /me with a newly refreshed access token. Compare with
+    // the request that produced the response, not the old token captured at boot.
+    const sentAuthorization = response.config?.headers?.Authorization
+    const sentToken = typeof sentAuthorization === 'string' && sentAuthorization.startsWith('Bearer ')
+      ? sentAuthorization.slice(7) : initialToken
+    if (!isCurrent() || this.getCurrentUser()?.id !== expectedUser.id || this.getToken() !== sentToken) return null
+    const user: User = {
+      id: data.id, email: data.email, fullName: data.fullName, role,
+      studentCode: data.studentCode ?? undefined, mustChangePassword: data.mustChangePassword,
+    }
+    sessionStorage.setItem('user_profile', JSON.stringify(user))
+    return user
+  },
+
   async passwordLogin(request: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/auth/password-login', request)
     clearMockExamSession()
     return persistSession(response.data)
   },
 
-  async googleLogin(request: GoogleLoginRequest): Promise<LoginResponse> {
-    const response = await apiClient.post<LoginResponse>('/auth/google-login', request)
+  async googleLogin(request: GoogleLoginRequest, signal?: AbortSignal): Promise<LoginResponse> {
+    signal?.throwIfAborted()
+    const response = await apiClient.post<LoginResponse>('/auth/google-login', request,
+      { withCredentials: true, _skipAuthRefresh: true, signal })
+    signal?.throwIfAborted()
     clearMockExamSession()
     return persistSession(response.data)
+  },
+
+  async createGoogleChallenge(signal?: AbortSignal): Promise<{ nonce: string; expiresIn: number }> {
+    const { data } = await apiClient.post<{ nonce: string; expiresIn: number }>('/auth/google-challenge', null,
+      { withCredentials: true, _skipAuthRefresh: true, signal })
+    if (typeof data.nonce !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(data.nonce)
+      || !Number.isFinite(data.expiresIn) || data.expiresIn <= 0 || data.expiresIn > 300)
+      throw new Error('Phản hồi phiên đăng nhập Google không hợp lệ.')
+    return data
   },
 
   async changePassword(request: { currentPassword: string; newPassword: string }): Promise<void> {
@@ -148,14 +206,18 @@ export const authService = {
 
   async logout(): Promise<void> {
     const refreshToken = sessionStorage.getItem('refresh_token')
+    const accessToken = this.getToken()
+    // Invalidate locally before network I/O, including any pending refresh response.
+    this.clearSession()
     try {
       if (refreshToken) {
-        await apiClient.post('/auth/sign-out', { refreshToken }, { _skipAuthRefresh: true })
+        await apiClient.post('/auth/sign-out', { refreshToken }, {
+          _skipAuthRefresh: true,
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        })
       }
     } catch {
-      // Luôn xoá phiên cục bộ kể cả khi máy chủ không còn khả dụng.
-    } finally {
-      this.clearSession()
+      // Local logout already completed; never clear a newer login after this request.
     }
   },
 
@@ -188,7 +250,10 @@ export const authService = {
         ? (LEGACY_DEV_USER_IDS[parsed.id] ?? parsed.id)
         : parsed.id
       const jwtMustChange = extractMustChangePasswordFromJwt(sessionStorage.getItem('access_token'))
-      const mustChangePassword = Boolean(jwtMustChange ?? parsed.mustChangePassword)
+      // /me can be newer than the issued JWT. Do not replace its verified flag
+      // with an older token claim; legacy profiles without a flag may fall back.
+      const mustChangePassword = typeof parsed.mustChangePassword === 'boolean'
+        ? parsed.mustChangePassword : Boolean(jwtMustChange)
       const user: User = { ...parsed, id: migratedId, role, mustChangePassword } as User
       if (
         migratedId !== parsed.id ||

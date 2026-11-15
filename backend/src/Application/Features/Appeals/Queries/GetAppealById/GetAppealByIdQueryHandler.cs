@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Appeals.Queries.GetAppealById;
 
@@ -19,6 +20,13 @@ public sealed class GetAppealByIdQueryHandler : IRequestHandler<GetAppealByIdQue
 
     public async Task<Result<AppealResponseDto>> Handle(GetAppealByIdQuery request, CancellationToken cancellationToken)
     {
+        var actor = await AppealAuthorization.ActiveClaimedActorAsync(
+            _context, request.RequesterId, request.RequesterRole, cancellationToken);
+        if (actor is null || !AppealAuthorization.IsReadRole(actor.Role))
+        {
+            return Result<AppealResponseDto>.Failure(AppealAuthorization.Forbidden);
+        }
+
         var appeal = await _context.AppealRequests
             .AsNoTracking()
             .Include(a => a.Ticket)
@@ -34,19 +42,18 @@ public sealed class GetAppealByIdQueryHandler : IRequestHandler<GetAppealByIdQue
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
-        if (request.RequesterId.HasValue)
+        var canView = actor.Role switch
         {
-            var canView = request.RequesterRole switch
-            {
-                "student" => appeal.StudentId == request.RequesterId.Value,
-                "lecturer" => appeal.AssignedTo == request.RequesterId.Value,
-                "department_head" or "examination_officer" or "admin" => true,
-                _ => false
-            };
-            if (!canView)
-            {
-                return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong phạm vi được phép truy cập.");
-            }
+            UserRole.Student => appeal.StudentId == actor.Id,
+            UserRole.Lecturer => appeal.AssignedTo == actor.Id,
+            UserRole.DepartmentHead => await AppealAuthorization.OwnsSessionCourseAsync(
+                _context, appeal.SessionId, actor.Id, cancellationToken),
+            UserRole.ExaminationOfficer or UserRole.Admin => true,
+            _ => false
+        };
+        if (!canView)
+        {
+            return Result<AppealResponseDto>.Failure(AppealAuthorization.Forbidden);
         }
 
         var dto = new AppealResponseDto

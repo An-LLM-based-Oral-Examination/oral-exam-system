@@ -22,6 +22,31 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
 
     public async Task<Result<AppealResponseDto>> Handle(ReviewAppealDecisionCommand request, CancellationToken cancellationToken)
     {
+        var ticketId = await _context.AppealRequests.AsNoTracking()
+            .Where(appeal => appeal.Id == request.AppealId)
+            .Select(appeal => (Guid?)appeal.TicketId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // Preserve the handler's standard not-found result without manufacturing a cross-ticket lock.
+        if (!ticketId.HasValue)
+        {
+            return await _context.ExecuteAppealTransitionAsync(request.AppealId,
+                ct => HandleSerialized(request, ct), cancellationToken);
+        }
+
+        return await _context.ExecuteAppealDecisionAsync(request.AppealId, ticketId.Value,
+            ct => HandleSerialized(request, ct), cancellationToken);
+    }
+
+    private async Task<Result<AppealResponseDto>> HandleSerialized(ReviewAppealDecisionCommand request, CancellationToken cancellationToken)
+    {
+        var reviewer = await _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.ReviewerId && u.IsActive, cancellationToken);
+        if (reviewer is null || reviewer.Role != UserRole.ExaminationOfficer)
+        {
+            return Result<AppealResponseDto>.Failure(AppealAuthorization.Forbidden);
+        }
+
         var appeal = await _context.AppealRequests
             .Include(a => a.Ticket)
                 .ThenInclude(t => t.Shift)
@@ -36,21 +61,22 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
-        if (appeal.Status != AppealStatus.Pending && appeal.Status != AppealStatus.InReview)
+        if (appeal.Status != AppealStatus.RegradedByLecturer)
         {
             return Result<AppealResponseDto>.Failure("Đơn phúc khảo này đã có quyết định xử lý trước đó.");
         }
 
-        var reviewer = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == request.ReviewerId, cancellationToken);
-
-        // Chỉ Cán bộ Khảo thí hoặc Quản trị viên mới có thẩm quyền phê duyệt quyết định phúc khảo cuối cùng (R2/R7)
-        if (reviewer == null || (reviewer.Role != UserRole.ExaminationOfficer && reviewer.Role != UserRole.Admin))
+        if (request.Decision == AppealStatus.Approved && !appeal.ProposedScore.HasValue)
         {
-            return Result<AppealResponseDto>.Failure("Người dùng không có quyền thẩm định đơn phúc khảo (yêu cầu Cán bộ Khảo thí hoặc Quản trị viên).");
+            return Result<AppealResponseDto>.Failure("CONFLICT: Đơn phúc khảo chưa có điểm chấm lại hợp lệ.");
+        }
+        if (request.ProposedScore.HasValue && request.ProposedScore != appeal.ProposedScore)
+        {
+            return Result<AppealResponseDto>.Failure("CONFLICT: Điểm quyết định phải đúng với điểm do giảng viên độc lập đề xuất.");
         }
 
-        var effectiveProposedScore = request.ProposedScore ?? appeal.ProposedScore;
+        var effectiveProposedScore = appeal.ProposedScore;
+        var previousStatus = appeal.Status;
 
         appeal.ReviewedBy = request.ReviewerId;
         appeal.Decision = request.Decision;
@@ -107,6 +133,12 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 }
             }
         }
+
+        AppealWorkflowEffects.AddTransitionAudit(_context, reviewer.Id, appeal, previousStatus, appeal.Status,
+            request.ReviewNotes.Trim());
+        await AppealWorkflowEffects.AddNotificationIfMissingAsync(_context, appeal.StudentId, appeal,
+            "APPEAL_DECIDED", "Đơn phúc khảo đã có quyết định",
+            $"Đơn phúc khảo của bạn đã được quyết định: {appeal.Status}.", cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

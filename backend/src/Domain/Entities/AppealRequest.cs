@@ -11,7 +11,7 @@ public partial class AppealRequest
     public Guid SessionId { get; set; }
     public Guid? SubmissionId { get; set; }
     public string Reason { get; set; } = null!;
-    public string Status { get; set; } = "PENDING";
+    public string Status { get; set; } = "SUBMITTED_TO_EXAM_OFFICE";
     public Guid AssignedTo { get; set; }
     public Guid? ReviewedBy { get; set; }
     public string? Decision { get; set; }

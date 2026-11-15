@@ -6,6 +6,7 @@ using OralExamination.Application.Features.AcademicHierarchy.Commands.SyncCourse
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetCourseOfferingLecturers;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerCourseOfferings;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.SearchOfferingLecturers;
 
 namespace API.Controllers.v1;
 
@@ -15,7 +16,7 @@ namespace API.Controllers.v1;
 public sealed class CourseOfferingsController(ISender sender) : ControllerBase
 {
     [HttpPut("{id:guid}/lecturers")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> SyncLecturers(
         [FromRoute] Guid id,
         [FromBody] SyncCourseOfferingLecturersRequest request,
@@ -36,7 +37,7 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await sender.Send(
-            new GetCourseOfferingLecturersQuery(id, includeInactive),
+            new GetCourseOfferingLecturersQuery(id, includeInactive, GetCurrentUserId()),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfferingProblem(result.Error);
@@ -47,6 +48,7 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
     public async Task<IActionResult> GetMyOfferings(
         [FromQuery] Guid? lecturerId = null,
         [FromQuery] bool includeInactive = false,
+        [FromQuery] Guid? semesterId = null,
         CancellationToken cancellationToken = default)
     {
         var targetLecturerId = User.IsInRole("admin") && lecturerId is { } requestedId && requestedId != Guid.Empty
@@ -65,9 +67,18 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
         }
 
         var result = await sender.Send(
-            new GetLecturerCourseOfferingsQuery(targetLecturerId, includeInactive),
+            new GetLecturerCourseOfferingsQuery(targetLecturerId, includeInactive, semesterId),
             cancellationToken);
 
+        return result.IsSuccess ? Ok(result.Value) : OfferingProblem(result.Error);
+    }
+
+    [HttpGet("{id:guid}/lecturer-directory")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> SearchLecturers(Guid id, [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await sender.Send(new SearchOfferingLecturersQuery(GetCurrentUserId(), id, search), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : OfferingProblem(result.Error);
     }
 

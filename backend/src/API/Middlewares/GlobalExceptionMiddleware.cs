@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using OralExamination.Domain.Exceptions;
+using OralExamination.API.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,6 +40,7 @@ public class GlobalExceptionMiddleware
         }
         catch (Exception ex)
         {
+            if (context.Response.HasStarted) throw;
             _logger.LogError(ex, "An unhandled exception occurred: {Message}", ex.Message);
             var isDevelopment = _environment?.IsDevelopment() == true;
             await HandleExceptionAsync(context, ex, isDevelopment);
@@ -111,7 +113,7 @@ public class GlobalExceptionMiddleware
                 break;
 
             case BadHttpRequestException badHttpEx:
-                statusCode = StatusCodes.Status400BadRequest;
+                statusCode = badHttpEx.StatusCode;
                 problemDetails.Status = statusCode;
                 problemDetails.Title = "Yêu cầu không hợp lệ.";
                 problemDetails.Detail = badHttpEx.Message;
@@ -163,6 +165,19 @@ public class GlobalExceptionMiddleware
                 break;
         }
 
+        var postgres = exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException;
+        if (postgres?.SqlState == PostgresErrorCodes.ForeignKeyViolation
+            && (postgres.ConstraintName is "FK_practice_questions_course_clos_clo_id" or "FK_exam_questions_course_clos_clo_id")
+            && HttpMethods.IsDelete(context.Request.Method)
+            && context.Request.Path.StartsWithSegments("/api/v1/courses"))
+        {
+            statusCode = StatusCodes.Status409Conflict;
+            problemDetails.Title = "CLO đang được sử dụng.";
+            problemDetails.Detail = "Không thể xóa CLO đang được câu hỏi tham chiếu. Vui lòng tải lại dữ liệu.";
+            problemDetails.Type = "about:blank";
+            problemDetails.Extensions["errorCode"] = "CLO_IN_USE";
+        }
+        ApiProblems.Enrich(context, problemDetails, statusCode);
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = statusCode;
 

@@ -24,6 +24,7 @@ describe('role route matrix', () => {
     ['ExaminationOfficer', '/official-exams/manage'],
     ['DepartmentHead', '/question-bank'],
     ['Student', '/practice/session'],
+    ['Instructor', '/dlq'],
   ]
 
   it.each(allowed)('allows %s to access %s', (role, pathname) => {
@@ -41,7 +42,6 @@ describe('role route matrix', () => {
     ['Admin', '/examination-officer/exams'],
     ['DepartmentHead', '/question-bank/create'],
     ['Admin', '/appeals'],
-    ['Instructor', '/dlq'],
     ['Student', '/lecturer/dashboard'],
     ['Proctor', '/student/overview'],
     ['Proctor', '/lecturer/dashboard'],

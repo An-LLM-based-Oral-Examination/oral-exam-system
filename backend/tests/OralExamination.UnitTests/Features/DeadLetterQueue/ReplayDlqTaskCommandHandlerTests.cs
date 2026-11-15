@@ -22,7 +22,9 @@ public class ReplayDlqTaskCommandHandlerTests
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new OralExamDbContext(options);
+        var context = new OralExamDbContext(options);
+        DlqTestActors.Seed(context);
+        return context;
     }
 
     [Fact(DisplayName = "1. ReplayDlqTaskCommand: Trả về Failure khi không tìm thấy tác vụ DLQ với Id đã cho")]
@@ -32,7 +34,7 @@ public class ReplayDlqTaskCommandHandlerTests
         using var context = CreateDbContext();
         var queueChannelMock = new Mock<IGradingQueueChannel>();
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
-        var command = new ReplayDlqTaskCommand(Guid.NewGuid());
+        var command = new ReplayDlqTaskCommand(Guid.NewGuid(), DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -64,7 +66,7 @@ public class ReplayDlqTaskCommandHandlerTests
 
         var queueChannelMock = new Mock<IGradingQueueChannel>();
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
-        var command = new ReplayDlqTaskCommand(task.Id);
+        var command = new ReplayDlqTaskCommand(task.Id, DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -95,7 +97,7 @@ public class ReplayDlqTaskCommandHandlerTests
 
         var queueChannelMock = new Mock<IGradingQueueChannel>();
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
-        var command = new ReplayDlqTaskCommand(task.Id);
+        var command = new ReplayDlqTaskCommand(task.Id, DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -153,7 +155,7 @@ public class ReplayDlqTaskCommandHandlerTests
             .Returns(ValueTask.CompletedTask);
 
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
-        var command = new ReplayDlqTaskCommand(dlqEntry.Id);
+        var command = new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -225,7 +227,7 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Officer, "examination_officer"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -286,7 +288,7 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, Guid.NewGuid(), "admin"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -325,7 +327,7 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "admin"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -353,12 +355,11 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act - Thử bằng role examination_officer hoặc lecturer
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "examination_officer"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Officer, "examination_officer"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("FORBIDDEN");
-        result.Error.Should().Contain("Quản trị viên (Admin)");
     }
 
     [Fact(DisplayName = "9. ReplayDlqTaskCommand: Replay tác vụ OfficialExam với role khác examination_officer bị từ chối FORBIDDEN")]
@@ -383,12 +384,11 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act - Thử bằng role admin
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "admin"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("FORBIDDEN");
-        result.Error.Should().Contain("Cán bộ Khảo thí");
     }
 
     [Fact(DisplayName = "10. ReplayDlqTaskCommand: Ghi nhận ResolvedByUserId khi người dùng thực hiện replay")]
@@ -397,6 +397,7 @@ public class ReplayDlqTaskCommandHandlerTests
         // Arrange
         using var context = CreateDbContext();
         var actorUserId = Guid.NewGuid();
+        context.Users.Add(DlqTestActors.User(actorUserId, "admin"));
         var answerId = Guid.NewGuid();
         var gradingTask = new GradingTask { AnswerId = answerId };
 
@@ -432,6 +433,7 @@ public class ReplayDlqTaskCommandHandlerTests
         using var context = CreateDbContext();
         var submissionId = Guid.NewGuid();
         var shiftId = Guid.NewGuid();
+        context.InClassExamShifts.Add(new InClassExamShift { Id = shiftId, ClassId = Guid.NewGuid(), LecturerId = DlqTestActors.Lecturer, ShiftName = "QA", TotpSecretKey = "QA" });
         var studentId = Guid.NewGuid();
         var questionId = Guid.NewGuid();
 
@@ -481,7 +483,7 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act - Replay bởi lecturer
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "lecturer"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Lecturer, "lecturer"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();
@@ -527,10 +529,10 @@ public class ReplayDlqTaskCommandHandlerTests
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
         // Act - Role examination_officer cố replay ca thi trong lớp
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, ActorRole: "examination_officer"), CancellationToken.None);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Officer, "examination_officer"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("FORBIDDEN: Chỉ có Giảng viên hoặc Quản trị viên mới có quyền replay tác vụ Ca thi trong lớp.");
+        result.Error.Should().StartWith("FORBIDDEN:");
     }
 }

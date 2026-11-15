@@ -14,6 +14,55 @@ namespace OralExamination.UnitTests.Features.Appeals.Handlers;
 
 public class CreateAppealCommandHandlerTests
 {
+    private sealed class FixedClock(DateTime now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(now);
+    }
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    public async Task Task03_DeadlineBoundary_IsEnforcedBeforeWriting(long offsetTicks, bool succeeds)
+    {
+        using var context = CreateDbContext();
+        var (student, _, ticket, _) = await SeedDataAsync(context);
+        var publication = new DateTime(2026, 11, 14, 0, 0, 0, DateTimeKind.Utc);
+        ticket.GradesPublishedAt = publication;
+        await context.SaveChangesAsync();
+        var handler = new CreateAppealCommandHandler(context, clock: new FixedClock(publication.AddHours(72).AddTicks(offsetTicks)));
+        var result = await handler.Handle(new CreateAppealCommand(student.Id, ticket.Id, null, "Đề nghị xem lại điểm."), CancellationToken.None);
+        result.IsSuccess.Should().Be(succeeds);
+        (await context.AppealRequests.CountAsync()).Should().Be(succeeds ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task Task03_AcknowledgedTicket_CannotCreateAppeal()
+    {
+        using var context = CreateDbContext();
+        var (student, _, ticket, _) = await SeedDataAsync(context);
+        ticket.StudentAcknowledgementStatus = "ACKNOWLEDGED";
+        await context.SaveChangesAsync();
+        var result = await new CreateAppealCommandHandler(context).Handle(new CreateAppealCommand(student.Id, ticket.Id, null, "Đề nghị xem lại điểm."), CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        (await context.AppealRequests.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(AppealStatus.Pending)]
+    [InlineData(AppealStatus.InReview)]
+    public async Task Task03_OpenAppeal_PreventsAcknowledgement(string status)
+    {
+        using var context = CreateDbContext();
+        var (student, deptHead, ticket, _) = await SeedDataAsync(context);
+        context.AppealRequests.Add(new AppealRequest { TicketId = ticket.Id, StudentId = student.Id, SessionId = ticket.Shift.SessionId, AssignedTo = deptHead.Id, Reason = "Đang phúc khảo", Status = status });
+        await context.SaveChangesAsync();
+        var result = await new OralExamination.Application.Features.Student.Commands.AcknowledgeOfficialGrade.AcknowledgeOfficialGradeCommandHandler(context)
+            .Handle(new(ticket.Id, student.Id), CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        ticket.StudentAcknowledgementStatus.Should().Be("PENDING");
+    }
+
     private OralExamDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
@@ -115,6 +164,7 @@ public class CreateAppealCommandHandlerTests
             SeatNumber = 12,
             IpAddress = "192.168.1.102",
             Status = ExamTicketStatus.Published,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = false
         };
 

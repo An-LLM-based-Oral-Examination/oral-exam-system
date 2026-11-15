@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.AcademicHierarchy.Queries.GetCourseOfferingLecturers;
 
@@ -13,14 +15,22 @@ public sealed class GetCourseOfferingLecturersQueryHandler(IApplicationDbContext
         GetCourseOfferingLecturersQuery request,
         CancellationToken cancellationToken)
     {
-        var offeringExists = await context.CourseOfferings
+        var offering = await context.CourseOfferings
             .AsNoTracking()
-            .AnyAsync(o => o.Id == request.CourseOfferingId, cancellationToken);
-        if (!offeringExists)
+            .Include(o => o.Course).ThenInclude(c => c.AcademicProgram)
+            .FirstOrDefaultAsync(o => o.Id == request.CourseOfferingId, cancellationToken);
+        if (offering is null)
         {
             return Result<IReadOnlyList<CourseLecturerDto>>.Failure(
                 "NOT_FOUND: Không tìm thấy course offering.");
         }
+
+        var actor = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
+        if (actor is null || !actor.IsActive ||
+            (!AcademicCourseOwnership.CanManage(offering.Course, actor.Role, actor.Id) &&
+             !(actor.Role == UserRole.Lecturer && await context.CourseLecturers.AnyAsync(a =>
+                 a.CourseOfferingId == offering.Id && a.LecturerUserId == actor.Id && a.IsActive, cancellationToken))))
+            return Result<IReadOnlyList<CourseLecturerDto>>.Failure("FORBIDDEN: Không có quyền xem phân công của môn học này.");
 
         var query = context.CourseLecturers
             .AsNoTracking()

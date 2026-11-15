@@ -46,11 +46,17 @@ public sealed class GetLecturerCoursesQueryHandler(IApplicationDbContext context
 
         var isElevated = user.Role is UserRole.DepartmentHead or UserRole.Admin;
 
+        if (!user.IsActive || (!isElevated && user.Role != UserRole.Lecturer))
+            return Result<IReadOnlyList<LecturerCourseDto>>.Failure("FORBIDDEN: Không có quyền xem môn được phân công.");
+
         if (isElevated)
         {
             var allCourses = await context.Courses
                 .AsNoTracking()
                 .Where(c => c.IsActive)
+                .Where(c => user.Role == UserRole.Admin ||
+                    (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId != null && c.AcademicProgram.DepartmentHeadUserId != Guid.Empty
+                        ? c.AcademicProgram.DepartmentHeadUserId : c.DepartmentHeadUserId) == user.Id)
                 .OrderBy(c => c.Code)
                 .Select(c => new LecturerCourseDto(c.Id, c.Code, c.Name, c.Credits, c.IsActive))
                 .ToListAsync(cancellationToken);
@@ -63,6 +69,7 @@ public sealed class GetLecturerCoursesQueryHandler(IApplicationDbContext context
             join c in context.Courses.AsNoTracking() on cl.CourseId equals c.Id
             where cl.LecturerUserId == request.LecturerUserId
                   && cl.IsActive
+                  && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled)
                   && c.IsActive
             orderby c.Code
             select new LecturerCourseDto(c.Id, c.Code, c.Name, c.Credits, c.IsActive)

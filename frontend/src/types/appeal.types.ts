@@ -1,4 +1,11 @@
-export type AppealStatus = 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | string
+export type AppealStatus =
+  | 'SUBMITTED_TO_EXAM_OFFICE'
+  | 'ASSIGNED_TO_LECTURER'
+  | 'REGRADED_BY_LECTURER'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | string
 
 export interface Appeal {
   id: string

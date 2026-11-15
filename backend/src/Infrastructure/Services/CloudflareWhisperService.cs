@@ -13,7 +13,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Polly;
-using Polly.Retry;
 
 namespace OralExamination.Infrastructure.Services;
 
@@ -42,22 +41,8 @@ public class CloudflareWhisperService : ISpeechToTextService
             ?? configuration["Cloudflare__ApiToken"]
             ?? string.Empty;
 
-        // Cấu hình Polly Resilience Pipeline: Chỉ retry với lỗi mạng hoặc HTTP 5xx/429/408 (không retry vô ích với 400 BadRequest)
-        _resiliencePipeline = resiliencePipeline ?? new ResiliencePipelineBuilder()
-            .AddRetry(new RetryStrategyOptions
-            {
-                MaxRetryAttempts = 2,
-                Delay = TimeSpan.FromMilliseconds(400),
-                BackoffType = DelayBackoffType.Exponential,
-                ShouldHandle = new PredicateBuilder()
-                    .Handle<HttpRequestException>(ex =>
-                        ex.StatusCode is null
-                        or >= System.Net.HttpStatusCode.InternalServerError
-                        or System.Net.HttpStatusCode.TooManyRequests
-                        or System.Net.HttpStatusCode.RequestTimeout)
-                    .Handle<TaskCanceledException>(ex => !ex.CancellationToken.IsCancellationRequested)
-            })
-            .Build();
+        // The shared DI HTTP pipeline owns timeout/retry/circuit state. Keep optional override for focused transport tests.
+        _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
     }
 
     public async Task<string> TranscribeAudioAsync(Stream audioStream, string fileName, CancellationToken cancellationToken = default)
@@ -256,7 +241,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
                 request.Content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
 
-                var response = await _httpClient.SendAsync(request, ct);
+                using var response = await _httpClient.SendAsync(request, ct);
                 var body = await response.Content.ReadAsStringAsync(ct);
 
                 if (!response.IsSuccessStatusCode)
@@ -292,7 +277,7 @@ public class CloudflareWhisperService : ISpeechToTextService
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             request.Content = content;
 
-            var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
 
             if (!response.IsSuccessStatusCode)

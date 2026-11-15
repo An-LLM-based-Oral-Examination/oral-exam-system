@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.Infrastructure.Resilience;
+using OralExamination.Infrastructure.Diagnostics;
 
 namespace OralExamination.Infrastructure;
 
@@ -15,6 +17,12 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddAbuseTelemetry(configuration);
+        var appealHours = configuration.GetValue<int?>("Appeals:WindowHours")
+            ?? OralExamination.Application.Features.Appeals.AppealWindowOptions.DefaultHours;
+        if (appealHours <= 0 || appealHours > 8760)
+            throw new InvalidOperationException("Appeals:WindowHours must be between 1 and 8760.");
+        services.AddSingleton(new OralExamination.Application.Features.Appeals.AppealWindowOptions { Hours = appealHours });
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException(
                 "Connection string 'DefaultConnection' is missing.");
@@ -60,10 +68,19 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp =>
             sp.GetRequiredService<OralExamDbContext>());
 
-        services.AddHttpClient<IAiQuestionGenerationService, OralExamination.Infrastructure.Services.GeminiQuestionGenerationService>();
-        services.AddHttpClient<IAiGradingService, OralExamination.Infrastructure.Services.GeminiAiGradingService>();
-        services.AddHttpClient<OralExamination.Infrastructure.Services.CloudflareWhisperService>();
-        services.AddHttpClient<OralExamination.Infrastructure.Services.GeminiSpeechToTextService>();
+        services.AddSingleton<ExternalDependencyResilience>();
+        services.AddHttpClient<IAiQuestionGenerationService, OralExamination.Infrastructure.Services.GeminiQuestionGenerationService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Gemini));
+        services.AddHttpClient<IAiGradingService, OralExamination.Infrastructure.Services.GeminiAiGradingService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Gemini));
+        services.AddHttpClient<OralExamination.Infrastructure.Services.CloudflareWhisperService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Whisper));
+        services.AddHttpClient<OralExamination.Infrastructure.Services.GeminiSpeechToTextService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Gemini));
         services.AddScoped<ISpeechToTextService, OralExamination.Infrastructure.Services.ResilientSpeechToTextService>();
         services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();

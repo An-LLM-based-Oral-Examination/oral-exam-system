@@ -27,10 +27,12 @@ public class MustChangePasswordMiddleware
                 Status = StatusCodes.Status403Forbidden,
                 Title = "Cần đổi mật khẩu.",
                 Detail = "Bạn phải đổi mật khẩu trước khi dùng các chức năng khác.",
+                Instance = context.Request.Path,
                 Type = "https://tools.ietf.org/html/rfc7231"
             };
             problem.Extensions["code"] = "MUST_CHANGE_PASSWORD";
             problem.Extensions["errorCode"] = "MUST_CHANGE_PASSWORD";
+            problem.Extensions["traceId"] = context.TraceIdentifier;
             await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
             return;
         }

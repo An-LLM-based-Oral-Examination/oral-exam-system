@@ -262,11 +262,12 @@ public class OfficialExamsController : ControllerBase
 
     /// <summary>
     /// Cán bộ Khảo thí hoặc Quản trị viên thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
+    /// Cán bộ Khảo thí thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
     /// BẮT BUỘC: 100% sinh viên trong ca thi phải có điểm hoàn chỉnh.
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
     /// </summary>
     [HttpPost("shifts/{shiftId:guid}/publish-grades")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> PublishGrades(Guid shiftId, CancellationToken cancellationToken = default)
     {
         var lecturerId = GetAuthenticatedUserId();
@@ -385,11 +386,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí tạo kỳ thi thật. Role lấy từ tài khoản trong database.
+    /// Khảo thí tạo kỳ thi thật với cấu hình học thuật mặc định an toàn.
     /// </summary>
     [HttpPost("sessions")]
     [HttpPost("seasons")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> CreateSession([FromBody] CreateOfficialExamSessionRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -413,11 +414,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
+    /// Khảo thí mở một ca thi trong kỳ, gắn phòng lab và người coi thi.
     /// </summary>
     [HttpPost("shifts")]
     [HttpPost("seasons/{sessionId:guid}/shifts")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> OpenShift(
         [FromBody] OpenExamShiftRequest request,
         CancellationToken cancellationToken = default,
@@ -447,11 +448,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Quản trị viên cấu hình tính năng Follow-up cho kỳ thi thật (MF-04).
-    /// Cán bộ Khảo thí (examination_officer) bị từ chối 403 Forbidden.
+    /// Chỉ Trưởng bộ môn phụ trách môn cấu hình Follow-up cho kỳ thi thật (MF-04).
     /// </summary>
     [HttpPut("sessions/{id:guid}/follow-up-config")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> ConfigureFollowUp(
         Guid id,
         [FromBody] ConfigureOfficialExamFollowUpRequest request,
@@ -473,10 +473,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
+    /// Khảo thí gán sinh viên vào ghế 1-40 và địa chỉ IP máy trạm của ca thi.
     /// </summary>
     [HttpPost("tickets")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> AssignTicket([FromBody] AssignExamTicketRequest request, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -544,10 +544,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ khảo thí hoặc Trưởng bộ môn công bố đề thi cho ca thi phòng Lab (is_exam_published = true).
+    /// Cán bộ Khảo thí công bố đề thi cho ca thi phòng Lab (is_exam_published = true).
     /// </summary>
     [HttpPost("shifts/{id:guid}/publish")]
-    [Authorize(Roles = "examination_officer,department_head,admin")]
+    [Authorize(Roles = "examination_officer")]
     public async Task<IActionResult> PublishShift(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId();
@@ -672,7 +672,7 @@ public class OfficialExamsController : ControllerBase
     /// Trưởng bộ môn phê duyệt bộ đề thành chính thức (OFFICIAL), cascade duyệt toàn bộ câu hỏi và cắm cờ cảnh báo câu hỏi trùng.
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/approve")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> ApproveExamSet(Guid id, [FromBody] ApproveExamSetRequest? request, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -682,6 +682,11 @@ public class OfficialExamsController : ControllerBase
 
         if (!result.IsSuccess)
         {
+            if (result.Error == OfficialExamErrors.Forbidden)
+            {
+                return OfficialExamProblem(result.Error);
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -695,10 +700,10 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng bộ môn hoặc Khảo thí bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER).
+    /// Trưởng bộ môn phụ trách môn bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER).
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/hand-over")]
-    [Authorize(Roles = "department_head,examination_officer,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> HandOverExamSet(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;

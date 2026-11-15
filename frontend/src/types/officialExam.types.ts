@@ -357,6 +357,8 @@ export interface StudentInternalAppealInfo {
   canAppeal: boolean
   instruction: string
   appealDeadlineDays: number
+  appealDeadlineAtUtc: string | null
+  canAcknowledge: boolean
   appealEndpoint: string
 }
 
@@ -368,7 +370,7 @@ export interface StudentOfficialExamGrade {
   status: string
   isLocked: boolean
   totalScore: number | null
-  publishedAt: string
+  publishedAt: string | null
   publishedBy: string
   studentAcknowledgementStatus: string
   detailedScorecard: StudentOfficialExamQuestionScorecard[]

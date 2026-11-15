@@ -88,7 +88,8 @@ public class DuplicateQuestionAndExamSetTests
         var structureId = Guid.NewGuid();
         var headId = Guid.NewGuid();
 
-        context.Courses.Add(new Course { Id = courseId, Code = "CSD201", Name = "Data Structures", IsActive = true });
+        context.Users.Add(new User { Id = headId, Email = "head@examsets.test", FullName = "Head", Role = UserRole.DepartmentHead, IsActive = true });
+        context.Courses.Add(new Course { Id = courseId, Code = "CSD201", Name = "Data Structures", IsActive = true, DepartmentHeadUserId = headId });
         context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
 
         // Câu hỏi dùng chung (sẽ bị cắm cờ trùng lặp)
@@ -190,7 +191,7 @@ public class DuplicateQuestionAndExamSetTests
     {
         await using var context = CreateDbContext();
 
-        var officerId = Guid.NewGuid();
+        var headId = Guid.NewGuid();
         var examSet = new ExamSet
         {
             Id = Guid.NewGuid(),
@@ -201,10 +202,12 @@ public class DuplicateQuestionAndExamSetTests
             IsActive = true
         };
         context.ExamSets.Add(examSet);
+        context.Users.Add(new User { Id = headId, Email = "head@examsets.test", FullName = "Head", Role = UserRole.DepartmentHead, IsActive = true });
+        context.Courses.Add(new Course { Id = examSet.CourseId, Code = "PRN231", Name = "Owned course", DepartmentHeadUserId = headId });
         await context.SaveChangesAsync();
 
         var handler = new HandOverExamSetCommandHandler(context);
-        var result = await handler.Handle(new HandOverExamSetCommand(examSet.Id, officerId, UserRole.ExaminationOfficer), CancellationToken.None);
+        var result = await handler.Handle(new HandOverExamSetCommand(examSet.Id, headId, UserRole.DepartmentHead), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
 
@@ -227,11 +230,14 @@ public class DuplicateQuestionAndExamSetTests
             Status = ExamSetStatus.Draft,
             IsActive = true
         };
+        var head = new User { Email = "head@examsets.test", FullName = "Head", Role = UserRole.DepartmentHead, IsActive = true };
+        context.Users.Add(head);
+        context.Courses.Add(new Course { Id = examSet.CourseId, Code = "DRAFT", Name = "Owned course", DepartmentHeadUserId = head.Id });
         context.ExamSets.Add(examSet);
         await context.SaveChangesAsync();
 
         var handler = new HandOverExamSetCommandHandler(context);
-        var result = await handler.Handle(new HandOverExamSetCommand(examSet.Id, Guid.NewGuid(), UserRole.DepartmentHead), CancellationToken.None);
+        var result = await handler.Handle(new HandOverExamSetCommand(examSet.Id, head.Id, UserRole.DepartmentHead), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("OFFICIAL");

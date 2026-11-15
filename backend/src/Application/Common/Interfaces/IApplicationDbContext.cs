@@ -57,4 +57,18 @@ public interface IApplicationDbContext
     /// Bắt đầu phạm vi khóa phân bổ câu hỏi bằng Advisory Lock trên PostgreSQL (hoặc no-op nếu là InMemory).
     /// </summary>
     Task<IAsyncDisposable?> BeginShiftAllocationLockScopeAsync(Guid shiftId, CancellationToken cancellationToken = default);
+
+    Task<T> ExecuteTicketDecisionAsync<T>(Guid ticketId, Func<CancellationToken, Task<T>> decision, CancellationToken cancellationToken = default);
+    /// <summary>Serialize and atomically persist a mock start for one student/course/Vietnam day.</summary>
+    Task<T> ExecuteMockExamStartAsync<T>(Guid studentId, Guid courseId, DateOnly quotaDate, Func<CancellationToken, Task<T>> start, CancellationToken cancellationToken = default);
+    /// <summary>Serialize question allocation and idempotent participation for one in-class shift.</summary>
+    Task<T> ExecuteInClassJoinAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> join, CancellationToken cancellationToken = default);
+    /// <summary>Serialize answer persistence and participant-state calculation for one student in one in-class shift.</summary>
+    Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId, Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default);
+    /// <summary>Serialize one appeal transition so concurrent requests cannot skip or duplicate a workflow step.</summary>
+    Task<T> ExecuteAppealTransitionAsync<T>(Guid appealId, Func<CancellationToken, Task<T>> transition, CancellationToken cancellationToken = default);
+    /// <summary>Serialize an appeal decision with its ticket aggregate to keep the locked audit score consistent.</summary>
+    Task<T> ExecuteAppealDecisionAsync<T>(Guid appealId, Guid ticketId, Func<CancellationToken, Task<T>> decision, CancellationToken cancellationToken = default);
+    /// <summary>Serialize appeal assignments and lecturer workload checks under the same transaction.</summary>
+    Task<T> ExecuteAppealAssignmentAsync<T>(IReadOnlyCollection<Guid> appealIds, IReadOnlyCollection<Guid> lecturerIds, Func<CancellationToken, Task<T>> assignment, CancellationToken cancellationToken = default);
 }

@@ -110,6 +110,7 @@ public class R2InternalAppealAndAllocationTests
             StudentId = student.Id,
             SeatNumber = 1,
             Status = ExamTicketStatus.Published,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = true
         };
         var submission = new ExamQuestionSubmission
@@ -315,8 +316,11 @@ public class R2InternalAppealAndAllocationTests
         }
         await context.SaveChangesAsync();
 
+        var officer = new User { Email = $"officer.{Guid.NewGuid():N}@fe.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var handler = new GetAppealAllocationProposalQueryHandler(context);
-        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id, officer.Id, officer.Role), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TotalAppeals.Should().Be(30);
@@ -401,8 +405,11 @@ public class R2InternalAppealAndAllocationTests
         }
         await context.SaveChangesAsync();
 
+        var officer = new User { Email = $"officer.{Guid.NewGuid():N}@fe.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var handler = new GetAppealAllocationProposalQueryHandler(context);
-        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id, officer.Id, officer.Role), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TotalAppeals.Should().Be(50);
@@ -410,7 +417,8 @@ public class R2InternalAppealAndAllocationTests
 
         // 50 bài chia cho 2 GV -> mỗi GV nhận 25 bài
         result.Value.LecturerSummaries.Should().HaveCount(2);
-        result.Value.LecturerSummaries.Should().OnlyContain(s => s.AssignedCount == 25);
+        result.Value.LecturerSummaries.Should().OnlyContain(s => s.AssignedCount == 24);
+        result.Value.Items.Count(item => item.ProposedLecturerId is null).Should().Be(2);
     }
 
     [Fact(DisplayName = "R2-06: Thuật toán đề xuất phân bổ loại trừ Giám khảo chấm ban đầu")]
@@ -495,8 +503,11 @@ public class R2InternalAppealAndAllocationTests
         }
         await context.SaveChangesAsync();
 
+        var officer = new User { Email = $"officer.{Guid.NewGuid():N}@fe.edu.vn", FullName = "Cán bộ Khảo thí", Role = UserRole.ExaminationOfficer, IsActive = true };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
         var handler = new GetAppealAllocationProposalQueryHandler(context);
-        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAppealAllocationProposalQuery(session.Id, officer.Id, officer.Role), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
 
@@ -587,7 +598,7 @@ public class R2InternalAppealAndAllocationTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProposedScore.Should().Be(8.5m);
-        result.Value.Status.Should().Be(AppealStatus.InReview); // Vẫn ở InReview
+        result.Value.Status.Should().Be(AppealStatus.RegradedByLecturer);
 
         // Kiểm tra trong DB: Điểm Audit và Submission chưa hề bị thay đổi
         var auditInDb = await context.LecturerAudits.FirstOrDefaultAsync(a => a.TicketId == ticket.Id);
@@ -611,7 +622,7 @@ public class R2InternalAppealAndAllocationTests
             SessionId = ticket.Shift!.SessionId,
             SubmissionId = submission.Id,
             Reason = "Xin chấm lại",
-            Status = AppealStatus.InReview,
+            Status = AppealStatus.RegradedByLecturer,
             AssignedTo = lecturer.Id,
             ProposedScore = 8.5m,
             ReviewNotes = "Đề xuất 8.5m",

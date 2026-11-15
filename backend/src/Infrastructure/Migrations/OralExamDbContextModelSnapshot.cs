@@ -274,9 +274,9 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("PENDING")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("SUBMITTED_TO_EXAM_OFFICE")
                         .HasColumnName("status");
 
                     b.Property<Guid>("StudentId")
@@ -322,7 +322,7 @@ namespace OralExamination.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_appeal_requests_scores", "(original_score IS NULL OR (original_score >= 0 AND original_score <= 10.00)) AND (proposed_score IS NULL OR (proposed_score >= 0 AND proposed_score <= 10.00))");
 
-                            t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED')");
+                            t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED')");
                         });
 
                     b.HasData(
@@ -3572,6 +3572,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("PENDING")
                         .HasColumnName("student_acknowledgement_status");
 
+                    b.Property<DateTime?>("GradesPublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grades_published_at");
+
                     b.Property<Guid>("StudentId")
                         .HasColumnType("uuid")
                         .HasColumnName("student_id");
@@ -4250,7 +4254,7 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
                         .WithMany()
                         .HasForeignKey("CloId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamQuestions")
@@ -4681,7 +4685,7 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
                         .WithMany()
                         .HasForeignKey("CloId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("PracticeQuestions")

@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Domain.Entities;
@@ -59,15 +60,14 @@ public sealed class SyncCourseOfferingLecturersCommandHandler(
                 "FORBIDDEN: Tài khoản người thực hiện đang bị vô hiệu hóa.");
         }
 
-        var isAdmin = string.Equals(actor.Role, UserRole.Admin, StringComparison.OrdinalIgnoreCase);
         var isOwningDepartmentHead =
             string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
-            offering.Course.AcademicProgram?.DepartmentHeadUserId == actor.Id;
+            AcademicCourseOwnership.IsOwnedBy(offering.Course, actor.Id);
 
-        if (!isAdmin && !isOwningDepartmentHead)
+        if (!isOwningDepartmentHead)
         {
             return Result<SyncCourseOfferingLecturersResponseDto>.Failure(
-                "FORBIDDEN: Chỉ Admin hoặc Trưởng bộ môn của ngành sở hữu môn học mới được phân công giảng viên.");
+                "FORBIDDEN: Chỉ Trưởng bộ môn sở hữu môn học mới được phân công giảng viên.");
         }
 
         var selectedIds = request.LecturerUserIds.ToHashSet();
@@ -92,13 +92,13 @@ public sealed class SyncCourseOfferingLecturersCommandHandler(
 
         var assignments = await context.CourseLecturers
             .Where(a => a.CourseOfferingId == offering.Id ||
-                        (a.CourseOfferingId == null &&
-                         a.CourseId == offering.CourseId &&
+                        (a.CourseId == offering.CourseId &&
                          a.SemesterId == offering.SemesterId))
             .ToListAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
         var disabledCount = 0;
+        var previousActiveIds = assignments.Where(a => a.IsActive).Select(a => a.LecturerUserId).Order().ToArray();
 
         foreach (var assignment in assignments)
         {
@@ -139,6 +139,7 @@ public sealed class SyncCourseOfferingLecturersCommandHandler(
             Action = "COURSE_OFFERING_LECTURERS_SYNCED",
             EntityName = "course_offerings",
             EntityId = offering.Id,
+            OldValues = $"LecturerUserIds={string.Join(',', previousActiveIds)}",
             NewValues = $"LecturerUserIds={string.Join(',', selectedIds.Order())}",
             CreatedAt = now
         });

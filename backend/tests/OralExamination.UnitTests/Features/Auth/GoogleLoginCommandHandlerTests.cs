@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Features.Auth;
 using OralExamination.Application.Features.Auth.Commands.GoogleLogin;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -20,29 +21,51 @@ namespace OralExamination.UnitTests.Features.Auth;
 
 public class GoogleLoginCommandHandlerTests
 {
-    [Fact]
-    public async Task Handle_NewEmail_CreatesStudentAndReturnsRefreshToken()
+    [Theory]
+    [InlineData("New.Student@gmail.com", null)]
+    [InlineData("TotntSE180123@fpt.edu.vn", "SE180123")]
+    public async Task Handle_VerifiedNewGoogleIdentity_ProvisionsOnlyStudentWithoutLocalPassword(string email, string? studentCode)
     {
         await using var context = CreateDbContext();
         var google = new FakeGoogle
         {
-            Identity = new GoogleUserIdentity("New.Student@gmail.com", "Sinh Viên Mới")
+            Identity = new GoogleUserIdentity(email, "Sinh Viên Mới")
         };
         var issuer = new FakeIssuer();
         var handler = CreateHandler(context, google, issuer);
 
-        var result = await handler.Handle(new GoogleLoginCommand("token"), CancellationToken.None);
+        var result = await handler.Handle(new GoogleLoginCommand("token", AuthTestNonceStore.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.User.Role.Should().Be(UserRole.Student);
-        result.Value.User.StudentCode.Should().BeNull();
-        result.Value.User.Email.Should().Be("new.student@gmail.com");
-        result.Value.ExpiresIn.Should().Be(900);
-        result.Value.TokenType.Should().Be("Bearer");
-        result.Value.RefreshToken.Should().NotBeNullOrWhiteSpace();
-        (await context.Users.CountAsync()).Should().Be(1);
+        var user = await context.Users.SingleAsync();
+        user.Email.Should().Be(email.ToLowerInvariant());
+        user.StudentCode.Should().Be(studentCode);
+        user.IsActive.Should().BeTrue();
+        user.MustChangePassword.Should().BeFalse();
+        user.PasswordHash.Should().BeNull();
+        user.Username.Should().BeNull();
         (await context.RefreshTokens.CountAsync()).Should().Be(1);
+        context.ChangeTracker.HasChanges().Should().BeFalse();
         issuer.Calls.Should().Be(1);
+        issuer.Role.Should().Be(UserRole.Student);
+        issuer.MustChangePassword.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_NewIdentityWithWrongBrowserNonce_DoesNotProvisionUserOrIssueTokens()
+    {
+        await using var context = CreateDbContext();
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(context, new FakeGoogle { Identity = new GoogleUserIdentity("new@fpt.edu.vn", "New") }, issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-signed-token", new string('x', 43)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(AuthErrors.GoogleNonceInvalid);
+        (await context.Users.CountAsync()).Should().Be(0);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+        issuer.Calls.Should().Be(0);
     }
 
     [Fact]
@@ -63,7 +86,7 @@ public class GoogleLoginCommandHandlerTests
         };
         var handler = CreateHandler(context, google, new FakeIssuer());
 
-        var result = await handler.Handle(new GoogleLoginCommand("token"), CancellationToken.None);
+        var result = await handler.Handle(new GoogleLoginCommand("token", AuthTestNonceStore.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.User.Role.Should().Be(UserRole.Admin);
@@ -90,11 +113,44 @@ public class GoogleLoginCommandHandlerTests
             Identity = new GoogleUserIdentity("locked@gmail.com", "Tài khoản khóa")
         }, issuer);
 
-        var result = await handler.Handle(new GoogleLoginCommand("token"), CancellationToken.None);
+        var result = await handler.Handle(new GoogleLoginCommand("token", AuthTestNonceStore.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("khóa");
         issuer.Calls.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ExistingUser_PreservesPasswordChangeRequirementInDatabaseAndToken(bool mustChangePassword)
+    {
+        await using var context = CreateDbContext();
+        var user = new User
+        {
+            Email = "provisioned@fpt.edu.vn",
+            FullName = "Sinh Viên Được Cấp",
+            Role = UserRole.Student,
+            IsActive = true,
+            MustChangePassword = mustChangePassword
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(context, new FakeGoogle
+        {
+            Identity = new GoogleUserIdentity(user.Email, user.FullName)
+        }, issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        issuer.Calls.Should().Be(1);
+        issuer.MustChangePassword.Should().Be(mustChangePassword);
+        context.ChangeTracker.Clear();
+        var persistedUser = await context.Users.SingleAsync();
+        persistedUser.MustChangePassword.Should().Be(mustChangePassword);
+        (await context.RefreshTokens.CountAsync()).Should().Be(1);
     }
 
     [Fact]
@@ -104,7 +160,7 @@ public class GoogleLoginCommandHandlerTests
         var issuer = new FakeIssuer();
         var handler = CreateHandler(context, new FakeGoogle { Reject = true }, issuer);
 
-        var result = await handler.Handle(new GoogleLoginCommand("bad-token"), CancellationToken.None);
+        var result = await handler.Handle(new GoogleLoginCommand("bad-token", AuthTestNonceStore.Value), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("Google");
@@ -155,7 +211,7 @@ public class GoogleLoginCommandHandlerTests
         FakeGoogle google,
         FakeIssuer issuer)
     {
-        return new GoogleLoginCommandHandler(context, google, issuer, new GoogleLoginCommandValidator());
+        return new GoogleLoginCommandHandler(context, google, issuer, new GoogleLoginCommandValidator(), new AuthTestNonceStore());
     }
 
     private static OralExamDbContext CreateDbContext()
@@ -180,17 +236,21 @@ public class GoogleLoginCommandHandlerTests
                 throw new GoogleIdTokenRejectedException();
             }
 
-            return Task.FromResult(Identity!);
+            return Task.FromResult(Identity! with { Nonce = AuthTestNonceStore.Value });
         }
     }
 
     private sealed class FakeIssuer : IAccessTokenIssuer
     {
         public int Calls { get; private set; }
+        public bool MustChangePassword { get; private set; }
+        public string? Role { get; private set; }
 
         public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
         {
             Calls++;
+            MustChangePassword = mustChangePassword;
+            Role = role;
             return new IssuedAccessToken("access-token", 900);
         }
     }

@@ -300,6 +300,9 @@ public class ExportAndVerifyGradeCertificateTests
         var dbName = Guid.NewGuid().ToString();
         using var seedContext = CreateDbContext(dbName, withLockInterceptor: false);
         var (_, _, audit, appeal, deptHead) = await SeedShiftDataAsync(seedContext);
+        appeal.Status = AppealStatus.RegradedByLecturer;
+        appeal.ProposedScore = 9.75m;
+        await seedContext.SaveChangesAsync();
 
         using var activeContext = CreateDbContext(dbName, withLockInterceptor: true);
         var reviewHandler = new ReviewAppealDecisionCommandHandler(activeContext);

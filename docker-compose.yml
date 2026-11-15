@@ -41,6 +41,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_HTTP_PORTS: "5000"
+      # Set the exact frontend proxy container IP before production rollout; never trust all networks.
+      Security__TrustedProxies__0: ${TRUSTED_PROXY_IP:-127.0.0.1}
       DATABASE_ALLOW_IN_MEMORY_FALLBACK: "false"
       DATABASE_ENABLE_DEVELOPMENT_SEED: ${DATABASE_ENABLE_DEVELOPMENT_SEED:-true}
       GradingQueue__MaxDegreeOfParallelism: ${GRADING_MAX_PARALLELISM:-${GRADING_QUEUE_MAX_PARALLELISM:-12}}

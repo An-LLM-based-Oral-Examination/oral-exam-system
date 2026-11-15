@@ -293,6 +293,7 @@ public class ContractCompletenessTests
             Role = UserRole.Student,
             IsActive = true
         };
+        course.DepartmentHeadUserId = head.Id;
         db.Courses.Add(course);
         db.Users.AddRange(head, student);
         await db.SaveChangesAsync();
@@ -360,6 +361,7 @@ public class ContractCompletenessTests
             SeatNumber = 1,
             IpAddress = "10.0.0.11",
             Status = ExamTicketStatus.Published,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = true,
             StudentAcknowledgementStatus = "PENDING"
         };
@@ -628,6 +630,14 @@ public class ContractCompletenessTests
             Role = UserRole.Lecturer,
             IsActive = true
         };
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.publish@fpt.edu.vn",
+            FullName = "Cán bộ Khảo thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
         var ungradedTicket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
@@ -657,7 +667,7 @@ public class ContractCompletenessTests
             GradingStatus = "ai_graded",
             SubmittedAt = DateTime.UtcNow
         };
-        db.Users.Add(lecturer);
+        db.Users.AddRange(lecturer, officer);
         db.StudentExamTickets.AddRange(ungradedTicket, gradedTicket);
         db.ExamQuestionSubmissions.Add(submission);
         await db.SaveChangesAsync();
@@ -787,7 +797,7 @@ public class ContractCompletenessTests
 
         var publishHandler = new OralExamination.Application.Features.OfficialExams.Commands.PublishGrades.PublishGradesCommandHandler(db);
         var publishRes = await publishHandler.Handle(
-            new OralExamination.Application.Features.OfficialExams.Commands.PublishGrades.PublishGradesCommand(shift.Id, lecturer.Id),
+            new OralExamination.Application.Features.OfficialExams.Commands.PublishGrades.PublishGradesCommand(shift.Id, officer.Id),
             CancellationToken.None);
         publishRes.IsSuccess.Should().BeTrue();
         publishRes.Value.TotalPublished.Should().Be(3);
@@ -966,6 +976,7 @@ public class ContractCompletenessTests
             SemesterId = Guid.NewGuid(),
             IsActive = true
         };
+        course.DepartmentHeadUserId = head.Id;
         db.Users.AddRange(head, student);
         db.Courses.Add(course);
         await db.SaveChangesAsync();
@@ -1042,12 +1053,12 @@ public class ContractCompletenessTests
         var reviewAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.ReviewAppeal))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        reviewAttr.Roles.Should().Be("examination_officer,admin");
+        reviewAttr.Roles.Should().Be("examination_officer");
 
         var assignAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.AssignLecturer))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        assignAttr.Roles.Should().Be("examination_officer,admin");
+        assignAttr.Roles.Should().Be("examination_officer");
 
         var regradeAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             appealsType.GetMethod(nameof(global::API.Controllers.v1.AppealsController.Regrade))!,

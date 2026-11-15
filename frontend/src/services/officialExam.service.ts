@@ -472,11 +472,7 @@ function normalizeGrade(payload: unknown): StudentOfficialExamGrade {
     status: requiredString(record, 'status', 'Điểm thi thật thiếu trạng thái.'),
     isLocked: requiredBoolean(record, 'isLocked', 'Điểm thi thật thiếu trạng thái khóa.'),
     totalScore: readNullableNumber(record, 'totalScore'),
-    publishedAt: requiredDateString(
-      record,
-      'publishedAt',
-      'Điểm thi thật thiếu thời điểm công bố.',
-    ),
+    publishedAt: readNullableString(record, 'publishedAt'),
     publishedBy: requiredString(record, 'publishedBy', 'Điểm thi thật thiếu người công bố.'),
     studentAcknowledgementStatus: requiredString(
       record,
@@ -488,6 +484,8 @@ function normalizeGrade(payload: unknown): StudentOfficialExamGrade {
       canAppeal: readBoolean(appeal, 'canAppeal') ?? false,
       instruction: readString(appeal, 'instruction') ?? '',
       appealDeadlineDays: readNumber(appeal, 'appealDeadlineDays') ?? 0,
+      appealDeadlineAtUtc: readNullableString(appeal, 'appealDeadlineAtUtc'),
+      canAcknowledge: readBoolean(appeal, 'canAcknowledge') ?? false,
       appealEndpoint: readString(appeal, 'appealEndpoint') ?? '/api/v1/appeals',
     },
   }

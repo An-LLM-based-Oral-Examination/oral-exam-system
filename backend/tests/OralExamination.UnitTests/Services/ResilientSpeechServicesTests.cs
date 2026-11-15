@@ -31,8 +31,19 @@ public class ResilientSpeechServicesTests
 {
     private static IConfiguration BuildConfig(Dictionary<string, string?> values)
     {
+        // Missing credentials are intentional test inputs. Explicit empty values
+        // prevent the service from falling back to the developer machine's secrets.
+        var settings = new Dictionary<string, string?>(values);
+        if (!settings.ContainsKey("Gemini:ApiKey") && !settings.ContainsKey("Gemini__ApiKey"))
+        {
+            settings["Gemini:ApiKey"] = string.Empty;
+        }
+        if (!settings.ContainsKey("Gemini:FallbackApiKey") && !settings.ContainsKey("Gemini__FallbackApiKey"))
+        {
+            settings["Gemini:FallbackApiKey"] = string.Empty;
+        }
         return new ConfigurationBuilder()
-            .AddInMemoryCollection(values)
+            .AddInMemoryCollection(settings)
             .Build();
     }
 

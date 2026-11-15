@@ -61,6 +61,7 @@ public class GetAppealsQueryHandlerTests
             Credits = 3,
             SemesterId = semester.Id
         };
+        course.DepartmentHeadUserId = deptHead.Id;
 
         var session = new OfficialExamSession
         {
@@ -130,10 +131,10 @@ public class GetAppealsQueryHandlerTests
     public async Task Handle_GetAppeals_Should_Return_All_Appeals()
     {
         using var context = CreateDbContext();
-        await SeedDataAsync(context);
+        var (_, deptHead, _, _, _) = await SeedDataAsync(context);
 
         var handler = new GetAppealsQueryHandler(context);
-        var query = new GetAppealsQuery();
+        var query = new GetAppealsQuery(RequesterId: deptHead.Id, RequesterRole: deptHead.Role);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -145,10 +146,10 @@ public class GetAppealsQueryHandlerTests
     public async Task Handle_GetAppeals_Should_Filter_By_Status()
     {
         using var context = CreateDbContext();
-        await SeedDataAsync(context);
+        var (_, deptHead, _, _, _) = await SeedDataAsync(context);
 
         var handler = new GetAppealsQueryHandler(context);
-        var query = new GetAppealsQuery(Status: AppealStatus.Pending);
+        var query = new GetAppealsQuery(Status: AppealStatus.Pending, RequesterId: deptHead.Id, RequesterRole: deptHead.Role);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -161,10 +162,10 @@ public class GetAppealsQueryHandlerTests
     public async Task Handle_GetAppealById_Should_Return_Appeal_Detail()
     {
         using var context = CreateDbContext();
-        var (_, _, _, appeal1, _) = await SeedDataAsync(context);
+        var (_, deptHead, _, appeal1, _) = await SeedDataAsync(context);
 
         var handler = new GetAppealByIdQueryHandler(context);
-        var query = new GetAppealByIdQuery(appeal1.Id);
+        var query = new GetAppealByIdQuery(appeal1.Id, deptHead.Id, deptHead.Role);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -177,10 +178,10 @@ public class GetAppealsQueryHandlerTests
     public async Task Handle_GetAppealById_Should_Fail_When_Not_Found()
     {
         using var context = CreateDbContext();
-        await SeedDataAsync(context);
+        var (_, deptHead, _, _, _) = await SeedDataAsync(context);
 
         var handler = new GetAppealByIdQueryHandler(context);
-        var query = new GetAppealByIdQuery(Guid.NewGuid());
+        var query = new GetAppealByIdQuery(Guid.NewGuid(), deptHead.Id, deptHead.Role);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -193,10 +194,17 @@ public class GetAppealsQueryHandlerTests
     {
         using var context = CreateDbContext();
         await SeedDataAsync(context);
+        var outsider = new User
+        {
+            Id = Guid.NewGuid(), Email = "outsider.student@fpt.edu.vn", FullName = "Outsider",
+            Role = UserRole.Student, IsActive = true
+        };
+        context.Users.Add(outsider);
+        await context.SaveChangesAsync();
         var handler = new GetAppealsQueryHandler(context);
 
         var result = await handler.Handle(
-            new GetAppealsQuery(RequesterId: Guid.NewGuid(), RequesterRole: UserRole.Student),
+            new GetAppealsQuery(RequesterId: outsider.Id, RequesterRole: UserRole.Student),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -208,13 +216,20 @@ public class GetAppealsQueryHandlerTests
     {
         using var context = CreateDbContext();
         var (_, _, _, appeal, _) = await SeedDataAsync(context);
+        var outsider = new User
+        {
+            Id = Guid.NewGuid(), Email = "outsider.lecturer@fpt.edu.vn", FullName = "Outsider lecturer",
+            Role = UserRole.Lecturer, IsActive = true
+        };
+        context.Users.Add(outsider);
+        await context.SaveChangesAsync();
         var handler = new GetAppealByIdQueryHandler(context);
 
         var result = await handler.Handle(
-            new GetAppealByIdQuery(appeal.Id, Guid.NewGuid(), UserRole.Lecturer),
+            new GetAppealByIdQuery(appeal.Id, outsider.Id, UserRole.Lecturer),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("phạm vi được phép truy cập");
+        result.Error.Should().StartWith("FORBIDDEN:");
     }
 }

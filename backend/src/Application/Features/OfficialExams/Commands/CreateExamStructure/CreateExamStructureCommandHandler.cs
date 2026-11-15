@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
@@ -15,7 +16,7 @@ using OralExamination.Domain.Enums;
 namespace OralExamination.Application.Features.OfficialExams.Commands.CreateExamStructure;
 
 /// <summary>
-/// Handler xử lý tạo mới cấu trúc đề thi (ExamStructure) của Trưởng Bộ Môn / Quản trị viên.
+/// Handler xử lý tạo mới cấu trúc đề thi của Trưởng Bộ Môn phụ trách môn.
 /// </summary>
 public sealed class CreateExamStructureCommandHandler(IApplicationDbContext context)
     : IRequestHandler<CreateExamStructureCommand, Result<ExamStructureDto>>
@@ -44,18 +45,23 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
                 "FORBIDDEN: Không xác định được danh tính người thực hiện thao tác.");
         }
 
-        if (actor.Role != UserRole.DepartmentHead && actor.Role != UserRole.Admin)
+        if (actor.Role != UserRole.DepartmentHead)
         {
             return Result<ExamStructureDto>.Failure(
-                "FORBIDDEN: Chỉ Trưởng Bộ Môn hoặc Quản trị viên mới có quyền cấu hình đề thi.");
+                "FORBIDDEN: Chỉ Trưởng Bộ Môn phụ trách môn mới có quyền cấu hình đề thi.");
         }
 
-        var course = await _context.Courses.FirstOrDefaultAsync(
+        var course = await _context.Courses.Include(course => course.AcademicProgram).FirstOrDefaultAsync(
             c => c.Id == request.CourseId && c.IsActive,
             cancellationToken);
         if (course is null)
         {
             return Result<ExamStructureDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
+        }
+
+        if (!AcademicCourseOwnership.IsOwnedBy(course, actor.Id))
+        {
+            return Result<ExamStructureDto>.Failure("FORBIDDEN: Môn học không thuộc phạm vi phụ trách.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name) ||
