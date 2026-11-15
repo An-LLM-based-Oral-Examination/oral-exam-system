@@ -295,6 +295,15 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                    EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
+                END IF;
+                BEGIN
+                    ALTER TABLE real_exam_session_shifts ADD CONSTRAINT ck_shifts_max_seats
+                        CHECK (max_seats >= 1 AND max_seats <= 40);
+                EXCEPTION WHEN duplicate_object THEN NULL;
+                END;
                 BEGIN
                     ALTER TABLE real_exam_session_shifts ADD CONSTRAINT "FK_real_exam_session_shifts_users_examiner_user_id"
                         FOREIGN KEY (examiner_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -911,6 +920,7 @@ DO $reconcile_pre$
                 proctor_user_id uuid NULL,
                 published_at timestamp with time zone NULL,
                 room_lab character varying(50) NOT NULL,
+                max_seats integer NOT NULL DEFAULT 24,
                 session_id uuid NULL,
                 shift_name character varying(100) NOT NULL,
                 start_time timestamp with time zone NULL,
@@ -1163,6 +1173,10 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS examiner_user_id uuid NULL;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                    EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
+                END IF;
             END IF;
 
             -- dead_letter_queues

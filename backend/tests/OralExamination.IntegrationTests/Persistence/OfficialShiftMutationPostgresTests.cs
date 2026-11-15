@@ -17,6 +17,19 @@ namespace OralExamination.IntegrationTests.Persistence;
 [Trait("Category", "PostgresIntegration")]
 public class OfficialShiftMutationPostgresTests(PostgresFixture fixture)
 {
+    [Fact]
+    public async Task ShiftCapacity_DatabaseEnforcesHardMaximumAndPersistsDefault()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        await using var context = database.CreateContext();
+        var data = await TestData.OfficialAsync(context);
+
+        data.Ticket.Shift.MaxSeats.Should().Be(24);
+        data.Ticket.Shift.MaxSeats = 41;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+    }
+
     private static async Task<(OfficialData Data, User Officer)> Seed(TestDatabase database, bool empty = false)
     {
         await using var context = database.CreateContext();

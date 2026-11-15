@@ -116,6 +116,23 @@ public class OfficialExamCheckInTests
         result.Value.ProctorUserId.Should().Be(proctor.Id);
         result.Value.ExaminerUserId.Should().Be(examiner.Id);
         result.Value.RoomLab.Should().Be("Lab 7.1");
+        result.Value.MaxSeats.Should().Be(OfficialExamRules.DefaultShiftCapacity);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(41)]
+    public void OpenShift_CapacityOutsideHardLimit_FailsValidation(int maxSeats)
+    {
+        var command = new OpenExamShiftCommand(
+            Guid.NewGuid(), Guid.NewGuid(), "Morning", "Lab",
+            DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1),
+            Guid.NewGuid(), Guid.NewGuid(), maxSeats);
+
+        var result = new OpenExamShiftCommandValidator().Validate(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(error => error.PropertyName == nameof(OpenExamShiftCommand.MaxSeats));
     }
 
     [Fact]
@@ -139,6 +156,25 @@ public class OfficialExamCheckInTests
         created.IsSuccess.Should().BeTrue();
         duplicate.IsSuccess.Should().BeFalse();
         duplicate.Error.Should().Be(OfficialExamErrors.SeatTaken);
+    }
+
+    [Fact]
+    public async Task AssignTicket_SeatAboveConfiguredCapacity_FailsWithoutCreatingTicket()
+    {
+        await using var context = CreateDbContext();
+        var officer = await SeedUser(context, UserRole.ExaminationOfficer);
+        var student = await SeedUser(context, UserRole.Student);
+        var session = await SeedSession(context, officer.Id);
+        var shift = await SeedShift(context, session.Id, officer.Id);
+        shift.MaxSeats = 24;
+        await context.SaveChangesAsync();
+
+        var result = await new AssignExamTicketCommandHandler(context, new AssignExamTicketCommandValidator())
+            .Handle(new AssignExamTicketCommand(officer.Id, shift.Id, student.Id, 25, "192.168.1.125"), default);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("1 đến 24");
+        (await context.StudentExamTickets.CountAsync()).Should().Be(0);
     }
 
     [Fact]

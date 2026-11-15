@@ -28,6 +28,7 @@ public class OfficialShiftMutationControllerTests
     [InlineData(ShiftMutationErrors.HasTickets, 409, "SHIFT_HAS_TICKETS")]
     [InlineData(ShiftMutationErrors.HasSubmissions, 409, "SHIFT_HAS_SUBMISSIONS")]
     [InlineData(ShiftMutationErrors.Published, 409, "SHIFT_EXAM_PUBLISHED")]
+    [InlineData(ShiftMutationErrors.CapacityBelowAllocation, 409, "SHIFT_CAPACITY_BELOW_ALLOCATION")]
     [InlineData(OfficialExamErrors.Forbidden, 403, "SHIFT_FORBIDDEN")]
     [InlineData(OfficialExamErrors.ShiftNotFound, 404, "SHIFT_RESOURCE_NOT_FOUND")]
     [InlineData("Invalid input", 400, "SHIFT_INVALID_INPUT")]

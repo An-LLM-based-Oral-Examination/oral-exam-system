@@ -397,7 +397,7 @@ public class SatelliteModulesTests
         afterAll.Value.UnreadCount.Should().Be(0);
     }
 
-    [Fact(DisplayName = "BE-V10: Proctor Room Monitor trả về sơ đồ 40 ghế, cập nhật điểm danh và đình chỉ vé thi vi phạm Kiosk")]
+    [Fact(DisplayName = "BE-V10: Proctor Room Monitor trả về sơ đồ theo sức chứa, cập nhật điểm danh và đình chỉ vé thi vi phạm Kiosk")]
     public async Task ProctorRoomMonitor_ShouldReturn40Seats_UpdateAttendance_AndSuspendTicket()
     {
         await using var context = CreateDbContext();
@@ -474,8 +474,8 @@ public class SatelliteModulesTests
         var monitorHandler = new GetShiftAttendanceQueryHandler(context);
         var monitor = await monitorHandler.Handle(new GetShiftAttendanceQuery(shift.Id, proctor.Id), CancellationToken.None);
         monitor.IsSuccess.Should().BeTrue();
-        monitor.Value.TotalSeats.Should().Be(40);
-        monitor.Value.Seats.Should().HaveCount(40);
+        monitor.Value.TotalSeats.Should().Be(24);
+        monitor.Value.Seats.Should().HaveCount(24);
         monitor.Value.SuspendedCount.Should().Be(1);
 
         var seat5 = monitor.Value.Seats.First(s => s.SeatNumber == 5);

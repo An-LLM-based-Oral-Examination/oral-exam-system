@@ -54,7 +54,8 @@ public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
                 sh.Status,
                 sh.ExaminerUserId,
                 sh.ExaminerUser != null ? sh.ExaminerUser.FullName : null,
-                sh.ProctorUser != null ? sh.ProctorUser.FullName : null))
+                sh.ProctorUser != null ? sh.ProctorUser.FullName : null,
+                sh.MaxSeats))
             .ToListAsync(cancellationToken);
 
         return Result<List<ExamShiftResponse>>.Success(shifts);

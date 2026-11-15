@@ -85,6 +85,38 @@ public class Task09ProctorAuthorizationTests
     }
 
     [Fact]
+    public async Task Attendance_UsesConfiguredShiftCapacityForGridAndSeatValidation()
+    {
+        await using var db = Create();
+        var actor = Actor("proctor");
+        var student = Actor("student");
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(), SessionId = Guid.NewGuid(), ShiftName = "QA", RoomLab = "QA",
+            ProctorUserId = actor.Id, MaxSeats = 2
+        };
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = student.Id, SeatNumber = 1, Status = "scheduled"
+        };
+        db.Users.AddRange(actor, student);
+        db.RealExamSessionShifts.Add(shift);
+        db.StudentExamTickets.Add(ticket);
+        await db.SaveChangesAsync();
+
+        var monitor = await new GetShiftAttendanceQueryHandler(db).Handle(new(shift.Id, actor.Id), default);
+        var update = await new UpdateTicketAttendanceCommandHandler(db)
+            .Handle(new(actor.Id, ticket.Id, SeatNumber: 3), default);
+
+        monitor.IsSuccess.Should().BeTrue();
+        monitor.Value.TotalSeats.Should().Be(2);
+        monitor.Value.Seats.Should().HaveCount(2);
+        update.IsSuccess.Should().BeFalse();
+        update.Error.Should().Contain("1 đến 2");
+        ticket.SeatNumber.Should().Be(1);
+    }
+
+    [Fact]
     public async Task InactiveAssignedProctor_CannotReadOrMutate()
     {
         await using var db = Create(); var actor = Actor("proctor"); actor.IsActive = false; var student = Actor("student");

@@ -82,6 +82,7 @@ public sealed class OpenExamShiftRequest
     public DateTime EndTime { get; set; }
     public Guid ProctorUserId { get; set; }
     public Guid ExaminerUserId { get; set; }
+    public int MaxSeats { get; set; } = OfficialExamRules.DefaultShiftCapacity;
 }
 
 public sealed record ExamShiftResponse(
@@ -95,7 +96,8 @@ public sealed record ExamShiftResponse(
     string Status,
     Guid? ExaminerUserId = null,
     string? ExaminerName = null,
-    string? ProctorName = null);
+    string? ProctorName = null,
+    int MaxSeats = OfficialExamRules.DefaultShiftCapacity);
 
 public sealed class ConfigureOfficialExamFollowUpRequest
 {
@@ -140,12 +142,24 @@ public sealed record BulkExamTicketImportRow(
 
 public sealed record BulkExamTicketImportIssue(int? SourceRow, string Message);
 
+public sealed record BulkExamTicketImportPreviewRow(
+    int SourceRow,
+    string StudentCode,
+    string? FullName,
+    int SeatNumber,
+    string IpAddress,
+    IReadOnlyList<string> Issues)
+{
+    public bool IsValid => Issues.Count == 0;
+}
+
 public sealed record BulkExamTicketImportPreview(
     Guid ShiftId,
     int ValidRowCount,
     int AvailableHandedOverSetCount,
     IReadOnlyList<BulkExamTicketImportIssue> Issues,
-    IReadOnlyList<string> ReservedExamSetCodes)
+    IReadOnlyList<string> ReservedExamSetCodes,
+    IReadOnlyList<BulkExamTicketImportPreviewRow>? Rows = null)
 {
     public bool CanCommit => Issues.Count == 0;
 }

@@ -20,9 +20,10 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
         {
             var shift = await context.RealExamSessionShifts.FirstOrDefaultAsync(s => s.Id == request.ShiftId, ct);
             if (shift is null) return Result.Failure(OfficialExamErrors.ShiftNotFound);
+            var maxSeats = request.MaxSeats ?? shift.MaxSeats;
             var validation = await new OpenExamShiftCommandValidator().ValidateAsync(new OpenExamShiftCommand(
                 request.ActorUserId, shift.SessionId, request.ShiftName, request.RoomLab, startTime,
-                endTime, request.ProctorUserId, request.ExaminerUserId), ct);
+                endTime, request.ProctorUserId, request.ExaminerUserId, maxSeats), ct);
             if (!validation.IsValid) return Result.Failure(validation.Errors[0].ErrorMessage);
             var conflict = await ShiftMutationGuard.Conflict(context, shift, false, ct);
             if (conflict is not null) return Result.Failure(conflict);
@@ -33,8 +34,21 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
             var examinerValid = await context.Users.AnyAsync(u => u.Id == request.ExaminerUserId && u.IsActive
                 && (u.Role == UserRole.Lecturer || u.Role == UserRole.DepartmentHead), ct);
             if (!examinerValid) return Result.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
+            var existingAllocation = await context.StudentExamTickets.AsNoTracking()
+                .Where(ticket => ticket.ShiftId == shift.Id)
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Count = group.Count(),
+                    HighestSeat = group.Max(ticket => ticket.SeatNumber)
+                })
+                .FirstOrDefaultAsync(ct);
+            if (existingAllocation is not null &&
+                (existingAllocation.Count > maxSeats || existingAllocation.HighestSeat > maxSeats))
+                return Result.Failure(ShiftMutationErrors.CapacityBelowAllocation);
             shift.ShiftName = request.ShiftName!.Trim();
             shift.RoomLab = request.RoomLab!.Trim();
+            shift.MaxSeats = maxSeats;
             shift.StartTime = startTime;
             shift.EndTime = endTime;
             shift.ProctorUserId = request.ProctorUserId;

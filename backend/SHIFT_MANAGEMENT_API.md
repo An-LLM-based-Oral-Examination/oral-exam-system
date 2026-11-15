@@ -42,6 +42,7 @@ phát hiện thêm nguyên nhân khác. Mỗi lỗi có `code` ổn định và 
 | `SHIFT_HAS_ANTI_CHEAT_LOGS` | Có log giám sát/vi phạm liên quan ca hoặc vé trong ca | Chính thức, Update/Delete |
 | `SHIFT_HAS_PARTICIPANTS` | Có người tham gia | Trên lớp, Update/Delete |
 | `SHIFT_HAS_PASSWORDS` | Đã phát sinh mật khẩu vào thi | Trên lớp, Update/Delete |
+| `SHIFT_CAPACITY_BELOW_ALLOCATION` | Sức chứa mới thấp hơn số vé hoặc ghế cao nhất đã cấp | Chính thức, Update |
 
 Ví dụ khi xóa ca có vé:
 
@@ -71,12 +72,16 @@ Ca chính thức:
   "startTime": "2027-01-10T01:00:00Z",
   "endTime": "2027-01-10T03:00:00Z",
   "proctorUserId": "<UUID giám thị đang hoạt động>",
-  "examinerUserId": "<UUID giảng viên chấm thi đang hoạt động>"
+  "examinerUserId": "<UUID giảng viên chấm thi đang hoạt động>",
+  "maxSeats": 24
 }
 ```
 
 Giám thị phải là proctor/lecturer; người chấm là lecturer/department_head và hai người phải khác nhau.
 Tên ca tối đa 100 ký tự, phòng tối đa 50 ký tự.
+`maxSeats` mặc định là 24 khi tạo ca và chỉ nhận giá trị từ 1 đến trần cứng 40.
+Không được giảm sức chứa thấp hơn số vé hoặc số ghế cao nhất đã cấp trong ca.
+Khi Update không gửi `maxSeats`, Backend giữ nguyên sức chứa hiện tại để tương thích client cũ.
 
 Ca trên lớp:
 
@@ -105,8 +110,9 @@ số câu phụ 0–5. Nguồn câu hỏi phải đủ câu, active, approved v�
 PostgreSQL: giao dịch ReadCommitted khóa hàng ca trước khi đọc điều kiện, đồng thời khóa vé
 hiện hữu đối với ca chính thức. Khóa cha ngăn insert con vượt qua kiểm tra ca trống;
 khóa vé ngăn điểm danh/nộp bài chen vào kiểm tra vé chưa dùng.
-Các writer công bố đề, kích hoạt, phân vé, import danh sách và tham gia dùng cùng khóa hàng ca.
-Không cần migration vì không thay schema.
+Các writer công bố đề, kích hoạt, phân vé, import danh sách, điểm danh/đổi ghế và tham gia dùng cùng khóa hàng ca.
+Migration `AddOfficialShiftCapacity` thêm `max_seats`; ca cũ nhận ít nhất 24 và tự nâng theo số ghế cao nhất
+đã cấp (tối đa 40) để không làm dữ liệu hiện hữu trở nên bất hợp lệ.
 
 Test liên quan: `ShiftMutationTests`, `InClassShiftMutationTests`,
 `OfficialShiftMutationControllerTests`, `InClassShiftsControllerTests`,
