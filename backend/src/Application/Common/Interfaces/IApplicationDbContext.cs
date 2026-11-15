@@ -53,6 +53,8 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
+    Task<T> ExecuteShiftAllocationAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> allocate, CancellationToken cancellationToken);
+
     /// <summary>
     /// Bắt đầu phạm vi khóa phân bổ câu hỏi bằng Advisory Lock trên PostgreSQL (hoặc no-op nếu là InMemory).
     /// </summary>

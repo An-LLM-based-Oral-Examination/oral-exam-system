@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { CompactPagination } from '@/components/common/CompactPagination'
 import {
   CheckCircle2,
   ChevronRight,
@@ -100,6 +101,18 @@ export function LecturerDashboardPage() {
   const [semester, setSemester] = useState<SemesterOption | null>(null)
   const [semesterCode, setSemesterCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [coursePage, setCoursePage] = useState(1)
+  const [wideCourseGrid, setWideCourseGrid] = useState(() => window.matchMedia('(min-width: 64rem)').matches)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 64rem)')
+    const update = () => {
+      setWideCourseGrid(media.matches)
+      setCoursePage(1)
+    }
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -165,6 +178,12 @@ export function LecturerDashboardPage() {
     }
     return [...map.values()]
   }, [offerings])
+
+  const coursePageSize = wideCourseGrid ? 6 : 2
+  const coursePageCount = Math.max(1, Math.ceil(assignedCourses.length / coursePageSize))
+  const currentCoursePage = Math.min(coursePage, coursePageCount)
+  const courseStart = (currentCoursePage - 1) * coursePageSize
+  const visibleCourses = assignedCourses.slice(courseStart, courseStart + coursePageSize)
 
   const metrics = useMemo<DashboardMetric[]>(
     () => [
@@ -290,8 +309,9 @@ export function LecturerDashboardPage() {
               description={`Chưa có môn trong kỳ ${semesterCode || 'hiện tại'}. Liên hệ Trưởng Bộ môn nếu thiếu phân công.`}
             />
           ) : (
+            <div className="space-y-4">
             <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              {assignedCourses.map((course) => {
+              {visibleCourses.map((course) => {
                 const courseClasses = classes.filter((item) => item.courseCode === course.courseCode)
                 const studentCount = courseClasses.reduce((total, item) => total + item.enrolledCount, 0)
                 return (
@@ -349,6 +369,13 @@ export function LecturerDashboardPage() {
                 )
               })}
             </ul>
+              <CompactPagination
+                label="Phân trang môn được phân công"
+                page={currentCoursePage}
+                pageCount={coursePageCount}
+                onPageChange={setCoursePage}
+              />
+            </div>
           )}
         </div>
       </section>

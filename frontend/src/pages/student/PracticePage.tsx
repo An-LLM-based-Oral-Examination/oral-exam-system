@@ -425,6 +425,7 @@ export function PracticePage() {
   return (
     <div className={ds.page}>
       <PageBanner
+        sceneClassName="lg:h-0"
         icon={Mic2}
         eyebrow="Luyện tập tương tác theo học phần"
         title="Phòng Luyện tập Vấn đáp Chuyên ngành"
@@ -453,7 +454,7 @@ export function PracticePage() {
         }
       />
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.78fr)]">
+      <div className="mb-0! grid items-start gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.78fr)]">
         <section className={cn(ds.section, 'overflow-hidden')}>
           <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}>
             <div className={ds.sectionHeading}>
@@ -1066,7 +1067,7 @@ export function PracticePage() {
       {selectedScorecardId && (
         <FormDialog
           titleId="practice-scorecard-title"
-          eyebrow="Bảng điểm"
+          eyebrow="Luyện tập"
           title="Chi tiết phiên luyện tập"
           icon={Award}
           onClose={() => setSelectedScorecardId(null)}

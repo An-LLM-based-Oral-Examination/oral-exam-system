@@ -66,7 +66,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
         }
 
         var now = DateTime.UtcNow;
-        if (now > session.ExpiresAt.AddSeconds(10))
+        if (session.PausedAt.HasValue || now > session.ExpiresAt.AddSeconds(10))
         {
             return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi đã hết thời gian làm bài.");
         }

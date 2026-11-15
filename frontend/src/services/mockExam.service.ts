@@ -394,8 +394,19 @@ export const mockExamService = {
   },
 
   async resumeSession(sessionId: string): Promise<ResumeMockExamResponse> {
-    const response = await apiClient.get<unknown>(`/mock-exams/sessions/${sessionId}/resume`)
+    const response = await apiClient.post<unknown>(`/mock-exams/sessions/${sessionId}/resume`)
     return normalizeResume(unwrapPayload(response.data))
+  },
+
+  async pauseSession(sessionId: string): Promise<number> {
+    const response = await apiClient.post<unknown>(`/mock-exams/sessions/${sessionId}/pause`)
+    const record = requireRecord(unwrapPayload(response.data), 'Phản hồi tạm dừng ca thi không hợp lệ.')
+    const remainingSeconds = requireInteger(
+      record,
+      'remainingSeconds',
+      'Phản hồi tạm dừng ca thi thiếu thời gian còn lại.',
+    )
+    return Math.max(0, remainingSeconds)
   },
 
   async submitAnswer(

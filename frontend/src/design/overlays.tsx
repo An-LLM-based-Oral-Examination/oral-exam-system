@@ -92,11 +92,13 @@ export function FormDialog({
   icon: Icon,
   iconNode,
   headerExtra,
+  headerClassName,
   onClose,
   busy = false,
   size = 'md',
   maxHeight = 'max-h-[min(92dvh,680px)]',
   beforeBody,
+  bodyClassName,
   footer,
   children,
   lockScroll = true,
@@ -113,11 +115,13 @@ export function FormDialog({
   iconNode?: ReactNode
   /** Chip/tag hiển thị trên header, cạnh nút đóng. */
   headerExtra?: ReactNode
+  headerClassName?: string
   onClose: () => void
   busy?: boolean
   size?: OverlaySize
   maxHeight?: string
   beforeBody?: ReactNode
+  bodyClassName?: string
   footer?: ReactNode
   children: ReactNode
   lockScroll?: LockScrollMode
@@ -155,7 +159,7 @@ export function FormDialog({
         className={cn(overlay.panel, overlaySize[size], maxHeight)}
       >
         {hasChrome ? (
-          <header className={overlay.header}>
+          <header className={cn(overlay.header, headerClassName)}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3">
                 {Icon || iconNode ? (
@@ -180,7 +184,7 @@ export function FormDialog({
           </header>
         ) : null}
         {beforeBody}
-        <div className={cn(overlay.body, !hasChrome && 'rounded-none')}>{children}</div>
+        <div className={cn(overlay.body, !hasChrome && 'rounded-none', bodyClassName)}>{children}</div>
         {footer}
       </div>
     </div>

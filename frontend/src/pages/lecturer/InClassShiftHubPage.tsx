@@ -18,6 +18,7 @@ import {
   Search,
   Timer,
   UsersRound,
+  Move,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
@@ -590,6 +591,8 @@ function CreateInClassShiftDialog({
   const [hasFollowUp, setHasFollowUp] = useState(false)
   const [maxFollowUpQuestions, setMaxFollowUpQuestions] = useState(2)
   const [poolMode, setPoolMode] = useState<InClassQuestionPoolMode>('ALL_COURSE_BANK')
+  const [questionSearch, setQuestionSearch] = useState('')
+  const [questionPickerOpen, setQuestionPickerOpen] = useState(false)
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
   const [questionOptions, setQuestionOptions] = useState<Array<{ id: string; title: string }>>([])
   const [questionsLoading, setQuestionsLoading] = useState(false)
@@ -782,7 +785,7 @@ function CreateInClassShiftDialog({
       totalQuestionsPerStudent: questionCount,
       hasFollowUp,
       maxFollowUpQuestions: hasFollowUp ? maxFollowUpQuestions : 0,
-      isAutoPublishGrades: true,
+      isAutoPublishGrades: false,
       examDurationMinutes: examMinutes,
     }
     try {
@@ -809,297 +812,369 @@ function CreateInClassShiftDialog({
     { id: 2 as const, title: 'Cấu trúc đề' },
   ]
 
-  return (
-    <FormDialog
-      titleId="create-inclass-title"
-      eyebrow="Ca kiểm tra"
-      title="Tạo ca kiểm tra"
-      icon={ClipboardList}
-      onClose={onClose}
-      busy={busy}
-      beforeBody={
-        <TwoStepProgress
-          label="Tiến độ tạo ca"
-          step={step}
-          steps={steps}
-          disabled={busy}
-          onStepChange={(target) => target === 1 ? goBack() : goNext()}
-        />
-      }
-      footer={(
-        <DialogFooter className="bg-white sm:items-center sm:justify-between">
-          <button type="button" disabled={busy} onClick={onClose} className={cn(ds.outlineButton, 'min-h-10')}>
-            Hủy
-          </button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            {step === 2 && (
-              <button type="button" disabled={busy} onClick={goBack} className={cn(ds.outlineButton, 'min-h-10')}>
-                Quay lại
-              </button>
-            )}
-            {step === 1 ? (
-              <button
-                key="create-shift-next"
-                type="button"
-                disabled={busy}
-                onClick={goNext}
-                className={cn(ds.primaryButton, 'min-h-10')}
-              >
-                Tiếp tục
-                <ChevronRight className="size-4" />
-              </button>
-            ) : (
-              <button
-                key="create-shift-submit"
-                type="button"
-                disabled={busy}
-                onClick={() => void createShift()}
-                className={cn(ds.primaryButton, 'min-h-10')}
-              >
-                {busy ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <Plus className="size-3.5" />}
-                {busy ? 'Đang tạo...' : 'Tạo ca'}
-              </button>
-            )}
-          </div>
-        </DialogFooter>
-      )}
-    >
-      <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-3">
-            {step === 1 ? (
-              <section className="space-y-3">
-                {fixedClassId ? null : (
-                <label className="block">
-                  <span className={fieldLabelClass(Boolean(fieldErrors.classId))}>Lớp</span>
-                  <FilterDropMenu
-                    label="Chọn lớp"
-                    value={classId}
-                    onChange={(value) => {
-                      setClassId(value)
-                      clearFieldError('classId')
-                    }}
-                    options={classOptions}
-                    emptyText="Chưa có lớp để chọn"
-                    className="mt-1.5 w-full"
-                    invalid={Boolean(fieldErrors.classId)}
-                  />
-                  <FieldError message={fieldErrors.classId} />
-                </label>
-                )}
-                <label className="block">
-                  <span className={fieldLabelClass(Boolean(fieldErrors.title))}>Tên ca</span>
-                  <input
-                    value={title}
-                    onChange={(event) => {
-                      setTitle(event.target.value)
-                      clearFieldError('title')
-                    }}
-                    maxLength={255}
-                    placeholder="Ví dụ: Kiểm tra tiến độ 1"
-                    aria-invalid={Boolean(fieldErrors.title)}
-                    className={cn(ds.field, 'mt-1.5', fieldErrors.title && fieldInvalidClass)}
-                    autoFocus
-                  />
-                  <FieldError message={fieldErrors.title} />
-                </label>
-                <div className="space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <DateField
-                        label="Ngày mở ca"
-                        value={startDateKey}
-                        invalid={Boolean(fieldErrors.startDateKey || fieldErrors.time)}
-                        onChange={(value) => {
-                          setStartDateKey(value)
-                          clearFieldError('startDateKey', 'time', 'examMinutes')
-                        }}
-                      />
-                      <FieldError message={fieldErrors.startDateKey} />
-                    </div>
-                    <ClockField
-                      label="Giờ mở ca"
-                      value={startClock}
-                      invalid={Boolean(fieldErrors.time)}
-                      onChange={(value) => {
-                        setStartClock(value)
-                        clearFieldError('time', 'examMinutes')
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <DateField
-                        label="Ngày đóng ca"
-                        value={endDateKey}
-                        invalid={Boolean(fieldErrors.endDateKey || fieldErrors.time)}
-                        onChange={(value) => {
-                          setEndDateKey(value)
-                          clearFieldError('endDateKey', 'time', 'examMinutes')
-                        }}
-                      />
-                      <FieldError message={fieldErrors.endDateKey} />
-                    </div>
-                    <ClockField
-                      label="Giờ đóng ca"
-                      value={endClock}
-                      invalid={Boolean(fieldErrors.time)}
-                      onChange={(value) => {
-                        setEndClock(value)
-                        clearFieldError('time', 'examMinutes')
-                      }}
-                    />
-                  </div>
-                  <FieldError message={fieldErrors.time} />
-                </div>
-              </section>
-            ) : (
-              <>
-                <div className={cn('flex items-center gap-3 rounded-2xl border border-[#82aedb]/55 bg-white px-3 py-2.5', ds.panelShadow)}>
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#e7f1fb] text-[#1C4D8D]">
-                    <UsersRound className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-[#0F2854]">{title.trim() || 'Chưa đặt tên'}</p>
-                    <p className="truncate text-xs font-semibold text-[#5b6b84]">
-                      {selectedClass?.name || 'Chưa chọn lớp'}
-                      {timeValid ? ` · Ca ${startClock} ${startDateKey.split('-').reverse().join('/')} – ${endClock} ${endDateKey.split('-').reverse().join('/')}` : ''}
-                      {examMinutesValid ? ` · Làm bài ${formatDuration(examMinutes)}` : ''}
-                    </p>
-                  </div>
-                </div>
+  const matchingQuestions = questionOptions.filter((question) =>
+    question.title.toLocaleLowerCase('vi').includes(questionSearch.trim().toLocaleLowerCase('vi')),
+  )
+  const renderQuestionChoices = (options: typeof questionOptions, expanded = false) => options.map((question) => {
+    const checked = selectedQuestionIds.includes(question.id)
+    return (
+      <li key={question.id}>
+        <label className={cn(
+          'flex cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-sm text-[#0F2854]',
+          expanded && 'gap-3 border px-3 py-2.5 leading-relaxed transition-colors focus-within:ring-2 focus-within:ring-[#4988C4]/30',
+          expanded && (checked ? 'border-[#82aedb] bg-[#E7F3FB] font-semibold' : 'border-slate-200 bg-white hover:border-[#82aedb] hover:bg-[#F4FBFD]'),
+        )}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => {
+              setSelectedQuestionIds((current) =>
+                checked ? current.filter((id) => id !== question.id) : [...current, question.id],
+              )
+              clearFieldError('pool')
+            }}
+            className="mt-0.5 size-4 shrink-0 accent-[#1C4D8D]"
+          />
+          <span>{question.title}</span>
+        </label>
+      </li>
+    )
+  })
 
-                <section className={cn('space-y-4 rounded-2xl border border-[#82aedb]/55 bg-white p-3.5', ds.panelShadow)}>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <SliderField
-                      label="Thời gian"
-                      value={examMinutes}
-                      min={1}
-                      max={60}
-                      suffix="phút"
-                      invalid={Boolean(fieldErrors.examMinutes)}
-                      onChange={(value) => {
-                        setExamMinutes(value)
-                        clearFieldError('examMinutes')
-                      }}
-                    />
-                    <SliderField
-                      label="Số câu chính"
-                      value={questionCount}
-                      min={1}
-                      max={10}
-                      suffix="câu"
-                      onChange={(value) => {
-                        setQuestionCount(value)
-                        clearFieldError('pool')
-                      }}
-                    />
-                  </div>
-                  <FieldError message={fieldErrors.examMinutes} className="-mt-2" />
-                  <div className="grid items-center gap-4 sm:grid-cols-2">
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] px-3 py-2.5">
-                      <span>
-                        <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi phụ</span>
-                        <span className="text-xs text-[#5b6b84]">Hỏi thêm sau câu chính</span>
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={hasFollowUp}
-                        aria-label="Câu hỏi phụ"
-                        onClick={() => {
-                          setHasFollowUp((current) => {
-                            if (!current) setMaxFollowUpQuestions((count) => Math.min(3, Math.max(1, count || 1)))
-                            return !current
-                          })
-                        }}
-                        className={cn('relative h-6 w-11 shrink-0 rounded-full transition', hasFollowUp ? 'bg-[#1C4D8D]' : 'bg-[#c5d0e0]')}
-                      >
-                        <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition', hasFollowUp ? 'left-[22px]' : 'left-0.5')} />
-                      </button>
-                    </div>
-                    <SliderField
-                      label="Số câu phụ"
-                      value={Math.min(3, Math.max(1, maxFollowUpQuestions || 1))}
-                      min={1}
-                      max={3}
-                      suffix="câu"
-                      disabled={!hasFollowUp}
-                      onChange={setMaxFollowUpQuestions}
-                    />
-                  </div>
+  return (
+    <>
+      <FormDialog
+        titleId="create-inclass-title"
+        eyebrow="Ca kiểm tra"
+        title="Tạo ca kiểm tra"
+        icon={ClipboardList}
+        onClose={onClose}
+        busy={busy || questionPickerOpen}
+        beforeBody={
+          <TwoStepProgress
+            label="Tiến độ tạo ca"
+            step={step}
+            steps={steps}
+            disabled={busy}
+            onStepChange={(target) => target === 1 ? goBack() : goNext()}
+          />
+        }
+        footer={(
+          <DialogFooter className="bg-white sm:items-center sm:justify-between">
+            <button type="button" disabled={busy} onClick={onClose} className={cn(ds.outlineButton, 'min-h-10')}>
+              Hủy
+            </button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              {step === 2 && (
+                <button type="button" disabled={busy} onClick={goBack} className={cn(ds.outlineButton, 'min-h-10')}>
+                  Quay lại
+                </button>
+              )}
+              {step === 1 ? (
+                <button
+                  key="create-shift-next"
+                  type="button"
+                  disabled={busy}
+                  onClick={goNext}
+                  className={cn(ds.primaryButton, 'min-h-10')}
+                >
+                  Tiếp tục
+                  <ChevronRight className="size-4" />
+                </button>
+              ) : (
+                <button
+                  key="create-shift-submit"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void createShift()}
+                  className={cn(ds.primaryButton, 'min-h-10')}
+                >
+                  {busy ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <Plus className="size-3.5" />}
+                  {busy ? 'Đang tạo...' : 'Tạo ca'}
+                </button>
+              )}
+            </div>
+          </DialogFooter>
+        )}
+      >
+        <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-3">
+              {step === 1 ? (
+                <section className="space-y-3">
+                  {fixedClassId ? null : (
                   <label className="block">
-                    <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Mô tả</span>
-                    <textarea
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      rows={2}
-                      placeholder="Ví dụ: Nội dung chương 1 đến chương 3"
-                      className="mt-1.5 min-h-16 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30"
-                    />
-                  </label>
-                  <div className="block">
-                    <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Nguồn câu hỏi</span>
+                    <span className={fieldLabelClass(Boolean(fieldErrors.classId))}>Lớp</span>
                     <FilterDropMenu
-                      label="Chọn nguồn câu hỏi"
-                      value={poolMode}
+                      label="Chọn lớp"
+                      value={classId}
                       onChange={(value) => {
-                        setPoolMode(value as InClassQuestionPoolMode)
-                        clearFieldError('pool')
+                        setClassId(value)
+                        clearFieldError('classId')
                       }}
-                      options={[
-                        { value: 'ALL_COURSE_BANK', label: 'Cả ngân hàng môn' },
-                        { value: 'SELECTED_POOL', label: 'Chọn bộ câu' },
-                      ]}
+                      options={classOptions}
+                      emptyText="Chưa có lớp để chọn"
                       className="mt-1.5 w-full"
+                      invalid={Boolean(fieldErrors.classId)}
                     />
-                  </div>
-                  {poolMode === 'SELECTED_POOL' && (
-                    <div
-                      className={cn(
-                        'rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] p-3',
-                        fieldErrors.pool && fieldInvalidClass,
-                      )}
-                    >
-                      <p className="text-xs font-bold text-[#5b6b84]">
-                        Chọn ít nhất {questionCount} câu đã duyệt
-                        {selectedQuestionIds.length > 0 ? ` · đã chọn ${selectedQuestionIds.length}` : ''}
-                      </p>
-                      {questionsLoading ? (
-                        <p className="mt-2 text-xs text-[#5b6b84]">Đang tải câu hỏi...</p>
-                      ) : questionOptions.length === 0 ? (
-                        <p className="mt-2 text-xs text-[#5b6b84]">Không có câu đã duyệt cho môn của lớp này.</p>
-                      ) : (
-                        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-                          {questionOptions.map((question) => {
-                            const checked = selectedQuestionIds.includes(question.id)
-                            return (
-                              <li key={question.id}>
-                                <label className="flex items-start gap-2 rounded-lg px-1 py-1 text-sm text-[#0F2854]">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => {
-                                      setSelectedQuestionIds((current) =>
-                                        checked ? current.filter((id) => id !== question.id) : [...current, question.id],
-                                      )
-                                      clearFieldError('pool')
-                                    }}
-                                    className="mt-1 size-4 accent-[#1C4D8D]"
-                                  />
-                                  <span>{question.title}</span>
-                                </label>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                      <FieldError message={fieldErrors.pool} />
-                    </div>
+                    <FieldError message={fieldErrors.classId} />
+                  </label>
                   )}
+                  <label className="block">
+                    <span className={fieldLabelClass(Boolean(fieldErrors.title))}>Tên ca</span>
+                    <input
+                      value={title}
+                      onChange={(event) => {
+                        setTitle(event.target.value)
+                        clearFieldError('title')
+                      }}
+                      maxLength={255}
+                      placeholder="Ví dụ: Kiểm tra tiến độ 1"
+                      aria-invalid={Boolean(fieldErrors.title)}
+                      className={cn(ds.field, 'mt-1.5', fieldErrors.title && fieldInvalidClass)}
+                      autoFocus
+                    />
+                    <FieldError message={fieldErrors.title} />
+                  </label>
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <DateField
+                          label="Ngày mở ca"
+                          value={startDateKey}
+                          invalid={Boolean(fieldErrors.startDateKey || fieldErrors.time)}
+                          onChange={(value) => {
+                            setStartDateKey(value)
+                            clearFieldError('startDateKey', 'time', 'examMinutes')
+                          }}
+                        />
+                        <FieldError message={fieldErrors.startDateKey} />
+                      </div>
+                      <ClockField
+                        label="Giờ mở ca"
+                        value={startClock}
+                        invalid={Boolean(fieldErrors.time)}
+                        onChange={(value) => {
+                          setStartClock(value)
+                          clearFieldError('time', 'examMinutes')
+                        }}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <DateField
+                          label="Ngày đóng ca"
+                          value={endDateKey}
+                          invalid={Boolean(fieldErrors.endDateKey || fieldErrors.time)}
+                          onChange={(value) => {
+                            setEndDateKey(value)
+                            clearFieldError('endDateKey', 'time', 'examMinutes')
+                          }}
+                        />
+                        <FieldError message={fieldErrors.endDateKey} />
+                      </div>
+                      <ClockField
+                        label="Giờ đóng ca"
+                        value={endClock}
+                        invalid={Boolean(fieldErrors.time)}
+                        onChange={(value) => {
+                          setEndClock(value)
+                          clearFieldError('time', 'examMinutes')
+                        }}
+                      />
+                    </div>
+                    <FieldError message={fieldErrors.time} />
+                  </div>
                 </section>
-              </>
-            )}
-      </form>
-    </FormDialog>
+              ) : (
+                <>
+                  <div className={cn('flex items-center gap-3 rounded-2xl border border-[#82aedb]/55 bg-white px-3 py-2.5', ds.panelShadow)}>
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#e7f1fb] text-[#1C4D8D]">
+                      <UsersRound className="size-4" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-[#0F2854]">{title.trim() || 'Chưa đặt tên'}</p>
+                      <p className="truncate text-xs font-semibold text-[#5b6b84]">
+                        {selectedClass?.name || 'Chưa chọn lớp'}
+                        {timeValid ? ` · Ca ${startClock} ${startDateKey.split('-').reverse().join('/')} – ${endClock} ${endDateKey.split('-').reverse().join('/')}` : ''}
+                        {examMinutesValid ? ` · Làm bài ${formatDuration(examMinutes)}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <section className={cn('space-y-4 rounded-2xl border border-[#82aedb]/55 bg-white p-3.5', ds.panelShadow)}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <SliderField
+                        label="Thời gian"
+                        value={examMinutes}
+                        min={1}
+                        max={60}
+                        suffix="phút"
+                        invalid={Boolean(fieldErrors.examMinutes)}
+                        onChange={(value) => {
+                          setExamMinutes(value)
+                          clearFieldError('examMinutes')
+                        }}
+                      />
+                      <SliderField
+                        label="Số câu chính"
+                        value={questionCount}
+                        min={1}
+                        max={10}
+                        suffix="câu"
+                        onChange={(value) => {
+                          setQuestionCount(value)
+                          clearFieldError('pool')
+                        }}
+                      />
+                    </div>
+                    <FieldError message={fieldErrors.examMinutes} className="-mt-2" />
+                    <div className="grid items-center gap-4 sm:grid-cols-2">
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] px-3 py-2.5">
+                        <span>
+                          <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi phụ</span>
+                          <span className="text-xs text-[#5b6b84]">Hỏi thêm sau câu chính</span>
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={hasFollowUp}
+                          aria-label="Câu hỏi phụ"
+                          onClick={() => {
+                            setHasFollowUp((current) => {
+                              if (!current) setMaxFollowUpQuestions((count) => Math.min(3, Math.max(1, count || 1)))
+                              return !current
+                            })
+                          }}
+                          className={cn('relative h-6 w-11 shrink-0 rounded-full transition', hasFollowUp ? 'bg-[#1C4D8D]' : 'bg-[#c5d0e0]')}
+                        >
+                          <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition', hasFollowUp ? 'left-[22px]' : 'left-0.5')} />
+                        </button>
+                      </div>
+                      <SliderField
+                        label="Số câu phụ"
+                        value={Math.min(3, Math.max(1, maxFollowUpQuestions || 1))}
+                        min={1}
+                        max={3}
+                        suffix="câu"
+                        disabled={!hasFollowUp}
+                        onChange={setMaxFollowUpQuestions}
+                      />
+                    </div>
+                    <label className="block">
+                      <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Mô tả</span>
+                      <textarea
+                        value={description}
+                        onChange={(event) => setDescription(event.target.value)}
+                        rows={2}
+                        placeholder="Ví dụ: Nội dung chương 1 đến chương 3"
+                        className="mt-1.5 min-h-16 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30"
+                      />
+                    </label>
+                    <div className="block">
+                      <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Nguồn câu hỏi</span>
+                      <FilterDropMenu
+                        label="Chọn nguồn câu hỏi"
+                        value={poolMode}
+                        onChange={(value) => {
+                          setPoolMode(value as InClassQuestionPoolMode)
+                          clearFieldError('pool')
+                        }}
+                        options={[
+                          { value: 'ALL_COURSE_BANK', label: 'Cả ngân hàng môn' },
+                          { value: 'SELECTED_POOL', label: 'Chọn bộ câu' },
+                        ]}
+                        className="mt-1.5 w-full"
+                      />
+                    </div>
+                    {poolMode === 'SELECTED_POOL' && (
+                      <div
+                        className={cn(
+                          'rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] p-3',
+                          fieldErrors.pool && fieldInvalidClass,
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-bold text-[#5b6b84]">
+                            Chọn ít nhất {questionCount} câu đã duyệt
+                            {selectedQuestionIds.length > 0 ? ` · đã chọn ${selectedQuestionIds.length}` : ''}
+                          </p>
+                          {!questionsLoading && questionOptions.length > 0 && (
+                            <button
+                              type="button"
+                              aria-label="Phóng to danh sách câu hỏi"
+                              title="Phóng to danh sách câu hỏi"
+                              aria-haspopup="dialog"
+                              className={cn(ds.outlineButton, 'h-8 min-h-8 w-8 px-0')}
+                              onClick={() => {
+                                setQuestionSearch('')
+                                setQuestionPickerOpen(true)
+                              }}
+                            >
+                              <Move className="size-4" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                        {questionsLoading ? (
+                          <p className="mt-2 text-xs text-[#5b6b84]">Đang tải câu hỏi...</p>
+                        ) : questionOptions.length === 0 ? (
+                          <p className="mt-2 text-xs text-[#5b6b84]">Không có câu đã duyệt cho môn của lớp này.</p>
+                        ) : (
+                          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                            {renderQuestionChoices(questionOptions)}
+                          </ul>
+                        )}
+                        <FieldError message={fieldErrors.pool} />
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
+        </form>
+      </FormDialog>
+      {questionPickerOpen && (
+        <FormDialog
+          nested
+          align="center"
+          size="2xl"
+          maxHeight="h-[90dvh] max-h-[90dvh]"
+          eyebrow="Ca kiểm tra"
+          title="Chọn câu hỏi"
+          beforeBody={
+            <div className="border-b border-[#82aedb]/35 bg-white px-5 py-3">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label="Tìm theo tiêu đề câu hỏi"
+                  placeholder="Tìm theo tiêu đề câu hỏi"
+                  value={questionSearch}
+                  onChange={(event) => setQuestionSearch(event.target.value)}
+                  className={cn(ds.field, 'pl-9')}
+                />
+              </label>
+            </div>
+          }
+          icon={ClipboardList}
+          onClose={() => setQuestionPickerOpen(false)}
+          footer={
+            <DialogFooter>
+              <div role="status" className="mr-auto flex flex-wrap items-center gap-2 text-sm">
+                <span className={selectedQuestionIds.length >= questionCount ? ds.successChip : ds.infoChip}>
+                  Đã chọn {selectedQuestionIds.length} câu
+                </span>
+                <span className="text-[#5b6b84]">Tối thiểu {questionCount} câu</span>
+              </div>
+              <button type="button" className={ds.primaryButton} onClick={() => setQuestionPickerOpen(false)}>Xong</button>
+            </DialogFooter>
+          }
+        >
+          {matchingQuestions.length > 0 ? (
+            <ul className="space-y-1.5">{renderQuestionChoices(matchingQuestions, true)}</ul>
+          ) : (
+            <EmptyState compact className="h-full w-full justify-center" icon={Search} title="Không tìm thấy câu hỏi" description="Thử tìm bằng từ khóa khác." />
+          )}
+        </FormDialog>
+      )}
+    </>
   )
 }
 

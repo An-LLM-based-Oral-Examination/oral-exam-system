@@ -166,7 +166,9 @@ public record StudentClassDto(
     DateTime EnrolledAt,
     string Status,
     string JoinMethod,
-    Guid? CourseOfferingId = null);
+    Guid? CourseOfferingId = null,
+    int? EnrolledCount = null,
+    int? MaxStudents = null);
 
 /// <summary>
 /// DTO hiển thị kết quả tìm kiếm lớp học đang mở cho sinh viên tìm và bấm tham gia.

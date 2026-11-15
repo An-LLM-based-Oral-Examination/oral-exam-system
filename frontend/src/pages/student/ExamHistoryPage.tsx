@@ -788,7 +788,7 @@ function LiveExamHistoryPage() {
   }, [mockItems, officialItems, practiceItems])
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-8')}>
+    <div lang="vi" className={ds.page}>
       <PageBanner
         icon={BarChart3}
         eyebrow="Hồ sơ kết quả & bảng điểm"
@@ -895,7 +895,7 @@ function LiveExamHistoryPage() {
         <div
           className={cn(
             ds.sectionHeader,
-            'flex flex-col justify-between gap-3 lg:flex-row lg:items-center',
+            'flex flex-col gap-3',
           )}
         >
           <div className={ds.sectionHeading}>
@@ -909,7 +909,7 @@ function LiveExamHistoryPage() {
             <p className={ds.sectionHint}>Bấm vào bản ghi để xem bảng điểm chi tiết</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
             <div className="relative">
               <Filter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#1C4D8D]" />
               <select
@@ -1117,7 +1117,7 @@ function LiveExamHistoryPage() {
       {activeModal && (
         <FormDialog
           titleId="exam-history-detail-title"
-          eyebrow="Bảng điểm"
+          eyebrow="Lịch sử & Kết quả"
           title={
             activeModal.category === 'practice'
               ? 'Chi tiết phiên luyện tập'

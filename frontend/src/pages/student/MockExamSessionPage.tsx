@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
+  Award,
   Clock3,
   LoaderCircle,
   Mic,
@@ -18,7 +19,10 @@ import {
   looksLikeQuestionEcho,
 } from '@/lib/transcriptGuards'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
+import { DialogFooter, FormDialog } from '@/design/overlays'
+import { ds } from '@/design/system'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
+import { toast } from '@/components/common/toastStore'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { AutoFitQuestionText } from '@/components/question/AutoFitQuestionText'
 import { QuestionImage } from '@/components/question/QuestionImage'
@@ -52,6 +56,7 @@ import {
   saveMockExamSession,
   secondsUntilExpiry,
 } from '@/utils/mockExamSessionStorage'
+import { readDevicePreferences, updateDevicePreferences } from '@/utils/devicePreferences'
 
 type RoomPhase = 'exam' | 'submitting-exam' | 'scorecard'
 
@@ -167,11 +172,11 @@ export function MockExamSessionPage() {
   const [session, setSession] = useState<StoredMockExamSession | null>(() =>
     sessionId ? readMockExamSessionById(sessionId) : null,
   )
-  const [isRestoring, setIsRestoring] = useState(() => Boolean(sessionId && !session))
+  const [isRestoring, setIsRestoring] = useState(() => Boolean(sessionId))
   const [restoreError, setRestoreError] = useState('')
 
   useEffect(() => {
-    if (!sessionId || session) return
+    if (!sessionId) return
 
     let cancelled = false
     // isRestoring đã true từ initial state — chỉ gọi API, cập nhật state trong callback.
@@ -189,6 +194,7 @@ export function MockExamSessionPage() {
       })
       .catch((error: unknown) => {
         if (cancelled) return
+        setSession(null)
         setRestoreError(
           getMockExamErrorDetail(error, 'Không thể khôi phục ca thi. Ca có thể đã hết hạn hoặc đã nộp.'),
         )
@@ -200,7 +206,7 @@ export function MockExamSessionPage() {
     return () => {
       cancelled = true
     }
-  }, [session, sessionId])
+  }, [sessionId])
 
   if (!sessionId) return <MissingSession message="Thiếu mã ca thi trên đường dẫn." />
   if (isRestoring) {
@@ -352,10 +358,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const [recordedSeconds, setRecordedSeconds] = useState(0)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [isSendingAnswer, setIsSendingAnswer] = useState(false)
+  const [isLeaving, setIsLeaving] = useState(false)
   const [answerError, setAnswerError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [scorecard, setScorecard] = useState<MockExamScorecardData | null>(null)
-  const [autoRead, setAutoRead] = useState(false)
+  const [autoRead, setAutoRead] = useState(() => readDevicePreferences().autoReadQuestions)
   const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [warning, setWarning] = useState<ExamWarning | null>(null)
@@ -1758,17 +1765,38 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   }
 
   const leaveRoom = async () => {
+    if (isLeaving) return
     const isExpiredOrErrored = secondsLeft <= 0 || Boolean(submitError) || Boolean(answerError)
-    const confirmed = await askWarning({
-      title: 'Rời phòng thi?',
-      message: isExpiredOrErrored
-        ? 'Các câu trả lời đã thu âm trên máy chủ đã được lưu an toàn để chấm bù. Bạn có muốn đóng phiên này trên trình duyệt và quay về phòng chờ không?'
-        : 'Đồng hồ máy chủ vẫn tiếp tục chạy. Bạn có thể quay lại phòng thi trước khi hết giờ.',
-      confirmLabel: 'Rời phòng',
-      cancelLabel: 'Ở lại',
-      tone: 'warning',
-    })
+    const confirmed = readDevicePreferences().confirmBeforeLeavingMockExam
+      ? await askWarning({
+          title: 'Rời phòng thi?',
+          message: isExpiredOrErrored
+            ? 'Các câu trả lời đã thu âm trên máy chủ đã được lưu an toàn để chấm bù. Bạn có muốn đóng phiên này trên trình duyệt và quay về phòng chờ không?'
+            : 'Thời gian làm bài sẽ được tạm dừng. Bạn có thể tiếp tục từ thời gian còn lại khi quay lại phòng thi.',
+          confirmLabel: 'Rời phòng',
+          cancelLabel: 'Ở lại',
+          tone: 'warning',
+        })
+      : true
     if (!confirmed) return
+
+    if (!isExpiredOrErrored) {
+      setIsLeaving(true)
+      try {
+        const pausedRemainingSeconds = await mockExamService.pauseSession(session.sessionId)
+        const latestStoredSession = readMockExamSessionById(session.sessionId) ?? session
+        saveMockExamSession({ ...latestStoredSession, pausedRemainingSeconds })
+      } catch (error) {
+        toast.error(
+          getMockExamErrorDetail(
+            error,
+            'Không thể tạm dừng thời gian làm bài. Vui lòng thử lại trước khi rời phòng.',
+          ),
+        )
+        setIsLeaving(false)
+        return
+      }
+    }
     if (isExpiredOrErrored) {
       pendingFinalizeReasonRef.current = null
       clearMockExamSession(session.sessionId)
@@ -1811,25 +1839,26 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   }
 
   if (phase === 'scorecard' && scorecard) {
+    const returnToLobby = () => navigate('/mock-exam', { replace: true })
     return (
-      <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#0F2854]/45 px-4 py-6 sm:items-center">
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="max-h-[90dvh] w-full max-w-3xl space-y-4 overflow-y-auto rounded-2xl border border-[#82aedb]/55 bg-white p-4 text-[#0F2854] shadow-[0_24px_60px_rgba(16,32,61,0.22)] sm:p-5"
-        >
-          <MockExamScorecard scorecard={scorecard} />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => navigate('/mock-exam')}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
-            >
-              Về phòng chờ <ArrowRight className="size-4" />
+      <FormDialog
+        titleId="mock-scorecard-title"
+        eyebrow="Thi thử"
+        title="Bảng điểm"
+        icon={Award}
+        onClose={returnToLobby}
+        size="xl"
+        maxHeight="max-h-[min(90dvh,820px)]"
+        footer={
+          <DialogFooter>
+            <button type="button" onClick={returnToLobby} className={ds.primaryButton}>
+              Về phòng chờ <ArrowRight className="size-4" aria-hidden="true" />
             </button>
-          </div>
-        </div>
-      </div>
+          </DialogFooter>
+        }
+      >
+        <MockExamScorecard scorecard={scorecard} />
+      </FormDialog>
     )
   }
 
@@ -1888,7 +1917,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                     type="button"
                     data-space-ignore="true"
                     aria-pressed={autoRead}
-                    onClick={() => setAutoRead((current) => !current)}
+                    onClick={() => setAutoRead((current) => {
+                      const next = !current
+                      updateDevicePreferences({ autoReadQuestions: next })
+                      return next
+                    })}
                     className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left"
                   >
                     <span>
@@ -1919,9 +1952,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               data-space-ignore="true"
               aria-label="Rời phòng thi"
               onClick={leaveRoom}
-              className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20"
+              disabled={isLeaving}
+              className="flex size-10 items-center justify-center rounded-full border border-white/30 bg-white/10 text-white transition hover:bg-white/20 disabled:cursor-wait disabled:opacity-60"
             >
-              <X className="size-5" />
+              {isLeaving ? <LoaderCircle className="size-5 animate-spin" /> : <X className="size-5" />}
             </button>
           </div>
           </div>

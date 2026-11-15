@@ -117,141 +117,153 @@ public sealed class EnterInClassShiftCommandHandler(
 
         var shiftLock = ShiftAllocationLocks.GetOrAdd(shift.Id, _ => new SemaphoreSlim(1, 1));
         await shiftLock.WaitAsync(cancellationToken);
-        await using var dbLockScope = await context.BeginShiftAllocationLockScopeAsync(shift.Id, cancellationToken);
         try
         {
-            var existingParticipant = await context.InClassShiftParticipants
-                .FirstOrDefaultAsync(
-                    p => p.ShiftId == shift.Id && p.StudentId == request.StudentId,
-                    cancellationToken);
-
-            if (existingParticipant is not null)
-            {
-                if (IsCompletedParticipation(existingParticipant.Status))
-                {
-                    return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.AlreadyParticipated);
-                }
-
-                var existingIds = ParseGuidList(existingParticipant.AssignedQuestionIdsJson);
-                if (existingIds.Count == 0 && existingParticipant.AssignedQuestionId.HasValue)
-                {
-                    existingIds.Add(existingParticipant.AssignedQuestionId.Value);
-                }
-
-                if (existingIds.Count == 0)
-                {
-                    existingIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
-                    if (existingIds.Count < targetQuestionCount)
-                    {
-                        return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
-                    }
-
-                    existingParticipant.AssignedQuestionId = existingIds[0];
-                    existingParticipant.AssignedQuestionIdsJson = JsonSerializer.Serialize(existingIds);
-                    await context.SaveChangesAsync(cancellationToken);
-                }
-
-                if (InClassShiftLifecycle.IsPersonalExamTimeExpired(existingParticipant, shift, utcNow))
-                {
-                    await InClassShiftAutoSubmit.FinalizeParticipantAsync(
-                        context,
-                        gradingQueue,
-                        existingParticipant,
-                        cancellationToken);
-                    return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
-                }
-
-                var existingDtos = await LoadQuestionDtosAsync(existingIds, cancellationToken);
-                var existingEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(existingParticipant, shift);
-                return Result<JoinInClassShiftResponse>.Success(new JoinInClassShiftResponse(
-                    shift.Id,
-                    existingParticipant.StudentId,
-                    shift.ShiftName,
-                    existingParticipant.Status,
-                    existingParticipant.JoinedAt,
-                    existingParticipant.AssignedQuestionId,
-                    existingDtos.FirstOrDefault(),
-                    existingIds,
-                    existingDtos,
-                    targetQuestionCount,
-                    shift.HasFollowUp,
-                    shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
-                    existingEndsAt,
-                    InClassShiftLifecycle.GetRemainingExamSeconds(existingEndsAt, utcNow)
-                ));
-            }
-
-            var assignedQuestionIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
-            if (assignedQuestionIds.Count < targetQuestionCount)
-            {
-                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
-            }
-
-            var assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
-
-            var participant = new InClassShiftParticipant
-            {
-                Id = Guid.NewGuid(),
-                ShiftId = shift.Id,
-                StudentId = request.StudentId,
-                AssignedQuestionId = assignedQuestionIds[0],
-                AssignedQuestionIdsJson = JsonSerializer.Serialize(assignedQuestionIds),
-                JoinedAt = utcNow,
-                Status = "JOINED"
-            };
-
-            context.InClassShiftParticipants.Add(participant);
-            try
-            {
-                await context.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException)
-            {
-                // Xử lý race condition khi có 2 request đồng thời cho cùng 1 sinh viên
-                var reloadedParticipant = await context.InClassShiftParticipants
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(p => p.ShiftId == shift.Id && p.StudentId == request.StudentId, cancellationToken);
-
-                if (reloadedParticipant is not null)
-                {
-                    participant = reloadedParticipant;
-                    assignedQuestionIds = ParseGuidList(participant.AssignedQuestionIdsJson);
-                    if (assignedQuestionIds.Count == 0 && participant.AssignedQuestionId.HasValue)
-                    {
-                        assignedQuestionIds.Add(participant.AssignedQuestionId.Value);
-                    }
-                    assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            var examEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant, shift);
-            var response = new JoinInClassShiftResponse(
+            return await context.ExecuteShiftAllocationAsync(
                 shift.Id,
-                participant.StudentId,
-                shift.ShiftName,
-                participant.Status,
-                participant.JoinedAt,
-                participant.AssignedQuestionId,
-                assignedQuestionDtos.FirstOrDefault(),
-                assignedQuestionIds,
-                assignedQuestionDtos,
-                targetQuestionCount,
-                shift.HasFollowUp,
-                shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
-                examEndsAt,
-                InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt, utcNow)
-            );
-
-            return Result<JoinInClassShiftResponse>.Success(response);
+                token => EnterWithAllocationLockAsync(request, shift, targetQuestionCount, utcNow, token),
+                cancellationToken);
         }
         finally
         {
             shiftLock.Release();
         }
+    }
+
+    private async Task<Result<JoinInClassShiftResponse>> EnterWithAllocationLockAsync(
+        EnterInClassShiftCommand request,
+        InClassExamShift shift,
+        int targetQuestionCount,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var existingParticipant = await context.InClassShiftParticipants
+            .FirstOrDefaultAsync(
+                p => p.ShiftId == shift.Id && p.StudentId == request.StudentId,
+                cancellationToken);
+
+        if (existingParticipant is not null)
+        {
+            if (IsCompletedParticipation(existingParticipant.Status))
+            {
+                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.AlreadyParticipated);
+            }
+
+            var existingIds = ParseGuidList(existingParticipant.AssignedQuestionIdsJson);
+            if (existingIds.Count == 0 && existingParticipant.AssignedQuestionId.HasValue)
+            {
+                existingIds.Add(existingParticipant.AssignedQuestionId.Value);
+            }
+
+            if (existingIds.Count == 0)
+            {
+                existingIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
+                if (existingIds.Count < targetQuestionCount)
+                {
+                    return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
+                }
+
+                existingParticipant.AssignedQuestionId = existingIds[0];
+                existingParticipant.AssignedQuestionIdsJson = JsonSerializer.Serialize(existingIds);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            if (InClassShiftLifecycle.IsPersonalExamTimeExpired(existingParticipant, shift, utcNow))
+            {
+                await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+                    context,
+                    gradingQueue,
+                    existingParticipant,
+                    cancellationToken);
+                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
+            }
+
+            var existingDtos = await LoadQuestionDtosAsync(existingIds, cancellationToken);
+            var existingEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(existingParticipant, shift);
+            return Result<JoinInClassShiftResponse>.Success(new JoinInClassShiftResponse(
+                shift.Id,
+                existingParticipant.StudentId,
+                shift.ShiftName,
+                existingParticipant.Status,
+                existingParticipant.JoinedAt,
+                existingParticipant.AssignedQuestionId,
+                existingDtos.FirstOrDefault(),
+                existingIds,
+                existingDtos,
+                targetQuestionCount,
+                shift.HasFollowUp,
+                shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
+                existingEndsAt,
+                InClassShiftLifecycle.GetRemainingExamSeconds(existingEndsAt, utcNow)
+            ));
+        }
+
+        var assignedQuestionIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
+        if (assignedQuestionIds.Count < targetQuestionCount)
+        {
+            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
+        }
+
+        var assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
+
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = request.StudentId,
+            AssignedQuestionId = assignedQuestionIds[0],
+            AssignedQuestionIdsJson = JsonSerializer.Serialize(assignedQuestionIds),
+            JoinedAt = utcNow,
+            Status = "JOINED"
+        };
+
+        context.InClassShiftParticipants.Add(participant);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Xử lý race condition khi có 2 request đồng thời cho cùng 1 sinh viên
+            var reloadedParticipant = await context.InClassShiftParticipants
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.ShiftId == shift.Id && p.StudentId == request.StudentId, cancellationToken);
+
+            if (reloadedParticipant is not null)
+            {
+                participant = reloadedParticipant;
+                assignedQuestionIds = ParseGuidList(participant.AssignedQuestionIdsJson);
+                if (assignedQuestionIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+                {
+                    assignedQuestionIds.Add(participant.AssignedQuestionId.Value);
+                }
+                assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        var examEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant, shift);
+        var response = new JoinInClassShiftResponse(
+            shift.Id,
+            participant.StudentId,
+            shift.ShiftName,
+            participant.Status,
+            participant.JoinedAt,
+            participant.AssignedQuestionId,
+            assignedQuestionDtos.FirstOrDefault(),
+            assignedQuestionIds,
+            assignedQuestionDtos,
+            targetQuestionCount,
+            shift.HasFollowUp,
+            shift.HasFollowUp ? shift.MaxFollowUpQuestions : 0,
+            examEndsAt,
+            InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt, utcNow)
+        );
+
+        return Result<JoinInClassShiftResponse>.Success(response);
     }
 
     /// <summary>

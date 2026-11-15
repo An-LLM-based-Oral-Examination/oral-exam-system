@@ -2035,6 +2035,7 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("shift_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
@@ -2466,6 +2467,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("has_follow_up");
+
+                    b.Property<DateTime?>("PausedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paused_at");
 
                     b.Property<DateTime>("StartedAt")
                         .ValueGeneratedOnAdd()

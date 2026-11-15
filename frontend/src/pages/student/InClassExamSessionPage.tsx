@@ -1,5 +1,8 @@
+import { ds } from '@/design/system'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useNavigate } from 'react-router-dom'
+import { readDevicePreferences, updateDevicePreferences } from '@/utils/devicePreferences'
 import {
   ArrowLeft,
   ArrowRight,
@@ -94,11 +97,13 @@ export function InClassExamSessionPage() {
     return Math.max(0, Math.min(boot.questions.length - 1, draftBoot.questionIndex))
   })
   const [drafts, setDrafts] = useState<Record<string, string>>(() => draftBoot?.drafts ?? {})
+  const [leaving, setLeaving] = useState(false)
+  const [confirmSubmit, setConfirmSubmit] = useState(false)
   const [submitted, setSubmitted] = useState<Record<string, boolean>>({})
   const [followUpTurns, setFollowUpTurns] = useState<Record<string, FollowUpTurnState>>({})
   const [busy, setBusy] = useState(false)
   const [isReadingQuestion, setIsReadingQuestion] = useState(false)
-  const [autoRead, setAutoRead] = useState(false)
+  const [autoRead, setAutoRead] = useState(() => readDevicePreferences().autoReadQuestions)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reRecording, setReRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -397,20 +402,17 @@ export function InClassExamSessionPage() {
       return
     }
 
-    const shouldSubmit = window.confirm(
-      'Nộp bài và thoát phòng?\n\nChọn OK để nộp bài (AI chấm). Chọn Cancel để ở lại làm tiếp.',
-    )
-    if (!shouldSubmit) {
-      persistDraftsRef.current()
-      blocker.reset?.()
-      return
-    }
+  }, [blocker, shift])
 
+  const submitAndLeave = () => {
+    if (blocker.state !== 'blocked' || !shift || leaveSubmitInFlightRef.current || endedRef.current) return
     leaveSubmitInFlightRef.current = true
+    setLeaving(true)
     endedRef.current = true
     void (async () => {
       const finishedOk = await submitExamForGradingRef.current()
       leaveSubmitInFlightRef.current = false
+      setLeaving(false)
       if (finishedOk) {
         toast.success('Đã nộp bài. AI đang chấm nền.')
         blocker.reset?.()
@@ -427,7 +429,7 @@ export function InClassExamSessionPage() {
       toast.error('Không nộp được bài lên máy chủ. Hãy ở lại phòng và thử nộp lại.')
       blocker.reset?.()
     })()
-  }, [blocker, navigate, shift])
+  }
 
   useEffect(() => {
     if (secondsLeft !== 0) return
@@ -619,6 +621,8 @@ export function InClassExamSessionPage() {
     }
   }
 
+  const shouldRequestFollowUp = hasPendingFollowUpTurns && Boolean(draft.trim()) && !submitted[turnKey]
+
   const goNext = async () => {
     if (speech.isListening || busy) return
     const hasText = Boolean((drafts[turnKey] ?? '').trim())
@@ -633,20 +637,20 @@ export function InClassExamSessionPage() {
   const skipFollowUpOrQuestion = () => {
     if (speech.isListening || busy || secondsLeft <= 0) return
     setReRecording(false)
-    if (!isLast) {
-      setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
-      return
-    }
-    endExam('Đã nộp bài. Điểm và nhận xét AI được cập nhật theo thời gian thực.')
+    setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
   }
 
-  const finish = async () => {
-    if (speech.isListening || busy || endedRef.current) return
-    const hasText = Boolean((drafts[turnKey] ?? '').trim())
-    if (hasText && question && !submitted[turnKey]) {
-      const status = await submitCurrent()
-      if (status === 'FAILED' || status === 'FOLLOW_UP_READY') return
-    }
+  const unanswered = questions.filter((item) =>
+      !submitted[item.questionId] && !(drafts[item.questionId] ?? '').trim(),
+    ).length
+  const unansweredFollowUp = currentTurn.followUpIndex > 0 && !draft.trim() && !submitted[turnKey]
+  const warnings = [
+      unanswered > 0 ? `Bạn còn ${unanswered} câu chính chưa trả lời.` : '',
+      unansweredFollowUp ? 'Bạn chưa trả lời câu hỏi phụ hiện tại.' : '',
+    ].filter(Boolean)
+  const finish = () => {
+    setConfirmSubmit(false)
+    if (speech.isListening || busy || endedRef.current || secondsLeft <= 0) return
     endExam('Đã nộp bài. Điểm và nhận xét AI được cập nhật theo thời gian thực.')
   }
 
@@ -710,7 +714,11 @@ export function InClassExamSessionPage() {
                       type="button"
                       data-space-ignore="true"
                       aria-pressed={autoRead}
-                      onClick={() => setAutoRead((current) => !current)}
+                      onClick={() => setAutoRead((current) => {
+                        const next = !current
+                        updateDevicePreferences({ autoReadQuestions: next })
+                        return next
+                      })}
                       className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left"
                     >
                       <span>
@@ -808,16 +816,7 @@ export function InClassExamSessionPage() {
                 </button>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white">
-                <div className="p-3.5">
-                  <h2 className="text-[18px] leading-snug font-semibold whitespace-pre-line text-[#0F2854]">
-                    <span className="font-semibold">Câu {questionIndex + 1}. </span>
-                    {question.content || question.title}
-                  </h2>
-                </div>
-              </div>
-
-              {currentTurn.followUpIndex > 0 && currentTurn.followUpPrompt && (
+              {currentTurn.followUpIndex > 0 && currentTurn.followUpPrompt ? (
                 <div className="rounded-2xl border border-[#1C4D8D]/40 bg-[#F4FBFD] p-3.5">
                   <p className="text-xs font-bold tracking-[0.06em] text-[#1C4D8D] uppercase">
                     Câu hỏi phụ #{currentTurn.followUpIndex}/{maxFollowUps} (Phát vấn theo ngữ cảnh)
@@ -825,6 +824,15 @@ export function InClassExamSessionPage() {
                   <p className="mt-1.5 text-base leading-snug font-semibold text-[#0F2854]">
                     {currentTurn.followUpPrompt}
                   </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white">
+                  <div className="p-3.5">
+                    <h2 className="text-[18px] leading-snug font-semibold whitespace-pre-line text-[#0F2854]">
+                      <span className="font-semibold">Câu {questionIndex + 1}. </span>
+                      {question.content || question.title}
+                    </h2>
+                  </div>
                 </div>
               )}
 
@@ -979,7 +987,7 @@ export function InClassExamSessionPage() {
                   Câu trước
                 </button>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {currentTurn.followUpIndex > 0 && !draft.trim() && !submitted[turnKey] && (
+                  {!isLast && currentTurn.followUpIndex > 0 && !draft.trim() && !submitted[turnKey] && (
                     <button
                       type="button"
                       data-space-ignore="true"
@@ -987,7 +995,7 @@ export function InClassExamSessionPage() {
                       disabled={speech.isListening || busy || secondsLeft <= 0}
                       className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] hover:-translate-y-0.5 hover:border-[#4988C4] disabled:opacity-40 motion-reduce:transform-none"
                     >
-                      {isLast ? 'Bỏ qua câu phụ & Nộp bài' : 'Bỏ qua câu phụ'}
+                      Bỏ qua câu phụ
                       <ArrowRight className="size-4" />
                     </button>
                   )}
@@ -1022,27 +1030,61 @@ export function InClassExamSessionPage() {
                       <ArrowRight className="size-4" />
                     </button>
                   )}
-                  {isLast && (
+                  {isLast && shouldRequestFollowUp && (
                     <button
                       type="button"
                       data-space-ignore="true"
-                      onClick={() => void finish()}
+                      onClick={() => void submitCurrent()}
                       disabled={speech.isListening || busy || secondsLeft <= 0}
-                      className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-40 motion-reduce:transform-none"
+                      className={ds.outlineButton}
                     >
-                      {busy
-                        ? 'Đang nộp...'
-                        : hasPendingFollowUpTurns && Boolean(draft.trim()) && !submitted[turnKey]
-                          ? `Gửi & Câu phụ (${currentTurn.followUpIndex + 1}/${maxFollowUps})`
-                          : 'Nộp bài'}
+                      Gửi & Câu phụ
                     </button>
                   )}
+                  <button
+                    type="button"
+                    data-space-ignore="true"
+                    onClick={() => setConfirmSubmit(true)}
+                    disabled={speech.isListening || busy || secondsLeft <= 0}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1C4D8D] px-5 text-sm font-bold text-white shadow-[0_8px_16px_rgba(36,94,234,0.22)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:opacity-40 motion-reduce:transform-none"
+                  >
+                    Nộp bài
+                  </button>
                 </div>
               </div>
             </section>
           )
         )}
       </div>
+      {(confirmSubmit || blocker.state === 'blocked') && (
+        <ConfirmDialog
+          title={blocker.state === 'blocked' ? 'Nộp bài và thoát phòng?' : 'Xác nhận nộp bài'}
+          eyebrow={warnings.length ? 'Cảnh báo' : 'Ca kiểm tra'}
+          tone={warnings.length ? 'warning' : 'info'}
+          confirmLabel="Nộp bài"
+          cancelLabel="Làm tiếp"
+          pending={busy || leaving}
+          onConfirm={blocker.state === 'blocked' ? submitAndLeave : finish}
+          onCancel={() => {
+            setConfirmSubmit(false)
+            if (blocker.state === 'blocked') {
+              persistDraftsRef.current()
+              blocker.reset()
+            }
+          }}
+        >
+          <div className="space-y-3 text-sm">
+            {warnings.length > 0 && (
+              <ul className="list-disc space-y-1 rounded-xl border border-amber-200 bg-amber-50 py-3 pr-3 pl-7 font-medium text-amber-900">
+                {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+            <p className="leading-relaxed text-[#5b6b84]">
+              {warnings.length ? 'Bạn có thể làm tiếp hoặc nộp bài ngay.' : 'Bạn có chắc muốn nộp bài?'}
+            </p>
+          </div>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

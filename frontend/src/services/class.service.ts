@@ -198,6 +198,8 @@ export const classService = {
         semesterCode: readString(item, 'semesterCode'),
         lecturerName: readString(item, 'lecturerName'),
         enrolledAt: readString(item, 'enrolledAt') || undefined,
+        enrolledCount: typeof item.enrolledCount === 'number' ? item.enrolledCount : undefined,
+        maxStudents: typeof item.maxStudents === 'number' ? item.maxStudents : undefined,
       }))
       .filter((item) => item.classId)
   },

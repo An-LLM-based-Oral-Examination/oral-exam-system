@@ -1,3 +1,4 @@
+using OralExamination.Application.Features.MockExams.Commands;
 using System;
 using System.IO;
 using System.Security.Claims;
@@ -350,7 +351,22 @@ public class MockExamsController : ControllerBase
     /// <summary>
     /// Khôi phục ca thi thử đang in_progress để tiếp tục làm bài (không tạo ca mới).
     /// </summary>
-    [HttpGet("sessions/{id:guid}/resume")]
+    [HttpPost("sessions/{id:guid}/pause")]
+    public async Task<IActionResult> PauseSession([FromRoute] Guid id, CancellationToken cancellationToken)
+    {
+        var studentId = GetCurrentUserId();
+        if (studentId == Guid.Empty) return Unauthorized();
+
+        var remainingSeconds = await _sender.Send(new PauseMockExamSessionCommand(id, studentId), cancellationToken);
+        if (remainingSeconds is null)
+        {
+            return Conflict(new ProblemDetails { Detail = "Không thể tạm dừng ca thi này." });
+        }
+
+        return Ok(new { remainingSeconds });
+    }
+
+    [HttpPost("sessions/{id:guid}/resume")]
     public async Task<IActionResult> ResumeSession([FromRoute] Guid id)
     {
         var currentUserId = GetCurrentUserId();

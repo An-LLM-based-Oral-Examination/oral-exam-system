@@ -15,6 +15,7 @@ interface FilterDropMenuProps {
   options: FilterDropMenuOption[]
   onChange: (value: string) => void
   className?: string
+  menuMinWidth?: number
   /** Thông báo khi danh sách trống. */
   emptyText?: string
   /** Viền đỏ khi trường không hợp lệ. */
@@ -40,6 +41,7 @@ export function FilterDropMenu({
   options,
   onChange,
   className,
+  menuMinWidth = 176,
   emptyText = 'Không có dữ liệu',
   invalid = false,
 }: FilterDropMenuProps) {
@@ -68,7 +70,7 @@ export function FilterDropMenu({
       const spaceAbove = rect.top - gap - viewportPad
       const openUp = spaceBelow < 160 && spaceAbove > spaceBelow
       const maxHeight = Math.max(120, Math.min(preferredHeight, openUp ? spaceAbove : spaceBelow))
-      const width = Math.max(rect.width, 176)
+      const width = Math.min(Math.max(rect.width, menuMinWidth), window.innerWidth - 2 * viewportPad)
       const left = Math.min(Math.max(viewportPad, rect.left), window.innerWidth - width - viewportPad)
 
       if (openUp) {
@@ -96,7 +98,7 @@ export function FilterDropMenu({
       window.removeEventListener('resize', place)
       window.removeEventListener('scroll', place, true)
     }
-  }, [open, options.length])
+  }, [open, options.length, menuMinWidth])
 
   useEffect(() => {
     if (!isEmpty || !open) return

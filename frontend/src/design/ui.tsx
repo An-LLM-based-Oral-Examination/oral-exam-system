@@ -40,6 +40,7 @@ type PageBannerProps = {
   description?: ReactNode
   extras?: ReactNode
   scene?: ReactNode
+  sceneClassName?: string
   className?: string
   children?: ReactNode
 }
@@ -52,6 +53,7 @@ export function PageBanner({
   description,
   extras,
   scene,
+  sceneClassName,
   className,
   children,
 }: PageBannerProps) {
@@ -59,8 +61,9 @@ export function PageBanner({
 
   return (
     <section className={cn(ds.banner, className)}>
-      <div
-        className="pointer-events-none absolute inset-0 opacity-70"
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden="true">
+        <div
+        className="absolute inset-0 opacity-70"
         style={{
           backgroundImage:
             'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
@@ -69,6 +72,7 @@ export function PageBanner({
       />
       <div className="pointer-events-none absolute -top-28 -right-20 size-80 rounded-full bg-[#57dcff]/12 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 left-[34%] size-80 rounded-full bg-[#7357ff]/9 blur-3xl" />
+      </div>
 
       <div
         className={cn(
@@ -90,7 +94,7 @@ export function PageBanner({
 
         {hasScene ? (
           <div
-            className="relative min-h-[150px] overflow-hidden lg:min-h-full"
+            className={cn('relative min-h-[150px] overflow-hidden lg:min-h-full', sceneClassName)}
             aria-hidden={scene || children ? undefined : true}
           >
             {scene}

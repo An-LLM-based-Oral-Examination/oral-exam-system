@@ -79,8 +79,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
 
         // BOLA & Privacy Enforcement: Sinh viên chỉ được xem dữ liệu của chính mình
         bool isStudent = actor.Role == UserRole.Student;
-        bool canStudentViewScores = !isStudent || shift.IsLocked || shift.Status == "FINALIZED" || shift.IsAutoPublishGrades;
-        bool canStudentViewLecturerNotes = !isStudent || shift.IsLocked || shift.Status == "FINALIZED";
+        bool canStudentViewScores = !isStudent || shift.Status == "FINALIZED";
+        bool canStudentViewLecturerNotes = canStudentViewScores;
 
         var visibleParticipants = isStudent
             ? shift.Participants.Where(p => p.StudentId == actor.Id).ToList()

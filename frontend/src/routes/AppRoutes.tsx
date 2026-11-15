@@ -1,10 +1,11 @@
+import { StudentClassesPage } from '@/pages/student/StudentClassesPage'
 import { Suspense } from 'react'
 import { Navigate, Outlet, Route, createRoutesFromElements } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { StudentLayout } from '@/components/layout/StudentLayout'
 import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
 import { LegacyRoleRouteLayout } from '@/routes/LegacyRoleRouteLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
+import { ProfileRouteLayout } from '@/routes/ProfileRouteLayout'
 import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 import {
   AdminDashboardPage,
@@ -47,6 +48,7 @@ import { OfficialExamPage } from '@/pages/student/OfficialExamPage'
 import { ExamHistoryPage } from '@/pages/student/ExamHistoryPage'
 import { StudentInClassExamPage } from '@/pages/student/StudentInClassExamPage'
 import { InClassExamSessionPage } from '@/pages/student/InClassExamSessionPage'
+import { ProfilePage } from '@/pages/profile/ProfilePage'
 
 export const appRoutes = createRoutesFromElements(
   <>
@@ -58,14 +60,18 @@ export const appRoutes = createRoutesFromElements(
     <Route element={<ProtectedRoute />}>
       <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/change-password" element={<ChangePasswordPage />} />
+      <Route element={<ProfileRouteLayout />}>
+        <Route path="/profile" element={<ProfilePage />} />
+      </Route>
 
       {/* Student Portal */}
       <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
         <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
         <Route path="/in-class-exam/session" element={<InClassExamSessionPage />} />
-        <Route element={<StudentLayout />}>
+        <Route element={<AppLayout />}>
           <Route path="/student/overview" element={<StudentDashboardPage />} />
-          <Route path="/classes" element={<Navigate to="/student/overview" replace />} />
+          <Route path="/classes" element={<StudentClassesPage />} />
+          <Route path="/classes/:classId" element={<StudentInClassExamPage />} />
           <Route path="/in-class-exam" element={<StudentInClassExamPage />} />
           <Route path="/practice" element={<PracticePage />} />
           <Route path="/practice/session" element={<PracticeSessionPage />} />
