@@ -1,6 +1,8 @@
+import { ClassCapacity } from '@/components/common/ClassCapacity'
+import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, LoaderCircle, Plus, Users, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, LoaderCircle, Plus, Search, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
@@ -67,7 +69,36 @@ export function LecturerClassManagementPage() {
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [courseCode, setCourseCode] = useState('ALL')
+  const [classSearch, setClassSearch] = useState('')
+  const [appliedClassSearch, setAppliedClassSearch] = useState('')
+  const [classPage, setClassPage] = useState(1)
+  const [classPageSize, setClassPageSize] = useState(() =>
+    window.matchMedia('(min-width: 80rem)').matches ? 6 : window.matchMedia('(min-width: 40rem)').matches ? 4 : 2,
+  )
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const wide = window.matchMedia('(min-width: 80rem)')
+    const medium = window.matchMedia('(min-width: 40rem)')
+    const update = () => {
+      setClassPageSize(wide.matches ? 6 : medium.matches ? 4 : 2)
+      setClassPage(1)
+    }
+    wide.addEventListener('change', update)
+    medium.addEventListener('change', update)
+    return () => {
+      wide.removeEventListener('change', update)
+      medium.removeEventListener('change', update)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setAppliedClassSearch(classSearch)
+      setClassPage(1)
+    }, 500)
+    return () => window.clearTimeout(timeout)
+  }, [classSearch])
 
   const load = async (selectedSemester = semesterId) => {
     setLoading(true)
@@ -122,7 +153,18 @@ export function LecturerClassManagementPage() {
       ...[...map.entries()].map(([code, name]) => ({ value: code, label: `${code} · ${name}` })),
     ]
   }, [visibleOfferings])
-  const visibleClasses = classes.filter((item) => courseCode === 'ALL' || item.courseCode === courseCode)
+  const searchTerm = appliedClassSearch.trim().toLocaleLowerCase('vi-VN')
+  const visibleClasses = classes.filter((item) => {
+    const matchesCourse = courseCode === 'ALL' || item.courseCode === courseCode
+    const matchesSearch = !searchTerm || [item.name, item.code].some(
+      (value) => value?.toLocaleLowerCase('vi-VN').includes(searchTerm),
+    )
+    return matchesCourse && matchesSearch
+  })
+  const classPageCount = Math.max(1, Math.ceil(visibleClasses.length / classPageSize))
+  const currentClassPage = Math.min(classPage, classPageCount)
+  const classStart = (currentClassPage - 1) * classPageSize
+  const pageClasses = visibleClasses.slice(classStart, classStart + classPageSize)
 
   return (
     <div lang="vi" className={ds.page}>
@@ -136,7 +178,7 @@ export function LecturerClassManagementPage() {
       />
 
       <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between')}>
+        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3')}>
             <div className={ds.sectionHeading}>
               <div className={ds.sectionTitleRow}>
                 <span className={ds.sectionIconWrap}>
@@ -147,28 +189,52 @@ export function LecturerClassManagementPage() {
               </div>
               <p className={ds.sectionHint}>Quản lý lớp theo học kỳ và môn được phân công</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
               <FilterDropMenu
                 label="Học kỳ"
                 value={semesterId}
                 onChange={(value) => {
                   setSemesterId(value)
+                  setClassPage(1)
                   setCourseCode('ALL')
                   void load(value)
                 }}
                 options={semesters}
                 emptyText="Chưa có học kỳ"
-                className="w-44"
+                className="w-40 max-w-full"
+                menuMinWidth={192}
               />
               <FilterDropMenu
                 label="Môn"
                 value={courseOptions.some((item) => item.value === courseCode) ? courseCode : 'ALL'}
-                onChange={setCourseCode}
+                onChange={(value) => {
+                  setCourseCode(value)
+                  setClassPage(1)
+                }}
                 options={courseOptions}
                 emptyText="Chưa có môn trong kỳ này"
-                className="w-64"
+                className="w-64 max-w-full"
+                menuMinWidth={352}
               />
-              <button type="button" className={cn(ds.primaryButton, 'min-h-10')} onClick={() => setCreateOpen(true)}>
+              <div className="relative w-full sm:w-fit">
+                <Search className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4 text-[#1C4D8D]" aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label="Tìm theo tên lớp hoặc mã lớp"
+                  placeholder="Tìm theo tên lớp hoặc mã lớp"
+                  value={classSearch}
+                  onChange={(event) => setClassSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                      event.preventDefault()
+                      setAppliedClassSearch(classSearch)
+                      setClassPage(1)
+                    }
+                  }}
+                  className={cn(ds.field, 'h-10 min-h-10 rounded-full pr-3 pl-10 shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition sm:w-[264px]')}
+                />
+              </div>
+              <button type="button" className={cn(ds.primaryButton, 'min-h-10 shrink-0')} onClick={() => setCreateOpen(true)}>
                 <Plus className="size-3.5" />
                 Tạo lớp
               </button>
@@ -183,23 +249,31 @@ export function LecturerClassManagementPage() {
           ) : visibleClasses.length === 0 ? (
             <EmptyState
               icon={UsersRound}
-              title="Chưa có lớp trong bộ lọc này"
-              description="Đổi học kỳ/môn hoặc tạo lớp mới cho môn được phân công."
-              action={
+              title={searchTerm ? 'Không tìm thấy lớp phù hợp' : 'Chưa có lớp trong bộ lọc này'}
+              description={searchTerm ? 'Thử tên lớp hoặc mã lớp khác.' : 'Đổi học kỳ/môn hoặc tạo lớp mới cho môn được phân công.'}
+              action={searchTerm ? undefined : (
                 <button type="button" className={ds.primaryButton} onClick={() => setCreateOpen(true)}>
                   <Plus className="size-4" />
                   Tạo lớp
                 </button>
-              }
+              )}
             />
           ) : (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleClasses.map((item) => (
-                <li key={item.id}>
-                  <LecturerClassCard item={item} onOpen={(classId) => navigate(`/lecturer/classes/${classId}`)} />
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4">
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {pageClasses.map((item) => (
+                  <li key={item.id}>
+                    <LecturerClassCard item={item} onOpen={(classId) => navigate(`/lecturer/classes/${classId}`)} />
+                  </li>
+                ))}
+              </ul>
+              <CompactPagination
+                label="Phân trang lớp học của tôi"
+                page={currentClassPage}
+                pageCount={classPageCount}
+                onPageChange={setClassPage}
+              />
+            </div>
           )}
         </div>
       </section>
@@ -232,9 +306,6 @@ function LecturerClassCard({
   item: ManagedClass
   onOpen: (classId: string) => void
 }) {
-  const seatsLeft = Math.max(0, item.maxStudents - item.enrolledCount)
-  const fillRatio = item.maxStudents > 0 ? Math.min(1, item.enrolledCount / item.maxStudents) : 0
-  const nearlyFull = fillRatio >= 0.85
 
   return (
     <article
@@ -287,36 +358,13 @@ function LecturerClassCard({
         </h3>
         <p className="mt-1 line-clamp-1 text-sm font-semibold text-[#3d5270]">{item.courseName}</p>
 
-        <div className="mt-4 space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-xs font-bold">
-            <span className="inline-flex items-center gap-1 text-[#5b6b84]">
-              <Users className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
-              Sĩ số
-            </span>
-            <span className={cn(nearlyFull ? 'text-[#c26a12]' : 'text-[#0F2854]')}>
-              {item.enrolledCount}
-              <span className="font-semibold text-[#5b6b84]">/{item.maxStudents}</span>
-              <span className="ml-1.5 font-semibold text-[#5b6b84]">· còn {seatsLeft}</span>
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-[#E7F3FB] ring-1 ring-[#82aedb]/30">
-            <div
-              className={cn(
-                'h-full rounded-full transition-[width] duration-300',
-                nearlyFull
-                  ? 'bg-[linear-gradient(90deg,#e3a23a,#c26a12)]'
-                  : 'bg-[linear-gradient(90deg,#4988C4,#1C4D8D)]',
-              )}
-              style={{ width: `${Math.max(fillRatio * 100, item.enrolledCount > 0 ? 8 : 0)}%` }}
-            />
-          </div>
-        </div>
+        <ClassCapacity enrolledCount={item.enrolledCount} maxStudents={item.maxStudents} />
 
         <p className={cn('mt-3 text-sm font-bold', item.activeShiftCount > 0 ? 'text-[#16836a]' : 'text-[#5b6b84]')}>
           {classShiftLine(item)}
         </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-3.5">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-0.5">
           <span className="text-xs font-semibold text-[#5b6b84]">Mở lớp</span>
           <span className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition group-hover:border-[#1C4D8D] group-hover:bg-[#E7F3FB]">
             Chi tiết
@@ -405,7 +453,7 @@ function CreateClassDialog({
   return (
     <FormDialog
       titleId="create-class-title"
-      eyebrow="Lớp học phần"
+      eyebrow="Quản lý lớp học"
       title="Tạo lớp mới"
       icon={Plus}
       onClose={onClose}

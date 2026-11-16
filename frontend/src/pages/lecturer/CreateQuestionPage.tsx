@@ -1617,7 +1617,7 @@ export function CreatePracticeQuestionForm({
     return (
       <FormDialog
         titleId="create-practice-question-title"
-        eyebrow="Kho luyện tập"
+        eyebrow="Câu hỏi luyện tập"
         title={mode ? flowName : 'Chọn cách tạo câu hỏi'}
         icon={Sparkles}
         onClose={() => onClose?.()}

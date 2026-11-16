@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { AuthContext, type AuthContextType } from '@/context/auth-context'
 import { Sidebar } from '@/components/layout/Sidebar'
-import { StudentSidebar } from '@/components/layout/StudentSidebar'
 import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
 import type { User, UserRole } from '@/types/auth.types'
 
@@ -65,18 +64,18 @@ describe('portal navigation boundaries', () => {
     renderWithAuth(role, <Sidebar collapsed={false} mobileOpen={false} onCollapse={() => undefined} onMobileClose={() => undefined} />)
 
     const links = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
-    expect(new Set(links)).toEqual(new Set([...allowedPaths, '/change-password']))
+    expect(new Set(links)).toEqual(new Set(allowedPaths))
   })
 
   it('student navigation contains only student actions', () => {
     renderWithAuth(
       'Student',
-      <StudentSidebar collapsed={false} mobileOpen={false} onCollapse={() => undefined} onMobileClose={() => undefined} />,
+      <Sidebar collapsed={false} mobileOpen={false} onCollapse={() => undefined} onMobileClose={() => undefined} />,
     )
 
     const links = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
     expect(links).toEqual(
-      expect.arrayContaining(['/student/overview', '/practice', '/mock-exam', '/in-class-exam', '/results', '/change-password']),
+      expect.arrayContaining(['/student/overview', '/classes', '/practice', '/mock-exam', '/results']),
     )
     expect(links.some((path) => path?.startsWith('/lecturer/'))).toBe(false)
     expect(links.some((path) => path?.startsWith('/admin/'))).toBe(false)

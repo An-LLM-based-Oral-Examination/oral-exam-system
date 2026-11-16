@@ -33,6 +33,7 @@ public sealed class GetMockExamHistoryQueryHandler(
                         .ThenInclude(d => d.Criterion)
             .Where(s => s.StudentId == request.StudentId &&
                         s.Status == "in_progress" &&
+                        s.PausedAt == null &&
                         nowUtc > s.ExpiresAt.AddSeconds(10))
             .ToListAsync(cancellationToken);
 

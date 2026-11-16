@@ -1,15 +1,17 @@
+import { PortalSidebar, PortalSidebarBrand, PortalSidebarFooter } from '@/components/layout/PortalChrome'
 import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
+  BarChart3,
+  Mic2,
+  TimerReset,
   BookOpenCheck,
   ChevronLeft,
   ClipboardCheck,
   FileCheck2,
-  KeyRound,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
-  Scale,
   ServerCog,
   ShieldAlert,
   UserRoundCheck,
@@ -39,7 +41,34 @@ interface InstructorNavigationItem {
 }
 
 const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
-  Student: [],
+  Student: [
+  {
+    label: 'Tổng quan',
+    path: '/student/overview',
+    icon: LayoutDashboard,
+    end: true,
+  },
+  {
+    label: 'Quản lý lớp học',
+    path: '/classes',
+    icon: UsersRound,
+  },
+  {
+    label: 'Luyện tập',
+    path: '/practice',
+    icon: Mic2,
+  },
+  {
+    label: 'Thi thử',
+    path: '/mock-exam',
+    icon: TimerReset,
+  },
+  {
+    label: 'Kết quả',
+    path: '/results',
+    icon: BarChart3,
+  },
+  ],
   Instructor: [
     { label: 'Lỗi chấm ca lớp', path: '/lecturer/dlq', icon: ServerCog },
     { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
@@ -71,17 +100,13 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
   const portalRole = user ? canonicalRole(user.role) : null
   const visibleNavigation = portalRole ? PORTAL_NAVIGATION[portalRole] : []
   const portalTitle =
-    portalRole === 'DepartmentHead'
+    portalRole === 'Student' ? 'Cổng sinh viên' : portalRole === 'DepartmentHead'
       ? 'Cổng Trưởng Bộ môn'
       : portalRole === 'Admin'
         ? 'Cổng quản trị'
         : portalRole === 'Proctor'
           ? 'Cổng Giám thị'
           : 'Cổng giảng viên'
-  const navigationWithPassword = [
-    ...visibleNavigation,
-    { label: 'Đổi mật khẩu', path: '/change-password', icon: KeyRound },
-  ]
   useEffect(() => {
     if (!mobileOpen) return
 
@@ -110,15 +135,14 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
         onClick={onMobileClose}
       />
 
-      <aside
+      <PortalSidebar
         aria-label="Điều hướng portal"
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
           collapsed ? 'md:w-20' : 'md:w-[220px] xl:w-[240px]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-[77px] shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4">
+        <PortalSidebarBrand>
           <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white p-0.5">
             <img
               src={universityTechLogo}
@@ -145,20 +169,12 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           >
             <X className="size-5" aria-hidden="true" />
           </button>
-        </div>
+        </PortalSidebarBrand>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-5">
-          <p
-            className={cn(
-              'mb-2 px-3 text-xs font-bold tracking-[0.15em] text-[#1C4D8D] uppercase',
-              collapsed && 'md:hidden',
-            )}
-          >
-            Nghiệp vụ học thuật
-          </p>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
 
           <nav className="space-y-1.5" aria-label="Các phân hệ portal">
-            {navigationWithPassword.map(({ label, path, icon: Icon, end }) => (
+            {visibleNavigation.map(({ label, path, icon: Icon, end }) => (
               <NavLink
                 key={path}
                 to={path}
@@ -184,22 +200,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           </nav>
         </div>
 
-        <div className="shrink-0 border-t border-[#4988C4] bg-[#D7F1F8] p-3">
-          <div
-            className={cn(
-              'mb-2 flex items-start gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] px-3 py-2.5',
-              collapsed && 'md:hidden',
-            )}
-          >
-            <Scale className="mt-0.5 size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-[#0F2854]">Chốt chặn học thuật</p>
-              <p className="mt-0.5 text-xs leading-snug text-[#1C4D8D]">
-                Rubric đủ 10.0 điểm và cần Trưởng Bộ môn phê duyệt.
-              </p>
-            </div>
-          </div>
-
+        <PortalSidebarFooter>
           <button
             type="button"
             onClick={onCollapse}
@@ -222,8 +223,8 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
               </>
             )}
           </button>
-        </div>
-      </aside>
+        </PortalSidebarFooter>
+      </PortalSidebar>
     </>
   )
 }

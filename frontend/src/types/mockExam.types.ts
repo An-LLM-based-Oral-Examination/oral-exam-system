@@ -163,6 +163,8 @@ export interface StoredMockExamAnswer {
 
 export interface StoredMockExamSession extends StartMockExamResponse {
   answers: StoredMockExamAnswer[]
+  /** Số giây còn lại được chốt khi sinh viên rời phòng thi. */
+  pausedRemainingSeconds?: number
   /** Chỉ số câu xa nhất đã mở (làm hoặc bỏ qua). Không nhảy tới câu chưa xem. */
   furthestQuestionIndex?: number
   activeFollowUp?: MockExamActiveFollowUp | null

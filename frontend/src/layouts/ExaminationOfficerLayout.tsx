@@ -1,3 +1,4 @@
+import { PortalHeader, PortalSidebar, PortalSidebarBrand, PortalSidebarFooter } from '@/components/layout/PortalChrome'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -5,7 +6,6 @@ import {
   ChevronLeft,
   ClipboardCheck,
   FileBarChart2,
-  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -14,6 +14,7 @@ import {
   ScanSearch,
   ServerCog,
   TicketCheck,
+  UserRound,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -40,6 +41,7 @@ const navigation: OfficerNavItem[] = [
 ]
 
 const pageLabels: Array<{ prefix: string; label: string; icon: LucideIcon }> = [
+  { prefix: '/profile', label: 'Hồ sơ cá nhân', icon: UserRound },
   { prefix: '/examination-officer/dashboard', label: 'Tổng quan Khảo thí', icon: LayoutDashboard },
   { prefix: '/examination-officer/exams', label: 'Kỳ thi chính thức', icon: CalendarDays },
   { prefix: '/examination-officer/tickets', label: 'Cấp vé thi', icon: TicketCheck },
@@ -68,8 +70,7 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-[77px] items-stretch bg-white px-4 py-2 sm:px-6 xl:px-8">
-      <div className="flex min-h-0 w-full flex-1 items-center justify-between gap-3 rounded-2xl border border-[#4988C4] bg-white px-3 sm:px-4">
+    <PortalHeader>
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -92,7 +93,12 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3">
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+            aria-label="Mở hồ sơ cá nhân"
+          >
             <div className="hidden text-right sm:block">
               <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
                 {user?.fullName ?? 'Cán bộ Khảo thí'}
@@ -101,21 +107,9 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
                 {user?.email ?? 'examination_officer'}
               </p>
             </div>
-            <div
-              className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
-              aria-label={`Tài khoản ${user?.fullName ?? 'Cán bộ Khảo thí'}`}
-            >
+            <div className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white">
               {initials || 'KT'}
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/change-password')}
-            className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D]"
-            aria-label="Đổi mật khẩu"
-          >
-            <KeyRound className="size-4" aria-hidden="true" />
-            <span className="hidden lg:inline">Đổi mật khẩu</span>
           </button>
           <button
             type="button"
@@ -126,8 +120,7 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             <LogOut className="size-4" aria-hidden="true" />
           </button>
         </div>
-      </div>
-    </header>
+    </PortalHeader>
   )
 }
 
@@ -167,15 +160,14 @@ function OfficerSidebar({
         )}
         onClick={onMobileClose}
       />
-      <aside
+      <PortalSidebar
         aria-label="Điều hướng Cán bộ Khảo thí"
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
           collapsed ? 'md:w-20' : 'md:w-[220px] xl:w-[240px]',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-[77px] shrink-0 items-center gap-3 border-b border-[#4988C4] bg-[#D7F1F8] px-4">
+        <PortalSidebarBrand>
           <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#4988C4] bg-white p-0.5">
             <img
               src={universityTechLogo}
@@ -200,7 +192,7 @@ function OfficerSidebar({
           >
             <X className="size-5" aria-hidden="true" />
           </button>
-        </div>
+        </PortalSidebarBrand>
         <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-5">
           <nav className="space-y-1.5" aria-label="Các phân hệ Khảo thí">
             {navigation
@@ -230,7 +222,7 @@ function OfficerSidebar({
               ))}
           </nav>
         </div>
-        <div className="shrink-0 border-t border-[#4988C4] bg-[#D7F1F8] p-3">
+        <PortalSidebarFooter>
           <button
             type="button"
             onClick={onCollapse}
@@ -253,8 +245,8 @@ function OfficerSidebar({
               </>
             )}
           </button>
-        </div>
-      </aside>
+        </PortalSidebarFooter>
+      </PortalSidebar>
     </>
   )
 }
@@ -286,7 +278,7 @@ export function ExaminationOfficerLayout({ children }: { children?: ReactNode })
         <main
           id="examination-officer-main-content"
           tabIndex={-1}
-          className="px-4 py-5 focus:outline-none sm:px-6 sm:py-5 xl:px-8"
+          className="px-4 pt-3 pb-5 focus:outline-none sm:px-6 xl:px-8"
         >
           <div className="mx-auto w-full max-w-[1380px]">{children ?? <Outlet />}</div>
         </main>

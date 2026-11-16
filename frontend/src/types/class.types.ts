@@ -103,6 +103,8 @@ export interface StudentClassItem {
   semesterCode: string
   lecturerName: string
   enrolledAt?: string
+  enrolledCount?: number | null
+  maxStudents?: number | null
 }
 
 export interface JoinableClassItem {

@@ -916,7 +916,7 @@ export function InClassShiftResultsPage() {
       {gradeDialogOpen && selected && !locked && !viewingInProgress && (
         <FormDialog
           titleId="grade-exam-dialog-title"
-          eyebrow="Chỉnh điểm"
+          eyebrow="Kết quả ca kiểm tra"
           title={selected.studentName}
           icon={Pencil}
           onClose={closeGradeDialog}

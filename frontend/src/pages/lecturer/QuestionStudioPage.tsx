@@ -1,3 +1,4 @@
+import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -455,7 +456,7 @@ export function QuestionStudioPage() {
   const courseFilterOptions = useMemo(() => {
     if (courses.length === 0) return []
     return [
-      { value: '', label: 'Tất cả môn phân công' },
+      { value: '', label: 'Tất cả môn' },
       ...courses.map((course) => ({
         value: course.id,
         label: `${course.code} · ${course.name}`,
@@ -722,7 +723,7 @@ export function QuestionStudioPage() {
   const showSelectionActions = workspace === 'mine'
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-8')}>
+    <div lang="vi" className={cn(ds.page)}>
       {showSelectionActions && selectedIds.size > 0 && (
         <section
           className="rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
@@ -856,6 +857,7 @@ export function QuestionStudioPage() {
                 value={filters.courseId ?? ''}
                 onChange={(value) => updateFilter('courseId', value)}
                 options={courseFilterOptions}
+                menuMinWidth={352}
                 emptyText="Chưa có môn phân công"
                 className="w-56 shrink-0"
               />
@@ -1159,28 +1161,13 @@ export function QuestionStudioPage() {
         )}
 
         {!isLoading && questions.length > 0 && (
-          <div className="flex items-center justify-between border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
-            <button
-              type="button"
-              onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
-              disabled={pageNumber <= 1}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#536780] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transform-none"
-            >
-              <ArrowLeft className="size-3.5" />
-              Trang trước
-            </button>
-            <span className="text-xs font-semibold text-[#708096]">
-              Trang {pageNumber} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPageNumber((page) => Math.min(totalPages, page + 1))}
-              disabled={pageNumber >= totalPages}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#536780] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transform-none"
-            >
-              Trang sau
-              <ArrowRight className="size-3.5" />
-            </button>
+          <div className="border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
+            <CompactPagination
+              label="Phân trang câu hỏi luyện tập"
+              page={pageNumber}
+              pageCount={totalPages}
+              onPageChange={setPageNumber}
+            />
           </div>
         )}
       </section>

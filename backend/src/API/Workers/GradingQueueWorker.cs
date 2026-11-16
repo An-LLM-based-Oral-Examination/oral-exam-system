@@ -1089,33 +1089,6 @@ public class GradingQueueWorker : BackgroundService
         // Publish điểm song song theo thời gian thực (Parallel Real-time Grade Publishing) qua SignalR Group của Ca thi
         try
         {
-            var realtimeDto = new PracticeAnswerDetailDto
-            {
-                AnswerId = submission.Id,
-                QuestionId = submission.QuestionId,
-                AnswerText = submission.Transcript,
-                IsFollowUp = submission.IsFollowUp,
-                ParentAnswerId = submission.ParentSubmissionId,
-                Status = "AI_GRADED",
-                SubmittedAt = submission.SubmittedAt,
-                TotalScore = score,
-                Feedback = gradingResult.Feedback,
-                IsSuspicious = gradingResult.IsSuspicious,
-                ConfidenceScore = gradingResult.ConfidenceScore,
-                NeedsFollowUp = hasMoreFollowUp,
-                FollowUpPrompt = submission.FollowUpPrompt
-            };
-
-            if (_inClassHubContext is not null)
-            {
-                if (submission.Shift?.IsAutoPublishGrades == true)
-                {
-                    await _inClassHubContext.Clients
-                        .Group(InClassShiftHub.StudentGroupName(submission.ShiftId, submission.StudentId))
-                        .ReceiveGradingResult(realtimeDto);
-                }
-            }
-
             var inClassEventDto = new
             {
                 shiftId = submission.ShiftId,

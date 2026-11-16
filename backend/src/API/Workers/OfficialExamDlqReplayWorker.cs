@@ -384,7 +384,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             .AsNoTracking()
             .Where(s =>
                 !excludedSessionIds.Contains(s.Id) &&
-                ((s.Status == "in_progress" && now > s.ExpiresAt.AddSeconds(15)) ||
+                ((s.Status == "in_progress" && s.PausedAt == null && now > s.ExpiresAt.AddSeconds(15)) ||
                  (s.Status == "submitted" && s.TotalScore == null)))
             .OrderBy(s => s.ExpiresAt)
             .Take(10)

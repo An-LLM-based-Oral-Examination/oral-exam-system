@@ -2468,6 +2468,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("has_follow_up");
 
+                    b.Property<DateTime?>("PausedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paused_at");
+
                     b.Property<DateTime>("StartedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")

@@ -24,7 +24,6 @@ public sealed class ResumeMockExamSessionQueryHandler(
         CancellationToken cancellationToken)
     {
         var session = await context.MockExamSessions
-            .AsNoTracking()
             .Include(s => s.Course)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.Question!)
@@ -46,6 +45,24 @@ public sealed class ResumeMockExamSessionQueryHandler(
         if (!string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
         {
             return Result<ResumeMockExamResponse>.Failure("Ca thi này đã kết thúc, không thể tiếp tục làm bài.");
+        }
+
+        if (session.PausedAt is DateTime pausedAt)
+        {
+            session.ExpiresAt += DateTime.UtcNow - pausedAt;
+            session.PausedAt = null;
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await context.MockExamSessions.Entry(session).ReloadAsync(cancellationToken);
+                if (session.PausedAt != null || session.Status != "in_progress")
+                {
+                    return Result<ResumeMockExamResponse>.Failure("Trạng thái ca thi đã thay đổi. Vui lòng thử lại.");
+                }
+            }
         }
 
         var orderedAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);

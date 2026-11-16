@@ -12,6 +12,7 @@ public partial class MockExamSession
     public bool HasFollowUp { get; set; } = false;
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
+    public DateTime? PausedAt { get; set; }
     public DateTime? SubmittedAt { get; set; }
     public string Status { get; set; } = "in_progress";
     public decimal? TotalScore { get; set; }

@@ -49,10 +49,8 @@ public sealed class GetStudentInClassSubmissionQueryHandler(
             .Select(q => new { q.Title, q.Content })
             .FirstOrDefaultAsync(cancellationToken);
 
-        bool canViewScores = submission.Shift is not null &&
-            (submission.Shift.IsLocked || submission.Shift.Status == "FINALIZED" || submission.Shift.IsAutoPublishGrades);
-        bool canViewLecturerNotes = submission.Shift is not null &&
-            (submission.Shift.IsLocked || submission.Shift.Status == "FINALIZED");
+        bool canViewScores = submission.Shift?.Status == "FINALIZED";
+        bool canViewLecturerNotes = canViewScores;
 
         var response = new InClassExamSubmissionResponse(
             submission.Id,

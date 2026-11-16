@@ -3048,7 +3048,7 @@ export const PracticeSessionPage: React.FC = () => {
         <ConfirmDialog
           tone="warning"
           icon={Send}
-          eyebrow="Xác nhận nộp bài"
+          eyebrow="Phiên luyện tập"
           title="Bạn có chắc muốn nộp bài không?"
           message={
             fullSessionSubmitConfirmation.unansweredCount > 0
@@ -3067,7 +3067,7 @@ export const PracticeSessionPage: React.FC = () => {
         <ConfirmDialog
           tone="danger"
           icon={Square}
-          eyebrow="Xác nhận kết thúc"
+          eyebrow="Phiên luyện tập"
           title="Kết thúc phiên luyện tập?"
           message={
             isRecording

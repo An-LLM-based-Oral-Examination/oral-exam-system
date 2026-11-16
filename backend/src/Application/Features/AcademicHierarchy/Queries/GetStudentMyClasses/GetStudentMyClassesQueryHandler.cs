@@ -56,7 +56,9 @@ public class GetStudentMyClassesQueryHandler(IApplicationDbContext context)
                 e.EnrolledAt,
                 e.Status,
                 e.JoinMethod,
-                e.Class.CourseOfferingId))
+                e.Class.CourseOfferingId,
+                e.Class.Enrollments.Count(enrollment => enrollment.Status == "enrolled"),
+                e.Class.MaxStudents))
             .ToListAsync(cancellationToken);
 
         return Result<List<StudentClassDto>>.Success(classes);

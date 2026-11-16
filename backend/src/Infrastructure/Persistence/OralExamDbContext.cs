@@ -1456,6 +1456,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.HasFollowUp).HasColumnName("has_follow_up").HasDefaultValue(false);
             entity.Property(e => e.StartedAt).HasColumnName("started_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.ExpiresAt).HasColumnName("expires_at").IsRequired();
+            entity.Property(e => e.PausedAt).HasColumnName("paused_at").IsConcurrencyToken();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("in_progress");
             entity.Property(e => e.TotalScore).HasColumnName("total_score").HasPrecision(4, 2);
@@ -2310,6 +2311,40 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         });
     }
 
+    public Task<T> ExecuteShiftAllocationAsync<T>(
+        Guid shiftId,
+        Func<CancellationToken, Task<T>> allocate,
+        CancellationToken cancellationToken)
+    {
+        if (!Database.IsRelational())
+        {
+            return allocate(cancellationToken);
+        }
+
+        return Database.CreateExecutionStrategy().ExecuteAsync(async token =>
+        {
+            try
+            {
+                await using var transaction = await Database.BeginTransactionAsync(token);
+                await AcquireShiftAllocationLockAsync(shiftId, token);
+                var result = await allocate(token);
+                await transaction.CommitAsync(token);
+                return result;
+            }
+            catch
+            {
+                ChangeTracker.Clear();
+                throw;
+            }
+        }, cancellationToken);
+    }
+
+    private Task<int> AcquireShiftAllocationLockAsync(Guid shiftId, CancellationToken cancellationToken)
+    {
+        var shiftHash = BitConverter.ToInt64(shiftId.ToByteArray(), 0);
+        return Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({shiftHash})", cancellationToken);
+    }
+
     public async Task<IAsyncDisposable?> BeginShiftAllocationLockScopeAsync(Guid shiftId, CancellationToken cancellationToken = default)
     {
         if (!Database.IsRelational())
@@ -2318,8 +2353,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         }
 
         var transaction = await Database.BeginTransactionAsync(cancellationToken);
-        var shiftHash = BitConverter.ToInt64(shiftId.ToByteArray(), 0);
-        await Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({shiftHash})", cancellationToken);
+        await AcquireShiftAllocationLockAsync(shiftId, cancellationToken);
 
         return new TransactionLockScope(transaction);
     }

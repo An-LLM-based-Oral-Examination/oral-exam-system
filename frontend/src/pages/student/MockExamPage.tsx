@@ -1,23 +1,23 @@
+import { CompactPagination } from '@/components/common/CompactPagination'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle,
   ArrowRight,
   Award,
   Bot,
   ChevronDown,
-  ChevronLeft,
   Eye,
   GraduationCap,
   History,
-  Keyboard,
-  ListChecks,
   LoaderCircle,
   Mic2,
-  PenLine,
   Play,
   ShieldCheck,
   TimerReset,
+  AlertTriangle,
+  Keyboard,
+  ListChecks,
+  PenLine,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
@@ -26,8 +26,7 @@ import { ds } from '@/design/system'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { toast } from '@/components/common/toastStore'
-import { studentCardShellClass } from '@/design/studentCardTones'
-import { BannerFact, PageBanner, StudentColorCardAccent } from '@/design/ui'
+import { BannerFact, PageBanner } from '@/design/ui'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { courseService } from '@/services/course.service'
 import {
@@ -69,8 +68,9 @@ function readMicrophoneLevel(samples: Uint8Array) {
   return Math.sqrt(squareSum / samples.length)
 }
 
-const RECENT_HISTORY_SIZE = 3
-const ARCHIVE_PAGE_SIZE = 8
+const COURSE_PAGE_SIZE = 4
+const RECENT_HISTORY_SIZE = 4
+const ARCHIVE_PAGE_SIZE = 5
 
 const HISTORY_STATUS_OPTIONS = [
   { value: '', label: 'Mọi trạng thái' },
@@ -98,10 +98,6 @@ function courseToneIndex(code: string) {
     hash = (hash * 31 + code.charCodeAt(index)) >>> 0
   }
   return hash
-}
-
-function courseCodeTone(code: string) {
-  return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
 }
 
 const EXAM_STEPS = [
@@ -146,6 +142,10 @@ const EXAM_NOTES = [
   'Môn hết lượt không bắt đầu được đến ngày hôm sau.',
   'Có thể bật tự động đọc câu trong phòng thi.',
 ]
+
+function courseCodeTone(code: string) {
+  return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
+}
 
 const DEVICE_STATUS: Record<
   DeviceState,
@@ -273,10 +273,10 @@ export function MockExamPage() {
   const [micLevel, setMicLevel] = useState(0)
   const micTestRef = useRef<{ cancelled: boolean; stop: () => void } | null>(null)
   const [quotaModal, setQuotaModal] = useState('')
-  const [guideOpen, setGuideOpen] = useState(true)
-  const [coursesExpanded, setCoursesExpanded] = useState(false)
+  const [coursePage, setCoursePage] = useState(1)
   const [historyItems, setHistoryItems] = useState<MockExamHistoryItem[]>([])
   const [historyTotal, setHistoryTotal] = useState(0)
+  const [guideOpen, setGuideOpen] = useState(true)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [archiveCourseId, setArchiveCourseId] = useState('')
   const [archiveStatus, setArchiveStatus] = useState('')
@@ -291,17 +291,52 @@ export function MockExamPage() {
   const [historyDetails, setHistoryDetails] = useState<Record<string, MockExamScorecardData>>({})
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null)
   const [activeSessionVersion, setActiveSessionVersion] = useState(0)
+  const courseSectionRef = useRef<HTMLElement | null>(null)
+  const [compactSectionHeight, setCompactSectionHeight] = useState<number | null>(null)
 
   const localSessions = useMemo(() => {
     void activeSessionVersion
     return listMockExamSessions()
   }, [activeSessionVersion])
   const modalCourse = courses.find((course) => course.id === openCourseId) ?? null
+  const coursePageCount = Math.max(1, Math.ceil(courses.length / COURSE_PAGE_SIZE))
+  const currentCoursePage = Math.min(coursePage, coursePageCount)
+  const visibleCourses = courses.slice(
+    (currentCoursePage - 1) * COURSE_PAGE_SIZE,
+    currentCoursePage * COURSE_PAGE_SIZE,
+  )
+  const recentHistoryLimit = courses.length < 3 ? 2 : RECENT_HISTORY_SIZE
+  const visibleHistoryItems = historyItems.slice(0, recentHistoryLimit)
   const modalQuota = modalCourse ? (quotas[modalCourse.id] ?? null) : null
   const deviceStatus = DEVICE_STATUS[deviceState]
   const canStart = Boolean(
     modalCourse && modalQuota?.canStartExam && deviceState === 'ready' && !isStarting,
   )
+
+  useEffect(() => {
+    const courseSection = courseSectionRef.current
+    if (!courseSection || courses.length >= 3) {
+      setCompactSectionHeight(null)
+      return
+    }
+
+    const updateHeight = () => {
+      if (!window.matchMedia('(min-width: 1280px)').matches) {
+        setCompactSectionHeight(null)
+        return
+      }
+      setCompactSectionHeight(Math.round(courseSection.getBoundingClientRect().height))
+    }
+
+    updateHeight()
+    const observer = new ResizeObserver(updateHeight)
+    observer.observe(courseSection)
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [courses.length])
 
   const loadQuotas = useCallback(async (courseIds: string[]) => {
     if (courseIds.length === 0) {
@@ -639,10 +674,10 @@ export function MockExamPage() {
         <button
           type="button"
           onClick={() => void handleToggleHistory(item)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+          className={cn(ds.outlineButton, 'h-9 min-h-9 rounded-lg px-3 text-xs')}
         >
           <ArrowRight className="size-3" />
-          Tiếp tục ca thi
+          Tiếp tục
         </button>
       )
     }
@@ -652,7 +687,7 @@ export function MockExamPage() {
         <button
           type="button"
           onClick={() => void handleToggleHistory(item)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-semibold text-[#0F2854] shadow-[0_3px_8px_rgba(23,48,96,0.05)] transition hover:border-[#4988C4] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+          className={cn(ds.outlineButton, 'h-9 min-h-9 rounded-lg px-3 text-xs')}
           aria-expanded={isOpen}
         >
           <Eye className="size-3" />
@@ -673,6 +708,7 @@ export function MockExamPage() {
   return (
     <div className={ds.page}>
       <PageBanner
+        sceneClassName="lg:h-0"
         icon={ShieldCheck}
         eyebrow="Thi thử · Không tính điểm"
         title="Thi thử Vấn đáp Giả lập"
@@ -715,7 +751,7 @@ export function MockExamPage() {
             </p>
             <ul className="mt-3 space-y-2">
               {localSessions.map((item) => {
-                const secondsLeft = secondsUntilExpiry(item.expiresAt)
+                const secondsLeft = item.pausedRemainingSeconds ?? secondsUntilExpiry(item.expiresAt)
                 const answered = item.answers.filter((answer) => !answer.isFollowUp).length
                 return (
                   <li
@@ -749,144 +785,233 @@ export function MockExamPage() {
         </section>
       )}
 
-      <section className={ds.section}>
-        <div className={ds.sectionHeader}>
-          <div className={ds.sectionHeading}>
-            <div className={ds.sectionTitleRow}>
-              <span className={ds.sectionIconWrap}>
-                <GraduationCap className={ds.sectionIcon} aria-hidden="true" />
-              </span>
-              <h2 className={ds.sectionTitle}>Môn học của tôi</h2>
-            </div>
-            <p className={ds.sectionHint}>Chọn môn để bắt đầu phiên thi thử</p>
-          </div>
-        </div>
-
-        <div className={cn(ds.sectionBody, 'space-y-4')}>
-          {isLoadingCourses ? (
-            <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
-              <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
-              Đang tải môn học…
-            </div>
-          ) : courses.length === 0 ? (
-            <EmptyState
-              icon={GraduationCap}
-              title="Chưa có môn học đang mở"
-              description="Tham gia lớp học phần trước để thấy môn đủ điều kiện thi thử."
-            />
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {courses.map((course, index) => {
-                  const courseQuota = quotas[course.id]
-                  const exhausted = Boolean(courseQuota && !courseQuota.canStartExam)
-                  const quotaUnknown = !isLoadingQuotas && quotaFailedIds.includes(course.id)
-                  return (
-                    <article
-                      key={course.id}
-                      className={cn(
-                        !coursesExpanded && index >= 6 && 'hidden',
-                        !coursesExpanded && index >= 4 && 'max-lg:hidden',
-                        !coursesExpanded && index >= 2 && 'max-sm:hidden',
-                        exhausted
-                          ? 'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[#f7f8fa] p-3.5'
-                          : studentCardShellClass(course.code),
-                      )}
-                    >
-                      {!exhausted && <StudentColorCardAccent seed={course.code} />}
-                      <div className={exhausted ? 'flex h-full flex-1 flex-col' : 'relative flex h-full flex-1 flex-col p-3.5'}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                            <span
-                              className={cn(
-                                'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
-                                exhausted ? 'border border-[#8b97a8]/30 bg-[#e8edf3] text-[#8b97a8]' : courseCodeTone(course.code),
-                              )}
-                            >
-                              {course.code}
-                            </span>
-                            <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[#4988C4]/55 bg-white/85 px-2 text-xs font-semibold text-[#5b6b84] backdrop-blur-[2px]">
-                              <GraduationCap className="size-3 shrink-0 text-[#1C4D8D]" />
-                              {course.credits} tín chỉ
-                            </span>
-                          </div>
-                          <span
-                            className={cn(
-                              'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-semibold',
-                              exhausted
-                                ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
-                                : courseQuota
-                                  ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                                  : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]',
-                            )}
-                          >
-                            <TimerReset className="size-3 shrink-0" />
-                            {courseQuota
-                              ? exhausted
-                                ? 'Hết lượt'
-                                : `${courseQuota.remainingCount}/${courseQuota.maxDailyQuota}`
-                              : quotaUnknown
-                                ? 'Chưa rõ'
-                                : '…'}
-                          </span>
-                        </div>
-                        <h3
-                          className={cn(
-                            'mt-3 truncate text-xl leading-snug font-bold',
-                            exhausted ? 'text-[#6d7888]' : 'text-[#0F2854]',
-                          )}
-                        >
-                          {course.name}
-                        </h3>
-                        {exhausted ? (
-                          <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
-                            Hết lượt · quay lại ngày mai
-                          </p>
-                        ) : (
-                          <div className="mt-auto pt-3">
-                            <button
-                              type="button"
-                              onClick={() => openCourse(course.id)}
-                              className={ds.outlineButton}
-                            >
-                              <Play className="size-3.5 fill-current" />
-                              Bắt đầu
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </article>
-                  )
-                })}
+      <div
+        className={cn(
+          'grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]',
+          courses.length < 3 && 'xl:items-start',
+        )}
+      >
+        <section ref={courseSectionRef} className={cn(ds.section, 'flex min-w-0 flex-col')}>
+          <div className={ds.sectionHeader}>
+            <div className={ds.sectionHeading}>
+              <div className={ds.sectionTitleRow}>
+                <span className={ds.sectionIconWrap}>
+                  <GraduationCap className={ds.sectionIcon} aria-hidden="true" />
+                </span>
+                <h2 className={ds.sectionTitle}>Môn học của tôi</h2>
               </div>
-              {courses.length > 2 && (
+              <p className={ds.sectionHint}>Chọn môn để bắt đầu phiên thi thử</p>
+            </div>
+          </div>
+
+          <div className={cn(ds.sectionBody, 'flex flex-1 flex-col gap-4')}>
+            {isLoadingCourses ? (
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
+                <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
+                Đang tải môn học…
+              </div>
+            ) : courses.length === 0 ? (
+              <EmptyState
+                icon={GraduationCap}
+                title="Chưa có môn học đang mở"
+                description="Tham gia lớp học phần trước để thấy môn đủ điều kiện thi thử."
+              />
+            ) : (
+              <>
                 <div
                   className={cn(
-                    'flex justify-center',
-                    courses.length <= 4 && 'sm:hidden',
-                    courses.length <= 6 && 'lg:hidden',
+                    'grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2',
+                    courses.length >= 3 && 'sm:grid-rows-2',
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setCoursesExpanded((open) => !open)}
-                    aria-expanded={coursesExpanded}
-                    className="inline-flex items-center gap-1 text-sm font-bold text-[#1C4D8D] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-                  >
-                    {coursesExpanded ? 'Thu gọn' : 'Xem thêm'}
-                    <ChevronDown
-                      className={cn('size-4 transition', coursesExpanded && 'rotate-180')}
-                      aria-hidden="true"
-                    />
-                  </button>
+                  {visibleCourses.map((course) => {
+                    const courseQuota = quotas[course.id]
+                    const exhausted = Boolean(courseQuota && !courseQuota.canStartExam)
+                    const quotaUnknown = !isLoadingQuotas && quotaFailedIds.includes(course.id)
+                    return (
+                      <article
+                        key={course.id}
+                        className={cn(
+                          exhausted
+                            ? 'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[#f7f8fa] p-3.5'
+                            : cn(ds.softCard, ds.softCardHover, ds.panelShadow),
+                        )}
+                      >
+                        {!exhausted && (
+                          <div className={ds.softCardAccentWrap} aria-hidden="true">
+                            <div className={ds.softCardAccentGlow} />
+                            <div className={ds.softCardAccentLine} />
+                          </div>
+                        )}
+                        <div className={exhausted ? 'flex h-full flex-1 flex-col' : 'relative flex h-full flex-1 flex-col p-3.5'}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
+                                  exhausted ? 'border border-[#8b97a8]/30 bg-[#e8edf3] text-[#8b97a8]' : courseCodeTone(course.code),
+                                )}
+                              >
+                                {course.code}
+                              </span>
+                              <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[#4988C4]/55 bg-white/85 px-2 text-xs font-semibold text-[#5b6b84] backdrop-blur-[2px]">
+                                <GraduationCap className="size-3 shrink-0 text-[#1C4D8D]" />
+                                {course.credits} tín chỉ
+                              </span>
+                            </div>
+                            <span
+                              className={cn(
+                                'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-semibold',
+                                exhausted
+                                  ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
+                                  : courseQuota
+                                    ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                                    : 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]',
+                              )}
+                            >
+                              <TimerReset className="size-3 shrink-0" />
+                              {courseQuota
+                                ? exhausted
+                                  ? 'Hết lượt'
+                                  : `${courseQuota.remainingCount}/${courseQuota.maxDailyQuota}`
+                                : quotaUnknown
+                                  ? 'Chưa rõ'
+                                  : '…'}
+                            </span>
+                          </div>
+                          <h3
+                            className={cn(
+                              'mt-3 truncate text-xl leading-snug font-bold',
+                              exhausted ? 'text-[#6d7888]' : 'text-[#0F2854]',
+                            )}
+                          >
+                            {course.name}
+                          </h3>
+                          {exhausted ? (
+                            <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
+                              Hết lượt · quay lại ngày mai
+                            </p>
+                          ) : (
+                            <div className="mt-auto pt-3">
+                              <button
+                                type="button"
+                                onClick={() => openCourse(course.id)}
+                                className={ds.outlineButton}
+                              >
+                                <Play className="size-3.5 fill-current" />
+                                Bắt đầu
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    )
+                  })}
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
+                <CompactPagination
+                  label="Phân trang môn học"
+                  page={currentCoursePage}
+                  pageCount={coursePageCount}
+                  onPageChange={setCoursePage}
+                />
+              </>
+            )}
+          </div>
+        </section>
 
-      <section className={ds.section}>
+        <section
+          className={cn(ds.section, 'flex min-w-0 flex-col', compactSectionHeight && 'overflow-hidden')}
+          style={compactSectionHeight ? { height: compactSectionHeight } : undefined}
+        >
+          <div className={ds.sectionHeader}>
+            <div className={ds.sectionHeading}>
+              <div className={ds.sectionTitleRow}>
+                <span className={ds.sectionIconWrap}>
+                  <History className={ds.sectionIcon} aria-hidden="true" />
+                </span>
+                <h2 className={ds.sectionTitle}>Lịch sử</h2>
+                <span className={ds.sectionBadge}>
+                  {historyTotal > recentHistoryLimit
+                    ? `${recentHistoryLimit}/${historyTotal}`
+                    : `${historyTotal} phiên`}
+                </span>
+              </div>
+              <p className={ds.sectionHint}>
+                {historyTotal > recentHistoryLimit
+                  ? `${recentHistoryLimit} phiên gần nhất trong ${historyTotal} lượt`
+                  : 'Các phiên thi thử gần nhất'}
+              </p>
+            </div>
+          </div>
+
+          {historyError && (
+            <div className="px-5 py-4 text-xs text-[#ae3d50] sm:px-6">{historyError}</div>
+          )}
+          <div className={cn(ds.sectionBody, 'flex min-h-0 flex-1 flex-col gap-4 pt-3 sm:pt-3')}>
+            {isLoadingHistory ? (
+              <div className="flex flex-1 items-center gap-2 text-sm font-semibold text-[#5b6b84]">
+                <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
+                Đang tải lịch sử…
+              </div>
+            ) : historyItems.length === 0 ? (
+              <EmptyState
+                compact
+                className="flex-1 justify-center"
+                icon={History}
+                title="Chưa có ca thi thử nào"
+                description="Lịch sử và điểm sẽ hiện sau khi thi thử."
+              />
+            ) : (
+              <ul
+                className={cn(
+                  'grid min-h-0 flex-1',
+                  recentHistoryLimit === 2 ? 'grid-rows-2' : 'grid-rows-4',
+                )}
+              >
+                {visibleHistoryItems.map((item) => (
+                  <li key={item.sessionId} className="relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 rounded-b-lg border-b border-[#b7cce1] px-3 py-2 transition-shadow hover:z-10 hover:shadow-[0_5px_5px_-5px_rgba(15,40,84,0.35)] sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+                    <span className="grid size-10 place-items-center rounded-lg bg-[#E7F3FB] text-[#1C4D8D]">
+                      <TimerReset className="size-5" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="break-words text-sm font-bold leading-snug text-[#0F2854]">{item.courseName}</h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#5b6b84]">
+                        <span className={cn('rounded-full px-2 py-0.5 font-bold', statusChipClass(item.status))}>
+                          {normalizeHistoryStatus(item.status) === 'graded' && item.totalScore !== null
+                            ? `${item.totalScore.toFixed(2)}/10`
+                            : statusLabel(item.status)}
+                        </span>
+                        <time dateTime={item.startedAt}>{formatExamDate(item.startedAt)}</time>
+                        <span>{item.answeredQuestions}/{item.totalQuestions} câu</span>
+                      </div>
+                    </div>
+                    <div className="col-start-2 min-w-0 sm:col-start-3">
+                      {renderHistoryAction(item)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="flex h-7 shrink-0 items-center justify-end text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setArchiveOpen(true)
+                  setExpandedHistoryId(null)
+                }}
+                className="ml-auto inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-bold text-[#1C4D8D] transition hover:bg-[#E7F3FB] hover:text-[#0F2854] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+              >
+                Xem tất cả
+                <ArrowRight className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+        </section>
+      </div>
+
+      <section className={cn(ds.section, 'mb-0!')}>
         <button
           type="button"
           onClick={() => setGuideOpen((open) => !open)}
@@ -971,142 +1096,12 @@ export function MockExamPage() {
         )}
       </section>
 
-      <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}>
-          <div className={ds.sectionHeading}>
-            <div className={ds.sectionTitleRow}>
-              <span className={ds.sectionIconWrap}>
-                <History className={ds.sectionIcon} aria-hidden="true" />
-              </span>
-              <h2 className={ds.sectionTitle}>Lịch sử</h2>
-              <span className={ds.sectionBadge}>
-                {historyTotal > RECENT_HISTORY_SIZE
-                  ? `${RECENT_HISTORY_SIZE}/${historyTotal}`
-                  : `${historyTotal} phiên`}
-              </span>
-            </div>
-            <p className={ds.sectionHint}>
-              {historyTotal > RECENT_HISTORY_SIZE
-                ? `${RECENT_HISTORY_SIZE} phiên gần nhất trong ${historyTotal} lượt`
-                : 'Các phiên thi thử gần nhất'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setArchiveOpen(true)
-              setExpandedHistoryId(null)
-            }}
-            className={ds.outlineButton}
-          >
-            Xem toàn bộ lịch sử
-          </button>
-        </div>
-
-        {historyError && (
-          <div className="px-5 py-4 text-xs text-[#ae3d50] sm:px-6">{historyError}</div>
-        )}
-        {isLoadingHistory ? (
-          <div className="flex items-center gap-2 px-5 py-8 text-sm font-semibold text-[#5b6b84] sm:px-6">
-            <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
-            Đang tải lịch sử…
-          </div>
-        ) : historyItems.length === 0 ? (
-          <div className="p-4 sm:p-5">
-            <EmptyState
-              icon={History}
-              title="Chưa có ca thi thử nào"
-              description="Bắt đầu phiên thi thử đầu tiên để xem lịch sử và bảng điểm tại đây."
-            />
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <table className="w-full table-fixed border-collapse text-left">
-                <thead className="border-b border-[#4988C4] bg-white text-xs font-bold text-[#5b6b84]">
-                  <tr>
-                    <th className="w-[40%] px-5 py-3">Môn thi</th>
-                    <th className="w-[16%] px-3 py-3">Thời điểm</th>
-                    <th className="w-[13%] px-3 py-3">Trạng thái</th>
-                    <th className="w-[13%] px-3 py-3">Điểm</th>
-                    <th className="w-[18%] px-3 py-3">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#4988C4]/30">
-                  {historyItems.map((item) => (
-                    <tr key={item.sessionId} className="text-sm text-[#5b6b84]">
-                      <td className="px-5 py-3">
-                        <p className="truncate font-bold text-[#0F2854]">{item.courseName}</p>
-                        <p className="mt-0.5 truncate text-xs text-[#5b6b84]">
-                          {item.courseCode} · {item.answeredQuestions}/{item.totalQuestions} câu
-                        </p>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{formatExamDate(item.startedAt)}</td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={cn(
-                            'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold',
-                            statusChipClass(item.status),
-                          )}
-                        >
-                          {statusLabel(item.status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {item.totalScore === null ? (
-                          '—'
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-2 py-1 font-bold text-[#16836a]">
-                            {item.totalScore.toFixed(2)} / 10
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{renderHistoryAction(item)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="divide-y divide-[#4988C4]/30 md:hidden">
-              {historyItems.map((item) => (
-                <article key={item.sessionId} className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-[#0F2854]">{item.courseName}</h3>
-                      <p className="mt-0.5 text-xs text-[#5b6b84]">
-                        {item.courseCode} · {statusLabel(item.status)}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full px-2 py-1 text-xs font-bold',
-                        item.totalScore === null
-                          ? 'bg-[#F4FBFD] text-[#1C4D8D]'
-                          : 'bg-[#e8f8f1] text-[#16836a]',
-                      )}
-                    >
-                      {item.totalScore === null ? '—' : `${item.totalScore.toFixed(2)}/10`}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 text-xs text-[#5b6b84]">
-                    <span>
-                      {formatExamDate(item.startedAt)} · {item.durationMinutes} phút
-                    </span>
-                    {renderHistoryAction(item)}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </>
-        )}
-
-      </section>
-
       {archiveOpen && (
         <FormDialog
           titleId="mock-history-title"
           eyebrow="Thi thử"
           title="Lịch sử thi thử"
+          bodyClassName="pt-5 pb-5"
           icon={History}
           onClose={() => setArchiveOpen(false)}
           size="2xl"
@@ -1132,7 +1127,7 @@ export function MockExamPage() {
                       ]
                 }
                 emptyText="Chưa có môn học"
-                className="min-w-52 flex-1 sm:max-w-xs sm:flex-none"
+                className="min-w-64 flex-1 sm:w-96 sm:max-w-96 sm:flex-none"
               />
               <FilterDropMenu
                 label="Lọc theo trạng thái"
@@ -1146,33 +1141,19 @@ export function MockExamPage() {
               />
             </div>
           )}
-          footer={
-            archiveTotalPages > 1 ? (
-              <DialogFooter className="bg-white sm:items-center sm:justify-between">
-                <button
-                  type="button"
-                  disabled={archivePage <= 1}
-                  onClick={() => setArchivePage((current) => Math.max(1, current - 1))}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
-                >
-                  <ChevronLeft className="size-4" /> Trước
-                </button>
-                <span className="text-sm font-semibold text-[#6d7c90]">
-                  Trang {archivePage}/{archiveTotalPages}
-                </span>
-                <button
-                  type="button"
-                  disabled={archivePage >= archiveTotalPages}
-                  onClick={() => setArchivePage((current) => current + 1)}
-                  className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-bold text-[#1C4D8D] disabled:opacity-40"
-                >
-                  Sau <ChevronDown className="size-4 -rotate-90" />
-                </button>
-              </DialogFooter>
-            ) : undefined
+          footer={(
+            <DialogFooter className="justify-center bg-white sm:justify-center">
+              <CompactPagination
+                label="Phân trang lịch sử thi thử"
+                page={Math.min(archivePage, Math.max(1, archiveTotalPages))}
+                pageCount={Math.max(1, archiveTotalPages)}
+                onPageChange={setArchivePage}
+              />
+            </DialogFooter>
+            )
           }
         >
-            <div className="min-h-0">
+            <div className="flex min-h-[362px] flex-col">
               {archiveError ? (
                 <p className="rounded-xl bg-white px-4 py-8 text-sm text-[#ae3d50]">{archiveError}</p>
               ) : isLoadingArchive ? (
@@ -1181,13 +1162,17 @@ export function MockExamPage() {
                   Đang tải lịch sử…
                 </div>
               ) : archiveItems.length === 0 ? (
-                <p className="rounded-xl bg-white px-4 py-8 text-sm text-[#5b6b84]">
-                  Không có phiên thi thử phù hợp.
-                </p>
+                <EmptyState
+                  compact
+                  className="flex-1 justify-center"
+                  icon={History}
+                  title="Không có phiên thi thử phù hợp"
+                  description="Thử thay đổi bộ lọc để xem các phiên khác."
+                />
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-[#82aedb]/55 bg-white">
+                <div className="flex-1 overflow-x-auto rounded-2xl border border-[#82aedb]/55 bg-white">
                   <div className="min-w-[760px]">
-                    <div className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] items-center gap-3 border-b border-[#4988C4] bg-white px-4 py-3 text-xs font-bold text-[#5b6b84]">
+                    <div className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] min-h-10 items-center gap-3 border-b border-[#4988C4] bg-white px-4 py-3 text-xs font-bold text-[#5b6b84]">
                       <span>Môn thi</span>
                       <span>Thời điểm</span>
                       <span>Trạng thái</span>
@@ -1200,7 +1185,7 @@ export function MockExamPage() {
                         return (
                           <li
                             key={item.sessionId}
-                            className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] items-center gap-3 px-4 py-3 text-sm text-[#5b6b84]"
+                            className="grid grid-cols-[minmax(0,2.4fr)_124px_96px_100px_144px] min-h-16 items-center gap-3 px-4 py-3 text-sm text-[#5b6b84]"
                           >
                             <div className="min-w-0">
                               <p className="truncate font-bold text-[#0F2854]">{item.courseName}</p>
@@ -1265,7 +1250,7 @@ export function MockExamPage() {
       {modalCourse && (
         <FormDialog
           titleId="mock-course-title"
-          eyebrow={modalCourse.code}
+          eyebrow="Thi thử"
           title={modalCourse.name}
           icon={GraduationCap}
           onClose={closeCourseModal}
@@ -1444,7 +1429,7 @@ export function MockExamPage() {
       {quotaModal && (
         <ConfirmDialog
           tone="danger"
-          eyebrow="Hạn ngạch"
+          eyebrow="Thi thử"
           title="Hết lượt thi thử hôm nay"
           message={quotaModal}
           confirmLabel="Đã hiểu"

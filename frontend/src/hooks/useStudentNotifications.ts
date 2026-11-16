@@ -4,7 +4,7 @@ import type { StudentNotification } from '@/types/notification.types'
 
 const PAGE_SIZE = 20
 
-export function useStudentNotifications(isOpen: boolean) {
+export function useStudentNotifications(isOpen: boolean, enabled = true) {
   const [items, setItems] = useState<StudentNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
@@ -48,6 +48,7 @@ export function useStudentNotifications(isOpen: boolean) {
   const refresh = useCallback(() => loadPage(1, false), [loadPage])
 
   useEffect(() => {
+    if (!enabled) return
     const initialLoad = window.setTimeout(() => void refresh(), 0)
     const handleFocus = () => void refresh()
     window.addEventListener('focus', handleFocus)
@@ -56,7 +57,7 @@ export function useStudentNotifications(isOpen: boolean) {
       window.removeEventListener('focus', handleFocus)
       requestId.current += 1
     }
-  }, [refresh])
+  }, [enabled, refresh])
 
   useEffect(() => {
     if (!isOpen) return

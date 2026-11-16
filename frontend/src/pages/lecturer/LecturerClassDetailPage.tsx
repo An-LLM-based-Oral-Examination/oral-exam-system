@@ -391,7 +391,7 @@ function AddStudentDialog({
   return (
     <FormDialog
       titleId="add-student-title"
-      eyebrow="Sinh viên"
+      eyebrow="Chi tiết lớp học"
       title="Thêm sinh viên"
       icon={Users}
       onClose={onClose}
