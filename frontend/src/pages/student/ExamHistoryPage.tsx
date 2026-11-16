@@ -1,3 +1,4 @@
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -442,7 +443,8 @@ function LiveExamHistoryPage() {
       : 'all'
   })
   const [courseFilter, setCourseFilter] = useState<string>('ALL')
-  const [searchQuery, setSearchQuery] = useState<string>('')
+  const searchQueryInput = useSearchInput()
+  const searchQuery = searchQueryInput.query
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -959,8 +961,9 @@ function LiveExamHistoryPage() {
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
               <input
                 type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                value={searchQueryInput.draft}
+                onChange={(event) => searchQueryInput.change(event.target.value)}
+                onKeyDown={searchQueryInput.onKeyDown}
                 placeholder="Tìm môn học, ca thi..."
                 className="min-h-9 w-48 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-3 pl-8 text-xs font-medium text-[#0F2854] outline-none focus:border-[#1C4D8D] sm:w-56"
               />

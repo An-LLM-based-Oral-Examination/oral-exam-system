@@ -498,9 +498,11 @@ public class CoursesController : ControllerBase
     {
         var role = GetActorRole();
         var userId = GetCurrentUserId();
-        if (string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase) && userId != Guid.Empty)
+        if (userId != Guid.Empty &&
+            (string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(role, "lecturer", StringComparison.OrdinalIgnoreCase)))
         {
-            return $"department_head:{userId}";
+            return $"{role}:{userId}";
         }
 
         return role;

@@ -3,6 +3,8 @@ import { Navigate, useParams } from 'react-router-dom'
 
 export const DepartmentLecturerAssignmentPage = lazy(() => import('@/pages/lecturer/DepartmentLecturerAssignmentPage'))
 export const DepartmentCourseClosPage = lazy(() => import('@/pages/lecturer/DepartmentCourseClosPage'))
+export const DepartmentCoursesPage = lazy(() => import('@/pages/lecturer/DepartmentCoursesPage'))
+export const DepartmentCourseDetailPage = lazy(() => import('@/pages/lecturer/DepartmentCourseDetailPage'))
 
 export const LecturerDashboardPage = lazy(() =>
   import('@/pages/lecturer/LecturerDashboardPage').then((module) => ({

@@ -1,3 +1,4 @@
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { TwoStepProgress } from '@/design/TwoStepProgress'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
@@ -591,7 +592,8 @@ function CreateInClassShiftDialog({
   const [hasFollowUp, setHasFollowUp] = useState(false)
   const [maxFollowUpQuestions, setMaxFollowUpQuestions] = useState(2)
   const [poolMode, setPoolMode] = useState<InClassQuestionPoolMode>('ALL_COURSE_BANK')
-  const [questionSearch, setQuestionSearch] = useState('')
+  const questionSearchInput = useSearchInput()
+  const questionSearch = questionSearchInput.query
   const [questionPickerOpen, setQuestionPickerOpen] = useState(false)
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
   const [questionOptions, setQuestionOptions] = useState<Array<{ id: string; title: string }>>([])
@@ -1105,7 +1107,7 @@ function CreateInClassShiftDialog({
                               aria-haspopup="dialog"
                               className={cn(ds.outlineButton, 'h-8 min-h-8 w-8 px-0')}
                               onClick={() => {
-                                setQuestionSearch('')
+                                questionSearchInput.change('')
                                 setQuestionPickerOpen(true)
                               }}
                             >
@@ -1146,8 +1148,9 @@ function CreateInClassShiftDialog({
                   type="search"
                   aria-label="Tìm theo tiêu đề câu hỏi"
                   placeholder="Tìm theo tiêu đề câu hỏi"
-                  value={questionSearch}
-                  onChange={(event) => setQuestionSearch(event.target.value)}
+                  value={questionSearchInput.draft}
+                  onChange={(event) => questionSearchInput.change(event.target.value)}
+                  onKeyDown={questionSearchInput.onKeyDown}
                   className={cn(ds.field, 'pl-9')}
                 />
               </label>
@@ -1190,7 +1193,8 @@ export function InClassShiftHubPage({
   const [shifts, setShifts] = useState<InClassShift[]>([])
   const [classFilter, setClassFilter] = useState(() => lockedClassId || searchParams.get('classId') || 'ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
-  const [search, setSearch] = useState('')
+  const searchInput = useSearchInput()
+  const search = searchInput.query
   const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [projectorShiftId, setProjectorShiftId] = useState<string | null>(null)
@@ -1336,8 +1340,9 @@ export function InClassShiftHubPage({
               <div className="relative shrink-0">
                 <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
                 <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  value={searchInput.draft}
+                  onChange={(event) => searchInput.change(event.target.value)}
+                  onKeyDown={searchInput.onKeyDown}
                   placeholder="Tìm theo tên ca..."
                   className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
                 />

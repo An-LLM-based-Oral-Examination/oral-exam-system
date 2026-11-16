@@ -37,6 +37,30 @@ public class CourseCloOwnershipTests
 
     private static string Head(Guid id) => $"{UserRole.DepartmentHead}:{id}";
 
+    [Fact]
+    public async Task List_AssignedLecturerCanOnlyReadActiveClos()
+    {
+        await using var db = NewContext();
+        var lecturerId = Guid.NewGuid();
+        var course = NewCourse();
+        course.IsActive = true;
+        var inactiveClo = NewClo(course, "CLO2");
+        inactiveClo.IsActive = false;
+        db.Courses.Add(course);
+        db.CourseClos.AddRange(NewClo(course), inactiveClo);
+        db.CourseLecturers.Add(new CourseLecturer { CourseId = course.Id, LecturerUserId = lecturerId });
+        await db.SaveChangesAsync();
+
+        var handler = new GetCourseClosQueryHandler(db);
+        var actor = $"{UserRole.Lecturer}:{lecturerId}";
+        var active = await handler.Handle(new(course.Id, true, actor), default);
+        active.IsSuccess.Should().BeTrue();
+        active.Value.Select(clo => clo.CloCode).Should().Equal("CLO1");
+        (await handler.Handle(new(course.Id, false, actor), default)).IsSuccess.Should().BeFalse();
+        (await handler.Handle(new(course.Id, true, $"{UserRole.Lecturer}:{Guid.NewGuid()}"), default))
+            .IsSuccess.Should().BeFalse();
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("department_head")]

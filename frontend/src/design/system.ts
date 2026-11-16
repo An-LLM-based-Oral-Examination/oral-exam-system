@@ -53,7 +53,7 @@ export const ds = {
   infoChip:
     'inline-flex items-center gap-1 rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-1 text-xs font-bold text-[#1C4D8D]',
   field:
-    'min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
+    'min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
   /** Card mềm (lớp/môn/ca): nền mist → trắng + accent trên. */
   softCard:
     'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[linear-gradient(180deg,#EAF5FB_0%,#F8FBFD_22%,#FFFFFF_48%,#FFFFFF_100%)]',
@@ -104,6 +104,7 @@ export const overlay = {
 } as const
 
 export const overlaySize = {
+  xs: 'max-w-sm',
   sm: 'max-w-md',
   md: 'max-w-xl',
   lg: 'max-w-2xl',

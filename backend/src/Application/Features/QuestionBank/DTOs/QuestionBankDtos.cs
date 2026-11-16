@@ -163,7 +163,7 @@ public sealed record PagedResult<T>(
 public sealed record GenerateQuestionsFromCloRequestDto(
     Guid CourseId,
     List<string> SelectedCloCodes,
-    List<string> Topics,
+    List<string>? Topics,
     int NumberOfQuestions,
     string UsageScope,
     List<string> TargetBloomLevels,

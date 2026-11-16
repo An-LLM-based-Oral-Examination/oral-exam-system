@@ -153,3 +153,13 @@ body {
   }
 }
 
+
+/* Match single-line form controls to the shared filter dropdown height. */
+input:not([type]),
+input:is([type='text'], [type='search'], [type='email'], [type='password'],
+  [type='number'], [type='tel'], [type='url'], [type='date'],
+  [type='datetime-local'], [type='time'], [type='month'], [type='week']) {
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding-block: 0;
+}

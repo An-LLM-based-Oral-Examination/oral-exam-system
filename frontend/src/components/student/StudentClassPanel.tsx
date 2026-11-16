@@ -110,13 +110,16 @@ function StudentClassCard({ item, onJoin, shifts }: {
             </span>
           </div>
         ) : enrolled ? (
-          <div className="mt-auto space-y-2 pt-3">
+          <div className="mt-auto space-y-0.5 pt-3">
             <p className={cn('text-sm font-semibold', activeShiftCount > 0 ? 'font-bold text-[#16836a]' : 'text-[#5b6b84]')}>{activeShiftCount > 0 ? `${activeShiftCount} ca đang diễn ra`
                 : shifts ? 'Chưa có ca đang diễn ra' : 'Chưa tải được lịch ca'}
             </p>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-[#5b6b84]">Mở lớp</span>
-              <Link to={`/classes/${encodeURIComponent(item.classId)}`} className={ds.outlineButton}>
+              <Link
+                to={`/classes/${encodeURIComponent(item.classId)}`}
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:border-[#1C4D8D] hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+              >
                 Chi tiết <ArrowRight className="size-3.5" aria-hidden="true" />
               </Link>
             </div>

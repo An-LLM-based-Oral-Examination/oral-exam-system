@@ -1,3 +1,4 @@
+import { useSearchInput } from '@/hooks/useSearchInput'
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowRight, ClipboardCheck, RefreshCw, Search } from 'lucide-react'
@@ -11,7 +12,8 @@ import { userMessage } from '@/lib/userMessage'
 
 export function ExaminationOfficerAppealListPage() {
   const [appeals, setAppeals] = useState<Appeal[]>([])
-  const [search, setSearch] = useState('')
+  const searchInput = useSearchInput()
+  const search = searchInput.query
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -75,8 +77,9 @@ export function ExaminationOfficerAppealListPage() {
             <input
               className={`${ds.field} pl-9`}
               placeholder="MSSV, họ tên, kỳ thi hoặc lý do"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              value={searchInput.draft}
+              onChange={(event) => searchInput.change(event.target.value)}
+              onKeyDown={searchInput.onKeyDown}
             />
           </label>
           <label className="sm:w-52">

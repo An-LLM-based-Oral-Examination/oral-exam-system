@@ -1,3 +1,4 @@
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -148,7 +149,8 @@ export function InClassShiftResultsPage() {
   const [submissions, setSubmissions] = useState<InClassSubmission[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<SubmissionFilter>('ALL')
-  const [search, setSearch] = useState('')
+  const searchInput = useSearchInput()
+  const search = searchInput.query
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [examScore, setExamScore] = useState('')
@@ -242,6 +244,7 @@ export function InClassShiftResultsPage() {
   const answers = selected?.answers ?? []
   const answerIndex = answers.length === 0 ? 0 : Math.min(answerCursor, answers.length - 1)
   const activeAnswer = answers[answerIndex] ?? null
+  const activeTranscript = activeAnswer?.transcript?.trim()
 
   useEffect(() => {
     return scheduleUi(() => {
@@ -569,8 +572,9 @@ export function InClassShiftResultsPage() {
             <div className="relative mt-3 w-full lg:absolute lg:right-0 lg:bottom-2 lg:mt-0 lg:w-56">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#6485b2]" />
               <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                value={searchInput.draft}
+                onChange={(event) => searchInput.change(event.target.value)}
+                onKeyDown={searchInput.onKeyDown}
                 placeholder="MSSV hoặc họ tên..."
                 aria-label="Tìm sinh viên"
                 className="h-10 w-full rounded-full border border-[#4988C4] bg-white pr-3 pl-9 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#4988C4]/30"
@@ -846,7 +850,7 @@ export function InClassShiftResultsPage() {
                             Câu trả lời
                           </p>
                           <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-[#0F2854]">
-                            {activeAnswer.transcript?.trim() || 'Chưa có transcript.'}
+                            {activeTranscript || 'Sinh viên không trả lời.'}
                           </p>
                         </section>
                         <section className={cn('rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4', ds.panelShadow)}>
@@ -854,7 +858,9 @@ export function InClassShiftResultsPage() {
                             Nhận xét AI
                           </p>
                           <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-[#176f58]">
-                            {activeAnswer.aiFeedback?.trim() || 'AI chưa trả nhận xét.'}
+                            {activeTranscript
+                              ? activeAnswer.aiFeedback?.trim() || 'AI chưa trả nhận xét.'
+                              : 'Sinh viên không trả lời.'}
                           </p>
                         </section>
                       </>

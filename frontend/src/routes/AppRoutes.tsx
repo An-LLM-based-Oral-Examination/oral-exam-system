@@ -12,6 +12,8 @@ import {
   DepartmentHeadDashboardPage,
   DepartmentLecturerAssignmentPage,
   DepartmentCourseClosPage,
+  DepartmentCoursesPage,
+  DepartmentCourseDetailPage,
   OfficialExamManagementPage,
   AppealManagementPage,
   AuditEvidencePage,
@@ -240,6 +242,8 @@ export const appRoutes = createRoutesFromElements(
           >
             <Route path="/department-head/lecturer-assignments" element={<DepartmentLecturerAssignmentPage />} />
             <Route path="/department-head/clos" element={<DepartmentCourseClosPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.courses} element={<DepartmentCoursesPage />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.courses}/:courseId`} element={<DepartmentCourseDetailPage />} />
             <Route path="/department-head/exam-structures" element={<OfficialExamManagementPage />} />
             <Route path="/department/clos" element={<Navigate to="/department-head/clos" replace />} />
             <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />

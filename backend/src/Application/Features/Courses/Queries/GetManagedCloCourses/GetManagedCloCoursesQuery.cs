@@ -7,7 +7,9 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Courses.Queries.GetManagedCloCourses;
 
-public sealed record ManagedCloCourseDto(Guid Id, string Code, string Name);
+public sealed record ManagedCloCourseDto(
+    Guid Id, string Code, string Name, int Credits, string? Description, string? AcademicProgramName,
+    int ActiveCloCount, int TotalCloCount, bool IsActive);
 public sealed record GetManagedCloCoursesQuery(string? ActorRole) : IRequest<Result<List<ManagedCloCourseDto>>>;
 
 public sealed class GetManagedCloCoursesQueryHandler(IApplicationDbContext context)
@@ -25,7 +27,10 @@ public sealed class GetManagedCloCoursesQueryHandler(IApplicationDbContext conte
                     && c.AcademicProgram.DepartmentHeadUserId != Guid.Empty)
                 ? c.AcademicProgram.DepartmentHeadUserId == actorId
                 : c.DepartmentHeadUserId == actorId);
-        var items = await courses.OrderBy(c => c.Code).Select(c => new ManagedCloCourseDto(c.Id, c.Code, c.Name))
+        var items = await courses.OrderBy(c => c.Code).Select(c => new ManagedCloCourseDto(
+                c.Id, c.Code, c.Name, c.Credits, c.Description,
+                c.AcademicProgram == null ? null : c.AcademicProgram.Name,
+                c.CourseClos.Count(clo => clo.IsActive), c.CourseClos.Count, c.IsActive))
             .ToListAsync(cancellationToken);
         return Result<List<ManagedCloCourseDto>>.Success(items);
     }

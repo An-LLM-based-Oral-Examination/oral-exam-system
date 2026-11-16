@@ -6,6 +6,7 @@ import {
   Mic2,
   TimerReset,
   BookOpenCheck,
+  BookOpen,
   ChevronLeft,
   ClipboardCheck,
   FileCheck2,
@@ -70,19 +71,18 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
   },
   ],
   Instructor: [
-    { label: 'Lỗi chấm ca lớp', path: '/lecturer/dlq', icon: ServerCog },
     { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý lớp học', path: ROUTE_PATHS.lecturer.classes, icon: UsersRound },
     { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
     { label: 'Hậu kiểm điểm', path: ROUTE_PATHS.lecturer.audit, icon: ClipboardCheck },
     { label: 'Phúc khảo được giao', path: ROUTE_PATHS.lecturer.appeals, icon: UserRoundCheck },
+    { label: 'Lỗi chấm ca lớp', path: '/lecturer/dlq', icon: ServerCog },
   ],
   DepartmentHead: [
-    { label: 'Phân công giảng viên', path: '/department-head/lecturer-assignments', icon: UsersRound },
-    { label: 'Chuẩn đầu ra (CLO)', path: '/department-head/clos', icon: BookOpenCheck },
-    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
+    { label: 'Quản lý môn học', path: ROUTE_PATHS.departmentHead.courses, icon: BookOpen },
     { label: 'Duyệt câu hỏi và đề', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
+    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
     { label: 'Quản lý phúc khảo', path: ROUTE_PATHS.departmentHead.appeals, icon: UserRoundCheck },
   ],
   ExaminationOfficer: [],
@@ -101,7 +101,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
   const visibleNavigation = portalRole ? PORTAL_NAVIGATION[portalRole] : []
   const portalTitle =
     portalRole === 'Student' ? 'Cổng sinh viên' : portalRole === 'DepartmentHead'
-      ? 'Cổng Trưởng Bộ môn'
+      ? 'Cổng Trưởng BM'
       : portalRole === 'Admin'
         ? 'Cổng quản trị'
         : portalRole === 'Proctor'
@@ -156,7 +156,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
             <p className="text-xs font-bold tracking-[0.14em] text-[#1C4D8D] uppercase">
               {portalTitle}
             </p>
-            <p className="mt-0.5 truncate text-sm font-bold tracking-[-0.02em] text-[#0F2854]">
+            <p className="mt-0.5 truncate text-base font-bold tracking-[-0.02em] text-[#0F2854]">
               OralExam AI
             </p>
           </div>

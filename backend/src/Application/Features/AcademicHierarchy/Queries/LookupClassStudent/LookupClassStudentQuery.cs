@@ -27,7 +27,7 @@ public sealed class LookupClassStudentQueryHandler(IApplicationDbContext context
         var term = (request.Query ?? string.Empty).Trim();
         if (term.Length == 0)
         {
-            return Result<ClassStudentLookupDto>.Failure("VALIDATION: Nhập đủ mã sinh viên hoặc email.");
+            return Result<ClassStudentLookupDto>.Failure("Nhập đủ mã sinh viên hoặc email.");
         }
 
         UserMatch? match;
@@ -45,7 +45,7 @@ public sealed class LookupClassStudentQueryHandler(IApplicationDbContext context
             var code = term.ToUpperInvariant();
             if (!StudentCodePattern.IsMatch(code))
             {
-                return Result<ClassStudentLookupDto>.Failure("VALIDATION: Nhập đủ mã sinh viên hoặc email.");
+                return Result<ClassStudentLookupDto>.Failure("Nhập đủ mã sinh viên hoặc email.");
             }
 
             match = await context.Users

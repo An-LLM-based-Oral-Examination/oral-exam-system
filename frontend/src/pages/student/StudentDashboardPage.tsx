@@ -425,15 +425,10 @@ export function StudentDashboardPage() {
   const shiftPageCount = Math.max(1, Math.ceil(upcomingShifts.length / 2))
   const currentShiftPage = Math.min(shiftPage, shiftPageCount)
   const visibleShifts = upcomingShifts.slice((currentShiftPage - 1) * 2, currentShiftPage * 2)
-  const resumeActivity = recentActivities.find((activity) =>
+  const resumeActivities = recentActivities.filter((activity) =>
     activity.type === 'mock' && activity.destination.startsWith('/mock-exam/session?'),
-  )
-  const resumeStoredSession = resumeActivity
-    ? listMockExamSessions().find((item) => `mock-${item.sessionId}` === resumeActivity.id)
-    : null
-  const resumeRemainingSeconds = resumeStoredSession
-    ? resumeStoredSession.pausedRemainingSeconds ?? secondsUntilExpiry(resumeStoredSession.expiresAt)
-    : null
+  ).slice(0, 2)
+  const storedMockSessions = resumeActivities.length > 0 ? listMockExamSessions() : []
   const studentName = user?.fullName ?? 'Sinh viên'
 
   return (
@@ -569,29 +564,45 @@ export function StudentDashboardPage() {
         </section>
         <section className={cn(ds.section, 'flex flex-col')}>
           <SectionHeader icon={Mic2} title="Tiếp tục học" hint="Mở lại phiên đang dở" className="flex flex-wrap items-center justify-between gap-2" />
-          <div className={cn(ds.sectionBody, 'flex flex-1 flex-col', resumeActivity && 'pt-1 pb-3 sm:pt-1 sm:pb-3')}>
-            {resumeActivity ? (
-              <div className={cn("grid min-h-[180px] flex-1 grid-rows-2", upcomingShifts.length > 0 && "lg:pb-10")}>
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-2 gap-y-2 rounded-b-lg border-b border-[#b7cce1] bg-white px-2 py-1.5 sm:px-4 relative transition-shadow hover:z-10 hover:shadow-[0_5px_5px_-5px_rgba(15,40,84,0.35)] hover:border-[#82aedb]/40 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-                  <span className="grid size-9 place-items-center rounded-lg bg-[#E7F3FB] text-[#1C4D8D]">
-                    <TimerReset className="size-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="break-words text-sm font-bold leading-snug text-[#0F2854]">{resumeActivity.title}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold', getActivityBadgeClass(resumeActivity.type))}>
-                        {resumeActivity.typeLabel}
+          <div className={cn(ds.sectionBody, 'flex flex-1 flex-col', resumeActivities.length > 0 && 'pt-1 pb-3 sm:pt-1 sm:pb-3')}>
+            {resumeActivities.length > 0 ? (
+              <div className="flex flex-1 flex-col">
+                <div className="grid min-h-[180px] flex-1 grid-rows-2">
+                {resumeActivities.map((resumeActivity) => {
+                  const storedSession = storedMockSessions.find((item) => `mock-${item.sessionId}` === resumeActivity.id)
+                  const resumeRemainingSeconds = storedSession
+                    ? storedSession.pausedRemainingSeconds ?? secondsUntilExpiry(storedSession.expiresAt)
+                    : null
+
+                  return (
+                    <div key={resumeActivity.id} className="grid grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-2 gap-y-2 rounded-b-lg border-b border-[#b7cce1] bg-white px-2 py-1.5 sm:px-4 relative transition-shadow hover:z-10 hover:shadow-[0_5px_5px_-5px_rgba(15,40,84,0.35)] hover:border-[#82aedb]/40 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+                      <span className="grid size-9 place-items-center rounded-lg bg-[#E7F3FB] text-[#1C4D8D]">
+                        <TimerReset className="size-4" aria-hidden="true" />
                       </span>
-                      {resumeRemainingSeconds !== null && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[#f0d09d] bg-[#fff7e8] px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-[#b45f0b]">
-                          <Clock3 className="size-3 shrink-0" aria-hidden="true" />
-                          Còn {formatRemainingTime(resumeRemainingSeconds)}
-                        </span>
-                      )}
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-bold leading-snug text-[#0F2854]">{resumeActivity.title}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold', getActivityBadgeClass(resumeActivity.type))}>
+                            {resumeActivity.typeLabel}
+                          </span>
+                          {resumeRemainingSeconds !== null && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#f0d09d] bg-[#fff7e8] px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-[#b45f0b]">
+                              <Clock3 className="size-3 shrink-0" aria-hidden="true" />
+                              Còn {formatRemainingTime(resumeRemainingSeconds)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Link to={resumeActivity.destination} className={cn(ds.outlineButton, 'col-start-2 h-8 min-h-8 w-fit px-2.5 text-xs sm:col-start-3')}>
+                        Tiếp tục <ArrowRight className="size-3.5" aria-hidden="true" />
+                      </Link>
                     </div>
-                  </div>
-                  <Link to={resumeActivity.destination} className={cn(ds.outlineButton, 'col-start-2 h-8 min-h-8 w-fit px-2.5 text-xs sm:col-start-3')}>
-                    Tiếp tục <ArrowRight className="size-3.5" aria-hidden="true" />
+                  )
+                })}
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <Link to="/mock-exam" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]">
+                    Đến trang thi thử <ArrowRight className="size-3.5" aria-hidden="true" />
                   </Link>
                 </div>
               </div>

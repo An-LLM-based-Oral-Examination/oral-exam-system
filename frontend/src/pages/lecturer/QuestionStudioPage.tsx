@@ -1,3 +1,4 @@
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -22,7 +23,7 @@ import {
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
-import { fieldInvalidClass } from '@/components/common/formFieldClasses'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { QuestionImage } from '@/components/question/QuestionImage'
@@ -41,6 +42,7 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { lockBodyScroll } from '@/design/bodyScrollLock'
+import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds, overlay } from '@/design/system'
 
 type WorkspaceTab = 'mine' | 'bank'
@@ -135,7 +137,7 @@ function isUuid(value: string) {
 }
 
 function getSourceLabel(source: QuestionSummary['source']) {
-  return source === 'flm_api' ? 'AI từ FLM' : 'Thủ công'
+  return source === 'flm_api' ? 'AI' : 'Thủ công'
 }
 
 function getDifficultyLabel(difficulty: QuestionDetail['difficulty']) {
@@ -219,8 +221,8 @@ export function QuestionStudioPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [pageNumber, setPageNumber] = useState(1)
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
+  const searchInput = useSearchInput(() => setPageNumber(1))
+  const appliedSearch = searchInput.query
   const [filters, setFilters] = useState<QuestionFilters>({
     pageNumber: 1,
     pageSize: 12,
@@ -233,6 +235,7 @@ export function QuestionStudioPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [submissionNotes, setSubmissionNotes] = useState('')
+  const [submissionOpen, setSubmissionOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionDetail | null>(null)
   const [viewingQuestionId, setViewingQuestionId] = useState<string | null>(null)
@@ -488,9 +491,13 @@ export function QuestionStudioPage() {
   }
 
   const toggleAllDrafts = () => {
+    const courseId = selectedCourseId ?? draftQuestions[0]?.courseId
     const eligible = draftQuestions.filter(
-      (question) => !selectedCourseId || question.courseId === selectedCourseId,
+      (question) => question.courseId === courseId,
     )
+    if (!selectedCourseId && eligible.length < draftQuestions.length) {
+      toast.info('Chỉ có thể gửi cùng lúc câu hỏi thuộc một môn học. Hãy lọc theo môn để chọn bản nháp của môn khác.')
+    }
     setSelectedIds((current) => {
       const next = new Set(current)
       if (allSelectableDraftsChecked) eligible.forEach(({ id }) => next.delete(id))
@@ -586,7 +593,7 @@ export function QuestionStudioPage() {
   }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
 
   const submitForReview = async () => {
-    if (!selectedCourseId || selectedIds.size === 0) return
+    if (!selectedCourseId || selectedQuestions.length === 0 || isSubmitting) return
     if (!isUuid(user?.id ?? '')) {
       toast.error(
         'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
@@ -604,13 +611,14 @@ export function QuestionStudioPage() {
     try {
       const result = await questionService.batchSubmitForReview({
         courseId: selectedCourseId,
-        questionIds: [...selectedIds],
+        questionIds: selectedQuestions.map((question) => question.id),
         submissionNotes: submissionNotes.trim() || undefined,
         lecturerId: user?.id,
       })
       toast.success(userMessage(result.message, 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.'))
       setSelectedIds(new Set())
       setSubmissionNotes('')
+      setSubmissionOpen(false)
       setReloadKey((key) => key + 1)
     } catch (submitError) {
       toast.error(userMessage(submitError, 'Không gửi được câu hỏi thẩm định. Vui lòng thử lại.'))
@@ -626,7 +634,7 @@ export function QuestionStudioPage() {
       const result = await questionService.batchSubmitReview(
         [selectedQuestion.id],
         selectedQuestion.courseId,
-        submissionNotes.trim() || 'Gửi Trưởng Bộ môn thẩm định từ chi tiết câu hỏi.',
+        'Gửi Trưởng Bộ môn thẩm định từ chi tiết câu hỏi.',
         user?.id,
       )
       const updatedDetail: QuestionDetail = {
@@ -720,61 +728,10 @@ export function QuestionStudioPage() {
     }
   }
 
-  const showSelectionActions = workspace === 'mine'
+  const showSelectionActions = workspace === 'mine' && statusTab === 'DRAFT'
 
   return (
     <div lang="vi" className={cn(ds.page)}>
-      {showSelectionActions && selectedIds.size > 0 && (
-        <section
-          className="rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
-          aria-label="Gửi câu hỏi để thẩm định"
-        >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 text-sm font-bold text-[#1C4D8D]">
-                <Send className="size-4" aria-hidden="true" />
-                Đã chọn {selectedIds.size} bản nháp luyện tập · {selectedQuestions[0]?.courseCode}
-              </p>
-              <label className="mt-3 block">
-                <span className="text-xs font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
-                  Ghi chú gửi Trưởng Bộ môn
-                </span>
-                <textarea
-                  value={submissionNotes}
-                  onChange={(event) => setSubmissionNotes(event.target.value)}
-                  maxLength={1000}
-                  placeholder="Nêu phạm vi CLO / nội dung cần lưu ý khi thẩm định kho luyện tập..."
-                  className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white/90 px-3 py-2.5 text-sm text-[#0F2854] transition outline-none placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                />
-              </label>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-              <button
-                type="button"
-                onClick={() => setSelectedIds(new Set())}
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-4 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-                Bỏ chọn
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitForReview()}
-                disabled={isSubmitting}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#16836a] px-4 text-xs font-bold text-white shadow-[0_8px_18px_rgba(22,131,106,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#136f5a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16836a] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
-              >
-                {isSubmitting ? (
-                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Send className="size-3.5" aria-hidden="true" />
-                )}
-                Gửi Trưởng BM duyệt
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
       <section className={cn(ds.section, 'overflow-hidden')}>
         {/* Header section: tab cấp 1 + tiêu đề/lọc — một khối liền */}
         <div className={cn(ds.sectionHeader, 'space-y-3')}>
@@ -865,21 +822,9 @@ export function QuestionStudioPage() {
                 <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
                 <input
                   type="search"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      setPageNumber(1)
-                      setAppliedSearch(searchInput.trim())
-                    }
-                  }}
-                  onBlur={() => {
-                    if (searchInput.trim() !== appliedSearch) {
-                      setPageNumber(1)
-                      setAppliedSearch(searchInput.trim())
-                    }
-                  }}
+                  value={searchInput.draft}
+                  onChange={(event) => searchInput.change(event.target.value)}
+                  onKeyDown={searchInput.onKeyDown}
                   placeholder="Tìm tiêu đề, nội dung..."
                   className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
                 />
@@ -965,15 +910,8 @@ export function QuestionStudioPage() {
               workspace === 'mine' ? undefined : 'border-t-0',
             )}
           >
-            <FilterDropMenu
-              label="Lọc theo bậc Bloom"
-              value={filters.bloomLevel ?? ''}
-              onChange={(value) => updateFilter('bloomLevel', value)}
-              options={BLOOM_OPTIONS}
-              className="w-44 shrink-0"
-            />
             {showSelectionActions && (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {canReviewQuestions && pendingReviewQuestions.length > 0 && (
                   <button
                     type="button"
@@ -995,11 +933,35 @@ export function QuestionStudioPage() {
                   disabled={draftQuestions.length === 0}
                   className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
                 >
-                  <Check className="size-3.5" aria-hidden="true" />
-                  {allSelectableDraftsChecked ? 'Bỏ chọn bản nháp' : 'Chọn bản nháp'}
+                  {allSelectableDraftsChecked
+                    ? <X className="size-3.5" aria-hidden="true" />
+                    : <Check className="size-3.5" aria-hidden="true" />}
+                  {allSelectableDraftsChecked ? 'Bỏ chọn' : 'Chọn tất cả'}
                 </button>
+                {selectedQuestions.length > 0 && (
+                  <button
+                    type="button"
+                    className={cn(ds.primaryButton, 'min-h-9 whitespace-nowrap')}
+                    onClick={() => {
+                      setSubmissionNotes('')
+                      setSubmissionOpen(true)
+                    }}
+                  >
+                    <Send className="size-3.5" aria-hidden="true" />
+                    Gửi Trưởng Bộ môn duyệt
+                  </button>
+                )}
               </div>
             )}
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+              <FilterDropMenu
+                label="Lọc theo bậc Bloom"
+                value={filters.bloomLevel ?? ''}
+                onChange={(value) => updateFilter('bloomLevel', value)}
+                options={BLOOM_OPTIONS}
+                className="w-44 shrink-0"
+              />
+            </div>
           </div>
         </div>
 
@@ -1171,6 +1133,52 @@ export function QuestionStudioPage() {
           </div>
         )}
       </section>
+
+      {submissionOpen && (
+        <FormDialog
+          titleId="submit-questions-title"
+          eyebrow="Ngân hàng câu hỏi"
+          title="Gửi Trưởng Bộ môn duyệt"
+          icon={Send}
+          size="sm"
+          busy={isSubmitting}
+          onClose={() => setSubmissionOpen(false)}
+          footer={(
+            <DialogFooter className="bg-white sm:flex-row">
+              <button type="button" className={ds.outlineButton} disabled={isSubmitting} onClick={() => setSubmissionOpen(false)}>
+                Hủy
+              </button>
+              <button type="submit" form="submit-questions-form" className={ds.primaryButton} disabled={isSubmitting || selectedQuestions.length === 0}>
+                {isSubmitting
+                  ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                  : <Send className="size-4" aria-hidden="true" />}
+                {isSubmitting ? 'Đang gửi…' : 'Xác nhận gửi'}
+              </button>
+            </DialogFooter>
+          )}
+        >
+          <form id="submit-questions-form" className="space-y-3" onSubmit={(event) => {
+            event.preventDefault()
+            void submitForReview()
+          }}>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3 py-2.5">
+              <p className="text-sm font-semibold text-[#0F2854]">{selectedQuestions.length} bản nháp được chọn</p>
+              <span className={ds.infoChip}>{selectedQuestions[0]?.courseCode}</span>
+            </div>
+            <label className="block">
+              <span className={fieldLabelClass(false)}>Ghi chú (không bắt buộc)</span>
+              <textarea
+                value={submissionNotes}
+                onChange={(event) => setSubmissionNotes(event.target.value)}
+                disabled={isSubmitting}
+                maxLength={1000}
+                placeholder="Nhập ghi chú cho Trưởng Bộ môn"
+                className={cn(ds.field, 'mt-1.5 block min-h-24 resize-y py-2.5 leading-relaxed font-normal')}
+              />
+            </label>
+          </form>
+        </FormDialog>
+      )}
 
       {isDetailOpen && (
         <>

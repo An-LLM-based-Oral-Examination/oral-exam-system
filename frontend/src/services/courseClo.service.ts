@@ -5,8 +5,10 @@ export const courseCloService = {
   async getManagedCourses(): Promise<ManagedCloCourse[]> {
     return (await apiClient.get<ManagedCloCourse[]>('/courses/managed-for-clos')).data
   },
-  async list(courseId: string): Promise<CourseClo[]> {
-    return (await apiClient.get<CourseClo[]>(`/courses/${encodeURIComponent(courseId)}/clos`)).data
+  async list(courseId: string, activeOnly?: boolean): Promise<CourseClo[]> {
+    return (await apiClient.get<CourseClo[]>(`/courses/${encodeURIComponent(courseId)}/clos`, {
+      params: { activeOnly },
+    })).data
   },
   async create(courseId: string, input: CreateCourseCloInput): Promise<CourseClo> {
     return (await apiClient.post<CourseClo>(`/courses/${encodeURIComponent(courseId)}/clos`, input)).data
