@@ -78,6 +78,21 @@ interface SeedRoleOptions {
   mustChangePassword?: boolean
 }
 
+async function rejectSharedSessionRestore(page: Page): Promise<void> {
+  await page.route('**/api/v1/auth/refresh-token', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        status: 401,
+        title: 'Unauthorized',
+        detail: 'No active browser session.',
+      }),
+    })
+  })
+}
+
 async function seedAuthenticatedRole(page: Page, role: E2eRole, options: SeedRoleOptions = {}): Promise<void> {
   const profile = {
     id: `e2e-${role.toLowerCase()}`,
@@ -129,11 +144,13 @@ test.describe('RBAC route matrix', () => {
   }
 
   test('an unauthenticated user is redirected to login', async ({ page }) => {
+    await rejectSharedSessionRestore(page)
     await page.goto('/admin/dashboard')
     await expect(page).toHaveURL(/\/login$/)
   })
 
   test('an invalid role stored in the session cannot mount any protected portal', async ({ page }) => {
+    await rejectSharedSessionRestore(page)
     await page.addInitScript(() => {
       sessionStorage.setItem('access_token', 'e2e-access-token')
       sessionStorage.setItem('refresh_token', 'e2e-refresh-token')

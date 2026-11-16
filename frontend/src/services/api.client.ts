@@ -1,16 +1,27 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type { ProblemDetails } from '@/types/auth.types'
 import { safeJsonParse } from '@/utils/json.utils'
+import { browserAuthSession } from '@/services/browserAuthSession'
+import {
+  getSessionEpoch,
+  isSessionEpochCurrent,
+  rotateSessionEpoch,
+} from '@/services/authSessionState'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
     _retry?: boolean
     _skipAuthRefresh?: boolean
+    _silentAuthFailure?: boolean
   }
 }
 
 type JsonRecord = Record<string, unknown>
-type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRefresh?: boolean }
+type RetryConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  _skipAuthRefresh?: boolean
+  _silentAuthFailure?: boolean
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -26,6 +37,7 @@ function readString(record: JsonRecord, ...keys: string[]) {
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
   transformResponse: [
@@ -57,7 +69,7 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error),
 )
 
-let refreshInFlight: { refreshToken: string; promise: Promise<string> } | null = null
+let refreshInFlight: { epoch: string; promise: Promise<string> } | null = null
 
 function readMustChangeFromToken(token: string): boolean | undefined {
   const parts = token.split('.')
@@ -74,25 +86,25 @@ function readMustChangeFromToken(token: string): boolean | undefined {
 }
 
 async function refreshAccessToken(): Promise<string> {
-  const refreshToken = sessionStorage.getItem('refresh_token')
-  if (!refreshToken) throw new Error('Không có refresh token')
-
-  const response = await apiClient.post<{ accessToken: string; refreshToken: string }>(
-    '/auth/refresh-token',
-    { refreshToken },
-    { _skipAuthRefresh: true },
+  const epoch = getSessionEpoch()
+  const response = await browserAuthSession.withRefreshLock(() =>
+    apiClient.post<{ accessToken: string }>(
+      '/auth/refresh-token',
+      {},
+      { _skipAuthRefresh: true, withCredentials: true },
+    ),
   )
-  if (!response.data.accessToken || !response.data.refreshToken) {
+  if (!response.data.accessToken) {
     throw new Error('Backend không trả về token mới hợp lệ')
   }
 
   // A response from an old session must never resurrect logout or replace a new login.
-  if (sessionStorage.getItem('refresh_token') !== refreshToken) {
+  if (!isSessionEpochCurrent(epoch)) {
     throw new Error('Phiên đăng nhập đã thay đổi trong khi làm mới token')
   }
 
   sessionStorage.setItem('access_token', response.data.accessToken)
-  sessionStorage.setItem('refresh_token', response.data.refreshToken)
+  sessionStorage.removeItem('refresh_token')
   const mustChange = readMustChangeFromToken(response.data.accessToken)
   const rawProfile = sessionStorage.getItem('user_profile')
   if (rawProfile && mustChange !== undefined) {
@@ -126,27 +138,32 @@ apiClient.interceptors.response.use(
       !config._retry &&
       !config._skipAuthRefresh &&
       !isAuthEndpoint &&
-      config.headers.Authorization === `Bearer ${sessionStorage.getItem('access_token')}` &&
-      sessionStorage.getItem('refresh_token')
+      config.headers.Authorization === `Bearer ${sessionStorage.getItem('access_token')}`
     ) {
       config._retry = true
-      const originalRefreshToken = sessionStorage.getItem('refresh_token')!
+      const originalAccessToken = sessionStorage.getItem('access_token')
+      const originalEpoch = getSessionEpoch()
       try {
-        if (!refreshInFlight || refreshInFlight.refreshToken !== originalRefreshToken) {
-          const entry = { refreshToken: originalRefreshToken, promise: Promise.resolve('') }
+        if (!refreshInFlight || refreshInFlight.epoch !== originalEpoch) {
+          const entry = { epoch: originalEpoch, promise: Promise.resolve('') }
           entry.promise = refreshAccessToken().finally(() => {
             if (refreshInFlight === entry) refreshInFlight = null
           })
           refreshInFlight = entry
         }
         const token = await refreshInFlight.promise
-        if (sessionStorage.getItem('access_token') !== token) throw new Error('Phiên đăng nhập đã thay đổi')
+        if (sessionStorage.getItem('access_token') !== token)
+          throw new Error('Phiên đăng nhập đã thay đổi')
         if (config.headers) config.headers.Authorization = `Bearer ${token}`
         return apiClient.request(config)
       } catch (refreshError) {
         const failureStatus = isRecord(refreshError) ? refreshError.status : undefined
-        if (sessionStorage.getItem('refresh_token') === originalRefreshToken &&
-          (failureStatus === 401 || failureStatus === 403)) {
+        if (
+          isSessionEpochCurrent(originalEpoch) &&
+          sessionStorage.getItem('access_token') === originalAccessToken &&
+          (failureStatus === 401 || failureStatus === 403)
+        ) {
+          rotateSessionEpoch()
           sessionStorage.removeItem('access_token')
           sessionStorage.removeItem('refresh_token')
           sessionStorage.removeItem('user_profile')
@@ -193,7 +210,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(problem)
     }
 
-    console.warn(`[API Error ${normalizedStatus}]: ${detail}`)
+    if (!config?._silentAuthFailure) console.warn(`[API Error ${normalizedStatus}]: ${detail}`)
     return Promise.reject(problem)
   },
 )

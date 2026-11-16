@@ -2,8 +2,25 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginPage } from './LoginPage'
 
-const mocks = vi.hoisted(() => ({ challenge: vi.fn(), initialize: vi.fn(), googleLogin: vi.fn(), navigate: vi.fn() }))
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ loginWithGoogle: mocks.googleLogin, loginWithPassword: vi.fn() }) }))
+const mocks = vi.hoisted(() => ({
+  challenge: vi.fn(),
+  initialize: vi.fn(),
+  googleLogin: vi.fn(),
+  passwordLogin: vi.fn(),
+  navigate: vi.fn(),
+  authState: {
+    isAuthenticated: false,
+    isLoading: false,
+    user: null as null | { id: string; role: string; mustChangePassword: boolean },
+  },
+}))
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    loginWithGoogle: mocks.googleLogin,
+    loginWithPassword: mocks.passwordLogin,
+    ...mocks.authState,
+  }),
+}))
 vi.mock('@/services/auth.service', () => ({ authService: { createGoogleChallenge: mocks.challenge, getCurrentUser: () => null } }))
 vi.mock('@/services/googleAuth.service', () => ({ googleAuthManager: {
   isLoaded: () => true, initialize: mocks.initialize,
@@ -15,7 +32,10 @@ vi.mock('./LoginThreeScene', () => ({ LoginThreeScene: () => null }))
 
 beforeEach(() => {
   vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'qa-client')
-  mocks.challenge.mockReset(); mocks.initialize.mockReset(); mocks.googleLogin.mockReset(); mocks.navigate.mockReset()
+  mocks.challenge.mockReset(); mocks.initialize.mockReset(); mocks.googleLogin.mockReset(); mocks.passwordLogin.mockReset(); mocks.navigate.mockReset()
+  mocks.authState.isAuthenticated = false
+  mocks.authState.isLoading = false
+  mocks.authState.user = null
   mocks.challenge.mockResolvedValue({ nonce: 'n'.repeat(43), expiresIn: 300 })
 })
 afterEach(() => { vi.unstubAllEnvs() })
@@ -52,5 +72,28 @@ describe('Google login challenge UI', () => {
     view.unmount()
     await act(async () => { complete() })
     expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+
+  it('leaves an already-open login page after another tab restores the shared session', async () => {
+    const view = render(<LoginPage />)
+    expect(mocks.navigate).not.toHaveBeenCalled()
+
+    mocks.authState.isAuthenticated = true
+    mocks.authState.user = { id: 'lecturer-1', role: 'Instructor', mustChangePassword: false }
+    view.rerender(<LoginPage />)
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true }))
+  })
+
+  it('preserves the password-change gate when another tab restores the shared session', async () => {
+    const view = render(<LoginPage />)
+
+    mocks.authState.isAuthenticated = true
+    mocks.authState.user = { id: 'student-1', role: 'Student', mustChangePassword: true }
+    view.rerender(<LoginPage />)
+
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith('/change-password', { replace: true }),
+    )
   })
 })

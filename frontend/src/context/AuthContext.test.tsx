@@ -7,30 +7,69 @@ import { authService } from '@/services/auth.service'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { browserAuthSession, type BrowserAuthEvent } from '@/services/browserAuthSession'
 
-vi.mock('@/services/auth.service', () => ({ authService: {
-  getCurrentUser: vi.fn(), getToken: vi.fn(), synchronizeCurrentUser: vi.fn(), clearSession: vi.fn(),
-  logout: vi.fn(), refreshToken: vi.fn(), passwordLogin: vi.fn(), googleLogin: vi.fn(),
-} }))
-vi.mock('@/services/browserAuthSession', () => ({ browserAuthSession: {
-  isIdentityAllowed: () => true, claimIdentity: () => true, subscribe: () => () => {},
-  activateIdentity: vi.fn(), deactivateIdentity: vi.fn(),
-} }))
-const user = { id: 'qa', email: 'qa@example.test', fullName: 'QA', role: 'Student' as const, mustChangePassword: false }
+vi.mock('@/services/auth.service', () => ({
+  authService: {
+    getCurrentUser: vi.fn(),
+    getToken: vi.fn(),
+    synchronizeCurrentUser: vi.fn(),
+    clearSession: vi.fn(),
+    logout: vi.fn(),
+    refreshToken: vi.fn(),
+    restoreSession: vi.fn(),
+    passwordLogin: vi.fn(),
+    googleLogin: vi.fn(),
+  },
+}))
+vi.mock('@/services/browserAuthSession', () => ({
+  browserAuthSession: {
+    isIdentityAllowed: () => true,
+    claimIdentity: () => true,
+    subscribe: () => () => {},
+    activateIdentity: vi.fn(),
+    deactivateIdentity: vi.fn(),
+  },
+}))
+const user = {
+  id: 'qa',
+  email: 'qa@example.test',
+  fullName: 'QA',
+  role: 'Student' as const,
+  mustChangePassword: false,
+}
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason: unknown) => void
-  const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail })
+  const promise = new Promise<T>((ok, fail) => {
+    resolve = ok
+    reject = fail
+  })
   return { promise, resolve, reject }
 }
 function Actions() {
   const auth = useAuth()
-  return <><button onClick={() => void auth.logout()}>logout</button><output>{auth.user?.fullName ?? 'none'}</output></>
+  return (
+    <>
+      <button onClick={() => void auth.logout()}>logout</button>
+      <output>{auth.user?.fullName ?? 'none'}</output>
+    </>
+  )
 }
 function mount() {
-  return render(<AuthProvider><MemoryRouter initialEntries={['/private']}><Actions /><Routes>
-    <Route element={<ProtectedRoute allowedRoles={['Student']} />}><Route path="/private" element={<div>private content</div>} /><Route path="/change-password" element={<div>password gate</div>} /></Route>
-    <Route path="/login" element={<div>login page</div>} /><Route path="/unauthorized" element={<div>unauthorized page</div>} />
-  </Routes></MemoryRouter></AuthProvider>)
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/private']}>
+        <Actions />
+        <Routes>
+          <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
+            <Route path="/private" element={<div>private content</div>} />
+            <Route path="/change-password" element={<div>password gate</div>} />
+          </Route>
+          <Route path="/login" element={<div>login page</div>} />
+          <Route path="/unauthorized" element={<div>unauthorized page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
+  )
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -48,15 +87,28 @@ describe('verified current profile gate', () => {
     await act(async () => request.resolve(user))
     expect(await screen.findByText('private content')).toBeTruthy()
   })
+  it('restores the shared browser session when a new tab has no tab-local token', async () => {
+    vi.mocked(authService.getCurrentUser).mockReturnValue(null)
+    vi.mocked(authService.getToken).mockReturnValue(null)
+    vi.mocked(authService.restoreSession).mockResolvedValue({ accessToken: 'restored-token', user })
+    mount()
+    expect(await screen.findByText('private content')).toBeTruthy()
+    expect(browserAuthSession.activateIdentity).toHaveBeenCalledWith(user.id)
+  })
   it('fails closed on network errors, retains tokens and offers retry', async () => {
-    vi.mocked(authService.synchronizeCurrentUser).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(user)
+    vi.mocked(authService.synchronizeCurrentUser)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(user)
     mount()
     fireEvent.click(await screen.findByRole('button', { name: /thử lại/i }))
     expect(await screen.findByText('private content')).toBeTruthy()
     expect(authService.clearSession).not.toHaveBeenCalled()
   })
   it('obeys fresh MustChangePassword without triggering token refresh loops', async () => {
-    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue({ ...user, mustChangePassword: true })
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue({
+      ...user,
+      mustChangePassword: true,
+    })
     mount()
     expect(await screen.findByText('password gate')).toBeTruthy()
     expect(authService.refreshToken).not.toHaveBeenCalled()
@@ -73,7 +125,7 @@ describe('verified current profile gate', () => {
   it('invalidates in-flight persistence after unmount', async () => {
     const request = deferred<typeof user>()
     let isCurrent!: () => boolean
-    vi.mocked(authService.synchronizeCurrentUser).mockImplementation(callback => {
+    vi.mocked(authService.synchronizeCurrentUser).mockImplementation((callback) => {
       isCurrent = callback!
       return request.promise
     })
@@ -85,15 +137,36 @@ describe('verified current profile gate', () => {
   })
   it('invalidates in-flight verification on a cross-tab account change', async () => {
     const request = deferred<typeof user>()
+    const differentUser = { ...user, id: 'different-user', fullName: 'Other QA' }
     let listener!: (event: BrowserAuthEvent) => void
-    vi.spyOn(browserAuthSession, 'subscribe').mockImplementation(callback => { listener = callback; return () => {} })
+    vi.spyOn(browserAuthSession, 'subscribe').mockImplementation((callback) => {
+      listener = callback
+      return () => {}
+    })
     vi.mocked(authService.synchronizeCurrentUser).mockReturnValue(request.promise)
+    vi.mocked(authService.clearSession).mockImplementation(() => {
+      vi.mocked(authService.getCurrentUser).mockReturnValue(null)
+      vi.mocked(authService.getToken).mockReturnValue(null)
+    })
+    vi.mocked(authService.restoreSession).mockResolvedValue({
+      accessToken: 'different-token',
+      user: differentUser,
+    })
     mount()
-    act(() => listener({ type: 'LOGIN', userId: 'different-user', eventId: 'evt', sourceTabId: 'another', occurredAt: Date.now() }))
+    act(() =>
+      listener({
+        type: 'LOGIN',
+        userId: 'different-user',
+        eventId: 'evt',
+        sourceTabId: 'another',
+        occurredAt: Date.now(),
+      }),
+    )
     await act(async () => request.resolve(user))
-    expect(screen.getByText('login page')).toBeTruthy()
-    expect(screen.queryByText('private content')).toBeNull()
-    expect(authService.logout).toHaveBeenCalled()
+    expect(await screen.findByText('Other QA')).toBeTruthy()
+    expect(screen.getByText('private content')).toBeTruthy()
+    expect(authService.clearSession).toHaveBeenCalled()
+    expect(authService.logout).not.toHaveBeenCalled()
   })
 })
 
