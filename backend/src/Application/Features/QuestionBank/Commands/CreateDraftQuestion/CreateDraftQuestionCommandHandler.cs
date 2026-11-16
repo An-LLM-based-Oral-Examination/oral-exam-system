@@ -168,6 +168,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         var approvalStatus = isAutoApproved ? ApprovalStatus.Approved : ApprovalStatus.Draft;
         Guid? approvedBy = isAutoApproved ? request.ApprovedBy!.Value : null;
+        DateTime? approvedAt = isAutoApproved ? DateTime.UtcNow : null;
 
         bool createPractice = normalizedScope == "practice";
         bool createExam = !createPractice;
@@ -193,6 +194,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 Source = request.Source ?? "manual",
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
+                ApprovedAt = approvedAt,
                 SubmittedBy = request.LecturerId,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
@@ -224,6 +226,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 Source = request.Source ?? "manual",
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
+                ApprovedAt = approvedAt,
                 SubmittedBy = request.LecturerId,
                 IsActive = isAutoApproved,
                 CreatedAt = DateTime.UtcNow

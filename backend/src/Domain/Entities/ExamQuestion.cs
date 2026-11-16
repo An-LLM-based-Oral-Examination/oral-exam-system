@@ -17,6 +17,7 @@ public partial class ExamQuestion
     public string Difficulty { get; set; } = "medium";
     public string BloomLevel { get; set; } = "Understand";
     public Guid? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
     public string Source { get; set; } = "manual";
     public string ApprovalStatus { get; set; } = "DRAFT";
     public Guid? SubmittedBy { get; set; }

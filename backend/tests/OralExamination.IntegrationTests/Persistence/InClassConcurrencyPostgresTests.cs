@@ -8,6 +8,7 @@ using Npgsql;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Common.Security;
+using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
 using OralExamination.Domain.Entities;
@@ -21,6 +22,158 @@ namespace OralExamination.IntegrationTests.Persistence;
 [Trait("Category", "PostgresIntegration")]
 public sealed class InClassConcurrencyPostgresTests(PostgresFixture fixture)
 {
+    [Fact]
+    public async Task ShiftAllocationAdvisoryLock_WhenContended_SerializesIndependentConnections()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var shiftId = Guid.NewGuid();
+        var firstHasLock = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        long secondWaitMilliseconds = 0;
+
+        var first = Task.Run(async () =>
+        {
+            await using var context = database.CreateContext();
+            await using var scope = await context.BeginShiftAllocationLockScopeAsync(shiftId);
+            scope.Should().NotBeNull();
+            firstHasLock.TrySetResult();
+            await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.Delay(500);
+        });
+        var second = Task.Run(async () =>
+        {
+            await firstHasLock.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await using var context = database.CreateContext();
+            secondStarted.TrySetResult();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            await using var scope = await context.BeginShiftAllocationLockScopeAsync(shiftId);
+            stopwatch.Stop();
+            scope.Should().NotBeNull();
+            secondWaitMilliseconds = stopwatch.ElapsedMilliseconds;
+        });
+
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(20));
+        secondWaitMilliseconds.Should().BeGreaterThanOrEqualTo(200,
+            "the second PostgreSQL session must wait for the transaction-level advisory lock");
+    }
+
+    [Fact]
+    public async Task ConcurrentSameQuestionAndTranscript_IsIdempotentAndPersistsOneSubmission()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var data = await SeedShiftAsync(database, joiningStudents: 1, seedExistingQuestionUsage: false,
+            seedJoinedParticipant: true);
+        var studentId = data.JoiningStudentIds.Single();
+        var questionId = data.QuestionIds[0];
+        var queue = new RecordingQueue();
+        var barrier = new Barrier(2);
+        var command = new SubmitInClassShiftAnswerCommand(
+            studentId, data.ShiftId, questionId, "Identical concurrent transcript");
+
+        var attempts = Enumerable.Range(0, 2).Select(_ => Task.Run(async () =>
+        {
+            await using var context = database.CreateContext();
+            var handler = new SubmitInClassShiftAnswerCommandHandler(
+                context, queue, new SubmitInClassShiftAnswerCommandValidator());
+            barrier.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            return await handler.Handle(command, default);
+        })).ToArray();
+
+        var results = await Task.WhenAll(attempts).WaitAsync(TimeSpan.FromSeconds(30));
+        results.Should().OnlyContain(result => result.IsSuccess,
+            string.Join(" | ", results.Select(result => result.Error)));
+        results.Select(result => result.Value!.SubmissionId).Distinct().Should().ContainSingle();
+        await using var verify = database.CreateContext();
+        (await verify.InClassExamSubmissions.CountAsync(item =>
+            item.ShiftId == data.ShiftId && item.StudentId == studentId && item.QuestionId == questionId))
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ConcurrentSameQuestionAndDifferentTranscript_ReturnsOneConflictAndPersistsOneSubmission()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var data = await SeedShiftAsync(database, joiningStudents: 1, seedExistingQuestionUsage: false,
+            seedJoinedParticipant: true);
+        var studentId = data.JoiningStudentIds.Single();
+        var questionId = data.QuestionIds[0];
+        var queue = new RecordingQueue();
+        var barrier = new Barrier(2);
+        var commands = new[]
+        {
+            new SubmitInClassShiftAnswerCommand(studentId, data.ShiftId, questionId, "Concurrent transcript A"),
+            new SubmitInClassShiftAnswerCommand(studentId, data.ShiftId, questionId, "Concurrent transcript B")
+        };
+
+        var attempts = commands.Select(command => Task.Run(async () =>
+        {
+            await using var context = database.CreateContext();
+            var handler = new SubmitInClassShiftAnswerCommandHandler(
+                context, queue, new SubmitInClassShiftAnswerCommandValidator());
+            barrier.SignalAndWait(TimeSpan.FromSeconds(10)).Should().BeTrue();
+            return await handler.Handle(command, default);
+        })).ToArray();
+
+        var results = await Task.WhenAll(attempts).WaitAsync(TimeSpan.FromSeconds(30));
+        results.Count(result => result.IsSuccess).Should().Be(1);
+        results.Count(result => !result.IsSuccess && result.Error == InClassShiftErrors.DuplicateSubmission)
+            .Should().Be(1);
+        await using var verify = database.CreateContext();
+        (await verify.InClassExamSubmissions.CountAsync(item =>
+            item.ShiftId == data.ShiftId && item.StudentId == studentId && item.QuestionId == questionId))
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SubmissionStatusConcurrencyToken_PreservesLecturerAuditAgainstStaleWorker()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var data = await SeedShiftAsync(database, joiningStudents: 1, seedExistingQuestionUsage: false,
+            seedJoinedParticipant: true);
+        var studentId = data.JoiningStudentIds.Single();
+        var questionId = data.QuestionIds[0];
+        var submissionId = Guid.NewGuid();
+        await using (var setup = database.CreateContext())
+        {
+            setup.InClassExamSubmissions.Add(new InClassExamSubmission
+            {
+                Id = submissionId,
+                ShiftId = data.ShiftId,
+                StudentId = studentId,
+                QuestionId = questionId,
+                Transcript = "Concurrency token integration test",
+                Status = "SUBMITTED",
+                SubmittedAt = DateTime.UtcNow.AddMinutes(-5)
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var worker = database.CreateContext();
+        var staleSubmission = await worker.InClassExamSubmissions.SingleAsync(item => item.Id == submissionId);
+        await using (var lecturer = database.CreateContext())
+        {
+            var audited = await lecturer.InClassExamSubmissions.SingleAsync(item => item.Id == submissionId);
+            audited.FinalScore = 9.8m;
+            audited.LecturerNotes = "Lecturer audit wins";
+            audited.Status = "AUDITED";
+            audited.GradedAt = DateTime.UtcNow;
+            await lecturer.SaveChangesAsync();
+        }
+
+        staleSubmission.AiScore = 4.5m;
+        staleSubmission.FinalScore = 4.5m;
+        staleSubmission.Status = "AI_GRADED";
+        staleSubmission.GradedAt = DateTime.UtcNow;
+        var saveStaleWorker = async () => await worker.SaveChangesAsync();
+        await saveStaleWorker.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+        await using var verify = database.CreateContext();
+        var persisted = await verify.InClassExamSubmissions.SingleAsync(item => item.Id == submissionId);
+        persisted.Status.Should().Be("AUDITED");
+        persisted.FinalScore.Should().Be(9.8m);
+        persisted.LecturerNotes.Should().Be("Lecturer audit wins");
+    }
+
     [Fact]
     public async Task ConcurrentJoins_UseCurrentCommittedLoad_AndKeepQuestionUsageBalanced()
     {

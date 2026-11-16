@@ -414,6 +414,38 @@ public class QuestionsController : ControllerBase
     }
 
     /// <summary>
+    /// Xem các câu hỏi hiện đang được chính tài khoản đăng nhập phê duyệt, mới duyệt trước.
+    /// </summary>
+    [HttpGet("my-approved")]
+    [Authorize(Roles = "department_head,admin")]
+    public async Task<IActionResult> GetMyApprovedQuestions([FromQuery] GetQuestionsQuery filters)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        // Identity and status come from the server, never from query-string filters.
+        var query = filters with
+        {
+            ApprovedBy = actorId,
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Approved
+        };
+        var result = await _sender.Send(query);
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+            {
+                return Forbid();
+            }
+            return BadRequest(new { detail = result.Error });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
     /// Xem chi tiết câu hỏi kèm Barem và các tiêu chí con
     /// </summary>
     [HttpGet("{id}")]
