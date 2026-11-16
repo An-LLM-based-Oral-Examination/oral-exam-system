@@ -84,6 +84,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     NormalizeRubricWeights(practiceOnlyQuestion.Rubric!);
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.Approved;
                     practiceOnlyQuestion.ApprovedBy = request.ReviewerId;
+                    practiceOnlyQuestion.ApprovedAt = now;
                     practiceOnlyQuestion.ReviewNotes = request.ReviewNotes;
                     practiceOnlyQuestion.IsActive = true;
                     message = "Câu hỏi luyện tập đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng câu hỏi luyện tập.";
@@ -144,6 +145,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
 
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
+                question.ApprovedAt = now;
                 question.ReviewNotes = request.ReviewNotes;
                 question.IsActive = true;
 

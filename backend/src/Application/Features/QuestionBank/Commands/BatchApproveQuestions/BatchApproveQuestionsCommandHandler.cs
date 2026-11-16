@@ -157,6 +157,7 @@ public sealed class BatchApproveQuestionsCommandHandler
                     Source = normalizedSource,
                     ApprovalStatus = ApprovalStatus.Approved,
                     ApprovedBy = request.ApproverUserId,
+                    ApprovedAt = now,
                     SubmittedBy = request.ApproverUserId,
                     ImageUrl = imageUrl,
                     ImageDescription = imageDescription,
@@ -189,6 +190,7 @@ public sealed class BatchApproveQuestionsCommandHandler
                     Source = normalizedSource,
                     ApprovalStatus = ApprovalStatus.Approved,
                     ApprovedBy = request.ApproverUserId,
+                    ApprovedAt = now,
                     SubmittedBy = request.ApproverUserId,
                     IsActive = true,
                     CreatedAt = now

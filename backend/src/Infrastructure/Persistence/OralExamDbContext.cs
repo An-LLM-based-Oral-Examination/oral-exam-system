@@ -858,6 +858,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("APPROVED").IsRequired();
             entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual").IsRequired();
             entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
+            entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
+            entity.HasIndex(e => new { e.ApprovedBy, e.ApprovalStatus, e.ApprovedAt })
+                .HasDatabaseName("ix_practice_questions_approver_status_time");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.HasIndex(e => e.CloId).HasDatabaseName("ix_practice_questions_clo");
@@ -1012,6 +1015,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Difficulty).HasColumnName("difficulty").HasMaxLength(20).HasDefaultValue("medium");
             entity.Property(e => e.BloomLevel).HasColumnName("bloom_level").HasMaxLength(20).HasDefaultValue("Understand");
             entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
+            entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
+            entity.HasIndex(e => new { e.ApprovedBy, e.ApprovalStatus, e.ApprovedAt })
+                .HasDatabaseName("ix_exam_questions_approver_status_time");
             entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual");
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("DRAFT");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
