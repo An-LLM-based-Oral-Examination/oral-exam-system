@@ -41,5 +41,27 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    preview: {
+      port: 3000,
+      host: true,
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      },
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/hubs': {
+          target: apiTarget,
+          changeOrigin: true,
+          ws: true,
+        },
+        '/uploads': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })

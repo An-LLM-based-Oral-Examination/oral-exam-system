@@ -83,19 +83,21 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
 
         // Cascade contained questions to APPROVED
         var cascadedCount = 0;
+        var approvedAt = DateTime.UtcNow;
         foreach (var esq in examSet.ExamSetQuestions)
         {
             if (esq.ExamQuestion != null)
             {
                 esq.ExamQuestion.ApprovalStatus = ApprovalStatus.Approved;
                 esq.ExamQuestion.ApprovedBy = request.ActorUserId;
+                esq.ExamQuestion.ApprovedAt = approvedAt;
                 cascadedCount++;
             }
         }
 
         examSet.Status = ExamSetStatus.Official;
         examSet.ApprovedBy = request.ActorUserId;
-        examSet.ApprovedAt = DateTime.UtcNow;
+        examSet.ApprovedAt = approvedAt;
         if (!string.IsNullOrWhiteSpace(request.ReviewNotes))
         {
             examSet.ReviewNotes = request.ReviewNotes.Trim();

@@ -5,16 +5,24 @@ import type {
   LoginRequest,
   LoginResponse,
   ProblemDetails,
+  RefreshTokenResponse,
   User,
   UserRole,
 } from '@/types/auth.types'
 import { clearMockExamSession } from '@/utils/mockExamSessionStorage'
 import { clearPracticeRuntimes } from '@/utils/practiceSessionStorage'
 import { safeJsonParse } from '@/utils/json.utils'
+import { browserAuthSession } from '@/services/browserAuthSession'
+import {
+  getSessionEpoch,
+  isSessionEpochCurrent,
+  rotateSessionEpoch,
+} from '@/services/authSessionState'
 
 function normalizePortalRole(role: unknown): UserRole | null {
   if (role === 'Student' || role === 'student') return 'Student'
-  if (role === 'Instructor' || role === 'instructor' || role === 'lecturer' || role === 'Lecturer') return 'Instructor'
+  if (role === 'Instructor' || role === 'instructor' || role === 'lecturer' || role === 'Lecturer')
+    return 'Instructor'
   if (
     role === 'DepartmentHead' ||
     role === 'department_head' ||
@@ -59,40 +67,76 @@ const LEGACY_DEV_USER_IDS: Record<string, string> = {
 
 function normalizeResponse(data: LoginResponse): LoginResponse {
   const role = normalizePortalRole(data.user?.role)
-  if (!data.accessToken || !data.refreshToken || !data.user || !role) {
+  if (!data.accessToken || !data.user || !role) {
     throw {
       status: 502,
       title: 'Phản hồi đăng nhập không hợp lệ',
-      detail: 'Backend không trả về đủ token hoặc vai trò người dùng được hỗ trợ.',
+      detail: 'Backend không trả về access token hoặc vai trò người dùng được hỗ trợ.',
     } satisfies ProblemDetails
   }
 
   const jwtMustChange = extractMustChangePasswordFromJwt(data.accessToken)
   const mustChange = Boolean(
     data.mustChangePassword ??
-      jwtMustChange ??
-      (data.user as { mustChangePassword?: boolean })?.mustChangePassword,
+    jwtMustChange ??
+    (data.user as { mustChangePassword?: boolean })?.mustChangePassword,
   )
-  return { ...data, mustChangePassword: mustChange, user: { ...data.user, role, mustChangePassword: mustChange } }
+  return {
+    ...data,
+    mustChangePassword: mustChange,
+    user: { ...data.user, role, mustChangePassword: mustChange },
+  }
 }
 
 function persistSession(data: LoginResponse): LoginResponse {
   const normalized = normalizeResponse(data)
   clearPracticeRuntimes()
+  rotateSessionEpoch()
   sessionStorage.setItem('access_token', normalized.accessToken)
-  sessionStorage.setItem('refresh_token', normalized.refreshToken)
+  sessionStorage.removeItem('refresh_token')
   sessionStorage.setItem('user_profile', JSON.stringify(normalized.user))
   return normalized
+}
+
+function toUser(data: CurrentUserResponse): User {
+  return {
+    id: data.id,
+    email: data.email,
+    fullName: data.fullName,
+    role: data.role,
+    studentCode: data.studentCode ?? undefined,
+    mustChangePassword: data.mustChangePassword,
+  }
+}
+
+function readFailureStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const direct = (error as { status?: unknown }).status
+  if (typeof direct === 'number') return direct
+  const response = (error as { response?: { status?: unknown } }).response
+  return typeof response?.status === 'number' ? response.status : undefined
+}
+
+export interface RestoredAuthSession {
+  accessToken: string
+  user: User
 }
 
 export const authService = {
   async fetchCurrentUser(): Promise<CurrentUserResponse> {
     const { data } = await apiClient.get<CurrentUserResponse>('/auth/me')
     const role = normalizePortalRole(data.role)
-    if (!role || typeof data.id !== 'string' || !data.id.trim() ||
-      typeof data.email !== 'string' || !data.email.trim() ||
-      typeof data.fullName !== 'string' || !data.fullName.trim() ||
-      typeof data.isActive !== 'boolean' || typeof data.mustChangePassword !== 'boolean') {
+    if (
+      !role ||
+      typeof data.id !== 'string' ||
+      !data.id.trim() ||
+      typeof data.email !== 'string' ||
+      !data.email.trim() ||
+      typeof data.fullName !== 'string' ||
+      !data.fullName.trim() ||
+      typeof data.isActive !== 'boolean' ||
+      typeof data.mustChangePassword !== 'boolean'
+    ) {
       throw {
         status: 502,
         title: 'Hồ sơ người dùng không hợp lệ',
@@ -110,22 +154,45 @@ export const authService = {
     const response = await apiClient.get<CurrentUserResponse>('/auth/me')
     const data = response.data
     const role = normalizePortalRole(data?.role)
-    if (!data || !role || typeof data.id !== 'string' || data.id !== expectedUser.id ||
-      typeof data.email !== 'string' || !data.email.trim() ||
-      typeof data.fullName !== 'string' || !data.fullName.trim() || data.isActive !== true ||
+    if (
+      !data ||
+      !role ||
+      typeof data.id !== 'string' ||
+      data.id !== expectedUser.id ||
+      typeof data.email !== 'string' ||
+      !data.email.trim() ||
+      typeof data.fullName !== 'string' ||
+      !data.fullName.trim() ||
+      data.isActive !== true ||
       typeof data.mustChangePassword !== 'boolean' ||
-      (data.studentCode != null && typeof data.studentCode !== 'string')) {
-      throw { status: 403, title: 'Không thể xác minh phiên đăng nhập', detail: 'Hồ sơ máy chủ không hợp lệ, không hoạt động hoặc không khớp tài khoản hiện tại.' } satisfies ProblemDetails
+      (data.studentCode != null && typeof data.studentCode !== 'string')
+    ) {
+      throw {
+        status: 403,
+        title: 'Không thể xác minh phiên đăng nhập',
+        detail: 'Hồ sơ máy chủ không hợp lệ, không hoạt động hoặc không khớp tài khoản hiện tại.',
+      } satisfies ProblemDetails
     }
     // Axios may have retried /me with a newly refreshed access token. Compare with
     // the request that produced the response, not the old token captured at boot.
     const sentAuthorization = response.config?.headers?.Authorization
-    const sentToken = typeof sentAuthorization === 'string' && sentAuthorization.startsWith('Bearer ')
-      ? sentAuthorization.slice(7) : initialToken
-    if (!isCurrent() || this.getCurrentUser()?.id !== expectedUser.id || this.getToken() !== sentToken) return null
+    const sentToken =
+      typeof sentAuthorization === 'string' && sentAuthorization.startsWith('Bearer ')
+        ? sentAuthorization.slice(7)
+        : initialToken
+    if (
+      !isCurrent() ||
+      this.getCurrentUser()?.id !== expectedUser.id ||
+      this.getToken() !== sentToken
+    )
+      return null
     const user: User = {
-      id: data.id, email: data.email, fullName: data.fullName, role,
-      studentCode: data.studentCode ?? undefined, mustChangePassword: data.mustChangePassword,
+      id: data.id,
+      email: data.email,
+      fullName: data.fullName,
+      role,
+      studentCode: data.studentCode ?? undefined,
+      mustChangePassword: data.mustChangePassword,
     }
     sessionStorage.setItem('user_profile', JSON.stringify(user))
     return user
@@ -139,18 +206,29 @@ export const authService = {
 
   async googleLogin(request: GoogleLoginRequest, signal?: AbortSignal): Promise<LoginResponse> {
     signal?.throwIfAborted()
-    const response = await apiClient.post<LoginResponse>('/auth/google-login', request,
-      { withCredentials: true, _skipAuthRefresh: true, signal })
+    const response = await apiClient.post<LoginResponse>('/auth/google-login', request, {
+      withCredentials: true,
+      _skipAuthRefresh: true,
+      signal,
+    })
     signal?.throwIfAborted()
     clearMockExamSession()
     return persistSession(response.data)
   },
 
   async createGoogleChallenge(signal?: AbortSignal): Promise<{ nonce: string; expiresIn: number }> {
-    const { data } = await apiClient.post<{ nonce: string; expiresIn: number }>('/auth/google-challenge', null,
-      { withCredentials: true, _skipAuthRefresh: true, signal })
-    if (typeof data.nonce !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(data.nonce)
-      || !Number.isFinite(data.expiresIn) || data.expiresIn <= 0 || data.expiresIn > 300)
+    const { data } = await apiClient.post<{ nonce: string; expiresIn: number }>(
+      '/auth/google-challenge',
+      null,
+      { withCredentials: true, _skipAuthRefresh: true, signal },
+    )
+    if (
+      typeof data.nonce !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(data.nonce) ||
+      !Number.isFinite(data.expiresIn) ||
+      data.expiresIn <= 0 ||
+      data.expiresIn > 300
+    )
       throw new Error('Phản hồi phiên đăng nhập Google không hợp lệ.')
     return data
   },
@@ -158,15 +236,16 @@ export const authService = {
   async changePassword(request: { currentPassword: string; newPassword: string }): Promise<void> {
     const response = await apiClient.post<{
       accessToken: string
-      refreshToken: string
+      refreshToken?: string
       tokenType: string
       expiresIn: number
       mustChangePassword?: boolean
       message?: string
     }>('/auth/change-password', request)
 
+    rotateSessionEpoch()
     sessionStorage.setItem('access_token', response.data.accessToken)
-    sessionStorage.setItem('refresh_token', response.data.refreshToken)
+    sessionStorage.removeItem('refresh_token')
     const currentUser = this.getCurrentUser()
     if (currentUser) {
       const updatedUser: User = { ...currentUser, mustChangePassword: false }
@@ -175,20 +254,27 @@ export const authService = {
   },
 
   async refreshToken(): Promise<LoginResponse> {
-    const refreshToken = sessionStorage.getItem('refresh_token')
-    if (!refreshToken) throw new Error('Không có refresh token')
+    const epoch = getSessionEpoch()
+    const response = await browserAuthSession.withRefreshLock(() =>
+      apiClient.post<RefreshTokenResponse>(
+        '/auth/refresh-token',
+        {},
+        { _skipAuthRefresh: true, withCredentials: true },
+      ),
+    )
 
-    const response = await apiClient.post<
-      Pick<LoginResponse, 'accessToken' | 'refreshToken' | 'tokenType' | 'expiresIn'>
-    >('/auth/refresh-token', { refreshToken }, { _skipAuthRefresh: true })
-
-    if (!response.data.accessToken || !response.data.refreshToken) {
+    if (!isSessionEpochCurrent(epoch)) {
+      throw new Error('Phiên đăng nhập đã thay đổi trong khi làm mới token')
+    }
+    if (!response.data.accessToken) {
       throw new Error('Backend không trả về token mới hợp lệ')
     }
 
     const user = this.getCurrentUser()
     if (!user) throw new Error('Không có hồ sơ người dùng')
-    return persistSession({ ...response.data, user })
+    sessionStorage.setItem('access_token', response.data.accessToken)
+    sessionStorage.removeItem('refresh_token')
+    return normalizeResponse({ ...response.data, user })
   },
 
   // Giữ tên tương thích với các interceptor hoặc màn hình tích hợp ở nhánh develop.
@@ -204,24 +290,65 @@ export const authService = {
     }
   },
 
+  async restoreSession(isCurrent: () => boolean = () => true): Promise<RestoredAuthSession | null> {
+    const epoch = getSessionEpoch()
+    let response
+    try {
+      response = await browserAuthSession.withRefreshLock(() =>
+        apiClient.post<RefreshTokenResponse>(
+          '/auth/refresh-token',
+          {},
+          { _skipAuthRefresh: true, _silentAuthFailure: true, withCredentials: true },
+        ),
+      )
+    } catch (error) {
+      const status = readFailureStatus(error)
+      if (status === 401 || status === 403) return null
+      throw error
+    }
+
+    if (!isCurrent() || !isSessionEpochCurrent(epoch)) return null
+    if (!response.data.accessToken) {
+      throw new Error('Backend không trả về access token hợp lệ')
+    }
+
+    sessionStorage.setItem('access_token', response.data.accessToken)
+    sessionStorage.removeItem('refresh_token')
+    const profile = await this.fetchCurrentUser()
+    if (
+      !isCurrent() ||
+      !isSessionEpochCurrent(epoch) ||
+      this.getToken() !== response.data.accessToken
+    ) {
+      return null
+    }
+
+    const user = toUser(profile)
+    sessionStorage.setItem('user_profile', JSON.stringify(user))
+    return { accessToken: response.data.accessToken, user }
+  },
+
   async logout(): Promise<void> {
-    const refreshToken = sessionStorage.getItem('refresh_token')
     const accessToken = this.getToken()
     // Invalidate locally before network I/O, including any pending refresh response.
     this.clearSession()
     try {
-      if (refreshToken) {
-        await apiClient.post('/auth/sign-out', { refreshToken }, {
+      await apiClient.post(
+        '/auth/sign-out',
+        {},
+        {
           _skipAuthRefresh: true,
+          withCredentials: true,
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-        })
-      }
+        },
+      )
     } catch {
       // Local logout already completed; never clear a newer login after this request.
     }
   },
 
   clearSession(): void {
+    rotateSessionEpoch()
     clearPracticeRuntimes()
     clearMockExamSession()
     sessionStorage.removeItem('access_token')
@@ -252,8 +379,10 @@ export const authService = {
       const jwtMustChange = extractMustChangePasswordFromJwt(sessionStorage.getItem('access_token'))
       // /me can be newer than the issued JWT. Do not replace its verified flag
       // with an older token claim; legacy profiles without a flag may fall back.
-      const mustChangePassword = typeof parsed.mustChangePassword === 'boolean'
-        ? parsed.mustChangePassword : Boolean(jwtMustChange)
+      const mustChangePassword =
+        typeof parsed.mustChangePassword === 'boolean'
+          ? parsed.mustChangePassword
+          : Boolean(jwtMustChange)
       const user: User = { ...parsed, id: migratedId, role, mustChangePassword } as User
       if (
         migratedId !== parsed.id ||

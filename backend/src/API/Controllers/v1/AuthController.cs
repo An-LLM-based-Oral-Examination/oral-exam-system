@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Features.Auth;
 using OralExamination.Application.Features.Auth.Commands.ChangePassword;
 using OralExamination.Application.Features.Auth.Commands.GoogleLogin;
@@ -24,6 +25,7 @@ namespace API.Controllers.v1;
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
+    private const string RefreshSessionCookieName = "oes_refresh_session";
     private readonly ISender _sender;
 
     public AuthController(ISender sender)
@@ -85,7 +87,7 @@ public class AuthController : ControllerBase
     [HttpPost("google-login")]
     [AllowAnonymous]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-    [ProducesResponseType(typeof(GoogleLoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BrowserGoogleLoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -100,7 +102,12 @@ public class AuthController : ControllerBase
             return AuthProblem(result.Error);
         }
 
-        return Ok(result.Value);
+        SetRefreshSessionCookie(result.Value.RefreshToken);
+        return Ok(new BrowserGoogleLoginResponse(
+            result.Value.AccessToken,
+            result.Value.TokenType,
+            result.Value.ExpiresIn,
+            result.Value.User));
     }
 
     /// <summary>
@@ -109,13 +116,31 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("refresh-token")]
     [AllowAnonymous]
-    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
-        var command = new RefreshTokenCommand(request.RefreshToken);
+        var cookieToken = Request.Cookies[RefreshSessionCookieName];
+        var refreshToken = cookieToken ?? request?.RefreshToken;
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Token không hợp lệ.",
+                Detail = "Không tìm thấy phiên đăng nhập trong trình duyệt.",
+                Type = "https://tools.ietf.org/html/rfc7231"
+            });
+        }
+
+        var command = new RefreshTokenCommand(refreshToken);
         var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
+            if (!string.IsNullOrWhiteSpace(cookieToken))
+            {
+                DeleteRefreshSessionCookie();
+            }
+
             var statusCode = result.Error switch
             {
                 "Tài khoản đã bị khóa." => StatusCodes.Status403Forbidden,
@@ -133,7 +158,11 @@ public class AuthController : ControllerBase
             });
         }
 
-        return Ok(result.Value);
+        SetRefreshSessionCookie(result.Value.RefreshToken);
+        return Ok(new BrowserRefreshTokenResponse(
+            result.Value.AccessToken,
+            result.Value.TokenType,
+            result.Value.ExpiresIn));
     }
 
     /// <summary>
@@ -142,10 +171,11 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("sign-out")]
     [AllowAnonymous]
-    public async Task<IActionResult> SignOut([FromBody] SignOutRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> SignOut([FromBody] SignOutRequest? request, CancellationToken cancellationToken)
     {
-        var command = new SignOutCommand(request.RefreshToken);
+        var command = new SignOutCommand(Request.Cookies[RefreshSessionCookieName] ?? request?.RefreshToken);
         var result = await _sender.Send(command, cancellationToken);
+        DeleteRefreshSessionCookie();
 
         if (!result.IsSuccess)
         {
@@ -174,7 +204,13 @@ public class AuthController : ControllerBase
             return AuthProblem(result.Error);
         }
 
-        return Ok(result.Value);
+        SetRefreshSessionCookie(result.Value.RefreshToken);
+        return Ok(new BrowserPasswordLoginResponse(
+            result.Value.AccessToken,
+            result.Value.TokenType,
+            result.Value.ExpiresIn,
+            result.Value.MustChangePassword,
+            result.Value.User));
     }
 
     /// <summary>
@@ -199,7 +235,12 @@ public class AuthController : ControllerBase
             return AuthProblem(result.Error);
         }
 
-        return Ok(result.Value);
+        SetRefreshSessionCookie(result.Value.RefreshToken);
+        return Ok(new BrowserChangePasswordResponse(
+            result.Value.AccessToken,
+            result.Value.TokenType,
+            result.Value.ExpiresIn,
+            result.Value.MustChangePassword));
     }
 
     private IActionResult AuthProblem(string error)
@@ -248,6 +289,33 @@ public class AuthController : ControllerBase
         return new CookieOptions
         {
             HttpOnly = true, SameSite = SameSiteMode.Strict, Path = GoogleLoginRules.CookiePath, MaxAge = maxAge,
+            Secure = Request.IsHttps || !(environment.IsDevelopment() || environment.IsEnvironment("Testing"))
+        };
+    }
+
+    private void SetRefreshSessionCookie(string refreshToken)
+    {
+        Response.Cookies.Append(
+            RefreshSessionCookieName,
+            refreshToken,
+            RefreshSessionCookie(TimeSpan.FromDays(AuthTokenDefaults.RefreshTokenDays)));
+    }
+
+    private void DeleteRefreshSessionCookie()
+    {
+        Response.Cookies.Delete(RefreshSessionCookieName, RefreshSessionCookie());
+    }
+
+    private CookieOptions RefreshSessionCookie(TimeSpan? maxAge = null)
+    {
+        var environment = HttpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>();
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            IsEssential = true,
+            SameSite = SameSiteMode.Strict,
+            Path = "/api/v1/auth",
+            MaxAge = maxAge,
             Secure = Request.IsHttps || !(environment.IsDevelopment() || environment.IsEnvironment("Testing"))
         };
     }

@@ -31,6 +31,8 @@ function normalizeSeat(value: unknown): ProctorSeatItem {
     studentCode: readNullableString(record, 'studentCode'),
     fullName: readNullableString(record, 'fullName'),
     ipAddress: readNullableString(record, 'ipAddress'),
+    examSetId: readNullableString(record, 'examSetId'),
+    setCode: readNullableString(record, 'examSetCode', 'setCode'),
     status: readNullableString(record, 'status'),
     isCheckedIn: readBoolean(record, 'isCheckedIn') ?? false,
     isSuspended: readBoolean(record, 'isSuspended') ?? false,
@@ -43,6 +45,7 @@ function normalizeSeat(value: unknown): ProctorSeatItem {
 function normalizeAttendance(payload: unknown): ShiftAttendanceMonitor {
   const record = requireRecord(unwrapPayload(payload), 'Thông tin điểm danh ca thi không hợp lệ.')
   const seats = field(record, 'seats')
+  const normalizedSeats = Array.isArray(seats) ? seats.map(normalizeSeat) : []
   return {
     shiftId: requiredString(record, 'shiftId', 'Thông tin điểm danh thiếu mã ca thi.'),
     shiftName: requiredString(record, 'shiftName', 'Thông tin điểm danh thiếu tên ca.'),
@@ -50,13 +53,13 @@ function normalizeAttendance(payload: unknown): ShiftAttendanceMonitor {
     shiftStatus: requiredString(record, 'shiftStatus', 'Thông tin điểm danh thiếu trạng thái ca.'),
     startTime: requiredDateString(record, 'startTime', 'Thông tin điểm danh thiếu giờ bắt đầu.'),
     endTime: requiredDateString(record, 'endTime', 'Thông tin điểm danh thiếu giờ kết thúc.'),
-    totalSeats: readNumber(record, 'totalSeats') ?? 40,
+    totalSeats: readNumber(record, 'totalSeats', 'maxSeats') ?? (normalizedSeats.length || 24),
     assignedTicketsCount: readNumber(record, 'assignedTicketsCount') ?? 0,
     checkedInCount: readNumber(record, 'checkedInCount') ?? 0,
     inProgressCount: readNumber(record, 'inProgressCount') ?? 0,
     submittedCount: readNumber(record, 'submittedCount') ?? 0,
     suspendedCount: readNumber(record, 'suspendedCount') ?? 0,
-    seats: Array.isArray(seats) ? seats.map(normalizeSeat) : [],
+    seats: normalizedSeats,
   }
 }
 
@@ -70,6 +73,8 @@ function normalizeAction(payload: unknown): TicketProctorActionResponse {
     fullName: requiredString(record, 'fullName', 'Phản hồi coi thi thiếu họ tên.'),
     seatNumber: requiredNumber(record, 'seatNumber', 'Phản hồi coi thi thiếu số ghế.'),
     ipAddress: readNullableString(record, 'ipAddress'),
+    examSetId: readNullableString(record, 'examSetId'),
+    setCode: readNullableString(record, 'examSetCode', 'setCode'),
     status: requiredString(record, 'status', 'Phản hồi coi thi thiếu trạng thái vé.'),
     isSuspended: readBoolean(record, 'isSuspended') ?? false,
     suspensionReason: readNullableString(record, 'suspensionReason'),

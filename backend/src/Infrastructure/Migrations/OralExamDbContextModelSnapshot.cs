@@ -1244,6 +1244,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("DRAFT")
                         .HasColumnName("approval_status");
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
@@ -1357,6 +1361,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("SubmittedBy")
                         .HasDatabaseName("ix_exam_questions_submitted");
+
+                    b.HasIndex("ApprovedBy", "ApprovalStatus", "ApprovedAt")
+                        .HasDatabaseName("ix_exam_questions_approver_status_time");
 
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_exam_questions_course");
@@ -2799,6 +2806,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("APPROVED")
                         .HasColumnName("approval_status");
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
@@ -2915,6 +2926,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("SubmittedBy")
                         .HasDatabaseName("ix_practice_questions_submitted");
+
+                    b.HasIndex("ApprovedBy", "ApprovalStatus", "ApprovedAt")
+                        .HasDatabaseName("ix_practice_questions_approver_status_time");
 
                     b.HasIndex("CourseId", "Difficulty", "IsActive")
                         .HasDatabaseName("ix_practice_questions_course");

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Queries.GetQuestions;
 
@@ -25,6 +26,17 @@ public sealed class GetQuestionsQueryHandler
         GetQuestionsQuery request,
         CancellationToken cancellationToken)
     {
+        if (request.ApprovedBy.HasValue)
+        {
+            var approver = await _context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == request.ApprovedBy.Value && u.IsActive, cancellationToken);
+            if (approver == null || (approver.Role != "department_head" && approver.Role != "admin"))
+            {
+                return Result<PagedResult<QuestionSummaryDto>>.Failure(
+                    "FORBIDDEN: Chỉ Trưởng Bộ Môn hoặc Quản trị viên đang hoạt động mới có danh sách câu hỏi đã duyệt.");
+            }
+        }
+
         var examQuery = _context.ExamQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
@@ -79,6 +91,12 @@ public sealed class GetQuestionsQueryHandler
             practiceQuery = practiceQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
         }
 
+        if (request.ApprovedBy.HasValue)
+        {
+            examQuery = examQuery.Where(q => q.ApprovedBy == request.ApprovedBy.Value && q.ApprovalStatus == ApprovalStatus.Approved);
+            practiceQuery = practiceQuery.Where(q => q.ApprovedBy == request.ApprovedBy.Value && q.ApprovalStatus == ApprovalStatus.Approved);
+        }
+
         var pageNumber = Math.Max(1, request.PageNumber);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var normalizedScope = (request.UsageScope ?? string.Empty).Trim().ToLowerInvariant();
@@ -87,7 +105,8 @@ public sealed class GetQuestionsQueryHandler
         {
             var practiceCount = await practiceQuery.CountAsync(cancellationToken);
             var practicePageItems = await practiceQuery
-                .OrderByDescending(q => q.CreatedAt)
+                .OrderByDescending(q => request.ApprovedBy.HasValue ? (q.ApprovedAt ?? DateTime.MinValue) : q.CreatedAt)
+                .ThenBy(q => q.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .Select(q => new QuestionSummaryDto(
@@ -106,7 +125,9 @@ public sealed class GetQuestionsQueryHandler
                     q.ImageUrl,
                     q.ImageDescription,
                     q.CloId,
-                    null
+                    null,
+                    q.ApprovedAt,
+                    "practice"
                 ))
                 .ToListAsync(cancellationToken);
 
@@ -119,7 +140,8 @@ public sealed class GetQuestionsQueryHandler
         {
             var examCount = await examQuery.CountAsync(cancellationToken);
             var examPageItems = await examQuery
-                .OrderByDescending(q => q.CreatedAt)
+                .OrderByDescending(q => request.ApprovedBy.HasValue ? (q.ApprovedAt ?? DateTime.MinValue) : q.CreatedAt)
+                .ThenBy(q => q.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .Select(q => new QuestionSummaryDto(
@@ -138,7 +160,9 @@ public sealed class GetQuestionsQueryHandler
                     q.ImageUrl,
                     q.ImageDescription,
                     q.CloId,
-                    q.StructureId
+                    q.StructureId,
+                    q.ApprovedAt,
+                    "exam"
                 ))
                 .ToListAsync(cancellationToken);
 
@@ -159,7 +183,8 @@ public sealed class GetQuestionsQueryHandler
         var windowLimit = pageNumber * pageSize;
 
         var examItems = await examQuery
-            .OrderByDescending(q => q.CreatedAt)
+            .OrderByDescending(q => request.ApprovedBy.HasValue ? (q.ApprovedAt ?? DateTime.MinValue) : q.CreatedAt)
+            .ThenBy(q => q.Id)
             .Take(windowLimit)
             .Select(q => new QuestionSummaryDto(
                 q.Id,
@@ -177,12 +202,15 @@ public sealed class GetQuestionsQueryHandler
                 q.ImageUrl,
                 q.ImageDescription,
                 q.CloId,
-                q.StructureId
+                q.StructureId,
+                q.ApprovedAt,
+                "exam"
             ))
             .ToListAsync(cancellationToken);
 
         var practiceOnlyItems = await practiceQuery
-            .OrderByDescending(q => q.CreatedAt)
+            .OrderByDescending(q => request.ApprovedBy.HasValue ? (q.ApprovedAt ?? DateTime.MinValue) : q.CreatedAt)
+            .ThenBy(q => q.Id)
             .Take(windowLimit)
             .Select(q => new QuestionSummaryDto(
                 q.Id,
@@ -200,13 +228,16 @@ public sealed class GetQuestionsQueryHandler
                 q.ImageUrl,
                 q.ImageDescription,
                 q.CloId,
-                null
+                null,
+                q.ApprovedAt,
+                "practice"
             ))
             .ToListAsync(cancellationToken);
 
         var items = examItems
             .Concat(practiceOnlyItems)
-            .OrderByDescending(q => q.CreatedAt)
+            .OrderByDescending(q => request.ApprovedBy.HasValue ? (q.ApprovedAt ?? DateTime.MinValue) : q.CreatedAt)
+            .ThenBy(q => q.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToList();

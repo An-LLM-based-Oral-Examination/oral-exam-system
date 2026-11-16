@@ -31,6 +31,7 @@ import {
   ExaminationOfficerExamListPage,
   ExaminationOfficerExamDetailPage,
   ExaminationOfficerTicketAssignmentPage,
+  ExaminationOfficerRosterImportPage,
   ExaminationOfficerMonitorSelectorPage,
   ExaminationOfficerShiftMonitorPage,
   ExaminationOfficerGradeSelectorPage,
@@ -101,6 +102,10 @@ export const appRoutes = createRoutesFromElements(
           <Route
             path="/examination-officer/tickets/assign"
             element={<ExaminationOfficerTicketAssignmentPage />}
+          />
+          <Route
+            path="/examination-officer/shifts/:shiftId/tickets/import"
+            element={<ExaminationOfficerRosterImportPage />}
           />
           <Route
             path="/examination-officer/monitor"

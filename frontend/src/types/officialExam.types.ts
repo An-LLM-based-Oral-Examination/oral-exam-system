@@ -92,7 +92,7 @@ export interface PublishExamShiftResponse {
 export interface OfficialExamSession {
   id: string
   courseId: string
-  examStructureId: string
+  examStructureId?: string
   title: string
   examDate: string
   hasFollowUp: boolean
@@ -150,7 +150,7 @@ export interface UpdateExamStructureRequest {
 
 export interface CreateOfficialExamSessionRequest {
   courseId: string
-  examStructureId: string
+  examStructureId: string | null
   title?: string | null
   examDate: string
   hasFollowUp: boolean
@@ -171,6 +171,9 @@ export interface ExamShift {
   examinerName: string | null
   proctorName: string | null
   status: string
+  maxSeats?: number
+  assignedTicketsCount?: number
+  remainingSeats?: number
 }
 
 export interface GetExamShiftsParams {
@@ -186,11 +189,24 @@ export interface CreateExamShiftRequest {
   startTime: string
   endTime: string
   proctorUserId: string
+  examinerUserId: string
+  maxSeats?: number
+}
+
+export interface UpdateExamShiftRequest {
+  shiftName: string
+  roomLab: string
+  startTime: string
+  endTime: string
+  proctorUserId: string
+  examinerUserId: string
+  maxSeats?: number | null
 }
 
 export interface AssignExamTicketRequest {
   shiftId: string
-  studentId: string
+  studentCode: string
+  studentId?: string
   seatNumber: number
   ipAddress?: string | null
 }
@@ -199,11 +215,54 @@ export interface ExamTicket {
   id: string
   shiftId: string
   studentId: string
+  studentCode: string | null
+  fullName?: string | null
   seatNumber: number
   ipAddress: string | null
   status: ExamTicketStatus | string
   checkedInAt: string
   examSetId: string | null
+  setCode?: string | null
+}
+
+export interface BulkExamTicketImportIssue {
+  sourceRow: number | null
+  code: string
+  field: string | null
+  message: string
+}
+
+export interface BulkExamTicketImportPreviewRow {
+  sourceRow: number
+  studentCode: string
+  fullName: string | null
+  seatNumber: number | null
+  ipAddress: string | null
+  setCode: string | null
+  isValid: boolean
+  errors: BulkExamTicketImportIssue[]
+  issues?: string[]
+}
+
+export interface BulkExamTicketImportPreview {
+  shiftId: string
+  totalRowCount: number
+  validRowCount: number
+  errorRowCount: number
+  availableHandedOverSetCount: number
+  rows: BulkExamTicketImportPreviewRow[]
+  globalErrors: BulkExamTicketImportIssue[]
+  reservedExamSetCodes?: string[]
+  maxSeats?: number
+  existingTicketCount?: number
+  remainingSeats?: number
+  canCommit: boolean
+}
+
+export interface BulkExamTicketImportCommitResult {
+  shiftId: string
+  createdTicketCount: number
+  tickets: ExamTicket[]
 }
 
 export interface WorkstationExamQuestion {

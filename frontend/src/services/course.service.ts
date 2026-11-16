@@ -1,5 +1,6 @@
 import apiClient from './api.client'
 import { classService } from '@/services/class.service'
+import type { CourseLecturer } from '@/types/class.types'
 import type { CourseConfigurationDto, CourseDto, ExamInputMode } from '@/types/practice.types'
 
 type JsonRecord = Record<string, unknown>
@@ -100,6 +101,44 @@ function normalizeConfiguration(value: unknown): CourseConfigurationDto {
   }
 }
 
+export interface ShiftStaffCandidate {
+  userId: string
+  fullName: string
+  detail?: string
+}
+
+export interface ShiftStaffCandidatePool {
+  proctors: ShiftStaffCandidate[]
+  examiners: ShiftStaffCandidate[]
+  departmentHeadIds: string[]
+}
+
+function unwrapArrayPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (isRecord(payload) && Array.isArray(payload.value)) return payload.value
+  if (isRecord(payload) && Array.isArray(payload.items)) return payload.items
+  return []
+}
+
+function normalizeCourseLecturer(value: unknown): CourseLecturer | null {
+  if (!isRecord(value)) return null
+
+  const lecturerId = readString(value, 'lecturerId')
+  const fullName = readString(value, 'fullName')
+  if (!lecturerId || !fullName) return null
+
+  return {
+    lecturerId,
+    fullName,
+    email: readString(value, 'email') ?? '',
+    studentCode: readString(value, 'studentCode'),
+    isActive: readBoolean(value, 'isActive') ?? true,
+    semesterId: readString(value, 'semesterId'),
+    semesterCode: readString(value, 'semesterCode'),
+    courseOfferingId: readString(value, 'courseOfferingId'),
+  }
+}
+
 export const courseService = {
   async getEnrolledCourses(): Promise<CourseDto[]> {
     const [enrolled, courses] = await Promise.all([classService.listMyClasses(), this.getCourses()])
@@ -148,8 +187,134 @@ export const courseService = {
     return invalidResponse('API không trả về danh sách môn được phân công.')
   },
 
+  async getCourseLecturers(courseId: string): Promise<CourseLecturer[]> {
+    const response = await apiClient.get<unknown>(`/courses/${courseId}/lecturers`)
+    const payload = response.data
+    const rawList = Array.isArray(payload)
+      ? payload
+      : isRecord(payload) && Array.isArray(payload.value)
+        ? payload.value
+        : isRecord(payload) && Array.isArray(payload.items)
+          ? payload.items
+          : null
+
+    if (!rawList) {
+      return invalidResponse('API không trả về danh sách giảng viên của môn học.')
+    }
+
+    return rawList
+      .map(normalizeCourseLecturer)
+      .filter((lecturer): lecturer is CourseLecturer => lecturer !== null && lecturer.isActive)
+  },
+
   async getConfiguration(courseId: string): Promise<CourseConfigurationDto> {
     const response = await apiClient.get<unknown>(`/courses/${courseId}/configurations`)
     return normalizeConfiguration(response.data)
+  },
+
+  /**
+   * Tổng hợp danh sách Giám thị & Giám khảo hợp lệ cho Cán bộ Khảo thí từ các endpoint danh mục
+   * đã mở quyền sẵn trên Backend (`/semesters/classes`, `/examination-officer/appeals/allocation-proposal`, `/academic-programs`).
+   */
+  async getShiftStaffCandidates(params: {
+    courseId: string
+    semesterId?: string
+    academicProgramId?: string | null
+  }): Promise<ShiftStaffCandidatePool> {
+    const [courseClassesRes, allocationProposalRes, semesterClassesRes, programsRes] =
+      await Promise.allSettled([
+        apiClient.get<unknown>('/semesters/classes', {
+          params: {
+            courseId: params.courseId,
+            semesterId: params.semesterId || undefined,
+            isActive: true,
+          },
+        }),
+        apiClient.get<unknown>('/examination-officer/appeals/allocation-proposal'),
+        apiClient.get<unknown>('/semesters/classes', {
+          params: {
+            semesterId: params.semesterId || undefined,
+            isActive: true,
+          },
+        }),
+        apiClient.get<unknown>('/academic-programs', {
+          params: { isActive: true },
+        }),
+      ])
+
+    const proctorMap = new Map<string, ShiftStaffCandidate>()
+    const examinerMap = new Map<string, ShiftStaffCandidate>()
+    const departmentHeadIds = new Set<string>()
+
+    const addLecturerCandidate = (record: JsonRecord, fallbackLabel: string) => {
+      const lecturerId = readString(record, 'lecturerId')
+      const lecturerName = readString(record, 'lecturerName') ?? readString(record, 'fullName')
+      const email = readString(record, 'email')
+      if (!lecturerId || !lecturerName) return
+      const detail = email || fallbackLabel
+      if (!proctorMap.has(lecturerId)) {
+        proctorMap.set(lecturerId, { userId: lecturerId, fullName: lecturerName, detail })
+      }
+      if (!examinerMap.has(lecturerId)) {
+        examinerMap.set(lecturerId, { userId: lecturerId, fullName: lecturerName, detail })
+      }
+    }
+
+    if (courseClassesRes.status === 'fulfilled') {
+      for (const item of unwrapArrayPayload(courseClassesRes.value.data)) {
+        if (isRecord(item)) addLecturerCandidate(item, 'Giảng viên phụ trách môn')
+      }
+    }
+
+    if (allocationProposalRes.status === 'fulfilled' && isRecord(allocationProposalRes.value.data)) {
+      const summaries =
+        allocationProposalRes.value.data.lecturerSummaries ??
+        allocationProposalRes.value.data.LecturerSummaries
+      for (const item of unwrapArrayPayload(summaries)) {
+        if (isRecord(item)) addLecturerCandidate(item, 'Giảng viên')
+      }
+    }
+
+    if (semesterClassesRes.status === 'fulfilled') {
+      for (const item of unwrapArrayPayload(semesterClassesRes.value.data)) {
+        if (isRecord(item)) addLecturerCandidate(item, 'Giảng viên trong học kỳ')
+      }
+    }
+
+    if (programsRes.status === 'fulfilled') {
+      const programItems = unwrapArrayPayload(programsRes.value.data).filter(isRecord)
+      const sortedPrograms = [...programItems].sort((left, right) => {
+        const leftMatch =
+          params.academicProgramId && readString(left, 'id') === params.academicProgramId ? 0 : 1
+        const rightMatch =
+          params.academicProgramId && readString(right, 'id') === params.academicProgramId ? 0 : 1
+        return leftMatch - rightMatch
+      })
+
+      for (const program of sortedPrograms) {
+        const headId = readString(program, 'departmentHeadUserId')
+        const headName = readString(program, 'departmentHeadName')
+        const programCode = readString(program, 'code')
+        if (!headId) continue
+        departmentHeadIds.add(headId)
+        if (headName && !examinerMap.has(headId)) {
+          examinerMap.set(headId, {
+            userId: headId,
+            fullName: headName,
+            detail: programCode ? `Trưởng bộ môn ${programCode}` : 'Trưởng bộ môn',
+          })
+        }
+      }
+    }
+
+    for (const headId of departmentHeadIds) {
+      proctorMap.delete(headId)
+    }
+
+    return {
+      proctors: Array.from(proctorMap.values()),
+      examiners: Array.from(examinerMap.values()),
+      departmentHeadIds: Array.from(departmentHeadIds),
+    }
   },
 }

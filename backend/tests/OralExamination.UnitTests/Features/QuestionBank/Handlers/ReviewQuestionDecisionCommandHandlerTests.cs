@@ -147,6 +147,7 @@ public class ReviewQuestionDecisionCommandHandlerTests
         dbQuestion.Should().NotBeNull();
         dbQuestion!.ApprovalStatus.Should().Be(ApprovalStatus.Approved);
         dbQuestion.ApprovedBy.Should().Be(reviewer.Id);
+        dbQuestion.ApprovedAt.Should().Be(result.Value.ReviewedAt);
         dbQuestion.ReviewNotes.Should().Be(command.ReviewNotes);
         dbQuestion.IsActive.Should().BeTrue();
     }

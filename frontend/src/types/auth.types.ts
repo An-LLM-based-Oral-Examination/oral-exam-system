@@ -59,7 +59,7 @@ export interface LoginRequest {
  */
 export interface LoginResponse {
   accessToken: string
-  refreshToken: string
+  refreshToken?: string
   tokenType: string
   expiresIn: number
   mustChangePassword?: boolean
@@ -71,7 +71,7 @@ export interface LoginResponse {
  */
 export interface GoogleLoginResponse {
   accessToken: string
-  refreshToken: string
+  refreshToken?: string
   tokenType: string
   expiresIn: number
   user: {
@@ -88,7 +88,7 @@ export interface GoogleLoginResponse {
  */
 export interface RefreshTokenResponse {
   accessToken: string
-  refreshToken: string
+  refreshToken?: string
   tokenType: string
   expiresIn: number
 }

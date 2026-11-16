@@ -251,8 +251,8 @@ test.describe('Cổng Khảo thí and MF-04 appeals', () => {
     startTime: '2026-11-20T08:00:00.000Z',
     endTime: '2026-11-20T09:30:00.000Z',
     proctorUserId: 'proctor-1',
-    examinerUserId: null,
-    examinerName: null,
+    examinerUserId: 'examiner-1',
+    examinerName: 'Examiner E2E',
     proctorName: 'Proctor E2E',
     status: 'SCHEDULED',
   }
@@ -264,6 +264,87 @@ test.describe('Cổng Khảo thí and MF-04 appeals', () => {
     let shifts = [] as (typeof officialShift)[]
     let sessionBody: Record<string, unknown> | null = null
     let shiftBody: Record<string, unknown> | null = null
+
+    await page.route('**/api/v1/semesters', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'semester-fa26',
+            code: 'FA26',
+            name: 'Fall 2026',
+            startDate: '2026-09-01',
+            endDate: '2026-12-31',
+            isActive: true,
+          },
+        ]),
+      })
+    })
+    await page.route('**/api/v1/semesters/semester-fa26/course-offerings**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            courseId,
+            courseOfferingId: 'course-offering-1',
+            code: 'PRN231',
+            name: 'Building Cross-Platform Back-End Applications',
+            credits: 3,
+            isCourseActive: true,
+            isSelected: true,
+          },
+        ]),
+      })
+    })
+    await page.route(`**/api/v1/courses/${courseId}/configurations`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          courseId,
+          courseCode: 'PRN231',
+          courseName: 'Building Cross-Platform Back-End Applications',
+          hasFollowUp: true,
+          maxFollowUpQuestions: 2,
+          examInputMode: 'VoiceWithTranscriptEdit',
+          transcriptBufferSeconds: 60,
+          isActive: true,
+        }),
+      })
+    })
+    await page.route(`**/api/v1/courses/${courseId}/lecturers`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            lecturerId: officialShift.proctorUserId,
+            fullName: officialShift.proctorName,
+            email: 'proctor@example.com',
+            studentCode: 'GV001',
+            isActive: true,
+            semesterId: 'semester-fa26',
+            semesterCode: 'FA26',
+            courseOfferingId: 'course-offering-1',
+          },
+          {
+            lecturerId: officialShift.examinerUserId,
+            fullName: officialShift.examinerName,
+            email: 'examiner@example.com',
+            studentCode: 'GV002',
+            isActive: true,
+            semesterId: 'semester-fa26',
+            semesterCode: 'FA26',
+            courseOfferingId: 'course-offering-1',
+          },
+        ]),
+      })
+    })
+    await page.route('**/api/v1/exam-structures**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    })
 
     await page.route('**/api/v1/official-exams/sessions', async (route) => {
       if (route.request().method() === 'POST') {
@@ -303,41 +384,34 @@ test.describe('Cổng Khảo thí and MF-04 appeals', () => {
     await seedRole(page, 'ExaminationOfficer')
     await page.goto('/examination-officer/exams')
 
-    const sessionForm = page.locator('form').nth(0)
-    await sessionForm.locator('input').nth(0).fill(courseId)
-    await sessionForm.locator('input').nth(1).fill(officialSession.examStructureId)
-    await sessionForm.locator('input').nth(2).fill(officialSession.title)
-    await sessionForm.locator('input').nth(3).fill(officialSession.examDate)
-    await sessionForm.locator('input').nth(4).fill('60')
-    await sessionForm.locator('button[type="submit"]').click()
-    await expect(
-      page.locator('article strong').filter({ hasText: officialSession.title }),
-    ).toBeVisible()
-
-    const shiftForm = page.locator('form').nth(1)
-    await shiftForm.locator('select').selectOption(officialSession.id)
-    await shiftForm.locator('input').nth(0).fill(officialShift.shiftName)
-    await shiftForm.locator('input').nth(1).fill(officialShift.roomLab)
-    await shiftForm.locator('input').nth(2).fill('2026-11-20T08:00')
-    await shiftForm.locator('input').nth(3).fill('2026-11-20T09:30')
-    await shiftForm.locator('input').nth(4).fill(officialShift.proctorUserId)
-    await shiftForm.locator('button[type="submit"]').click()
+    await page.getByRole('button', { name: 'Tạo ca thi' }).click()
+    await expect(page.locator('#exam-semester')).toHaveValue('semester-fa26')
+    await page.locator('#exam-course').selectOption(courseId)
+    await page.locator('#shift-name').fill(officialShift.shiftName)
+    await page.locator('#shift-room').fill(officialShift.roomLab)
+    await page.locator('#shift-start').fill('2026-11-20T08:00')
+    await page.locator('#shift-end').fill('2026-11-20T09:30')
+    await page.locator('#shift-proctor').selectOption(officialShift.proctorUserId)
+    await page.locator('#shift-examiner').selectOption(officialShift.examinerUserId)
+    await page.getByRole('button', { name: 'Tạo ca thi cho PRN231' }).click()
+    await page.getByRole('button', { name: 'Đã hiểu' }).click()
     await expect(
       page.locator('article strong').filter({ hasText: officialShift.shiftName }),
     ).toBeVisible()
 
     expect(sessionBody).toMatchObject({
       courseId,
-      examStructureId: officialSession.examStructureId,
-      title: officialSession.title,
+      examStructureId: null,
       examDate: officialSession.examDate,
       transcriptBufferSeconds: 60,
     })
+    expect(sessionBody?.title).toContain('PRN231')
     expect(shiftBody).toMatchObject({
       sessionId: officialSession.id,
       shiftName: officialShift.shiftName,
       roomLab: officialShift.roomLab,
       proctorUserId: officialShift.proctorUserId,
+      examinerUserId: officialShift.examinerUserId,
     })
   })
 
@@ -350,6 +424,7 @@ test.describe('Cổng Khảo thí and MF-04 appeals', () => {
       id: '00000000-0000-4000-8000-000000000033',
       shiftId: officialShift.id,
       studentId: '00000000-0000-4000-8000-000000000002',
+      studentCode: 'SE170002',
       seatNumber: 7,
       ipAddress: '10.0.0.7',
       status: 'SCHEDULED',
@@ -405,17 +480,17 @@ test.describe('Cổng Khảo thí and MF-04 appeals', () => {
     await expect.poll(() => publishCalled).toBe(true)
 
     await page.goto('/examination-officer/tickets/assign')
-    const ticketForm = page.locator('form').first()
-    await ticketForm.locator('select').selectOption(officialShift.id)
-    await ticketForm.locator('input').nth(0).fill(ticket.studentId)
-    await ticketForm.locator('input').nth(1).fill(String(ticket.seatNumber))
-    await ticketForm.locator('input').nth(2).fill(ticket.ipAddress)
-    await ticketForm.locator('button[type="submit"]').click()
-    await expect(page.getByText(`Sinh viên: ${ticket.studentId}`)).toBeVisible()
+    await page.getByRole('button', { name: 'Cấp vé thi' }).click()
+    await page.locator('#ticket-shift').selectOption(officialShift.id)
+    await page.locator('#ticket-student-code').fill(ticket.studentCode)
+    await page.locator('#ticket-seat-number').fill(String(ticket.seatNumber))
+    await page.locator('#ticket-ip-address').fill(ticket.ipAddress)
+    await page.getByRole('button', { name: 'Xác nhận cấp vé' }).click()
+    await expect(page.getByText(`MSSV: ${ticket.studentCode}`)).toBeVisible()
 
     expect(ticketBody).toEqual({
       shiftId: officialShift.id,
-      studentId: ticket.studentId,
+      studentCode: ticket.studentCode,
       seatNumber: ticket.seatNumber,
       ipAddress: ticket.ipAddress,
     })

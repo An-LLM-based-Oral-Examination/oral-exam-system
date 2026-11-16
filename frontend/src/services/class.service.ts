@@ -7,6 +7,7 @@ import type {
   LecturerCourseOffering,
   ManagedClass,
   SemesterOption,
+  SemesterCourseOffering,
   StudentClassItem,
 } from '@/types/class.types'
 
@@ -60,6 +61,30 @@ export const classService = {
         isActive: readBool(item, 'isActive'),
       }))
       .filter((item) => item.id)
+  },
+
+  async listSemesterCourseOfferings(
+    semesterId: string,
+    includeInactive = false,
+  ): Promise<SemesterCourseOffering[]> {
+    const response = await apiClient.get<unknown>(`/semesters/${semesterId}/course-offerings`, {
+      params: { includeInactive },
+    })
+    return unwrapList(response.data)
+      .filter(isRecord)
+      .map((item) => ({
+        courseOfferingId: readString(item, 'courseOfferingId'),
+        courseId: readString(item, 'courseId'),
+        courseCode: readString(item, 'code', 'courseCode'),
+        courseName: readString(item, 'name', 'courseName'),
+        description: readString(item, 'description') || null,
+        credits: readNumber(item, 'credits'),
+        academicProgramId: readString(item, 'academicProgramId') || null,
+        academicProgramCode: readString(item, 'academicProgramCode') || null,
+        isCourseActive: readBool(item, 'isCourseActive', 'isActive'),
+        isSelected: readBool(item, 'isSelected'),
+      }))
+      .filter((item) => item.courseId && item.isCourseActive && item.isSelected)
   },
 
   async listMyOfferings(): Promise<LecturerCourseOffering[]> {

@@ -184,6 +184,8 @@ public class DuplicateQuestionAndExamSetTests
         var reloadedUnique = await context.ExamQuestions.FindAsync(uniqueQuestion.Id);
         reloadedUnique!.ApprovalStatus.Should().Be(ApprovalStatus.Approved);
         reloadedUnique.ApprovedBy.Should().Be(headId);
+        reloadedUnique.ApprovedAt.Should().NotBeNull();
+        reloadedUnique.ApprovedAt.Should().Be((await context.ExamSets.FindAsync(newSet.Id))!.ApprovedAt);
     }
 
     [Fact(DisplayName = "EXAMSET-03: Bàn giao bộ đề chính thức sang phòng Khảo thí (HANDED_OVER)")]

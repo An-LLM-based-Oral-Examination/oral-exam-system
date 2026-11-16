@@ -101,13 +101,46 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
         (await db.RefreshTokens.CountAsync()).Should().Be(1);
         (await db.Users.SingleAsync()).MustChangePassword.Should().BeTrue();
         (await db.AuditLogs.AnyAsync(row => row.Action == "GOOGLE_LOGIN_FAILED")).Should().BeTrue();
-        var refresh = json.GetProperty("refreshToken").GetString();
-        var rotated = await _client.PostAsJsonAsync("/api/v1/auth/refresh-token", new { refreshToken = refresh });
+        json.TryGetProperty("refreshToken", out _).Should().BeFalse("refresh token chỉ được lưu trong HttpOnly cookie");
+        var rotated = await _client.PostAsJsonAsync("/api/v1/auth/refresh-token", new { });
         rotated.EnsureSuccessStatusCode();
         var after = JsonDocument.Parse(await rotated.Content.ReadAsStringAsync()).RootElement;
-        after.GetProperty("refreshToken").GetString().Should().NotBe(refresh);
+        after.TryGetProperty("refreshToken", out _).Should().BeFalse();
         db.ChangeTracker.Clear();
         (await db.RefreshTokens.CountAsync(row => row.RevokedAt != null)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task LoginCookie_RestoresAnotherTab_AndSignOutClearsBrowserSession()
+    {
+        var login = await Login(await Challenge());
+        login.EnsureSuccessStatusCode();
+
+        var loginCookie = login.Headers.GetValues("Set-Cookie")
+            .Single(value => value.StartsWith("oes_refresh_session=", StringComparison.OrdinalIgnoreCase))
+            .ToLowerInvariant();
+        loginCookie.Should().Contain("httponly")
+            .And.Contain("samesite=strict")
+            .And.Contain("path=/api/v1/auth");
+        loginCookie.Should().NotContain("domain=");
+
+        var restored = await _client.PostAsJsonAsync("/api/v1/auth/refresh-token", new { });
+        restored.EnsureSuccessStatusCode();
+        var restoredBody = JsonDocument.Parse(await restored.Content.ReadAsStringAsync()).RootElement;
+        restoredBody.GetProperty("accessToken").GetString().Should().NotBeNullOrWhiteSpace();
+        restored.Headers.GetValues("Set-Cookie")
+            .Should().Contain(value => value.StartsWith("oes_refresh_session=", StringComparison.OrdinalIgnoreCase));
+
+        var signOut = await _client.PostAsJsonAsync("/api/v1/auth/sign-out", new { });
+        signOut.EnsureSuccessStatusCode();
+        signOut.Headers.GetValues("Set-Cookie")
+            .Should().Contain(value =>
+                value.StartsWith("oes_refresh_session=", StringComparison.OrdinalIgnoreCase)
+                && (value.Contains("max-age=0", StringComparison.OrdinalIgnoreCase)
+                    || value.Contains("expires=", StringComparison.OrdinalIgnoreCase)));
+
+        var afterSignOut = await _client.PostAsJsonAsync("/api/v1/auth/refresh-token", new { });
+        afterSignOut.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

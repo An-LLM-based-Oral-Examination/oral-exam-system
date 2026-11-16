@@ -1,5 +1,8 @@
 const ACTIVE_IDENTITY_KEY = 'oes_active_identity'
 const CHANNEL_NAME = 'oes-auth'
+const REFRESH_LOCK_KEY = 'oes_auth_refresh_lock'
+const REFRESH_LOCK_NAME = 'oes-auth-refresh'
+const REFRESH_LOCK_TTL_MS = 20_000
 
 type BrowserAuthEventType = 'LOGIN' | 'LOGOUT'
 
@@ -75,7 +78,81 @@ function broadcast(event: BrowserAuthEvent): void {
   }
 }
 
+interface RefreshLockLease {
+  owner: string
+  expiresAt: number
+}
+
+function readRefreshLease(): RefreshLockLease | null {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(REFRESH_LOCK_KEY) ?? 'null',
+    ) as Partial<RefreshLockLease> | null
+    return parsed && typeof parsed.owner === 'string' && typeof parsed.expiresAt === 'number'
+      ? (parsed as RefreshLockLease)
+      : null
+  } catch {
+    return null
+  }
+}
+
+async function waitForRefreshLease(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(done, 75)
+    function done() {
+      window.clearTimeout(timeout)
+      window.removeEventListener('storage', handleStorage)
+      resolve()
+    }
+    function handleStorage(event: StorageEvent) {
+      if (event.key === REFRESH_LOCK_KEY) done()
+    }
+    window.addEventListener('storage', handleStorage)
+  })
+}
+
+async function withStorageRefreshLock<T>(action: () => Promise<T>): Promise<T> {
+  const owner = createId()
+  const deadline = Date.now() + REFRESH_LOCK_TTL_MS * 2
+
+  while (Date.now() < deadline) {
+    let acquired = false
+    try {
+      const current = readRefreshLease()
+      if (!current || current.expiresAt <= Date.now()) {
+        const lease: RefreshLockLease = { owner, expiresAt: Date.now() + REFRESH_LOCK_TTL_MS }
+        localStorage.setItem(REFRESH_LOCK_KEY, JSON.stringify(lease))
+        acquired = readRefreshLease()?.owner === owner
+      }
+    } catch {
+      return action()
+    }
+
+    if (acquired) {
+      try {
+        return await action()
+      } finally {
+        try {
+          if (readRefreshLease()?.owner === owner) localStorage.removeItem(REFRESH_LOCK_KEY)
+        } catch {
+          // The lease expires automatically if storage becomes unavailable.
+        }
+      }
+    }
+    await waitForRefreshLease()
+  }
+
+  throw new Error('Không thể đồng bộ phiên làm mới đăng nhập giữa các tab.')
+}
+
 export const browserAuthSession = {
+  async withRefreshLock<T>(action: () => Promise<T>): Promise<T> {
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return navigator.locks.request(REFRESH_LOCK_NAME, action)
+    }
+    return withStorageRefreshLock(action)
+  },
+
   isIdentityAllowed(userId: string): boolean {
     const active = readActiveIdentity()
     return !active || active.userId === userId
