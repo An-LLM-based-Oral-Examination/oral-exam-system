@@ -22,35 +22,52 @@ function getInitialAuthState(): AuthState {
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>(getInitialAuthState)
-  const [isLoading, setIsLoading] = useState(() => Boolean(authService.getToken()))
+  const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const verificationGeneration = useRef(0)
   const { user, token } = authState
-  const invalidateVerification = useCallback(() => { ++verificationGeneration.current }, [])
+  const invalidateVerification = useCallback(() => {
+    ++verificationGeneration.current
+  }, [])
 
   const retryAuthentication = useCallback(() => {
     const generation = ++verificationGeneration.current
     const current = () => generation === verificationGeneration.current
-    const cachedUser = authService.getCurrentUser()
-    if (!authService.getToken() || !cachedUser || !browserAuthSession.isIdentityAllowed(cachedUser.id)) {
-      setAuthState({ user: null, token: null })
-      setIsLoading(false)
-      setAuthError(null)
-      return
-    }
     setIsLoading(true)
     setAuthError(null)
-    setAuthState({ user: null, token: authService.getToken() })
-    void authService.synchronizeCurrentUser(current).then((verifiedUser) => {
+
+    void (async () => {
+      const cachedUser = authService.getCurrentUser()
+      const cachedToken = authService.getToken()
+      if (cachedToken && cachedUser && browserAuthSession.isIdentityAllowed(cachedUser.id)) {
+        setAuthState({ user: null, token: cachedToken })
+        const verifiedUser = await authService.synchronizeCurrentUser(current)
+        if (!current()) return
+        if (!verifiedUser) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng thử lại.')
+        setAuthState({ user: verifiedUser, token: authService.getToken() })
+        setIsLoading(false)
+        return
+      }
+
+      if (cachedToken || cachedUser) authService.clearSession()
+      setAuthState({ user: null, token: null })
+      const restored = await authService.restoreSession(current)
       if (!current()) return
-      if (!verifiedUser) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng thử lại.')
-      setAuthState({ user: verifiedUser, token: authService.getToken() })
+      if (!restored) {
+        setIsLoading(false)
+        return
+      }
+
+      browserAuthSession.activateIdentity(restored.user.id)
+      setAuthState({ user: restored.user, token: restored.accessToken })
       setIsLoading(false)
-    }).catch(() => {
+    })().catch(() => {
       if (!current()) return
       setAuthState({ user: null, token: authService.getToken() })
       setIsLoading(false)
-      setAuthError('Không thể xác minh phiên đăng nhập với máy chủ. Vui lòng kiểm tra kết nối và thử lại.')
+      setAuthError(
+        'Không thể xác minh phiên đăng nhập với máy chủ. Vui lòng kiểm tra kết nối và thử lại.',
+      )
     })
   }, [])
 
@@ -79,37 +96,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const unsubscribeBrowserAuth = browserAuthSession.subscribe((event) => {
       const activeUser = authService.getCurrentUser()
-      if (!activeUser) return
-
-      const accountChanged = event.type === 'LOGIN' && event.userId !== activeUser.id
-      const accountLoggedOut = event.type === 'LOGOUT' && event.userId === activeUser.id
-      if (!accountChanged && !accountLoggedOut) return
-
-      ++verificationGeneration.current
-      setAuthState({ user: null, token: null })
-      setIsLoading(false)
-      setAuthError(null)
-      void authService.logout()
-      toast.warning(
-        accountChanged
-          ? 'Phiên đăng nhập đã chuyển sang tài khoản khác ở một tab khác.'
-          : 'Bạn đã đăng xuất ở một tab khác.',
-      )
-    })
-
-    const currentUser = authService.getCurrentUser()
-    if (currentUser && !browserAuthSession.claimIdentity(currentUser.id)) {
-      queueMicrotask(() => {
+      if (event.type === 'LOGOUT') {
+        if (!activeUser || event.userId !== activeUser.id) return
         ++verificationGeneration.current
         authService.clearSession()
         setAuthState({ user: null, token: null })
         setIsLoading(false)
-        toast.warning('Phiên đăng nhập đang được sử dụng bởi tài khoản khác trong trình duyệt này.')
-      })
-    }
+        setAuthError(null)
+        toast.warning('Bạn đã đăng xuất ở một tab khác.')
+        return
+      }
+
+      if (activeUser?.id === event.userId) return
+      ++verificationGeneration.current
+      authService.clearSession()
+      setAuthState({ user: null, token: null })
+      setIsLoading(true)
+      setAuthError(null)
+      retryAuthentication()
+      if (activeUser) toast.warning('Phiên đăng nhập đã chuyển sang tài khoản khác ở một tab khác.')
+    })
 
     let mounted = true
-    queueMicrotask(() => { if (mounted) retryAuthentication() })
+    queueMicrotask(() => {
+      if (mounted) retryAuthentication()
+    })
 
     return () => {
       mounted = false

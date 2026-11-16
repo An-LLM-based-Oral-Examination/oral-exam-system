@@ -65,7 +65,8 @@ function getLoginErrorMessage(error: unknown): string {
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { loginWithPassword, loginWithGoogle } = useAuth()
+  const { loginWithPassword, loginWithGoogle, isAuthenticated, isLoading: isAuthLoading, user } =
+    useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
@@ -77,6 +78,11 @@ export function LoginPage() {
   const [googleOriginError, setGoogleOriginError] = useState(false)
   const [googleChallengeError, setGoogleChallengeError] = useState(false)
   const [googleAttempt, setGoogleAttempt] = useState(0)
+
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated || !user) return
+    navigate(user.mustChangePassword ? '/change-password' : '/', { replace: true })
+  }, [isAuthLoading, isAuthenticated, navigate, user])
 
   // Intercept GSI_LOGGER warnings/errors to handle origin mismatch gracefully (with safeSerialize against circular structures)
   useEffect(() => {
