@@ -16,6 +16,7 @@ interface Seat {
   studentCode?: string | null
   fullName?: string | null
   ipAddress?: string | null
+  setCode?: string | null
   status?: string | null
   isCheckedIn: boolean
   isSuspended: boolean
@@ -60,6 +61,8 @@ export function ProctorAttendancePage() {
   const [shiftIdError, setShiftIdError] = useState('')
   const [suspendReasonError, setSuspendReasonError] = useState('')
   const [blurCountError, setBlurCountError] = useState('')
+  const [targetSeatInput, setTargetSeatInput] = useState('')
+  const [seatChangeError, setSeatChangeError] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -106,9 +109,53 @@ export function ProctorAttendancePage() {
     try {
       await proctorService.updateTicketAttendance(seat.ticketId, {
         isPresent: present,
-        ipAddress: seat.ipAddress ?? undefined,
       })
       setNotice(present ? `Đã điểm danh ghế ${seat.seatNumber}.` : `Đã ghi nhận ghế ${seat.seatNumber} vắng.`)
+      await loadAttendance()
+    } catch (actionError) {
+      setError(getErrorMessage(actionError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const changeSeat = async () => {
+    if (!monitor || !selectedSeat?.ticketId || !canRecordAttendance) return
+    const trimmed = targetSeatInput.trim()
+    const parsedSeat = Number(trimmed)
+    if (!trimmed || !Number.isInteger(parsedSeat) || /[.,]/.test(trimmed)) {
+      setSeatChangeError(`Số ghế mới phải là số nguyên từ 1 đến ${monitor.totalSeats}.`)
+      return
+    }
+    if (parsedSeat < 1 || parsedSeat > monitor.totalSeats) {
+      setSeatChangeError(
+        `Không thể đổi vé sang ghế ngoài phạm vi 1–${monitor.totalSeats} của ca thi.`,
+      )
+      return
+    }
+    if (parsedSeat === selectedSeat.seatNumber) {
+      setSeatChangeError('Vui lòng chọn số ghế khác với ghế hiện tại.')
+      return
+    }
+    const existingAtTarget = monitor.seats.find(
+      (item) => item.seatNumber === parsedSeat && item.isOccupied && item.ticketId !== selectedSeat.ticketId,
+    )
+    if (existingAtTarget) {
+      setSeatChangeError(`Ghế #${parsedSeat} đã được phân cho sinh viên khác.`)
+      return
+    }
+
+    setSeatChangeError('')
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await proctorService.updateTicketAttendance(selectedSeat.ticketId, {
+        isPresent: selectedSeat.isCheckedIn,
+        seatNumber: parsedSeat,
+      })
+      setNotice(`Đã chuyển vé từ ghế #${selectedSeat.seatNumber} sang ghế #${parsedSeat}.`)
+      setTargetSeatInput('')
       await loadAttendance()
     } catch (actionError) {
       setError(getErrorMessage(actionError))
@@ -173,16 +220,50 @@ export function ProctorAttendancePage() {
 
   if (!canView) return <div role="alert">Chỉ Giám thị được phân công và Khảo thí được truy cập ca thi.</div>
 
+  const seatCapacity =
+    typeof monitor?.totalSeats === 'number' && monitor.totalSeats > 0
+      ? monitor.totalSeats
+      : monitor?.seats.length
+  const renderedSeats: Seat[] = monitor
+    ? Array.from({ length: seatCapacity ?? 0 }, (_, index) => {
+        const seatNumber = index + 1
+        const found = monitor.seats.find((item) => item.seatNumber === seatNumber)
+        return (
+          found ?? {
+            seatNumber,
+            isOccupied: false,
+            ticketId: null,
+            studentCode: null,
+            fullName: null,
+            ipAddress: null,
+            setCode: null,
+            status: null,
+            isCheckedIn: false,
+            isSuspended: false,
+            suspensionReason: null,
+          }
+        )
+      })
+    : []
+
   return (
     <div className={ds.page}>
       <LecturerPageBanner
         icon={MonitorCheck}
-        eyebrow="Giám thị phòng Lab (40 ghế)"
+        eyebrow={
+          seatCapacity ? `Giám thị phòng Lab (${seatCapacity} ghế)` : 'Giám thị phòng Lab'
+        }
         title="Điểm danh & Báo cáo vi phạm phòng thi"
-        description="Giám thị đối chiếu thẻ SV/CCCD điểm danh STT (SeatNumber 1–40) và lập biên bản vi phạm an ninh phòng thi trực tiếp vào exam_anti_cheat_logs."
+        description={
+          seatCapacity
+            ? `Giám thị đối chiếu trực tiếp thẻ SV/CCCD điểm danh STT (SeatNumber 1–${seatCapacity}, không lưu CCCD trên trình duyệt) và lập biên bản vi phạm an ninh phòng thi trực tiếp vào exam_anti_cheat_logs.`
+            : 'Giám thị đối chiếu trực tiếp thẻ SV/CCCD điểm danh STT theo sức chứa ca thi và lập biên bản vi phạm an ninh phòng thi trực tiếp vào exam_anti_cheat_logs.'
+        }
         extras={
           <>
-            <BannerFact icon={Armchair}>Sơ đồ 40 ghế Lab</BannerFact>
+            <BannerFact icon={Armchair}>
+              {seatCapacity ? `Sơ đồ ${seatCapacity} ghế Lab` : 'Sơ đồ ghế phòng Lab'}
+            </BannerFact>
             <BannerFact icon={UserCheck} tone="green">
               Điểm danh thẻ SV/CCCD
             </BannerFact>
@@ -232,8 +313,9 @@ export function ProctorAttendancePage() {
         </div>
       ) : monitor ? (
         <>
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {[
+              ['Sức chứa ca', monitor.totalSeats],
               ['Đã cấp vé', monitor.assignedTicketsCount],
               ['Đã điểm danh', monitor.checkedInCount],
               ['Đang thi', monitor.inProgressCount],
@@ -250,7 +332,8 @@ export function ProctorAttendancePage() {
             <SectionHeader
               icon={UserCheck}
               title={`${monitor.shiftName} · ${monitor.roomLab}`}
-              hint={`Điểm danh ghế Lab · trạng thái: ${monitor.shiftStatus}`}
+              badge={`${monitor.assignedTicketsCount}/${monitor.totalSeats} ghế`}
+              hint={`Điểm danh ghế Lab (1–${monitor.totalSeats}) · Còn trống ${Math.max(0, monitor.totalSeats - monitor.assignedTicketsCount)} ghế · trạng thái: ${monitor.shiftStatus}`}
               action={
                 <button type="button" className={ds.outlineButton} onClick={() => void loadAttendance()}>
                   <RefreshCw className="size-4" /> Làm mới
@@ -258,12 +341,14 @@ export function ProctorAttendancePage() {
               }
             />
             <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 lg:grid-cols-5">
-              {monitor.seats.map((seat) => (
+              {renderedSeats.map((seat) => (
                 <button
                   key={seat.seatNumber}
                   type="button"
                   onClick={() => {
                     setSelectedSeat(seat)
+                    setTargetSeatInput(String(seat.seatNumber))
+                    setSeatChangeError('')
                     setViolationDetailsError('')
                     setSuspendReasonError('')
                     setBlurCountError('')
@@ -295,6 +380,11 @@ export function ProctorAttendancePage() {
                   <p className="mt-1 truncate font-mono text-[10px] text-[#718298]">
                     {seat.studentCode || seat.ipAddress || 'Chưa cấp vé'}
                   </p>
+                  {seat.isOccupied ? (
+                    <p className="mt-1 truncate text-[10px] font-semibold text-[#245997]">
+                      Đề: {seat.setCode || '—'} · {seat.status || 'SCHEDULED'}
+                    </p>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -307,7 +397,7 @@ export function ProctorAttendancePage() {
                     Ghế #{selectedSeat.seatNumber} · {selectedSeat.fullName || selectedSeat.studentCode}
                   </h2>
                   <p className="mt-1 text-xs text-[#687a91]">
-                    Trạng thái: {selectedSeat.status || 'SCHEDULED'} · IP: {selectedSeat.ipAddress || '—'}
+                    MSSV: {selectedSeat.studentCode || '—'} · Trạng thái: {selectedSeat.status || 'SCHEDULED'} · IP: {selectedSeat.ipAddress || '—'} · Bộ đề: {selectedSeat.setCode || '—'}
                   </p>
                 </div>
                 {canRecordAttendance && <div className="flex gap-2">
@@ -329,6 +419,41 @@ export function ProctorAttendancePage() {
                   </button>
                 </div>}
               </div>
+
+              {canRecordAttendance && (
+                <div className="rounded-xl border border-[#d6e4f2] bg-[#f8fbfd] p-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#1C4D8D]">
+                    Đổi ghế trong phạm vi sức chứa ca thi (1–{monitor.totalSeats})
+                  </h3>
+                  <div className="mt-3 flex flex-wrap items-start gap-3">
+                    <label className={cn(fieldLabelClass(Boolean(seatChangeError)), 'min-w-[200px]')}>
+                      Số ghế mới (1–{monitor.totalSeats})
+                      <input
+                        type="number"
+                        min={1}
+                        max={monitor.totalSeats}
+                        step={1}
+                        aria-label="Số ghế mới"
+                        className={cn(ds.field, 'mt-1', seatChangeError && fieldInvalidClass)}
+                        value={targetSeatInput}
+                        onChange={(event) => {
+                          setTargetSeatInput(event.target.value)
+                          if (seatChangeError) setSeatChangeError('')
+                        }}
+                      />
+                      <FieldError message={seatChangeError} />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void changeSeat()}
+                      className={cn(ds.outlineButton, 'mt-5')}
+                    >
+                      <Armchair className="size-4" /> Đổi ghế
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {canRecordAttendance && <div className="rounded-xl border border-[#d6e4f2] bg-[#f8fbfd] p-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1C4D8D]">

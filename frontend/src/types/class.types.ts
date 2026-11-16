@@ -7,6 +7,30 @@ export interface SemesterOption {
   isActive: boolean
 }
 
+export interface SemesterCourseOffering {
+  courseOfferingId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  description: string | null
+  credits: number
+  academicProgramId: string | null
+  academicProgramCode: string | null
+  isCourseActive: boolean
+  isSelected: boolean
+}
+
+export interface CourseLecturer {
+  lecturerId: string
+  fullName: string
+  email: string
+  studentCode: string | null
+  isActive: boolean
+  semesterId: string | null
+  semesterCode: string | null
+  courseOfferingId: string | null
+}
+
 export interface LecturerCourseOffering {
   courseOfferingId: string
   courseId: string

@@ -1,10 +1,11 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  LoaderCircle,
   RefreshCw,
   ScanSearch,
   TicketCheck,
@@ -12,10 +13,27 @@ import {
 import { officialExamService } from '@/services/officialExam.service'
 import type { ExamSet, ExamShift, OfficialExamSession } from '@/types/officialExam.types'
 import { PageBanner, SectionHeader } from '@/design/ui'
+import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { EmptyState } from '@/components/common/EmptyState'
 import { userMessage } from '@/lib/userMessage'
 import { toast } from '@/components/common/toastStore'
+import {
+  DEFAULT_SHIFT_CAPACITY,
+  MAX_SHIFT_CAPACITY,
+  MIN_SHIFT_CAPACITY,
+  getShiftCapacityMetrics,
+  validateShiftCapacityInput,
+} from '@/lib/shiftCapacity'
+
+function toDateTimeLocalValue(value: string) {
+  if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 16)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+}
 
 export function ExaminationOfficerExamDetailPage() {
   const { sessionId = '' } = useParams<{ sessionId: string }>()
@@ -24,6 +42,14 @@ export function ExaminationOfficerExamDetailPage() {
   const [examSets, setExamSets] = useState<ExamSet[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [editingShift, setEditingShift] = useState<ExamShift | null>(null)
+  const [editMaxSeats, setEditMaxSeats] = useState(String(DEFAULT_SHIFT_CAPACITY))
+  const [editShiftName, setEditShiftName] = useState('')
+  const [editRoomLab, setEditRoomLab] = useState('')
+  const [editStartTime, setEditStartTime] = useState('')
+  const [editEndTime, setEditEndTime] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState('')
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -65,6 +91,52 @@ export function ExaminationOfficerExamDetailPage() {
       toast.error(message)
     }
   }
+  const openEditShift = (shift: ExamShift) => {
+    setEditingShift(shift)
+    setEditShiftName(shift.shiftName || '')
+    setEditRoomLab(shift.roomLab || '')
+    setEditStartTime(toDateTimeLocalValue(shift.startTime))
+    setEditEndTime(toDateTimeLocalValue(shift.endTime))
+    setEditMaxSeats(String(shift.maxSeats ?? DEFAULT_SHIFT_CAPACITY))
+    setEditError('')
+  }
+  const submitEditShift = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingShift) return
+    const capacityCheck = validateShiftCapacityInput(editMaxSeats, {
+      defaultWhenEmpty: editingShift.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
+    })
+    if (capacityCheck.error || capacityCheck.value === null) {
+      setEditError(capacityCheck.error)
+      toast.error(capacityCheck.error)
+      return
+    }
+    setEditBusy(true)
+    setEditError('')
+    try {
+      await officialExamService.updateShift(editingShift.id, {
+        shiftName: editShiftName.trim() || editingShift.shiftName,
+        roomLab: editRoomLab.trim() || editingShift.roomLab,
+        startTime: new Date(editStartTime || editingShift.startTime).toISOString(),
+        endTime: new Date(editEndTime || editingShift.endTime).toISOString(),
+        proctorUserId: editingShift.proctorUserId ?? '',
+        examinerUserId: editingShift.examinerUserId ?? '',
+        maxSeats: capacityCheck.value,
+      })
+      toast.success('Đã cập nhật ca thi thành công.')
+      setEditingShift(null)
+      await load()
+    } catch (updateError) {
+      const message = userMessage(updateError, 'Không cập nhật được ca thi.')
+      setEditError(message)
+      toast.error(message)
+    } finally {
+      setEditBusy(false)
+    }
+  }
+  const editCapacityValidation = validateShiftCapacityInput(editMaxSeats, {
+    defaultWhenEmpty: editingShift?.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
+  })
   useEffect(() => {
     void load()
   }, [load])
@@ -109,40 +181,58 @@ export function ExaminationOfficerExamDetailPage() {
           hint={session ? `${session.examDate} · ${session.status}` : 'Đang tải thông tin kỳ thi'}
         />
         <div className="grid gap-3 p-5 md:grid-cols-2">
-          {shifts.map((shift) => (
-            <article key={shift.id} className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
-                  <p className="mt-1 text-xs text-[#5b6b84]">
-                    {shift.roomLab} · {shift.startTime}
-                  </p>
-                  <p className="mt-1 text-xs text-[#5b6b84]">
-                    Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
-                    khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
-                  </p>
+          {shifts.map((shift) => {
+            const capacity = getShiftCapacityMetrics(shift)
+            return (
+              <article key={shift.id} className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
+                    <p className="mt-1 text-xs text-[#5b6b84]">
+                      {shift.roomLab} · {shift.startTime}
+                    </p>
+                    <p className="mt-1 text-xs text-[#5b6b84]">
+                      Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
+                      khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
+                    </p>
+                    <p className="mt-1.5 text-xs font-semibold text-[#245997]">
+                      Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
+                      {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
+                      {capacity.remainingSeats ?? '—'}
+                    </p>
+                  </div>
+                  <span className={ds.infoChip}>{shift.status}</span>
                 </div>
-                <span className={ds.infoChip}>{shift.status}</span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
-                  <ScanSearch className="size-4" /> Giám sát
-                </Link>
-                <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
-                  <TicketCheck className="size-4" /> Điểm
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => void publishShift(shift.id)}
-                  disabled={shift.status.toUpperCase() === 'PUBLISHED'}
-                  className={ds.primaryButton}
-                >
-                  <CheckCircle2 className="size-4" />{' '}
-                  {shift.status.toUpperCase() === 'PUBLISHED' ? 'Đã xuất bản' : 'Xuất bản đề'}
-                </button>
-              </div>
-            </article>
-          ))}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
+                    <ScanSearch className="size-4" /> Giám sát
+                  </Link>
+                  <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
+                    <TicketCheck className="size-4" /> Điểm
+                  </Link>
+                  <Link to={`/examination-officer/shifts/${shift.id}/tickets/import`} className={ds.outlineButton}>
+                    <TicketCheck className="size-4" /> Import DSSV
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => openEditShift(shift)}
+                    className={ds.outlineButton}
+                  >
+                    Cập nhật ca
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void publishShift(shift.id)}
+                    disabled={shift.status.toUpperCase() === 'PUBLISHED'}
+                    className={ds.primaryButton}
+                  >
+                    <CheckCircle2 className="size-4" />{' '}
+                    {shift.status.toUpperCase() === 'PUBLISHED' ? 'Đã xuất bản' : 'Xuất bản đề'}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
           {!loading && shifts.length === 0 ? (
             <EmptyState
               compact
@@ -186,6 +276,88 @@ export function ExaminationOfficerExamDetailPage() {
           ) : null}
         </div>
       </section>
+      {editingShift ? (
+        <FormDialog
+          open
+          align="center"
+          size="md"
+          eyebrow="CẤU HÌNH CA THI MF-04"
+          title="Cập nhật ca thi"
+          icon={CalendarDays}
+          busy={editBusy}
+          onClose={() => !editBusy && setEditingShift(null)}
+          footer={
+            <DialogFooter className="justify-end bg-white">
+              <button
+                type="button"
+                className={ds.outlineButton}
+                onClick={() => setEditingShift(null)}
+                disabled={editBusy}
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                form="detail-update-shift-form"
+                disabled={editBusy}
+                className={ds.primaryButton}
+              >
+                {editBusy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+                {editBusy ? 'Đang lưu…' : 'Lưu cập nhật ca thi'}
+              </button>
+            </DialogFooter>
+          }
+        >
+          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-4">
+            {editError ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-4 py-3 text-sm font-semibold text-[#a43d4b]"
+              >
+                {editError}
+              </div>
+            ) : null}
+            <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="detail-edit-shift-name">
+              Tên ca *
+              <input
+                id="detail-edit-shift-name"
+                required
+                className={ds.field}
+                value={editShiftName}
+                onChange={(event) => setEditShiftName(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="detail-edit-shift-room">
+              Phòng Lab *
+              <input
+                id="detail-edit-shift-room"
+                required
+                className={ds.field}
+                value={editRoomLab}
+                onChange={(event) => setEditRoomLab(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="detail-edit-max-seats">
+              Sức chứa tối đa (maxSeats) *
+              <input
+                id="detail-edit-max-seats"
+                type="number"
+                min={MIN_SHIFT_CAPACITY}
+                max={MAX_SHIFT_CAPACITY}
+                step={1}
+                className={ds.field}
+                value={editMaxSeats}
+                onChange={(event) => setEditMaxSeats(event.target.value)}
+              />
+              {editMaxSeats.trim() !== '' && editCapacityValidation.error ? (
+                <span role="alert" className="text-[11px] font-semibold text-[#a43d4b]">
+                  {editCapacityValidation.error}
+                </span>
+              ) : null}
+            </label>
+          </form>
+        </FormDialog>
+      ) : null}
     </div>
   )
 }

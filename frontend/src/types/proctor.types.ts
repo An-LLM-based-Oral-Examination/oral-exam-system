@@ -6,6 +6,8 @@ export interface ProctorSeatItem {
   studentCode: string | null
   fullName: string | null
   ipAddress: string | null
+  examSetId?: string | null
+  setCode?: string | null
   status: string | null
   isCheckedIn: boolean
   isSuspended: boolean
@@ -34,6 +36,7 @@ export interface UpdateTicketAttendanceRequest {
   isPresent?: boolean
   ipAddress?: string | null
   note?: string | null
+  seatNumber?: number | null
 }
 
 export interface SuspendExamTicketRequest {
@@ -68,6 +71,8 @@ export interface TicketProctorActionResponse {
   fullName: string
   seatNumber: number
   ipAddress: string | null
+  examSetId?: string | null
+  setCode?: string | null
   status: string
   isSuspended: boolean
   suspensionReason: string | null

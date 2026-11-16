@@ -175,7 +175,10 @@ export function ExaminationOfficerShiftMonitorPage() {
                 {seat.studentCode || seat.studentId || 'Chưa cấp vé'}
               </p>
               <p className="mt-1 truncate text-xs text-[#5b6b84]">{seat.fullName || '—'}</p>
-              <p className="mt-2 truncate text-[11px] text-[#5b6b84]">
+              <p className="mt-1 truncate text-[11px] font-semibold text-[#245997]">
+                Bộ đề: {seat.setCode || '—'}
+              </p>
+              <p className="mt-1 truncate text-[11px] text-[#5b6b84]">
                 IP: {seat.ipAddress || 'Chưa niêm phong'}
               </p>
             </article>
