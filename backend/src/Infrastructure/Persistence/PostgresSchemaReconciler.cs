@@ -46,6 +46,7 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS academic_program_id uuid NULL;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
 
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
@@ -1045,6 +1046,7 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS academic_program_id uuid NULL;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
                 CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
@@ -1635,7 +1637,7 @@ DO $reconcile_pre$
 
         END
         $reconcile_post$;
-""";
+""" + QuestionReviewRequestSchema.CreateSql + QuestionReviewRequestSchema.BackfillSql;
 
     public static async Task ReconcilePreMigrationAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {

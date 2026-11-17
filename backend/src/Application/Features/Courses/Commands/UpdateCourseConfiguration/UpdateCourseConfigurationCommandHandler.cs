@@ -1,9 +1,13 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json;
+using System.Collections.Generic;
+using System.Linq;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Courses.DTOs;
 using OralExamination.Domain.Enums;
@@ -21,40 +25,46 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
 
     public async Task<Result<CourseConfigurationDto>> Handle(UpdateCourseConfigurationCommand request, CancellationToken cancellationToken)
     {
-        var (actorRole, actorUserId) = ParseActorRoleAndId(request.ActorRole);
-
-        if (string.Equals(actorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Giảng viên không có quyền cấu hình tham số môn học.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(actorRole) &&
-            !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ có Trưởng bộ môn hoặc Quản trị viên (Admin) mới có quyền cấu hình tham số môn học.");
-        }
-
-        if (request.MaxMockExamsPerDay.HasValue &&
-            !string.IsNullOrWhiteSpace(actorRole) &&
-            !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ có Quản trị viên (Admin) mới có quyền cấu hình hạn ngạch thi thử (MaxMockExamsPerDay).");
-        }
-
-        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
+        var (actorRole, actorUserId) = AcademicCourseOwnership.ParseActor(request.ActorRole);
+        var course = await _context.Courses
+            .Include(c => c.AcademicProgram)
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course == null)
         {
             return Result<CourseConfigurationDto>.Failure("Môn học không tồn tại trong hệ thống.");
         }
 
-        if (string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
-            course.DepartmentHeadUserId.HasValue &&
-            actorUserId.HasValue &&
-            actorUserId.Value != Guid.Empty &&
-            course.DepartmentHeadUserId.Value != actorUserId.Value)
+        if (!AcademicCourseOwnership.CanManage(course, actorRole, actorUserId))
         {
-            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Trưởng bộ môn chỉ được cấu hình môn học do mình phụ trách.");
+            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ Admin hoặc Trưởng bộ môn phụ trách được cấu hình môn học.");
+        }
+
+        if (request.MaxMockExamsPerDay.HasValue &&
+            !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ Admin được cấu hình hạn ngạch thi thử mỗi ngày.");
+        }
+
+        if (request.MockExamDifficultyDistribution is not null)
+        {
+            Dictionary<string, int>? distribution;
+            try
+            {
+                distribution = JsonSerializer.Deserialize<Dictionary<string, int>>(request.MockExamDifficultyDistribution);
+            }
+            catch (JsonException)
+            {
+                return Result<CourseConfigurationDto>.Failure("VALIDATION: Phân bổ độ khó không hợp lệ.");
+            }
+            var levels = new[] { "easy", "medium", "hard" };
+            if (distribution is null || distribution.Count != 3 ||
+                levels.Any(level => !distribution.ContainsKey(level)) ||
+                distribution.Values.Any(count => count < 0 || count > 100) ||
+                distribution.Values.Sum() is < 1 or > 100)
+                return Result<CourseConfigurationDto>.Failure("VALIDATION: Phân bổ độ khó phải có từ 1 đến 100 câu.");
+
+            course.MockExamDifficultyDistribution = JsonSerializer.Serialize(distribution);
+            course.MockExamTotalQuestions = distribution.Values.Sum();
         }
 
         course.TranscriptBufferSeconds = request.TranscriptBufferSeconds;
@@ -80,7 +90,7 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
             course.MockExamDurationMinutes = request.MockExamDurationMinutes.Value;
         }
 
-        if (request.MockExamTotalQuestions.HasValue && request.MockExamTotalQuestions.Value > 0)
+        if (request.MockExamDifficultyDistribution is null && request.MockExamTotalQuestions.HasValue && request.MockExamTotalQuestions.Value > 0)
         {
             course.MockExamTotalQuestions = request.MockExamTotalQuestions.Value;
         }
@@ -102,6 +112,7 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
             MaxMockExamsPerDay = course.MaxMockExamsPerDay,
             MockExamDurationMinutes = course.MockExamDurationMinutes,
             MockExamTotalQuestions = course.MockExamTotalQuestions,
+            MockExamDifficultyDistribution = course.MockExamDifficultyDistribution,
             MockExamBloomDistribution = course.MockExamBloomDistribution,
             HasFollowUp = course.HasFollowUp,
             ExamInputMode = course.ExamInputMode,
@@ -111,24 +122,4 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
         return Result<CourseConfigurationDto>.Success(dto);
     }
 
-    private static (string? Role, Guid? UserId) ParseActorRoleAndId(string? rawActorRole)
-    {
-        if (string.IsNullOrWhiteSpace(rawActorRole))
-        {
-            return (null, null);
-        }
-
-        var separatorIndex = rawActorRole.IndexOf(':');
-        if (separatorIndex > 0)
-        {
-            var rolePart = rawActorRole[..separatorIndex].Trim();
-            var idPart = rawActorRole[(separatorIndex + 1)..].Trim();
-            if (Guid.TryParse(idPart, out var parsedId) && parsedId != Guid.Empty)
-            {
-                return (rolePart, parsedId);
-            }
-        }
-
-        return (rawActorRole.Trim(), null);
-    }
 }

@@ -14,6 +14,7 @@ import {
   DepartmentCourseClosPage,
   DepartmentCoursesPage,
   DepartmentCourseDetailPage,
+  QuestionReviewRequestsPage,
   OfficialExamManagementPage,
   AppealManagementPage,
   AuditEvidencePage,
@@ -252,7 +253,10 @@ export const appRoutes = createRoutesFromElements(
             <Route path="/department-head/exam-structures" element={<OfficialExamManagementPage />} />
             <Route path="/department/clos" element={<Navigate to="/department-head/clos" replace />} />
             <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />
-            <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionStudioPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionReviewRequestsPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.questionBank} element={<QuestionStudioPage />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.questionReview}/bank`} element={<Navigate to={ROUTE_PATHS.departmentHead.questionBank} replace />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.questionReview}/:requestId`} element={<QuestionReviewRequestsPage />} />
             <Route path={ROUTE_PATHS.departmentHead.appeals} element={<AppealManagementPage />} />
           </Route>
         </Route>
@@ -294,3 +298,4 @@ export const appRoutes = createRoutesFromElements(
     <Route path="*" element={<Navigate to="/" replace />} />
   </>,
 )
+

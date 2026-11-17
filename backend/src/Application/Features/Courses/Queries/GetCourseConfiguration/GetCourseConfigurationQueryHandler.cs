@@ -38,6 +38,7 @@ public sealed class GetCourseConfigurationQueryHandler : IRequestHandler<GetCour
             MaxMockExamsPerDay = course.MaxMockExamsPerDay,
             MockExamDurationMinutes = course.MockExamDurationMinutes,
             MockExamTotalQuestions = course.MockExamTotalQuestions,
+            MockExamDifficultyDistribution = course.MockExamDifficultyDistribution,
             MockExamBloomDistribution = course.MockExamBloomDistribution,
             HasFollowUp = course.HasFollowUp,
             ExamInputMode = course.ExamInputMode,

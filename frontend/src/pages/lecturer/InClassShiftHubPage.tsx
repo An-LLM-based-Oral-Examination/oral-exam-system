@@ -1,3 +1,5 @@
+import { StatusTabs } from '@/components/common/StatusTabs'
+import { SearchField } from '@/components/common/SearchField'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { TwoStepProgress } from '@/design/TwoStepProgress'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
@@ -1118,7 +1120,7 @@ function CreateInClassShiftDialog({
                         {questionsLoading ? (
                           <p className="mt-2 text-xs text-[#5b6b84]">Đang tải câu hỏi...</p>
                         ) : questionOptions.length === 0 ? (
-                          <p className="mt-2 text-xs text-[#5b6b84]">Không có câu đã duyệt cho môn của lớp này.</p>
+                          <EmptyState compact className="mt-2" icon={Search} title="Chưa có câu hỏi đã duyệt" description="Môn của lớp này chưa có câu hỏi đã duyệt để chọn." />
                         ) : (
                           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
                             {renderQuestionChoices(questionOptions)}
@@ -1143,8 +1145,7 @@ function CreateInClassShiftDialog({
           beforeBody={
             <div className="border-b border-[#82aedb]/35 bg-white px-5 py-3">
               <label className="relative block">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" aria-hidden="true" />
-                <input
+                <SearchField
                   type="search"
                   aria-label="Tìm theo tiêu đề câu hỏi"
                   placeholder="Tìm theo tiêu đề câu hỏi"
@@ -1330,21 +1331,22 @@ export function InClassShiftHubPage({
               {lockedClassId ? null : (
               <FilterDropMenu
                 label="Lớp học phần"
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
                 value={classFilter}
                 onChange={setClassFilter}
                 options={classOptions}
                 emptyText="Chưa có lớp"
-                className="w-56 shrink-0"
+                className={ds.filterClass}
               />
               )}
               <div className="relative shrink-0">
-                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-                <input
+                <SearchField
                   value={searchInput.draft}
                   onChange={(event) => searchInput.change(event.target.value)}
                   onKeyDown={searchInput.onKeyDown}
                   placeholder="Tìm theo tên ca..."
-                  className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
+                  className={cn(ds.searchControl, 'h-10 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15')}
                 />
               </div>
               <button
@@ -1369,48 +1371,7 @@ export function InClassShiftHubPage({
 
         <div className="bg-white">
           <div className="px-4 pt-3 sm:px-6">
-            <div
-              className="flex flex-wrap items-end gap-0 border-b-2 border-[#1C4D8D]"
-              role="tablist"
-              aria-label="Lọc trạng thái ca"
-            >
-              {STATUS_FILTERS.map((tab) => {
-                const count = statusCounts[tab.value]
-                const active = statusFilter === tab.value
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setStatusFilter(tab.value)}
-                    className={cn(
-                      'relative inline-flex items-center gap-1.5 border px-3.5 py-2.5 text-[14px] font-bold whitespace-nowrap transition sm:px-4',
-                      active
-                        ? '-mb-0.5 rounded-t-xl border-[#1C4D8D] border-b-white bg-[linear-gradient(165deg,#BDE8F5_0%,#EAF6FB_42%,#ffffff_100%)] text-[#1C4D8D]'
-                        : 'mb-0 border-transparent text-[#6f7f93] hover:bg-[#F4FBFD] hover:text-[#1C4D8D]',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        active ? 'bg-[#1C4D8D]' : tab.dotClass,
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span>{tab.label}</span>
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
-                        active ? 'bg-[#1C4D8D]/12 text-[#1C4D8D]' : tab.countIdleClass,
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            <StatusTabs label="Lọc trạng thái ca" value={statusFilter} options={STATUS_FILTERS.map(tab => ({ ...tab, count: statusCounts[tab.value] }))} onChange={setStatusFilter} />
           </div>
         </div>
 

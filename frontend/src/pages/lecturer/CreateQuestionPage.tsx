@@ -94,13 +94,6 @@ const DIFFICULTIES: Array<{ value: QuestionDifficulty; label: string }> = [
   { value: 'hard', label: 'Khó' },
 ]
 
-/** Bloom gắn theo độ khó: Dễ → Remember, Trung bình → Apply, Khó → Analyze. */
-function bloomFromDifficulty(difficulty: QuestionDifficulty): BloomLevel {
-  if (difficulty === 'easy') return 'Remember'
-  if (difficulty === 'hard') return 'Analyze'
-  return 'Apply'
-}
-
 function createCriterion(maxScore = 5, bloomLevel: BloomLevel = 'Apply'): CriterionForm {
   return {
     localId: crypto.randomUUID(),
@@ -207,13 +200,13 @@ export function CreatePracticeQuestionForm({
   const [sampleAnswer, setSampleAnswer] = useState('')
   const [keyPointsInput, setKeyPointsInput] = useState('')
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('medium')
-  const bloomLevel = bloomFromDifficulty(difficulty)
+  const [bloomLevel, setBloomLevel] = useState<BloomLevel>('Apply')
   const [rubricName, setRubricName] = useState('')
   const [rubricDescription, setRubricDescription] = useState('')
   const [manualSource, setManualSource] = useState<QuestionSource>('manual')
   const [criteria, setCriteria] = useState<CriterionForm[]>(() => [
-    createCriterion(5, bloomFromDifficulty('medium')),
-    createCriterion(5, bloomFromDifficulty('medium')),
+    createCriterion(5),
+    createCriterion(5),
   ])
   const [manualErrors, setManualErrors] = useState<ManualFieldErrors>({})
   const [criterionErrors, setCriterionErrors] = useState<CriterionFieldErrors>({})
@@ -343,15 +336,14 @@ export function CreatePracticeQuestionForm({
     )
   }
 
-  const changeDifficulty = (value: QuestionDifficulty) => {
-    const nextBloom = bloomFromDifficulty(value)
-    setDifficulty(value)
-    setCriteria((current) => current.map((criterion) => ({ ...criterion, bloomLevel: nextBloom })))
+  const changeBloomLevel = (value: BloomLevel) => {
+    setBloomLevel(value)
+    setCriteria((current) => current.map((criterion) => ({ ...criterion, bloomLevel: value })))
   }
 
   const addCriterion = () => {
     clearManualError('criteria')
-    setCriteria((current) => [...current, createCriterion(0, bloomFromDifficulty(difficulty))])
+    setCriteria((current) => [...current, createCriterion(0, bloomLevel)])
   }
 
   const removeCriterion = (localId: string) => {
@@ -369,11 +361,12 @@ export function CreatePracticeQuestionForm({
     setSampleAnswer('')
     setKeyPointsInput('')
     setDifficulty('medium')
+    setBloomLevel('Apply')
     setRubricName('')
     setRubricDescription('')
     setCriteria([
-      createCriterion(5, bloomFromDifficulty('medium')),
-      createCriterion(5, bloomFromDifficulty('medium')),
+      createCriterion(5),
+      createCriterion(5),
     ])
     setManualSource('manual')
     setEditingGeneratedTempId('')
@@ -391,8 +384,9 @@ export function CreatePracticeQuestionForm({
     setSampleAnswer(question.modelAnswer)
     setKeyPointsInput(question.keyPoints.join('\n'))
     const nextDifficulty = question.difficulty
-    const nextBloom = bloomFromDifficulty(nextDifficulty)
+    const nextBloom = question.bloomLevel
     setDifficulty(nextDifficulty)
+    setBloomLevel(nextBloom)
     setRubricName(question.rubric.name)
     setRubricDescription(question.rubric.description ?? '')
     setCriteria(
@@ -511,7 +505,7 @@ export function CreatePracticeQuestionForm({
         return
       }
       setManualNotice(
-        `Đã lưu bản nháp luyện tập. Mã câu hỏi: ${result.questionId}. Bạn có thể gửi Trưởng Bộ môn duyệt ngay bên dưới.`,
+        `Đã lưu bản nháp luyện tập.`,
       )
       onCreated?.(result.questionId)
     } catch (saveError) {
@@ -783,7 +777,7 @@ export function CreatePracticeQuestionForm({
   )
 
   const dialogFooter = (
-    <DialogFooter className="bg-white [&_button]:shrink-0 [&_button]:whitespace-nowrap sm:flex-wrap sm:items-center sm:justify-between">
+    <DialogFooter className="flex-row flex-nowrap items-center justify-between overflow-x-auto bg-white [&_button]:shrink-0 [&_button]:whitespace-nowrap sm:flex-nowrap sm:justify-between">
       {mode && (
         <button
           type="button"
@@ -807,10 +801,11 @@ export function CreatePracticeQuestionForm({
       )}
       {mode === 'manual' ? (
         <>
-          <div className="flex w-full min-w-0 flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="ml-auto flex min-w-max flex-1 flex-nowrap items-center justify-end gap-2">
             {manualNotice && (
               <p
-                className="order-first text-xs font-semibold text-[#176f58] sm:order-none sm:mr-1 sm:min-w-28 sm:flex-1"
+                className="mr-auto max-w-28 truncate text-xs font-semibold text-[#176f58]"
+                title={manualNotice}
                 role="status"
               >
                 {manualNotice}
@@ -934,7 +929,7 @@ export function CreatePracticeQuestionForm({
                 <FilterDropMenu
                   label="Chọn độ khó"
                   value={difficulty}
-                  onChange={(value) => changeDifficulty(value as QuestionDifficulty)}
+                  onChange={(value) => setDifficulty(value as QuestionDifficulty)}
                   options={DIFFICULTIES}
                   className="mt-1.5 w-full"
                 />
@@ -959,6 +954,23 @@ export function CreatePracticeQuestionForm({
                   className="mt-1.5 w-full"
                 />
                 <FieldError message={manualErrors.clo || cloLoadError} />
+                {courseClos.find((clo) => clo.id === manualCloId) && (
+                  <p className="mt-1.5 text-xs text-[#5b6b84]">
+                    Bloom mục tiêu của CLO: <span className="font-semibold text-[#1C4D8D]">{courseClos.find((clo) => clo.id === manualCloId)?.bloomLevel}</span> · Thông tin tham khảo
+                  </p>
+                )}
+              </div>
+              <div className="min-w-0 sm:col-span-full">
+                <span className={fieldLabelClass(false)}>Bloom của câu hỏi</span>
+                <FilterDropMenu
+                  label="Bloom của câu hỏi"
+                  value={bloomLevel}
+                  onChange={(value) => changeBloomLevel(value as BloomLevel)}
+                  options={BLOOM_LEVELS.map((level) => ({ value: level, label: level }))}
+                  disabled={dialogBusy}
+                  className="mt-1.5 w-full"
+                  menuMinWidth={0}
+                />
               </div>
             </>
           )}
@@ -1021,7 +1033,7 @@ export function CreatePracticeQuestionForm({
                     placeholder="Tên ngắn gọn giúp nhận diện câu hỏi"
                     aria-invalid={Boolean(manualErrors.title)}
                     className={cn(
-                      'mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      'mt-1.5 min-h-11 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                       manualErrors.title && fieldInvalidClass,
                     )}
                   />
@@ -1043,7 +1055,7 @@ export function CreatePracticeQuestionForm({
                   placeholder="Viết đầy đủ yêu cầu mà sinh viên cần trình bày..."
                   aria-invalid={Boolean(manualErrors.content)}
                   className={cn(
-                    'mt-1.5 min-h-[calc(2lh+1.25rem+2px)] w-full resize-y [field-sizing:content] rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                    'mt-1.5 min-h-[calc(2lh+1.25rem+2px)] w-full min-w-0 max-w-full resize-y [field-sizing:content] rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                     manualErrors.content && fieldInvalidClass,
                   )}
                 />
@@ -1111,7 +1123,7 @@ export function CreatePracticeQuestionForm({
                   placeholder="Câu trả lời chuẩn mực dùng làm mốc chấm..."
                   aria-invalid={Boolean(manualErrors.sampleAnswer)}
                   className={cn(
-                    'mt-1.5 min-h-[calc(2lh+1.25rem+2px)] w-full resize-y [field-sizing:content] rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                    'mt-1.5 min-h-[calc(2lh+1.25rem+2px)] w-full min-w-0 max-w-full resize-y [field-sizing:content] rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                     manualErrors.sampleAnswer && fieldInvalidClass,
                   )}
                 />
@@ -1127,7 +1139,7 @@ export function CreatePracticeQuestionForm({
                   value={keyPointsInput}
                   onChange={(event) => setKeyPointsInput(event.target.value)}
                   placeholder={'Khái niệm trọng tâm\nLập luận cần có\nVí dụ hoặc tình huống'}
-                  className="mt-1.5 min-h-24 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                  className="mt-1.5 min-h-24 w-full min-w-0 max-w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm leading-relaxed text-[#0F2854] transition outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                 />
               </details>
 
@@ -1176,7 +1188,7 @@ export function CreatePracticeQuestionForm({
                     placeholder="Ví dụ: Rubric đánh giá kiến trúc"
                     aria-invalid={Boolean(manualErrors.rubricName)}
                     className={cn(
-                      'mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                      'mt-1.5 min-h-11 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                       manualErrors.rubricName && fieldInvalidClass,
                     )}
                   />
@@ -1188,7 +1200,7 @@ export function CreatePracticeQuestionForm({
                     value={rubricDescription}
                     onChange={(event) => setRubricDescription(event.target.value)}
                     placeholder="Mục tiêu đánh giá của rubric"
-                    className="mt-1.5 min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                    className="mt-1.5 min-h-11 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                   />
                 </label>
               </div>
@@ -1198,13 +1210,13 @@ export function CreatePracticeQuestionForm({
                   <div key={criterion.localId} className="relative">
                     <details
                       open={criterionErrors[criterion.localId] ? true : undefined}
-                      className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5"
+                      className="min-w-0 rounded-2xl border border-[#82aedb]/55 bg-white p-3.5"
                     >
-                      <summary className="cursor-pointer rounded-lg py-1 pr-10 text-sm font-semibold text-[#0F2854]">
+                      <summary className="cursor-pointer rounded-lg py-1 pr-10 wrap-anywhere text-sm font-semibold text-[#0F2854]">
                         {criterion.criterionName || `Tiêu chí ${index + 1}`} · {criterion.maxScore} điểm
                       </summary>
-                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <label className="block">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <label className="block min-w-0">
                           <span className={fieldLabelClass(Boolean(criterionErrors[criterion.localId]?.name))}>
                             Tiêu chí {index + 1}
                           </span>
@@ -1216,7 +1228,7 @@ export function CreatePracticeQuestionForm({
                             placeholder="Tên tiêu chí đánh giá"
                             aria-invalid={Boolean(criterionErrors[criterion.localId]?.name)}
                             className={cn(
-                              'mt-1 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-xs outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                              'mt-1 min-h-10 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-3 text-xs outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                               criterionErrors[criterion.localId]?.name && fieldInvalidClass,
                             )}
                           />
@@ -1241,7 +1253,7 @@ export function CreatePracticeQuestionForm({
                             }
                             aria-invalid={Boolean(criterionErrors[criterion.localId]?.score)}
                             className={cn(
-                              'mt-1 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
+                              'mt-1 min-h-10 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                               criterionErrors[criterion.localId]?.score && fieldInvalidClass,
                             )}
                           />
@@ -1257,7 +1269,7 @@ export function CreatePracticeQuestionForm({
                             updateCriterion(criterion.localId, 'description', event.target.value)
                           }
                           placeholder="Mô tả biểu hiện đạt điểm của tiêu chí..."
-                          className="w-full resize-y rounded-lg border border-[#4988C4] bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
+                          className="w-full min-w-0 max-w-full resize-y rounded-lg border border-[#4988C4] bg-white px-3 py-2 text-xs leading-relaxed outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
                         />
                       </label>
                     </details>
@@ -1594,14 +1606,14 @@ export function CreatePracticeQuestionForm({
                         <div className="mt-2 divide-y divide-[#82aedb]/35 rounded-xl border border-[#82aedb]/45 bg-white">
                           <section className="p-3 sm:px-4">
                             <h4 className="text-xs font-bold text-[#5b6b84] uppercase">Đề bài</h4>
-                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-[#24364f]">
+                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap wrap-anywhere text-[#24364f]">
                               {question.content}
                             </p>
                             <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} className="mt-3" />
                           </section>
                           <section className="p-3 sm:px-4">
                             <h4 className="text-xs font-bold text-[#5b6b84] uppercase">Đáp án mẫu</h4>
-                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-[#24364f]">
+                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap wrap-anywhere text-[#24364f]">
                               {question.modelAnswer}
                             </p>
                           </section>
@@ -1610,7 +1622,7 @@ export function CreatePracticeQuestionForm({
                             <ul className="mt-2 space-y-1.5">
                               {question.rubric.criteria.map((criterion, index) => (
                                 <li key={index} className="flex items-start justify-between gap-3 rounded-lg bg-[#F4F8FC] px-3 py-2 text-sm text-[#24364f]">
-                                  <span className="min-w-0 break-words">{criterion.criterionName}</span>
+                                  <span className="min-w-0 wrap-anywhere">{criterion.criterionName}</span>
                                   <span className="shrink-0 font-semibold whitespace-nowrap tabular-nums text-[#1C4D8D]">
                                     {criterion.maxScore} điểm
                                   </span>

@@ -1,12 +1,14 @@
+import { BackLink } from '@/components/common/BackLink'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, BookOpen, BookOpenCheck, CalendarDays, GraduationCap, Layers, UsersRound } from 'lucide-react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { BookOpen, BookOpenCheck, CalendarDays, GraduationCap, Layers, Settings2, UsersRound } from 'lucide-react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import DepartmentCourseClosPage from '@/pages/lecturer/DepartmentCourseClosPage'
 import { DepartmentLecturerAssignmentPage } from '@/pages/lecturer/DepartmentLecturerAssignmentPage'
+import { CourseConfigurationDialog } from '@/pages/lecturer/CourseConfigurationDialog'
 import { ROUTE_PATHS } from '@/routes/routePaths'
 import { courseCloService } from '@/services/courseClo.service'
 import { lecturerAssignmentService } from '@/services/lecturerAssignment.service'
@@ -22,6 +24,7 @@ export default function DepartmentCourseDetailPage() {
   const { courseId = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'clos' ? 'clos' : 'lecturers'
+  const [configurationOpen, setConfigurationOpen] = useState(false)
   const [result, setResult] = useState<{ id: string; course?: ManagedCloCourse; error?: string }>()
   const [termResult, setTermResult] = useState<{ id: string; offerings: AssignmentOffering[] }>()
   const [assignmentRevision, setAssignmentRevision] = useState(0)
@@ -96,13 +99,8 @@ export default function DepartmentCourseDetailPage() {
 
   return (
     <div lang="vi" className={cn(ds.page, 'space-y-3')}>
-      <Link
-        to={ROUTE_PATHS.departmentHead.courses}
-        className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-      >
-        <ArrowLeft className="size-5" aria-hidden="true" />
-        Về danh sách
-      </Link>
+      <BackLink
+        to={ROUTE_PATHS.departmentHead.courses}>Về danh sách</BackLink>
       {!detail ? (
         <p role="status" className={cn(ds.section, 'p-5 text-sm text-[#5b6b84]')}>Đang tải môn học…</p>
       ) : detail.error ? (
@@ -117,6 +115,9 @@ export default function DepartmentCourseDetailPage() {
                 <span className={ds.sectionIconWrap}><BookOpen className={ds.sectionIcon} /></span>
                 <h1 className={ds.sectionTitle}>{detail.course.name}</h1>
                 <span className={ds.sectionBadge}>{detail.course.code}</span>
+                <button type="button" className={cn(ds.outlineButton, 'ml-auto')} onClick={() => setConfigurationOpen(true)}>
+                  <Settings2 className="size-4" aria-hidden="true" /> Cấu hình môn học
+                </button>
               </div>
               {detail.course.description?.trim() && (
                 <p className={cn(ds.sectionHint, 'leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]')}>{detail.course.description}</p>
@@ -202,6 +203,9 @@ export default function DepartmentCourseDetailPage() {
           )}
           </div>
         </div>
+      )}
+      {configurationOpen && detail?.course && (
+        <CourseConfigurationDialog key={courseId} courseId={courseId} onClose={() => setConfigurationOpen(false)} />
       )}
     </div>
   )

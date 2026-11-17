@@ -6,7 +6,7 @@ function dateKey(value: string) {
   return year * 10000 + month * 100 + day
 }
 
-export function pickCurrentSemester(semesters: SemesterOption[]) {
+export function pickCurrentSemester(semesters: SemesterOption[], fallbackToFirst = true) {
   const today = new Date()
   const todayKey = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate()
   const covering = semesters.filter((item) => {
@@ -14,5 +14,5 @@ export function pickCurrentSemester(semesters: SemesterOption[]) {
     const end = dateKey(item.endDate)
     return start !== null && end !== null && todayKey >= start && todayKey <= end
   })
-  return covering.find((item) => item.isActive) ?? covering[0] ?? semesters.find((item) => item.isActive) ?? semesters[0]
+  return covering.find((item) => item.isActive) ?? covering[0] ?? semesters.find((item) => item.isActive) ?? (fallbackToFirst ? semesters[0] : undefined)
 }

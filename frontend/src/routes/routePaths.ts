@@ -11,6 +11,7 @@ export const ROUTE_PATHS = {
     courses: '/department-head/courses',
     dashboard: '/department-head/dashboard',
     questionReview: '/department-head/question-review',
+    questionBank: '/department-head/question-bank',
     appeals: '/department-head/appeals',
   },
   examinationOfficer: {
@@ -30,3 +31,4 @@ export const ROUTE_PATHS = {
     attendance: '/proctor/attendance',
   },
 } as const
+

@@ -55,6 +55,7 @@ public class ReviewQuestionDecisionCommandHandlerTests
             Code = "PRN231",
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
+            DepartmentHeadUserId = reviewer.Id,
             SemesterId = semester.Id,
             HasFollowUp = true,
             IsActive = true

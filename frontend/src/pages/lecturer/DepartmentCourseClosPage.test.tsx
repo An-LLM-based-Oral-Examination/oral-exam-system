@@ -39,7 +39,7 @@ describe('DepartmentCourseClosPage', () => {
     fireEvent.change(screen.getByLabelText('Mã CLO'), { target: { value: 'clo1' } })
     fireEvent.change(screen.getByLabelText('Tên / mô tả chuẩn đầu ra'), { target: { value: 'Duplicate outcome' } })
     fireEvent.click(screen.getByRole('button', { name: 'Lưu CLO' }))
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Mã CLO đã tồn tại trong môn học này.')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Mã CLO đã tồn tại trong môn học.')
     expect(courseCloService.create).not.toHaveBeenCalled()
   })
 

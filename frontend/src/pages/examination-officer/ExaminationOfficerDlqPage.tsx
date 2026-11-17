@@ -119,7 +119,7 @@ export function ExaminationOfficerDlqPage() {
           <div className="flex gap-2">
             <select
               aria-label="Lọc trạng thái DLQ"
-              className={ds.field}
+              className={cn(ds.field, ds.filterStatus)}
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >

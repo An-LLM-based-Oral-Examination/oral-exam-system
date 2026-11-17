@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
 export const SEARCH_DELAY_MS = 500
 
-export function useSearchInput(onApply?: () => void) {
-  const [draft, setDraft] = useState('')
-  const [query, setQuery] = useState('')
+export function useSearchInput(onApply?: (query: string) => void, initialValue = '') {
+  const [draft, setDraft] = useState(initialValue)
+  const [query, setQuery] = useState(initialValue.trim())
   const timer = useRef<number | undefined>(undefined)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
@@ -14,7 +14,7 @@ export function useSearchInput(onApply?: () => void) {
     const nextQuery = value.trim()
     if (nextQuery === query) return
     setQuery(nextQuery)
-    onApply?.()
+    onApply?.(nextQuery)
   }
 
   const change = (value: string) => {

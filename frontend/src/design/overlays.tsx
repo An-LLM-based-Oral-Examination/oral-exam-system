@@ -15,7 +15,7 @@ type LockScrollMode = boolean | 'mobile'
 function shouldLockScroll(mode: LockScrollMode) {
   if (mode === false) return false
   if (mode === true) return true
-  return !window.matchMedia('(min-width: 1024px)').matches
+  return !(window.matchMedia?.('(min-width: 1024px)').matches ?? window.innerWidth >= 1024)
 }
 
 function useOverlayChrome({

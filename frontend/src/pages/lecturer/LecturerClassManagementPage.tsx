@@ -1,17 +1,20 @@
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
 import { pickCurrentSemester } from '@/lib/semester'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, LoaderCircle, Plus, Search, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, Plus, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { DialogFooter, FormDialog } from '@/design/overlays'
+import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
@@ -178,8 +181,8 @@ export function LecturerClassManagementPage() {
                 }}
                 options={semesters}
                 emptyText="Chưa có học kỳ"
-                className="w-32"
-                menuMinWidth={192}
+                className={ds.filterSemester}
+                menuMinWidth={ds.filterMenuMinWidth}
               />
               <FilterDropMenu
                 label="Môn"
@@ -190,12 +193,12 @@ export function LecturerClassManagementPage() {
                 }}
                 options={courseOptions}
                 emptyText="Chưa có môn trong kỳ này"
-                className="w-40 xl:w-48"
-                menuMinWidth={352}
+                className={ds.filterCourse}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
               />
-              <div className="relative w-52 xl:w-60">
-                <Search className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4 text-[#1C4D8D]" aria-hidden="true" />
-                <input
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
                   type="search"
                   aria-label="Tìm theo tên lớp hoặc mã lớp"
                   placeholder="Tìm theo tên lớp hoặc mã lớp"
@@ -213,10 +216,7 @@ export function LecturerClassManagementPage() {
         </div>
         <div className={ds.sectionBody}>
           {loading ? (
-            <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#5b6b84]">
-              <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" />
-              Đang tải lớp...
-            </div>
+            <LoadingState label="Đang tải lớp…" />
           ) : visibleClasses.length === 0 ? (
             <EmptyState
               icon={UsersRound}
@@ -430,13 +430,7 @@ function CreateClassDialog({
       onClose={onClose}
       busy={busy}
       footer={(
-        <DialogFooter className="bg-white sm:flex-row">
-          <button type="button" onClick={onClose} disabled={busy} className={cn(ds.outlineButton, 'min-h-10')}>Hủy</button>
-          <button type="submit" form="create-class-form" disabled={busy || offerings.length === 0} className={cn(ds.primaryButton, 'min-h-10')}>
-            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-3.5" />}
-            Tạo lớp
-          </button>
-        </DialogFooter>
+        <SubmitDialogFooter form="create-class-form" label="Tạo lớp" busyLabel="Đang tạo…" busy={busy} disabled={offerings.length === 0} icon={Plus} onCancel={onClose} />
       )}
     >
       <form id="create-class-form" onSubmit={(event) => void submit(event)} className="space-y-3" noValidate>

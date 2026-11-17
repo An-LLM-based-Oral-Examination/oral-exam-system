@@ -6,6 +6,7 @@ import { appealsService } from '@/services/appeals.service'
 import type { Appeal } from '@/types/appeal.types'
 import { PageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 
@@ -199,7 +200,7 @@ export function ExaminationOfficerAppealDetailPage() {
         </div>
       ) : !loading ? (
         <div className={ds.section}>
-          <div className="p-5">Không tìm thấy đơn phúc khảo.</div>
+          <div className="p-5"><EmptyState icon={ClipboardCheck} title="Không tìm thấy đơn phúc khảo." /></div>
         </div>
       ) : null}
     </div>

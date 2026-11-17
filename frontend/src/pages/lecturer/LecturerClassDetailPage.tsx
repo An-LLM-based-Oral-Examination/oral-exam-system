@@ -1,8 +1,13 @@
+import { SectionHeader } from '@/design/ui'
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
+import { BackLink } from '@/components/common/BackLink'
 import { SEARCH_DELAY_MS, useSearchInput } from '@/hooks/useSearchInput'
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft,
+  Search,
   ClipboardList,
   Eye,
   EyeOff,
@@ -10,7 +15,6 @@ import {
   LoaderCircle,
   Lock,
   Plus,
-  Search,
   Save,
   Unlock,
   Users,
@@ -101,20 +105,12 @@ export function LecturerClassDetailPage() {
   return (
     <div lang="vi" className={cn(ds.page, 'pb-8')}>
       <div className="space-y-3">
-      <Link
-        to="/lecturer/classes"
-        className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-      >
-        <ArrowLeft className="size-5" aria-hidden="true" />
-        Về danh sách
-      </Link>
+      <BackLink
+        to="/lecturer/classes">Về danh sách</BackLink>
 
       <div className="space-y-6">
       {loading && !detail ? (
-        <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#5b6b84]">
-          <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" />
-          Đang tải lớp...
-        </div>
+        <LoadingState label="Đang tải lớp…" />
       ) : null}
 
       {detail ? (
@@ -304,25 +300,22 @@ function StudentRoster({
 
   return (
     <section className={ds.section}>
-      <div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}>
-        <div className={ds.sectionHeading}>
-          <div className={ds.sectionTitleRow}>
-            <span className={ds.sectionIconWrap}><Users className={ds.sectionIcon} /></span>
-            <h2 className={ds.sectionTitle}>Danh sách sinh viên</h2>
-            <span className={ds.sectionBadge}>{students.length} sinh viên</span>
-          </div>
-          <p className={ds.sectionHint}>Sinh viên đang tham gia lớp này</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative">
+      <SectionHeader
+        icon={Users}
+        title="Danh sách sinh viên"
+        badge={`${students.length} sinh viên`}
+        hint="Sinh viên đang tham gia lớp này"
+        className="flex-row flex-wrap items-center justify-between"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+          <label className={cn('relative', ds.searchControl)}>
             <span className="sr-only">Tìm sinh viên</span>
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-            <input
+            <SearchField
               value={keywordInput.draft}
               onChange={(event) => keywordInput.change(event.target.value)}
               onKeyDown={keywordInput.onKeyDown}
               placeholder="Tên, mã hoặc email"
-              className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#1C4D8D]/15"
+              className="h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#1C4D8D]/15"
             />
           </label>
           <button type="button" className={cn(ds.primaryButton, 'min-h-10')} onClick={onAdd}>
@@ -330,7 +323,8 @@ function StudentRoster({
             Thêm sinh viên
           </button>
         </div>
-      </div>
+        }
+      />
       <div className={cn(ds.sectionBody, students.length > 0 && 'py-0 sm:py-0')}>
         {detail.students.length === 0 ? (
           <EmptyState
@@ -422,15 +416,7 @@ function ResetJoinPasswordDialog({
       onClose={onClose}
       busy={saving}
       footer={(
-        <DialogFooter className="bg-white sm:flex-row">
-          <button type="button" className={cn(ds.outlineButton, 'min-h-10')} onClick={onClose} disabled={saving}>
-            Hủy
-          </button>
-          <button type="submit" form="reset-join-password" className={cn(ds.primaryButton, 'min-h-10')} disabled={saving}>
-            {saving ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-3.5" aria-hidden="true" />}
-            {saving ? 'Đang lưu…' : 'Lưu mật khẩu'}
-          </button>
-        </DialogFooter>
+        <SubmitDialogFooter form="reset-join-password" label="Lưu mật khẩu" busyLabel="Đang lưu…" busy={saving} icon={Save} onCancel={onClose} />
       )}
     >
       <form id="reset-join-password" onSubmit={submit}>

@@ -571,12 +571,7 @@ export function AuditEvidencePage() {
 
                 <div className="max-h-[560px] space-y-1.5 overflow-y-auto p-2 lg:max-h-[620px]">
                   {filteredEvidence.length === 0 ? (
-                    <div className="px-4 py-10 text-center">
-                      <BadgeCheck className="mx-auto size-6 text-[#47a88c]" />
-                      <p className="mt-2 text-xs font-bold text-[#5b6b84]">
-                        Không có bài trong nhóm này
-                      </p>
-                    </div>
+                    <EmptyState compact icon={BadgeCheck} title="Không có bài trong nhóm này" description="Chọn nhóm khác để xem bài làm." />
                   ) : (
                     filteredEvidence.map((candidate) => {
                       const active = candidate.ticketId === visibleSelectedTicketId

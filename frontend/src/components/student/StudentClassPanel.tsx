@@ -1,3 +1,4 @@
+import { SearchField } from '@/components/common/SearchField'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { InClassShift } from '@/types/inClassShift.types'
@@ -336,8 +337,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
         >
           <div ref={searchRef} className="relative min-w-0 sm:w-72">
             <label className="relative block">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" />
-              <input
+              <SearchField
                 value={keyword}
                 onChange={(event) => {
                   setSubmittedKeyword('')
@@ -377,7 +377,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 ) : searchFailed ? (
                   <p className="px-2 py-3 text-sm text-[#5b6b84]">Không thể tải kết quả tìm kiếm. Vui lòng thử lại.</p>
                 ) : openClasses.length === 0 ? (
-                  <p className="px-2 py-3 text-sm text-[#5b6b84]">Không có lớp khớp. Thử tên lớp hoặc mã môn khác.</p>
+                  <EmptyState compact icon={Search} title="Không tìm thấy lớp phù hợp" description="Thử tên lớp hoặc mã môn khác." />
                 ) : (
                   <ul className="space-y-1">
                     {openClasses.map((item) => (
@@ -441,7 +441,9 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 onChange={setSemesterId}
                 options={semesterOptions}
                 emptyText="Chưa có học kỳ"
-                className="w-40"
+                className={ds.filterSemester}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
               />
             )}
 

@@ -694,6 +694,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("mock_exam_bloom_distribution")
                         .HasDefaultValueSql("'{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}'::jsonb");
 
+                    b.Property<string>("MockExamDifficultyDistribution")
+                        .HasColumnType("text")
+                        .HasColumnName("mock_exam_difficulty_distribution");
+
                     b.Property<int>("MockExamDurationMinutes")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3147,6 +3151,86 @@ namespace OralExamination.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.QuestionReviewRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SubmittedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmittedBy");
+
+                    b.HasIndex("CourseId", "SubmittedAt");
+
+                    b.ToTable("question_review_requests", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.QuestionReviewRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UsageScope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsageScope", "QuestionId")
+                        .IsUnique()
+                        .HasFilter("\"Decision\" = 'PENDING'");
+
+                    b.HasIndex("RequestId", "QuestionId", "UsageScope")
+                        .IsUnique();
+
+                    b.ToTable("question_review_request_items", (string)null);
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4763,6 +4847,36 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.QuestionReviewRequest", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.User", "Lecturer")
+                        .WithMany()
+                        .HasForeignKey("SubmittedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("Lecturer");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.QuestionReviewRequestItem", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.QuestionReviewRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>
                 {
                     b.HasOne("OralExamination.Domain.Entities.User", "ExaminerUser")
@@ -4985,6 +5099,11 @@ namespace OralExamination.Infrastructure.Migrations
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeSession", b =>
                 {
                     b.Navigation("Answers");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.QuestionReviewRequest", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RealExamSessionShift", b =>

@@ -1,11 +1,17 @@
+import { StatusTabs } from '@/components/common/StatusTabs'
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { TextareaField } from '@/components/common/TextareaField'
+import { QuestionRowMetrics } from '@/components/question/QuestionRowMetrics'
+import { QuestionDrawer } from '@/components/question/QuestionDrawer'
+import { DividedList } from '@/components/common/DividedList'
+import { SearchField } from '@/components/common/SearchField'
+import { QuestionManagementTabs } from '@/pages/department-head/QuestionManagementTabs'
 import { useSearchInput } from '@/hooks/useSearchInput'
-import { CompactPagination } from '@/components/common/CompactPagination'
+import { ListPagination } from '@/components/common/ListPagination'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   Check,
   CheckCircle2,
   CircleDashed,
@@ -14,7 +20,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
-  Search,
+
   Send,
   ShieldCheck,
   Sparkles,
@@ -22,14 +28,13 @@ import {
   X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError } from '@/components/common/formField'
-import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { QuestionImage } from '@/components/question/QuestionImage'
+import { QuestionDetailContent } from '@/components/question/QuestionDetailContent'
 import { useAuth } from '@/hooks/useAuth'
 import { CreatePracticeQuestionDialog } from '@/pages/lecturer/CreateQuestionPage'
 import { courseService } from '@/services/course.service'
+import { courseCloService } from '@/services/courseClo.service'
 import { questionService } from '@/services/question.service'
 import type { UserRole } from '@/types/auth.types'
 import type {
@@ -41,9 +46,8 @@ import type {
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
-import { lockBodyScroll } from '@/design/bodyScrollLock'
-import { DialogFooter, FormDialog } from '@/design/overlays'
-import { ds, overlay } from '@/design/system'
+import { FormDialog } from '@/design/overlays'
+import { ds } from '@/design/system'
 
 type WorkspaceTab = 'mine' | 'bank'
 
@@ -92,7 +96,7 @@ const MY_STATUS_TABS: Array<{
 ]
 
 const BLOOM_OPTIONS = [
-  { value: '', label: 'Tất cả bậc Bloom' },
+  { value: '', label: 'Tất cả Bloom' },
   { value: 'Remember', label: 'Remember' },
   { value: 'Understand', label: 'Understand' },
   { value: 'Apply', label: 'Apply' },
@@ -121,7 +125,7 @@ const STATUS_META: Record<QuestionApprovalStatus, { label: string; className: st
   },
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string | null) {
   if (!value) return 'Chưa xác định'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Chưa xác định'
@@ -206,6 +210,7 @@ function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
 export function QuestionStudioPage() {
   const { user } = useAuth()
   const location = useLocation()
+  const isDepartmentWorkspace = location.pathname.startsWith('/department-head/')
   const navigate = useNavigate()
   const rawRole = String(user?.role ?? '')
   const canReviewQuestions =
@@ -214,7 +219,7 @@ export function QuestionStudioPage() {
     rawRole === 'department_head' ||
     rawRole === 'admin'
 
-  const [workspace, setWorkspace] = useState<WorkspaceTab>('mine')
+  const [workspace, setWorkspace] = useState<WorkspaceTab>(location.pathname.startsWith('/department-head/') ? 'bank' : 'mine')
   const [statusTab, setStatusTab] = useState<QuestionApprovalStatus | ''>('')
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
   const [questions, setQuestions] = useState<QuestionSummary[]>([])
@@ -260,8 +265,9 @@ export function QuestionStudioPage() {
 
   useEffect(() => {
     let isActive = true
-    void courseService
-      .getLecturerCourses()
+    void (isDepartmentWorkspace
+      ? courseCloService.getCurrentSemesterManagedCourses()
+      : courseService.getLecturerCourses())
       .then((items) => {
         if (!isActive) return
         setCourses(items)
@@ -275,7 +281,7 @@ export function QuestionStudioPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [isDepartmentWorkspace])
 
   useEffect(() => {
     let isActive = true
@@ -565,10 +571,6 @@ export function QuestionStudioPage() {
     if (!isDetailOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeDetail()
-        return
-      }
       if (event.key === 'ArrowLeft' && hasPrevDetail) {
         event.preventDefault()
         openAdjacentDetail(-1)
@@ -580,14 +582,10 @@ export function QuestionStudioPage() {
       }
     }
 
-    // Mobile: khóa scroll nền. Desktop: giữ list cuộn được để đổi câu hỏi.
-    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
-    const unlock = isDesktop ? undefined : lockBodyScroll()
     document.addEventListener('keydown', handleKeyDown)
     closeDetailButtonRef.current?.focus()
 
     return () => {
-      unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
@@ -735,7 +733,8 @@ export function QuestionStudioPage() {
       <section className={cn(ds.section, 'overflow-hidden')}>
         {/* Header section: tab cấp 1 + tiêu đề/lọc — một khối liền */}
         <div className={cn(ds.sectionHeader, 'space-y-3')}>
-          <div
+          {location.pathname.startsWith('/department-head/') && <QuestionManagementTabs />}
+          {!location.pathname.startsWith('/department-head/') && <div
             className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-[#82aedb]/55 bg-white/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]"
             role="tablist"
             aria-label="Không gian làm việc câu hỏi"
@@ -782,11 +781,11 @@ export function QuestionStudioPage() {
               />
               <span className="truncate">Ngân hàng câu hỏi</span>
             </button>
-          </div>
+          </div>}
 
           <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-            <div className={ds.sectionHeading}>
-              <div className={ds.sectionTitleRow}>
+            <div className={cn(ds.sectionHeading, 'shrink-0')}>
+              <div className={cn(ds.sectionTitleRow, 'flex-nowrap')}>
                 <span className={ds.sectionIconWrap}>
                   {workspace === 'mine' ? (
                     <UserRound className={ds.sectionIcon} />
@@ -797,36 +796,45 @@ export function QuestionStudioPage() {
                 <h2 className={ds.sectionTitle}>
                   {workspace === 'mine' ? 'Câu hỏi của tôi' : 'Ngân hàng câu hỏi'}
                 </h2>
-                <span className={ds.sectionBadge}>
+                <span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap')}>
                   {isLoading ? '…' : `${totalCount} câu hỏi`}
                 </span>
               </div>
               <p className={ds.sectionHint}>
                 {workspace === 'mine'
-                  ? 'Bản nháp do bạn tạo — chọn để gửi Trưởng Bộ môn duyệt'
-                  : 'Câu hỏi đã duyệt của các môn bạn được phân công'}
+                  ? 'Quản lý và gửi câu hỏi duyệt'
+                  : isDepartmentWorkspace ? 'Câu hỏi bộ môn trong kỳ hiện tại' : 'Câu hỏi đã duyệt của môn được phân công'}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto py-1 lg:ml-auto">
               <FilterDropMenu
                 label="Lọc theo môn học"
                 value={filters.courseId ?? ''}
                 onChange={(value) => updateFilter('courseId', value)}
                 options={courseFilterOptions}
-                menuMinWidth={352}
-                emptyText="Chưa có môn phân công"
-                className="w-56 shrink-0"
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
+                emptyText={isDepartmentWorkspace ? 'Chưa có môn trong kỳ hiện tại' : 'Chưa có môn phân công'}
+                className={ds.filterCourse}
               />
-              <div className="relative shrink-0">
-                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-                <input
+              <FilterDropMenu
+                label="Lọc theo bậc Bloom"
+                value={filters.bloomLevel ?? ''}
+                onChange={(value) => updateFilter('bloomLevel', value)}
+                options={BLOOM_OPTIONS}
+                className={ds.filterBloom}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
+              />
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
                   type="search"
                   value={searchInput.draft}
                   onChange={(event) => searchInput.change(event.target.value)}
                   onKeyDown={searchInput.onKeyDown}
                   placeholder="Tìm tiêu đề, nội dung..."
-                  className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
+                  className="h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
                 />
               </div>
               <button
@@ -852,59 +860,15 @@ export function QuestionStudioPage() {
           </div>
         </div>
 
-        {/* Tab trạng thái (folder style) + lọc phụ Bloom */}
+        {/* Tab trạng thái (folder style) và thao tác chọn câu hỏi */}
         <div className="bg-white">
           {workspace === 'mine' && (
             <div className="px-4 pt-3 sm:px-6">
-              <div
-                className="flex flex-wrap items-end gap-0 border-b-2 border-[#1C4D8D]"
-                role="tablist"
-                aria-label="Lọc theo trạng thái thẩm định"
-              >
-                {MY_STATUS_TABS.map((tab) => {
-                  const countKey = tab.value || 'ALL'
-                  const count = statusCounts[countKey]
-                  const active = statusTab === tab.value
-                  return (
-                    <button
-                      key={countKey}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => switchStatusTab(tab.value)}
-                      className={cn(
-                        'relative inline-flex items-center gap-1.5 border px-3.5 py-2.5 text-[14px] font-bold whitespace-nowrap transition sm:px-4',
-                        active
-                          ? '-mb-0.5 rounded-t-xl border-[#1C4D8D] border-b-white bg-[linear-gradient(165deg,#BDE8F5_0%,#EAF6FB_42%,#ffffff_100%)] text-[#1C4D8D]'
-                          : 'mb-0 border-transparent text-[#6f7f93] hover:bg-[#F4FBFD] hover:text-[#1C4D8D]',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'size-1.5 rounded-full',
-                          active ? 'bg-[#1C4D8D]' : tab.dotClass,
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span>{tab.label}</span>
-                      {typeof count === 'number' && (
-                        <span
-                          className={cn(
-                            'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
-                            active ? 'bg-[#1C4D8D]/12 text-[#1C4D8D]' : tab.countIdleClass,
-                          )}
-                        >
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+              <StatusTabs label="Lọc theo trạng thái thẩm định" value={statusTab} options={MY_STATUS_TABS.map(tab => ({ ...tab, count: statusCounts[tab.value || 'ALL'] }))} onChange={switchStatusTab} />
             </div>
           )}
 
-          <div
+          {showSelectionActions && <div
             className={cn(
               'flex flex-wrap items-center gap-2 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 sm:px-6',
               workspace === 'mine' ? undefined : 'border-t-0',
@@ -953,16 +917,7 @@ export function QuestionStudioPage() {
                 )}
               </div>
             )}
-            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-              <FilterDropMenu
-                label="Lọc theo bậc Bloom"
-                value={filters.bloomLevel ?? ''}
-                onChange={(value) => updateFilter('bloomLevel', value)}
-                options={BLOOM_OPTIONS}
-                className="w-44 shrink-0"
-              />
-            </div>
-          </div>
+          </div>}
         </div>
 
         {isLoading ? (
@@ -993,7 +948,7 @@ export function QuestionStudioPage() {
             />
           </div>
         ) : (
-          <div className="divide-y divide-[#4988C4]/30">
+          <DividedList as="div">
             {questions.map((question) => {
               const isSelected = selectedIds.has(question.id)
               const isViewing = isDetailOpen && viewingQuestionId === question.id
@@ -1022,10 +977,10 @@ export function QuestionStudioPage() {
                     }
                   }}
                   className={cn(
-                    'relative grid cursor-pointer gap-3 px-4 py-4 transition sm:px-5',
+                    'relative grid cursor-pointer gap-8 px-4 py-4 transition sm:px-5',
                     showSelectionActions
-                      ? 'lg:grid-cols-[auto_minmax(0,1fr)_140px_140px_auto] lg:items-center'
-                      : 'lg:grid-cols-[minmax(0,1fr)_140px_140px_auto] lg:items-center',
+                      ? 'lg:grid-cols-[auto_minmax(0,1fr)_100px_100px_auto] lg:items-center'
+                      : 'lg:grid-cols-[minmax(0,1fr)_100px_100px_auto] lg:items-center',
                     isViewing
                       ? 'bg-[#D7F1F8] shadow-[inset_4px_0_0_0_#1C4D8D] ring-1 ring-inset ring-[#4988C4]/55'
                       : isSelected
@@ -1072,33 +1027,18 @@ export function QuestionStudioPage() {
                         </span>
                       )}
                     </div>
-                    <h3 className="mt-2 line-clamp-2 text-sm leading-snug font-bold text-[#0F2854]">
+                    <h3 className="mt-1 line-clamp-2 text-sm leading-snug wrap-anywhere font-bold text-[#0F2854]">
                       {question.title}
                     </h3>
                     <p className="mt-1 text-xs text-[#8794a6]">
-                      Tạo ngày {formatDate(question.createdAt)} · Nguồn{' '}
+                      {workspace === 'bank' && question.approvedAt
+                        ? `Ngày duyệt ${formatDate(question.approvedAt)}`
+                        : `Tạo ngày ${formatDate(question.createdAt)}`} · Nguồn{' '}
                       {getSourceLabel(question.source)}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 lg:block">
-                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Bloom</span>
-                    <span className="mt-0.5 inline-flex rounded-lg bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#1C4D8D]">
-                      {question.bloomLevel}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 lg:block">
-                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Barem</span>
-                    <span
-                      className={cn(
-                        'mt-0.5 text-sm font-black',
-                        question.totalRubricScore === 10 ? 'text-[#168367]' : 'text-[#b8404b]',
-                      )}
-                    >
-                      {question.totalRubricScore.toFixed(1)} / 10
-                    </span>
-                  </div>
+                  <QuestionRowMetrics bloom={question.bloomLevel} score={question.totalRubricScore} />
 
                   <button
                     type="button"
@@ -1119,18 +1059,16 @@ export function QuestionStudioPage() {
                 </article>
               )
             })}
-          </div>
+          </DividedList>
         )}
 
         {!isLoading && questions.length > 0 && (
-          <div className="border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
-            <CompactPagination
+          <ListPagination
               label="Phân trang câu hỏi luyện tập"
               page={pageNumber}
               pageCount={totalPages}
               onPageChange={setPageNumber}
             />
-          </div>
         )}
       </section>
 
@@ -1144,17 +1082,15 @@ export function QuestionStudioPage() {
           busy={isSubmitting}
           onClose={() => setSubmissionOpen(false)}
           footer={(
-            <DialogFooter className="bg-white sm:flex-row">
-              <button type="button" className={ds.outlineButton} disabled={isSubmitting} onClick={() => setSubmissionOpen(false)}>
-                Hủy
-              </button>
-              <button type="submit" form="submit-questions-form" className={ds.primaryButton} disabled={isSubmitting || selectedQuestions.length === 0}>
-                {isSubmitting
-                  ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  : <Send className="size-4" aria-hidden="true" />}
-                {isSubmitting ? 'Đang gửi…' : 'Xác nhận gửi'}
-              </button>
-            </DialogFooter>
+            <SubmitDialogFooter
+              form="submit-questions-form"
+              label="Xác nhận gửi"
+              busyLabel="Đang gửi…"
+              busy={isSubmitting}
+              disabled={selectedQuestions.length === 0}
+              icon={Send}
+              onCancel={() => setSubmissionOpen(false)}
+            />
           )}
         >
           <form id="submit-questions-form" className="space-y-3" onSubmit={(event) => {
@@ -1165,261 +1101,46 @@ export function QuestionStudioPage() {
               <p className="text-sm font-semibold text-[#0F2854]">{selectedQuestions.length} bản nháp được chọn</p>
               <span className={ds.infoChip}>{selectedQuestions[0]?.courseCode}</span>
             </div>
-            <label className="block">
-              <span className={fieldLabelClass(false)}>Ghi chú (không bắt buộc)</span>
-              <textarea
+            <TextareaField label="Ghi chú (không bắt buộc)"  
                 value={submissionNotes}
                 onChange={(event) => setSubmissionNotes(event.target.value)}
                 disabled={isSubmitting}
                 maxLength={1000}
-                placeholder="Nhập ghi chú cho Trưởng Bộ môn"
-                className={cn(ds.field, 'mt-1.5 block min-h-24 resize-y py-2.5 leading-relaxed font-normal')}
-              />
-            </label>
+                placeholder="Nhập ghi chú cho Trưởng Bộ môn" />
           </form>
         </FormDialog>
       )}
 
       {isDetailOpen && (
-        <>
-          {/* Mobile: overlay đóng drawer. Desktop: để trống để bấm đổi câu trên list. */}
-          <button
-            type="button"
-            className={cn(overlay.scrimDrawer, overlay.z.drawer)}
-            onClick={closeDetail}
-            aria-label="Đóng chi tiết câu hỏi"
-          />
-          <aside
-            className={cn(overlay.drawer, overlay.z.modal, 'max-w-xl')}
-            aria-label="Chi tiết câu hỏi"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className={cn(overlay.header, 'flex items-start justify-between gap-3 px-4 py-3.5 sm:px-5')}>
-              <div className="min-w-0 flex-1">
-                {selectedQuestion ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[#1C4D8D]">
-                        {selectedQuestion.courseCode}
-                      </span>
-                      <StatusBadge status={selectedQuestion.approvalStatus} />
-                      {detailIndex >= 0 && (
-                        <span className="text-[11px] font-semibold text-[#7a8aa0]">
-                          {detailIndex + 1}/{questions.length}
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="mt-1.5 line-clamp-2 text-base font-bold text-[#0F2854] sm:text-lg">
-                      {selectedQuestion.title}
-                    </h2>
-                    <p className="mt-1.5 text-xs font-medium text-[#6f8198]">
-                      {[
-                        getDifficultyLabel(selectedQuestion.difficulty),
-                        selectedQuestion.bloomLevel,
-                        getSourceLabel(selectedQuestion.source),
-                        formatDate(selectedQuestion.createdAt),
-                        selectedQuestion.submittedByName
-                          ? selectedQuestion.submittedByName
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </>
-                ) : (
-                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
-                    Đang tải nội dung...
-                  </h2>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={!hasPrevDetail || isDetailLoading}
-                  onClick={() => openAdjacentDetail(-1)}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
-                  aria-label="Câu hỏi trước"
-                  title="Câu hỏi trước (←)"
-                >
-                  <ArrowLeft className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  disabled={!hasNextDetail || isDetailLoading}
-                  onClick={() => openAdjacentDetail(1)}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
-                  aria-label="Câu hỏi tiếp"
-                  title="Câu hỏi tiếp (→)"
-                >
-                  <ArrowRight className="size-4" />
-                </button>
-                <button
-                  ref={closeDetailButtonRef}
-                  type="button"
-                  onClick={closeDetail}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#82aedb]/55 bg-white text-[#5f7088] transition hover:bg-[#f2f5f9] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-                  aria-label="Đóng bảng chi tiết"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {isDetailLoading ? (
-                <div className="flex min-h-[50vh] flex-col items-center justify-center">
-                  <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
-                  <p className="mt-3 text-sm font-semibold text-[#708096]">
-                    Đang tải chi tiết...
-                  </p>
-                </div>
-              ) : detailLoadFailed && !selectedQuestion ? (
-                <div className="m-5">
-                  <EmptyState compact icon={AlertCircle} title="Không thể tải chi tiết câu hỏi" />
-                </div>
-              ) : selectedQuestion ? (
-                <div className="space-y-4 px-4 pt-4 pb-6 sm:px-5 sm:pt-5">
-                  {selectedQuestion.reviewNotes && (
-                    <section className={cn('rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4', ds.panelShadow)}>
-                      <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
-                        <Sparkles className="size-4" />
-                        Phản hồi Trưởng Bộ môn
-                      </p>
-                      <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#755826]">
-                        {selectedQuestion.reviewNotes}
-                      </p>
-                    </section>
-                  )}
-
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                      Nội dung câu hỏi
-                    </p>
-                    <QuestionImage
-                      imageUrl={selectedQuestion.imageUrl}
-                      imageAlt={selectedQuestion.imageAlt}
-                      className="mt-3"
-                    />
-                    <p
-                      className={cn(
-                        'text-[15px] leading-relaxed font-medium whitespace-pre-wrap text-[#0F2854]',
-                        selectedQuestion.imageUrl ? 'mt-4' : 'mt-3',
-                      )}
-                    >
-                      {selectedQuestion.content}
-                    </p>
-                  </section>
-
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                          Barem Rubric
-                        </p>
-                        <h3 className="mt-1 text-sm font-bold text-[#0F2854]">
-                          {selectedQuestion.rubric.name}
-                        </h3>
-                      </div>
-                      <span
-                        className={cn(
-                          'rounded-xl px-3 py-2 text-sm font-black',
-                          selectedQuestion.rubric.totalMaxScore === 10
-                            ? 'bg-[#eaf9f4] text-[#14765c]'
-                            : 'bg-[#fff0f1] text-[#ae3945]',
-                        )}
-                      >
-                        {selectedQuestion.rubric.totalMaxScore.toFixed(1)} / 10
-                      </span>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      {selectedQuestion.rubric.criteria.map((criterion, index) => {
-                        const ratio = Math.min(
-                          100,
-                          Math.max(0, (criterion.maxScore / 10) * 100),
-                        )
-                        return (
-                          <div
-                            key={criterion.id}
-                            className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD]/40 p-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm font-bold text-[#30445f]">
-                                {index + 1}. {criterion.criterionName}
-                              </p>
-                              <span className="shrink-0 font-mono text-xs font-black text-[#1C4D8D]">
-                                {criterion.maxScore.toFixed(1)}đ
-                              </span>
-                            </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#dce6f2]">
-                              <div
-                                className="h-full rounded-full bg-[#4988C4]"
-                                style={{ width: `${ratio}%` }}
-                              />
-                            </div>
-                            {criterion.description && (
-                              <p className="mt-2 text-xs leading-relaxed text-[#78879a]">
-                                {criterion.description}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </section>
-
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                      Câu trả lời mẫu
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#586a82]">
-                      {selectedQuestion.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
-                    </p>
-                  </section>
-
-                  {canReviewQuestions &&
-                    (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
-                      selectedQuestion.approvalStatus === 'DRAFT' ||
-                      selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
-                      <section className={cn('space-y-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4', ds.panelShadow)}>
-                        <label className="block">
-                          <span
-                            className={cn(
-                              'flex items-center gap-2 text-xs font-bold',
-                              reviewNotesError ? 'text-[#c2415b]' : 'text-[#0F2854]',
-                            )}
-                          >
-                            <ShieldCheck className={cn('size-3.5', reviewNotesError ? 'text-[#c2415b]' : 'text-[#1C4D8D]')} />
-                            Nhận xét khi yêu cầu sửa / từ chối
-                          </span>
-                          <textarea
-                            value={reviewNotes}
-                            onChange={(event) => {
-                              setReviewNotes(event.target.value)
-                              setReviewNotesError('')
-                            }}
-                            aria-invalid={reviewNotesError ? true : undefined}
-                            placeholder="Tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối..."
-                            className={cn(
-                              'mt-2 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D]',
-                              reviewNotesError && fieldInvalidClass,
-                            )}
-                          />
-                          <FieldError message={reviewNotesError} />
-                        </label>
-                      </section>
-                    )}
-                </div>
-              ) : null}
-            </div>
-
-            {selectedQuestion &&
+        <QuestionDrawer
+          onClose={closeDetail}
+          closeRef={closeDetailButtonRef}
+          onPrevious={hasPrevDetail && !isDetailLoading ? () => openAdjacentDetail(-1) : undefined}
+          onNext={hasNextDetail && !isDetailLoading ? () => openAdjacentDetail(1) : undefined}
+          title={selectedQuestion?.title ?? 'Đang tải nội dung...'}
+          badges={selectedQuestion && (
+            <>
+              <span className="font-mono text-xs font-bold text-[#1C4D8D]">{selectedQuestion.courseCode}</span>
+              <StatusBadge status={selectedQuestion.approvalStatus} />
+              {detailIndex >= 0 && <span className="text-[11px] font-semibold text-[#7a8aa0]">{detailIndex + 1}/{questions.length}</span>}
+            </>
+          )}
+          meta={selectedQuestion && [
+            getDifficultyLabel(selectedQuestion.difficulty),
+            selectedQuestion.bloomLevel,
+            getSourceLabel(selectedQuestion.source),
+            workspace === 'bank' && selectedQuestion.approvedAt
+              ? `Ngày duyệt ${formatDate(selectedQuestion.approvedAt)}`
+              : formatDate(selectedQuestion.createdAt),
+            selectedQuestion.submittedByName,
+          ].filter(Boolean).join(' · ')}
+          footer={selectedQuestion &&
               !isDetailLoading &&
               (selectedQuestion.approvalStatus === 'DRAFT' ||
                 selectedQuestion.approvalStatus === 'NEEDS_REVISION' ||
                 (canReviewQuestions &&
                   selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW')) && (
-                <div className="shrink-0 space-y-2 border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
+                <div className="space-y-2">
                   {(selectedQuestion.approvalStatus === 'DRAFT' ||
                     selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
                     <button
@@ -1473,8 +1194,52 @@ export function QuestionStudioPage() {
                     )}
                 </div>
               )}
-          </aside>
-        </>
+        >
+              {isDetailLoading ? (
+                <div className="flex min-h-[50vh] flex-col items-center justify-center">
+                  <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
+                  <p className="mt-3 text-sm font-semibold text-[#708096]">
+                    Đang tải chi tiết...
+                  </p>
+                </div>
+              ) : detailLoadFailed && !selectedQuestion ? (
+                <div className="m-5">
+                  <EmptyState compact icon={AlertCircle} title="Không thể tải chi tiết câu hỏi" />
+                </div>
+              ) : selectedQuestion ? (
+                <div className="space-y-4 px-4 pt-4 pb-6 sm:px-5 sm:pt-5">
+                  {selectedQuestion.reviewNotes && (
+                    <section className={cn('rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4', ds.panelShadow)}>
+                      <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
+                        <Sparkles className="size-4" />
+                        Phản hồi Trưởng Bộ môn
+                      </p>
+                      <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#755826]">
+                        {selectedQuestion.reviewNotes}
+                      </p>
+                    </section>
+                  )}
+
+                  <QuestionDetailContent question={selectedQuestion} />
+
+                  {canReviewQuestions &&
+                    (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
+                      selectedQuestion.approvalStatus === 'DRAFT' ||
+                      selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
+                      <section className={cn('space-y-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4', ds.panelShadow)}>
+                        <TextareaField label="Nhận xét thẩm định" error={reviewNotesError} className="min-h-20"
+                            value={reviewNotes}
+                            onChange={(event) => {
+                              setReviewNotes(event.target.value)
+                              setReviewNotesError('')
+                            }}
+                            
+                            placeholder="Tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối..." />
+                      </section>
+                    )}
+                </div>
+              ) : null}
+        </QuestionDrawer>
       )}
 
       <CreatePracticeQuestionDialog

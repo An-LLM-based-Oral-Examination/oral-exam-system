@@ -1,5 +1,8 @@
+import { SearchField } from '@/components/common/SearchField'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchInput } from '@/hooks/useSearchInput'
+import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import {
   ChevronLeft,
   ChevronRight,
@@ -7,7 +10,6 @@ import {
   KeyRound,
   LoaderCircle,
   RefreshCw,
-  Search,
   ShieldAlert,
   Sliders,
   UserCheck,
@@ -349,9 +351,8 @@ export function AdminDashboardPage() {
           <div className="flex flex-col gap-3 rounded-2xl border border-[#82aedb]/50 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-1 flex-wrap items-center gap-3">
               {/* Search */}
-              <div className="relative min-w-[240px] flex-1 max-w-md">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#82aedb]" />
-                <input
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
                   value={userSearch.draft}
                   onChange={(event) => userSearch.change(event.target.value)}
                   onKeyDown={userSearch.onKeyDown}
@@ -367,7 +368,7 @@ export function AdminDashboardPage() {
                   setUserRoleFilter(e.target.value)
                   setUserPage(1)
                 }}
-                className="rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none"
+                className={cn(ds.filterRole, 'rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none')}
               >
                 <option value="">Tất cả vai trò</option>
                 {SYSTEM_ROLES.map((r) => (
@@ -384,7 +385,7 @@ export function AdminDashboardPage() {
                   setUserStatusFilter(e.target.value as 'all' | 'active' | 'locked')
                   setUserPage(1)
                 }}
-                className="rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none"
+                className={cn(ds.filterStatus, 'rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none')}
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="active">Đang hoạt động</option>
@@ -429,8 +430,8 @@ export function AdminDashboardPage() {
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-[#63738a]">
-                        Không tìm thấy người dùng nào phù hợp với bộ lọc.
+                      <td colSpan={7} className="p-5">
+                        <EmptyState icon={Users} title="Không tìm thấy người dùng phù hợp" description="Thử thay đổi từ khóa hoặc bộ lọc." />
                       </td>
                     </tr>
                   ) : (
@@ -574,8 +575,8 @@ export function AdminDashboardPage() {
                   </tr>
                 ) : configs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-[#63738a]">
-                      Chưa có tham số hệ thống nào trong bảng system_configs.
+                    <td colSpan={5} className="p-5">
+                      <EmptyState icon={Sliders} title="Chưa có tham số hệ thống" description="Các tham số cấu hình sẽ xuất hiện tại đây." />
                     </td>
                   </tr>
                 ) : (
@@ -625,7 +626,7 @@ export function AdminDashboardPage() {
                 onChange={(event) => logEntityFilter.change(event.target.value)}
                 onKeyDown={logEntityFilter.onKeyDown}
                 placeholder="Lọc theo tên bảng (users, config...)"
-                className="rounded-xl border border-[#82aedb]/50 bg-[#F4FBFD]/50 px-3 py-1.5 text-xs text-[#0F2854] outline-none"
+                className={cn(ds.searchControl, 'rounded-xl border border-[#82aedb]/50 bg-[#F4FBFD]/50 px-3 py-1.5 text-xs text-[#0F2854] outline-none')}
               />
             </div>
           </div>
@@ -653,8 +654,8 @@ export function AdminDashboardPage() {
                     </tr>
                   ) : logs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-[#63738a]">
-                        Chưa có bản ghi kiểm toán nào phù hợp.
+                      <td colSpan={6} className="p-5">
+                        <EmptyState icon={FileText} title="Chưa có bản ghi kiểm toán phù hợp" description="Thử thay đổi bộ lọc hoặc kiểm tra lại sau." />
                       </td>
                     </tr>
                   ) : (

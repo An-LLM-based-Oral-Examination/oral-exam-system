@@ -167,6 +167,7 @@ public class CoursesController : ControllerBase
             MaxMockExamsPerDay = request.MaxMockExamsPerDay,
             MockExamDurationMinutes = request.MockExamDurationMinutes,
             MockExamTotalQuestions = request.MockExamTotalQuestions,
+            MockExamDifficultyDistribution = request.MockExamDifficultyDistribution,
             MockExamBloomDistribution = request.MockExamBloomDistribution,
             ActorRole = actorRole
         };

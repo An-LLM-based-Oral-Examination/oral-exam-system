@@ -12,6 +12,82 @@ namespace OralExamination.UnitTests.Features.Courses.Handlers;
 
 public class UpdateCourseConfigurationCommandHandlerTests
 {
+    [Theory]
+    [InlineData("{\"easy\":1,\"medium\":2,\"hard\":1}", true)]
+    [InlineData("{\"easy\":0,\"medium\":0,\"hard\":0}", false)]
+    [InlineData("{\"easy\":-1,\"medium\":2,\"hard\":1}", false)]
+    [InlineData("{\"Apply\":3}", false)]
+    [InlineData("invalid", false)]
+    public async Task Handle_DifficultyDistributionDeterminesQuestionCount(string distribution, bool valid)
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+        var originalCount = course.MockExamTotalQuestions;
+        var command = new UpdateCourseConfigurationCommand(course.Id, 60, 2, true)
+        {
+            ActorRole = "admin",
+            MockExamDifficultyDistribution = distribution,
+            MockExamTotalQuestions = 99
+        };
+        var result = await new UpdateCourseConfigurationCommandHandler(context).Handle(command, default);
+        result.IsSuccess.Should().Be(valid);
+        course.MockExamTotalQuestions.Should().Be(valid ? 4 : originalCount);
+        if (valid) course.MockExamDifficultyDistribution.Should().NotBeNull();
+        else course.MockExamDifficultyDistribution.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("program", true)]
+    [InlineData("legacy", false)]
+    [InlineData("other", false)]
+    [InlineData("missing", false)]
+    [InlineData("missing_id", false)]
+    public async Task Handle_UsesProgramOwnership(string actor, bool allowed)
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+        var programOwner = Guid.NewGuid();
+        var legacyOwner = Guid.NewGuid();
+        course.DepartmentHeadUserId = legacyOwner;
+        course.AcademicProgram = new AcademicProgram
+        {
+            Code = "SE", Name = "Software Engineering", DepartmentHeadUserId = programOwner
+        };
+        await context.SaveChangesAsync();
+        var id = actor == "program" ? programOwner : actor == "legacy" ? legacyOwner : Guid.NewGuid();
+        var command = new UpdateCourseConfigurationCommand(course.Id, 90, 2, true)
+        {
+            ActorRole = actor switch
+            {
+                "missing" => null,
+                "missing_id" => "department_head",
+                _ => $"department_head:{id}"
+            }
+        };
+
+        var result = await new UpdateCourseConfigurationCommandHandler(context).Handle(command, default);
+        result.IsSuccess.Should().Be(allowed);
+        course.TranscriptBufferSeconds.Should().Be(allowed ? 90 : 60);
+    }
+
+    [Fact]
+    public async Task Handle_LegacyOwnerCanConfigureButCannotChangeQuota()
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+        var owner = Guid.NewGuid();
+        course.DepartmentHeadUserId = owner;
+        await context.SaveChangesAsync();
+        var handler = new UpdateCourseConfigurationCommandHandler(context);
+        var command = new UpdateCourseConfigurationCommand(course.Id, 90, 2, true)
+        {
+            ActorRole = $"department_head:{owner}"
+        };
+        (await handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        (await handler.Handle(command with { MaxMockExamsPerDay = 5 }, default)).IsSuccess.Should().BeFalse();
+        course.MaxMockExamsPerDay.Should().Be(3);
+    }
+
     private OralExamDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
@@ -65,7 +141,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 90,
             MaxFollowUpQuestions: 3,
             HasFollowUp: true
-        );
+        ) { ActorRole = "admin" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -95,7 +171,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 120,
             MaxFollowUpQuestions: 2,
             HasFollowUp: false
-        );
+        ) { ActorRole = "admin" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -117,7 +193,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 45,
             MaxFollowUpQuestions: 2,
             HasFollowUp: null
-        );
+        ) { ActorRole = "admin" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -145,6 +221,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             ExamInputMode: "VoiceOnly"
         )
         {
+            ActorRole = "admin",
             MaxMockExamsPerDay = 5
         };
 

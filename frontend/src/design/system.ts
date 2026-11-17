@@ -18,6 +18,17 @@ const panelShadow = 'shadow-[0_1px_0_#fff_inset,0_8px_16px_rgba(15,40,84,0.16)]'
 
 export const ds = {
   page: 'space-y-6',
+  /** Chiều rộng theo loại bộ lọc trên trang, không dùng trong form/popup. */
+  filterCourse: 'w-56 max-w-full shrink-0',
+  filterSemester: 'w-40 max-w-full shrink-0',
+  filterBloom: 'w-36 max-w-full shrink-0',
+  filterStatus: 'w-44 max-w-full shrink-0',
+  filterClass: 'w-48 max-w-full shrink-0',
+  filterRole: 'w-48 max-w-full shrink-0',
+  filterFlow: 'w-48 max-w-full shrink-0',
+  searchControl: 'w-60 max-w-full shrink-0',
+  /** Menu rộng bằng ô mở; component vẫn giới hạn theo viewport. */
+  filterMenuMinWidth: 0,
   panelShadow,
   banner:
     'relative isolate overflow-hidden rounded-[22px] border border-[#0F2854] bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] shadow-[0_16px_36px_rgba(15,40,84,0.22)]',

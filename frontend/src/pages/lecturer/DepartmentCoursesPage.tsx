@@ -1,5 +1,6 @@
+import { SearchField } from '@/components/common/SearchField'
 import { useEffect, useState } from 'react'
-import { ArrowRight, BookOpen, BookOpenCheck, GraduationCap, Layers, LoaderCircle, Search, UsersRound } from 'lucide-react'
+import { ArrowRight, BookOpen, BookOpenCheck, GraduationCap, Layers, LoaderCircle, UsersRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
@@ -117,11 +118,12 @@ export default function DepartmentCoursesPage() {
               emptyText="Chưa có học kỳ"
               value={semesterId}
               onChange={setSemesterId}
-              className="w-40 max-w-full"
+              className={ds.filterSemester}
+              menuMinWidth={ds.filterMenuMinWidth}
+              wrapOptions
             />
-            <div className="relative w-64 max-w-full">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" aria-hidden="true" />
-              <input
+            <div className={cn('relative', ds.searchControl)}>
+              <SearchField
                 type="search"
                 aria-label="Tìm theo tên hoặc mã môn"
                 placeholder="Tìm theo tên hoặc mã môn"

@@ -1,3 +1,4 @@
+import { SearchField } from '@/components/common/SearchField'
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
@@ -12,7 +13,7 @@ import {
   MapPin,
   Plus,
   RefreshCw,
-  Search,
+
   Users,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -698,10 +699,9 @@ export function ExaminationOfficerExamManagementPage() {
           ))}
         </div>
         <div className="flex flex-col gap-3 border-b border-[#d9e8f2] p-5 sm:flex-row">
-          <label className="relative min-w-0 flex-1" htmlFor="shift-search">
+          <label className={cn('relative', ds.searchControl)} htmlFor="shift-search">
             <span className="sr-only">Tìm ca thi</span>
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#71829a]" />
-            <input
+            <SearchField
               id="shift-search"
               className={cn(ds.field, 'pl-10')}
               value={shiftSearch}
@@ -709,7 +709,7 @@ export function ExaminationOfficerExamManagementPage() {
               onChange={(event) => setShiftSearch(event.target.value)}
             />
           </label>
-          <label className="sm:w-52" htmlFor="shift-status-filter">
+          <label className={ds.filterStatus} htmlFor="shift-status-filter">
             <span className="sr-only">Lọc trạng thái ca thi</span>
             <select
               id="shift-status-filter"

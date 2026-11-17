@@ -1,10 +1,13 @@
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { TextareaField } from '@/components/common/TextareaField'
 import { useEffect, useState, type FormEvent } from 'react'
-import { BookOpenCheck, LoaderCircle, Pencil, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BookOpenCheck, Pencil, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { fieldLabelClass } from '@/components/common/formFieldClasses'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
+import { FieldError } from '@/components/common/formField'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
-import { DialogFooter, FormDialog } from '@/design/overlays'
+import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { courseCloService } from '@/services/courseClo.service'
@@ -35,6 +38,13 @@ export default function DepartmentCourseClosPage({
   const [editing, setEditing] = useState<CourseClo | 'new' | null>(null)
   const [deleting, setDeleting] = useState<CourseClo | null>(null)
   const [form, setForm] = useState(freshForm())
+  const [fieldErrors, setFieldErrors] = useState<{ cloCode?: string; description?: string; bloomLevel?: string }>({})
+
+  function updateForm<Key extends keyof UpdateCourseCloInput>(key: Key, value: UpdateCourseCloInput[Key]) {
+    setForm(current => ({ ...current, [key]: value }))
+    setFieldErrors(current => ({ ...current, [key]: undefined }))
+    setError('')
+  }
 
   useEffect(() => {
     if (managedCourse) return
@@ -70,6 +80,7 @@ export default function DepartmentCourseClosPage({
   }
 
   function startEdit(clo?: CourseClo) {
+    setFieldErrors({})
     setEditing(clo ?? 'new')
     setForm(clo ? {
       cloCode: clo.cloCode, description: clo.description, bloomLevel: clo.bloomLevel,
@@ -83,14 +94,19 @@ export default function DepartmentCourseClosPage({
     event.preventDefault()
     if (!editing || !courseId || busy) return
     const input = { ...form, cloCode: form.cloCode.trim().toUpperCase(), description: form.description.trim() }
-    if (!input.cloCode || input.cloCode.length > 30 || !input.description || input.description.length > 1000
-      || !Number.isInteger(input.orderIndex) || input.orderIndex < 1) {
-      setError('Nhập mã CLO tối đa 30 ký tự, mô tả tối đa 1000 ký tự và thứ tự là số nguyên dương.'); return
-    }
+    const errors: typeof fieldErrors = {}
+    if (!input.cloCode) errors.cloCode = 'Vui lòng nhập mã CLO.'
+    else if (input.cloCode.length > 30) errors.cloCode = 'Mã CLO không được vượt quá 30 ký tự.'
+    if (!input.description) errors.description = 'Vui lòng nhập mô tả chuẩn đầu ra.'
+    else if (input.description.length > 1000) errors.description = 'Mô tả không được vượt quá 1000 ký tự.'
+    if (!CLO_BLOOM_LEVELS.includes(input.bloomLevel)) errors.bloomLevel = 'Vui lòng chọn Bloom mục tiêu hợp lệ.'
     if (clos.some(item => item.id !== (editing === 'new' ? '' : editing.id)
       && item.cloCode.trim().toUpperCase() === input.cloCode)) {
-      setError('Mã CLO đã tồn tại trong môn học này.'); return
+      errors.cloCode = 'Mã CLO đã tồn tại trong môn học.'
     }
+    setFieldErrors(errors)
+    setError('')
+    if (Object.keys(errors).length > 0) return
     setBusy(true)
     setError('')
     try {
@@ -141,9 +157,10 @@ export default function DepartmentCourseClosPage({
         </div>
         {(managedCourse || courses.length > 0) && <div className="flex min-w-0 flex-wrap items-center gap-2">
       {!managedCourse && (
-        <div className="w-56 max-w-full">
+        <div className={ds.filterCourse}>
           <FilterDropMenu
             label="Môn học phụ trách"
+            menuMinWidth={ds.filterMenuMinWidth}
             value={courseId}
             disabled={busy}
             options={courses.map((course) => ({ value: course.id, label: `${course.code} — ${course.name}` }))}
@@ -194,7 +211,7 @@ export default function DepartmentCourseClosPage({
                   )}
                 </div>
                 <div className="flex items-center gap-2 lg:block">
-                  <span className="text-xs font-semibold text-[#8995a6] lg:block">Bloom</span>
+                  <span className="text-xs font-semibold text-[#8995a6] lg:block">Bloom mục tiêu</span>
                   <span className="mt-0.5 inline-flex rounded-lg bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#1C4D8D]">{clo.bloomLevel}</span>
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap">
@@ -224,36 +241,38 @@ export default function DepartmentCourseClosPage({
       size="sm"
       busy={busy}
       onClose={() => setEditing(null)}
-      footer={<DialogFooter className="bg-white sm:flex-row">
-        <button className={button} type="button" disabled={busy} onClick={() => setEditing(null)}>Hủy</button>
-        <button className={ds.primaryButton} type="submit" form="department-clo-form" disabled={busy}>
-          {busy ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
-          {busy ? 'Đang lưu…' : 'Lưu CLO'}
-        </button>
-      </DialogFooter>}
+      footer={<SubmitDialogFooter
+              form="department-clo-form"
+              label="Lưu CLO"
+              busyLabel="Đang lưu…"
+              busy={busy}
+              icon={Save}
+              onCancel={() => setEditing(null)}
+            />}
     >
-      <form id="department-clo-form" onSubmit={event => void save(event)} className="grid gap-4 sm:grid-cols-2">
+      <form id="department-clo-form" noValidate onSubmit={event => void save(event)} className="grid gap-4 sm:grid-cols-2">
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">{error}</p>}
         <label className="block min-w-0">
-          <span className={fieldLabelClass(false)}>Mã CLO</span>
-          <input className={cn(control, 'mt-1.5')} placeholder="Ví dụ: CLO1" value={form.cloCode} maxLength={30} required disabled={busy} onChange={event => setForm({ ...form, cloCode: event.target.value })} />
+          <span className={fieldLabelClass(Boolean(fieldErrors.cloCode))}>Mã CLO</span>
+          <input className={cn(control, 'mt-1.5', fieldErrors.cloCode && fieldInvalidClass)} aria-invalid={Boolean(fieldErrors.cloCode)} aria-describedby={fieldErrors.cloCode ? 'clo-code-error' : undefined} placeholder="Ví dụ: CLO1" value={form.cloCode} maxLength={30} required disabled={busy} onChange={event => updateForm('cloCode', event.target.value)} />
+          {fieldErrors.cloCode && <div id="clo-code-error" role="alert"><FieldError message={fieldErrors.cloCode} /></div>}
         </label>
         <div className="min-w-0">
-          <span className={fieldLabelClass(false)}>Cấp độ Bloom</span>
+          <span className={fieldLabelClass(Boolean(fieldErrors.bloomLevel))}>Bloom mục tiêu</span>
           <FilterDropMenu
-            label="Cấp độ Bloom"
+            label="Bloom mục tiêu"
             className="mt-1.5"
             disabled={busy}
+            invalid={Boolean(fieldErrors.bloomLevel)}
             value={form.bloomLevel}
             menuMinWidth={0}
             options={CLO_BLOOM_LEVELS.map((level) => ({ value: level, label: level }))}
-            onChange={(value) => setForm({ ...form, bloomLevel: value as CloBloomLevel })}
+            onChange={(value) => updateForm('bloomLevel', value as CloBloomLevel)}
           />
+          <p className="mt-1.5 text-xs leading-relaxed text-[#5b6b84]">Mức tư duy mà sinh viên cần đạt</p>
+          {fieldErrors.bloomLevel && <div role="alert"><FieldError message={fieldErrors.bloomLevel} /></div>}
         </div>
-        <label className="block sm:col-span-2">
-          <span className={fieldLabelClass(false)}>Tên / mô tả chuẩn đầu ra</span>
-          <textarea className={cn(control, 'mt-1.5 block resize-y py-2.5 leading-relaxed font-normal')} placeholder="Nhập kiến thức hoặc năng lực sinh viên cần đạt" rows={3} maxLength={1000} required disabled={busy} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
-        </label>
+        <TextareaField label="Tên / mô tả chuẩn đầu ra" error={fieldErrors.description} wrapperClassName="sm:col-span-2"    placeholder="Nhập kiến thức hoặc năng lực sinh viên cần đạt" rows={3} maxLength={1000} required disabled={busy} value={form.description} onChange={event => updateForm('description', event.target.value)} />
 
         {editing !== 'new' && (
           <button

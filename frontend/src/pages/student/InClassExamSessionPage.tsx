@@ -1,4 +1,5 @@
 import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useNavigate } from 'react-router-dom'
@@ -781,9 +782,9 @@ export function InClassExamSessionPage() {
         </header>
 
         {questions.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-[#5b6b84]">
-            Ca chưa phân câu hỏi. Báo giảng viên kiểm tra ngân hàng câu đã duyệt.
-          </p>
+          <div className="p-5">
+            <EmptyState icon={Mic} title="Ca chưa phân câu hỏi" description="Báo giảng viên kiểm tra ngân hàng câu đã duyệt." />
+          </div>
         ) : (
           question && (
             <section className="flex flex-col gap-3 px-4 py-4 sm:px-5">

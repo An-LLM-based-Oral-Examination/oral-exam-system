@@ -356,7 +356,9 @@ export function DepartmentLecturerAssignmentPage({
                 <div className="min-w-0">
                   <FilterDropMenu
                     label="Học kỳ"
-                    className="w-40 max-w-full"
+                    className={ds.filterSemester}
+                    menuMinWidth={ds.filterMenuMinWidth}
+                    wrapOptions
                     value={semesterId}
                     options={semesters.map(([value, label]) => ({ value, label }))}
                     disabled={saving}
@@ -371,7 +373,9 @@ export function DepartmentLecturerAssignmentPage({
                 {(!courseId || visibleOfferings.length > 1) && <div className="min-w-0">
                   <FilterDropMenu
                     label="Môn học"
-                    className="w-40 max-w-full"
+                    className={ds.filterCourse}
+                    menuMinWidth={ds.filterMenuMinWidth}
+                    wrapOptions
                     value={effectiveOfferingId}
                     options={visibleOfferings.map((row) => ({ value: row.courseOfferingId, label: `${row.courseCode} — ${row.courseName}` }))}
                     disabled={saving}
