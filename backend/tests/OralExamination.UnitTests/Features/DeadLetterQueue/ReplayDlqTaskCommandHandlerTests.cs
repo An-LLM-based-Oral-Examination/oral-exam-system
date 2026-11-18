@@ -482,8 +482,8 @@ public class ReplayDlqTaskCommandHandlerTests
 
         var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
 
-        // Act - Replay bởi lecturer
-        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Lecturer, "lecturer"), CancellationToken.None);
+        // Act - DLQ MF-05 do Admin quản lý, không giao quyền replay cho giảng viên.
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"), CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeTrue();

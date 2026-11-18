@@ -84,7 +84,7 @@ public class StorageControllerTests
         var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         badRequest.Value.Should().NotBeNull();
-        badRequest.Value?.ToString().Should().Contain("vượt quá giới hạn cho phép");
+        badRequest.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("vượt quá giới hạn cho phép");
     }
 
     [Fact(DisplayName = "4. UploadAudio trả về HTTP 400 BadRequest khi Command xử lý thất bại")]
@@ -106,7 +106,7 @@ public class StorageControllerTests
         var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         badRequest.Value.Should().NotBeNull();
-        badRequest.Value?.ToString().Should().Contain("Cloudflare Whisper timeout");
+        badRequest.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("Cloudflare Whisper timeout");
     }
 
     [Fact(DisplayName = "5. UploadAudio tự động nhận diện file từ Request.Form.Files khi trường form khác tên 'file'")]

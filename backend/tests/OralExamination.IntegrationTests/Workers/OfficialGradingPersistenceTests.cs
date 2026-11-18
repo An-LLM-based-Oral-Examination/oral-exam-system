@@ -331,6 +331,8 @@ public sealed class OfficialGradingPersistenceTests(PostgresFixture fixture)
 
     private sealed class UnexpectedPracticeQueue : IGradingQueueChannel
     {
+        public int Count => 0;
+        public int Capacity => 1000;
         public ValueTask EnqueueAsync(GradingTask task, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Official DLQ replay must use the durable job, not the practice queue.");
         public IAsyncEnumerable<GradingTask> ReadAllAsync(CancellationToken cancellationToken = default) =>

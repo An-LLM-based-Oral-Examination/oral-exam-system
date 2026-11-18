@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.DTOs;
+using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamAnswer;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
@@ -44,6 +45,34 @@ public class MockExamsControllerTests
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
+    }
+
+    [Fact]
+    public async Task QuotaAndStart_MapMissingEnrollmentTo403()
+    {
+        SetUserContext(Guid.NewGuid());
+        _senderMock.Setup(s => s.Send(It.IsAny<GetMockExamQuotaQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<MockExamQuotaDto>.Failure("FORBIDDEN:Chưa tham gia lớp."));
+        _senderMock.Setup(s => s.Send(It.IsAny<StartMockExamCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StartMockExamResponse>.Failure("FORBIDDEN:Chưa tham gia lớp."));
+
+        var quota = await _controller.GetQuota(Guid.NewGuid());
+        var start = await _controller.StartSession(new StartMockExamRequest(Guid.NewGuid(), false));
+
+        quota.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(403);
+        start.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task Start_MapsMissingStructureTo409()
+    {
+        SetUserContext(Guid.NewGuid());
+        _senderMock.Setup(s => s.Send(It.IsAny<StartMockExamCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StartMockExamResponse>.Failure("CONFLICT:Chưa có cấu trúc đề."));
+
+        var result = await _controller.StartSession(new StartMockExamRequest(Guid.NewGuid(), false));
+
+        result.Should().BeOfType<ConflictObjectResult>().Which.StatusCode.Should().Be(409);
     }
 
     [Fact(DisplayName = "1. GetQuota trả về 200 OK cùng MockExamQuotaDto khi thành công")]

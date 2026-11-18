@@ -32,6 +32,8 @@ using Xunit.Abstractions;
 using OralExamination.Application.Features.Auth.Commands.CreateGoogleLoginChallenge;
 using OralExamination.Application.Features.OfficialExams.Queries.VerifyGradeCertificate;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Domain.Entities;
+using OralExamination.Infrastructure.Persistence;
 
 namespace OralExamination.UnitTests.Features.Controllers;
 
@@ -51,6 +53,9 @@ public sealed class ApiErrorContractTests(ITestOutputHelper output) : IAsyncLife
         builder.Services.AddControllers().AddApplicationPart(typeof(ErrorContractProbeController).Assembly)
             .AddApplicationPart(typeof(AuthController).Assembly);
         builder.Services.AddApiErrorContracts();
+        var dbName = Guid.NewGuid().ToString();
+        builder.Services.AddDbContext<OralExamDbContext>(opt => opt.UseInMemoryDatabase(dbName));
+        builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<OralExamDbContext>());
         builder.Services.AddSingleton(_sender.Object);
         builder.Services.AddOralExamAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
@@ -328,9 +333,25 @@ public sealed class ApiErrorContractTests(ITestOutputHelper output) : IAsyncLife
 
     private void Authenticate(string role)
     {
+        var userId = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            db.Users.Add(new User
+            {
+                Id = userId,
+                Email = $"{userId:N}@example.test",
+                FullName = "Contract User",
+                Role = role,
+                IsActive = true,
+                AuthVersion = 1
+            });
+            db.SaveChanges();
+        }
+
         var issuer = new JwtAccessTokenIssuer(_app.Configuration);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
-            issuer.Issue(Guid.NewGuid(), "wire@example.test", "Test", role).Token);
+            issuer.Issue(userId, "wire@example.test", "Test", role, authVersion: 1).Token);
     }
 
     private static async Task<JsonElement> AssertProblem(HttpResponseMessage response, int status)

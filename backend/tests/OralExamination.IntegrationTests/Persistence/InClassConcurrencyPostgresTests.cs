@@ -261,6 +261,8 @@ public sealed class InClassConcurrencyPostgresTests(PostgresFixture fixture)
 
     private sealed class RecordingQueue : IGradingQueueChannel
     {
+        public int Count => Tasks.Count;
+        public int Capacity => 1000;
         public ConcurrentQueue<GradingTask> Tasks { get; } = new();
 
         public ValueTask EnqueueAsync(GradingTask task, CancellationToken cancellationToken = default)

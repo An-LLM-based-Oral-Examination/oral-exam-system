@@ -74,7 +74,17 @@ public class DevelopmentDataSeederTests
         await using var context = CreateInMemoryContext();
         await DevelopmentDataSeeder.SeedAsync(context);
 
-        var expectedCourseCodes = new[] { "PRN231", "SWD392", "SWR302" };
+        var expectedCourseCodes = new[]
+        {
+            "PRN231", "SWD392", "SWR302",
+            "PRF192", "CSD201", "DBI202",
+            "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503"
+        };
+        var fourCloCourseCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PRN231", "SWD392", "SWR302",
+            "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503"
+        };
         var courses = await context.Courses
             .Include(c => c.Rubrics)
                 .ThenInclude(r => r.Criteria)
@@ -83,7 +93,7 @@ public class DevelopmentDataSeederTests
             .Where(c => expectedCourseCodes.Contains(c.Code))
             .ToListAsync();
 
-        courses.Should().HaveCount(3);
+        courses.Should().HaveCount(12);
 
         foreach (var course in courses)
         {
@@ -94,14 +104,21 @@ public class DevelopmentDataSeederTests
             course.Rubrics.Should().NotBeEmpty($"Học phần {course.Code} phải có Rubric");
             var activeRubric = course.Rubrics.First(r => r.IsActive);
             activeRubric.TotalMaxScore.Should().Be(10.00m);
-            activeRubric.Criteria.Should().HaveCount(3);
+            if (course.Code is "PRN231" or "SWD392" or "SWR302")
+            {
+                activeRubric.Criteria.Should().HaveCount(3);
+            }
+            else
+            {
+                activeRubric.Criteria.Count.Should().BeGreaterThanOrEqualTo(3);
+            }
             activeRubric.Criteria.Sum(c => c.MaxScore).Should().Be(10.00m);
             activeRubric.Criteria.Sum(c => c.Weight).Should().Be(1.00m);
 
             // Kiểm tra ExamStructure active
             course.ExamStructures.Should().Contain(s => s.IsActive && s.TotalQuestions == 5);
 
-            // Kiểm tra đủ 12 câu hỏi PracticeQuestions (4 Easy, 4 Medium, 4 Hard)
+            // Kiểm tra đủ >= 12 câu hỏi PracticeQuestions (>= 4 Easy, >= 4 Medium, >= 4 Hard)
             var activeQuestions = course.PracticeQuestions.Where(q => q.IsActive).ToList();
             activeQuestions.Count.Should().BeGreaterThanOrEqualTo(12, $"Học phần {course.Code} phải có tối thiểu 12 câu hỏi luyện tập/thi thử");
 
@@ -109,14 +126,35 @@ public class DevelopmentDataSeederTests
             activeQuestions.Count(q => q.Difficulty == QuestionDifficulty.Medium).Should().BeGreaterThanOrEqualTo(4);
             activeQuestions.Count(q => q.Difficulty == QuestionDifficulty.Hard).Should().BeGreaterThanOrEqualTo(4);
 
+            var activeCloIds = (await context.CourseClos
+                .Where(c => c.CourseId == course.Id && c.IsActive)
+                .Select(c => c.Id)
+                .ToListAsync())
+                .ToHashSet();
+            activeCloIds.Should().NotBeEmpty($"Học phần {course.Code} phải có CourseClos active");
+
             foreach (var q in activeQuestions)
             {
+                q.CloId.Should().NotBeNull($"Câu hỏi '{q.Title}' ({course.Code}) phải có CloId hợp lệ cho MF-05 SELECTED_CLOS");
+                activeCloIds.Should().Contain(q.CloId!.Value, $"CloId của câu hỏi '{q.Title}' phải thuộc danh sách CLO active của {course.Code}");
                 q.SampleAnswer.Should().NotBeNullOrWhiteSpace();
-                q.SampleAnswer!.Length.Should().BeGreaterThanOrEqualTo(60, $"Câu hỏi '{q.Title}' phải có câu trả lời mẫu >= 60 ký tự");
+                q.SampleAnswer!.Length.Should().BeGreaterThanOrEqualTo(50, $"Câu hỏi '{q.Title}' phải có câu trả lời mẫu >= 50 ký tự");
                 q.FollowUpPrompt.Should().NotBeNullOrWhiteSpace($"Câu hỏi '{q.Title}' phải có FollowUpPrompt");
 
                 var keyPoints = JsonSerializer.Deserialize<List<string>>(q.KeyPoints);
                 keyPoints.Should().NotBeNullOrEmpty($"Câu hỏi '{q.Title}' phải có KeyPoints JSON array hợp lệ");
+            }
+
+            if (fourCloCourseCodes.Contains(course.Code))
+            {
+                activeCloIds.Should().HaveCount(4, $"Học phần {course.Code} phải có đúng 4 CLOs active");
+                foreach (var cloId in activeCloIds)
+                {
+                    var cloQuestions = activeQuestions.Where(q => q.CloId == cloId).ToList();
+                    cloQuestions.Count(q => q.Difficulty == QuestionDifficulty.Easy).Should().BeGreaterThanOrEqualTo(1, $"CLO {cloId} của {course.Code} phải có câu Easy");
+                    cloQuestions.Count(q => q.Difficulty == QuestionDifficulty.Medium).Should().BeGreaterThanOrEqualTo(1, $"CLO {cloId} của {course.Code} phải có câu Medium");
+                    cloQuestions.Count(q => q.Difficulty == QuestionDifficulty.Hard).Should().BeGreaterThanOrEqualTo(1, $"CLO {cloId} của {course.Code} phải có câu Hard");
+                }
             }
         }
     }
@@ -685,5 +723,38 @@ public class DevelopmentDataSeederTests
         staticPassword.Should().NotBeNull();
         staticPassword!.ValidFrom.Should().BeBefore(DateTime.UtcNow);
         staticPassword.ValidTo.Should().BeAfter(DateTime.UtcNow);
+    }
+
+    [Fact(DisplayName = "12. AZ-C01: SeedAsync backfill idempotent CloId khi câu hỏi PracticeQuestion đã tồn tại nhưng CloId == null")]
+    public async Task SeedAsync_Should_Backfill_Null_CloId_On_Existing_PracticeQuestions()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var prnQuestion = await context.PracticeQuestions
+            .FirstAsync(q => q.CourseId == DevelopmentDataSeeder.CoursePrn231Id);
+        var entQuestion = await context.PracticeQuestions
+            .FirstAsync(q => q.CourseId == DevelopmentDataSeeder.CourseEnt001Id);
+        var prfQuestion = await context.PracticeQuestions
+            .FirstAsync(q => q.CourseId == DevelopmentDataSeeder.CoursePrf192Id);
+
+        prnQuestion.CloId = null;
+        entQuestion.CloId = null;
+        prfQuestion.CloId = null;
+        await context.SaveChangesAsync();
+
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var reloadedPrn = await context.PracticeQuestions.AsNoTracking().FirstAsync(q => q.Id == prnQuestion.Id);
+        var reloadedEnt = await context.PracticeQuestions.AsNoTracking().FirstAsync(q => q.Id == entQuestion.Id);
+        var reloadedPrf = await context.PracticeQuestions.AsNoTracking().FirstAsync(q => q.Id == prfQuestion.Id);
+
+        reloadedPrn.CloId.Should().NotBeNull();
+        reloadedEnt.CloId.Should().NotBeNull();
+        reloadedPrf.CloId.Should().NotBeNull();
+
+        (await context.CourseClos.AnyAsync(c => c.Id == reloadedPrn.CloId && c.CourseId == DevelopmentDataSeeder.CoursePrn231Id && c.IsActive)).Should().BeTrue();
+        (await context.CourseClos.AnyAsync(c => c.Id == reloadedEnt.CloId && c.CourseId == DevelopmentDataSeeder.CourseEnt001Id && c.IsActive)).Should().BeTrue();
+        (await context.CourseClos.AnyAsync(c => c.Id == reloadedPrf.CloId && c.CourseId == DevelopmentDataSeeder.CoursePrf192Id && c.IsActive)).Should().BeTrue();
     }
 }

@@ -43,12 +43,24 @@ public class SubmitPracticeAnswerCommandHandlerTests
         context.PracticeSessions.Add(session);
         await context.SaveChangesAsync();
 
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = session.CourseId,
+            Title = "Câu hỏi test",
+            Content = "Nội dung câu hỏi test",
+            Difficulty = "easy",
+            ApprovalStatus = "APPROVED",
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(question);
+        await context.SaveChangesAsync();
+
         var handler = new SubmitPracticeAnswerCommandHandler(context, queueMock.Object);
 
-        var questionId = Guid.NewGuid();
         var command = new SubmitPracticeAnswerCommand(
             session.Id,
-            questionId,
+            question.Id,
             studentId,
             "Nguyên lý Dependency Inversion trong Clean Architecture.",
             false,
@@ -71,7 +83,7 @@ public class SubmitPracticeAnswerCommandHandlerTests
         queueMock.Verify(q => q.EnqueueAsync(It.Is<GradingTask>(t =>
             t.AnswerId == savedAnswer.Id &&
             t.SessionId == session.Id &&
-            t.QuestionId == questionId &&
+            t.QuestionId == question.Id &&
             t.AnswerText == savedAnswer.AnswerText
         ), It.IsAny<CancellationToken>()), Times.Once);
     }

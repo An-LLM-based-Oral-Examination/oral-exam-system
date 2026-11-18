@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -736,6 +737,9 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
     private class TestGradingChannel : IGradingQueueChannel
     {
         private readonly Channel<GradingTask> _channel = Channel.CreateUnbounded<GradingTask>();
+
+        public int Count => _channel.Reader.Count;
+        public int Capacity => 1000;
 
         public async ValueTask EnqueueAsync(GradingTask task, CancellationToken cancellationToken = default)
         {
@@ -1582,5 +1586,207 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
         followUpResult.CriteriaScores![0].CriterionId.Should().Be(crit3.Id);
         followUpResult.CriteriaScores[0].Score.Should().Be(2.4m);
         followUpResult.CriteriaScores[0].MaxScore.Should().Be(3.0m);
+    }
+
+    [Fact(DisplayName = "M3-Item8 MF-01: Lỗi SignalR ReceiveGradingResult sau SaveChanges KHÔNG kích hoạt Polly retry và KHÔNG ghi DLQ")]
+    public async Task GradingQueueWorker_Mf01SignalRException_DoesNotTriggerPollyRetryOrDlq()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateDbContext(dbName);
+        var (course, student, session) = await SeedPracticeSessionAsync(context, DateTime.UtcNow);
+        var questions = await SeedPracticeQuestionsAsync(context, course.Id, "easy", 1);
+        var question = questions[0];
+
+        var answer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            AnswerText = "Trình bày vai trò của SignalR Hub trong kiến trúc real-time.",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow,
+            IsFollowUp = false
+        };
+        context.PracticeAnswers.Add(answer);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(a => a.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 9.0m,
+                ConfidenceScore = 0.96m,
+                Feedback = "Trả lời tốt.",
+                Details = new List<GradingDetailDto>
+                {
+                    new GradingDetailDto { CriterionId = question.Rubric!.Criteria.First().Id.ToString(), Score = 9.0m, Comment = "Tốt" }
+                }
+            });
+
+        var services = new ServiceCollection();
+        services.AddScoped<IApplicationDbContext>(_ => CreateDbContext(dbName));
+        services.AddScoped(_ => aiMock.Object);
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var hubMock = new Mock<IHubContext<PracticeHub, IPracticeClient>>();
+        var hubClientsMock = new Mock<IHubClients<IPracticeClient>>();
+        var clientMock = new Mock<IPracticeClient>();
+        hubMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+        hubClientsMock.Setup(c => c.Group($"session_{session.Id}")).Returns(clientMock.Object);
+
+        clientMock.Setup(c => c.ReceiveGradingResult(It.IsAny<PracticeAnswerDetailDto>()))
+            .ThrowsAsync(new InvalidOperationException("SignalR connection dropped"));
+
+        var fastRetryConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["GradingQueue:RetryDelayMilliseconds"] = "1" })
+            .Build();
+
+        var channel = new TestGradingChannel();
+        var worker = new GradingQueueWorker(
+            channel,
+            serviceProvider,
+            hubMock.Object,
+            NullLogger<GradingQueueWorker>.Instance,
+            configuration: fastRetryConfig);
+
+        await worker.StartAsync(CancellationToken.None);
+        await channel.EnqueueAsync(new GradingTask
+        {
+            AnswerId = answer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            AnswerText = answer.AnswerText,
+            IsFollowUp = false,
+            IsFullSession = false
+        });
+        channel.Complete();
+        if (worker.ExecuteTask is not null)
+        {
+            await worker.ExecuteTask;
+        }
+        await worker.StopAsync(CancellationToken.None);
+
+        aiMock.Verify(a => a.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        using var checkDb = CreateDbContext(dbName);
+        var savedAnswer = await checkDb.PracticeAnswers.AsNoTracking().FirstAsync(a => a.Id == answer.Id);
+        savedAnswer.Status.Should().Be("graded");
+        (await checkDb.AiEvaluations.CountAsync(e => e.PracticeAnswerId == answer.Id)).Should().Be(1);
+        (await checkDb.DeadLetterQueues.CountAsync()).Should().Be(0);
+    }
+
+    [Fact(DisplayName = "M3-Item8 MF-01: Replay/Retry khi đã có AiEvaluation sẽ cập nhật tại chỗ (idempotent, không trùng bản ghi)")]
+    public async Task GradingQueueWorker_Mf01RetryOrDlqReplay_UpdatesExistingAiEvaluationIdempotently()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateDbContext(dbName);
+        var (course, student, session) = await SeedPracticeSessionAsync(context, DateTime.UtcNow);
+        var questions = await SeedPracticeQuestionsAsync(context, course.Id, "medium", 1);
+        var question = questions[0];
+        var criterion = question.Rubric!.Criteria.First();
+
+        var answer = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            StudentId = student.Id,
+            AnswerText = "Giải thích về Dependency Injection và vòng đời dịch vụ.",
+            Status = "pending",
+            SubmittedAt = DateTime.UtcNow,
+            IsFollowUp = false
+        };
+        context.PracticeAnswers.Add(answer);
+
+        var existingEval = new AiEvaluation
+        {
+            Id = Guid.NewGuid(),
+            AnswerType = "practice",
+            StudentId = student.Id,
+            PracticeAnswerId = answer.Id,
+            TotalScore = 4.0m,
+            ConfidenceScore = 0.60m,
+            Feedback = "Old feedback",
+            EvaluatedAt = DateTime.UtcNow.AddMinutes(-10),
+            Details = new List<AiEvaluationDetail>
+            {
+                new AiEvaluationDetail
+                {
+                    Id = Guid.NewGuid(),
+                    CriterionId = criterion.Id,
+                    Score = 4.0m,
+                    Comment = "Old detail"
+                }
+            }
+        };
+        context.AiEvaluations.Add(existingEval);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(a => a.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 8.5m,
+                ConfidenceScore = 0.95m,
+                Feedback = "Updated feedback",
+                CotTrace = "Updated trace",
+                Details = new List<GradingDetailDto>
+                {
+                    new GradingDetailDto { CriterionId = criterion.Id.ToString(), Score = 8.5m, Comment = "Updated detail" }
+                }
+            });
+
+        var services = new ServiceCollection();
+        services.AddScoped<IApplicationDbContext>(_ => CreateDbContext(dbName));
+        services.AddScoped(_ => aiMock.Object);
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var hubMock = new Mock<IHubContext<PracticeHub, IPracticeClient>>();
+        var hubClientsMock = new Mock<IHubClients<IPracticeClient>>();
+        var clientMock = new Mock<IPracticeClient>();
+        hubMock.Setup(h => h.Clients).Returns(hubClientsMock.Object);
+        hubClientsMock.Setup(c => c.Group($"session_{session.Id}")).Returns(clientMock.Object);
+        clientMock.Setup(c => c.ReceiveGradingResult(It.IsAny<PracticeAnswerDetailDto>())).Returns(Task.CompletedTask);
+
+        var channel = new TestGradingChannel();
+        var worker = new GradingQueueWorker(channel, serviceProvider, hubMock.Object, NullLogger<GradingQueueWorker>.Instance);
+        await worker.StartAsync(CancellationToken.None);
+        await channel.EnqueueAsync(new GradingTask
+        {
+            AnswerId = answer.Id,
+            QuestionId = question.Id,
+            SessionId = session.Id,
+            StudentId = student.Id,
+            AnswerText = answer.AnswerText,
+            IsFollowUp = false,
+            IsFullSession = false
+        });
+        channel.Complete();
+        if (worker.ExecuteTask is not null)
+        {
+            await worker.ExecuteTask;
+        }
+        await worker.StopAsync(CancellationToken.None);
+
+        using var checkDb = CreateDbContext(dbName);
+        var evaluations = await checkDb.AiEvaluations
+            .AsNoTracking()
+            .Where(e => e.PracticeAnswerId == answer.Id)
+            .ToListAsync();
+        evaluations.Should().ContainSingle();
+        evaluations[0].Id.Should().Be(existingEval.Id);
+        evaluations[0].TotalScore.Should().Be(8.5m);
+        evaluations[0].Feedback.Should().Be("Updated feedback");
+        evaluations[0].FollowUpPrompt.Should().BeNull();
+
+        var details = await checkDb.AiEvaluationDetails
+            .AsNoTracking()
+            .Where(d => d.EvaluationId == existingEval.Id)
+            .ToListAsync();
+        details.Should().ContainSingle();
+        details[0].Score.Should().Be(8.5m);
+        details[0].Comment.Should().Be("Updated detail");
     }
 }

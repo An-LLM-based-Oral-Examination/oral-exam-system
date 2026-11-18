@@ -118,14 +118,14 @@ public class PasswordLoginAdversarialChallengerTests
         result.Value.User.StudentCode.Should().Be("SE181212");
     }
 
-    [Theory(DisplayName = "Challenger 1.3: Đăng nhập với Alias totse18191414 và totse18191414@fpt.edu.vn")]
-    [InlineData("totse18191414", "Totse181414")]
-    [InlineData(" totse18191414 ", "Totse181414")]
-    [InlineData("TOTSE18191414", "Totse181414")]
-    [InlineData("totse18191414@fpt.edu.vn", "Totse181414")]
-    [InlineData(" TOTSE18191414@FPT.EDU.VN ", "Totse181414")]
+    [Theory(DisplayName = "Challenger 1.3: Đăng nhập với Username và Email (case-insensitive)")]
     [InlineData("totse181414", "Totse181414")]
+    [InlineData(" totse181414 ", "Totse181414")]
+    [InlineData("TOTSE181414", "Totse181414")]
+    [InlineData("totntse181414@fe.edu.vn", "Totse181414")]
+    [InlineData(" totntse181414@fpt.edu.vn ", "Totse181414")]
     [InlineData("totntse181414@fpt.edu.vn", "Totse181414")]
+    [InlineData(" TOTNTSE181414@FPT.EDU.VN ", "Totse181414")]
     public async Task Challenger_Student_TotAlias_Variants_Success(string usernameOrEmail, string password)
     {
         await using var context = CreateDbContext();
@@ -224,11 +224,11 @@ public class PasswordLoginAdversarialChallengerTests
         var problem401 = objectResult401.Value as ProblemDetails;
         problem401.Should().NotBeNull();
         problem401!.Status.Should().Be(StatusCodes.Status401Unauthorized);
-        problem401.Detail.Should().Be(AuthErrors.WrongPassword);
+        problem401.Detail.Should().Be("Tên đăng nhập hoặc mật khẩu không chính xác.");
         problem401.Title.Should().Be("Không xác thực được.");
         problem401.Type.Should().Be("https://tools.ietf.org/html/rfc7231");
 
-        // 2. Account Not Found -> 404 ProblemDetails
+        // 2. Account Not Found -> 401 ProblemDetails (User Enumeration Defense)
         var mockSender404 = new Mock<ISender>();
         mockSender404
             .Setup(s => s.Send(It.IsAny<PasswordLoginCommand>(), It.IsAny<CancellationToken>()))
@@ -239,12 +239,12 @@ public class PasswordLoginAdversarialChallengerTests
 
         var objectResult404 = actionResult404 as ObjectResult;
         objectResult404.Should().NotBeNull();
-        objectResult404!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        objectResult404!.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
         var problem404 = objectResult404.Value as ProblemDetails;
         problem404.Should().NotBeNull();
-        problem404!.Status.Should().Be(StatusCodes.Status404NotFound);
-        problem404.Detail.Should().Be(AuthErrors.AccountNotFound);
-        problem404.Title.Should().Be("Không tìm thấy tài khoản.");
+        problem404!.Status.Should().Be(StatusCodes.Status401Unauthorized);
+        problem404.Detail.Should().Be("Tên đăng nhập hoặc mật khẩu không chính xác.");
+        problem404.Title.Should().Be("Không xác thực được.");
 
         // 3. Account Locked -> 403 ProblemDetails
         var mockSender403 = new Mock<ISender>();
@@ -269,7 +269,7 @@ public class PasswordLoginAdversarialChallengerTests
     {
         public bool MustChangePassword { get; private set; }
 
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
         {
             MustChangePassword = mustChangePassword;
             return new IssuedAccessToken("access-token-adversarial-test", 900);

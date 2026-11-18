@@ -80,7 +80,8 @@ public sealed class LecturerAssignmentRouteTests : IAsyncLifetime
     [InlineData("admin", HttpStatusCode.Forbidden)]
     public async Task Directory_RealRouteEnforcesSixRoleMatrix(string role, HttpStatusCode expected)
     {
-        Authenticate(_headId, role);
+        var userId = role == "department_head" ? _headId : await AddUser(role);
+        Authenticate(userId, role);
         var response = await _client.GetAsync($"/api/v1/course-offerings/{_offeringId}/lecturer-directory?search=lecturer");
         response.StatusCode.Should().Be(expected);
         if (expected == HttpStatusCode.OK)

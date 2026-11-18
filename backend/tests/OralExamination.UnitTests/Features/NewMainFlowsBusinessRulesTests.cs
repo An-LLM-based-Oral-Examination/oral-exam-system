@@ -11,6 +11,7 @@ using OralExamination.Application.Features.Practice.Commands.StartPracticeSessio
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features;
@@ -85,6 +86,7 @@ public class NewMainFlowsBusinessRulesTests
         context.Rubrics.Add(rubric);
         context.PracticeQuestions.Add(question);
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
 
         var handler = new StartPracticeSessionCommandHandler(context);
         var command = new StartPracticeSessionCommand(student.Id, course.Id, Difficulty: "medium", QuestionCount: 1, IsFullSession: false, Topic: null);
@@ -118,6 +120,7 @@ public class NewMainFlowsBusinessRulesTests
         context.Rubrics.Add(rubric);
         context.PracticeQuestions.Add(question);
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
 
         var handler = new StartPracticeSessionCommandHandler(context);
         var command = new StartPracticeSessionCommand(student.Id, course.Id, Difficulty: "medium", QuestionCount: 1, IsFullSession: true, Topic: null);
@@ -235,6 +238,7 @@ public class NewMainFlowsBusinessRulesTests
         context.Rubrics.Add(rubric);
         context.PracticeQuestions.Add(unapprovedQuestion);
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
 
         var handler = new StartPracticeSessionCommandHandler(context);
         var command = new StartPracticeSessionCommand(
@@ -330,6 +334,7 @@ public class NewMainFlowsBusinessRulesTests
         context.Rubrics.Add(rubric);
         context.PracticeQuestions.Add(unapprovedQuestion);
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
 
         var handler = new StartMockExamCommandHandler(context);
         var command = new StartMockExamCommand(

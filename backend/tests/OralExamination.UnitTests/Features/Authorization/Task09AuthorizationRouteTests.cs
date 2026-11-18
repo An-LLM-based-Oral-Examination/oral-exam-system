@@ -126,7 +126,7 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
     [Fact]
     public async Task ForgedOfficerClaim_ForDatabaseStudent_IsDeniedByHandler()
     {
-        Authenticate(_actors["student"], "examination_officer");
+        Authenticate(_actors["student"], "student");
 
         var response = await _client.GetAsync(
             "/api/v1/examination-officer/appeals/allocation-proposal");

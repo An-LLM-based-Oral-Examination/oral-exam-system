@@ -167,6 +167,10 @@ public class ContractCompletenessTests
             IsActive = true
         };
         db.Users.Add(lecturer);
+        db.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id
+        });
         await db.SaveChangesAsync();
 
         var draftQuestionHandler = new CreateDraftQuestionCommandHandler(db);
@@ -213,6 +217,7 @@ public class ContractCompletenessTests
         };
         db.Courses.Add(course);
         db.Users.Add(head);
+        course.DepartmentHeadUserId = head.Id;
         await db.SaveChangesAsync();
 
         var handler = new BatchApproveQuestionsCommandHandler(db);
@@ -460,6 +465,7 @@ public class ContractCompletenessTests
         };
         db.Courses.Add(course);
         db.Users.AddRange(lecturer, head);
+        course.DepartmentHeadUserId = head.Id;
         await db.SaveChangesAsync();
 
         var handler = new BatchApproveQuestionsCommandHandler(db);

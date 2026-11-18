@@ -172,7 +172,7 @@ public class GeminiModelDynamicConfigTests
 
         // Assert
         fallbacks.Should().NotBeNullOrEmpty();
-        fallbacks.Length.Should().BeGreaterOrEqualTo(6);
+        fallbacks.Length.Should().BeGreaterOrEqualTo(4);
 
         // Vị trí 0: gemini-flash-lite-latest
         fallbacks[0].Should().Be(
@@ -186,9 +186,7 @@ public class GeminiModelDynamicConfigTests
 
         // Các mô hình dự phòng tiếp theo
         fallbacks.Should().Contain("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
-        fallbacks.Should().Contain("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent");
-        fallbacks.Should().Contain("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent");
-        fallbacks.Should().Contain("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent");
+        fallbacks.Should().OnlyContain(url => !url.Contains("gemini-2.0-") && !url.Contains("gemini-1.5-"));
     }
 
     [Fact(DisplayName = "GeminiModelConfig: Danh sách candidate API keys loại trừ placeholder và lọc trùng an toàn")]
@@ -212,6 +210,8 @@ public class GeminiModelDynamicConfigTests
         candidateKeys.Should().Contain("key-beta");
         candidateKeys.Should().Contain("key-gamma");
         candidateKeys.Should().Contain("key-delta");
+        candidateKeys.Last().Should().Be("key-beta", "fallback phải chỉ được dùng sau các key chính");
+        candidateKeys.Take(3).Should().BeEquivalentTo(["key-alpha", "key-gamma", "key-delta"]);
 
         // Placeholder phải bị loại bỏ 100%
         candidateKeys.Should().NotContain(k => k.Contains("YourActual", StringComparison.OrdinalIgnoreCase));

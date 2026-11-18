@@ -15,6 +15,7 @@ using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
 using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.MockExams;
@@ -110,6 +111,7 @@ public class ChallengerQuotaAdversarialTests
         }
 
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
         return (course, student, rubric);
     }
 
@@ -408,6 +410,11 @@ public class ChallengerQuotaAdversarialTests
         await setupContext.SaveChangesAsync();
 
         // Chạy song song 10 sinh viên bắt đầu thi
+        foreach (var studentId in studentIds)
+        {
+            await StudentEnrollmentFixture.EnrollAsync(setupContext, course.Id, studentId);
+        }
+
         var tasks = studentIds.Select(async sId =>
         {
             using var ctx = CreateDbContext(dbName);
@@ -498,6 +505,11 @@ public class ChallengerQuotaAdversarialTests
             }
         }
         await setupContext.SaveChangesAsync();
+
+        foreach (var courseId in courseIds)
+        {
+            await StudentEnrollmentFixture.EnrollAsync(setupContext, courseId, student.Id);
+        }
 
         // Bắt đầu thi trên cả 5 môn cùng lúc
         var tasks = courseIds.Select(async cId =>

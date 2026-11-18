@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using API.Controllers.v1;
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -96,17 +98,19 @@ public class PracticeBolaAdversarialTests
             "Controller PHẢI phớt lờ studentId bị giả mạo trong body và ghim vào token claim của Student A.");
     }
 
-    [Theory(DisplayName = "CHALLENGE-BOLA-02. StartSession: Elevated roles (lecturer, department_head, admin) có quyền tạo phiên hộ cho Student B")]
-    [InlineData("lecturer")]
-    [InlineData("department_head")]
-    [InlineData("admin")]
-    public async Task StartSession_ElevatedRoles_Should_Honor_Requested_StudentId(string elevatedRole)
+    [Fact(DisplayName = "CHALLENGE-BOLA-02. PracticeController: Chỉ cho phép role student truy cập qua AuthorizeAttribute và luôn ghim token identity")]
+    public async Task PracticeController_Should_Restrict_To_Student_Role_And_Pin_Token_Identity()
     {
+        // Assert AuthorizeAttribute
+        var authAttr = typeof(PracticeController).GetCustomAttribute<AuthorizeAttribute>();
+        authAttr.Should().NotBeNull();
+        authAttr!.Roles.Should().Be("student", "Endpoint luyện tập MF-01 chỉ được phép phục vụ duy nhất role student.");
+
         // Arrange
         var callerId = Guid.NewGuid();
         var targetStudentId = Guid.NewGuid();
         var courseId = Guid.NewGuid();
-        SetUserContext(callerId, role: elevatedRole);
+        SetUserContext(callerId, role: "student");
 
         var request = new StartPracticeSessionRequest(
             StudentId: targetStudentId,
@@ -128,9 +132,9 @@ public class PracticeBolaAdversarialTests
         // Assert
         result.Should().BeOfType<OkObjectResult>();
         _senderMock.Verify(s => s.Send(
-            It.Is<StartPracticeSessionCommand>(c => c.StudentId == targetStudentId),
+            It.Is<StartPracticeSessionCommand>(c => c.StudentId == callerId),
             It.IsAny<CancellationToken>()), Times.Once,
-            $"Cán bộ vai trò {elevatedRole} có quyền tạo phiên chỉ định cho sinh viên mục tiêu.");
+            "Controller bắt buộc ghim vào ID của chính token, cấm dùng targetStudentId để tạo hộ.");
     }
 
     #endregion
@@ -165,16 +169,13 @@ public class PracticeBolaAdversarialTests
         problem.Detail.Should().Contain("không có quyền");
     }
 
-    [Theory(DisplayName = "CHALLENGE-BOLA-04. GetSession: Elevated roles (lecturer, department_head, admin) xem được chi tiết phiên của sinh viên")]
-    [InlineData("lecturer")]
-    [InlineData("department_head")]
-    [InlineData("admin")]
-    public async Task GetSession_ElevatedRoles_Should_Have_Full_Inspection_Access(string elevatedRole)
+    [Fact(DisplayName = "CHALLENGE-BOLA-04. GetSession: Luôn ghim isElevatedRole=false trên student endpoint")]
+    public async Task GetSession_Should_Always_Pass_IsElevatedRole_False()
     {
         // Arrange
-        var elevatedUserId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
         var sessionBId = Guid.NewGuid();
-        SetUserContext(elevatedUserId, role: elevatedRole);
+        SetUserContext(userId, role: "student");
 
         var sessionDetail = new PracticeSessionDetailDto
         {
@@ -188,8 +189,8 @@ public class PracticeBolaAdversarialTests
         _senderMock
             .Setup(s => s.Send(It.Is<GetPracticeSessionQuery>(q =>
                 q.SessionId == sessionBId &&
-                q.RequestingUserId == elevatedUserId &&
-                q.IsElevatedRole == true), It.IsAny<CancellationToken>()))
+                q.RequestingUserId == userId &&
+                q.IsElevatedRole == false), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<PracticeSessionDetailDto>.Success(sessionDetail));
 
         // Act
@@ -219,7 +220,7 @@ public class PracticeBolaAdversarialTests
             .ReturnsAsync(Result<NextQuestionResponse>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này."));
 
         // Act
-        var actionResult = await _controller.GetNextQuestion(sessionBId, studentId: studentBId);
+        var actionResult = await _controller.GetNextQuestion(sessionBId);
 
         // Assert
         _senderMock.Verify(s => s.Send(
@@ -326,7 +327,7 @@ public class PracticeBolaAdversarialTests
             .ReturnsAsync(Result.Success());
 
         // Act
-        var actionResult = await _controller.CompleteSession(sessionBId, studentId: studentBId);
+        var actionResult = await _controller.CompleteSession(sessionBId);
 
         // Assert
         actionResult.Should().BeOfType<OkObjectResult>();
@@ -355,7 +356,7 @@ public class PracticeBolaAdversarialTests
             .ReturnsAsync(Result<List<PracticeHistoryItemDto>>.Success(new List<PracticeHistoryItemDto>()));
 
         // Act
-        var actionResult = await _controller.GetStudentHistory(studentId: studentBId);
+        var actionResult = await _controller.GetStudentHistory();
 
         // Assert
         actionResult.Should().BeOfType<OkObjectResult>();
@@ -365,30 +366,26 @@ public class PracticeBolaAdversarialTests
             "GetStudentPracticeHistoryQuery PHẢI bị ép StudentId = Student A khi caller là sinh viên.");
     }
 
-    [Theory(DisplayName = "CHALLENGE-BOLA-10. GetStudentHistory: Elevated roles (lecturer, department_head, admin) có quyền tra cứu lịch sử của bất kỳ sinh viên nào")]
-    [InlineData("lecturer")]
-    [InlineData("department_head")]
-    [InlineData("admin")]
-    public async Task GetStudentHistory_ElevatedRoles_Should_Honor_Target_StudentId(string elevatedRole)
+    [Fact(DisplayName = "CHALLENGE-BOLA-10. GetStudentHistory: Luôn ghim vào danh tính student từ token, cấm tham số truy vấn ngoài")]
+    public async Task GetStudentHistory_Should_Pin_To_Token_StudentId()
     {
         // Arrange
-        var elevatedUserId = Guid.NewGuid();
-        var targetStudentId = Guid.NewGuid();
-        SetUserContext(elevatedUserId, role: elevatedRole);
+        var studentId = Guid.NewGuid();
+        SetUserContext(studentId, role: "student");
 
         _senderMock
             .Setup(s => s.Send(It.IsAny<GetStudentPracticeHistoryQuery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<List<PracticeHistoryItemDto>>.Success(new List<PracticeHistoryItemDto>()));
 
         // Act
-        var actionResult = await _controller.GetStudentHistory(studentId: targetStudentId);
+        var actionResult = await _controller.GetStudentHistory();
 
         // Assert
         actionResult.Should().BeOfType<OkObjectResult>();
         _senderMock.Verify(s => s.Send(
-            It.Is<GetStudentPracticeHistoryQuery>(q => q.StudentId == targetStudentId),
+            It.Is<GetStudentPracticeHistoryQuery>(q => q.StudentId == studentId),
             It.IsAny<CancellationToken>()), Times.Once,
-            $"Cán bộ vai trò {elevatedRole} có quyền tra cứu lịch sử luyện tập của sinh viên mục tiêu.");
+            "GetStudentPracticeHistoryQuery bắt buộc lấy StudentId từ token claim.");
     }
 
     #endregion

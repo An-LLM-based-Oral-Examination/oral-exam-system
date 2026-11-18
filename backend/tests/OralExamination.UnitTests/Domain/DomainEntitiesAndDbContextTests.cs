@@ -249,7 +249,7 @@ public class DomainEntitiesAndDbContextTests
 
         var inClassPoolCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_pool_mode");
         inClassPoolCheck.Should().NotBeNull();
-        inClassPoolCheck!.Sql.Should().Be("question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')");
+        inClassPoolCheck!.Sql.Should().Be("question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_CLOS', 'SELECTED_POOL')");
 
         var inClassTotalQCheck = inClassShiftType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_in_class_exam_shifts_total_questions");
         inClassTotalQCheck.Should().NotBeNull();
@@ -282,11 +282,16 @@ public class DomainEntitiesAndDbContextTests
         examQuestionApprovalCheck.Should().NotBeNull();
         examQuestionApprovalCheck!.Sql.Should().Be("approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')");
 
+        var practiceAnswerType = model.FindEntityType(typeof(PracticeAnswer))!;
+        var practiceAnswerFollowUpCheck = practiceAnswerType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_practice_answers_follow_up_parent");
+        practiceAnswerFollowUpCheck.Should().NotBeNull();
+        practiceAnswerFollowUpCheck!.Sql.Should().Be("(is_follow_up = false AND parent_answer_id IS NULL) OR (is_follow_up = true AND parent_answer_id IS NOT NULL)");
+
         // 6. Toàn bộ Check Constraints từ các bảng phải được cấu hình đầy đủ với SQL biểu thức hợp lệ
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(66, "official shift capacity adds one hard 1-40 constraint in addition to the existing domain constraints");
+        allCheckConstraints.Count.Should().Be(67, "official shift capacity ck_shifts_max_seats (1-40) and practice_answers ck_practice_answers_follow_up_parent each add one check constraint in addition to the existing 65 domain constraints");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
@@ -744,6 +749,15 @@ public class DomainEntitiesAndDbContextTests
         paPromptProp.Should().NotBeNull("PracticeAnswer phải có cột PromptText lưu nội dung câu hỏi phụ");
         paPromptProp!.GetColumnName().Should().Be("prompt_text");
 
+        var paProcessingStartedAtProp = paEntity.FindProperty(nameof(PracticeAnswer.ProcessingStartedAt));
+        paProcessingStartedAtProp.Should().NotBeNull("PracticeAnswer phải có cột ProcessingStartedAt cho stale recovery");
+        paProcessingStartedAtProp!.GetColumnName().Should().Be("processing_started_at");
+
+        var icsEntity = model.FindEntityType(typeof(InClassExamSubmission))!;
+        var icsProcessingStartedAtProp = icsEntity.FindProperty(nameof(InClassExamSubmission.ProcessingStartedAt));
+        icsProcessingStartedAtProp.Should().NotBeNull("InClassExamSubmission phải có cột ProcessingStartedAt cho stale recovery");
+        icsProcessingStartedAtProp!.GetColumnName().Should().Be("processing_started_at");
+
         // 2. practice_sessions.selected_question_ids (jsonb) tách biệt với selected_difficulties
         var psEntity = model.FindEntityType(typeof(PracticeSession))!;
         var psQuestionIdsProp = psEntity.FindProperty(nameof(PracticeSession.SelectedQuestionIdsJson));
@@ -765,7 +779,20 @@ public class DomainEntitiesAndDbContextTests
         aiEvalType.FindProperty(nameof(AiEvaluation.StudentId))!.GetColumnName().Should().Be("student_id");
         aiEvalType.FindProperty(nameof(AiEvaluation.InClassSubmissionId))!.GetColumnName().Should().Be("in_class_submission_id");
         aiEvalType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_ai_evaluations_student").Should().NotBeNull();
-        aiEvalType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_ai_evaluations_in_class_submission").Should().NotBeNull();
+        var uqPracticeEval = aiEvalType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "uq_ai_evaluations_practice_answer");
+        uqPracticeEval.Should().NotBeNull();
+        uqPracticeEval!.IsUnique.Should().BeTrue();
+        uqPracticeEval.GetFilter().Should().Be("practice_answer_id IS NOT NULL");
+
+        var uqMockEval = aiEvalType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "uq_ai_evaluations_mock_exam_answer");
+        uqMockEval.Should().NotBeNull();
+        uqMockEval!.IsUnique.Should().BeTrue();
+        uqMockEval.GetFilter().Should().Be("mock_exam_answer_id IS NOT NULL");
+
+        var uqInClassEval = aiEvalType.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "uq_ai_evaluations_in_class_submission");
+        uqInClassEval.Should().NotBeNull();
+        uqInClassEval!.IsUnique.Should().BeTrue();
+        uqInClassEval.GetFilter().Should().Be("in_class_submission_id IS NOT NULL");
 
         // 5. lecturer_audit_details.submission_id + FK + Index
         var auditDetailEntity = context.Model.FindEntityType(typeof(LecturerAuditDetail))!;

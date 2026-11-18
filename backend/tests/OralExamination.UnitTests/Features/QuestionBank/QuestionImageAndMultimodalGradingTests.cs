@@ -19,6 +19,7 @@ using OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkstatio
 using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchApproveQuestions;
+using OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 using OralExamination.Application.Features.QuestionBank.Commands.CreateDraftQuestion;
 using OralExamination.Application.Features.QuestionBank.Commands.ReviewQuestionDecision;
 using OralExamination.Application.Features.QuestionBank.Commands.UploadQuestionImage;
@@ -28,6 +29,7 @@ using OralExamination.Application.Features.Student.Queries.GetOfficialExamGrade;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using OralExamination.Infrastructure.Services;
 using Xunit;
 
@@ -51,6 +53,73 @@ public sealed class QuestionImageAndMultimodalGradingTests
             0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
             0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52
         };
+    }
+
+    [Fact]
+    public async Task GeminiGrading_RedactsStudentIdentifiersBeforeSendingTranscript()
+    {
+        string? sentBody = null;
+        var grading = JsonSerializer.Serialize(new
+        {
+            Score = 8.0m, ConfidenceScore = 0.9m, IsSuspicious = false,
+            Feedback = "Giải thích được cách áp dụng dependency injection.",
+            Details = Array.Empty<object>()
+        });
+        var handler = new CaptureHttpMessageHandler(body =>
+        {
+            sentBody = body;
+            var response = new { candidates = new[] { new { content = new { parts = new[] { new { text = grading } } } } } };
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(response), Encoding.UTF8, "application/json")
+            };
+        });
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Gemini:ApiKey"] = "test-key-redaction" }).Build();
+        var service = new GeminiAiGradingService(new HttpClient(handler), configuration);
+
+        await service.GradeAnswerAsync(new AiGradingRequest
+        {
+            QuestionContent = "Giải thích Dependency Injection trong ứng dụng .NET.",
+            SampleAnswer = "Dependency Injection cung cấp phụ thuộc qua constructor, giúp giảm coupling và dễ kiểm thử hơn.",
+            Transcript = "Tôi tên là Nguyễn Văn Thành. MSSV SE170001, email thanh@example.com, số điện thoại 0912345678. " +
+                "Dependency Injection đưa service qua constructor, giúp thay thế implementation và kiểm thử độc lập dễ hơn."
+        }, CancellationToken.None);
+
+        sentBody.Should().NotBeNullOrWhiteSpace();
+        sentBody.Should().NotContain("Nguyễn Văn Thành");
+        sentBody.Should().NotContain("SE170001");
+        sentBody.Should().NotContain("thanh@example.com");
+        sentBody.Should().NotContain("0912345678");
+        sentBody.Should().Contain("Dependency Injection đưa service");
+    }
+
+    [Fact]
+    public async Task GeminiGrading_RejectsResponseWithoutRequiredScore()
+    {
+        var handler = new CaptureHttpMessageHandler(_ =>
+        {
+            var invalid = new { ConfidenceScore = 0.9m, IsSuspicious = false,
+                Feedback = "Looks plausible", Details = Array.Empty<object>() };
+            var response = new { candidates = new[] { new { content = new
+                { parts = new[] { new { text = JsonSerializer.Serialize(invalid) } } } } } };
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(response), Encoding.UTF8, "application/json")
+            };
+        });
+        var config = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Gemini:ApiKey"] = "test-key-schema" }).Build();
+        var service = new GeminiAiGradingService(new HttpClient(handler), config);
+
+        Func<Task> act = () => service.GradeAnswerAsync(new AiGradingRequest
+        {
+            QuestionContent = "Giải thích Dependency Injection trong ứng dụng .NET.",
+            SampleAnswer = "Dependency Injection cung cấp phụ thuộc qua constructor, giảm coupling và dễ kiểm thử hơn.",
+            Transcript = "Dependency Injection đưa service qua constructor, giúp thay thế implementation và kiểm thử độc lập dễ hơn."
+        }, CancellationToken.None);
+
+        await act.Should().ThrowAsync<HttpRequestException>();
     }
 
     [Fact]
@@ -215,6 +284,10 @@ public sealed class QuestionImageAndMultimodalGradingTests
             Role = "lecturer",
             IsActive = true
         });
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = courseId, LecturerUserId = lecturerId, AssignedByUserId = lecturerId
+        });
         await context.SaveChangesAsync();
 
         var rubric = new RubricDraftDto(
@@ -290,7 +363,13 @@ public sealed class QuestionImageAndMultimodalGradingTests
             Role = "department_head",
             IsActive = true
         });
+        (await context.Courses.FindAsync(courseId))!.DepartmentHeadUserId = headId;
         await context.SaveChangesAsync();
+
+        var submitResult = await new BatchSubmitQuestionsForReviewCommandHandler(context).Handle(
+            new BatchSubmitQuestionsForReviewCommand(courseId, lecturerId,
+                new List<Guid> { savedPracticeQuestion.Id }, "Gửi thẩm định câu hỏi có hình ảnh"), CancellationToken.None);
+        submitResult.IsSuccess.Should().BeTrue();
 
         var reviewHandler = new ReviewQuestionDecisionCommandHandler(context);
         var approveResult = await reviewHandler.Handle(new ReviewQuestionDecisionCommand(
@@ -304,15 +383,17 @@ public sealed class QuestionImageAndMultimodalGradingTests
 
         // 3. Kiểm tra Query chi tiết câu hỏi (MF-03) trả về đúng ImageUrl & ImageDescription
         var getByIdHandler = new GetQuestionByIdQueryHandler(context);
-        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(savedPracticeQuestion.Id), CancellationToken.None);
+        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(savedPracticeQuestion.Id, lecturerId, "lecturer"), CancellationToken.None);
         detailResult.IsSuccess.Should().BeTrue();
         detailResult.Value.ImageUrl.Should().Be("/uploads/questions/202610/oauth2-sequence.png");
         detailResult.Value.ImageDescription.Should().Contain("PKCE");
 
         // 4. Kiểm tra StartPracticeSession (MF-01) trả về đúng ImageUrl & ImageDescription
+        var practiceStudentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, courseId, practiceStudentId);
         var startPracticeHandler = new StartPracticeSessionCommandHandler(context);
         var practiceResult = await startPracticeHandler.Handle(new StartPracticeSessionCommand(
-            Guid.NewGuid(),
+            practiceStudentId,
             courseId,
             "hard",
             1,
@@ -333,7 +414,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
         var rubricId = Guid.NewGuid();
         var questionId = Guid.NewGuid();
 
-        context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Backend .NET", Credits = 3, IsActive = true });
+        context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Backend .NET", Credits = 3, IsActive = true, DepartmentHeadUserId = headId });
         context.Users.Add(new User { Id = headId, Email = "head@fpt.edu.vn", FullName = "Trưởng BM", Role = "department_head", IsActive = true });
         context.Rubrics.Add(new Rubric
         {
@@ -526,6 +607,15 @@ public sealed class QuestionImageAndMultimodalGradingTests
         var controller = new global::API.Controllers.v1.PracticeController(senderMock.Object);
         var courseId = Guid.NewGuid();
         var studentId = Guid.NewGuid();
+
+        var user = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, studentId.ToString()) },
+                "TestAuth"));
+        controller.ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = user }
+        };
 
         var request = new OralExamination.Application.Features.Practice.DTOs.StartPracticeSessionRequest(
             CourseId: courseId,

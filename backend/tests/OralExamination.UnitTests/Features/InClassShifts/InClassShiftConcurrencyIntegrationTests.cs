@@ -29,22 +29,48 @@ namespace OralExamination.UnitTests.Features.InClassShifts;
 /// </summary>
 public class InClassShiftConcurrencyIntegrationTests
 {
-    private const string DefaultTestConnectionString = "Host=localhost;Port=5432;Database=oralexam_integration_test;Username=oralexam;Password=oralexam_password;Include Error Detail=true;Timeout=5;";
-
-    public static string GetPostgresConnectionString()
+    public static string ValidateAndNormalizeTestConnectionString(string? connectionString)
     {
-        var envConn = Environment.GetEnvironmentVariable("ORALEXAM_TEST_CONNECTION_STRING")
-            ?? Environment.GetEnvironmentVariable("TEST_CONNECTION_STRING");
-        var connStr = !string.IsNullOrWhiteSpace(envConn) ? envConn : DefaultTestConnectionString;
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "[TASK-002 GUARD] Chuỗi kết nối CSDL test không được để trống. Vui lòng cung cấp qua biến môi trường ORALEXAM_TEST_CONNECTION_STRING.");
+        }
 
-        var builder = new NpgsqlConnectionStringBuilder(connStr);
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
         if (string.IsNullOrWhiteSpace(builder.Database) || !builder.Database.EndsWith("_test", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 $"[TASK-002 GUARD CHỐNG NHIỄM BẨN CSDL] Database trong connection string '{builder.Database}' bắt buộc phải kết thúc bằng hậu tố '_test'. Tuyệt đối từ chối chạy trên database chính/production!");
         }
 
-        return connStr;
+        return builder.ConnectionString;
+    }
+
+    public static string GetPostgresConnectionString()
+    {
+        var envConn = Environment.GetEnvironmentVariable("ORALEXAM_TEST_CONNECTION_STRING")
+            ?? Environment.GetEnvironmentVariable("TEST_CONNECTION_STRING");
+
+        if (string.IsNullOrWhiteSpace(envConn))
+        {
+            var user = Environment.GetEnvironmentVariable("PGUSER");
+            var pass = Environment.GetEnvironmentVariable("PGPASSWORD");
+
+            if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass))
+            {
+                throw new InvalidOperationException(
+                    "[TASK-002 GUARD] Thiếu thông tin xác thực CSDL test! Hãy cung cấp chuỗi kết nối qua biến môi trường ORALEXAM_TEST_CONNECTION_STRING hoặc cặp biến (PGUSER, PGPASSWORD). Tuyệt đối cấm hardcode credential trong mã nguồn!");
+            }
+
+            var host = Environment.GetEnvironmentVariable("PGHOST") ?? "localhost";
+            var port = Environment.GetEnvironmentVariable("PGPORT") ?? "5432";
+            var db = Environment.GetEnvironmentVariable("PGDATABASE_TEST") ?? "oralexam_integration_test";
+
+            envConn = $"Host={host};Port={port};Database={db};Username={user};Password={pass};Include Error Detail=true;Timeout=5;";
+        }
+
+        return ValidateAndNormalizeTestConnectionString(envConn);
     }
 
     private static OralExamDbContext CreatePostgresDbContext()
@@ -57,16 +83,17 @@ public class InClassShiftConcurrencyIntegrationTests
         return context;
     }
 
-    private static async Task<(User Lecturer, User Student, Course Course, Class ClassEntity, PracticeQuestion Question, InClassExamShift Shift, InClassShiftParticipant Participant)> SeedPostgresHierarchyAsync(OralExamDbContext context)
+    private static async Task<(User Lecturer, User Student, Course Course, Class ClassEntity, PracticeQuestion Question, InClassExamShift Shift, InClassShiftParticipant Participant, Guid? CreatedSemesterId)> SeedPostgresHierarchyAsync(OralExamDbContext context)
     {
         var existingSemester = await context.Semesters.AsNoTracking().FirstOrDefaultAsync();
         Guid semesterId;
+        Guid? createdSemesterId = null;
         if (existingSemester == null)
         {
             var defaultSemester = new Semester
             {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000007"),
-                Code = "FA26_TEST",
+                Id = Guid.NewGuid(),
+                Code = $"FA_{Guid.NewGuid():N}".Substring(0, 9).ToUpperInvariant(),
                 Name = "Fall 2026 Concurrency Test",
                 StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-1)),
                 EndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3)),
@@ -75,6 +102,7 @@ public class InClassShiftConcurrencyIntegrationTests
             context.Semesters.Add(defaultSemester);
             await context.SaveChangesAsync();
             semesterId = defaultSemester.Id;
+            createdSemesterId = defaultSemester.Id;
         }
         else
         {
@@ -165,7 +193,7 @@ public class InClassShiftConcurrencyIntegrationTests
         context.InClassShiftParticipants.Add(participant);
         await context.SaveChangesAsync();
 
-        return (lecturer, student, course, classEntity, question, shift, participant);
+        return (lecturer, student, course, classEntity, question, shift, participant, createdSemesterId);
     }
 
     private static async Task CleanupPostgresHierarchyAsync(
@@ -175,76 +203,118 @@ public class InClassShiftConcurrencyIntegrationTests
         Guid? classId = null,
         Guid? courseId = null,
         Guid? lecturerId = null,
-        Guid? studentId = null)
+        Guid? studentId = null,
+        Guid? semesterId = null)
     {
-        try
+        using var cleanupCtx = CreatePostgresDbContext();
+        if (shiftId.HasValue)
         {
-            using var cleanupCtx = CreatePostgresDbContext();
-            if (shiftId.HasValue)
+            var subs = await cleanupCtx.InClassExamSubmissions.Where(s => s.ShiftId == shiftId.Value).ToListAsync();
+            if (subs.Count > 0)
             {
-                var subs = await cleanupCtx.InClassExamSubmissions.Where(s => s.ShiftId == shiftId.Value).ToListAsync();
-                if (subs.Count > 0)
-                {
-                    cleanupCtx.InClassExamSubmissions.RemoveRange(subs);
-                    await cleanupCtx.SaveChangesAsync();
-                }
-
-                var parts = await cleanupCtx.InClassShiftParticipants.Where(p => p.ShiftId == shiftId.Value).ToListAsync();
-                if (parts.Count > 0)
-                {
-                    cleanupCtx.InClassShiftParticipants.RemoveRange(parts);
-                    await cleanupCtx.SaveChangesAsync();
-                }
-
-                var shift = await cleanupCtx.InClassExamShifts.FindAsync(shiftId.Value);
-                if (shift != null)
-                {
-                    cleanupCtx.InClassExamShifts.Remove(shift);
-                    await cleanupCtx.SaveChangesAsync();
-                }
+                cleanupCtx.InClassExamSubmissions.RemoveRange(subs);
+                await cleanupCtx.SaveChangesAsync();
             }
 
-            if (questionId.HasValue)
+            var parts = await cleanupCtx.InClassShiftParticipants.Where(p => p.ShiftId == shiftId.Value).ToListAsync();
+            if (parts.Count > 0)
             {
-                var q = await cleanupCtx.PracticeQuestions.FindAsync(questionId.Value);
-                if (q != null) cleanupCtx.PracticeQuestions.Remove(q);
+                cleanupCtx.InClassShiftParticipants.RemoveRange(parts);
+                await cleanupCtx.SaveChangesAsync();
             }
 
-            if (rubricId.HasValue)
+            var passwords = await cleanupCtx.InClassShiftPasswords.Where(p => p.ShiftId == shiftId.Value).ToListAsync();
+            if (passwords.Count > 0)
             {
-                var r = await cleanupCtx.Rubrics.FindAsync(rubricId.Value);
-                if (r != null) cleanupCtx.Rubrics.Remove(r);
+                cleanupCtx.InClassShiftPasswords.RemoveRange(passwords);
+                await cleanupCtx.SaveChangesAsync();
             }
 
-            if (classId.HasValue)
+            var shift = await cleanupCtx.InClassExamShifts.FindAsync(shiftId.Value);
+            if (shift != null)
             {
-                var c = await cleanupCtx.Classes.FindAsync(classId.Value);
-                if (c != null) cleanupCtx.Classes.Remove(c);
+                cleanupCtx.InClassExamShifts.Remove(shift);
+                await cleanupCtx.SaveChangesAsync();
             }
-
-            if (courseId.HasValue)
-            {
-                var cr = await cleanupCtx.Courses.FindAsync(courseId.Value);
-                if (cr != null) cleanupCtx.Courses.Remove(cr);
-            }
-
-            if (lecturerId.HasValue)
-            {
-                var l = await cleanupCtx.Users.FindAsync(lecturerId.Value);
-                if (l != null) cleanupCtx.Users.Remove(l);
-            }
-
-            if (studentId.HasValue)
-            {
-                var s = await cleanupCtx.Users.FindAsync(studentId.Value);
-                if (s != null) cleanupCtx.Users.Remove(s);
-            }
-
-            await cleanupCtx.SaveChangesAsync();
         }
-        catch
+
+        if (questionId.HasValue)
         {
-            // Dọn dẹp an toàn không làm ảnh hưởng kết quả kiểm thử
+            var q = await cleanupCtx.PracticeQuestions.FindAsync(questionId.Value);
+            if (q != null) cleanupCtx.PracticeQuestions.Remove(q);
+        }
+
+        if (rubricId.HasValue)
+        {
+            var r = await cleanupCtx.Rubrics.FindAsync(rubricId.Value);
+            if (r != null) cleanupCtx.Rubrics.Remove(r);
+        }
+
+        if (classId.HasValue)
+        {
+            var c = await cleanupCtx.Classes.FindAsync(classId.Value);
+            if (c != null) cleanupCtx.Classes.Remove(c);
+        }
+
+        if (courseId.HasValue)
+        {
+            var offerings = await cleanupCtx.CourseOfferings.Where(co => co.CourseId == courseId.Value).ToListAsync();
+            if (offerings.Count > 0)
+            {
+                var offeringIds = offerings.Select(o => o.Id).ToList();
+                var cls = await cleanupCtx.CourseLecturers.Where(cl => cl.CourseOfferingId != null && offeringIds.Contains(cl.CourseOfferingId.Value)).ToListAsync();
+                if (cls.Count > 0)
+                {
+                    cleanupCtx.CourseLecturers.RemoveRange(cls);
+                }
+                cleanupCtx.CourseOfferings.RemoveRange(offerings);
+                await cleanupCtx.SaveChangesAsync();
+            }
+
+            var cr = await cleanupCtx.Courses.FindAsync(courseId.Value);
+            if (cr != null) cleanupCtx.Courses.Remove(cr);
+        }
+
+        if (lecturerId.HasValue)
+        {
+            var l = await cleanupCtx.Users.FindAsync(lecturerId.Value);
+            if (l != null) cleanupCtx.Users.Remove(l);
+        }
+
+        if (studentId.HasValue)
+        {
+            var s = await cleanupCtx.Users.FindAsync(studentId.Value);
+            if (s != null) cleanupCtx.Users.Remove(s);
+        }
+
+        if (semesterId.HasValue)
+        {
+            var sem = await cleanupCtx.Semesters.FindAsync(semesterId.Value);
+            if (sem != null) cleanupCtx.Semesters.Remove(sem);
+        }
+
+        await cleanupCtx.SaveChangesAsync();
+
+        // T2-F002: Khẳng định hậu kiểm bắt buộc — không nuốt lỗi, bảo đảm xóa sạch hoàn toàn
+        if (shiftId.HasValue)
+        {
+            var remainingShift = await cleanupCtx.InClassExamShifts.AnyAsync(s => s.Id == shiftId.Value);
+            remainingShift.Should().BeFalse("Dữ liệu test InClassExamShift phải được dọn dẹp sạch sẽ sau test");
+        }
+        if (lecturerId.HasValue)
+        {
+            var remainingL = await cleanupCtx.Users.AnyAsync(u => u.Id == lecturerId.Value);
+            remainingL.Should().BeFalse("Dữ liệu test Lecturer phải được dọn dẹp sạch sẽ sau test");
+        }
+        if (studentId.HasValue)
+        {
+            var remainingS = await cleanupCtx.Users.AnyAsync(u => u.Id == studentId.Value);
+            remainingS.Should().BeFalse("Dữ liệu test Student phải được dọn dẹp sạch sẽ sau test");
+        }
+        if (semesterId.HasValue)
+        {
+            var remainingSem = await cleanupCtx.Semesters.AnyAsync(s => s.Id == semesterId.Value);
+            remainingSem.Should().BeFalse("Dữ liệu test Semester phải được dọn dẹp sạch sẽ sau test");
         }
     }
 
@@ -300,18 +370,49 @@ public class InClassShiftConcurrencyIntegrationTests
     public void DatabaseConnectionGuard_WhenDatabaseDoesNotEndWithTest_ThrowsInvalidOperationException()
     {
         var invalidConn = "Host=localhost;Port=5432;Database=oralexam_db;Username=oralexam;Password=oralexam_password;";
-        var builder = new NpgsqlConnectionStringBuilder(invalidConn);
 
-        Action act = () =>
-        {
-            if (string.IsNullOrWhiteSpace(builder.Database) || !builder.Database.EndsWith("_test", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"[TASK-002 GUARD CHỐNG NHIỄM BẨN CSDL] Database trong connection string '{builder.Database}' bắt buộc phải kết thúc bằng hậu tố '_test'.");
-            }
-        };
+        Action act = () => ValidateAndNormalizeTestConnectionString(invalidConn);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*TASK-002 GUARD CHỐNG NHIỄM BẨN CSDL*");
+    }
+
+    [Fact(DisplayName = "TASK-002 Guard: Từ chối kết nối nếu connection string null hoặc rỗng")]
+    public void DatabaseConnectionGuard_WhenConnectionStringIsEmpty_ThrowsInvalidOperationException()
+    {
+        Action act = () => ValidateAndNormalizeTestConnectionString(string.Empty);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*không được để trống*");
+    }
+
+    [Fact(DisplayName = "TASK-002 Guard: Từ chối kết nối nếu thiếu biến môi trường credentials")]
+    public void DatabaseConnectionGuard_WhenCredentialsEnvVarsAreMissing_ThrowsInvalidOperationException()
+    {
+        var originalConn = Environment.GetEnvironmentVariable("ORALEXAM_TEST_CONNECTION_STRING");
+        var originalTestConn = Environment.GetEnvironmentVariable("TEST_CONNECTION_STRING");
+        var originalUser = Environment.GetEnvironmentVariable("PGUSER");
+        var originalPass = Environment.GetEnvironmentVariable("PGPASSWORD");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("ORALEXAM_TEST_CONNECTION_STRING", null);
+            Environment.SetEnvironmentVariable("TEST_CONNECTION_STRING", null);
+            Environment.SetEnvironmentVariable("PGUSER", null);
+            Environment.SetEnvironmentVariable("PGPASSWORD", null);
+
+            Action act = () => GetPostgresConnectionString();
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*Thiếu thông tin xác thực CSDL test*");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ORALEXAM_TEST_CONNECTION_STRING", originalConn);
+            Environment.SetEnvironmentVariable("TEST_CONNECTION_STRING", originalTestConn);
+            Environment.SetEnvironmentVariable("PGUSER", originalUser);
+            Environment.SetEnvironmentVariable("PGPASSWORD", originalPass);
+        }
     }
 
     [Fact(DisplayName = "F-004: Hai request nộp bài đồng thời cùng transcript trên PostgreSQL kích hoạt unique constraint 23505 và idempotent replay thành công")]
@@ -319,7 +420,7 @@ public class InClassShiftConcurrencyIntegrationTests
     public async Task SubmitInClassShiftAnswer_WhenConcurrentSubmissionsOnPostgreSql_CatchesUniqueViolationAndReplaysSuccess()
     {
         using var setupCtx = CreatePostgresDbContext();
-        var (lecturer, student, course, classEntity, question, shift, _) = await SeedPostgresHierarchyAsync(setupCtx);
+        var (lecturer, student, course, classEntity, question, shift, _, createdSemesterId) = await SeedPostgresHierarchyAsync(setupCtx);
 
         try
         {
@@ -370,7 +471,7 @@ public class InClassShiftConcurrencyIntegrationTests
         }
         finally
         {
-            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id);
+            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id, createdSemesterId);
         }
     }
 
@@ -379,7 +480,7 @@ public class InClassShiftConcurrencyIntegrationTests
     public async Task SubmitInClassShiftAnswer_WhenConcurrentSubmissionsDifferentTranscriptOnPostgreSql_FailsWithDuplicateSubmission()
     {
         using var setupCtx = CreatePostgresDbContext();
-        var (lecturer, student, course, classEntity, question, shift, _) = await SeedPostgresHierarchyAsync(setupCtx);
+        var (lecturer, student, course, classEntity, question, shift, _, createdSemesterId) = await SeedPostgresHierarchyAsync(setupCtx);
 
         try
         {
@@ -422,7 +523,7 @@ public class InClassShiftConcurrencyIntegrationTests
         }
         finally
         {
-            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id);
+            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id, createdSemesterId);
         }
     }
 
@@ -431,7 +532,7 @@ public class InClassShiftConcurrencyIntegrationTests
     public async Task ConcurrencyToken_WhenAuditedDuringGradingOnPostgreSql_ThrowsDbUpdateConcurrencyExceptionAndPreservesLecturerScore()
     {
         using var setupCtx = CreatePostgresDbContext();
-        var (lecturer, student, course, classEntity, question, shift, _) = await SeedPostgresHierarchyAsync(setupCtx);
+        var (lecturer, student, course, classEntity, question, shift, _, createdSemesterId) = await SeedPostgresHierarchyAsync(setupCtx);
 
         var submissionId = Guid.NewGuid();
         try
@@ -485,7 +586,7 @@ public class InClassShiftConcurrencyIntegrationTests
         }
         finally
         {
-            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id);
+            await CleanupPostgresHierarchyAsync(shift.Id, question.Id, question.RubricId, classEntity.Id, course.Id, lecturer.Id, student.Id, createdSemesterId);
         }
     }
 }

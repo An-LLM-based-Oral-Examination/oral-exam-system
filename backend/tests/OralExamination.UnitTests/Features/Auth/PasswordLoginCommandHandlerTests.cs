@@ -301,7 +301,7 @@ public class PasswordLoginCommandHandlerTests
     {
         public bool MustChangePassword { get; private set; }
 
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
         {
             MustChangePassword = mustChangePassword;
             return new IssuedAccessToken("access-token", 900);

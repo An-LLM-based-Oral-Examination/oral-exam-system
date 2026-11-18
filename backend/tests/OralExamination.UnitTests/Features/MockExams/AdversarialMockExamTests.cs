@@ -20,6 +20,7 @@ using OralExamination.Application.Common.Behaviors;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using OralExamination.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -771,6 +772,17 @@ public class AdversarialMockExamTests
         await context.SaveChangesAsync();
 
         var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
+        context.ExamStructures.Add(new ExamStructure
+        {
+            CourseId = course.Id,
+            CreatedBy = studentId,
+            Name = "Cấu trúc thi thử SWP391",
+            TotalQuestions = 5,
+            DurationMinutes = 30,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
         var handler = new StartMockExamCommandHandler(context);
         var cmd = new StartMockExamCommand(course.Id, studentId, false);
 
@@ -1105,8 +1117,8 @@ public class AdversarialMockExamTests
         closeTagCount.Should().Be(1, "Chỉ được phép có duy nhất 1 thẻ đóng </student_transcript> do hệ thống tạo.");
     }
 
-    [Fact(DisplayName = "ADV-20: StartMockExam tự động khởi tạo và lưu ExamStructure mặc định hợp lệ (Id != Guid.Empty) và SetCode duy nhất khi môn học chưa có cấu trúc đề")]
-    public async Task StartMockExam_WithoutExistingStructure_PersistsValidStructureAndUniqueSetCodes()
+    [Fact(DisplayName = "ADV-20: StartMockExam từ chối khi Trưởng bộ môn chưa cấu hình cấu trúc đề")]
+    public async Task StartMockExam_WithoutExistingStructure_DoesNotCreateSessionOrQuota()
     {
         using var context = CreateDbContext();
         var course = new Course
@@ -1147,18 +1159,15 @@ public class AdversarialMockExamTests
 
         var handler = new StartMockExamCommandHandler(context);
         var student1 = Guid.NewGuid();
-        var student2 = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student1);
 
         var res1 = await handler.Handle(new StartMockExamCommand(course.Id, student1, false), CancellationToken.None);
-        var res2 = await handler.Handle(new StartMockExamCommand(course.Id, student2, false), CancellationToken.None);
 
-        res1.IsSuccess.Should().BeTrue();
-        res2.IsSuccess.Should().BeTrue();
-
-        var examSets = await context.ExamSets.Where(e => e.CourseId == course.Id).ToListAsync();
-        examSets.Should().HaveCount(2);
-        examSets[0].StructureId.Should().NotBe(Guid.Empty);
-        examSets[0].SetCode.Should().NotBe(examSets[1].SetCode, "Hai đề thi tạo cùng giây phải có SetCode khác nhau để không vi phạm UNIQUE index.");
+        res1.IsSuccess.Should().BeFalse();
+        res1.Error.Should().StartWith("CONFLICT:");
+        (await context.ExamStructures.CountAsync()).Should().Be(0);
+        (await context.ExamSets.CountAsync()).Should().Be(0);
+        (await context.MockExamQuotas.CountAsync()).Should().Be(0);
     }
 
     [Fact(DisplayName = "ADV-21: StartMockExam với HasFollowUp=true không tạo sẵn câu hỏi phụ tĩnh và không nối vào Content")]
@@ -1184,7 +1193,9 @@ public class AdversarialMockExamTests
         await context.SaveChangesAsync();
 
         var handler = new StartMockExamCommandHandler(context);
-        var result = await handler.Handle(new StartMockExamCommand(course.Id, Guid.NewGuid(), HasFollowUp: true), CancellationToken.None);
+        var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
+        var result = await handler.Handle(new StartMockExamCommand(course.Id, studentId, HasFollowUp: true), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.HasFollowUp.Should().BeTrue();

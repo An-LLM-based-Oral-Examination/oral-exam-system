@@ -9,6 +9,7 @@ using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.MockExams;
@@ -134,6 +135,7 @@ public class StartMockExamCommandHandlerTests
         }
 
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
         return (course, student, structure, practiceQuestions, examQuestions);
     }
 
@@ -175,6 +177,24 @@ public class StartMockExamCommandHandlerTests
         var quota = await context.MockExamQuotas.FirstOrDefaultAsync(q => q.StudentId == student.Id && q.CourseId == course.Id);
         quota.Should().NotBeNull();
         quota!.UsedCount.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "Không tự sinh cấu trúc đề khi môn chưa được cấu hình")]
+    public async Task Handle_MissingStructure_DoesNotCreateStructureSessionOrConsumeQuota()
+    {
+        using var context = CreateDbContext();
+        var (course, student, structure, _, _) = await SeedDataAsync(context);
+        context.ExamStructures.Remove(structure);
+        await context.SaveChangesAsync();
+
+        var result = await new StartMockExamCommandHandler(context)
+            .Handle(new StartMockExamCommand(course.Id, student.Id, false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+        (await context.ExamStructures.CountAsync()).Should().Be(0);
+        (await context.MockExamSessions.CountAsync()).Should().Be(0);
+        (await context.MockExamQuotas.CountAsync()).Should().Be(0);
     }
 
     [Fact(DisplayName = "2. Khi bật tùy chọn Follow-up, thời lượng làm bài tăng lên 45 phút")]
@@ -380,6 +400,8 @@ public class StartMockExamCommandHandlerTests
             });
         }
         await context.SaveChangesAsync();
+
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
 
         var handler = new StartMockExamCommandHandler(context);
         var command = new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false);

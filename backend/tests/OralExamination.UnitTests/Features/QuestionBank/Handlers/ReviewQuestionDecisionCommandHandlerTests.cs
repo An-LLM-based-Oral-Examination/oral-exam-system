@@ -56,6 +56,7 @@ public class ReviewQuestionDecisionCommandHandlerTests
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = role == "department_head" ? reviewer.Id : null,
             HasFollowUp = true,
             IsActive = true
         };
@@ -333,5 +334,42 @@ public class ReviewQuestionDecisionCommandHandlerTests
         var syncedPractice = await context.PracticeQuestions
             .FirstOrDefaultAsync(p => p.CourseId == course.Id && p.Title == question.Title);
         syncedPractice.Should().BeNull();
+    }
+    [Fact]
+    public async Task DepartmentHead_CannotApproveQuestionFromAnotherCourse()
+    {
+        using var context = CreateDbContext();
+        var (reviewer, course) = await SeedReviewerAndCourseAsync(context);
+        course.DepartmentHeadUserId = Guid.NewGuid();
+        var question = CreateExamQuestion(course.Id);
+        context.ExamQuestions.Add(question);
+        await context.SaveChangesAsync();
+
+        var result = await new ReviewQuestionDecisionCommandHandler(context).Handle(
+            new ReviewQuestionDecisionCommand(question.Id, reviewer.Id, ApprovalStatus.Approved, "cross-course", null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("FORBIDDEN");
+        question.ApprovalStatus.Should().Be(ApprovalStatus.SubmittedForReview);
+    }
+
+    [Fact]
+    public async Task DepartmentHead_CannotApproveOwnQuestion()
+    {
+        using var context = CreateDbContext();
+        var (reviewer, course) = await SeedReviewerAndCourseAsync(context);
+        var question = CreateExamQuestion(course.Id);
+        question.SubmittedBy = reviewer.Id;
+        context.ExamQuestions.Add(question);
+        await context.SaveChangesAsync();
+
+        var result = await new ReviewQuestionDecisionCommandHandler(context).Handle(
+            new ReviewQuestionDecisionCommand(question.Id, reviewer.Id, ApprovalStatus.Approved, "self-approval", null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("tự phê duyệt");
+        question.ApprovalStatus.Should().Be(ApprovalStatus.SubmittedForReview);
     }
 }

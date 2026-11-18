@@ -189,14 +189,27 @@ public class PostgresSchemaReconcilerCoverageTests
         sql.Should().MatchRegex(@"ALTER\s+TABLE\s+lecturer_audit_details\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+submission_id\s+uuid");
     }
 
-    [Fact(DisplayName = "PostgresSchemaReconciler: Bảng classes có đầy đủ join_password_plain, join_password_hash, join_code")]
+    [Fact(DisplayName = "PostgresSchemaReconciler: Bảng classes có đầy đủ join_password_hash, join_code và không còn join_password_plain")]
     public void GetPostMigrationSql_Should_Contain_CrucialColumns_For_Classes()
     {
         var sql = PostgresSchemaReconciler.GetPostMigrationSql();
 
-        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+classes\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+join_password_plain\s+character\s+varying");
+        sql.Should().NotContain("join_password_plain");
         sql.Should().MatchRegex(@"ALTER\s+TABLE\s+classes\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+join_password_hash\s+character\s+varying");
         sql.Should().MatchRegex(@"ALTER\s+TABLE\s+classes\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+join_code\s+character\s+varying");
+    }
+
+    [Fact(DisplayName = "PostgresSchemaReconciler: Bảng practice_answers, in_class_exam_submissions, appeal_requests và ai_evaluations đồng bộ AZ-B07/AZ-B10")]
+    public void GetPostMigrationSql_Should_Contain_ProcessingStartedAt_AppealVarchar40_And_AiEvalPartialUniqueIndexes()
+    {
+        var sql = PostgresSchemaReconciler.GetPostMigrationSql();
+
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+practice_answers\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+processing_started_at\s+timestamp\s+with\s+time\s+zone");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+in_class_exam_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+processing_started_at\s+timestamp\s+with\s+time\s+zone");
+        sql.Should().Contain("status character varying(40) NOT NULL");
+        sql.Should().Contain("uq_ai_evaluations_practice_answer");
+        sql.Should().Contain("uq_ai_evaluations_mock_exam_answer");
+        sql.Should().Contain("uq_ai_evaluations_in_class_submission");
     }
 
     [Fact(DisplayName = "PostgresSchemaReconciler: Ràng buộc ck_ai_evaluations_type bao gồm giá trị 'in_class' cho MF-05")]

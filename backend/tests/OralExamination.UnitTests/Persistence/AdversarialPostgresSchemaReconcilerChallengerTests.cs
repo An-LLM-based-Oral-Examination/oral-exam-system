@@ -189,33 +189,15 @@ public class AdversarialPostgresSchemaReconcilerChallengerTests
             $"Violations: {string.Join(" | ", staticDmlViolations)}");
     }
 
-    [Fact(DisplayName = "ADV-SEED-06: Seed user must_change_password reset must cover admin, dept head, and sample users")]
-    public void Adversarial_SeedUserPasswordReset_MustIncludeAllCoreDefaultAccounts()
+    [Fact(DisplayName = "ADV-SEED-06: Reconciler must never overwrite must_change_password = FALSE or seed hardcoded user IDs in Production")]
+    public void Adversarial_Reconciler_MustNeverOverwrite_AdminMustChangePassword()
     {
         var sql = PostgresSchemaReconciler.GetPostMigrationSql();
 
-        var expectedUsernames = new[] { "admin", "headse", "totnt", "khaothi", "hoalvse170001", "maittse170002" };
-        var expectedEmails = new[] { "admin@fpt.edu.vn", "headse@fe.edu.vn", "totnt@fe.edu.vn", "khaothi@fe.edu.vn" };
-        var expectedIds = new[]
-        {
-            "00000000-0000-0000-0000-000000000001", // admin
-            "00000000-0000-0000-0000-000000000002", // headse
-            "00000000-0000-0000-0000-000000000003"  // totnt
-        };
-
-        foreach (var username in expectedUsernames)
-        {
-            sql.Should().Contain($"''{username}''", $"Username '{username}' must be included in the self-healing password reset query");
-        }
-
-        foreach (var email in expectedEmails)
-        {
-            sql.Should().Contain($"''{email}''", $"Email '{email}' must be included in the self-healing password reset query");
-        }
-
-        foreach (var id in expectedIds)
-        {
-            sql.Should().Contain($"''{id}''", $"User ID '{id}' must be included in the self-healing password reset query");
-        }
+        sql.Should().NotContain("must_change_password = FALSE",
+            "Production admin bootstrap relies on MustChangePassword = true and must never be silently cleared by startup reconciliation");
+        sql.Should().NotContain("00000000-0000-0000-0000-000000000001");
+        sql.Should().NotContain("00000000-0000-0000-0000-000000000002");
+        sql.Should().NotContain("admin@fpt.edu.vn");
     }
 }

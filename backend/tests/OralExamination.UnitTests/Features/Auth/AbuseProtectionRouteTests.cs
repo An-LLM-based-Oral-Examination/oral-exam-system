@@ -8,12 +8,16 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OralExamination.API.Configuration;
 using OralExamination.Application;
+using OralExamination.Application.Common.Interfaces;
+using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Authentication;
+using OralExamination.Infrastructure.Persistence;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Auth;
@@ -30,21 +34,35 @@ public sealed class AbuseProtectionRouteTests : IAsyncLifetime
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Authentication:JwtSigningKey"] = "isolated-abuse-test-key-not-production-123456789012345",
-            ["Security:Abuse:LoginPermits"] = "2", ["Security:Abuse:SpeechPermits"] = "2",
-            ["Security:Abuse:UploadPermits"] = "2", ["Security:Abuse:AiPermits"] = "2",
-            ["Security:Abuse:MaxUploadBytes"] = "1024", ["Security:Abuse:ExpensiveRequestSeconds"] = "1"
+            ["Security:Abuse:LoginPermits"] = "2", ["Security:Abuse:RefreshPermits"] = "3",
+            ["Security:Abuse:SpeechPermits"] = "2", ["Security:Abuse:UploadPermits"] = "2",
+            ["Security:Abuse:AiPermits"] = "2", ["Security:Abuse:SubmitPermits"] = "3",
+            ["Security:Abuse:MaxUploadBytes"] = "1024", ["Security:Abuse:ExpensiveRequestSeconds"] = "1",
+            ["Security:TrustedNetworks:0"] = "172.18.0.0/16"
         });
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
         builder.Services.AddApplication();
+        var databaseName = Guid.NewGuid().ToString();
+        builder.Services.AddDbContext<OralExamDbContext>(options =>
+            options.UseInMemoryDatabase(databaseName));
+        builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<OralExamDbContext>());
         builder.Services.AddOralExamAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
         builder.Services.AddApiErrorContracts();
         builder.Services.AddApiAbuseProtection(builder.Configuration);
+        builder.Services.AddOralExamRateLimiting(builder.Configuration);
         builder.Services.AddControllers().AddApplicationPart(typeof(AbuseDiagnosticsController).Assembly);
         _app = builder.Build();
-        // Model an Internet peer, not the framework's trusted loopback proxy.
-        _app.Use((context, next) => { context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10"); return next(context); });
+        // Model an Internet peer by default, or a simulated peer IP when header is supplied in test.
+        _app.Use((context, next) =>
+        {
+            if (context.Request.Headers.TryGetValue("X-Test-Peer-Ip", out var peerIp) && IPAddress.TryParse(peerIp, out var parsedPeer))
+                context.Connection.RemoteIpAddress = parsedPeer;
+            else
+                context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.10");
+            return next(context);
+        });
         _app.UseForwardedHeaders();
         _app.UseRouting();
         _app.UseApiErrorContracts();
@@ -52,8 +70,11 @@ public sealed class AbuseProtectionRouteTests : IAsyncLifetime
         _app.UseApiAbuseProtection();
         _app.UseAuthorization();
         _app.MapPost("/api/v1/auth/login-probe", () => Results.Ok());
+        _app.MapPost("/api/v1/auth/probe/refresh-token", () => Results.Ok());
+        _app.MapPost("/api/v1/auth/probe/sign-out", () => Results.Ok());
         _app.MapPost("/api/v1/speech/probe", () => Results.Ok());
         _app.MapGet("/api/v1/generate-probe", () => Results.Ok());
+        _app.MapPost("/api/v1/practice/submit-probe", () => Results.Ok()).RequireAuthorization();
         _app.MapPost("/api/v1/upload-probe", async (HttpContext context) => { await context.Request.Body.CopyToAsync(Stream.Null, context.RequestAborted); return Results.Ok(); });
         _app.MapGet("/api/v1/speech/slow", async (HttpContext context) => { await Task.Delay(TimeSpan.FromSeconds(10), context.RequestAborted); return Results.Ok(); }).WithRequestTimeout("expensive");
         _app.MapControllers();
@@ -126,8 +147,145 @@ public sealed class AbuseProtectionRouteTests : IAsyncLifetime
         json.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo("requests", "rejected", "loginLockouts", "scope");
     }
 
+    [Fact]
+    public async Task Concurrent120Students_BehindSameNginxBridgeAndCampusNat_AllSucceedOnSubmitWithout429()
+    {
+        var students = Enumerable.Range(0, 120).Select(_ => Guid.NewGuid()).ToArray();
+        var tokens = new Dictionary<Guid, string>(students.Length);
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var issuer = new JwtAccessTokenIssuer(_app.Configuration);
+            foreach (var studentId in students)
+            {
+                db.Users.Add(new User
+                {
+                    Id = studentId,
+                    Email = $"{studentId:N}@fpt.edu.vn",
+                    FullName = "Student Concurrency",
+                    Role = "student",
+                    IsActive = true,
+                    AuthVersion = 1
+                });
+                tokens[studentId] = issuer.Issue(studentId, $"{studentId:N}@fpt.edu.vn", "Student Concurrency", "student", authVersion: 1).Token;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var submitTasks = students.Select(async studentId =>
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/practice/submit-probe");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens[studentId]);
+            // All 120 requests arrive through Docker Nginx container 172.18.0.4 and share 1 campus NAT IP 118.69.10.20.
+            request.Headers.Add("X-Test-Peer-Ip", "172.18.0.4");
+            request.Headers.Add("X-Forwarded-For", "118.69.10.20");
+            return await _client.SendAsync(request);
+        });
+
+        var responses = await Task.WhenAll(submitTasks);
+        responses.Should().HaveCount(120);
+        responses.Select(r => r.StatusCode).Should().AllBeEquivalentTo(HttpStatusCode.OK);
+
+        // Verify per-user submit limit (SubmitPermits = 3 in test fixture) still enforces 429 on 4th submit by same student
+        var singleStudentToken = tokens[students[0]];
+        for (var extra = 0; extra < 2; extra++)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/practice/submit-probe");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", singleStudentToken);
+            (await _client.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using var fourthReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/practice/submit-probe");
+        fourthReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", singleStudentToken);
+        await AssertProblem(await _client.SendAsync(fourthReq), 429, "RATE_LIMITED");
+    }
+
+    [Fact]
+    public async Task ExhaustedLoginBucket_DoesNotBlockSignOutOrRefreshToken()
+    {
+        for (var i = 0; i < 2; i++)
+            (await _client.PostAsync("/api/v1/auth/login-probe", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await AssertProblem(await _client.PostAsync("/api/v1/auth/login-probe", null), 429, "RATE_LIMITED");
+
+        (await _client.PostAsync("/api/v1/auth/probe/sign-out", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _client.PostAsync("/api/v1/auth/probe/refresh-token", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact(DisplayName = "M4-Item10: POST /hubs/in-class-shift/negotiate dùng mặc định 360 permits trên cùng Campus NAT và chặn #361 bằng 429 RATE_LIMITED")]
+    public async Task HubNegotiate_Default360PermitsOnSameCampusNat_Allows360AndRejects361With429()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Authentication:JwtSigningKey"] = "isolated-hub-negotiate-test-key-not-production-12345",
+            ["Security:TrustedNetworks:0"] = "172.18.0.0/16"
+        });
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        builder.Services.AddOralExamAuthentication(builder.Configuration);
+        builder.Services.AddAuthorization();
+        builder.Services.AddApiErrorContracts();
+        builder.Services.AddApiAbuseProtection(builder.Configuration);
+        builder.Services.AddOralExamRateLimiting(builder.Configuration);
+
+        await using var app = builder.Build();
+        app.Use((context, next) =>
+        {
+            context.Connection.RemoteIpAddress = IPAddress.Parse("172.18.0.4");
+            return next(context);
+        });
+        app.UseForwardedHeaders();
+        app.UseRouting();
+        app.UseApiErrorContracts();
+        app.UseAuthentication();
+        app.UseApiAbuseProtection();
+        app.UseAuthorization();
+        app.MapPost("/hubs/in-class-shift/negotiate", () => Results.Ok());
+        await app.StartAsync();
+
+        var url = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        using var client = new HttpClient { BaseAddress = new Uri(url) };
+
+        for (var i = 0; i < 360; i++)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/hubs/in-class-shift/negotiate");
+            req.Headers.Add("X-Forwarded-For", "118.69.10.20");
+            var resp = await client.SendAsync(req);
+            resp.StatusCode.Should().Be(HttpStatusCode.OK, $"hub negotiate permit #{i + 1} of 360 should succeed");
+        }
+
+        using var exceededReq = new HttpRequestMessage(HttpMethod.Post, "/hubs/in-class-shift/negotiate");
+        exceededReq.Headers.Add("X-Forwarded-For", "118.69.10.20");
+        var exceededResp = await client.SendAsync(exceededReq);
+        await AssertProblem(exceededResp, 429, "RATE_LIMITED");
+    }
+
     private void Authenticate(Guid user, string role = "student")
-        => _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtAccessTokenIssuer(_app.Configuration).Issue(user, "test@example.test", "Test", role).Token);
+    {
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var existing = db.Users.Find(user);
+            if (existing is null)
+            {
+                db.Users.Add(new User
+                {
+                    Id = user,
+                    Email = $"{user:N}@example.test",
+                    FullName = "Test User",
+                    Role = role,
+                    IsActive = true,
+                    AuthVersion = 1
+                });
+                db.SaveChanges();
+            }
+        }
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
+            new JwtAccessTokenIssuer(_app.Configuration).Issue(user, "test@example.test", "Test", role, authVersion: 1).Token);
+    }
 
     private static async Task AssertProblem(HttpResponseMessage response, int status, string code)
     {

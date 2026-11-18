@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.Auth.Commands.RefreshToken;
@@ -140,6 +141,39 @@ public class RefreshTokenCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
     }
 
+    [Fact(DisplayName = "T3-F008: Khi transaction commit thất bại, handler phải throw/fail và tuyệt đối không phát hành access token")]
+    public async Task Handle_CommitFailure_ThrowsException_AndDoesNotIssueTokens()
+    {
+        await using var context = CreateDbContext();
+        var user = SeedActiveUser(context);
+        var rawToken = "commit-fail-token";
+        SeedRefreshToken(context, user.Id, rawToken, DateTime.UtcNow.AddDays(7));
+        await context.SaveChangesAsync();
+
+        var issuer = new FakeIssuer();
+
+        var failingLockScope = new Mock<IRefreshTokenLockScope>();
+        failingLockScope.Setup(l => l.HasLock).Returns(true);
+        failingLockScope.Setup(l => l.CommitAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("PostgreSQL transaction commit failed due to connection break"));
+
+        var dbMock = new Mock<IApplicationDbContext>();
+        dbMock.Setup(d => d.Users).Returns(context.Users);
+        dbMock.Setup(d => d.RefreshTokens).Returns(context.RefreshTokens);
+        dbMock.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        dbMock.Setup(d => d.BeginRefreshTokenLockScopeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(failingLockScope.Object);
+
+        var handler = new RefreshTokenCommandHandler(dbMock.Object, issuer, new RefreshTokenCommandValidator());
+
+        var act = async () => await handler.Handle(new RefreshTokenCommand(rawToken), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*commit failed*");
+
+        issuer.Calls.Should().Be(0, "không được phép phát hành access token khi commit chưa thành công");
+    }
+
     private static RefreshTokenCommandHandler CreateHandler(OralExamDbContext context, FakeIssuer issuer)
     {
         return new RefreshTokenCommandHandler(context, issuer, new RefreshTokenCommandValidator());
@@ -179,11 +213,83 @@ public class RefreshTokenCommandHandlerTests
         return new OralExamDbContext(options);
     }
 
+    [Fact]
+    public async Task Controller_RefreshToken_409Conflict_PreservesSharedRefreshSessionCookie()
+    {
+        var sender = new Moq.Mock<MediatR.ISender>();
+        sender.Setup(x => x.Send(Moq.It.IsAny<RefreshTokenCommand>(), Moq.It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OralExamination.Application.Common.Models.Result<OralExamination.Application.Features.Auth.DTOs.RefreshTokenResponse>.Failure(
+                "CONFLICT: Refresh token đang được xử lý đồng thời ở một tiến trình khác."));
+
+        var serviceCollection = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<Microsoft.Extensions.Hosting.IHostEnvironment>(
+            serviceCollection, new FakeHostEnvironment { EnvironmentName = "Testing" });
+        var services = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(serviceCollection);
+
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            RequestServices = services
+        };
+        httpContext.Request.Headers.Cookie = "oes_refresh_session=concurrent-old-token";
+
+        var controller = new global::API.Controllers.v1.AuthController(sender.Object)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext }
+        };
+
+        var actionResult = await controller.RefreshToken(null, CancellationToken.None);
+
+        var objectResult = actionResult.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(Microsoft.AspNetCore.Http.StatusCodes.Status409Conflict);
+        httpContext.Response.Headers.SetCookie.ToString().Should().BeEmpty(
+            "409 Conflict do xoay vòng đồng thời không được phát Set-Cookie xóa oes_refresh_session mới vừa cấp ở tab bên cạnh");
+    }
+
+    [Fact]
+    public async Task Controller_RefreshToken_401Unauthorized_DeletesSharedRefreshSessionCookie()
+    {
+        var sender = new Moq.Mock<MediatR.ISender>();
+        sender.Setup(x => x.Send(Moq.It.IsAny<RefreshTokenCommand>(), Moq.It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OralExamination.Application.Common.Models.Result<OralExamination.Application.Features.Auth.DTOs.RefreshTokenResponse>.Failure(
+                "Refresh token không tồn tại hoặc không hợp lệ."));
+
+        var serviceCollection = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<Microsoft.Extensions.Hosting.IHostEnvironment>(
+            serviceCollection, new FakeHostEnvironment { EnvironmentName = "Testing" });
+        var services = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(serviceCollection);
+
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            RequestServices = services
+        };
+        httpContext.Request.Headers.Cookie = "oes_refresh_session=invalid-token";
+
+        var controller = new global::API.Controllers.v1.AuthController(sender.Object)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = httpContext }
+        };
+
+        var actionResult = await controller.RefreshToken(null, CancellationToken.None);
+
+        var objectResult = actionResult.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(Microsoft.AspNetCore.Http.StatusCodes.Status401Unauthorized);
+        httpContext.Response.Headers.SetCookie.ToString().Should().Contain("oes_refresh_session=;");
+    }
+
+    private sealed class FakeHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Testing";
+        public string ApplicationName { get; set; } = "OralExamination.UnitTests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
+    }
+
     private sealed class FakeIssuer : IAccessTokenIssuer
     {
         public int Calls { get; private set; }
 
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
         {
             Calls++;
             return new IssuedAccessToken("access-token", 900);

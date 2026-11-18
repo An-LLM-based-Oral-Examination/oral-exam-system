@@ -46,6 +46,19 @@ public class PracticeControllerTests
         };
     }
 
+    [Fact]
+    public async Task Start_MapsMissingEnrollmentTo403()
+    {
+        SetUserContext(Guid.NewGuid());
+        _senderMock.Setup(s => s.Send(It.IsAny<StartPracticeSessionCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<StartPracticeSessionResponse>.Failure("FORBIDDEN:Chưa tham gia lớp."));
+
+        var request = new StartPracticeSessionRequest(Guid.NewGuid(), "easy", 1);
+        var result = await _controller.StartSession(request);
+
+        result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(403);
+    }
+
     [Fact(DisplayName = "1. StartSession trả về 200 OK cùng StartPracticeSessionResponse khi thành công")]
     public async Task StartSession_Should_Return_200_When_Successful()
     {
@@ -349,7 +362,7 @@ public class PracticeControllerTests
             .ReturnsAsync(Result<NextQuestionResponse>.Success(expectedResponse));
 
         // Act
-        var actionResult = await _controller.GetNextQuestion(sessionId, studentId: spoofedStudentId);
+        var actionResult = await _controller.GetNextQuestion(sessionId);
 
         // Assert
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
@@ -375,7 +388,7 @@ public class PracticeControllerTests
             .ReturnsAsync(Result.Success());
 
         // Act
-        var actionResult = await _controller.CompleteSession(sessionId, studentId: spoofedStudentId);
+        var actionResult = await _controller.CompleteSession(sessionId);
 
         // Assert
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
@@ -429,7 +442,7 @@ public class PracticeControllerTests
             .ReturnsAsync(Result<List<PracticeHistoryItemDto>>.Success(expectedHistory));
 
         // Act
-        var actionResult = await _controller.GetStudentHistory(studentId: spoofedStudentId);
+        var actionResult = await _controller.GetStudentHistory();
 
         // Assert
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;

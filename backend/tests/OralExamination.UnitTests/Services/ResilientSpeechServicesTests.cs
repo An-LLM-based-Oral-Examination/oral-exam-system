@@ -17,9 +17,11 @@ using Polly.Retry;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -596,7 +598,7 @@ public class ResilientSpeechServicesTests
         fallbackResult.Text.Should().Be("Em dùng Polly Retry và Dead-Letter Queue");
     }
 
-    [Fact(DisplayName = "17. Gemini 3.8 TTS: Gửi verbatim transcript + speech_metadata.style (không chèn lệnh đạo diễn vào text) và đóng gói chuẩn audio/wav")]
+    [Fact(DisplayName = "17. Gemini TTS: Payload đúng schema, đọc nguyên văn và đóng gói audio/wav")]
     public async Task SynthesizeSpeechAsync_WhenFallingBackToGemini38Tts_SendsVerbatimTextAndReturnsWavAudio()
     {
         var config = BuildConfig(new Dictionary<string, string?>
@@ -635,15 +637,20 @@ public class ResilientSpeechServicesTests
 
         result.Provider.Should().Be("GeminiAudioTts");
         result.ContentType.Should().Be("audio/wav");
-        result.AudioBytes.Length.Should().Be(44 + rawPcmSamples.Length, "PCM16 từ Gemini 3.8 TTS phải được bọc header RIFF WAV 44 bytes");
+        result.AudioBytes.Length.Should().Be(44 + rawPcmSamples.Length, "PCM16 từ Gemini TTS phải được bọc header RIFF WAV 44 bytes");
         Encoding.ASCII.GetString(result.AudioBytes, 0, 4).Should().Be("RIFF");
         Encoding.ASCII.GetString(result.AudioBytes, 8, 4).Should().Be("WAVE");
 
-        capturedUrl.Should().Contain("gemini-3.8-flash-lite-tts:generateContent");
+        capturedUrl.Should().Contain("gemini-2.5-flash-preview-tts:generateContent");
         capturedUrl.Should().NotContain("key=");
         capturedPayload.Should().NotBeNull();
-        capturedPayload.Should().Contain("speech_metadata");
-        capturedPayload.Should().NotContain("Hãy đọc rõ ràng câu hỏi", "Gemini 3.8 TTS đọc nguyên văn parts[].text nên cấm nhét lời nhắc vào text");
+        using var payload = JsonDocument.Parse(capturedPayload!);
+        payload.RootElement.TryGetProperty("speech_metadata", out _).Should().BeFalse();
+        var voiceConfig = payload.RootElement.GetProperty("generationConfig")
+            .GetProperty("speechConfig").GetProperty("voiceConfig");
+        voiceConfig.TryGetProperty("voice", out _).Should().BeFalse();
+        voiceConfig.GetProperty("prebuiltVoiceConfig").GetProperty("voiceName").GetString().Should().Be("Kore");
+        capturedPayload.Should().NotContain("Hãy đọc rõ ràng câu hỏi", "Gemini TTS đọc nguyên văn parts[].text nên cấm nhét lời nhắc vào text");
     }
 
     [Fact(DisplayName = "18. GeminiSpeechToTextService: Không bị biến Gemini__ApiUrl (gemini-3.6-flash) ghi đè mất ưu tiên của gemini-3.5-transcribe")]
@@ -2145,5 +2152,250 @@ public class ResilientSpeechServicesTests
         CloudflareWhisperService.DetectLanguage("lang:en").Should().Be("vi", "lang:en dùng chế độ song ngữ vi cho Whisper để nhận diện cả tiếng Việt và thuật ngữ");
         CloudflareWhisperService.DetectLanguage(null).Should().Be("vi");
         CloudflareWhisperService.DetectLanguage("").Should().Be("vi");
+    }
+    [Fact]
+    public void GeminiSpeechToTextService_PoolOnlyCredentialsAreRecognized()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Gemini:ApiKey"] = "YourActualApiKey",
+            ["Gemini:ApiKeys"] = "key-pool-one,key-pool-two"
+        });
+
+        var service = new GeminiSpeechToTextService(new HttpClient(), config);
+
+        service.HasCredentials.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OfficialTtsOnly_UsesGeminiPoolWithoutCallingLegacyPrimary()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Speech:OfficialTtsOnly"] = "true",
+            ["Gemini:ApiKey"] = "YourActualApiKey",
+            ["Gemini:ApiKeys"] = "pool-key-one"
+        });
+        string? usedKey = null;
+        var audio = Convert.ToBase64String(Encoding.ASCII.GetBytes("RIFF0000WAVE"));
+        var handler = new MockHttpMessageHandler((request, _) =>
+        {
+            usedKey = request.Headers.GetValues("x-goog-api-key").Single();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"candidates\":[{{\"content\":{{\"parts\":[{{\"inlineData\":{{\"data\":\"{audio}\",\"mimeType\":\"audio/wav\"}}}}]}}}}]}}")
+            });
+        });
+        var service = new ResilientTextToSpeechService(new HttpClient(handler), config, null,
+            (_, _, _, _) => throw new InvalidOperationException("Legacy primary must not be called"));
+
+        var result = await service.SynthesizeSpeechAsync("Official TTS verification sentence 20261117");
+
+        result.Provider.Should().Be("GeminiAudioTts");
+        result.ContentType.Should().Be("audio/wav");
+        usedKey.Should().Be("pool-key-one");
+    }
+
+    [Fact]
+    public async Task GeminiTts_WhenTtsModelConfigured_UsesConfiguredModelFirst()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Speech:OfficialTtsOnly"] = "true",
+            ["Gemini:ApiKey"] = "tts-model-key",
+            ["Gemini:TtsModel"] = "gemini-2.5-pro-preview-tts"
+        });
+
+        var requestedUrls = new List<string>();
+        var audio = Convert.ToBase64String(Encoding.ASCII.GetBytes("RIFF0000WAVE"));
+        var handler = new MockHttpMessageHandler((request, _) =>
+        {
+            requestedUrls.Add(request.RequestUri!.ToString());
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"candidates\":[{{\"content\":{{\"parts\":[{{\"inlineData\":{{\"data\":\"{audio}\",\"mimeType\":\"audio/wav\"}}}}]}}}}]}}")
+            });
+        });
+
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(handler),
+            config,
+            null,
+            (_, _, _, _) => throw new InvalidOperationException("Legacy primary must not be called"));
+
+        var result = await service.SynthesizeSpeechAsync("Configured Gemini TTS model test 20261118");
+
+        result.Provider.Should().Be("GeminiAudioTts");
+        result.ContentType.Should().Be("audio/wav");
+        requestedUrls.Should().ContainSingle();
+        requestedUrls[0].Should().Contain("gemini-2.5-pro-preview-tts:generateContent");
+    }
+
+    [Fact]
+    public async Task GeminiTts_WhenFlashPreviewReturns404_FallsBackToProPreviewTts()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Speech:OfficialTtsOnly"] = "true",
+            ["Gemini:ApiKey"] = "tts-fallback-model-key"
+        });
+
+        var requestedUrls = new List<string>();
+        var audio = Convert.ToBase64String(Encoding.ASCII.GetBytes("RIFF0000WAVE"));
+        var handler = new MockHttpMessageHandler((request, _) =>
+        {
+            var url = request.RequestUri!.ToString();
+            requestedUrls.Add(url);
+            if (url.Contains("gemini-2.5-flash-preview-tts", StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+                {
+                    Content = new StringContent("{\"error\":{\"code\":404}}")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"candidates\":[{{\"content\":{{\"parts\":[{{\"inlineData\":{{\"data\":\"{audio}\",\"mimeType\":\"audio/wav\"}}}}]}}}}]}}")
+            });
+        });
+
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(handler),
+            config,
+            null,
+            (_, _, _, _) => throw new InvalidOperationException("Legacy primary must not be called"));
+
+        var result = await service.SynthesizeSpeechAsync("Fallback to gemini pro preview tts 20261118");
+
+        result.Provider.Should().Be("GeminiAudioTts");
+        result.ContentType.Should().Be("audio/wav");
+        requestedUrls.Should().HaveCount(2);
+        requestedUrls[0].Should().Contain("gemini-2.5-flash-preview-tts:generateContent");
+        requestedUrls[1].Should().Contain("gemini-2.5-pro-preview-tts:generateContent");
+    }
+
+    [Fact]
+    public async Task NonOfficialTts_WhenPreferGeminiFallbackAndApiKeyPoolConfigured_UsesGeminiPool()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Speech:OfficialTtsOnly"] = "false",
+            ["Speech:PreferGeminiTtsFallback"] = "true",
+            ["Gemini:ApiKey"] = "YourActualApiKey",
+            ["Gemini:ApiKeys"] = "pool-tts-key-2026"
+        });
+
+        string? capturedKey = null;
+        string? capturedUrl = null;
+        var audio = Convert.ToBase64String(Encoding.ASCII.GetBytes("RIFF0000WAVE"));
+        var handler = new MockHttpMessageHandler((request, _) =>
+        {
+            capturedKey = request.Headers.GetValues("x-goog-api-key").Single();
+            capturedUrl = request.RequestUri!.ToString();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"{{\"candidates\":[{{\"content\":{{\"parts\":[{{\"inlineData\":{{\"data\":\"{audio}\",\"mimeType\":\"audio/wav\"}}}}]}}}}]}}")
+            });
+        });
+
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(handler),
+            config,
+            null,
+            (_, _, _, _) => throw new InvalidOperationException("Edge WebSocket blocked"));
+
+        var result = await service.SynthesizeSpeechAsync("Pool fallback verification 20261118");
+
+        result.Provider.Should().Be("GeminiAudioTts");
+        result.UsedFallback.Should().BeTrue();
+        result.ContentType.Should().Be("audio/wav");
+        capturedKey.Should().Be("pool-tts-key-2026");
+        capturedUrl.Should().Contain("gemini-2.5-flash-preview-tts:generateContent");
+    }
+
+    [Fact]
+    public async Task AlpineFallbackChain_WhenEdgeAndGeminiFail_FallsBackToGoogleTranslateAndDoesNotRetryGeminiTwice()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Speech:OfficialTtsOnly"] = "false",
+            ["Speech:PreferGeminiTtsFallback"] = "true",
+            ["Gemini:ApiKey"] = "alpine-gemini-key"
+        });
+
+        int geminiCallCount = 0;
+        int googleCallCount = 0;
+        var fakeMp3 = new byte[] { 0x49, 0x44, 0x33, 0x03, 0x00, 0x01 };
+
+        var handler = new MockHttpMessageHandler((request, _) =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url.Contains("generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase))
+            {
+                geminiCallCount++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+                {
+                    Content = new StringContent("{\"error\":{\"code\":404}}")
+                });
+            }
+
+            if (url.Contains("translate.googleapis.com", StringComparison.OrdinalIgnoreCase))
+            {
+                googleCallCount++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new ByteArrayContent(fakeMp3)
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest));
+        });
+
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(handler),
+            config,
+            null,
+            (_, _, _, _) => throw new InvalidOperationException("Edge offline"));
+
+        // 1. Edge + Gemini fail -> falls back cleanly to GoogleNeuralTranslateTts
+        var result = await service.SynthesizeSpeechAsync("Kiểm thử chuỗi fallback Alpine 20261118");
+
+        result.Provider.Should().Be("GoogleNeuralTranslateTts");
+        result.ContentType.Should().Be("audio/mpeg");
+        result.UsedFallback.Should().BeTrue();
+        geminiCallCount.Should().Be(2, "Chỉ thử flash + pro 1 lượt trong PreferGeminiTtsFallback");
+        googleCallCount.Should().Be(1);
+
+        // 2. When Google ALSO fails, Gemini is NOT called redundantly a second time
+        geminiCallCount = 0;
+        var allFailHandler = new MockHttpMessageHandler((request, _) =>
+        {
+            var url = request.RequestUri!.ToString();
+            if (url.Contains("generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase))
+            {
+                geminiCallCount++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+                {
+                    Content = new StringContent("{\"error\":{\"code\":429}}")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("unavailable")
+            });
+        });
+
+        var failingService = new ResilientTextToSpeechService(
+            new HttpClient(allFailHandler),
+            config,
+            null,
+            (_, _, _, _) => throw new InvalidOperationException("Edge offline"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            failingService.SynthesizeSpeechAsync("Kiểm thử không gọi lại Gemini lần hai 20261118"));
+
+        geminiCallCount.Should().Be(2, "Không gọi lại Gemini trong catch(googleEx) khi PreferGeminiTtsFallback đã thử và thất bại");
     }
 }

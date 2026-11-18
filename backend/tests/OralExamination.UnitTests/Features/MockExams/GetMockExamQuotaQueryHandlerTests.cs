@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
 using OralExamination.Domain.Entities;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.MockExams;
@@ -36,6 +37,7 @@ public class GetMockExamQuotaQueryHandlerTests
         await context.SaveChangesAsync();
 
         var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -79,6 +81,7 @@ public class GetMockExamQuotaQueryHandlerTests
         context.MockExamQuotas.Add(quota);
         await context.SaveChangesAsync();
 
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -118,6 +121,7 @@ public class GetMockExamQuotaQueryHandlerTests
         context.MockExamQuotas.Add(quota);
         await context.SaveChangesAsync();
 
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -181,6 +185,7 @@ public class GetMockExamQuotaQueryHandlerTests
         await context.SaveChangesAsync();
 
         var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -207,6 +212,7 @@ public class GetMockExamQuotaQueryHandlerTests
         await context.SaveChangesAsync();
 
         var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -240,6 +246,7 @@ public class GetMockExamQuotaQueryHandlerTests
         await context.SaveChangesAsync();
 
         var studentId = Guid.NewGuid();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -294,6 +301,7 @@ public class GetMockExamQuotaQueryHandlerTests
         context.MockExamQuotas.AddRange(quotaYesterday, quotaTomorrow);
         await context.SaveChangesAsync();
 
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -335,6 +343,7 @@ public class GetMockExamQuotaQueryHandlerTests
         context.MockExamQuotas.Add(quota);
         await context.SaveChangesAsync();
 
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, studentId);
         var handler = new GetMockExamQuotaQueryHandler(context);
         var query = new GetMockExamQuotaQuery(course.Id, studentId);
 
@@ -406,6 +415,8 @@ public class GetMockExamQuotaQueryHandlerTests
         context.Courses.AddRange(course1, course2);
         context.MockExamQuotas.AddRange(quotaStudent1Course1, quotaStudent2Course1, quotaStudent1Course2);
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course2.Id, student1);
+        await StudentEnrollmentFixture.EnrollAsync(context, course1.Id, student2);
 
         var handler = new GetMockExamQuotaQueryHandler(context);
 

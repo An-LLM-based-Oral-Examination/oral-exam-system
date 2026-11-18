@@ -355,6 +355,9 @@ public class AcademicHierarchyTests
         result.Value.Name.Should().Be("Lớp SE1802 .NET Web API");
         result.Value.JoinCode.Should().Be("JOIN1802");
         result.Value.HasPassword.Should().BeTrue();
+        result.Value.JoinPassword.Should().Be("SecurePassword123!");
+        typeof(ClassDetailDto).GetProperty("JoinPassword").Should().BeNull();
+        typeof(LecturerClassItemDto).GetProperty("JoinPassword").Should().BeNull();
 
         var savedClass = await context.Classes.FindAsync(result.Value.Id);
         savedClass.Should().NotBeNull();
@@ -1116,6 +1119,7 @@ public class AcademicHierarchyTests
         result.Value.JoinCode.Should().Be("NEWJOIN2");
         result.Value.HasPassword.Should().BeTrue();
         result.Value.IsJoinEnabled.Should().BeFalse();
+        result.Value.JoinPassword.Should().Be("NewSecretPassword99!");
 
         var updatedClass = await context.Classes.FindAsync(targetClass.Id);
         _passwordHasher.Verify("NewSecretPassword99!", updatedClass!.JoinPasswordHash!).Should().BeTrue();

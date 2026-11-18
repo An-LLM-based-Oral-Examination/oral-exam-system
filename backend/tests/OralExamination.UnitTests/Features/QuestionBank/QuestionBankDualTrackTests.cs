@@ -65,6 +65,7 @@ public sealed class QuestionBankDualTrackTests
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = role == UserRole.DepartmentHead ? lecturer.Id : null,
             HasFollowUp = true,
             IsActive = true
         };
@@ -101,6 +102,11 @@ public sealed class QuestionBankDualTrackTests
         context.Courses.Add(course);
         context.CourseClos.Add(clo);
         context.ExamStructures.Add(structure);
+        if (role == UserRole.Lecturer)
+            context.CourseLecturers.Add(new CourseLecturer
+            {
+                CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id
+            });
         await context.SaveChangesAsync();
 
         return (lecturer, course, clo, structure);
@@ -517,6 +523,7 @@ public sealed class QuestionBankDualTrackTests
             CreatedAt = DateTime.UtcNow
         };
         context.Users.Add(deptHead);
+        course.DepartmentHeadUserId = deptHead.Id;
         await context.SaveChangesAsync();
 
         // 1. Giảng viên gọi CreateDraftQuestionCommand với UsageScope = "practice"
@@ -555,14 +562,15 @@ public sealed class QuestionBankDualTrackTests
         // 3. Gọi GetQuestionsQuery (lọc SUBMITTED_FOR_REVIEW) và GetQuestionByIdQuery
         var getListHandler = new GetQuestionsQueryHandler(context);
         var listResult = await getListHandler.Handle(
-            new GetQuestionsQuery(CourseId: course.Id, ApprovalStatus: ApprovalStatus.SubmittedForReview),
+            new GetQuestionsQuery(CourseId: course.Id, ApprovalStatus: ApprovalStatus.SubmittedForReview,
+                ActorId: lecturer.Id, ActorRole: UserRole.Lecturer),
             CancellationToken.None);
 
         listResult.IsSuccess.Should().BeTrue();
         listResult.Value.Items.Should().ContainSingle(q => q.Id == questionId && q.ApprovalStatus == ApprovalStatus.SubmittedForReview);
 
         var getByIdHandler = new GetQuestionByIdQueryHandler(context);
-        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(questionId), CancellationToken.None);
+        var detailResult = await getByIdHandler.Handle(new GetQuestionByIdQuery(questionId, lecturer.Id, UserRole.Lecturer), CancellationToken.None);
 
         detailResult.IsSuccess.Should().BeTrue();
         detailResult.Value.Id.Should().Be(questionId);

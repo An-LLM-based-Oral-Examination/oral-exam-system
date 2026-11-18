@@ -26,7 +26,7 @@ public class PostgresSchemaReconcilerTests
     {
         "academic_program_id",
         "course_offering_id",
-        "join_password_plain",
+        "processing_started_at",
         "status",
         "must_change_password",
         "flow_type",
@@ -136,19 +136,19 @@ public class PostgresSchemaReconcilerTests
     }
 
     [Fact]
-    public void GetPostMigrationSql_ShouldSelfHealSeedUsersMustChangePassword()
+    public void GetPostMigrationSql_ShouldNotOverwriteAdminMustChangePassword_AndShouldRepairAppealRequestsAndAiEvalIndexes()
     {
         // Act
         var sql = PostgresSchemaReconciler.GetPostMigrationSql();
 
         // Assert
-        sql.Should().Contain("must_change_password = FALSE");
-        sql.Should().Contain("00000000-0000-0000-0000-000000000001"); // admin
-        sql.Should().Contain("00000000-0000-0000-0000-000000000002"); // headse
-        sql.Should().Contain("00000000-0000-0000-0000-000000000003"); // totnt
-        sql.Should().Contain("admin@fpt.edu.vn");
-        sql.Should().Contain("headse@fe.edu.vn");
-        sql.Should().Contain("totnt@fe.edu.vn");
+        sql.Should().NotContain("must_change_password = FALSE");
+        sql.Should().NotContain("00000000-0000-0000-0000-000000000001");
+        sql.Should().NotContain("admin@fpt.edu.vn");
+        sql.Should().Contain("status character varying(40) NOT NULL");
+        sql.Should().Contain("uq_ai_evaluations_practice_answer");
+        sql.Should().Contain("uq_ai_evaluations_mock_exam_answer");
+        sql.Should().Contain("uq_ai_evaluations_in_class_submission");
     }
 
     [Fact]
@@ -158,12 +158,10 @@ public class PostgresSchemaReconcilerTests
         var sql = PostgresSchemaReconciler.GetPostMigrationSql();
 
         // Assert
-        sql.Should().Contain("EXECUTE 'INSERT INTO academic_programs");
-        sql.Should().Contain("EXECUTE 'UPDATE courses");
         sql.Should().Contain("EXECUTE 'INSERT INTO course_offerings");
         sql.Should().Contain("EXECUTE 'UPDATE course_lecturers AS cl");
         sql.Should().Contain("EXECUTE 'UPDATE classes AS cls");
-        sql.Should().Contain("EXECUTE 'UPDATE users");
+        sql.Should().Contain("EXECUTE 'UPDATE appeal_requests SET status");
         sql.Should().Contain("EXECUTE 'INSERT INTO \"__EFMigrationsHistory\"");
     }
 }

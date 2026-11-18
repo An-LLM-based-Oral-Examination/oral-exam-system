@@ -76,6 +76,7 @@ public class AdversarialMF03EdgeCaseTests
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = head.Id,
             HasFollowUp = true,
             IsActive = true
         };
@@ -83,6 +84,10 @@ public class AdversarialMF03EdgeCaseTests
         context.Users.AddRange(lecturer, head);
         context.Semesters.Add(semester);
         context.Courses.Add(course);
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = head.Id
+        });
         await context.SaveChangesAsync();
 
         return (lecturer, head, course);

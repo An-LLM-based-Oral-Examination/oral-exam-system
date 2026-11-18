@@ -118,15 +118,15 @@ public sealed class AiEvaluationConstraintTests(PostgresFixture fixture)
 
     private static async Task<PracticeAnswer[]> AddPracticeAnswersAsync(OralExamDbContext context, AcademicData academic)
     {
-        var question = new PracticeQuestion
+        var questions = Enumerable.Range(1, 2).Select(index => new PracticeQuestion
         {
             CourseId = academic.Course.Id, RubricId = academic.Rubric.Id, CloId = academic.Clo.Id,
-            Title = "Practice constraint fixture", Content = "Explain atomicity."
-        };
+            Title = $"Practice constraint fixture {index}", Content = $"Explain atomicity {index}."
+        }).ToArray();
         var session = new PracticeSession { CourseId = academic.Course.Id, StudentId = academic.Student.Id };
         var answers = Enumerable.Range(1, 2).Select(index => new PracticeAnswer
         {
-            Session = session, Question = question, StudentId = academic.Student.Id,
+            Session = session, Question = questions[index - 1], StudentId = academic.Student.Id,
             OrderIndex = index, AnswerText = $"Integration practice answer {index}"
         }).ToArray();
         context.PracticeAnswers.AddRange(answers);

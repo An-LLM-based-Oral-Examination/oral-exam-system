@@ -142,7 +142,7 @@ public class OfficialExamDlqReplayWorkerTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact(DisplayName = "3. OfficialExamDlqReplayWorker: Bài nộp bị kẹt quá 2 phút không có DLQ thì được tự động khôi phục vào hàng đợi chấm")]
+    [Fact(DisplayName = "3. OfficialExamDlqReplayWorker: Bài nộp bị kẹt quá 15 phút không có DLQ thì được tự động khôi phục vào hàng đợi chấm")]
     public async Task ReplayDueAsync_WhenSubmissionIsStuckWithoutDlq_ReEnqueuesSuccessfully()
     {
         // Arrange
@@ -160,7 +160,7 @@ public class OfficialExamDlqReplayWorkerTests
             QuestionId = questionId,
             Transcript = "Transcript hợp lệ cần chấm bù do sập server.",
             Status = "SUBMITTED",
-            SubmittedAt = DateTime.UtcNow.AddMinutes(-3) // Quá 2 phút
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-16)
         };
         context.InClassExamSubmissions.Add(submission);
         await context.SaveChangesAsync();

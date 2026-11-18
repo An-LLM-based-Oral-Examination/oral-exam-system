@@ -61,7 +61,9 @@ public sealed class PostgresConstraintTests(PostgresFixture fixture)
         await using var database = await fixture.CreateDatabaseAsync();
         await using var context = database.CreateContext();
         var user = new User { Email = "cascade@example.test", FullName = "Cascade User" };
+        var otherUser = new User { Email = "keep-me@example.test", FullName = "Preserved User" };
         var token = new RefreshToken { User = user, TokenHash = new string('a', 64), ExpiresAt = DateTime.UtcNow.AddDays(1) };
+        context.Users.Add(otherUser);
         context.RefreshTokens.Add(token);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
@@ -70,7 +72,7 @@ public sealed class PostgresConstraintTests(PostgresFixture fixture)
 
         await using var verify = database.CreateContext();
         (await verify.RefreshTokens.AnyAsync(item => item.Id == token.Id)).Should().BeFalse();
-        (await verify.Users.AnyAsync()).Should().BeTrue("migration seed users are outside this deletion");
+        (await verify.Users.AnyAsync(item => item.Id == otherUser.Id)).Should().BeTrue("other users are outside this deletion");
     }
 
     [Fact]

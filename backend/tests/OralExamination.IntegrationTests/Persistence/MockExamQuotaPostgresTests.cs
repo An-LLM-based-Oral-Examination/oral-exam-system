@@ -32,6 +32,20 @@ public sealed class MockExamQuotaPostgresTests(PostgresFixture fixture)
         {
             data = await SeedAsync(seed);
             other = await SeedAsync(seed);
+            // Biến thể tranh chấp theo student dùng cùng course nhưng sinh viên khác.
+            seed.ClassEnrollments.Add(new ClassEnrollment
+            {
+                ClassId = await seed.Classes.Where(c => c.CourseId == data.Course.Id).Select(c => c.Id).SingleAsync(),
+                StudentId = other.Student.Id,
+                Status = "enrolled"
+            });
+            seed.ClassEnrollments.Add(new ClassEnrollment
+            {
+                ClassId = await seed.Classes.Where(c => c.CourseId == other.Course.Id).Select(c => c.Id).SingleAsync(),
+                StudentId = data.Student.Id,
+                Status = "enrolled"
+            });
+            await seed.SaveChangesAsync();
         }
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -282,7 +296,9 @@ public sealed class MockExamQuotaPostgresTests(PostgresFixture fixture)
         await using var verify = database.CreateContext();
         (await verify.MockExamQuotas.SingleAsync(q => q.CourseId == data.Course.Id)).UsedCount.Should().Be(1);
         (await verify.MockExamSessions.CountAsync(s => s.CourseId == data.Course.Id)).Should().Be(1);
-        (await verify.ExamSets.CountAsync(s => s.CourseId == data.Course.Id)).Should().Be(1);
+        (await verify.ExamSets.CountAsync(s => s.CourseId == data.Course.Id)).Should().Be(0,
+            "thi thử không tạo ExamSet DRAFT rác cho từng lần bắt đầu");
+        (await verify.MockExamSessions.SingleAsync(s => s.CourseId == data.Course.Id)).ExamSetId.Should().BeNull();
         (await verify.MockExamAnswers.CountAsync(a => a.Session.CourseId == data.Course.Id)).Should().Be(1);
     }
 
@@ -302,6 +318,21 @@ public sealed class MockExamQuotaPostgresTests(PostgresFixture fixture)
         {
             CourseId = data.Course.Id, RubricId = data.Rubric.Id, CloId = data.Clo.Id,
             Title = "Quota question", Content = "Explain atomicity.", ApprovalStatus = "APPROVED", BloomLevel = "Understand"
+        });
+        var courseClass = new Class
+        {
+            CourseId = data.Course.Id,
+            SemesterId = data.Course.SemesterId,
+            Code = "IT" + Guid.NewGuid().ToString("N")[..8],
+            Name = "Quota integration class",
+            IsActive = true
+        };
+        context.Classes.Add(courseClass);
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Class = courseClass,
+            StudentId = data.Student.Id,
+            Status = "enrolled"
         });
         await context.SaveChangesAsync();
         return data;

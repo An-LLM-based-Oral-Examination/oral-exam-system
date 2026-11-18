@@ -63,6 +63,13 @@ public class BatchSubmitQuestionsForReviewCommandHandlerTests
         context.Users.Add(lecturer);
         context.Semesters.Add(semester);
         context.Courses.Add(course);
+        if (role == UserRole.Lecturer)
+            context.CourseLecturers.Add(new CourseLecturer
+            {
+                CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id
+            });
+        if (role == UserRole.DepartmentHead)
+            course.DepartmentHeadUserId = lecturer.Id;
         await context.SaveChangesAsync();
 
         return (lecturer, course);

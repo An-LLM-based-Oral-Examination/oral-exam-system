@@ -47,7 +47,7 @@ public class Task09DlqAuthorizationTests
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]
     [InlineData(true, true, true)]
-    public async Task Lecturer_ListAndMutations_UseSamePersistedOwner(bool payloadId, bool replay, bool conflicting)
+    public async Task Lecturer_CannotListOrMutateInClassDlq(bool payloadId, bool replay, bool conflicting)
     {
         await using var db = Create();
         var actor = DlqTestActors.User(Guid.NewGuid(), "lecturer");
@@ -58,19 +58,14 @@ public class Task09DlqAuthorizationTests
         if (payloadId) item.PayloadJson = JsonSerializer.Serialize(new GradingTask { InClassSubmissionId = submission.Id, SessionId = shift.Id, StudentId = student.Id, QuestionId = submission.QuestionId });
         db.Users.AddRange(actor, student); db.InClassExamShifts.Add(shift); db.InClassExamSubmissions.Add(submission); db.DeadLetterQueues.Add(item); await db.SaveChangesAsync();
         var list = await new GetDlqTasksQueryHandler(db).Handle(new(ActorUserId: actor.Id), default);
-        list.IsSuccess.Should().BeTrue(); list.Value.Count.Should().Be(conflicting ? 0 : 1);
+        list.IsSuccess.Should().BeFalse();
         var queue = new Mock<IGradingQueueChannel>(); queue.Setup(x => x.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         var result = replay
             ? await new ReplayDlqTaskCommandHandler(db, queue.Object).Handle(new(item.Id, actor.Id, actor.Role), default)
             : await new ResolveDlqTaskCommandHandler(db).Handle(new(item.Id, "QA", actor.Id, actor.Role), default);
-        result.IsSuccess.Should().Be(!conflicting);
-        if (conflicting)
-        {
-            item.Status.Should().Be("pending"); submission.Status.Should().Be("FAILED");
-            queue.Verify(x => x.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
-        else if (replay)
-            queue.Verify(x => x.EnqueueAsync(It.Is<GradingTask>(t => t.AnswerId == submission.Id && t.SessionId == shift.Id && t.StudentId == student.Id && t.AnswerText == submission.Transcript), It.IsAny<CancellationToken>()), Times.Once);
+        result.IsSuccess.Should().BeFalse();
+        item.Status.Should().Be("pending"); submission.Status.Should().Be("FAILED");
+        queue.Verify(x => x.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]

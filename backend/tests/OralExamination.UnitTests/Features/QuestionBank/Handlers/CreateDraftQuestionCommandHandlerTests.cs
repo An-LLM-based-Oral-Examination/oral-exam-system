@@ -54,6 +54,7 @@ public class CreateDraftQuestionCommandHandlerTests
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = role == UserRole.DepartmentHead ? lecturer.Id : null,
             HasFollowUp = true,
             IsActive = true
         };
@@ -61,6 +62,11 @@ public class CreateDraftQuestionCommandHandlerTests
         context.Users.Add(lecturer);
         context.Semesters.Add(semester);
         context.Courses.Add(course);
+        if (role == UserRole.Lecturer)
+            context.CourseLecturers.Add(new CourseLecturer
+            {
+                CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id
+            });
         await context.SaveChangesAsync();
 
         return (lecturer, course);
@@ -261,8 +267,8 @@ public class CreateDraftQuestionCommandHandlerTests
         (await context.PracticeQuestions.CountAsync()).Should().Be(0);
     }
 
-    [Fact(DisplayName = "9. Trưởng bộ môn tạo câu hỏi tự động APPROVED bắt buộc phải có SampleAnswer >= 50 ký tự")]
-    public async Task Handle_Should_Reject_Empty_SampleAnswer_When_DepartmentHead_AutoApproves()
+    [Fact(DisplayName = "9. Trưởng bộ môn không thể tự duyệt bằng ApprovedBy trong lệnh tạo draft")]
+    public async Task Handle_Should_Ignore_ApprovedBy_When_DepartmentHead_CreatesDraft()
     {
         using var context = CreateDbContext();
         var (deptHead, course) = await SeedUserAndCourseAsync(context, role: UserRole.DepartmentHead);
@@ -275,7 +281,25 @@ public class CreateDraftQuestionCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
+        result.IsSuccess.Should().BeTrue();
+        var question = await context.ExamQuestions.SingleAsync(q => q.Id == result.Value);
+        question.ApprovalStatus.Should().Be(ApprovalStatus.Draft);
+        question.ApprovedBy.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LecturerWithoutCourseAssignment_CannotCreateQuestion()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, course) = await SeedUserAndCourseAsync(context);
+        context.CourseLecturers.RemoveRange(context.CourseLecturers);
+        await context.SaveChangesAsync();
+
+        var result = await new CreateDraftQuestionCommandHandler(context).Handle(
+            CreateCommand(course.Id, lecturer.Id), CancellationToken.None);
+
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("50 ký tự");
+        result.Error.Should().Contain("chưa được phân công");
+        (await context.ExamQuestions.CountAsync()).Should().Be(0);
     }
 }

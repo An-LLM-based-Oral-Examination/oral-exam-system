@@ -9,6 +9,7 @@ using OralExamination.Application.Features.Practice.Commands.StartPracticeSessio
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Practice;
@@ -59,6 +60,7 @@ public class StartPracticeSessionCommandHandlerTests
         }
 
         await context.SaveChangesAsync();
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
         return (course, student);
     }
 

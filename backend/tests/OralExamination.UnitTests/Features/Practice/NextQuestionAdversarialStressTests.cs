@@ -244,8 +244,8 @@ public class NextQuestionAdversarialStressTests
         }
     }
 
-    [Fact(DisplayName = "ADV-04. Khi 2 câu liền trước là easy nhưng medium đã cạn sạch, hệ thống fallback cấp tiếp easy thay vì cạn đề giả")]
-    public async Task AntiConsecutiveRule_WhenFallbackNeeded_IfMediumExhausted_AllowsRemainingEasy()
+    [Fact(DisplayName = "ADV-04. Khi 2 câu liền trước là easy và mức khác đã cạn sạch, cấm cấp câu thứ 3 easy liên tiếp -> Trả hasMoreQuestions=false")]
+    public async Task AntiConsecutiveRule_WhenOtherDifficultiesExhausted_DoesNotAllowThirdConsecutiveEasy()
     {
         // Arrange
         using var context = CreateDbContext();
@@ -287,11 +287,9 @@ public class NextQuestionAdversarialStressTests
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
 
-        // Assert: Fallback sang easy còn lại vì non-excluded pool (medium) đã hết
+        // Assert: Tuân thủ nghiêm ngặt Anti-3-Consecutive, không cấp câu easy thứ 3 mà trả hasMoreQuestions = false
         result.IsSuccess.Should().BeTrue();
-        result.Value.HasMoreQuestions.Should().BeTrue();
-        result.Value.Question!.Difficulty.ToLowerInvariant().Should().Be("easy");
-        result.Value.Question.Id.Should().NotBe(easyQuestions[0].Id);
-        result.Value.Question.Id.Should().NotBe(easyQuestions[1].Id);
+        result.Value.HasMoreQuestions.Should().BeFalse();
+        result.Value.Question.Should().BeNull();
     }
 }

@@ -34,6 +34,7 @@ using OralExamination.Application.Features.Student.Queries.GetStudentDashboard;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.UnitTests.TestSupport;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Adversarial;
@@ -280,6 +281,7 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
         }
         await context.SaveChangesAsync();
 
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
         var startHandler = new StartPracticeSessionCommandHandler(context);
         var startRes = await startHandler.Handle(new StartPracticeSessionCommand(
             StudentId: student.Id,
@@ -534,6 +536,7 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
         await context.SaveChangesAsync();
 
         // 1. Bắt đầu ca thi thử với HasFollowUp = true trên cấu trúc 60 phút -> Phải tăng lên 75 phút (không bị tụt xuống 45 phút)
+        await StudentEnrollmentFixture.EnrollAsync(context, course.Id, student.Id);
         var startHandler = new StartMockExamCommandHandler(context);
         var startRes = await startHandler.Handle(new StartMockExamCommand(course.Id, student.Id, HasFollowUp: true), CancellationToken.None);
         startRes.IsSuccess.Should().BeTrue();
@@ -632,8 +635,8 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
         handlerRes.Error.Should().StartWith("FORBIDDEN:");
     }
 
-    [Fact(DisplayName = "RBAC-02: StudentController và MockExamsController ưu tiên ?studentId=... khi caller là Admin/Trưởng BM/Giảng viên")]
-    public async Task Controllers_WhenCalledByElevatedRole_ShouldHonorRequestedStudentIdQueryParam()
+    [Fact(DisplayName = "RBAC-02: StudentController và MockExamsController chặn ?studentId= của người khác")]
+    public async Task Controllers_CannotUseRequestedStudentIdOfAnotherUser()
     {
         var adminId = Guid.NewGuid();
         var targetStudentId = Guid.NewGuid();
@@ -665,16 +668,16 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = adminPrincipal } }
         };
         var dashRes = await studentController.GetDashboard(targetStudentId, CancellationToken.None);
-        dashRes.Should().BeOfType<OkObjectResult>();
-        senderMock.Verify(s => s.Send(It.Is<GetStudentDashboardQuery>(q => q.StudentId == targetStudentId), It.IsAny<CancellationToken>()), Times.Once);
+        dashRes.Should().BeOfType<UnauthorizedObjectResult>();
+        senderMock.Verify(s => s.Send(It.IsAny<GetStudentDashboardQuery>(), It.IsAny<CancellationToken>()), Times.Never);
 
         var mockExamsController = new MockExamsController(senderMock.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = adminPrincipal } }
         };
         var quotaRes = await mockExamsController.GetQuota(courseId, targetStudentId);
-        quotaRes.Should().BeOfType<OkObjectResult>();
-        senderMock.Verify(s => s.Send(It.Is<GetMockExamQuotaQuery>(q => q.StudentId == targetStudentId && q.CourseId == courseId), It.IsAny<CancellationToken>()), Times.Once);
+        quotaRes.Should().BeOfType<ForbidResult>();
+        senderMock.Verify(s => s.Send(It.IsAny<GetMockExamQuotaQuery>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact(DisplayName = "LOGIC-05/06/08: Validator đọc động MaxMixedPracticeQuestions, NeedsFollowUp tắt ở lượt cũ khi ParentAnswerId=null và AverageScore ghi nhận điểm cải thiện Follow-up")]

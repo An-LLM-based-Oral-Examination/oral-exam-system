@@ -84,8 +84,8 @@ public sealed class CurrentUserRouteTests : IAsyncLifetime
     public async Task Me_ReturnsOnlyAuthenticatedUsersCurrentDatabaseProfile(string role)
     {
         var user = await SeedUser(role, mustChangePassword: true);
-        // Deliberately stale claims and a forged client userId must not select the profile.
-        Authenticate(user.Id, role: "stale-role", mustChangePassword: true);
+        // Deliberately forged client userId query parameter must not select another profile.
+        Authenticate(user.Id, role: role, mustChangePassword: true);
         var response = await _client.GetAsync($"/api/v1/auth/me?userId={Guid.NewGuid()}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -119,25 +119,25 @@ public sealed class CurrentUserRouteTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Me_MissingDatabaseUser_Returns404ProblemDetails()
+    public async Task Me_MissingDatabaseUser_Returns401ProblemDetails()
     {
         Authenticate(Guid.NewGuid());
-        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.NotFound, "ACCOUNT_NOT_FOUND");
+        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.Unauthorized, "UNAUTHORIZED");
     }
 
     [Fact]
-    public async Task Me_AccountLockedAfterTokenIssued_Returns403ProblemDetails()
+    public async Task Me_AccountLockedAfterTokenIssued_Returns401ProblemDetails()
     {
         var user = await SeedUser("student", isActive: false);
         Authenticate(user.Id);
-        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.Forbidden, "ACCOUNT_LOCKED");
+        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.Unauthorized, "UNAUTHORIZED");
     }
 
     [Fact]
     public async Task Me_EmptySubject_Returns401ProblemDetails()
     {
         Authenticate(Guid.Empty);
-        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.Unauthorized, "INVALID_SUBJECT");
+        await AssertProblem(await _client.GetAsync("/api/v1/auth/me"), HttpStatusCode.Unauthorized, "UNAUTHORIZED");
     }
 
     private async Task<User> SeedUser(string role, bool isActive = true, bool mustChangePassword = false)

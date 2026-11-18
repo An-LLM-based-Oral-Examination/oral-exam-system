@@ -153,7 +153,7 @@ public class NoAutoEnrollmentLoginTests
 
     private sealed class FakeIssuer : IAccessTokenIssuer
     {
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
         {
             return new IssuedAccessToken("token-jwt", 900);
         }

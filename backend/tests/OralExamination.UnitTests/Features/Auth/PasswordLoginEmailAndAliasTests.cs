@@ -152,8 +152,8 @@ public class PasswordLoginEmailAndAliasTests
         result.Value.User.Id.Should().Be(student.Id);
     }
 
-    [Fact(DisplayName = "Đăng nhập với Alias totse18191414 và totse18191414@fpt.edu.vn")]
-    public async Task Handle_LoginWithTotse18191414Alias_Success()
+    [Fact(DisplayName = "Đăng nhập với Username totse181414 và Email totntse181414@fpt.edu.vn")]
+    public async Task Handle_LoginWithStudentUsernameAndEmail_Success()
     {
         await using var context = CreateDbContext();
         var student = new User
@@ -173,23 +173,23 @@ public class PasswordLoginEmailAndAliasTests
 
         var handler = CreateLoginHandler(context, new RecordingIssuer());
 
-        // Alias username
-        var resultAlias = await handler.Handle(new PasswordLoginCommand("totse18191414", "Totse181414"), CancellationToken.None);
-        resultAlias.IsSuccess.Should().BeTrue();
-        resultAlias.Value.User.Id.Should().Be(student.Id);
-        resultAlias.Value.User.StudentCode.Should().Be("SE181414");
+        // Username
+        var resultUsername = await handler.Handle(new PasswordLoginCommand("totse181414", "Totse181414"), CancellationToken.None);
+        resultUsername.IsSuccess.Should().BeTrue();
+        resultUsername.Value.User.Id.Should().Be(student.Id);
+        resultUsername.Value.User.StudentCode.Should().Be("SE181414");
 
-        // Alias email
-        var resultAliasEmail = await handler.Handle(new PasswordLoginCommand("totse18191414@fpt.edu.vn", "Totse181414"), CancellationToken.None);
-        resultAliasEmail.IsSuccess.Should().BeTrue();
-        resultAliasEmail.Value.User.Id.Should().Be(student.Id);
+        // Email
+        var resultEmail = await handler.Handle(new PasswordLoginCommand("totntse181414@fpt.edu.vn", "Totse181414"), CancellationToken.None);
+        resultEmail.IsSuccess.Should().BeTrue();
+        resultEmail.Value.User.Id.Should().Be(student.Id);
     }
 
     private sealed class RecordingIssuer : IAccessTokenIssuer
     {
         public bool MustChangePassword { get; private set; }
 
-        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+        public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
         {
             MustChangePassword = mustChangePassword;
             return new IssuedAccessToken("access-token-test", 900);
