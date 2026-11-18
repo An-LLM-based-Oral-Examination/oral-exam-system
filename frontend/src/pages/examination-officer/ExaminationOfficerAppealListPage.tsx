@@ -1,6 +1,8 @@
+import { SearchField } from '@/components/common/SearchField'
+import { useSearchInput } from '@/hooks/useSearchInput'
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, ClipboardCheck, RefreshCw, Search } from 'lucide-react'
+import { ArrowRight, ClipboardCheck, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { appealsService } from '@/services/appeals.service'
 import type { Appeal } from '@/types/appeal.types'
@@ -11,7 +13,8 @@ import { userMessage } from '@/lib/userMessage'
 
 export function ExaminationOfficerAppealListPage() {
   const [appeals, setAppeals] = useState<Appeal[]>([])
-  const [search, setSearch] = useState('')
+  const searchInput = useSearchInput()
+  const search = searchInput.query
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -66,20 +69,17 @@ export function ExaminationOfficerAppealListPage() {
           }
         />
         <div className="flex flex-col gap-3 border-b border-[#d9e8f2] bg-[#F8FBFD] p-5 sm:flex-row">
-          <label className="relative flex-1">
+          <label className={`relative ${ds.searchControl}`}>
             <span className="sr-only">Tìm kiếm phúc khảo</span>
-            <Search
-              className="pointer-events-none absolute top-3 left-3 size-4 text-[#5b6b84]"
-              aria-hidden="true"
-            />
-            <input
+            <SearchField
               className={`${ds.field} pl-9`}
               placeholder="MSSV, họ tên, kỳ thi hoặc lý do"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              value={searchInput.draft}
+              onChange={(event) => searchInput.change(event.target.value)}
+              onKeyDown={searchInput.onKeyDown}
             />
           </label>
-          <label className="sm:w-52">
+          <label className={ds.filterStatus}>
             <span className="sr-only">Lọc trạng thái</span>
             <select
               className={ds.field}

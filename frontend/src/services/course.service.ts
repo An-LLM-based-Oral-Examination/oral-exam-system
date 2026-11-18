@@ -1,7 +1,7 @@
 import apiClient from './api.client'
 import { classService } from '@/services/class.service'
 import type { CourseLecturer } from '@/types/class.types'
-import type { CourseConfigurationDto, CourseDto, ExamInputMode } from '@/types/practice.types'
+import type { CourseConfigurationDto, CourseDto, ExamInputMode, UpdateCourseConfigurationRequest } from '@/types/practice.types'
 
 type JsonRecord = Record<string, unknown>
 
@@ -98,6 +98,10 @@ function normalizeConfiguration(value: unknown): CourseConfigurationDto {
     hasFollowUp: course.hasFollowUp,
     examInputMode: course.examInputMode,
     isActive: course.isActive,
+    mockExamDurationMinutes: readNumber(value, 'mockExamDurationMinutes') ?? undefined,
+    mockExamTotalQuestions: readNumber(value, 'mockExamTotalQuestions') ?? undefined,
+    mockExamDifficultyDistribution: readString(value, 'mockExamDifficultyDistribution') ?? undefined,
+    mockExamBloomDistribution: readString(value, 'mockExamBloomDistribution') ?? undefined,
   }
 }
 
@@ -209,6 +213,11 @@ export const courseService = {
 
   async getConfiguration(courseId: string): Promise<CourseConfigurationDto> {
     const response = await apiClient.get<unknown>(`/courses/${courseId}/configurations`)
+    return normalizeConfiguration(response.data)
+  },
+
+  async updateConfiguration(courseId: string, payload: UpdateCourseConfigurationRequest): Promise<CourseConfigurationDto> {
+    const response = await apiClient.put<unknown>(`/courses/${encodeURIComponent(courseId)}/configurations`, payload)
     return normalizeConfiguration(response.data)
   },
 

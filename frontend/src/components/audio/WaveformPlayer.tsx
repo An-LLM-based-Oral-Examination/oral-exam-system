@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileAudio2, LoaderCircle, ShieldCheck, Volume2, VolumeX } from 'lucide-react'
+import { EmptyState } from '@/components/common/EmptyState'
 
 interface WaveformPlayerProps {
   audioUrl?: string | null
@@ -247,13 +248,7 @@ export function WaveformPlayer({
             </audio>
           </div>
         ) : (
-          <div className="flex min-h-28 flex-col items-center justify-center rounded-2xl border border-dashed border-[#82aedb]/55 bg-[#4988C4]/16 px-5 text-center">
-            <VolumeX className="size-6 text-[#8fa0b8]" aria-hidden="true" />
-            <p className="mt-2 text-xs font-bold text-[#455873]">Chưa nhận được tệp âm thanh</p>
-            <p className="mt-1 max-w-md text-xs leading-relaxed text-[#78889e]">
-              Hệ thống sẽ hiển thị trình phát khi ca thi trả về URL bằng chứng hợp lệ.
-            </p>
-          </div>
+          <EmptyState compact icon={VolumeX} title="Chưa nhận được tệp âm thanh" description="Trình phát sẽ hiển thị khi có tệp âm thanh hợp lệ." />
         )}
 
         <div className="rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5">

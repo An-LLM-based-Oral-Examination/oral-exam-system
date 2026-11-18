@@ -197,6 +197,10 @@ export const classService = {
     await apiClient.delete(`/lecturer/classes/${classId}/students/${studentId}`)
   },
 
+  async resetJoinPassword(classId: string, newPassword: string): Promise<void> {
+    await apiClient.post(`/lecturer/classes/${classId}/reset-password`, { newPassword })
+  },
+
   async createClass(payload: CreateManagedClassRequest): Promise<void> {
     await apiClient.post(`/lecturer/course-offerings/${payload.courseOfferingId}/classes`, {
       code: payload.code.trim(),

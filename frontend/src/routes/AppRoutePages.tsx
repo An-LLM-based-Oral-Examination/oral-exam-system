@@ -45,11 +45,20 @@ function withChunkRetry<T>(factory: () => Promise<T>): () => Promise<T> {
   }
 }
 
+export const QuestionReviewRequestsPage = lazy(
+  withChunkRetry(() => import('@/pages/department-head/QuestionReviewRequestsPage')),
+)
 export const DepartmentLecturerAssignmentPage = lazy(
   withChunkRetry(() => import('@/pages/lecturer/DepartmentLecturerAssignmentPage')),
 )
 export const DepartmentCourseClosPage = lazy(
   withChunkRetry(() => import('@/pages/lecturer/DepartmentCourseClosPage')),
+)
+export const DepartmentCoursesPage = lazy(
+  withChunkRetry(() => import('@/pages/lecturer/DepartmentCoursesPage')),
+)
+export const DepartmentCourseDetailPage = lazy(
+  withChunkRetry(() => import('@/pages/lecturer/DepartmentCourseDetailPage')),
 )
 
 export const LecturerDashboardPage = lazy(

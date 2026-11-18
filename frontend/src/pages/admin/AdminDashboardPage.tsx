@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react'
+import { SearchField } from '@/components/common/SearchField'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchInput } from '@/hooks/useSearchInput'
+import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,7 +10,6 @@ import {
   KeyRound,
   LoaderCircle,
   RefreshCw,
-  Search,
   ShieldAlert,
   Sliders,
   UserCheck,
@@ -43,7 +46,9 @@ export function AdminDashboardPage() {
   const [userTotal, setUserTotal] = useState(0)
   const [userPage, setUserPage] = useState(1)
   const [userTotalPages, setUserTotalPages] = useState(1)
-  const [userSearch, setUserSearch] = useState('')
+  const userSearch = useSearchInput(() => setUserPage(1))
+  const userQuery = userSearch.query
+  const userRequest = useRef(0)
   const [userRoleFilter, setUserRoleFilter] = useState('')
   const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'locked'>('all')
   const [isUsersLoading, setIsUsersLoading] = useState(false)
@@ -57,7 +62,9 @@ export function AdminDashboardPage() {
   const [logTotal, setLogTotal] = useState(0)
   const [logPage, setLogPage] = useState(1)
   const [logTotalPages, setLogTotalPages] = useState(1)
-  const [logEntityFilter, setLogEntityFilter] = useState('')
+  const logEntityFilter = useSearchInput(() => setLogPage(1))
+  const logEntityQuery = logEntityFilter.query
+  const logRequest = useRef(0)
   const [isLogsLoading, setIsLogsLoading] = useState(false)
 
   // Modals state
@@ -87,23 +94,25 @@ export function AdminDashboardPage() {
 
   // Load Users
   const loadUsers = async (page = 1) => {
+    const request = ++userRequest.current
     setIsUsersLoading(true)
     try {
       const res = await adminService.getUsers({
-        search: userSearch.trim() || undefined,
+        search: userQuery || undefined,
         role: userRoleFilter || undefined,
         isActive: userStatusFilter === 'all' ? undefined : userStatusFilter === 'active',
         page,
         pageSize: 15,
       })
+      if (request !== userRequest.current) return
       setUsers(res.items)
       setUserTotal(res.totalCount)
       setUserPage(res.page)
       setUserTotalPages(res.totalPages)
     } catch {
-      toast.error('Không thể tải danh sách người dùng.')
+      if (request === userRequest.current) toast.error('Không thể tải danh sách người dùng.')
     } finally {
-      setIsUsersLoading(false)
+      if (request === userRequest.current) setIsUsersLoading(false)
     }
   }
 
@@ -122,21 +131,23 @@ export function AdminDashboardPage() {
 
   // Load Audit Logs
   const loadLogs = async (page = 1) => {
+    const request = ++logRequest.current
     setIsLogsLoading(true)
     try {
       const res = await adminService.getAuditLogs({
-        entityName: logEntityFilter.trim() || undefined,
+        entityName: logEntityQuery || undefined,
         page,
         pageSize: 20,
       })
+      if (request !== logRequest.current) return
       setLogs(res.items)
       setLogTotal(res.totalCount)
       setLogPage(res.page)
       setLogTotalPages(res.totalPages)
     } catch {
-      toast.error('Không thể tải nhật ký kiểm toán.')
+      if (request === logRequest.current) toast.error('Không thể tải nhật ký kiểm toán.')
     } finally {
-      setIsLogsLoading(false)
+      if (request === logRequest.current) setIsLogsLoading(false)
     }
   }
 
@@ -152,7 +163,7 @@ export function AdminDashboardPage() {
     }, 0)
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, userPage, logPage])
+  }, [activeTab, userPage, userQuery, userRoleFilter, userStatusFilter, logPage, logEntityQuery])
 
   // Handle Create User
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -340,14 +351,11 @@ export function AdminDashboardPage() {
           <div className="flex flex-col gap-3 rounded-2xl border border-[#82aedb]/50 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-1 flex-wrap items-center gap-3">
               {/* Search */}
-              <div className="relative min-w-[240px] flex-1 max-w-md">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#82aedb]" />
-                <input
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void loadUsers(1)
-                  }}
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
+                  value={userSearch.draft}
+                  onChange={(event) => userSearch.change(event.target.value)}
+                  onKeyDown={userSearch.onKeyDown}
                   placeholder="Tìm theo email, họ tên, MSSV..."
                   className="w-full rounded-xl border border-[#82aedb]/50 bg-[#F4FBFD]/50 py-2 pr-3 pl-9 text-xs text-[#0F2854] outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/20"
                 />
@@ -358,9 +366,9 @@ export function AdminDashboardPage() {
                 value={userRoleFilter}
                 onChange={(e) => {
                   setUserRoleFilter(e.target.value)
-                  void loadUsers(1)
+                  setUserPage(1)
                 }}
-                className="rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none"
+                className={cn(ds.filterRole, 'rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none')}
               >
                 <option value="">Tất cả vai trò</option>
                 {SYSTEM_ROLES.map((r) => (
@@ -375,22 +383,15 @@ export function AdminDashboardPage() {
                 value={userStatusFilter}
                 onChange={(e) => {
                   setUserStatusFilter(e.target.value as 'all' | 'active' | 'locked')
-                  void loadUsers(1)
+                  setUserPage(1)
                 }}
-                className="rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none"
+                className={cn(ds.filterStatus, 'rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold text-[#0F2854] outline-none')}
               >
                 <option value="all">Tất cả trạng thái</option>
                 <option value="active">Đang hoạt động</option>
                 <option value="locked">Đã bị khóa</option>
               </select>
 
-              <button
-                type="button"
-                onClick={() => void loadUsers(1)}
-                className="rounded-xl bg-[#0F2854] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#1C4D8D]"
-              >
-                Lọc
-              </button>
             </div>
 
             {/* Create button */}
@@ -429,8 +430,8 @@ export function AdminDashboardPage() {
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-[#63738a]">
-                        Không tìm thấy người dùng nào phù hợp với bộ lọc.
+                      <td colSpan={7} className="p-5">
+                        <EmptyState icon={Users} title="Không tìm thấy người dùng phù hợp" description="Thử thay đổi từ khóa hoặc bộ lọc." />
                       </td>
                     </tr>
                   ) : (
@@ -521,7 +522,7 @@ export function AdminDashboardPage() {
                   <button
                     type="button"
                     disabled={userPage <= 1 || isUsersLoading}
-                    onClick={() => void loadUsers(userPage - 1)}
+                    onClick={() => setUserPage(userPage - 1)}
                     className="flex size-8 items-center justify-center rounded-lg border border-[#82aedb]/50 transition hover:bg-[#F4FBFD] disabled:opacity-40"
                   >
                     <ChevronLeft className="size-4" />
@@ -529,7 +530,7 @@ export function AdminDashboardPage() {
                   <button
                     type="button"
                     disabled={userPage >= userTotalPages || isUsersLoading}
-                    onClick={() => void loadUsers(userPage + 1)}
+                    onClick={() => setUserPage(userPage + 1)}
                     className="flex size-8 items-center justify-center rounded-lg border border-[#82aedb]/50 transition hover:bg-[#F4FBFD] disabled:opacity-40"
                   >
                     <ChevronRight className="size-4" />
@@ -574,8 +575,8 @@ export function AdminDashboardPage() {
                   </tr>
                 ) : configs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-[#63738a]">
-                      Chưa có tham số hệ thống nào trong bảng system_configs.
+                    <td colSpan={5} className="p-5">
+                      <EmptyState icon={Sliders} title="Chưa có tham số hệ thống" description="Các tham số cấu hình sẽ xuất hiện tại đây." />
                     </td>
                   </tr>
                 ) : (
@@ -621,18 +622,12 @@ export function AdminDashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               <input
-                value={logEntityFilter}
-                onChange={(e) => setLogEntityFilter(e.target.value)}
+                value={logEntityFilter.draft}
+                onChange={(event) => logEntityFilter.change(event.target.value)}
+                onKeyDown={logEntityFilter.onKeyDown}
                 placeholder="Lọc theo tên bảng (users, config...)"
-                className="rounded-xl border border-[#82aedb]/50 bg-[#F4FBFD]/50 px-3 py-1.5 text-xs text-[#0F2854] outline-none"
+                className={cn(ds.searchControl, 'rounded-xl border border-[#82aedb]/50 bg-[#F4FBFD]/50 px-3 py-1.5 text-xs text-[#0F2854] outline-none')}
               />
-              <button
-                type="button"
-                onClick={() => void loadLogs(1)}
-                className="rounded-xl bg-[#0F2854] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#1C4D8D]"
-              >
-                Lọc
-              </button>
             </div>
           </div>
 
@@ -659,8 +654,8 @@ export function AdminDashboardPage() {
                     </tr>
                   ) : logs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-[#63738a]">
-                        Chưa có bản ghi kiểm toán nào phù hợp.
+                      <td colSpan={6} className="p-5">
+                        <EmptyState icon={FileText} title="Chưa có bản ghi kiểm toán phù hợp" description="Thử thay đổi bộ lọc hoặc kiểm tra lại sau." />
                       </td>
                     </tr>
                   ) : (
@@ -712,7 +707,7 @@ export function AdminDashboardPage() {
                   <button
                     type="button"
                     disabled={logPage <= 1 || isLogsLoading}
-                    onClick={() => void loadLogs(logPage - 1)}
+                    onClick={() => setLogPage(logPage - 1)}
                     className="flex size-8 items-center justify-center rounded-lg border border-[#82aedb]/50 transition hover:bg-[#F4FBFD] disabled:opacity-40"
                   >
                     <ChevronLeft className="size-4" />
@@ -720,7 +715,7 @@ export function AdminDashboardPage() {
                   <button
                     type="button"
                     disabled={logPage >= logTotalPages || isLogsLoading}
-                    onClick={() => void loadLogs(logPage + 1)}
+                    onClick={() => setLogPage(logPage + 1)}
                     className="flex size-8 items-center justify-center rounded-lg border border-[#82aedb]/50 transition hover:bg-[#F4FBFD] disabled:opacity-40"
                   >
                     <ChevronRight className="size-4" />

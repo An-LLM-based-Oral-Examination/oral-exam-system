@@ -548,6 +548,7 @@ public sealed class QuestionBankDualTrackTests
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
+        course.DepartmentHeadUserId = deptHead.Id;
         context.Users.Add(deptHead);
         await context.SaveChangesAsync();
 

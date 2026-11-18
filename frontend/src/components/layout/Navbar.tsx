@@ -12,6 +12,8 @@ import {
   Mic2,
   TimerReset,
   BookOpenCheck,
+  BookOpen,
+  FileCheck2,
   ClipboardCheck,
   LayoutDashboard,
   LogOut,
@@ -50,8 +52,13 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/lecturer/audit': { label: 'Hậu kiểm điểm', icon: ClipboardCheck },
   [ROUTE_PATHS.lecturer.appeals]: { label: 'Phúc khảo được giao', icon: ClipboardCheck },
   [ROUTE_PATHS.departmentHead.dashboard]: { label: 'Tổng quan', icon: LayoutDashboard },
-  [ROUTE_PATHS.departmentHead.questionReview]: { label: 'Duyệt câu hỏi và đề', icon: BookOpenCheck },
+  [ROUTE_PATHS.departmentHead.questionReview]: { label: 'Quản lý câu hỏi', icon: BookOpenCheck },
+  [ROUTE_PATHS.departmentHead.questionBank]: { label: 'Quản lý câu hỏi', icon: BookOpenCheck },
   [ROUTE_PATHS.departmentHead.appeals]: { label: 'Quản lý phúc khảo', icon: ClipboardCheck },
+  [ROUTE_PATHS.departmentHead.courses]: { label: 'Quản lý môn học', icon: BookOpen },
+  '/department-head/lecturer-assignments': { label: 'Phân công giảng viên', icon: UsersRound },
+  '/department-head/clos': { label: 'Chuẩn đầu ra (CLO)', icon: BookOpenCheck },
+  '/department-head/exam-structures': { label: 'Cấu trúc đề thi', icon: FileCheck2 },
   '/official-exams/manage': { label: 'Kỳ thi chính thức', icon: TicketCheck },
   '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
   '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
@@ -87,6 +94,11 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const notifications = useStudentNotifications(isStudent && isNotificationOpen, isStudent)
   const page =
     PAGE_META[location.pathname] ??
+    (canonicalRole(user?.role) === 'DepartmentHead'
+      ? Object.entries(PAGE_META)
+        .filter(([path]) => path.startsWith('/department-head/') && location.pathname.startsWith(`${path}/`))
+        .sort(([left], [right]) => right.length - left.length)[0]?.[1]
+      : undefined) ??
     (isStudent ? { label: location.pathname.startsWith('/classes/') ? 'Chi tiết lớp học' : 'Cổng sinh viên', icon: isStudent && location.pathname.startsWith('/classes/') ? UsersRound : LayoutDashboard } : null) ??
     (location.pathname.startsWith('/lecturer/classes') || location.pathname.startsWith('/in-class-shifts')
       ? { label: 'Quản lý lớp học', icon: UsersRound }

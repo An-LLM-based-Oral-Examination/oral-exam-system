@@ -18,6 +18,17 @@ const panelShadow = 'shadow-[0_1px_0_#fff_inset,0_8px_16px_rgba(15,40,84,0.16)]'
 
 export const ds = {
   page: 'space-y-6',
+  /** Chiều rộng theo loại bộ lọc trên trang, không dùng trong form/popup. */
+  filterCourse: 'w-56 max-w-full shrink-0',
+  filterSemester: 'w-40 max-w-full shrink-0',
+  filterBloom: 'w-36 max-w-full shrink-0',
+  filterStatus: 'w-44 max-w-full shrink-0',
+  filterClass: 'w-48 max-w-full shrink-0',
+  filterRole: 'w-48 max-w-full shrink-0',
+  filterFlow: 'w-48 max-w-full shrink-0',
+  searchControl: 'w-60 max-w-full shrink-0',
+  /** Menu rộng bằng ô mở; component vẫn giới hạn theo viewport. */
+  filterMenuMinWidth: 0,
   panelShadow,
   banner:
     'relative isolate overflow-hidden rounded-[22px] border border-[#0F2854] bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] shadow-[0_16px_36px_rgba(15,40,84,0.22)]',
@@ -53,7 +64,7 @@ export const ds = {
   infoChip:
     'inline-flex items-center gap-1 rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-1 text-xs font-bold text-[#1C4D8D]',
   field:
-    'min-h-11 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
+    'min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
   /** Card mềm (lớp/môn/ca): nền mist → trắng + accent trên. */
   softCard:
     'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[linear-gradient(180deg,#EAF5FB_0%,#F8FBFD_22%,#FFFFFF_48%,#FFFFFF_100%)]',
@@ -104,6 +115,7 @@ export const overlay = {
 } as const
 
 export const overlaySize = {
+  xs: 'max-w-sm',
   sm: 'max-w-md',
   md: 'max-w-xl',
   lg: 'max-w-2xl',

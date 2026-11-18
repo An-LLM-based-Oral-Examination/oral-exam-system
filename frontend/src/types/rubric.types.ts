@@ -63,6 +63,7 @@ export interface QuestionSummary {
   approvalStatus: QuestionApprovalStatus
   submittedBy: string | null
   approvedBy: string | null
+  approvedAt?: string | null
   createdAt: string
   totalRubricScore: number
 }
@@ -86,6 +87,7 @@ export interface QuestionDetail {
   submittedByName: string | null
   approvedBy: string | null
   approvedByName: string | null
+  approvedAt?: string | null
   reviewNotes: string | null
   isActive: boolean
   createdAt: string

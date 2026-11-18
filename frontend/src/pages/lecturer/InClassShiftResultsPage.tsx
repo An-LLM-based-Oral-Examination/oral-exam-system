@@ -1,5 +1,9 @@
+import { StatusTabs } from '@/components/common/StatusTabs'
+import { SearchField } from '@/components/common/SearchField'
+import { BackLink } from '@/components/common/BackLink'
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,7 +15,7 @@ import {
   Lock,
   Pencil,
   Save,
-  Search,
+
   Timer,
   UsersRound,
   X,
@@ -148,7 +152,8 @@ export function InClassShiftResultsPage() {
   const [submissions, setSubmissions] = useState<InClassSubmission[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<SubmissionFilter>('ALL')
-  const [search, setSearch] = useState('')
+  const searchInput = useSearchInput()
+  const search = searchInput.query
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [examScore, setExamScore] = useState('')
@@ -242,6 +247,7 @@ export function InClassShiftResultsPage() {
   const answers = selected?.answers ?? []
   const answerIndex = answers.length === 0 ? 0 : Math.min(answerCursor, answers.length - 1)
   const activeAnswer = answers[answerIndex] ?? null
+  const activeTranscript = activeAnswer?.transcript?.trim()
 
   useEffect(() => {
     return scheduleUi(() => {
@@ -442,13 +448,8 @@ export function InClassShiftResultsPage() {
   return (
     <div lang="vi" className={cn(ds.page, 'pb-28')}>
       <div className="space-y-3">
-        <Link
-          to={classId ? `/lecturer/classes/${classId}?tab=shifts` : shift?.classId ? `/lecturer/classes/${shift.classId}?tab=shifts` : '/lecturer/classes'}
-          className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-        >
-          <ArrowLeft className="size-5" aria-hidden="true" />
-          Về lớp
-        </Link>
+        <BackLink
+          to={classId ? `/lecturer/classes/${classId}?tab=shifts` : shift?.classId ? `/lecturer/classes/${shift.classId}?tab=shifts` : '/lecturer/classes'}>Về lớp</BackLink>
 
         <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={ds.sectionHeader}>
@@ -524,53 +525,12 @@ export function InClassShiftResultsPage() {
 
         <div className="bg-white px-4 pt-3 sm:px-6">
           <div className="relative">
-            <div
-              className="flex min-w-0 flex-wrap items-end gap-0 border-b-2 border-[#1C4D8D] lg:pr-64"
-              role="tablist"
-              aria-label="Lọc trạng thái bài làm"
-            >
-              {SUBMISSION_TABS.map((tab) => {
-                const count = filterCounts[tab.value]
-                const active = filter === tab.value
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setFilter(tab.value)}
-                    className={cn(
-                      'relative inline-flex items-center gap-1.5 border px-3.5 py-2.5 text-[14px] font-bold whitespace-nowrap transition sm:px-4',
-                      active
-                        ? '-mb-0.5 rounded-t-xl border-[#1C4D8D] border-b-white bg-[linear-gradient(165deg,#BDE8F5_0%,#EAF6FB_42%,#ffffff_100%)] text-[#1C4D8D]'
-                        : 'mb-0 border-transparent text-[#6f7f93] hover:bg-[#F4FBFD] hover:text-[#1C4D8D]',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        active ? 'bg-[#1C4D8D]' : tab.dotClass,
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span>{tab.label}</span>
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
-                        active ? 'bg-[#1C4D8D]/12 text-[#1C4D8D]' : tab.countIdleClass,
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            <div className="relative mt-3 w-full lg:absolute lg:right-0 lg:bottom-2 lg:mt-0 lg:w-56">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#6485b2]" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+            <StatusTabs label="Lọc trạng thái bài làm" value={filter} options={SUBMISSION_TABS.map(tab => ({ ...tab, count: filterCounts[tab.value] }))} onChange={setFilter} className="lg:pr-64" />
+            <div className={cn(ds.searchControl, 'relative mt-3 lg:absolute lg:right-0 lg:bottom-2 lg:mt-0')}>
+              <SearchField
+                value={searchInput.draft}
+                onChange={(event) => searchInput.change(event.target.value)}
+                onKeyDown={searchInput.onKeyDown}
                 placeholder="MSSV hoặc họ tên..."
                 aria-label="Tìm sinh viên"
                 className="h-10 w-full rounded-full border border-[#4988C4] bg-white pr-3 pl-9 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#4988C4]/30"
@@ -846,7 +806,7 @@ export function InClassShiftResultsPage() {
                             Câu trả lời
                           </p>
                           <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-[#0F2854]">
-                            {activeAnswer.transcript?.trim() || 'Chưa có transcript.'}
+                            {activeTranscript || 'Sinh viên không trả lời.'}
                           </p>
                         </section>
                         <section className={cn('rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4', ds.panelShadow)}>
@@ -854,7 +814,9 @@ export function InClassShiftResultsPage() {
                             Nhận xét AI
                           </p>
                           <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-wrap text-[#176f58]">
-                            {activeAnswer.aiFeedback?.trim() || 'AI chưa trả nhận xét.'}
+                            {activeTranscript
+                              ? activeAnswer.aiFeedback?.trim() || 'AI chưa trả nhận xét.'
+                              : 'Sinh viên không trả lời.'}
                           </p>
                         </section>
                       </>

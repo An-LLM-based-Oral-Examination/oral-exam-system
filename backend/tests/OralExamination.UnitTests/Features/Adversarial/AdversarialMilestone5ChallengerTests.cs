@@ -302,7 +302,7 @@ public class AdversarialMilestone5ChallengerTests
             TranscriptBufferSeconds: 90,
             MaxFollowUpQuestions: validCount,
             HasFollowUp: true
-        );
+        ) { ActorRole = "admin" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 

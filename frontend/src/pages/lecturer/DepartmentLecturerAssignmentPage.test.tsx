@@ -72,7 +72,8 @@ describe('Department lecturer assignments', () => {
     render(<DepartmentLecturerAssignmentPage />)
     await screen.findByRole('button', { name: 'Gỡ phân công Nguyễn An' })
     expect(mocks.assignments).toHaveBeenCalledWith('offering-fall', expect.any(AbortSignal))
-    fireEvent.change(screen.getByLabelText('Học kỳ'), { target: { value: 'spring' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Học kỳ' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'SP27' }))
     await waitFor(() =>
       expect(mocks.assignments).toHaveBeenCalledWith('offering-spring', expect.any(AbortSignal)),
     )
@@ -81,17 +82,15 @@ describe('Department lecturer assignments', () => {
   it('searches only after two characters, selects a lecturer and requires confirmation before adding', async () => {
     render(<DepartmentLecturerAssignmentPage />)
     await screen.findByRole('button', { name: 'Gỡ phân công Nguyễn An' })
-    fireEvent.change(screen.getByLabelText('Tìm giảng viên theo tên hoặc email'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm phân công' }))
+    fireEvent.change(screen.getByLabelText('Tìm giảng viên'), {
       target: { value: 'b' },
     })
     expect(mocks.search).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByLabelText('Tìm giảng viên theo tên hoặc email'), {
+    fireEvent.change(screen.getByLabelText('Tìm giảng viên'), {
       target: { value: 'binh' },
     })
-    await screen.findByRole('option', { name: 'Trần Bình — binh@example.test' })
-    fireEvent.change(screen.getByLabelText('Giảng viên đang hoạt động'), {
-      target: { value: candidate.id },
-    })
+    fireEvent.click(await screen.findByRole('option', { name: 'Trần Bình — binh@example.test' }))
     fireEvent.click(screen.getByRole('button', { name: 'Thêm giảng viên' }))
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     expect(screen.getByRole('alertdialog').textContent).toContain('Giảng viên sẽ được cấp quyền')
@@ -141,11 +140,12 @@ describe('Department lecturer assignments', () => {
     ])
     render(<DepartmentLecturerAssignmentPage />)
     await screen.findByRole('button', { name: 'Gỡ phân công Nguyễn An' })
-    fireEvent.change(screen.getByLabelText('Tìm giảng viên theo tên hoặc email'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm phân công' }))
+    fireEvent.change(screen.getByLabelText('Tìm giảng viên'), {
       target: { value: 'an' },
     })
     await screen.findByText(
-      'Không có giảng viên phù hợp chưa được phân công. Thử tên hoặc email khác.',
+      'Không có giảng viên phù hợp chưa được phân công.',
     )
     expect(screen.queryByRole('option', { name: 'Nguyễn An — an@example.test' })).toBeNull()
     expect(

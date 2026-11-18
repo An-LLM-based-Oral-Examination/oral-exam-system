@@ -705,6 +705,41 @@ export function MockExamPage() {
 
   const selectedDetail = expandedHistoryId ? historyDetails[expandedHistoryId] : undefined
 
+  const renderUnfinishedSessions = (sessions: typeof localSessions) => (
+    <ul className="space-y-2">
+      {sessions.map((item) => {
+        const secondsLeft = item.pausedRemainingSeconds ?? secondsUntilExpiry(item.expiresAt)
+        const answered = item.answers.filter((answer) => !answer.isFollowUp).length
+        return (
+          <li
+            key={item.sessionId}
+            className="flex flex-col gap-3 rounded-xl border border-[#f0d7a8] bg-[#fffaf3] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-bold tracking-[0.06em] text-[#b45309]">
+                {item.courseCode}
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-[#0F2854]">{item.courseName}</p>
+              <p className="mt-0.5 text-xs text-[#5b6b84]">
+                {secondsLeft > 0
+                  ? `Còn ${formatClock(secondsLeft)} · Đã trả lời ${answered}/${item.questions.length}`
+                  : `Đã hết giờ · Đã trả lời ${answered}/${item.questions.length}`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => resumeSession(item.sessionId)}
+              className={ds.outlineButton}
+            >
+              Tiếp tục
+              <ArrowRight className="size-4" />
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   return (
     <div className={ds.page}>
       <PageBanner
@@ -749,38 +784,24 @@ export function MockExamPage() {
             <p className="mt-0.5 text-xs text-[#5b6b84]">
               Tiếp tục sẽ vào đúng câu đã làm, không tạo đề mới.
             </p>
-            <ul className="mt-3 space-y-2">
-              {localSessions.map((item) => {
-                const secondsLeft = item.pausedRemainingSeconds ?? secondsUntilExpiry(item.expiresAt)
-                const answered = item.answers.filter((answer) => !answer.isFollowUp).length
-                return (
-                  <li
-                    key={item.sessionId}
-                    className="flex flex-col gap-3 rounded-xl border border-[#f0d7a8] bg-[#fffaf3] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold tracking-[0.06em] text-[#b45309]">
-                        {item.courseCode}
-                      </p>
-                      <p className="mt-0.5 text-sm font-semibold text-[#0F2854]">{item.courseName}</p>
-                      <p className="mt-0.5 text-xs text-[#5b6b84]">
-                        {secondsLeft > 0
-                          ? `Còn ${formatClock(secondsLeft)} · Đã trả lời ${answered}/${item.questions.length}`
-                          : `Đã hết giờ · Đã trả lời ${answered}/${item.questions.length}`}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => resumeSession(item.sessionId)}
-                      className={ds.outlineButton}
-                    >
-                      Tiếp tục
-                      <ArrowRight className="size-4" />
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
+            <div className="mt-3">{renderUnfinishedSessions(localSessions.slice(0, 2))}</div>
+            {localSessions.length > 2 && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArchiveCourseId('')
+                    setArchiveStatus('in_progress')
+                    setArchivePage(1)
+                    setExpandedHistoryId(null)
+                    setArchiveOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+                >
+                  Xem lịch sử <ArrowRight className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -947,7 +968,7 @@ export function MockExamPage() {
           {historyError && (
             <div className="px-5 py-4 text-xs text-[#ae3d50] sm:px-6">{historyError}</div>
           )}
-          <div className={cn(ds.sectionBody, 'flex min-h-0 flex-1 flex-col gap-4 pt-3 sm:pt-3')}>
+          <div className={cn(ds.sectionBody, 'flex min-h-0 flex-1 flex-col gap-4', (isLoadingHistory || historyItems.length > 0) && 'pt-3 sm:pt-3')}>
             {isLoadingHistory ? (
               <div className="flex flex-1 items-center gap-2 text-sm font-semibold text-[#5b6b84]">
                 <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
@@ -955,7 +976,6 @@ export function MockExamPage() {
               </div>
             ) : historyItems.length === 0 ? (
               <EmptyState
-                compact
                 className="flex-1 justify-center"
                 icon={History}
                 title="Chưa có ca thi thử nào"
@@ -993,10 +1013,14 @@ export function MockExamPage() {
               </ul>
             )}
 
+            {!isLoadingHistory && historyItems.length > 0 && (
             <div className="flex h-7 shrink-0 items-center justify-end text-xs">
               <button
                 type="button"
                 onClick={() => {
+                  setArchiveCourseId('')
+                  setArchiveStatus('')
+                  setArchivePage(1)
                   setArchiveOpen(true)
                   setExpandedHistoryId(null)
                 }}
@@ -1006,6 +1030,7 @@ export function MockExamPage() {
                 <ArrowRight className="size-3.5" aria-hidden="true" />
               </button>
             </div>
+            )}
           </div>
 
         </section>

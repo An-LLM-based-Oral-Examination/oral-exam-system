@@ -18,6 +18,7 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+        services.AddScoped<Features.QuestionBank.ReviewRequests.QuestionReviewRequestService>();
 
         return services;
     }

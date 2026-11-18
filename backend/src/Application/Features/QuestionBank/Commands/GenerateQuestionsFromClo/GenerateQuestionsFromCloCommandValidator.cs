@@ -20,9 +20,6 @@ public sealed class GenerateQuestionsFromCloCommandValidator : AbstractValidator
         RuleFor(v => v.SelectedCloCodes)
             .NotEmpty().WithMessage("Cần chọn ít nhất 1 mã chuẩn đầu ra (CLO).");
 
-        RuleFor(v => v.Topics)
-            .NotEmpty().WithMessage("Cần chọn ít nhất 1 chủ đề bài học.");
-
         RuleFor(v => v.UsageScope)
             .Must(s => UsageScope.All.Contains(s))
             .WithMessage("Phạm vi sử dụng phải là 'practice' hoặc 'exam'.");

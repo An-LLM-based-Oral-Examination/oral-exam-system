@@ -1,15 +1,20 @@
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
+import { pickCurrentSemester } from '@/lib/semester'
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, LoaderCircle, Plus, Search, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, Plus, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { DialogFooter, FormDialog } from '@/design/overlays'
+import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
@@ -42,23 +47,6 @@ function courseCodeTone(code: string) {
   return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
 }
 
-function dateKey(value: string) {
-  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
-  if (!year || !month || !day) return null
-  return year * 10000 + month * 100 + day
-}
-
-function pickCurrentSemester(semesters: SemesterOption[]) {
-  const today = new Date()
-  const todayKey = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate()
-  const covering = semesters.filter((item) => {
-    const start = dateKey(item.startDate)
-    const end = dateKey(item.endDate)
-    return start !== null && end !== null && todayKey >= start && todayKey <= end
-  })
-  return covering.find((item) => item.isActive) ?? covering[0] ?? semesters.find((item) => item.isActive) ?? semesters[0]
-}
-
 export function LecturerClassManagementPage() {
   const [offerings, setOfferings] = useState<LecturerCourseOffering[]>([])
   const [semesterCatalog, setSemesterCatalog] = useState<SemesterOption[]>([])
@@ -69,9 +57,9 @@ export function LecturerClassManagementPage() {
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [courseCode, setCourseCode] = useState('ALL')
-  const [classSearch, setClassSearch] = useState('')
-  const [appliedClassSearch, setAppliedClassSearch] = useState('')
   const [classPage, setClassPage] = useState(1)
+  const classSearch = useSearchInput(() => setClassPage(1))
+  const appliedClassSearch = classSearch.query
   const [classPageSize, setClassPageSize] = useState(() =>
     window.matchMedia('(min-width: 80rem)').matches ? 6 : window.matchMedia('(min-width: 40rem)').matches ? 4 : 2,
   )
@@ -91,14 +79,6 @@ export function LecturerClassManagementPage() {
       medium.removeEventListener('change', update)
     }
   }, [])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setAppliedClassSearch(classSearch)
-      setClassPage(1)
-    }, 500)
-    return () => window.clearTimeout(timeout)
-  }, [classSearch])
 
   const load = async (selectedSemester = semesterId) => {
     setLoading(true)
@@ -178,18 +158,18 @@ export function LecturerClassManagementPage() {
       />
 
       <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3')}>
-            <div className={ds.sectionHeading}>
-              <div className={ds.sectionTitleRow}>
+        <div className={cn(ds.sectionHeader, 'flex items-center justify-between gap-4 overflow-x-auto')}>
+            <div className={cn(ds.sectionHeading, 'shrink-0')}>
+              <div className={cn(ds.sectionTitleRow, 'flex-nowrap whitespace-nowrap')}>
                 <span className={ds.sectionIconWrap}>
                   <UsersRound className={ds.sectionIcon} />
                 </span>
                 <h2 className={ds.sectionTitle}>Lớp học của tôi</h2>
                 <span className={ds.sectionBadge}>{visibleClasses.length} lớp</span>
               </div>
-              <p className={ds.sectionHint}>Quản lý lớp theo học kỳ và môn được phân công</p>
+              <p className={cn(ds.sectionHint, 'whitespace-nowrap')}>Quản lý lớp theo học kỳ và môn được phân công</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
               <FilterDropMenu
                 label="Học kỳ"
                 value={semesterId}
@@ -201,8 +181,8 @@ export function LecturerClassManagementPage() {
                 }}
                 options={semesters}
                 emptyText="Chưa có học kỳ"
-                className="w-40 max-w-full"
-                menuMinWidth={192}
+                className={ds.filterSemester}
+                menuMinWidth={ds.filterMenuMinWidth}
               />
               <FilterDropMenu
                 label="Môn"
@@ -213,25 +193,19 @@ export function LecturerClassManagementPage() {
                 }}
                 options={courseOptions}
                 emptyText="Chưa có môn trong kỳ này"
-                className="w-64 max-w-full"
-                menuMinWidth={352}
+                className={ds.filterCourse}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
               />
-              <div className="relative w-full sm:w-fit">
-                <Search className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4 text-[#1C4D8D]" aria-hidden="true" />
-                <input
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
                   type="search"
                   aria-label="Tìm theo tên lớp hoặc mã lớp"
                   placeholder="Tìm theo tên lớp hoặc mã lớp"
-                  value={classSearch}
-                  onChange={(event) => setClassSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                      event.preventDefault()
-                      setAppliedClassSearch(classSearch)
-                      setClassPage(1)
-                    }
-                  }}
-                  className={cn(ds.field, 'h-10 min-h-10 rounded-full pr-3 pl-10 shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition sm:w-[264px]')}
+                  value={classSearch.draft}
+                  onChange={(event) => classSearch.change(event.target.value)}
+                  onKeyDown={classSearch.onKeyDown}
+                  className={cn(ds.field, 'h-10 min-h-10 w-full rounded-full pr-3 pl-10 shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition')}
                 />
               </div>
               <button type="button" className={cn(ds.primaryButton, 'min-h-10 shrink-0')} onClick={() => setCreateOpen(true)}>
@@ -242,10 +216,7 @@ export function LecturerClassManagementPage() {
         </div>
         <div className={ds.sectionBody}>
           {loading ? (
-            <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#5b6b84]">
-              <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" />
-              Đang tải lớp...
-            </div>
+            <LoadingState label="Đang tải lớp…" />
           ) : visibleClasses.length === 0 ? (
             <EmptyState
               icon={UsersRound}
@@ -459,13 +430,7 @@ function CreateClassDialog({
       onClose={onClose}
       busy={busy}
       footer={(
-        <DialogFooter className="bg-white sm:flex-row">
-          <button type="button" onClick={onClose} disabled={busy} className={cn(ds.outlineButton, 'min-h-10')}>Hủy</button>
-          <button type="submit" form="create-class-form" disabled={busy || offerings.length === 0} className={cn(ds.primaryButton, 'min-h-10')}>
-            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-3.5" />}
-            Tạo lớp
-          </button>
-        </DialogFooter>
+        <SubmitDialogFooter form="create-class-form" label="Tạo lớp" busyLabel="Đang tạo…" busy={busy} disabled={offerings.length === 0} icon={Plus} onCancel={onClose} />
       )}
     >
       <form id="create-class-form" onSubmit={(event) => void submit(event)} className="space-y-3" noValidate>

@@ -21,6 +21,7 @@ import {
 import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
+import { EmptyState } from '@/components/common/EmptyState'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { toast } from '@/components/common/toastStore'
 import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
@@ -240,19 +241,17 @@ export function MockExamSessionPage() {
 function MissingSession({ message }: { message?: string }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-white px-4 text-[#0F2854]">
-      <section className="max-w-md text-center">
-        <h1 className="text-xl font-bold">Không tìm thấy ca thi đang mở</h1>
-        <p className="mt-2 text-sm leading-relaxed text-[#5f6f87]">
-          {message ||
-            'Ca thi chỉ được khôi phục trên trình duyệt đã bắt đầu bài. Hãy quay lại phòng chờ để tạo ca mới.'}
-        </p>
+      <EmptyState className="w-full max-w-md" icon={Clock3} title="Không tìm thấy ca thi đang mở"
+        description={message || 'Ca thi chỉ được khôi phục trên trình duyệt đã bắt đầu bài. Hãy quay lại phòng chờ để tạo ca mới.'}
+        action={
         <Link
           to="/mock-exam"
-          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[#f5c518] px-5 text-sm font-bold text-[#1b1600]"
+          className={ds.primaryButton}
         >
           <ArrowLeft className="size-4" /> Về phòng chờ
         </Link>
-      </section>
+        }
+      />
     </div>
   )
 }

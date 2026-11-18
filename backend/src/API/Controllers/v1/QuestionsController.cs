@@ -124,7 +124,7 @@ public class QuestionsController : ControllerBase
             request.CourseId,
             requesterId,
             request.SelectedCloCodes,
-            request.Topics,
+            request.Topics ?? [],
             request.NumberOfQuestions,
             request.UsageScope,
             request.TargetBloomLevels,

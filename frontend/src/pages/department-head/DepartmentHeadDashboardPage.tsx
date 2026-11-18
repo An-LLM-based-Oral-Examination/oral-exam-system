@@ -8,7 +8,7 @@ export function DepartmentHeadDashboardPage() {
   return (
     <div className={ds.page}>
       <PageBanner
-        eyebrow="CỔNG TRƯỞNG BỘ MÔN"
+        eyebrow="CỔNG TRƯỞNG BM"
         title="Điều hành học thuật"
         description="Quản lý duyệt câu hỏi, cấu trúc đề và quy trình phúc khảo theo phạm vi môn học được phân công."
       />

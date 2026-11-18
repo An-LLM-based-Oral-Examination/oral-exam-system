@@ -1,8 +1,10 @@
+import { StatusTabs } from '@/components/common/StatusTabs'
+import { BackLink } from '@/components/common/BackLink'
 import { classService } from '@/services/class.service'
 import type { StudentClassItem } from '@/types/class.types'
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clock3, ClipboardCheck, KeyRound, LoaderCircle, Lock, Mic2, RefreshCw, TimerReset, UserRound, Users, UsersRound } from 'lucide-react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Clock3, ClipboardCheck, KeyRound, LoaderCircle, Lock, Mic2, RefreshCw, TimerReset, UserRound, Users, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass } from '@/components/common/formFieldClasses'
@@ -708,13 +710,8 @@ export function StudentInClassExamPage() {
   return (
     <div lang="vi" className={cn(ds.page, routeClassId && 'pb-8 [&>a:first-child]:mb-3')}>
       {classId ? (
-        <Link
-          to="/classes"
-          className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-        >
-          <ArrowLeft className="size-5" aria-hidden="true" />
-          Về danh sách
-        </Link>
+        <BackLink
+          to="/classes">Về danh sách</BackLink>
       ) : (
         <PageBanner
           icon={ClipboardCheck}
@@ -809,48 +806,7 @@ export function StudentInClassExamPage() {
 
         <div className="bg-white">
           <div className="px-4 pt-3 sm:px-6">
-            <div
-              className="flex flex-wrap items-end gap-0 border-b-2 border-[#1C4D8D]"
-              role="tablist"
-              aria-label="Lọc trạng thái ca"
-            >
-              {STATUS_FILTERS.map((tab) => {
-                const count = tab.value === 'ALL' ? orderedShifts.length : orderedShifts.filter((shift) => shift.status === tab.value).length
-                const active = statusFilter === tab.value
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setStatusFilter(tab.value)}
-                    className={cn(
-                      'relative inline-flex items-center gap-1.5 border px-3.5 py-2.5 text-[14px] font-bold whitespace-nowrap transition sm:px-4',
-                      active
-                        ? '-mb-0.5 rounded-t-xl border-[#1C4D8D] border-b-white bg-[linear-gradient(165deg,#BDE8F5_0%,#EAF6FB_42%,#ffffff_100%)] text-[#1C4D8D]'
-                        : 'mb-0 border-transparent text-[#6f7f93] hover:bg-[#F4FBFD] hover:text-[#1C4D8D]',
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        active ? 'bg-[#1C4D8D]' : tab.dotClass,
-                      )}
-                      aria-hidden="true"
-                    />
-                    <span>{tab.label}</span>
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
-                        active ? 'bg-[#1C4D8D]/12 text-[#1C4D8D]' : tab.countIdleClass,
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            <StatusTabs label="Lọc trạng thái ca" value={statusFilter} options={STATUS_FILTERS.map(tab => ({ ...tab, count: tab.value === 'ALL' ? orderedShifts.length : orderedShifts.filter(shift => shift.status === tab.value).length }))} onChange={setStatusFilter} />
           </div>
         </div>
 

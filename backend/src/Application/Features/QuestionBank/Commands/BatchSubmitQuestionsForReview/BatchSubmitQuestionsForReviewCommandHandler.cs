@@ -10,6 +10,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Features.QuestionBank.ReviewRequests;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 
@@ -42,16 +43,31 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
 
         // 2. Tìm danh sách câu hỏi trong cả ExamQuestions và PracticeQuestions kèm Rubric và Criteria
         var examQuestions = await _context.ExamQuestions
+            .Include(q => q.Clo)
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
             .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId)
             .ToListAsync(cancellationToken);
 
         var practiceQuestions = await _context.PracticeQuestions
+            .Include(q => q.Clo)
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
             .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId)
             .ToListAsync(cancellationToken);
+
+        if (distinctIds.Count == 0 ||
+            examQuestions.Any(q => q.SubmittedBy != request.LecturerId && lecturer.Role != "admin") ||
+            practiceQuestions.Any(q => q.SubmittedBy != request.LecturerId && lecturer.Role != "admin"))
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure("FORBIDDEN: Chỉ được gửi câu hỏi do mình tạo.");
+
+        if (examQuestions.Any(q => q.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.NeedsRevision)) ||
+            practiceQuestions.Any(q => q.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.NeedsRevision)))
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure("Chỉ bản nháp hoặc câu cần chỉnh sửa được gửi duyệt.");
+
+        if (await _context.QuestionReviewRequestItems.AnyAsync(
+            i => distinctIds.Contains(i.QuestionId) && i.Decision == "PENDING", cancellationToken))
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure("CONFLICT: Câu hỏi đã nằm trong yêu cầu chờ duyệt.");
 
         var foundIds = examQuestions.Select(q => q.Id)
             .Union(practiceQuestions.Select(q => q.Id))
@@ -73,8 +89,7 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
             }
         }
 
-        var examIdSet = examQuestions.Select(q => q.Id).ToHashSet();
-        foreach (var pq in practiceQuestions.Where(p => !examIdSet.Contains(p.Id)))
+        foreach (var pq in practiceQuestions)
         {
             var validationError = ValidateQuestionForSubmission(pq.Title, pq.SampleAnswer, pq.Rubric);
             if (validationError != null)
@@ -85,27 +100,49 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
 
         // 4. Cập nhật trạng thái sang SUBMITTED_FOR_REVIEW cho cả 2 kho
         var now = DateTime.UtcNow;
+        var reviewRequest = new QuestionReviewRequest
+        {
+            CourseId = request.CourseId, SubmittedBy = request.LecturerId,
+            SubmittedAt = now, Notes = request.SubmissionNotes?.Trim()
+        };
+        foreach (var q in examQuestions)
+            reviewRequest.Items.Add(new QuestionReviewRequestItem
+            {
+                QuestionId = q.Id, UsageScope = "exam", SnapshotJson = ReviewQuestionSnapshot.From(q).ToJson()
+            });
+        foreach (var q in practiceQuestions)
+            reviewRequest.Items.Add(new QuestionReviewRequestItem
+            {
+                QuestionId = q.Id, UsageScope = "practice", SnapshotJson = ReviewQuestionSnapshot.From(q).ToJson()
+            });
+        _context.QuestionReviewRequests.Add(reviewRequest);
         foreach (var q in examQuestions)
         {
             q.ApprovalStatus = ApprovalStatus.SubmittedForReview;
             q.SubmittedBy = request.LecturerId;
-            if (!string.IsNullOrWhiteSpace(request.SubmissionNotes))
-            {
-                q.ReviewNotes = request.SubmissionNotes;
-            }
+            q.ReviewNotes = request.SubmissionNotes?.Trim();
+            q.ApprovedBy = null;
+            q.ApprovedAt = null;
         }
 
         foreach (var pq in practiceQuestions)
         {
             pq.ApprovalStatus = ApprovalStatus.SubmittedForReview;
             pq.SubmittedBy = request.LecturerId;
-            if (!string.IsNullOrWhiteSpace(request.SubmissionNotes))
-            {
-                pq.ReviewNotes = request.SubmissionNotes;
-            }
+            pq.ReviewNotes = request.SubmissionNotes?.Trim();
+            pq.ApprovedBy = null;
+            pq.ApprovedAt = null;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure(
+                "CONFLICT: Không thể gửi yêu cầu. Vui lòng tải lại danh sách trước khi thử lại.");
+        }
 
         var response = new BatchSubmitQuestionsForReviewResponseDto(
             request.CourseId,

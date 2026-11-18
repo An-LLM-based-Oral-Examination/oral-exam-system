@@ -292,6 +292,8 @@ public sealed class QuestionImageAndMultimodalGradingTests
         });
         await context.SaveChangesAsync();
 
+        (await context.Courses.FirstAsync(c => c.Id == savedPracticeQuestion.CourseId)).DepartmentHeadUserId = headId;
+        await context.SaveChangesAsync();
         var reviewHandler = new ReviewQuestionDecisionCommandHandler(context);
         var approveResult = await reviewHandler.Handle(new ReviewQuestionDecisionCommand(
             savedPracticeQuestion.Id,
@@ -333,7 +335,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
         var rubricId = Guid.NewGuid();
         var questionId = Guid.NewGuid();
 
-        context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Backend .NET", Credits = 3, IsActive = true });
+        context.Courses.Add(new Course { Id = courseId, DepartmentHeadUserId = headId, Code = "PRN231", Name = "Backend .NET", Credits = 3, IsActive = true });
         context.Users.Add(new User { Id = headId, Email = "head@fpt.edu.vn", FullName = "Trưởng BM", Role = "department_head", IsActive = true });
         context.Rubrics.Add(new Rubric
         {

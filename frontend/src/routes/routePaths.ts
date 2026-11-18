@@ -8,8 +8,10 @@ export const ROUTE_PATHS = {
     appeals: '/lecturer/appeals',
   },
   departmentHead: {
+    courses: '/department-head/courses',
     dashboard: '/department-head/dashboard',
     questionReview: '/department-head/question-review',
+    questionBank: '/department-head/question-bank',
     appeals: '/department-head/appeals',
   },
   examinationOfficer: {

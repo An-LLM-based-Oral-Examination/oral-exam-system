@@ -12,6 +12,7 @@ export interface AssignedLecturer {
   lecturerId: string
   fullName: string
   email: string
+  assignedAt?: string | null
   isActive: boolean
   semesterId: string | null
   semesterCode: string | null

@@ -1,5 +1,5 @@
 const STATUS_PREFIX =
-  /^(CONFLICT|BAD[\s_]*REQUEST|UNAUTHORIZED|FORBIDDEN|NOT[\s_]*FOUND|INTERNAL[\s_]*SERVER[\s_]*ERROR|ERROR|WARNING|INFO)\s*[:\-–—]\s*/i
+  /^(VALIDATION|CONFLICT|BAD[\s_]*REQUEST|UNAUTHORIZED|FORBIDDEN|NOT[\s_]*FOUND|INTERNAL[\s_]*SERVER[\s_]*ERROR|ERROR|WARNING|INFO)\s*[:\-–—]\s*/i
 
 const TECHNICAL =
   /\b(?:42[0-9A-Z]{3}|22[0-9]{3}|235\d{2}|42703)\b|column\s+.+\s+does not exist|does not exist|POSITION:\s*\d+|Npgsql|PostgresException|EntityFrameworkCore|SqlException|System\.\w*Exception|at\s+\S+\.cs:line\s+\d+/i

@@ -11,15 +11,17 @@ export interface FilterDropMenuOption {
 
 interface FilterDropMenuProps {
   label: string
-  value: string
+  value: string | readonly string[]
   options: FilterDropMenuOption[]
   onChange: (value: string) => void
   className?: string
   menuMinWidth?: number
+  wrapOptions?: boolean
   /** Thông báo khi danh sách trống. */
   emptyText?: string
   /** Viền đỏ khi trường không hợp lệ. */
   invalid?: boolean
+  disabled?: boolean
 }
 
 interface MenuBox {
@@ -42,8 +44,10 @@ export function FilterDropMenu({
   onChange,
   className,
   menuMinWidth = 176,
+  wrapOptions = false,
   emptyText = 'Không có dữ liệu',
   invalid = false,
+  disabled = false,
 }: FilterDropMenuProps) {
   const [open, setOpen] = useState(false)
   const [box, setBox] = useState<MenuBox | null>(null)
@@ -51,7 +55,10 @@ export function FilterDropMenu({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLUListElement>(null)
   const isEmpty = options.length === 0
-  const selected = options.find((option) => option.value === value)?.label
+  const unavailable = disabled || isEmpty
+  const multiple = typeof value !== 'string'
+  const selectedValues = typeof value === 'string' ? [value] : value
+  const selected = options.filter((option) => selectedValues.includes(option.value)).map((option) => option.label).join(', ') || undefined
   const triggerLabel = selected ?? (isEmpty ? emptyText : label)
 
   useLayoutEffect(() => {
@@ -101,9 +108,9 @@ export function FilterDropMenu({
   }, [open, options.length, menuMinWidth])
 
   useEffect(() => {
-    if (!isEmpty || !open) return
+    if (!unavailable || !open) return
     return scheduleUi(() => setOpen(false))
-  }, [isEmpty, open])
+  }, [unavailable, open])
 
   useEffect(() => {
     if (!open) return
@@ -138,17 +145,17 @@ export function FilterDropMenu({
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-disabled={isEmpty || undefined}
-        disabled={isEmpty}
+        aria-disabled={unavailable || undefined}
+        disabled={unavailable}
         onClick={() => {
-          if (isEmpty) return
+          if (unavailable) return
           setOpen((current) => !current)
         }}
         aria-invalid={invalid || undefined}
         className={cn(
           'relative inline-flex h-10 w-full items-center rounded-full border bg-white py-0 pr-11 pl-4 text-left text-sm font-semibold shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition',
           invalid ? 'border-[#c2415b] bg-[#fff7f8]' : 'border-[#4988C4]',
-          isEmpty ? 'cursor-default text-[#8aa0b8]' : 'text-[#0F2854]',
+          unavailable ? 'cursor-default text-[#8aa0b8]' : 'text-[#0F2854]',
           open && !invalid && 'ring-2 ring-[#1C4D8D]/15',
           open && invalid && 'ring-2 ring-[#c2415b]/20',
         )}
@@ -158,18 +165,19 @@ export function FilterDropMenu({
           className={cn(
             'pointer-events-none absolute right-5 size-4 text-[#1C4D8D] transition',
             open && 'rotate-180',
-            isEmpty && 'opacity-50',
+            unavailable && 'opacity-50',
           )}
         />
       </button>
       {open &&
-        !isEmpty &&
+        !unavailable &&
         box &&
         createPortal(
           <ul
             ref={panelRef}
             role="listbox"
             aria-label={label}
+            aria-multiselectable={multiple || undefined}
             style={{
               top: box.top,
               bottom: box.bottom,
@@ -180,7 +188,7 @@ export function FilterDropMenu({
             className="fixed z-[120] overflow-y-auto rounded-2xl border border-[#4988C4] bg-white p-1.5 shadow-[0_16px_36px_rgba(23,48,96,0.14)]"
           >
             {options.map((option) => {
-              const isSelected = option.value === value
+              const isSelected = selectedValues.includes(option.value)
               return (
                 <li key={`${option.value}::${option.label}`}>
                   <button
@@ -189,7 +197,7 @@ export function FilterDropMenu({
                     aria-selected={isSelected}
                     onClick={() => {
                       onChange(option.value)
-                      setOpen(false)
+                      if (!multiple) setOpen(false)
                     }}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold transition',
@@ -198,7 +206,9 @@ export function FilterDropMenu({
                         : 'text-[#0F2854] hover:bg-[#4988C4]/18',
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    <span className={cn('min-w-0 flex-1', wrapOptions ? 'whitespace-normal [overflow-wrap:anywhere]' : 'truncate')}>
+                      {option.label}
+                    </span>
                     {isSelected && <Check className="size-4 shrink-0" />}
                   </button>
                 </li>

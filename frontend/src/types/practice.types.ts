@@ -49,7 +49,15 @@ export interface CourseConfigurationDto {
   hasFollowUp: boolean
   examInputMode: ExamInputMode
   isActive: boolean
+  mockExamDurationMinutes?: number
+  mockExamTotalQuestions?: number
+  mockExamDifficultyDistribution?: string
+  mockExamBloomDistribution?: string
 }
+
+export type UpdateCourseConfigurationRequest = Pick<CourseConfigurationDto,
+  'transcriptBufferSeconds' | 'maxFollowUpQuestions' | 'hasFollowUp' | 'examInputMode' |
+  'mockExamDurationMinutes' | 'mockExamTotalQuestions' | 'mockExamDifficultyDistribution'>
 
 export interface PracticeQuestion {
   questionId: string
