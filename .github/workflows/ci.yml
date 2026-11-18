@@ -147,7 +147,7 @@ jobs:
         run: npm ci
 
       - name: Audit High-Severity npm Vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm run audit:ci
 
       - name: Lint Source Code (oxlint)
         run: npm run lint
