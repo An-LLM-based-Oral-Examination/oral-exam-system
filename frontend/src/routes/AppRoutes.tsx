@@ -298,4 +298,3 @@ export const appRoutes = createRoutesFromElements(
     <Route path="*" element={<Navigate to="/" replace />} />
   </>,
 )
-

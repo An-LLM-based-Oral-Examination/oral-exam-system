@@ -31,4 +31,3 @@ export const ROUTE_PATHS = {
     attendance: '/proctor/attendance',
   },
 } as const
-

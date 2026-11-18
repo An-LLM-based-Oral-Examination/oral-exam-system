@@ -162,7 +162,10 @@ public class AdversarialPostgresSchemaReconcilerChallengerTests
         var sql = PostgresSchemaReconciler.GetPostMigrationSql();
 
         // Extract lines inside the DO $reconcile_post$ block
-        var lines = sql.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var blockEnd = sql.IndexOf("$reconcile_post$;", StringComparison.Ordinal);
+        blockEnd.Should().BeGreaterThan(0);
+        var block = sql[..blockEnd];
+        var lines = block.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
         var staticDmlViolations = new List<string>();
 

@@ -18,4 +18,3 @@ function courseToneIndex(code: string) {
 export function courseCodeTone(code: string) {
   return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
 }
-

@@ -83,4 +83,3 @@ WHERE q.approval_status = 'SUBMITTED_FOR_REVIEW'
 ON CONFLICT DO NOTHING;
 """;
 }
-

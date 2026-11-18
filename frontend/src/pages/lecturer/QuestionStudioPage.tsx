@@ -1101,7 +1101,7 @@ export function QuestionStudioPage() {
               <p className="text-sm font-semibold text-[#0F2854]">{selectedQuestions.length} bản nháp được chọn</p>
               <span className={ds.infoChip}>{selectedQuestions[0]?.courseCode}</span>
             </div>
-            <TextareaField label="Ghi chú (không bắt buộc)"  
+            <TextareaField label="Ghi chú (không bắt buộc)"
                 value={submissionNotes}
                 onChange={(event) => setSubmissionNotes(event.target.value)}
                 disabled={isSubmitting}
@@ -1233,7 +1233,7 @@ export function QuestionStudioPage() {
                               setReviewNotes(event.target.value)
                               setReviewNotesError('')
                             }}
-                            
+
                             placeholder="Tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối..." />
                       </section>
                     )}

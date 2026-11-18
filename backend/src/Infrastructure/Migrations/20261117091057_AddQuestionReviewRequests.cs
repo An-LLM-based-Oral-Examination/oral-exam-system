@@ -26,4 +26,3 @@ namespace OralExamination.Infrastructure.Migrations
         }
     }
 }
-

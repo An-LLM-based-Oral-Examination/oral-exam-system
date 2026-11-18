@@ -489,6 +489,7 @@ public class AdversarialMF03EdgeCaseTests
     {
         using var context = CreateDbContext();
         var (_, head, course) = await SeedEntitiesAsync(context);
+        course.DepartmentHeadUserId = head.Id;
         var handler = new ReviewQuestionDecisionCommandHandler(context);
 
         var question = CreateExamQuestionInDb(course.Id, head.Id, "Câu hỏi thẩm định", new string('M', 60), 9.9999m);

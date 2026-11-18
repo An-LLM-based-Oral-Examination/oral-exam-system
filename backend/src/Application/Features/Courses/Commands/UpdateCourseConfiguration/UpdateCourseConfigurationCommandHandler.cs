@@ -26,6 +26,12 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
     public async Task<Result<CourseConfigurationDto>> Handle(UpdateCourseConfigurationCommand request, CancellationToken cancellationToken)
     {
         var (actorRole, actorUserId) = AcademicCourseOwnership.ParseActor(request.ActorRole);
+        if (!string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CourseConfigurationDto>.Failure("FORBIDDEN: Chỉ Admin hoặc Trưởng bộ môn phụ trách được cấu hình môn học.");
+        }
+
         var course = await _context.Courses
             .Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);

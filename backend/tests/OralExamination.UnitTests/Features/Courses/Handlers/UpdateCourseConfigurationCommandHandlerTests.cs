@@ -53,6 +53,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
         {
             Code = "SE", Name = "Software Engineering", DepartmentHeadUserId = programOwner
         };
+        context.AcademicPrograms.Add(course.AcademicProgram);
         await context.SaveChangesAsync();
         var id = actor == "program" ? programOwner : actor == "legacy" ? legacyOwner : Guid.NewGuid();
         var command = new UpdateCourseConfigurationCommand(course.Id, 90, 2, true)

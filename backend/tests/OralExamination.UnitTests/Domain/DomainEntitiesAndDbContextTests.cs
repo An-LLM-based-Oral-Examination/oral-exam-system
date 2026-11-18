@@ -34,8 +34,8 @@ public class DomainEntitiesAndDbContextTests
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(41,
-            "36 existing entities + 4 in-class exam entities (MF-05) + 1 notification entity (3NF)");
+        entityTypes.Should().HaveCount(43,
+            "36 existing entities + 4 in-class exam entities + 1 notification entity + 2 question review request entities");
 
         var expectedEntities = new[]
         {
