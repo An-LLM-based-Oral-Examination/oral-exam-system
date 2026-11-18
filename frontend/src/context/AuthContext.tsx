@@ -1,9 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { User, UserRole } from '@/types/auth.types'
 import { toast } from '@/components/common/toastStore'
+import { ensureFreshAccessToken, getJwtExpiryMs } from '@/services/api.client'
 import { authService } from '@/services/auth.service'
 import { browserAuthSession } from '@/services/browserAuthSession'
 import { AuthContext } from '@/context/auth-context'
+
+const PROACTIVE_REFRESH_LEAD_SECONDS = 180
+const PROACTIVE_REFRESH_LEAD_MS = PROACTIVE_REFRESH_LEAD_SECONDS * 1000
+const ACTIVE_WINDOW_MS = 15 * 60 * 1000
+const TRANSIENT_RETRY_MS = 30_000
+const MAX_TRANSIENT_RETRIES = 3
+
+function isWithinActiveExamRoute(): boolean {
+  if (typeof window === 'undefined') return false
+  const pathname = window.location.pathname
+  return (
+    /^\/(in-class-exam|mock-exam|practice|exam)(\/session)?$/.test(pathname) ||
+    /^\/classes\/[^/]+/.test(pathname) ||
+    /^\/lecturer\/classes\/[^/]+\/(?:in-class-shifts|shifts)\/[^/]+\/results/.test(pathname) ||
+    /^\/in-class-shifts\/[^/]+\/results/.test(pathname)
+  )
+}
 
 interface AuthState {
   user: User | null
@@ -25,6 +43,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState<string | null>(null)
   const verificationGeneration = useRef(0)
+  const lastActivityAtRef = useRef(0)
   const { user, token } = authState
   const invalidateVerification = useCallback(() => {
     ++verificationGeneration.current
@@ -91,8 +110,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       })
     }
 
+    const handleTokenRefreshed = (event: Event) => {
+      const nextToken =
+        event instanceof CustomEvent &&
+        typeof (event.detail as { token?: unknown } | null)?.token === 'string'
+          ? (event.detail as { token: string }).token
+          : authService.getToken()
+      if (!nextToken) return
+      setAuthState((prev) => {
+        if (!prev.user || prev.token === nextToken) return prev
+        return { ...prev, token: nextToken }
+      })
+    }
+
     window.addEventListener('auth:session-expired', handleSessionExpired)
     window.addEventListener('auth:must-change-password', handleMustChangePassword)
+    window.addEventListener('auth:token-refreshed', handleTokenRefreshed)
 
     const unsubscribeBrowserAuth = browserAuthSession.subscribe((event) => {
       const activeUser = authService.getCurrentUser()
@@ -127,9 +160,104 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       invalidateVerification()
       window.removeEventListener('auth:session-expired', handleSessionExpired)
       window.removeEventListener('auth:must-change-password', handleMustChangePassword)
+      window.removeEventListener('auth:token-refreshed', handleTokenRefreshed)
       unsubscribeBrowserAuth()
     }
   }, [retryAuthentication, invalidateVerification])
+
+  const isAuthenticated = !!token && !!user
+  const mustChangePassword = Boolean(user?.mustChangePassword)
+
+  useEffect(() => {
+    lastActivityAtRef.current = isAuthenticated ? Date.now() : 0
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated || !token || mustChangePassword) return
+
+    const expMs = getJwtExpiryMs(token)
+    if (expMs === null) return
+
+    let disposed = false
+    let retryTimerId: number | undefined
+    let retryCount = 0
+
+    const markActivity = () => {
+      lastActivityAtRef.current = Date.now()
+    }
+
+    const isActiveOrInExam = () =>
+      isWithinActiveExamRoute() || Date.now() - lastActivityAtRef.current <= ACTIVE_WINDOW_MS
+
+    const attemptProactiveRefresh = async (forceIfIdle: boolean) => {
+      if (disposed) return
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+
+      const currentToken = sessionStorage.getItem('access_token') ?? token
+      const currentExpMs = getJwtExpiryMs(currentToken)
+      if (currentExpMs === null || currentExpMs - Date.now() > PROACTIVE_REFRESH_LEAD_MS) {
+        return
+      }
+      if (!forceIfIdle && !isActiveOrInExam()) {
+        return
+      }
+
+      const nextToken = await ensureFreshAccessToken(PROACTIVE_REFRESH_LEAD_SECONDS)
+      if (disposed || !nextToken) return
+
+      if (nextToken !== currentToken) {
+        retryCount = 0
+        setAuthState((prev) => {
+          if (!prev.user || prev.token === nextToken) return prev
+          return { ...prev, token: nextToken }
+        })
+        return
+      }
+
+      if (currentExpMs > Date.now() && retryCount < MAX_TRANSIENT_RETRIES) {
+        retryCount += 1
+        if (retryTimerId !== undefined) window.clearTimeout(retryTimerId)
+        retryTimerId = window.setTimeout(() => {
+          retryTimerId = undefined
+          void attemptProactiveRefresh(forceIfIdle)
+        }, TRANSIENT_RETRY_MS)
+      }
+    }
+
+    const delayMs = Math.max(1_000, expMs - Date.now() - PROACTIVE_REFRESH_LEAD_MS)
+    const refreshTimerId = window.setTimeout(() => {
+      void attemptProactiveRefresh(false)
+    }, delayMs)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      markActivity()
+      void attemptProactiveRefresh(true)
+    }
+
+    const onOnline = () => {
+      void attemptProactiveRefresh(false)
+    }
+
+    window.addEventListener('pointerdown', markActivity, { passive: true })
+    window.addEventListener('keydown', markActivity, { passive: true })
+    window.addEventListener('touchstart', markActivity, { passive: true })
+    window.addEventListener('scroll', markActivity, { passive: true })
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('online', onOnline)
+
+    return () => {
+      disposed = true
+      window.clearTimeout(refreshTimerId)
+      if (retryTimerId !== undefined) window.clearTimeout(retryTimerId)
+      window.removeEventListener('pointerdown', markActivity)
+      window.removeEventListener('keydown', markActivity)
+      window.removeEventListener('touchstart', markActivity)
+      window.removeEventListener('scroll', markActivity)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [isAuthenticated, token, mustChangePassword])
 
   const loginWithGoogle = useCallback(async (idToken: string, signal?: AbortSignal) => {
     const data = await authService.googleLogin({ idToken }, signal)
@@ -167,17 +295,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await authService.logout()
   }
 
-  const hasRole = (roles: UserRole[]): boolean => {
+  const hasRole = (roles: UserRole | UserRole[]): boolean => {
     if (!user) return false
-    return roles.includes(user.role)
+    const roleList = Array.isArray(roles) ? roles : [roles]
+    return roleList.some(
+      (r) => r === user.role || r.toLowerCase() === user.role.toLowerCase(),
+    )
   }
 
   const isStudent = user?.role === 'Student'
   const isInstructor = user?.role === 'Instructor'
   const isDepartmentHead = user?.role === 'DepartmentHead'
+  const isExaminationOfficer = hasRole('ExaminationOfficer')
   const isProctor = user?.role === 'Proctor'
   const isAdmin = user?.role === 'Admin'
-  const isAuthenticated = !!token && !!user
 
   return (
     <AuthContext.Provider
@@ -191,6 +322,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isStudent,
         isInstructor,
         isDepartmentHead,
+        isExaminationOfficer,
         isProctor,
         isAdmin,
         loginWithPassword,

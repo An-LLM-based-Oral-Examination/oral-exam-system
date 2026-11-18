@@ -26,6 +26,7 @@ function createAuthValue(role: UserRole): AuthContextType {
     isStudent: role === 'Student',
     isInstructor: role === 'Instructor',
     isDepartmentHead: role === 'DepartmentHead',
+    isExaminationOfficer: role === 'ExaminationOfficer',
     isProctor: role === 'Proctor',
     isAdmin: role === 'Admin',
     loginWithPassword: async () => undefined,

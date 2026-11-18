@@ -28,7 +28,9 @@ import { toast } from '@/components/common/toastStore'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { courseService } from '@/services/course.service'
+import { courseCloService } from '@/services/courseClo.service'
 import { questionService } from '@/services/question.service'
+import type { CourseClo } from '@/types/courseClo.types'
 import type {
   BloomLevel,
   GenerateQuestionsFromFlmResponse,
@@ -60,6 +62,7 @@ const SESSION_INVALID_MESSAGE =
 
 type ManualFieldErrors = {
   courseId?: string
+  cloId?: string
   title?: string
   content?: string
   sampleAnswer?: string
@@ -147,6 +150,10 @@ export function CreatePracticeQuestionForm({
   /** Luồng này cố định kho luyện tập (practice_questions). */
   const usageScope: UsageScope = 'practice'
   const [availableCourses, setAvailableCourses] = useState<Array<{ id: string; code: string; name: string }>>([])
+  const [availableClos, setAvailableClos] = useState<CourseClo[]>([])
+  const [selectedCloId, setSelectedCloId] = useState('')
+  const [isLoadingClos, setIsLoadingClos] = useState(false)
+  const [cloLoadError, setCloLoadError] = useState('')
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
 
   useEffect(() => {
@@ -156,6 +163,7 @@ export function CreatePracticeQuestionForm({
       .then((courses) => {
         if (!active) return
         setAvailableCourses(courses)
+        setIsLoadingClos(true)
         setCourseId((current) => current || courses[0]?.id || '')
       })
       .catch(() => {
@@ -165,6 +173,22 @@ export function CreatePracticeQuestionForm({
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!isUuid(courseId)) return
+    let active = true
+    void courseCloService.list(courseId)
+      .then((clos) => {
+        if (active) setAvailableClos(clos.filter((clo) => clo.isActive))
+      })
+      .catch((error: unknown) => {
+        if (active) setCloLoadError(getErrorMessage(error))
+      })
+      .finally(() => {
+        if (active) setIsLoadingClos(false)
+      })
+    return () => { active = false }
+  }, [courseId])
 
   const courseOptions = useMemo(
     () =>
@@ -285,6 +309,14 @@ export function CreatePracticeQuestionForm({
   }
 
   const changeCourse = (value: string) => {
+    setAvailableClos([])
+    setSelectedCloId('')
+    setCloInput('')
+    setGeneration(null)
+    setSelectedGenerated(new Set())
+    setSavedGeneratedIds(new Set())
+    setCloLoadError('')
+    setIsLoadingClos(isUuid(value))
     setCourseId(value)
     clearManualError('courseId')
     clearAiError('courseId')
@@ -342,6 +374,7 @@ export function CreatePracticeQuestionForm({
       createCriterion(5, bloomFromDifficulty('medium')),
     ])
     setManualSource('manual')
+    setSelectedCloId('')
     setEditingGeneratedTempId('')
     setSavedQuestionId('')
     setManualErrors({})
@@ -350,6 +383,8 @@ export function CreatePracticeQuestionForm({
   }
 
   const editGeneratedDraft = (question: GeneratedQuestionDraft) => {
+    setSelectedCloId(availableClos.find((clo) =>
+      clo.cloCode.toLocaleLowerCase() === question.cloCode.trim().toLocaleLowerCase())?.id ?? '')
     setTitle(question.title)
     setContent(question.content)
     setSampleAnswer(question.modelAnswer)
@@ -387,6 +422,8 @@ export function CreatePracticeQuestionForm({
     const nextCriterionErrors: CriterionFieldErrors = {}
 
     if (!isUuid(courseId.trim())) errors.courseId = 'Vui lòng chọn môn học hợp lệ.'
+    if (!availableClos.some((clo) => clo.id === selectedCloId)) errors.cloId =
+      'Chọn CLO đang hoạt động của môn học trước khi lưu câu hỏi.'
     if (!title.trim()) errors.title = 'Vui lòng nhập tiêu đề câu hỏi.'
     if (!content.trim()) errors.content = 'Vui lòng nhập nội dung câu hỏi.'
     if (!sampleAnswerIsValid) errors.sampleAnswer = 'Model Answer bắt buộc có ít nhất 50 ký tự.'
@@ -407,9 +444,9 @@ export function CreatePracticeQuestionForm({
     event.preventDefault()
     if (isSaving || isUploadingImage || savedQuestionId) return
     if (step === 1) {
-      const { courseId, title, content, sampleAnswer } = validateManualForm().errors
-      setManualErrors({ courseId, title, content, sampleAnswer })
-      if (!courseId && !title && !content && !sampleAnswer) setStep(2)
+      const { courseId, cloId, title, content, sampleAnswer } = validateManualForm().errors
+      setManualErrors({ courseId, cloId, title, content, sampleAnswer })
+      if (!courseId && !cloId && !title && !content && !sampleAnswer) setStep(2)
       return
     }
     const validation = validateManualForm()
@@ -428,6 +465,7 @@ export function CreatePracticeQuestionForm({
     try {
       const result = await questionService.createPracticeQuestion({
         courseId: courseId.trim(),
+        cloId: selectedCloId,
         title: title.trim(),
         content: content.trim(),
         sampleAnswer: sampleAnswer.trim(),
@@ -522,7 +560,10 @@ export function CreatePracticeQuestionForm({
     event.preventDefault()
     const errors: AiFieldErrors = {}
     if (!isUuid(courseId.trim())) errors.courseId = 'Vui lòng chọn môn học hợp lệ.'
-    if (splitTerms(cloInput).length === 0) errors.clo = 'Nhập ít nhất một mã CLO.'
+    const selectedCodes = splitTerms(cloInput)
+    const validCodes = new Set(availableClos.map((clo) => clo.cloCode.toLocaleLowerCase()))
+    if (selectedCodes.length === 0 || selectedCodes.some((code) => !validCodes.has(code.toLocaleLowerCase())))
+      errors.clo = 'Chỉ nhập mã CLO đang hoạt động của môn học.'
     if (splitTerms(topicsInput).length === 0) errors.topics = 'Nhập ít nhất một chủ đề.'
     if ([easyCount, mediumCount, hardCount].some((count) => !Number.isInteger(count) || count < 0) || numberOfQuestions < 1 || numberOfQuestions > 10) {
       errors.numberOfQuestions = 'Số câu cần sinh phải từ 1 đến 10.'
@@ -604,8 +645,12 @@ export function CreatePracticeQuestionForm({
 
     for (const question of selected) {
       try {
+        const matchingClo = availableClos.find((clo) =>
+          clo.cloCode.toLocaleLowerCase() === question.cloCode.trim().toLocaleLowerCase())
+        if (!matchingClo) throw new Error(`CLO ${question.cloCode} không còn hoạt động trong môn học.`)
         await questionService.createPracticeQuestion({
           courseId: generation.courseId,
+          cloId: matchingClo.id,
           title: question.title,
           content: question.content,
           sampleAnswer: question.modelAnswer,
@@ -892,6 +937,21 @@ export function CreatePracticeQuestionForm({
               </div>
           )}
         </div>
+        {mode === 'manual' && (
+          <div className="mt-3">
+            <span className={fieldLabelClass(Boolean(manualErrors.cloId))}>Chuẩn đầu ra (CLO)</span>
+            <FilterDropMenu
+              label="Chọn CLO cho câu hỏi"
+              value={selectedCloId}
+              onChange={(value) => { setSelectedCloId(value); clearManualError('cloId') }}
+              options={availableClos.map((clo) => ({ value: clo.id, label: `${clo.cloCode} · ${clo.description}` }))}
+              emptyText={isLoadingClos ? 'Đang tải CLO…' : 'Chưa có CLO đang hoạt động'}
+              invalid={Boolean(manualErrors.cloId)}
+              className="mt-1.5 w-full"
+            />
+            <FieldError message={manualErrors.cloId || cloLoadError} />
+          </div>
+        )}
         {!isDialog && (
           <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#5b6b84]">
             <CircleHelp className="mt-0.5 size-3.5 shrink-0 text-[#6485b2]" aria-hidden="true" />
@@ -1323,6 +1383,12 @@ export function CreatePracticeQuestionForm({
                     )}
                   />
                   <FieldError message={aiErrors.clo} />
+                  <p className="mt-1 text-xs text-[#5b6b84]">
+                    {isLoadingClos ? 'Đang tải CLO…' : availableClos.length > 0
+                      ? `CLO đang hoạt động: ${availableClos.map((clo) => clo.cloCode).join(', ')}`
+                      : 'Môn học chưa có CLO đang hoạt động.'}
+                  </p>
+                  {cloLoadError && <FieldError message={cloLoadError} />}
                 </label>
                 <label className="block">
                   <span className={fieldLabelClass(Boolean(aiErrors.topics))}>

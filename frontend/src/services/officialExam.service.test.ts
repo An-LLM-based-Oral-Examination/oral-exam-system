@@ -65,6 +65,16 @@ describe('officialExamService MF-04 contract', () => {
     })
   })
 
+  it('normalizes official sessions when examStructureId is null', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: [{ ...sessionPayload, examStructureId: null }],
+    } as never)
+
+    await expect(officialExamService.getSessions()).resolves.toMatchObject([
+      { id: sessionId, examStructureId: '' },
+    ])
+  })
+
   it('publishes a shift and grades through the one-way backend endpoints', async () => {
     const post = vi
       .spyOn(apiClient, 'post')

@@ -7,9 +7,11 @@ import {
   ClipboardList,
   Clock3,
   Eye,
+  Layers3,
   LoaderCircle,
   Lock,
   Pencil,
+  Presentation,
   Save,
   Search,
   Timer,
@@ -27,11 +29,14 @@ import { ds, overlay } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
+import { InClassShiftProjectorDialog } from '@/pages/lecturer/InClassShiftProjectorDialog'
 import { inClassShiftService } from '@/services/inClassShift.service'
+import { ensureFreshAccessToken } from '@/services/api.client'
 import { createInClassShiftHubConnection } from '@/services/signalr.service'
 import type { InClassShift, InClassSubmission } from '@/types/inClassShift.types'
+import { formatDifficultyListLabel, formatPoolModeLabel } from '@/utils/inClassShiftPool'
 
-type SubmissionFilter = 'ALL' | 'PENDING' | 'AI' | 'OVERRIDE' | 'LOCKED'
+type SubmissionFilter = 'ALL' | 'PENDING' | 'GRADING' | 'AI' | 'OVERRIDE' | 'LOCKED'
 
 const SUBMISSION_TABS: Array<{
   value: SubmissionFilter
@@ -52,6 +57,12 @@ const SUBMISSION_TABS: Array<{
     dotClass: 'bg-[#d4a017]',
   },
   {
+    value: 'GRADING',
+    label: 'Đang chấm AI',
+    countIdleClass: 'bg-[#eaf3fc] text-[#1C4D8D]',
+    dotClass: 'bg-[#4988C4]',
+  },
+  {
     value: 'AI',
     label: 'Đã chấm AI',
     countIdleClass: 'bg-[#e8f7f1] text-[#197158]',
@@ -59,7 +70,7 @@ const SUBMISSION_TABS: Array<{
   },
   {
     value: 'OVERRIDE',
-    label: 'Đã chỉnh',
+    label: 'Đã hậu kiểm',
     countIdleClass: 'bg-[#eef1f5] text-[#52647d]',
     dotClass: 'bg-[#7a8aa0]',
   },
@@ -79,12 +90,44 @@ function isInProgress(status: InClassSubmission['status']) {
   return status === 'JOINED' || status === 'IN_PROGRESS'
 }
 
-function submissionBucket(item: InClassSubmission): SubmissionFilter | null {
+function submissionBucket(item: InClassSubmission): SubmissionFilter {
   if (isInProgress(item.status)) return 'PENDING'
   if (item.status === 'FINALIZED') return 'LOCKED'
-  if (item.overridden) return 'OVERRIDE'
-  if (item.aiScore != null) return 'AI'
-  return null
+  if (item.overridden || item.status === 'AUDITED') return 'OVERRIDE'
+  if (item.aiScore != null || item.status === 'GRADED') return 'AI'
+  return 'GRADING'
+}
+
+function submissionStatusBadge(item: InClassSubmission): { label: string; className: string } {
+  const bucket = submissionBucket(item)
+  if (bucket === 'PENDING') {
+    return {
+      label: 'Đang làm bài',
+      className: 'border-[#f3e0bf] bg-[#fff6e8] text-[#8d6118]',
+    }
+  }
+  if (bucket === 'GRADING') {
+    return {
+      label: 'Đang chấm AI',
+      className: 'border-[#82aedb]/60 bg-[#F4FBFD] text-[#1C4D8D]',
+    }
+  }
+  if (bucket === 'OVERRIDE') {
+    return {
+      label: 'Đã hậu kiểm',
+      className: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]',
+    }
+  }
+  if (bucket === 'LOCKED') {
+    return {
+      label: 'Đã khóa · Chốt điểm',
+      className: 'border-[#c5d0e0] bg-[#eef3f8] text-[#42556f]',
+    }
+  }
+  return {
+    label: 'Đã chấm AI',
+    className: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]',
+  }
 }
 
 function shiftStatusLabel(status: InClassShift['status']) {
@@ -154,13 +197,15 @@ export function InClassShiftResultsPage() {
   const [examScore, setExamScore] = useState('')
   const [examScoreError, setExamScoreError] = useState('')
   const [examComment, setExamComment] = useState('')
+  const [examCommentError, setExamCommentError] = useState('')
   const [confirmFinalize, setConfirmFinalize] = useState(false)
   const [gradeDialogOpen, setGradeDialogOpen] = useState(false)
+  const [projectorOpen, setProjectorOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [answerCursor, setAnswerCursor] = useState(0)
   const closeReviewButtonRef = useRef<HTMLButtonElement>(null)
 
-  const locked = shift?.status === 'FINALIZED'
+  const locked = shift?.status === 'FINALIZED' || Boolean(shift?.isLocked)
 
   const load = useCallback(async (showLoading = true) => {
     if (!shiftId) {
@@ -201,7 +246,7 @@ export function InClassShiftResultsPage() {
     const hubUrl = import.meta.env.VITE_IN_CLASS_SIGNALR_HUB_URL || '/hubs/in-class-shift'
     const connection = createInClassShiftHubConnection(
       hubUrl,
-      () => sessionStorage.getItem('access_token') ?? '',
+      () => ensureFreshAccessToken(90),
     )
     const refresh = () => {
       if (!disposed) void load(false)
@@ -216,7 +261,9 @@ export function InClassShiftResultsPage() {
 
     void connection
       .start()
-      .then(() => connection.invoke('JoinShift', shiftId))
+      .then(() => {
+        if (!disposed) return connection.invoke('JoinShift', shiftId)
+      })
       .catch(() => undefined)
 
     const pollTimer = window.setInterval(refresh, 10_000)
@@ -291,13 +338,13 @@ export function InClassShiftResultsPage() {
     const counts: Record<SubmissionFilter, number> = {
       ALL: submissions.length,
       PENDING: 0,
+      GRADING: 0,
       AI: 0,
       OVERRIDE: 0,
       LOCKED: 0,
     }
     for (const item of submissions) {
-      const bucket = submissionBucket(item)
-      if (bucket) counts[bucket] += 1
+      counts[submissionBucket(item)] += 1
     }
     return counts
   }, [submissions])
@@ -352,7 +399,10 @@ export function InClassShiftResultsPage() {
       }
     }
 
-    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
+    const isDesktop =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(min-width: 1024px)').matches
+        : true
     const unlock = isDesktop ? undefined : lockBodyScroll()
     document.addEventListener('keydown', handleKeyDown)
     if (!gradeDialogOpen) closeReviewButtonRef.current?.focus()
@@ -369,6 +419,7 @@ export function InClassShiftResultsPage() {
     setExamScore(score != null ? String(score) : '')
     setExamComment(selected.overrideReason ?? '')
     setExamScoreError('')
+    setExamCommentError('')
     setGradeDialogOpen(true)
   }
 
@@ -376,6 +427,7 @@ export function InClassShiftResultsPage() {
     if (busy) return
     setGradeDialogOpen(false)
     setExamScoreError('')
+    setExamCommentError('')
   }
 
   const saveExamGrade = async () => {
@@ -385,6 +437,11 @@ export function InClassShiftResultsPage() {
       setExamScoreError('Điểm cả bài phải trong khoảng 0–10.')
       return
     }
+    const comment = examComment.trim()
+    if (!comment) {
+      setExamCommentError('Vui lòng nhập nhận xét hoặc lý do hậu kiểm trước khi lưu điểm.')
+      return
+    }
     const answerIds = answers
       .filter((answer) => answer.status !== 'PENDING' && !answer.answerId.startsWith('pending-'))
       .map((answer) => answer.answerId)
@@ -392,8 +449,8 @@ export function InClassShiftResultsPage() {
       setExamScoreError('Chưa có bài nộp để chấm.')
       return
     }
-    const comment = examComment.trim()
     setExamScoreError('')
+    setExamCommentError('')
     setBusy(true)
     try {
       const updated = await inClassShiftService.gradeExam(shiftId, selected.id, answerIds, {
@@ -489,11 +546,11 @@ export function InClassShiftResultsPage() {
                     <span className={shiftFactClass}>
                       <ClipboardList className="size-3.5 shrink-0 text-[#1C4D8D]" />
                       <span>
-                        <span className="font-bold text-[#0F2854]">{shift.questionCount}</span> câu
+                        <span className="font-bold text-[#0F2854] tabular-nums">{shift.questionCount}</span> câu/SV
                         {shift.hasFollowUp ? (
                           <>
                             {' · phụ '}
-                            <span className="font-bold text-[#0F2854]">
+                            <span className="font-bold text-[#0F2854] tabular-nums">
                               {shift.maxFollowUpQuestions || 1}
                             </span>
                           </>
@@ -501,8 +558,20 @@ export function InClassShiftResultsPage() {
                       </span>
                     </span>
                     <span className={shiftFactClass}>
-                      <UsersRound className="size-3.5 shrink-0 text-[#1C4D8D]" />
+                      <Layers3 className="size-3.5 shrink-0 text-[#1C4D8D]" />
                       <span>
+                        {formatPoolModeLabel(
+                          shift.questionPoolMode,
+                          shift.selectedCloCodes,
+                          shift.selectedCloIds.length,
+                        )}
+                        {' · '}
+                        {formatDifficultyListLabel(shift.selectedDifficulties)}
+                      </span>
+                    </span>
+                    <span className={shiftFactClass}>
+                      <UsersRound className="size-3.5 shrink-0 text-[#1C4D8D]" />
+                      <span className="tabular-nums">
                         <span className="font-bold text-[#0F2854]">{shift.joinedCount}</span>
                         {' vào ca · '}
                         <span className="font-bold text-[#0F2854]">{shift.submittedCount}</span>
@@ -512,10 +581,20 @@ export function InClassShiftResultsPage() {
                     <span className={shiftFactClass}>
                       {locked
                         ? formatStamp(shift.finalizedAt)
-                          ? `Đã chốt ${formatStamp(shift.finalizedAt)}`
-                          : 'Đã chốt'
+                          ? `Đã khóa ${formatStamp(shift.finalizedAt)}`
+                          : 'Đã khóa'
                         : 'Chưa chốt'}
                     </span>
+                    {shift.status === 'ACTIVE' && !locked && (
+                      <button
+                        type="button"
+                        onClick={() => setProjectorOpen(true)}
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-[#1C4D8D] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#0F2854]"
+                      >
+                        <Presentation className="size-3.5" />
+                        Chiếu mã OTP
+                      </button>
+                    )}
                 </div>
               </div>
             ) : null}
@@ -600,6 +679,7 @@ export function InClassShiftResultsPage() {
               const aiLabel = inProgress || item.aiScore == null ? '—' : item.aiScore.toFixed(1)
               const finalLabel =
                 inProgress || item.finalScore == null ? '—' : item.finalScore.toFixed(1)
+              const badge = submissionStatusBadge(item)
               return (
                 <article
                   key={item.id}
@@ -627,9 +707,19 @@ export function InClassShiftResultsPage() {
                     </span>
                   )}
                   <div className="min-w-0">
-                    <h3 className="line-clamp-2 text-base leading-snug font-bold text-[#0F2854]">
-                      {item.studentName}
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="line-clamp-2 text-base leading-snug font-bold text-[#0F2854]">
+                        {item.studentName}
+                      </h3>
+                      <span
+                        className={cn(
+                          'inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                          badge.className,
+                        )}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
                     <p className="mt-1 text-sm text-[#8794a6]">
                       {inProgress
                         ? 'Đang làm bài'
@@ -791,7 +881,10 @@ export function InClassShiftResultsPage() {
                   <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-[#82aedb]/55 bg-white px-5 py-3">
                     {answers.map((answer, index) => {
                       const active = index === answerIndex
-                      const label = answer.isFollowUp ? `Câu phụ ${index + 1}` : `Câu ${index + 1}`
+                      const mainNo = answer.mainOrderIndex ?? index + 1
+                      const label = answer.isFollowUp
+                        ? `Câu ${mainNo} · Phụ #${answer.followUpIndex || 1}`
+                        : `Câu ${mainNo}`
                       return (
                         <button
                           key={answer.answerId}
@@ -832,13 +925,19 @@ export function InClassShiftResultsPage() {
                       <>
                         <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
                           <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                            Đề bài
+                            {activeAnswer.isFollowUp
+                              ? `Câu hỏi phụ AI #${activeAnswer.followUpIndex || 1}`
+                              : 'Đề bài'}
                           </p>
                           <h3 className="mt-2 text-base leading-snug font-bold text-[#0F2854]">
                             {activeAnswer.title}
                           </h3>
                           <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-wrap text-[#24364f]">
-                            {activeAnswer.content?.trim() || 'Không có nội dung đề bài.'}
+                            {activeAnswer.isFollowUp
+                              ? activeAnswer.followUpPrompt?.trim() ||
+                                activeAnswer.content?.trim() ||
+                                'Không có nội dung câu hỏi phụ.'
+                              : activeAnswer.content?.trim() || 'Không có nội dung đề bài.'}
                           </p>
                         </section>
                         <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
@@ -974,17 +1073,25 @@ export function InClassShiftResultsPage() {
               <FieldError message={examScoreError} />
             </div>
             <label className="block" htmlFor="exam-grade-comment">
-              <span className="text-xs font-semibold text-[#5b6b84]">
-                Nhận xét / lý do chỉnh (không bắt buộc)
+              <span className={fieldLabelClass(Boolean(examCommentError))}>
+                Nhận xét / lý do hậu kiểm
               </span>
               <textarea
                 id="exam-grade-comment"
                 value={examComment}
-                onChange={(event) => setExamComment(event.target.value)}
+                onChange={(event) => {
+                  setExamComment(event.target.value)
+                  setExamCommentError('')
+                }}
+                aria-invalid={examCommentError ? true : undefined}
                 rows={3}
-                placeholder="Có thể để trống"
-                className="mt-1 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#4988C4]/30"
+                placeholder="Nhập lý do điều chỉnh điểm hoặc nhận xét hậu kiểm..."
+                className={cn(
+                  'mt-1 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#4988C4]/30',
+                  examCommentError && fieldInvalidClass,
+                )}
               />
+              <FieldError message={examCommentError} />
             </label>
           </div>
         </FormDialog>
@@ -1003,6 +1110,12 @@ export function InClassShiftResultsPage() {
           onCancel={() => setConfirmFinalize(false)}
         />
       )}
+
+      <InClassShiftProjectorDialog
+        open={projectorOpen}
+        shiftId={shift?.id ?? null}
+        onClose={() => setProjectorOpen(false)}
+      />
 
     </div>
   )

@@ -180,7 +180,7 @@ function normalizeSession(value: unknown): OfficialExamSession {
   return {
     id: requiredString(record, 'id', 'Kỳ thi thật thiếu mã kỳ thi.'),
     courseId: requiredString(record, 'courseId', 'Kỳ thi thật thiếu mã môn học.'),
-    examStructureId: requiredString(record, 'examStructureId', 'Kỳ thi thật thiếu cấu trúc đề.'),
+    examStructureId: readNullableString(record, 'examStructureId') ?? '',
     title: requiredString(record, 'title', 'Kỳ thi thật thiếu tiêu đề.'),
     examDate: requiredString(record, 'examDate', 'Kỳ thi thật thiếu ngày thi.'),
     hasFollowUp: requiredBoolean(record, 'hasFollowUp', 'Kỳ thi thật thiếu cấu hình follow-up.'),

@@ -102,9 +102,14 @@ export function LecturerDashboardPage() {
   const [semesterCode, setSemesterCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [coursePage, setCoursePage] = useState(1)
-  const [wideCourseGrid, setWideCourseGrid] = useState(() => window.matchMedia('(min-width: 64rem)').matches)
+  const [wideCourseGrid, setWideCourseGrid] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(min-width: 64rem)').matches
+      : true,
+  )
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
     const media = window.matchMedia('(min-width: 64rem)')
     const update = () => {
       setWideCourseGrid(media.matches)

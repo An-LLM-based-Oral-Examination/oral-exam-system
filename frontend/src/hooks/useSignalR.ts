@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { HubConnectionState } from '@microsoft/signalr'
 import type { PracticeAnswerDetail } from '@/types/practice.types'
 import { createPracticeHubConnection } from '@/services/signalr.service'
+import { ensureFreshAccessToken } from '@/services/api.client'
 import { normalizePracticeAnswerDetail } from '@/services/practice.service'
 
 export type PracticeHubStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'offline'
@@ -53,7 +54,7 @@ export function useSignalR(
     let rejoinTimer: number | undefined
     const connection = createPracticeHubConnection(
       hubUrl,
-      () => sessionStorage.getItem('access_token') ?? '',
+      () => ensureFreshAccessToken(90),
     )
 
     const resetTimer = window.setTimeout(() => {

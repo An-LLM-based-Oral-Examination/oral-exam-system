@@ -13,6 +13,12 @@ function stopMediaStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
 }
 
+function detachRecorderHandlers(recorder: MediaRecorder) {
+  recorder.ondataavailable = null
+  recorder.onstop = null
+  recorder.onerror = null
+}
+
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined') return ''
   return AUDIO_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? ''
@@ -86,6 +92,8 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
+  const activeRecordersRef = useRef(new Set<MediaRecorder>())
+  const recordingSessionIdRef = useRef(0)
   const streamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const recorderVoicedMapRef = useRef(new WeakMap<MediaRecorder, boolean>())
@@ -110,6 +118,18 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
   const releaseRecorder = useCallback(() => {
     clearSegmentTimer()
+    recordingSessionIdRef.current += 1
+    for (const trackedRecorder of activeRecordersRef.current) {
+      detachRecorderHandlers(trackedRecorder)
+      if (trackedRecorder.state !== 'inactive') {
+        try {
+          trackedRecorder.stop()
+        } catch {
+          // Ignore stop errors when tearing down tracked recorders.
+        }
+      }
+    }
+    activeRecordersRef.current.clear()
     if (audioContextRef.current) {
       const ctx = audioContextRef.current
       audioContextRef.current = null
@@ -131,6 +151,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     if (recorderRef.current?.state === 'recording') return
 
     setError(null)
+    const sessionId = ++recordingSessionIdRef.current
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -140,6 +161,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         autoGainControl: true,
       },
     })
+
+    if (sessionId !== recordingSessionIdRef.current) {
+      stopMediaStream(stream)
+      return
+    }
 
     try {
       const mimeType = getSupportedMimeType()
@@ -153,16 +179,19 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       const bindAndStartRecorder = () => {
         const localChunks: BlobPart[] = []
         const recorder = createMediaRecorder(stream, mimeType)
+        activeRecordersRef.current.add(recorder)
         recorderRef.current = recorder
         chunksRef.current = localChunks
         // Nếu trình duyệt hỗ trợ Web Audio Analyser, chỉ gửi phân đoạn cuốn chiếu khi phát hiện năng lượng giọng nói thật (RMS Silence Gate)
         recorderVoicedMapRef.current.set(recorder, !audioGraph)
 
         recorder.ondataavailable = (event) => {
+          if (sessionId !== recordingSessionIdRef.current) return
           if (event.data.size > 0) localChunks.push(event.data)
         }
 
         recorder.onerror = () => {
+          if (sessionId !== recordingSessionIdRef.current) return
           const recordingError = new Error('Không thể tiếp tục ghi âm. Vui lòng kiểm tra microphone.')
           setError(recordingError.message)
           pendingStopRef.current?.reject(recordingError)
@@ -171,12 +200,16 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         }
 
         recorder.onstop = () => {
+          activeRecordersRef.current.delete(recorder)
+          detachRecorderHandlers(recorder)
+          if (sessionId !== recordingSessionIdRef.current) return
+
           const audio = new Blob(localChunks, {
             type: recorder.mimeType || mimeType || 'audio/webm',
           })
 
           // Nếu đây là phân đoạn 20s tự xoay vòng trong khi recorder mới đã chạy tiếp
-          if (recorderRef.current !== recorder && !pendingStopRef.current) {
+          if (recorderRef.current !== recorder) {
             const hadVoiceEnergy = recorderVoicedMapRef.current.get(recorder) ?? true
             if (audio.size > 0 && hadVoiceEnergy) {
               const currentIdx = segmentIndexRef.current++
@@ -210,6 +243,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           const prevRecorder = recorderRef.current
           const activeStream = streamRef.current
           if (
+            sessionId !== recordingSessionIdRef.current ||
             !activeStream ||
             !prevRecorder ||
             prevRecorder.state !== 'recording' ||
@@ -270,6 +304,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       setIsRecording(true)
     } catch (recordingError) {
+      releaseRecorder()
       stopMediaStream(stream)
       const message =
         recordingError instanceof Error
@@ -296,18 +331,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
   const cancelRecording = useCallback(() => {
     clearSegmentTimer()
-    const recorder = recorderRef.current
+    recordingSessionIdRef.current += 1
     pendingStopRef.current?.reject(new Error('Đã hủy bản ghi âm.'))
     pendingStopRef.current = null
     chunksRef.current = []
     lastEmittedSegmentRef.current = null
-
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.ondataavailable = null
-      recorder.onstop = null
-      recorder.onerror = null
-      recorder.stop()
-    }
     releaseRecorder()
   }, [clearSegmentTimer, releaseRecorder])
 

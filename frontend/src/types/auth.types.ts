@@ -26,6 +26,8 @@ export interface User {
   fullName: string
   role: UserRole
   studentCode?: string
+  username?: string
+  isActive?: boolean
   createdAt?: string
   mustChangePassword?: boolean
 }

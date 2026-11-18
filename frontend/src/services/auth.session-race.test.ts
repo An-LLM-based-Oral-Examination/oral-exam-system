@@ -1,8 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError, AxiosHeaders } from 'axios'
-import apiClient from './api.client'
+import apiClient, { ensureFreshAccessToken, getJwtExpiryMs } from './api.client'
 import { authService } from './auth.service'
 import { rotateSessionEpoch } from './authSessionState'
+
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function makeTestJwt(payload: Record<string, unknown>): string {
+  const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const body = toBase64Url(JSON.stringify(payload))
+  return `${header}.${body}.test-sig`
+}
 
 const originalAdapter = apiClient.defaults.adapter
 const user = { id: 'user-1', email: 'qa@example.test', fullName: 'QA', role: 'Student' }
@@ -210,5 +225,196 @@ describe('in-flight authentication session isolation', () => {
     finish()
     await logout
     expect(sessionStorage.getItem('access_token')).toBe('access-2')
+  })
+
+  it('decodes JWT expiry safely with UTF-8 claims and returns null for opaque tokens', () => {
+    const expSeconds = Math.floor(Date.now() / 1000) + 900
+    const jwt = makeTestJwt({ sub: 'user-1', name: 'Nguyễn Văn A', exp: expSeconds })
+    expect(getJwtExpiryMs(jwt)).toBe(expSeconds * 1000)
+    expect(getJwtExpiryMs('token')).toBeNull()
+    expect(getJwtExpiryMs('access-1')).toBeNull()
+    expect(getJwtExpiryMs('')).toBeNull()
+    expect(getJwtExpiryMs(`a.${toBase64Url(JSON.stringify({ exp: expSeconds }))}`)).toBeNull()
+    expect(getJwtExpiryMs(makeTestJwt({ sub: 'user-1' }))).toBeNull()
+  })
+
+  it('retries an in-flight 401 using the newer same-epoch token after concurrent ensureFreshAccessToken rotation without duplicate refresh', async () => {
+    const nearExpiryJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 30 })
+    const rotatedJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 900 })
+    sessionStorage.setItem('access_token', nearExpiryJwt)
+
+    let releaseInFlightRequest!: () => void
+    let inFlightStarted!: () => void
+    const inFlightGate = new Promise<void>((resolve) => {
+      inFlightStarted = resolve
+    })
+    let refreshCalls = 0
+    const authHeadersObserved: string[] = []
+
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCalls
+        return {
+          data: { accessToken: rotatedJwt },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      const authHeader =
+        typeof config.headers?.get === 'function'
+          ? String(config.headers.get('Authorization') ?? '')
+          : String(config.headers?.Authorization ?? '')
+      authHeadersObserved.push(authHeader)
+
+      if (!config._retry) {
+        inFlightStarted()
+        await new Promise<void>((resolve) => {
+          releaseInFlightRequest = resolve
+        })
+        throw new AxiosError('unauthorized', 'ERR_BAD_REQUEST', config, null, {
+          status: 401,
+          statusText: 'Unauthorized',
+          data: {},
+          headers: new AxiosHeaders(),
+          config,
+        })
+      }
+
+      return {
+        data: { submitted: true },
+        status: 200,
+        statusText: 'OK',
+        headers: new AxiosHeaders(),
+        config,
+      }
+    }
+
+    const inFlightPost = apiClient.post('/student/in-class-shifts/1/submit', { transcript: 'test' })
+    await inFlightGate
+
+    // ensureFreshAccessToken hoàn tất xoay vòng access_token TRƯỚC khi request cũ nhận về 401
+    const refreshedToken = await ensureFreshAccessToken(90)
+    expect(refreshedToken).toBe(rotatedJwt)
+    expect(sessionStorage.getItem('access_token')).toBe(rotatedJwt)
+
+    releaseInFlightRequest()
+    const response = await inFlightPost
+
+    expect(response.status).toBe(200)
+    expect(response.data).toEqual({ submitted: true })
+    expect(refreshCalls).toBe(1)
+    expect(authHeadersObserved).toEqual([`Bearer ${nearExpiryJwt}`, `Bearer ${rotatedJwt}`])
+  })
+
+  it('returns existing token immediately in ensureFreshAccessToken when above minValiditySeconds or non-JWT', async () => {
+    const freshJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 600 })
+    sessionStorage.setItem('access_token', freshJwt)
+
+    let refreshCalls = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCalls
+      }
+      throw new Error('should not be called')
+    }
+
+    expect(await ensureFreshAccessToken(90)).toBe(freshJwt)
+    sessionStorage.setItem('access_token', 'access-opaque')
+    expect(await ensureFreshAccessToken(90)).toBe('access-opaque')
+    expect(refreshCalls).toBe(0)
+  })
+
+  it('deduplicates concurrent ensureFreshAccessToken and 401 retry calls onto a single refresh request', async () => {
+    const nearExpiryJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 30 })
+    const rotatedJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 900 })
+    sessionStorage.setItem('access_token', nearExpiryJwt)
+
+    let finish!: () => void
+    let entered!: () => void
+    let refreshCalls = 0
+    const refreshing = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCalls
+        entered()
+        await new Promise<void>((resolve) => {
+          finish = resolve
+        })
+        return {
+          data: { accessToken: rotatedJwt },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      if (config._retry) {
+        return {
+          data: { ok: true },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      throw new AxiosError('unauthorized', 'ERR_BAD_REQUEST', config, null, {
+        status: 401,
+        statusText: 'Unauthorized',
+        data: {},
+        headers: new AxiosHeaders(),
+        config,
+      })
+    }
+
+    const p1 = ensureFreshAccessToken(90)
+    const p2 = ensureFreshAccessToken(90)
+    const p3 = apiClient.get('/protected')
+    await refreshing
+    finish()
+
+    const [t1, t2, res3] = await Promise.all([p1, p2, p3])
+    expect(t1).toBe(rotatedJwt)
+    expect(t2).toBe(rotatedJwt)
+    expect(res3.status).toBe(200)
+    expect(refreshCalls).toBe(1)
+    expect(sessionStorage.getItem('access_token')).toBe(rotatedJwt)
+  })
+
+  it('falls back to non-expired token on transient 500 error and clears session on terminal 401', async () => {
+    const nearExpiryJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 45 })
+    sessionStorage.setItem('access_token', nearExpiryJwt)
+
+    apiClient.defaults.adapter = async (config) => {
+      throw new AxiosError('server error', 'ERR_BAD_RESPONSE', config, null, {
+        status: 500,
+        statusText: 'Internal Server Error',
+        data: {},
+        headers: new AxiosHeaders(),
+        config,
+      })
+    }
+    expect(await ensureFreshAccessToken(90)).toBe(nearExpiryJwt)
+    expect(sessionStorage.getItem('access_token')).toBe(nearExpiryJwt)
+
+    const expiredListener = vi.fn()
+    window.addEventListener('auth:session-expired', expiredListener)
+    apiClient.defaults.adapter = async (config) => {
+      throw new AxiosError('unauthorized', 'ERR_BAD_REQUEST', config, null, {
+        status: 401,
+        statusText: 'Unauthorized',
+        data: {},
+        headers: new AxiosHeaders(),
+        config,
+      })
+    }
+    expect(await ensureFreshAccessToken(90)).toBe('')
+    expect(sessionStorage.getItem('access_token')).toBeNull()
+    expect(expiredListener).toHaveBeenCalledTimes(1)
+    window.removeEventListener('auth:session-expired', expiredListener)
   })
 })

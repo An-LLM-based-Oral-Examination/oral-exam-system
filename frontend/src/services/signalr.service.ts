@@ -1,6 +1,9 @@
 import * as signalR from '@microsoft/signalr'
 
-export function createPracticeHubConnection(hubUrl: string, accessTokenFactory: () => string) {
+export function createPracticeHubConnection(
+  hubUrl: string,
+  accessTokenFactory: () => string | Promise<string>,
+) {
   return new signalR.HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory,
@@ -10,7 +13,10 @@ export function createPracticeHubConnection(hubUrl: string, accessTokenFactory: 
     .build()
 }
 
-export function createInClassShiftHubConnection(hubUrl: string, accessTokenFactory: () => string) {
+export function createInClassShiftHubConnection(
+  hubUrl: string,
+  accessTokenFactory: () => string | Promise<string>,
+) {
   return new signalR.HubConnectionBuilder()
     .withUrl(hubUrl, {
       accessTokenFactory,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw, RotateCcw, X } from 'lucide-react'
 import { deadLetterQueueService } from '@/services/deadLetterQueue.service'
 import type { DeadLetterQueueTask } from '@/types/deadLetterQueue.types'
 import { cn } from '@/lib/utils'
@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { dlqFlowsFor } from '@/lib/task09Permissions'
 
 function errorMessage(error: unknown) {
-  return userMessage(error, 'Không chạy lại được bài chấm lỗi. Vui lòng thử lại.')
+  return userMessage(error, 'Không xử lý được tác vụ hàng đợi lỗi. Vui lòng thử lại.')
 }
 
 export function DeadLetterQueuePage() {
@@ -28,6 +28,8 @@ export function DeadLetterQueuePage() {
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [resolvingTask, setResolvingTask] = useState<DeadLetterQueueTask | null>(null)
+  const [resolutionNotes, setResolutionNotes] = useState('')
 
   const load = useCallback(async () => {
     const flows = dlqFlowsFor(role)
@@ -53,8 +55,22 @@ export function DeadLetterQueuePage() {
     return () => window.clearTimeout(timer)
   }, [load])
 
+  useEffect(() => {
+    if (!resolvingTask) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busyId) {
+        setResolvingTask(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [busyId, resolvingTask])
+
+  const canActOnTask = (task: DeadLetterQueueTask) =>
+    canView && (!task.flowType || allowedFlows.includes(task.flowType))
+
   const replay = async (task: DeadLetterQueueTask) => {
-    if (!canView || !task.flowType || !allowedFlows.includes(task.flowType)) return
+    if (busyId || !canActOnTask(task)) return
     setBusyId(task.id)
     setError('')
     setNotice('')
@@ -63,6 +79,34 @@ export function DeadLetterQueuePage() {
       const msg = userMessage(result.message, 'Đã chạy lại bài chấm lỗi.')
       setNotice(msg)
       toast.success(msg)
+      await load()
+    } catch (requestError) {
+      const msg = errorMessage(requestError)
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const handleConfirmResolve = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (busyId || !resolvingTask || !canActOnTask(resolvingTask)) {
+      return
+    }
+    setBusyId(resolvingTask.id)
+    setError('')
+    setNotice('')
+    try {
+      const result = await deadLetterQueueService.resolve(
+        resolvingTask.id,
+        resolutionNotes.trim() || undefined,
+      )
+      const msg = userMessage(result.message, 'Đã đánh dấu xử lý tác vụ DLQ.')
+      setNotice(msg)
+      toast.success(msg)
+      setResolvingTask(null)
+      setResolutionNotes('')
       await load()
     } catch (requestError) {
       const msg = errorMessage(requestError)
@@ -153,38 +197,59 @@ export function DeadLetterQueuePage() {
           </div>
         ) : (
           <div className="divide-y divide-[#e8edf3]">
-            {tasks.map((task) => (
-              <article
-                key={task.id}
-                className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
-              >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={ds.infoChip}>{task.status}</span>
-                    {task.flowType && (
-                      <span className="rounded-md bg-[#EBF4FA] px-2 py-0.5 text-xs font-semibold text-[#1C4D8D]">
-                        {task.flowType}
-                      </span>
-                    )}
-                    <span className="text-xs font-bold text-[#1C4D8D]">{task.taskType}</span>
-                    <span className="text-xs text-[#6c7d93]">Retry {task.retryCount}</span>
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-[#0F2854]">{task.errorMessage}</p>
-                  <p className="mt-1 text-xs text-[#6c7d93]">
-                    {new Date(task.createdAt).toLocaleString('vi-VN')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={Boolean(busyId) || task.status !== 'pending' || !task.flowType || !allowedFlows.includes(task.flowType)}
-                  onClick={() => void replay(task)}
-                  className={ds.outlineButton}
+            {tasks.map((task) => {
+              const isActionAllowed =
+                !busyId &&
+                task.status === 'pending' &&
+                canActOnTask(task)
+              return (
+                <article
+                  key={task.id}
+                  className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                 >
-                  <RotateCcw className="size-4" />
-                  {busyId === task.id ? 'Đang replay...' : 'Replay task'}
-                </button>
-              </article>
-            ))}
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={ds.infoChip}>{task.status}</span>
+                      {task.flowType && (
+                        <span className="rounded-md bg-[#EBF4FA] px-2 py-0.5 text-xs font-semibold text-[#1C4D8D]">
+                          {task.flowType}
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-[#1C4D8D]">{task.taskType}</span>
+                      <span className="text-xs text-[#6c7d93]">Retry {task.retryCount}</span>
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-[#0F2854]">{task.errorMessage}</p>
+                    <p className="mt-1 text-xs text-[#6c7d93]">
+                      Tạo lúc: {new Date(task.createdAt).toLocaleString('vi-VN')}
+                      {task.resolvedAt && ` · Xử lý lúc: ${new Date(task.resolvedAt).toLocaleString('vi-VN')}`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!isActionAllowed}
+                      onClick={() => void replay(task)}
+                      className={ds.outlineButton}
+                    >
+                      <RotateCcw className="size-4" />
+                      {busyId === task.id ? 'Đang replay...' : 'Replay task'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!isActionAllowed}
+                      onClick={() => {
+                        setResolvingTask(task)
+                        setResolutionNotes('')
+                      }}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#16836a]/35 bg-[#ecfdf5] px-3 py-1.5 text-xs font-bold text-[#059669] transition hover:bg-[#d1fae5] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      Đánh dấu đã xử lý
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
             {tasks.length === 0 && (
               <div className="p-4">
                 <EmptyState
@@ -197,6 +262,64 @@ export function DeadLetterQueuePage() {
           </div>
         )}
       </section>
+
+      {resolvingTask && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Đánh dấu đã xử lý tác vụ DLQ"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-[#82aedb]/50 bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#82aedb]/30 pb-3">
+              <h3 className="text-base font-bold text-[#0F2854]">Đánh Dấu Đã Xử Lý Tác Vụ DLQ</h3>
+              <button
+                type="button"
+                aria-label="Đóng"
+                onClick={() => setResolvingTask(null)}
+                className="text-[#94a3b8] transition hover:text-[#0F2854]"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-[#63738a]">
+              Luồng: <strong className="text-[#0F2854]">{resolvingTask.flowType || 'Chưa phân luồng'}</strong> · Loại:{' '}
+              <strong className="text-[#1C4D8D]">{resolvingTask.taskType}</strong>
+            </p>
+            <form onSubmit={handleConfirmResolve} className="mt-4 space-y-3 text-xs">
+              <div>
+                <label htmlFor="dlqResolutionNotes" className="block font-bold text-[#0F2854]">
+                  Ghi chú xử lý sự cố (lưu Audit)
+                </label>
+                <textarea
+                  id="dlqResolutionNotes"
+                  value={resolutionNotes}
+                  onChange={(event) => setResolutionNotes(event.target.value)}
+                  placeholder="Nhập nguyên nhân hoặc hướng xử lý thủ công..."
+                  className="mt-1 min-h-20 w-full rounded-xl border border-[#82aedb]/50 p-2.5 text-xs outline-none focus:border-[#4988C4]"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResolvingTask(null)}
+                  className="rounded-xl border border-[#82aedb]/50 px-4 py-2 font-bold text-[#64748b] transition hover:bg-[#f1f5f9]"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={Boolean(busyId)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#059669] px-4 py-2 font-bold text-white transition hover:bg-[#047857] disabled:opacity-50"
+                >
+                  {busyId === resolvingTask.id && <LoaderCircle className="size-3.5 animate-spin" />}
+                  Xác nhận đã xử lý
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

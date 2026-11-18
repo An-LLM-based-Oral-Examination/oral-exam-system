@@ -1,5 +1,9 @@
 import apiClient from './api.client'
+import { userMessage } from '@/lib/userMessage'
 import type {
+  BatchApprovePendingFailure,
+  BatchApprovePendingResult,
+  BatchApproveQuestionsRequest,
   BatchApproveQuestionsResult,
   BatchSubmitForReviewRequest,
   BatchSubmitForReviewResponse,
@@ -271,29 +275,56 @@ export const questionService = {
     return this.getQuestionById(id)
   },
 
-  async batchApprove(questionIds: string[]): Promise<BatchApproveQuestionsResult> {
-    if (questionIds.length === 0) {
+  async batchApprove(payload: BatchApproveQuestionsRequest): Promise<BatchApproveQuestionsResult> {
+    if (payload.questions.length === 0) {
       return { approvedCount: 0 }
     }
 
-    try {
-      const response = await apiClient.post<unknown>('/questions/batch-approve', { questionIds })
-      const candidate = unwrapRecord(response.data)
-      const count =
-        (candidate ? readNumber(candidate, 'approvedCount', 'ApprovedCount') : undefined) ??
-        (candidate ? readNumber(candidate, 'totalApproved', 'TotalApproved') : undefined) ??
-        questionIds.length
-      return { approvedCount: count }
-    } catch {
-      let approvedCount = 0
-      for (const id of questionIds) {
+    const response = await apiClient.post<unknown>('/questions/batch-approve', {
+      courseId: payload.courseId,
+      questions: payload.questions,
+      ...(payload.approverId ? { approverId: payload.approverId } : {}),
+    })
+    const candidate = unwrapRecord(response.data)
+    const count =
+      (candidate ? readNumber(candidate, 'totalApproved', 'TotalApproved') : undefined) ??
+      (candidate ? readNumber(candidate, 'approvedCount', 'ApprovedCount') : undefined) ??
+      payload.questions.length
+    return { approvedCount: count }
+  },
+
+  async batchApprovePendingQuestions(
+    questionIds: string[],
+    options?: { reviewNotes?: string; reviewerId?: string },
+  ): Promise<BatchApprovePendingResult> {
+    const uniqueIds = [...new Set(questionIds.map((id) => id.trim()).filter(Boolean))]
+    if (uniqueIds.length === 0) {
+      return { approvedCount: 0, approvedIds: [], failed: [] }
+    }
+
+    const approvedIds: string[] = []
+    const failed: BatchApprovePendingFailure[] = []
+
+    for (const id of uniqueIds) {
+      try {
         await this.reviewDecision(id, {
           decision: 'APPROVED',
-          reviewNotes: 'Câu hỏi và Barem Rubric 10.0 điểm đạt chuẩn thẩm định của Bộ môn.',
+          reviewNotes: options?.reviewNotes,
+          reviewerId: options?.reviewerId,
         })
-        approvedCount += 1
+        approvedIds.push(id)
+      } catch (error) {
+        failed.push({
+          id,
+          message: userMessage(error, 'Không phê duyệt được câu hỏi này.'),
+        })
       }
-      return { approvedCount }
+    }
+
+    return {
+      approvedCount: approvedIds.length,
+      approvedIds,
+      failed,
     }
   },
 }

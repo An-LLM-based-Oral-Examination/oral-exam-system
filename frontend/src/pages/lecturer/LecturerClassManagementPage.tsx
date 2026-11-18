@@ -2,7 +2,7 @@ import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { CompactPagination } from '@/components/common/CompactPagination'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, LoaderCircle, Plus, Search, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, Copy, KeyRound, LoaderCircle, Plus, Search, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
@@ -15,10 +15,39 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { classService } from '@/services/class.service'
-import type { LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
+import type { CreateClassResponse, LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
 
 function getErrorMessage(error: unknown) {
-  return userMessage(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
+  const message = userMessage(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
+  return message.replace(/^VALIDATION\s*[:\-–—]\s*/i, '').trim() || 'Không tải được dữ liệu lớp học. Vui lòng thử lại.'
+}
+
+async function copyText(value: string): Promise<boolean> {
+  if (!value) return false
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      return true
+    }
+  } catch {
+    // Fallback sang execCommand khi Clipboard API bị hạn chế
+  }
+  if (typeof document === 'undefined' || !document.body) return false
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  try {
+    document.body.appendChild(textarea)
+    textarea.select()
+    return typeof document.execCommand === 'function' ? document.execCommand('copy') : false
+  } catch {
+    return false
+  } finally {
+    textarea.value = ''
+    textarea.remove()
+  }
 }
 
 const COURSE_CODE_TONES = [
@@ -68,6 +97,7 @@ export function LecturerClassManagementPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [createdClass, setCreatedClass] = useState<CreateClassResponse | null>(null)
   const [courseCode, setCourseCode] = useState('ALL')
   const [classSearch, setClassSearch] = useState('')
   const [appliedClassSearch, setAppliedClassSearch] = useState('')
@@ -282,11 +312,19 @@ export function LecturerClassManagementPage() {
         <CreateClassDialog
           offerings={visibleOfferings.length > 0 ? visibleOfferings : offerings}
           onClose={() => setCreateOpen(false)}
-          onCreated={(name) => {
+          onCreated={(created) => {
             setCreateOpen(false)
-            setNotice(`Đã tạo lớp “${name}”.`)
+            setCreatedClass(created)
+            setNotice(`Đã tạo lớp “${created.name}”.`)
             void load(semesterId)
           }}
+        />
+      )}
+
+      {createdClass && (
+        <CreatedClassCredentialsDialog
+          created={createdClass}
+          onClose={() => setCreatedClass(null)}
         />
       )}
     </div>
@@ -392,7 +430,7 @@ function CreateClassDialog({
 }: {
   offerings: LecturerCourseOffering[]
   onClose: () => void
-  onCreated: (name: string) => void
+  onCreated: (created: CreateClassResponse) => void
 }) {
   const [offeringId, setOfferingId] = useState(offerings[0]?.courseOfferingId ?? '')
   const [code, setCode] = useState('')
@@ -400,9 +438,11 @@ function CreateClassDialog({
   const [password, setPassword] = useState('')
   const [maxStudents, setMaxStudents] = useState(35)
   const [busy, setBusy] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<CreateClassFieldErrors>({})
 
   const clearFieldError = (key: keyof CreateClassFieldErrors) => {
+    setSubmitError('')
     setFieldErrors((current) => {
       if (!current[key]) return current
       const next = { ...current }
@@ -434,18 +474,21 @@ function CreateClassDialog({
     }
 
     setBusy(true)
+    setSubmitError('')
     setFieldErrors({})
     try {
-      await classService.createClass({
+      const created = await classService.createClass({
         courseOfferingId: offeringId,
         code: code.trim(),
         name: name.trim(),
         password: password.trim(),
         maxStudents,
       })
-      onCreated(name.trim())
+      onCreated(created)
     } catch (createError) {
-      toast.error(getErrorMessage(createError))
+      const message = getErrorMessage(createError)
+      setSubmitError(message)
+      toast.error(message)
       setBusy(false)
     }
   }
@@ -469,6 +512,14 @@ function CreateClassDialog({
       )}
     >
       <form id="create-class-form" onSubmit={(event) => void submit(event)} className="space-y-3" noValidate>
+        {submitError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 py-2.5 text-xs font-semibold text-[#c2415b]"
+          >
+            {submitError}
+          </div>
+        ) : null}
         <div className="block">
           <span className={fieldLabelClass(Boolean(fieldErrors.offeringId))}>Môn được phân công</span>
           <FilterDropMenu
@@ -553,6 +604,99 @@ function CreateClassDialog({
           </label>
         </div>
       </form>
+    </FormDialog>
+  )
+}
+
+function CreatedClassCredentialsDialog({
+  created,
+  onClose,
+}: {
+  created: CreateClassResponse
+  onClose: () => void
+}) {
+  const [copiedField, setCopiedField] = useState<'joinCode' | 'joinPassword' | null>(null)
+
+  const handleCopy = async (field: 'joinCode' | 'joinPassword', value: string | null) => {
+    if (!value) return
+    const copied = await copyText(value)
+    if (copied) {
+      setCopiedField(field)
+      toast.success(field === 'joinCode' ? 'Đã sao chép mã tham gia.' : 'Đã sao chép mật khẩu tham gia.')
+      return
+    }
+    toast.warning('Không thể tự động sao chép. Vui lòng bôi đen và sao chép thủ công.')
+  }
+
+  return (
+    <FormDialog
+      titleId="created-class-credentials-title"
+      eyebrow="Thông tin tham gia lớp học"
+      title={created.name || created.code}
+      icon={KeyRound}
+      onClose={onClose}
+      footer={(
+        <DialogFooter className="bg-white sm:flex-row">
+          <button type="button" onClick={onClose} className={cn(ds.primaryButton, 'min-h-10')}>
+            Đã lưu thông tin
+          </button>
+        </DialogFooter>
+      )}
+    >
+      <div className="space-y-4">
+        <div className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3.5 py-2.5 text-xs font-semibold text-[#8a5e17]">
+          Mật khẩu tham gia chỉ hiển thị một lần sau khi tạo lớp. Hãy sao chép và lưu lại trước khi đóng hộp thoại này.
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-[#82aedb]/55 bg-[#F8FBFD] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mã lớp / Tên lớp</p>
+              <p className="mt-0.5 text-sm font-bold text-[#0F2854]">
+                {created.code} · {created.name}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-white px-3.5 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mã tham gia (Join Code)</p>
+              <p className="mt-0.5 font-mono text-base font-black tracking-[0.08em] text-[#0F2854]">
+                {created.joinCode || 'Chưa cấp'}
+              </p>
+            </div>
+            {created.joinCode ? (
+              <button
+                type="button"
+                onClick={() => void handleCopy('joinCode', created.joinCode)}
+                className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
+              >
+                {copiedField === 'joinCode' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+                {copiedField === 'joinCode' ? 'Đã sao chép' : 'Sao chép mã'}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-white px-3.5 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mật khẩu tham gia</p>
+              <p className="mt-0.5 font-mono text-base font-black tracking-[0.06em] text-[#0F2854]">
+                {created.joinPassword || 'Đã lưu mật khẩu vừa nhập'}
+              </p>
+            </div>
+            {created.joinPassword ? (
+              <button
+                type="button"
+                onClick={() => void handleCopy('joinPassword', created.joinPassword)}
+                className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
+              >
+                {copiedField === 'joinPassword' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+                {copiedField === 'joinPassword' ? 'Đã sao chép' : 'Sao chép mật khẩu'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
     </FormDialog>
   )
 }

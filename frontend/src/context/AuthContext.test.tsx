@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AxiosHeaders } from 'axios'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './AuthContext'
 import { useAuth } from '@/hooks/useAuth'
+import apiClient from '@/services/api.client'
 import { authService } from '@/services/auth.service'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { browserAuthSession, type BrowserAuthEvent } from '@/services/browserAuthSession'
@@ -27,6 +29,7 @@ vi.mock('@/services/browserAuthSession', () => ({
     subscribe: () => () => {},
     activateIdentity: vi.fn(),
     deactivateIdentity: vi.fn(),
+    withRefreshLock: vi.fn((action: () => Promise<unknown>) => action()),
   },
 }))
 const user = {
@@ -193,5 +196,341 @@ describe('verified session lifecycle events', () => {
       mustChangePassword: true,
     })
     sessionStorage.clear()
+  })
+})
+
+function makeJwtWithExp(expSeconds: number): string {
+  const toB64Url = (raw: string) =>
+    btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const header = toB64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = toB64Url(JSON.stringify({ sub: user.id, exp: expSeconds }))
+  return `${header}.${payload}.sig`
+}
+
+function TokenProbe() {
+  const auth = useAuth()
+  return (
+    <>
+      <button onClick={() => void auth.logout()}>logout-probe</button>
+      <output data-testid="probe-token" data-authenticated={String(auth.isAuthenticated)}>
+        {auth.token ?? 'none'}
+      </output>
+    </>
+  )
+}
+
+async function waitForAuthenticatedProbe(expectedToken: string) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
+  const probe = screen.getByTestId('probe-token')
+  expect(probe.getAttribute('data-authenticated')).toBe('true')
+  expect(probe.textContent).toBe(expectedToken)
+}
+
+describe('proactive silent token refresh', () => {
+  const originalAdapter = apiClient.defaults.adapter
+
+  afterEach(() => {
+    cleanup()
+    apiClient.defaults.adapter = originalAdapter
+    sessionStorage.clear()
+    vi.useRealTimers()
+  })
+
+  it('proactively silent-refreshes a 15-minute JWT around minute 12 while active', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const startSec = Math.floor(Date.now() / 1000)
+    const initialJwt = makeJwtWithExp(startSec + 900)
+    const rotatedJwt = makeJwtWithExp(startSec + 1800)
+    sessionStorage.setItem('access_token', initialJwt)
+    vi.mocked(authService.getToken).mockReturnValue(initialJwt)
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue(user)
+
+    let refreshCount = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCount
+        return {
+          data: { accessToken: rotatedJwt },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/private']}>
+          <TokenProbe />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    await waitForAuthenticatedProbe(initialJwt)
+    expect(refreshCount).toBe(0)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12 * 60_000 + 1_000)
+    })
+
+    expect(refreshCount).toBe(1)
+    expect(screen.getByTestId('probe-token').textContent).toBe(rotatedJwt)
+  })
+
+  it('never triggers proactive refresh when mustChangePassword is true', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const startSec = Math.floor(Date.now() / 1000)
+    const nearExpiryJwt = makeJwtWithExp(startSec + 120)
+    sessionStorage.setItem('access_token', nearExpiryJwt)
+    vi.mocked(authService.getToken).mockReturnValue(nearExpiryJwt)
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue({
+      ...user,
+      mustChangePassword: true,
+    })
+
+    let refreshCount = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') ++refreshCount
+      return { data: { accessToken: 'unexpected' }, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/change-password']}>
+          <TokenProbe />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    await waitForAuthenticatedProbe(nearExpiryJwt)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(13 * 60_000)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(refreshCount).toBe(0)
+  })
+
+  it('cleans up proactive refresh timer on logout and refreshes on visibilitychange only when <= 3m remain', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const startSec = Math.floor(Date.now() / 1000)
+    const jwt15m = makeJwtWithExp(startSec + 900)
+    const jwtRotated = makeJwtWithExp(startSec + 1800)
+    sessionStorage.setItem('access_token', jwt15m)
+    vi.mocked(authService.getToken).mockReturnValue(jwt15m)
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue(user)
+
+    let refreshCount = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCount
+        return {
+          data: { accessToken: jwtRotated },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/private']}>
+          <TokenProbe />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    await waitForAuthenticatedProbe(jwt15m)
+
+    // Tab quay lại visible khi còn > 3 phút -> KHÔNG gọi refresh
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(refreshCount).toBe(0)
+
+    // Logout trước phút 12 -> hủy timer
+    await act(async () => {
+      fireEvent.click(screen.getByText('logout-probe'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+    })
+    expect(refreshCount).toBe(0)
+  })
+
+  it('refreshes immediately on visibilitychange when <= 3m remain', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const startSec = Math.floor(Date.now() / 1000)
+    // Còn 90s trước khi hết hạn (< 3m)
+    const nearExpiryJwt = makeJwtWithExp(startSec + 90)
+    const rotatedJwt = makeJwtWithExp(startSec + 990)
+    sessionStorage.setItem('access_token', nearExpiryJwt)
+    vi.mocked(authService.getToken).mockReturnValue(nearExpiryJwt)
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue(user)
+
+    let refreshCount = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCount
+        return {
+          data: { accessToken: rotatedJwt },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/private']}>
+          <TokenProbe />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    await waitForAuthenticatedProbe(nearExpiryJwt)
+    expect(refreshCount).toBe(0)
+
+    // Dispatch visibilitychange at 0ms elapsed — proves immediate trigger before the 1,000ms fallback timer
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(refreshCount).toBe(1)
+    expect(screen.getByTestId('probe-token').textContent).toBe(rotatedJwt)
+  })
+
+  it('stops proactive refresh on idle non-exam routes after 15m inactivity across 42m', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const startSec = Math.floor(Date.now() / 1000)
+    const jwt1 = makeJwtWithExp(startSec + 900)
+    const jwt2 = makeJwtWithExp(startSec + 1800)
+    const jwt3 = makeJwtWithExp(startSec + 2700)
+    sessionStorage.setItem('access_token', jwt1)
+    vi.mocked(authService.getToken).mockReturnValue(jwt1)
+    vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue(user)
+
+    let refreshCount = 0
+    apiClient.defaults.adapter = async (config) => {
+      if (config.url === '/auth/refresh-token') {
+        ++refreshCount
+        const nextToken = refreshCount === 1 ? jwt2 : jwt3
+        return {
+          data: { accessToken: nextToken },
+          status: 200,
+          statusText: 'OK',
+          headers: new AxiosHeaders(),
+          config,
+        }
+      }
+      return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <TokenProbe />
+        </MemoryRouter>
+      </AuthProvider>,
+    )
+
+    await waitForAuthenticatedProbe(jwt1)
+
+    // Chu kỳ 1 (~phút 12): còn trong cửa sổ hoạt động 15 phút -> refresh 1 lần
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12 * 60_000 + 2_000)
+    })
+    expect(refreshCount).toBe(1)
+    expect(screen.getByTestId('probe-token').textContent).toBe(jwt2)
+
+    // Chu kỳ 2 (~phút 27) & Chu kỳ 3 (~phút 42): tab không có tương tác > 15 phút -> không refresh thêm
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15 * 60_000)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15 * 60_000)
+    })
+    expect(refreshCount).toBe(1)
+  })
+
+  it('treats /lecturer/classes/:classId/in-class-shifts/:shiftId/results as an active exam route even when idle', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-18T12:00:00.000Z'))
+    const originalPathname = window.location.pathname
+    window.history.replaceState({}, '', '/lecturer/classes/cls-1/in-class-shifts/shift-1/results')
+
+    try {
+      const startSec = Math.floor(Date.now() / 1000)
+      const jwt1 = makeJwtWithExp(startSec + 900)
+      const jwt2 = makeJwtWithExp(startSec + 1800)
+      const jwt3 = makeJwtWithExp(startSec + 2700)
+      sessionStorage.setItem('access_token', jwt1)
+      vi.mocked(authService.getToken).mockReturnValue(jwt1)
+      vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue({
+        ...user,
+        role: 'Instructor',
+      })
+
+      let refreshCount = 0
+      apiClient.defaults.adapter = async (config) => {
+        if (config.url === '/auth/refresh-token') {
+          ++refreshCount
+          const nextToken = refreshCount === 1 ? jwt2 : jwt3
+          return {
+            data: { accessToken: nextToken },
+            status: 200,
+            statusText: 'OK',
+            headers: new AxiosHeaders(),
+            config,
+          }
+        }
+        return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config }
+      }
+
+      render(
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/lecturer/classes/cls-1/in-class-shifts/shift-1/results']}>
+            <TokenProbe />
+          </MemoryRouter>
+        </AuthProvider>,
+      )
+
+      await waitForAuthenticatedProbe(jwt1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(12 * 60_000 + 2_000)
+      })
+      expect(refreshCount).toBe(1)
+      expect(screen.getByTestId('probe-token').textContent).toBe(jwt2)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15 * 60_000)
+      })
+      expect(refreshCount).toBe(2)
+      expect(screen.getByTestId('probe-token').textContent).toBe(jwt3)
+    } finally {
+      window.history.replaceState({}, '', originalPathname)
+    }
   })
 })

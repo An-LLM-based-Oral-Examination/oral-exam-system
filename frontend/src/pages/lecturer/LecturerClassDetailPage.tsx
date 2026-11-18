@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  Check,
   ClipboardList,
+  Copy,
   Eye,
   EyeOff,
   KeyRound,
@@ -27,9 +29,47 @@ import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { InClassShiftHubPage } from '@/pages/lecturer/InClassShiftHubPage'
 import { classService } from '@/services/class.service'
-import type { ClassDetail, ClassStudent, ClassStudentLookup } from '@/types/class.types'
+import type {
+  ClassDetail,
+  ClassStudent,
+  ClassStudentLookup,
+  ResetClassPasswordResponse,
+} from '@/types/class.types'
 
 type DetailTab = 'shifts' | 'students'
+
+function formatClassError(error: unknown, fallback: string) {
+  const message = userMessage(error, fallback)
+  return message.replace(/^VALIDATION\s*[:\-–—]\s*/i, '').trim() || fallback
+}
+
+async function copyText(value: string): Promise<boolean> {
+  if (!value) return false
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      return true
+    }
+  } catch {
+    // Fallback sang execCommand khi Clipboard API bị hạn chế
+  }
+  if (typeof document === 'undefined' || !document.body) return false
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  try {
+    document.body.appendChild(textarea)
+    textarea.select()
+    return typeof document.execCommand === 'function' ? document.execCommand('copy') : false
+  } catch {
+    return false
+  } finally {
+    textarea.value = ''
+    textarea.remove()
+  }
+}
 
 function joinMethodLabel(value: string) {
   const key = value.toLowerCase()
@@ -50,18 +90,27 @@ export function LecturerClassDetailPage() {
   const tab: DetailTab = searchParams.get('tab') === 'students' ? 'students' : 'shifts'
   const [detail, setDetail] = useState<ClassDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetResult, setResetResult] = useState<ResetClassPasswordResponse | null>(null)
+  const [sessionJoinPassword, setSessionJoinPassword] = useState<string | null>(null)
+  const [copiedJoinCode, setCopiedJoinCode] = useState(false)
   const [removing, setRemoving] = useState<ClassStudent | null>(null)
   const [removingBusy, setRemovingBusy] = useState(false)
 
-  const load = async () => {
-    if (!classId) return
+  const load = async (targetClassId = classId) => {
+    if (!targetClassId) return
     setLoading(true)
+    setLoadError('')
     try {
-      setDetail(await classService.getClassDetail(classId))
-    } catch (loadError) {
-      toast.error(userMessage(loadError, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.'))
-      setDetail(null)
+      const nextDetail = await classService.getClassDetail(targetClassId)
+      setDetail(nextDetail)
+    } catch (error) {
+      const message = formatClassError(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
+      setLoadError(message)
+      toast.error(message)
+      setDetail((current) => (current?.classId === targetClassId ? current : null))
     } finally {
       setLoading(false)
     }
@@ -69,9 +118,25 @@ export function LecturerClassDetailPage() {
 
   useEffect(() => {
     return scheduleUi(() => {
-      void load()
+      setDetail((current) => (current?.classId === classId ? current : null))
+      setLoadError('')
+      setSessionJoinPassword(null)
+      setResetResult(null)
+      setResetOpen(false)
+      setCopiedJoinCode(false)
+      void load(classId)
     })
   }, [classId])
+
+  const handleCopyJoinCode = async (joinCode: string) => {
+    const copied = await copyText(joinCode)
+    if (copied) {
+      setCopiedJoinCode(true)
+      toast.success('Đã sao chép mã tham gia lớp.')
+      return
+    }
+    toast.warning('Không thể tự động sao chép. Vui lòng sao chép thủ công mã tham gia.')
+  }
 
   const selectTab = (next: DetailTab) => {
     const params = new URLSearchParams(searchParams)
@@ -113,6 +178,23 @@ export function LecturerClassDetailPage() {
         </div>
       ) : null}
 
+      {loadError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#f3c2c8] bg-[#fdecec] px-4 py-3 text-sm font-semibold text-[#c2415b]"
+        >
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={() => void load(classId)}
+            disabled={loading}
+            className="inline-flex min-h-8 items-center rounded-lg border border-[#f3c2c8] bg-white px-3 text-xs font-bold text-[#c2415b] transition hover:bg-[#fff7f8] disabled:opacity-60"
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : null}
+
       {detail ? (
         <>
           <section className={cn(ds.section, 'overflow-hidden')}>
@@ -146,12 +228,34 @@ export function LecturerClassDetailPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {detail.joinCode ? (
+                  <div className="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-[#82aedb]/55 bg-white py-1 pr-1.5 pl-2.5">
+                    <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
+                      Mã tham gia
+                    </span>
+                    <span className="font-mono text-sm font-black tracking-[0.06em] text-[#0F2854]">
+                      {detail.joinCode}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Sao chép mã tham gia"
+                      onClick={() => void handleCopyJoinCode(detail.joinCode)}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
+                    >
+                      {copiedJoinCode ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+                      <span>{copiedJoinCode ? 'Đã sao chép' : 'Sao chép'}</span>
+                    </button>
+                  </div>
+                ) : null}
                 <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-[#82aedb]/55 bg-white py-1.5 pr-1.5 pl-2.5">
                   <KeyRound className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
                   <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
                     Mật khẩu
                   </span>
-                  <JoinPasswordReveal password={detail.joinPassword} hasPassword={detail.hasPassword} />
+                  <JoinPasswordReveal
+                    password={sessionJoinPassword ?? detail.joinPassword}
+                    hasPassword={detail.hasPassword}
+                  />
                 </div>
                 <span className={ds.infoChip}>
                   <Users className="size-3.5 shrink-0" aria-hidden="true" />
@@ -165,6 +269,17 @@ export function LecturerClassDetailPage() {
                   )}
                   {detail.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoadError('')
+                    setResetOpen(true)
+                  }}
+                  className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
+                >
+                  <KeyRound className="size-3.5" aria-hidden="true" />
+                  Đặt lại mật khẩu lớp
+                </button>
               </div>
 
               <div
@@ -241,6 +356,37 @@ export function LecturerClassDetailPage() {
             toast.success(`Đã thêm ${name} vào lớp.`)
             await load()
           }}
+        />
+      ) : null}
+
+      {resetOpen && detail ? (
+        <ResetClassPasswordDialog
+          detail={detail}
+          onClose={() => setResetOpen(false)}
+          onResetSuccess={async (response) => {
+            setResetOpen(false)
+            setResetResult(response)
+            setSessionJoinPassword(response.joinPassword)
+            setDetail((current) =>
+              current && current.classId === (response.classId || detail.classId)
+                ? {
+                    ...current,
+                    joinCode: response.joinCode || current.joinCode,
+                    hasPassword: response.hasPassword,
+                    isJoinEnabled: response.isJoinEnabled,
+                  }
+                : current,
+            )
+            toast.success('Đã đặt lại mật khẩu lớp.')
+            await load(detail.classId)
+          }}
+        />
+      ) : null}
+
+      {resetResult ? (
+        <ResetCredentialsDialog
+          result={resetResult}
+          onClose={() => setResetResult(null)}
         />
       ) : null}
 
@@ -447,6 +593,7 @@ function JoinPasswordReveal({
   hasPassword: boolean
 }) {
   const [visible, setVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
   const secret = password?.trim() || ''
   const canReveal = Boolean(secret)
 
@@ -457,22 +604,263 @@ function JoinPasswordReveal({
     setVisible((current) => !current)
   }
 
+  const handleCopy = async (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!secret) return
+    const ok = await copyText(secret)
+    if (ok) {
+      setCopied(true)
+      toast.success('Đã sao chép mật khẩu tham gia.')
+      return
+    }
+    toast.warning('Không thể tự động sao chép mật khẩu.')
+  }
+
   return (
     <div className="inline-flex min-w-0 items-center gap-0.5">
       <p className="max-w-[9rem] truncate font-mono text-sm font-black tracking-[0.06em] text-[#0F2854] sm:max-w-[12rem]">
         {!hasPassword && !secret ? 'Chưa đặt' : visible && secret ? secret : '••••••••'}
       </p>
       {canReveal ? (
-        <button
-          type="button"
-          aria-label={visible ? 'Ẩn mật khẩu tham gia' : 'Hiện mật khẩu tham gia'}
-          aria-pressed={visible}
-          onClick={toggle}
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
-        >
-          {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </button>
+        <>
+          <button
+            type="button"
+            aria-label={visible ? 'Ẩn mật khẩu tham gia' : 'Hiện mật khẩu tham gia'}
+            aria-pressed={visible}
+            onClick={toggle}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
+          >
+            {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          </button>
+          <button
+            type="button"
+            aria-label="Sao chép mật khẩu tham gia"
+            onClick={(event) => void handleCopy(event)}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
+          >
+            {copied ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+          </button>
+        </>
       ) : null}
     </div>
+  )
+}
+
+function ResetClassPasswordDialog({
+  detail,
+  onClose,
+  onResetSuccess,
+}: {
+  detail: ClassDetail
+  onClose: () => void
+  onResetSuccess: (response: ResetClassPasswordResponse) => Promise<void>
+}) {
+  const [newPassword, setNewPassword] = useState('')
+  const [newJoinCode, setNewJoinCode] = useState('')
+  const [isJoinEnabled, setIsJoinEnabled] = useState(detail.isJoinEnabled)
+  const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string; newJoinCode?: string }>({})
+  const [submitError, setSubmitError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (busy) return
+
+    const trimmedPassword = newPassword.trim()
+    const trimmedCode = newJoinCode.trim()
+    const nextErrors: { newPassword?: string; newJoinCode?: string } = {}
+    if (trimmedPassword.length < 8) {
+      nextErrors.newPassword = 'Mật khẩu mới cần ít nhất 8 ký tự.'
+    } else if (trimmedPassword.length > 128) {
+      nextErrors.newPassword = 'Mật khẩu mới tối đa 128 ký tự.'
+    }
+    if (trimmedCode && (trimmedCode.length < 4 || trimmedCode.length > 32)) {
+      nextErrors.newJoinCode = 'Mã tham gia mới cần từ 4 đến 32 ký tự.'
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors)
+      return
+    }
+
+    setBusy(true)
+    setFieldErrors({})
+    setSubmitError('')
+    try {
+      const response = await classService.resetPassword(detail.classId, {
+        newPassword: trimmedPassword,
+        newJoinCode: trimmedCode || undefined,
+        isJoinEnabled,
+      })
+      await onResetSuccess(response)
+    } catch (resetError) {
+      const message = formatClassError(
+        resetError,
+        'Không đặt lại được mật khẩu lớp. Vui lòng thử lại.',
+      )
+      setSubmitError(message)
+      toast.error(message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <FormDialog
+      titleId="reset-class-password-title"
+      eyebrow="Bảo mật lớp học"
+      title="Đặt lại mật khẩu lớp"
+      icon={KeyRound}
+      onClose={onClose}
+      busy={busy}
+      footer={(
+        <DialogFooter className="bg-white sm:flex-row">
+          <button type="button" onClick={onClose} disabled={busy} className={cn(ds.outlineButton, 'min-h-10')}>
+            Hủy
+          </button>
+          <button type="submit" form="reset-class-password-form" disabled={busy} className={cn(ds.primaryButton, 'min-h-10')}>
+            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-3.5" />}
+            Lưu mật khẩu mới
+          </button>
+        </DialogFooter>
+      )}
+    >
+      <form id="reset-class-password-form" onSubmit={(event) => void submit(event)} className="space-y-3" noValidate>
+        {submitError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 py-2.5 text-xs font-semibold text-[#c2415b]"
+          >
+            {submitError}
+          </div>
+        ) : null}
+
+        <label className="block">
+          <span className={fieldLabelClass(Boolean(fieldErrors.newPassword))}>Mật khẩu mới</span>
+          <input
+            value={newPassword}
+            onChange={(event) => {
+              setNewPassword(event.target.value)
+              setSubmitError('')
+              setFieldErrors((current) => ({ ...current, newPassword: undefined }))
+            }}
+            placeholder="Ít nhất 8 ký tự"
+            aria-invalid={Boolean(fieldErrors.newPassword) || undefined}
+            className={cn(ds.field, 'mt-1.5', fieldErrors.newPassword && fieldInvalidClass)}
+          />
+          <FieldError message={fieldErrors.newPassword} />
+        </label>
+
+        <label className="block">
+          <span className={fieldLabelClass(Boolean(fieldErrors.newJoinCode))}>Mã tham gia mới (tùy chọn)</span>
+          <input
+            value={newJoinCode}
+            onChange={(event) => {
+              setNewJoinCode(event.target.value)
+              setSubmitError('')
+              setFieldErrors((current) => ({ ...current, newJoinCode: undefined }))
+            }}
+            placeholder={detail.joinCode || 'Để trống để giữ nguyên mã hiện tại'}
+            aria-invalid={Boolean(fieldErrors.newJoinCode) || undefined}
+            className={cn(ds.field, 'mt-1.5', fieldErrors.newJoinCode && fieldInvalidClass)}
+          />
+          <p className="mt-1 text-xs text-[#5b6b84]">Để trống để giữ nguyên mã tham gia hiện tại.</p>
+          <FieldError message={fieldErrors.newJoinCode} />
+        </label>
+
+        <label className="flex items-center gap-2.5 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={isJoinEnabled}
+            onChange={(event) => setIsJoinEnabled(event.target.checked)}
+            className="size-4 rounded border-[#4988C4] text-[#1C4D8D] accent-[#1C4D8D]"
+          />
+          <span className="text-sm font-semibold text-[#0F2854]">Cho phép sinh viên tự tham gia lớp</span>
+        </label>
+      </form>
+    </FormDialog>
+  )
+}
+
+function ResetCredentialsDialog({
+  result,
+  onClose,
+}: {
+  result: ResetClassPasswordResponse
+  onClose: () => void
+}) {
+  const [copiedField, setCopiedField] = useState<'joinCode' | 'joinPassword' | null>(null)
+
+  const handleCopy = async (field: 'joinCode' | 'joinPassword', value: string | null) => {
+    if (!value) return
+    const ok = await copyText(value)
+    if (ok) {
+      setCopiedField(field)
+      toast.success(field === 'joinCode' ? 'Đã sao chép mã tham gia.' : 'Đã sao chép mật khẩu mới.')
+      return
+    }
+    toast.warning('Không thể tự động sao chép. Vui lòng sao chép thủ công.')
+  }
+
+  return (
+    <FormDialog
+      titleId="reset-class-credentials-title"
+      eyebrow="Đã cập nhật mật khẩu lớp"
+      title={result.name || result.code}
+      icon={KeyRound}
+      onClose={onClose}
+      footer={(
+        <DialogFooter className="bg-white sm:flex-row">
+          <button type="button" onClick={onClose} className={cn(ds.primaryButton, 'min-h-10')}>
+            Đã lưu thông tin
+          </button>
+        </DialogFooter>
+      )}
+    >
+      <div className="space-y-3">
+        <div className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3.5 py-2.5 text-xs font-semibold text-[#8a5e17]">
+          Mật khẩu mới chỉ hiển thị một lần ngay sau khi đặt lại. Hãy sao chép để gửi cho sinh viên.
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3.5 py-2.5">
+          <div>
+            <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mã tham gia</p>
+            <p className="mt-0.5 font-mono text-base font-black tracking-[0.08em] text-[#0F2854]">
+              {result.joinCode}
+            </p>
+          </div>
+          {result.joinCode ? (
+            <button
+              type="button"
+              onClick={() => void handleCopy('joinCode', result.joinCode)}
+              className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
+            >
+              {copiedField === 'joinCode' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+              {copiedField === 'joinCode' ? 'Đã sao chép' : 'Sao chép mã'}
+            </button>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3.5 py-2.5">
+          <div>
+            <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mật khẩu mới</p>
+            <p className="mt-0.5 font-mono text-base font-black tracking-[0.06em] text-[#0F2854]">
+              {result.joinPassword || 'Đã cập nhật mật khẩu'}
+            </p>
+          </div>
+          {result.joinPassword ? (
+            <button
+              type="button"
+              onClick={() => void handleCopy('joinPassword', result.joinPassword)}
+              className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
+            >
+              {copiedField === 'joinPassword' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+              {copiedField === 'joinPassword' ? 'Đã sao chép' : 'Sao chép mật khẩu'}
+            </button>
+          ) : null}
+        </div>
+        <p className="text-xs font-semibold text-[#5b6b84]">
+          Trạng thái tự tham gia: <span className="text-[#0F2854]">{result.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}</span>
+        </p>
+      </div>
+    </FormDialog>
   )
 }

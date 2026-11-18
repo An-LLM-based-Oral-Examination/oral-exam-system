@@ -4,7 +4,7 @@ import { StudentNotificationDrawer } from '@/components/student/StudentNotificat
 import { toast } from '@/components/common/toastStore'
 import { resolveStudentNotificationRoute } from '@/utils/notificationDeepLink'
 import { PortalHeader } from '@/components/layout/PortalChrome'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { canonicalRole } from '@/routes/routeAccess'
 import {
   BarChart3,
@@ -189,7 +189,11 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           </button>
           )}
           {isInstructor ? (
-            <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3">
+            <Link
+              to="/profile"
+              className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+              aria-label="Mở hồ sơ cá nhân"
+            >
               <div className="hidden text-right sm:block">
                 <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
                   {user?.fullName ?? roleLabel}
@@ -203,7 +207,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
               >
                 {getInitials(user?.fullName ?? roleLabel) || 'GV'}
               </div>
-            </div>
+            </Link>
           ) : (
             <button
               type="button"

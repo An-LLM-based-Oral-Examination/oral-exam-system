@@ -52,11 +52,30 @@ export function useSpeechRecognition() {
   const [error, setError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const transcriptRef = useRef('')
+  const isSupported =
+    typeof window !== 'undefined' &&
+    Boolean(
+      (window as SpeechRecognitionWindow).SpeechRecognition ??
+        (window as SpeechRecognitionWindow).webkitSpeechRecognition,
+    )
 
   const speak = useCallback((text: string) => {
     void playNaturalSpeech(text, DEFAULT_TTS_VOICE, 1).catch((speechError) => {
       console.warn('Không thể phát giọng đọc tự nhiên.', speechError)
     })
+  }, [])
+
+  const detachAndStop = useCallback((recognition: SpeechRecognitionLike | null) => {
+    if (!recognition) return
+    recognition.onstart = null
+    recognition.onresult = null
+    recognition.onerror = null
+    recognition.onend = null
+    try {
+      recognition.stop()
+    } catch {
+      // Ignore stop errors if the instance was not yet active or already stopped.
+    }
   }, [])
 
   const startListening = useCallback((lang = 'vi-VN') => {
@@ -68,22 +87,32 @@ export function useSpeechRecognition() {
       return
     }
 
+    if (recognitionRef.current) {
+      const previous = recognitionRef.current
+      recognitionRef.current = null
+      detachAndStop(previous)
+    }
+
+    let recognition: SpeechRecognitionLike | null = null
     try {
-      const recognition = new SpeechRecognition()
-      recognition.lang = lang.trim() || 'vi-VN'
-      recognition.continuous = true
-      recognition.interimResults = true
+      recognition = new SpeechRecognition()
+      const currentRecognition = recognition
+      currentRecognition.lang = lang.trim() || 'vi-VN'
+      currentRecognition.continuous = true
+      currentRecognition.interimResults = true
 
       transcriptRef.current = ''
       setTranscript('')
-      recognitionRef.current = recognition
+      recognitionRef.current = currentRecognition
 
-      recognition.onstart = () => {
+      currentRecognition.onstart = () => {
+        if (recognitionRef.current !== currentRecognition) return
         setIsListening(true)
         setError(null)
       }
 
-      recognition.onresult = (event) => {
+      currentRecognition.onresult = (event) => {
+        if (recognitionRef.current !== currentRecognition) return
         let currentTranscript = ''
         for (let i = 0; i < event.results.length; i++) {
           currentTranscript += event.results[i][0].transcript
@@ -92,28 +121,37 @@ export function useSpeechRecognition() {
         setTranscript(transcriptRef.current)
       }
 
-      recognition.onerror = (event) => {
+      currentRecognition.onerror = (event) => {
+        if (recognitionRef.current !== currentRecognition) return
         setError(event.error)
         setIsListening(false)
       }
 
-      recognition.onend = () => {
+      currentRecognition.onend = () => {
+        if (recognitionRef.current !== currentRecognition) return
         setIsListening(false)
-        if (recognitionRef.current === recognition) recognitionRef.current = null
+        recognitionRef.current = null
       }
 
-      recognition.start()
+      currentRecognition.start()
     } catch (err: unknown) {
+      if (recognition) {
+        recognition.onstart = null
+        recognition.onresult = null
+        recognition.onerror = null
+        recognition.onend = null
+      }
       recognitionRef.current = null
       setError(err instanceof Error ? err.message : 'Error initializing speech recognition')
     }
-  }, [])
+  }, [detachAndStop])
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop()
+    const current = recognitionRef.current
     recognitionRef.current = null
+    detachAndStop(current)
     setIsListening(false)
-  }, [])
+  }, [detachAndStop])
 
   const resetTranscript = useCallback(() => {
     transcriptRef.current = ''
@@ -124,12 +162,14 @@ export function useSpeechRecognition() {
 
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop()
+      const current = recognitionRef.current
       recognitionRef.current = null
+      detachAndStop(current)
     }
-  }, [])
+  }, [detachAndStop])
 
   return {
+    isSupported,
     isListening,
     transcript,
     error,

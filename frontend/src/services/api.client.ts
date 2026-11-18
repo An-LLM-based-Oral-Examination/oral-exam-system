@@ -21,6 +21,7 @@ type RetryConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
   _skipAuthRefresh?: boolean
   _silentAuthFailure?: boolean
+  _sessionEpoch?: string
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -58,6 +59,8 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    const retryConfig = config as RetryConfig
+    retryConfig._sessionEpoch = getSessionEpoch()
     const token = sessionStorage.getItem('access_token')
     if (token && config.headers) config.headers.Authorization = `Bearer ${token}`
     // Default Content-Type là application/json — FormData phải để browser gắn multipart + boundary.
@@ -71,18 +74,34 @@ apiClient.interceptors.request.use(
 
 let refreshInFlight: { epoch: string; promise: Promise<string> } | null = null
 
-function readMustChangeFromToken(token: string): boolean | undefined {
+function decodeJwtPayload(token: string): JsonRecord | null {
   const parts = token.split('.')
-  if (parts.length < 2) return undefined
+  if (parts.length !== 3 || !parts[1]) return null
   try {
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
-    const decoded = atob(padded)
-    const payload = safeJsonParse<{ must_change_password?: unknown }>(decoded, {})
-    return payload.must_change_password === 'true' || payload.must_change_password === true
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    const decoded = new TextDecoder().decode(bytes)
+    const parsed = safeJsonParse<unknown>(decoded, null)
+    return isRecord(parsed) ? parsed : null
   } catch {
-    return undefined
+    return null
   }
+}
+
+export function getJwtExpiryMs(token: string): number | null {
+  const payload = decodeJwtPayload(token)
+  if (!payload) return null
+  return typeof payload.exp === 'number' && Number.isFinite(payload.exp) && payload.exp > 0
+    ? payload.exp * 1000
+    : null
+}
+
+function readMustChangeFromToken(token: string): boolean | undefined {
+  const payload = decodeJwtPayload(token)
+  if (!payload) return undefined
+  return payload.must_change_password === 'true' || payload.must_change_password === true
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -116,7 +135,67 @@ async function refreshAccessToken(): Promise<string> {
       )
     }
   }
+  window.dispatchEvent(
+    new CustomEvent('auth:token-refreshed', { detail: { token: response.data.accessToken } }),
+  )
   return response.data.accessToken
+}
+
+async function runSingleFlightRefresh(): Promise<string> {
+  const originalAccessToken = sessionStorage.getItem('access_token')
+  const originalEpoch = getSessionEpoch()
+  try {
+    if (!refreshInFlight || refreshInFlight.epoch !== originalEpoch) {
+      const entry = { epoch: originalEpoch, promise: Promise.resolve('') }
+      entry.promise = refreshAccessToken().finally(() => {
+        if (refreshInFlight === entry) refreshInFlight = null
+      })
+      refreshInFlight = entry
+    }
+    const token = await refreshInFlight.promise
+    if (sessionStorage.getItem('access_token') !== token) {
+      throw new Error('Phiên đăng nhập đã thay đổi')
+    }
+    return token
+  } catch (refreshError) {
+    const failureStatus = isRecord(refreshError) ? refreshError.status : undefined
+    if (
+      isSessionEpochCurrent(originalEpoch) &&
+      sessionStorage.getItem('access_token') === originalAccessToken &&
+      (failureStatus === 401 || failureStatus === 403)
+    ) {
+      rotateSessionEpoch()
+      sessionStorage.removeItem('access_token')
+      sessionStorage.removeItem('refresh_token')
+      sessionStorage.removeItem('user_profile')
+      window.dispatchEvent(new Event('auth:session-expired'))
+    }
+    throw refreshError
+  }
+}
+
+export async function ensureFreshAccessToken(minValiditySeconds = 90): Promise<string> {
+  const currentToken = sessionStorage.getItem('access_token')
+  if (!currentToken) return ''
+
+  const expMs = getJwtExpiryMs(currentToken)
+  if (expMs === null) return currentToken
+
+  if (expMs - Date.now() > Math.max(0, minValiditySeconds) * 1000) {
+    return currentToken
+  }
+
+  try {
+    return await runSingleFlightRefresh()
+  } catch {
+    const latestToken = sessionStorage.getItem('access_token')
+    if (!latestToken) return ''
+    const latestExpMs = getJwtExpiryMs(latestToken)
+    if (latestExpMs === null || latestExpMs > Date.now()) {
+      return latestToken
+    }
+    return ''
+  }
 }
 
 apiClient.interceptors.response.use(
@@ -132,43 +211,33 @@ apiClient.interceptors.response.use(
       url.includes('/auth/google-login') ||
       url.includes('/auth/sign-out')
 
+    const sentAuthHeader =
+      typeof config?.headers?.get === 'function'
+        ? config.headers.get('Authorization')
+        : config?.headers?.Authorization
+    const hadAuthHeader = typeof sentAuthHeader === 'string' && sentAuthHeader.trim().length > 0
+
     if (
       status === 401 &&
       config &&
       !config._retry &&
       !config._skipAuthRefresh &&
       !isAuthEndpoint &&
-      config.headers.Authorization === `Bearer ${sessionStorage.getItem('access_token')}`
+      hadAuthHeader &&
+      typeof config._sessionEpoch === 'string' &&
+      isSessionEpochCurrent(config._sessionEpoch)
     ) {
       config._retry = true
-      const originalAccessToken = sessionStorage.getItem('access_token')
-      const originalEpoch = getSessionEpoch()
       try {
-        if (!refreshInFlight || refreshInFlight.epoch !== originalEpoch) {
-          const entry = { epoch: originalEpoch, promise: Promise.resolve('') }
-          entry.promise = refreshAccessToken().finally(() => {
-            if (refreshInFlight === entry) refreshInFlight = null
-          })
-          refreshInFlight = entry
-        }
-        const token = await refreshInFlight.promise
-        if (sessionStorage.getItem('access_token') !== token)
-          throw new Error('Phiên đăng nhập đã thay đổi')
+        const currentStoredToken = sessionStorage.getItem('access_token')
+        const token =
+          currentStoredToken && sentAuthHeader !== `Bearer ${currentStoredToken}`
+            ? currentStoredToken
+            : await runSingleFlightRefresh()
         if (config.headers) config.headers.Authorization = `Bearer ${token}`
         return apiClient.request(config)
-      } catch (refreshError) {
-        const failureStatus = isRecord(refreshError) ? refreshError.status : undefined
-        if (
-          isSessionEpochCurrent(originalEpoch) &&
-          sessionStorage.getItem('access_token') === originalAccessToken &&
-          (failureStatus === 401 || failureStatus === 403)
-        ) {
-          rotateSessionEpoch()
-          sessionStorage.removeItem('access_token')
-          sessionStorage.removeItem('refresh_token')
-          sessionStorage.removeItem('user_profile')
-          window.dispatchEvent(new Event('auth:session-expired'))
-        }
+      } catch {
+        // Phản hồi lỗi gốc 401 hoặc xử lý hết phiên đã được runSingleFlightRefresh thực hiện.
       }
     }
 

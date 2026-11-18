@@ -11,13 +11,14 @@ export interface AuthContextType {
   isStudent: boolean
   isInstructor: boolean
   isDepartmentHead: boolean
+  isExaminationOfficer: boolean
   isProctor: boolean
   isAdmin: boolean
   loginWithPassword: (username: string, password: string) => Promise<void>
   loginWithGoogle: (idToken: string, signal?: AbortSignal) => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   logout: () => Promise<void>
-  hasRole: (roles: UserRole[]) => boolean
+  hasRole: (roles: UserRole | UserRole[]) => boolean
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)

@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent }
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  AlertCircle,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -10,15 +11,16 @@ import {
   CircleStop,
   ClipboardList,
   Clock3,
+  Layers,
   LoaderCircle,
   Lock,
+  Minus,
   Plus,
   Presentation,
   RefreshCw,
   Search,
   Timer,
   UsersRound,
-  Move,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
@@ -32,12 +34,20 @@ import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
-import { questionService } from '@/services/question.service'
 import { InClassShiftProjectorDialog } from '@/pages/lecturer/InClassShiftProjectorDialog'
+import {
+  IN_CLASS_DIFFICULTIES,
+  evaluateInClassPoolSelection,
+  formatDifficultyListLabel,
+  formatPoolModeLabel,
+  sumCountsForDifficulties,
+} from '@/utils/inClassShiftPool'
 import type {
   CreateInClassShiftRequest,
-  InClassQuestionPoolMode,
+  InClassCreatePoolMode,
+  InClassDifficulty,
   InClassShift,
+  InClassShiftPoolStats,
   InClassShiftStatus,
   LecturerClassOption,
 } from '@/types/inClassShift.types'
@@ -563,7 +573,53 @@ function SliderField({
   )
 }
 
-type FieldErrors = Partial<Record<'classId' | 'title' | 'startDateKey' | 'endDateKey' | 'time' | 'examMinutes' | 'pool', string>>
+type FieldErrors = Partial<
+  Record<
+    | 'classId'
+    | 'title'
+    | 'startDateKey'
+    | 'endDateKey'
+    | 'time'
+    | 'examMinutes'
+    | 'questionCount'
+    | 'difficulties'
+    | 'pool',
+    string
+  >
+>
+
+interface ProblemAlertState {
+  title: string
+  detail: string
+  fieldMessages: string[]
+}
+
+function parseProblemAlert(error: unknown): ProblemAlertState {
+  if (typeof error === 'object' && error !== null) {
+    const rec = error as Record<string, unknown>
+    const title =
+      typeof rec.title === 'string' && rec.title.trim()
+        ? rec.title.trim()
+        : 'Không thể tạo ca kiểm tra'
+    const detail = userMessage(error, 'Dữ liệu cấu hình ca chưa hợp lệ. Vui lòng kiểm tra lại.')
+    const fieldMessages: string[] = []
+    if (typeof rec.errors === 'object' && rec.errors !== null && !Array.isArray(rec.errors)) {
+      for (const value of Object.values(rec.errors as Record<string, unknown>)) {
+        if (Array.isArray(value)) {
+          for (const msg of value) {
+            if (typeof msg === 'string' && msg.trim()) fieldMessages.push(msg.trim())
+          }
+        }
+      }
+    }
+    return { title, detail, fieldMessages }
+  }
+  return {
+    title: 'Không thể tạo ca kiểm tra',
+    detail: userMessage(error, 'Vui lòng kiểm tra kết nối và thử lại.'),
+    fieldMessages: [],
+  }
+}
 
 function CreateInClassShiftDialog({
   open,
@@ -587,21 +643,26 @@ function CreateInClassShiftDialog({
   const [endClock, setEndClock] = useState('')
   const [examMinutes, setExamMinutes] = useState(20)
   const [description, setDescription] = useState('')
-  const [questionCount, setQuestionCount] = useState(1)
+  const [questionCountInput, setQuestionCountInput] = useState('2')
   const [hasFollowUp, setHasFollowUp] = useState(false)
   const [maxFollowUpQuestions, setMaxFollowUpQuestions] = useState(2)
-  const [poolMode, setPoolMode] = useState<InClassQuestionPoolMode>('ALL_COURSE_BANK')
-  const [questionSearch, setQuestionSearch] = useState('')
-  const [questionPickerOpen, setQuestionPickerOpen] = useState(false)
-  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
-  const [questionOptions, setQuestionOptions] = useState<Array<{ id: string; title: string }>>([])
-  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [poolMode, setPoolMode] = useState<InClassCreatePoolMode>('ALL_COURSE_BANK')
+  const [selectedDifficulties, setSelectedDifficulties] = useState<InClassDifficulty[]>([
+    'easy',
+    'medium',
+    'hard',
+  ])
+  const [selectedCloIds, setSelectedCloIds] = useState<string[]>([])
+  const [poolStats, setPoolStats] = useState<InClassShiftPoolStats | null>(null)
+  const [poolLoading, setPoolLoading] = useState(false)
+  const [poolLoadError, setPoolLoadError] = useState<ProblemAlertState | null>(null)
+  const [poolReloadTick, setPoolReloadTick] = useState(0)
+  const [submitProblem, setSubmitProblem] = useState<ProblemAlertState | null>(null)
   const [busy, setBusy] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
   useEffect(() => {
     if (!open) return
-    // Cửa sổ ca mặc định 2 giờ — đủ thời gian cấu hình đề trước khi kích hoạt.
     const start = new Date()
     const end = new Date(start.getTime() + 2 * 60 * 60_000)
     return scheduleUi(() => {
@@ -609,70 +670,119 @@ function CreateInClassShiftDialog({
       setClassId(fixedClassId || classes[0]?.id || '')
       setTitle('')
       setStartDateKey(toDateKey(start))
+      setEndDateKey(toDateKey(end))
       setStartClock(toClock(start))
       setEndClock(toClock(end))
       setExamMinutes(20)
       setDescription('')
-      setQuestionCount(1)
+      setQuestionCountInput('2')
       setHasFollowUp(false)
       setMaxFollowUpQuestions(2)
       setPoolMode('ALL_COURSE_BANK')
-      setSelectedQuestionIds([])
-      setQuestionOptions([])
+      setSelectedDifficulties(['easy', 'medium', 'hard'])
+      setSelectedCloIds([])
+      setPoolStats(null)
+      setPoolLoadError(null)
+      setSubmitProblem(null)
       setFieldErrors({})
       setBusy(false)
     })
   }, [open, classes, fixedClassId])
 
-  const selectedCourseId = classes.find((item) => item.id === classId)?.courseId
+  const selectedClass = useMemo(
+    () => classes.find((item) => item.id === classId) ?? null,
+    [classes, classId],
+  )
+  const selectedCourseId = selectedClass?.courseId
 
   useEffect(() => {
-    if (!open || poolMode !== 'SELECTED_POOL') return
-    if (!selectedCourseId) {
-      return scheduleUi(() => setQuestionOptions([]))
+    if (!open || !classId) {
+      return scheduleUi(() => {
+        setPoolStats(null)
+        setPoolLoadError(null)
+        setPoolLoading(false)
+      })
     }
     let cancelled = false
     const cancelStart = scheduleUi(() => {
-      setQuestionsLoading(true)
-      void questionService
-        .getQuestions({
-          courseId: selectedCourseId,
-          approvalStatus: 'APPROVED',
-          usageScope: 'practice',
-          pageNumber: 1,
-          pageSize: 100,
-        })
-        .then((result) => {
+      setPoolLoading(true)
+      setPoolLoadError(null)
+      void inClassShiftService
+        .getPoolStats(classId, selectedCourseId)
+        .then((stats) => {
           if (cancelled) return
-          const options = result.items.map((item) => ({ id: item.id, title: item.title }))
-          const validQuestionIds = new Set(options.map((item) => item.id))
-          setQuestionOptions(options)
-          setSelectedQuestionIds((current) =>
-            current.filter((questionId) => validQuestionIds.has(questionId)),
+          setPoolStats(stats)
+          const validCloSet = new Set(stats.clos.map((item) => item.cloId))
+          setSelectedCloIds((current) => current.filter((id) => validCloSet.has(id)))
+          const nonZeroDiffs = IN_CLASS_DIFFICULTIES.map((item) => item.value).filter(
+            (diff) => (stats.courseBankCounts[diff] || 0) > 0,
           )
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setQuestionOptions([])
-            setSelectedQuestionIds([])
+          if (nonZeroDiffs.length > 0) {
+            setSelectedDifficulties((current) => {
+              const filtered = current.filter((diff) => (stats.courseBankCounts[diff] || 0) > 0)
+              return filtered.length > 0 ? filtered : nonZeroDiffs
+            })
           }
         })
+        .catch((loadErr) => {
+          if (cancelled) return
+          setPoolStats(null)
+          setPoolLoadError(parseProblemAlert(loadErr))
+        })
         .finally(() => {
-          if (!cancelled) setQuestionsLoading(false)
+          if (!cancelled) setPoolLoading(false)
         })
     })
     return () => {
       cancelled = true
       cancelStart()
     }
-  }, [open, poolMode, selectedCourseId])
+  }, [open, classId, selectedCourseId, poolReloadTick])
+
+  const parsedQuestionCount = useMemo(() => {
+    const trimmed = questionCountInput.trim()
+    if (!trimmed) return Number.NaN
+    const num = Number(trimmed)
+    return Number.isFinite(num) ? num : Number.NaN
+  }, [questionCountInput])
+
+  const poolEvaluation = useMemo(
+    () =>
+      evaluateInClassPoolSelection({
+        poolStats,
+        poolMode,
+        totalQuestionsPerStudent: parsedQuestionCount,
+        selectedDifficulties,
+        selectedCloIds,
+      }),
+    [poolStats, poolMode, parsedQuestionCount, selectedDifficulties, selectedCloIds],
+  )
+
+  const difficultySourceCounts = useMemo(() => {
+    if (!poolStats) return { easy: 0, medium: 0, hard: 0 }
+    if (poolMode === 'ALL_COURSE_BANK') {
+      return {
+        easy: poolStats.courseBankCounts.easy,
+        medium: poolStats.courseBankCounts.medium,
+        hard: poolStats.courseBankCounts.hard,
+      }
+    }
+    const chosen = poolStats.clos.filter((clo) => selectedCloIds.includes(clo.cloId))
+    return chosen.reduce(
+      (acc, clo) => ({
+        easy: acc.easy + (clo.counts.easy || 0),
+        medium: acc.medium + (clo.counts.medium || 0),
+        hard: acc.hard + (clo.counts.hard || 0),
+      }),
+      { easy: 0, medium: 0, hard: 0 },
+    )
+  }, [poolStats, poolMode, selectedCloIds])
 
   if (!open) return null
 
-  const selectedClass = classes.find((item) => item.id === classId) ?? null
   const classOptions = classes.map((item) => ({
     value: item.id,
-    label: item.name,
+    label: item.courseCode ? `${item.name} (${item.courseCode})` : item.name,
   }))
   const startTime = startDateKey && startClock ? `${startDateKey}T${startClock}` : ''
   const endTime = endDateKey && endClock ? `${endDateKey}T${endClock}` : ''
@@ -685,12 +795,15 @@ function CreateInClassShiftDialog({
       !Number.isNaN(endDate.getTime()) &&
       endDate.getTime() > startDate.getTime(),
   )
-  const windowMinutes = timeValid && startDate && endDate
-    ? Math.round((endDate.getTime() - startDate.getTime()) / 60_000)
-    : 0
-  const examMinutesValid = examMinutes >= 1 && examMinutes <= 60 && (windowMinutes === 0 || examMinutes <= windowMinutes)
+  const windowMinutes =
+    timeValid && startDate && endDate
+      ? Math.round((endDate.getTime() - startDate.getTime()) / 60_000)
+      : 0
+  const examMinutesValid =
+    examMinutes >= 1 && examMinutes <= 60 && (windowMinutes === 0 || examMinutes <= windowMinutes)
 
   const clearFieldError = (...keys: Array<keyof FieldErrors>) => {
+    setSubmitProblem(null)
     setFieldErrors((current) => {
       if (!keys.some((key) => current[key])) return current
       const next = { ...current }
@@ -702,13 +815,15 @@ function CreateInClassShiftDialog({
   const validateStep1 = (): FieldErrors => {
     const next: FieldErrors = {}
     const trimmedTitle = title.trim()
-    if (!classId) next.classId = 'Vui lòng chọn lớp.'
-    if (!trimmedTitle) next.title = 'Vui lòng nhập tên ca.'
-    else if (trimmedTitle.length > 255) next.title = 'Tên ca tối đa 255 ký tự.'
+    if (!classId) next.classId = 'Vui lòng chọn lớp học phần.'
+    if (!trimmedTitle) next.title = 'Vui lòng nhập tên ca kiểm tra.'
+    else if (trimmedTitle.length > 150) next.title = 'Tên ca tối đa 150 ký tự.'
     if (!startDateKey) next.startDateKey = 'Vui lòng chọn ngày mở ca.'
     if (!endDateKey) next.endDateKey = 'Vui lòng chọn ngày đóng ca.'
     if (!startClock || !endClock) next.time = 'Vui lòng chọn giờ mở và giờ đóng ca.'
-    else if (startDateKey && endDateKey && !timeValid) next.time = 'Thời điểm đóng ca phải sau thời điểm mở ca.'
+    else if (startDateKey && endDateKey && !timeValid) {
+      next.time = 'Thời điểm đóng ca phải sau thời điểm mở ca.'
+    }
     return next
   }
 
@@ -716,11 +831,29 @@ function CreateInClassShiftDialog({
     const next: FieldErrors = {}
     if (examMinutes < 1 || examMinutes > 60) {
       next.examMinutes = 'Thời gian làm bài phải từ 1 đến 60 phút.'
-    } else if (examMinutes > windowMinutes) {
+    } else if (windowMinutes > 0 && examMinutes > windowMinutes) {
       next.examMinutes = `Thời gian làm bài không được dài hơn khoảng ca đang mở (${formatDuration(windowMinutes)}).`
     }
-    if (poolMode === 'SELECTED_POOL' && selectedQuestionIds.length < questionCount) {
-      next.pool = `Chọn ít nhất ${questionCount} câu đã duyệt (đã chọn ${selectedQuestionIds.length}).`
+    if (
+      !Number.isInteger(parsedQuestionCount) ||
+      parsedQuestionCount < 1 ||
+      parsedQuestionCount > 10
+    ) {
+      next.questionCount = 'Số câu mỗi sinh viên phải là số nguyên từ 1 đến 10.'
+    }
+    if (selectedDifficulties.length === 0) {
+      next.difficulties = 'Vui lòng chọn ít nhất một mức độ câu hỏi (Dễ, Trung bình hoặc Khó).'
+    }
+    if (poolLoadError) {
+      next.pool = 'Chưa tải được thống kê ngân hàng câu hỏi của môn. Hãy tải lại trước khi tạo ca.'
+    } else if (!poolStats) {
+      next.pool = 'Đang kiểm tra ngân hàng câu hỏi hợp lệ. Vui lòng đợi trong giây lát.'
+    } else if (!poolEvaluation.isValid && poolEvaluation.errors.length > 0) {
+      const poolSpecific = poolEvaluation.errors.find(
+        (msg) =>
+          !msg.startsWith('Số câu mỗi sinh viên') && !msg.startsWith('Vui lòng chọn ít nhất một mức độ'),
+      )
+      if (poolSpecific) next.pool = poolSpecific
     }
     return next
   }
@@ -736,7 +869,31 @@ function CreateInClassShiftDialog({
   const goBack = () => {
     if (busy) return
     setFieldErrors({})
+    setSubmitProblem(null)
     setStep(1)
+  }
+
+  const toggleDifficulty = (diff: InClassDifficulty) => {
+    setSelectedDifficulties((current) => {
+      const exists = current.includes(diff)
+      const updated = exists ? current.filter((item) => item !== diff) : [...current, diff]
+      return IN_CLASS_DIFFICULTIES.map((item) => item.value).filter((val) => updated.includes(val))
+    })
+    clearFieldError('difficulties', 'pool')
+  }
+
+  const toggleClo = (cloId: string) => {
+    setSelectedCloIds((current) =>
+      current.includes(cloId) ? current.filter((id) => id !== cloId) : [...current, cloId],
+    )
+    clearFieldError('pool')
+  }
+
+  const stepQuestionCount = (delta: number) => {
+    const base = Number.isInteger(parsedQuestionCount) ? parsedQuestionCount : 2
+    const next = Math.min(10, Math.max(1, base + delta))
+    setQuestionCountInput(String(next))
+    clearFieldError('questionCount', 'pool')
   }
 
   const createShift = async () => {
@@ -763,17 +920,28 @@ function CreateInClassShiftDialog({
       return
     }
     if (endMs <= Date.now()) {
-      setFieldErrors({ time: 'Giờ đóng ca đã qua. Hãy chọn lại khung giờ (cửa sổ ca phải còn ở tương lai).' })
+      setFieldErrors({
+        time: 'Giờ đóng ca đã qua. Hãy chọn lại khung giờ (cửa sổ ca phải còn ở tương lai).',
+      })
       setStep(1)
       return
     }
     if (endMs - startMs < examMinutes * 60_000) {
-      setFieldErrors({ time: `Khung giờ ca phải dài hơn thời gian làm bài (${examMinutes} phút).` })
+      setFieldErrors({
+        time: `Khung giờ ca phải dài hơn hoặc bằng thời gian làm bài (${examMinutes} phút).`,
+      })
       setStep(1)
       return
     }
+
     setBusy(true)
     setFieldErrors({})
+    setSubmitProblem(null)
+
+    const orderedDifficulties = IN_CLASS_DIFFICULTIES.map((item) => item.value).filter((diff) =>
+      selectedDifficulties.includes(diff),
+    )
+
     const payload: CreateInClassShiftRequest = {
       classId,
       shiftName: title.trim(),
@@ -781,25 +949,28 @@ function CreateInClassShiftDialog({
       endTime: endIso,
       description: description.trim(),
       questionPoolMode: poolMode,
-      selectedQuestionIds: poolMode === 'SELECTED_POOL' ? selectedQuestionIds : [],
-      totalQuestionsPerStudent: questionCount,
+      totalQuestionsPerStudent: parsedQuestionCount,
+      selectedDifficulties: orderedDifficulties,
+      ...(poolMode === 'SELECTED_CLOS' ? { selectedCloIds } : {}),
       hasFollowUp,
       maxFollowUpQuestions: hasFollowUp ? maxFollowUpQuestions : 0,
       isAutoPublishGrades: false,
       examDurationMinutes: examMinutes,
     }
+
     try {
       const shift = await inClassShiftService.createShift(payload)
       onCreated(shift)
     } catch (createError) {
-      toast.error(getErrorMessage(createError))
+      const problem = parseProblemAlert(createError)
+      setSubmitProblem(problem)
+      toast.error(problem.detail)
       setBusy(false)
     }
   }
 
   const onFormSubmit = (event: FormEvent) => {
     event.preventDefault()
-    // Enter trên bước 1 chỉ chuyển bước — không tạo ca / không mở OTP.
     if (step === 1) {
       goNext()
       return
@@ -808,373 +979,669 @@ function CreateInClassShiftDialog({
   }
 
   const steps = [
-    { id: 1 as const, title: fixedClassId ? 'Thời gian' : 'Lớp và thời gian' },
-    { id: 2 as const, title: 'Cấu trúc đề' },
+    { id: 1 as const, title: fixedClassId ? 'Thông tin và thời gian' : 'Lớp và thời gian' },
+    { id: 2 as const, title: 'Nguồn đề & Phân bổ CLO' },
   ]
 
-  const matchingQuestions = questionOptions.filter((question) =>
-    question.title.toLocaleLowerCase('vi').includes(questionSearch.trim().toLocaleLowerCase('vi')),
-  )
-  const renderQuestionChoices = (options: typeof questionOptions, expanded = false) => options.map((question) => {
-    const checked = selectedQuestionIds.includes(question.id)
-    return (
-      <li key={question.id}>
-        <label className={cn(
-          'flex cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-sm text-[#0F2854]',
-          expanded && 'gap-3 border px-3 py-2.5 leading-relaxed transition-colors focus-within:ring-2 focus-within:ring-[#4988C4]/30',
-          expanded && (checked ? 'border-[#82aedb] bg-[#E7F3FB] font-semibold' : 'border-slate-200 bg-white hover:border-[#82aedb] hover:bg-[#F4FBFD]'),
-        )}>
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={() => {
-              setSelectedQuestionIds((current) =>
-                checked ? current.filter((id) => id !== question.id) : [...current, question.id],
-              )
-              clearFieldError('pool')
-            }}
-            className="mt-0.5 size-4 shrink-0 accent-[#1C4D8D]"
-          />
-          <span>{question.title}</span>
-        </label>
-      </li>
-    )
-  })
+  const canSubmitStep2 =
+    !busy &&
+    !poolLoading &&
+    !poolLoadError &&
+    Boolean(poolStats) &&
+    poolEvaluation.isValid &&
+    examMinutesValid
+
+  const questionCountInvalid =
+    Boolean(fieldErrors.questionCount) ||
+    !Number.isInteger(parsedQuestionCount) ||
+    parsedQuestionCount < 1 ||
+    parsedQuestionCount > 10
 
   return (
-    <>
-      <FormDialog
-        titleId="create-inclass-title"
-        eyebrow="Ca kiểm tra"
-        title="Tạo ca kiểm tra"
-        icon={ClipboardList}
-        onClose={onClose}
-        busy={busy || questionPickerOpen}
-        beforeBody={
-          <TwoStepProgress
-            label="Tiến độ tạo ca"
-            step={step}
-            steps={steps}
+    <FormDialog
+      titleId="create-inclass-title"
+      eyebrow="Ca kiểm tra trên lớp (MF-05)"
+      title="Tạo ca kiểm tra"
+      icon={ClipboardList}
+      size="lg"
+      onClose={onClose}
+      busy={busy}
+      beforeBody={
+        <TwoStepProgress
+          label="Tiến độ tạo ca"
+          step={step}
+          steps={steps}
+          disabled={busy}
+          onStepChange={(target) => (target === 1 ? goBack() : goNext())}
+        />
+      }
+      footer={
+        <DialogFooter className="bg-white sm:items-center sm:justify-between">
+          <button
+            type="button"
             disabled={busy}
-            onStepChange={(target) => target === 1 ? goBack() : goNext()}
-          />
-        }
-        footer={(
-          <DialogFooter className="bg-white sm:items-center sm:justify-between">
-            <button type="button" disabled={busy} onClick={onClose} className={cn(ds.outlineButton, 'min-h-10')}>
-              Hủy
-            </button>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              {step === 2 && (
-                <button type="button" disabled={busy} onClick={goBack} className={cn(ds.outlineButton, 'min-h-10')}>
-                  Quay lại
-                </button>
-              )}
-              {step === 1 ? (
-                <button
-                  key="create-shift-next"
-                  type="button"
-                  disabled={busy}
-                  onClick={goNext}
-                  className={cn(ds.primaryButton, 'min-h-10')}
-                >
-                  Tiếp tục
-                  <ChevronRight className="size-4" />
-                </button>
-              ) : (
-                <button
-                  key="create-shift-submit"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void createShift()}
-                  className={cn(ds.primaryButton, 'min-h-10')}
-                >
-                  {busy ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <Plus className="size-3.5" />}
-                  {busy ? 'Đang tạo...' : 'Tạo ca'}
-                </button>
-              )}
+            onClick={onClose}
+            className={cn(ds.outlineButton, 'min-h-10')}
+          >
+            Hủy
+          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {step === 2 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={goBack}
+                className={cn(ds.outlineButton, 'min-h-10')}
+              >
+                Quay lại
+              </button>
+            )}
+            {step === 1 ? (
+              <button
+                key="create-shift-next"
+                type="button"
+                disabled={busy}
+                onClick={goNext}
+                className={cn(ds.primaryButton, 'min-h-10')}
+              >
+                Tiếp tục
+                <ChevronRight className="size-4" />
+              </button>
+            ) : (
+              <button
+                key="create-shift-submit"
+                type="button"
+                disabled={!canSubmitStep2}
+                onClick={() => void createShift()}
+                className={cn(ds.primaryButton, 'min-h-10 disabled:cursor-not-allowed disabled:opacity-50')}
+              >
+                {busy ? (
+                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Plus className="size-3.5" />
+                )}
+                {busy ? 'Đang tạo...' : 'Tạo ca'}
+              </button>
+            )}
+          </div>
+        </DialogFooter>
+      }
+    >
+      <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-4">
+        {step === 1 ? (
+          <section className="space-y-3.5">
+            {fixedClassId ? null : (
+              <div>
+                <span className={fieldLabelClass(Boolean(fieldErrors.classId))}>Lớp học phần</span>
+                <FilterDropMenu
+                  label="Chọn lớp"
+                  value={classId}
+                  onChange={(value) => {
+                    setClassId(value)
+                    setSelectedCloIds([])
+                    clearFieldError('classId', 'pool')
+                  }}
+                  options={classOptions}
+                  emptyText="Chưa có lớp để chọn"
+                  className="mt-1.5 w-full"
+                  invalid={Boolean(fieldErrors.classId)}
+                />
+                <FieldError message={fieldErrors.classId} />
+              </div>
+            )}
+            <label className="block">
+              <span className={fieldLabelClass(Boolean(fieldErrors.title))}>Tên ca kiểm tra</span>
+              <input
+                value={title}
+                onChange={(event) => {
+                  setTitle(event.target.value)
+                  clearFieldError('title')
+                }}
+                maxLength={150}
+                placeholder="Ví dụ: Kiểm tra tiến độ 1"
+                aria-invalid={Boolean(fieldErrors.title)}
+                className={cn(ds.field, 'mt-1.5', fieldErrors.title && fieldInvalidClass)}
+                autoFocus
+              />
+              <FieldError message={fieldErrors.title} />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
+                Mô tả ca (tùy chọn)
+              </span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={2}
+                placeholder="Ví dụ: Đánh giá chuẩn đầu ra giai đoạn giữa kỳ"
+                className="mt-1.5 min-h-16 w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-[#0F2854] outline-none placeholder:text-slate-400 focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/20"
+              />
+            </label>
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <DateField
+                    label="Ngày mở ca"
+                    value={startDateKey}
+                    invalid={Boolean(fieldErrors.startDateKey || fieldErrors.time)}
+                    onChange={(value) => {
+                      setStartDateKey(value)
+                      clearFieldError('startDateKey', 'time', 'examMinutes')
+                    }}
+                  />
+                  <FieldError message={fieldErrors.startDateKey} />
+                </div>
+                <ClockField
+                  label="Giờ mở ca"
+                  value={startClock}
+                  invalid={Boolean(fieldErrors.time)}
+                  onChange={(value) => {
+                    setStartClock(value)
+                    clearFieldError('time', 'examMinutes')
+                  }}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <DateField
+                    label="Ngày đóng ca"
+                    value={endDateKey}
+                    invalid={Boolean(fieldErrors.endDateKey || fieldErrors.time)}
+                    onChange={(value) => {
+                      setEndDateKey(value)
+                      clearFieldError('endDateKey', 'time', 'examMinutes')
+                    }}
+                  />
+                  <FieldError message={fieldErrors.endDateKey} />
+                </div>
+                <ClockField
+                  label="Giờ đóng ca"
+                  value={endClock}
+                  invalid={Boolean(fieldErrors.time)}
+                  onChange={(value) => {
+                    setEndClock(value)
+                    clearFieldError('time', 'examMinutes')
+                  }}
+                />
+              </div>
+              <FieldError message={fieldErrors.time} />
             </div>
-          </DialogFooter>
-        )}
-      >
-        <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-3">
-              {step === 1 ? (
-                <section className="space-y-3">
-                  {fixedClassId ? null : (
-                  <label className="block">
-                    <span className={fieldLabelClass(Boolean(fieldErrors.classId))}>Lớp</span>
-                    <FilterDropMenu
-                      label="Chọn lớp"
-                      value={classId}
-                      onChange={(value) => {
-                        setClassId(value)
-                        clearFieldError('classId')
-                      }}
-                      options={classOptions}
-                      emptyText="Chưa có lớp để chọn"
-                      className="mt-1.5 w-full"
-                      invalid={Boolean(fieldErrors.classId)}
-                    />
-                    <FieldError message={fieldErrors.classId} />
-                  </label>
-                  )}
-                  <label className="block">
-                    <span className={fieldLabelClass(Boolean(fieldErrors.title))}>Tên ca</span>
-                    <input
-                      value={title}
-                      onChange={(event) => {
-                        setTitle(event.target.value)
-                        clearFieldError('title')
-                      }}
-                      maxLength={255}
-                      placeholder="Ví dụ: Kiểm tra tiến độ 1"
-                      aria-invalid={Boolean(fieldErrors.title)}
-                      className={cn(ds.field, 'mt-1.5', fieldErrors.title && fieldInvalidClass)}
-                      autoFocus
-                    />
-                    <FieldError message={fieldErrors.title} />
-                  </label>
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <DateField
-                          label="Ngày mở ca"
-                          value={startDateKey}
-                          invalid={Boolean(fieldErrors.startDateKey || fieldErrors.time)}
-                          onChange={(value) => {
-                            setStartDateKey(value)
-                            clearFieldError('startDateKey', 'time', 'examMinutes')
-                          }}
-                        />
-                        <FieldError message={fieldErrors.startDateKey} />
-                      </div>
-                      <ClockField
-                        label="Giờ mở ca"
-                        value={startClock}
-                        invalid={Boolean(fieldErrors.time)}
-                        onChange={(value) => {
-                          setStartClock(value)
-                          clearFieldError('time', 'examMinutes')
-                        }}
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <DateField
-                          label="Ngày đóng ca"
-                          value={endDateKey}
-                          invalid={Boolean(fieldErrors.endDateKey || fieldErrors.time)}
-                          onChange={(value) => {
-                            setEndDateKey(value)
-                            clearFieldError('endDateKey', 'time', 'examMinutes')
-                          }}
-                        />
-                        <FieldError message={fieldErrors.endDateKey} />
-                      </div>
-                      <ClockField
-                        label="Giờ đóng ca"
-                        value={endClock}
-                        invalid={Boolean(fieldErrors.time)}
-                        onChange={(value) => {
-                          setEndClock(value)
-                          clearFieldError('time', 'examMinutes')
-                        }}
-                      />
-                    </div>
-                    <FieldError message={fieldErrors.time} />
-                  </div>
-                </section>
-              ) : (
-                <>
-                  <div className={cn('flex items-center gap-3 rounded-2xl border border-[#82aedb]/55 bg-white px-3 py-2.5', ds.panelShadow)}>
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#e7f1fb] text-[#1C4D8D]">
-                      <UsersRound className="size-4" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-[#0F2854]">{title.trim() || 'Chưa đặt tên'}</p>
-                      <p className="truncate text-xs font-semibold text-[#5b6b84]">
-                        {selectedClass?.name || 'Chưa chọn lớp'}
-                        {timeValid ? ` · Ca ${startClock} ${startDateKey.split('-').reverse().join('/')} – ${endClock} ${endDateKey.split('-').reverse().join('/')}` : ''}
-                        {examMinutesValid ? ` · Làm bài ${formatDuration(examMinutes)}` : ''}
-                      </p>
-                    </div>
-                  </div>
+          </section>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/90 px-3.5 py-2.5">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D]/10 text-[#1C4D8D]">
+                <UsersRound className="size-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-[#0F2854]">
+                  {title.trim() || 'Chưa đặt tên'}
+                </p>
+                <p className="truncate text-xs font-medium text-slate-600">
+                  {selectedClass?.name || 'Chưa chọn lớp'}
+                  {selectedClass?.courseCode ? ` · ${selectedClass.courseCode}` : ''}
+                  {timeValid
+                    ? ` · ${startClock} ${startDateKey.split('-').reverse().join('/')} – ${endClock} ${endDateKey.split('-').reverse().join('/')}`
+                    : ''}
+                </p>
+              </div>
+            </div>
 
-                  <section className={cn('space-y-4 rounded-2xl border border-[#82aedb]/55 bg-white p-3.5', ds.panelShadow)}>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <SliderField
-                        label="Thời gian"
-                        value={examMinutes}
-                        min={1}
-                        max={60}
-                        suffix="phút"
-                        invalid={Boolean(fieldErrors.examMinutes)}
-                        onChange={(value) => {
-                          setExamMinutes(value)
-                          clearFieldError('examMinutes')
-                        }}
-                      />
-                      <SliderField
-                        label="Số câu chính"
-                        value={questionCount}
+            {submitProblem && (
+              <div
+                role="alert"
+                className="rounded-2xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-900"
+              >
+                <p className="flex items-center gap-1.5 font-bold text-rose-800">
+                  <AlertCircle className="size-4 shrink-0" />
+                  {submitProblem.title}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-rose-800">{submitProblem.detail}</p>
+                {submitProblem.fieldMessages.length > 0 && (
+                  <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs text-rose-800">
+                    {submitProblem.fieldMessages.map((msg, idx) => (
+                      <li key={idx}>{msg}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <SliderField
+                    label="Thời lượng làm bài"
+                    value={examMinutes}
+                    min={1}
+                    max={60}
+                    suffix="phút"
+                    invalid={Boolean(fieldErrors.examMinutes)}
+                    onChange={(value) => {
+                      setExamMinutes(value)
+                      clearFieldError('examMinutes')
+                    }}
+                  />
+                  <FieldError message={fieldErrors.examMinutes} />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="total-questions-per-student"
+                      className={fieldLabelClass(questionCountInvalid)}
+                    >
+                      Số câu mỗi sinh viên <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        aria-label="Giảm số câu mỗi sinh viên"
+                        disabled={busy || (Number.isInteger(parsedQuestionCount) && parsedQuestionCount <= 1)}
+                        onClick={() => stepQuestionCount(-1)}
+                        className="flex size-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#0F2854] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Minus className="size-3.5" />
+                      </button>
+                      <input
+                        id="total-questions-per-student"
+                        type="number"
                         min={1}
                         max={10}
-                        suffix="câu"
-                        onChange={(value) => {
-                          setQuestionCount(value)
-                          clearFieldError('pool')
+                        step={1}
+                        value={questionCountInput}
+                        aria-label="Số câu mỗi sinh viên"
+                        aria-invalid={questionCountInvalid || undefined}
+                        onChange={(event) => {
+                          setQuestionCountInput(event.target.value)
+                          clearFieldError('questionCount', 'pool')
                         }}
-                      />
-                    </div>
-                    <FieldError message={fieldErrors.examMinutes} className="-mt-2" />
-                    <div className="grid items-center gap-4 sm:grid-cols-2">
-                      <div className="flex items-center justify-between gap-3 rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] px-3 py-2.5">
-                        <span>
-                          <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi phụ</span>
-                          <span className="text-xs text-[#5b6b84]">Hỏi thêm sau câu chính</span>
-                        </span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={hasFollowUp}
-                          aria-label="Câu hỏi phụ"
-                          onClick={() => {
-                            setHasFollowUp((current) => {
-                              if (!current) setMaxFollowUpQuestions((count) => Math.min(3, Math.max(1, count || 1)))
-                              return !current
-                            })
-                          }}
-                          className={cn('relative h-6 w-11 shrink-0 rounded-full transition', hasFollowUp ? 'bg-[#1C4D8D]' : 'bg-[#c5d0e0]')}
-                        >
-                          <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition', hasFollowUp ? 'left-[22px]' : 'left-0.5')} />
-                        </button>
-                      </div>
-                      <SliderField
-                        label="Số câu phụ"
-                        value={Math.min(3, Math.max(1, maxFollowUpQuestions || 1))}
-                        min={1}
-                        max={3}
-                        suffix="câu"
-                        disabled={!hasFollowUp}
-                        onChange={setMaxFollowUpQuestions}
-                      />
-                    </div>
-                    <label className="block">
-                      <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Mô tả</span>
-                      <textarea
-                        value={description}
-                        onChange={(event) => setDescription(event.target.value)}
-                        rows={2}
-                        placeholder="Ví dụ: Nội dung chương 1 đến chương 3"
-                        className="mt-1.5 min-h-16 w-full resize-y rounded-xl border border-[#4988C4] bg-white px-3 py-2.5 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30"
-                      />
-                    </label>
-                    <div className="block">
-                      <span className="text-xs font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Nguồn câu hỏi</span>
-                      <FilterDropMenu
-                        label="Chọn nguồn câu hỏi"
-                        value={poolMode}
-                        onChange={(value) => {
-                          setPoolMode(value as InClassQuestionPoolMode)
-                          clearFieldError('pool')
-                        }}
-                        options={[
-                          { value: 'ALL_COURSE_BANK', label: 'Cả ngân hàng môn' },
-                          { value: 'SELECTED_POOL', label: 'Chọn bộ câu' },
-                        ]}
-                        className="mt-1.5 w-full"
-                      />
-                    </div>
-                    {poolMode === 'SELECTED_POOL' && (
-                      <div
                         className={cn(
-                          'rounded-xl border border-[#82aedb]/55 bg-[#F8FBFD] p-3',
-                          fieldErrors.pool && fieldInvalidClass,
+                          'h-8 w-16 rounded-lg border border-slate-300 bg-white px-2 text-center font-mono text-sm font-bold tabular-nums text-[#0F2854] outline-none focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/20',
+                          questionCountInvalid && fieldInvalidClass,
+                        )}
+                      />
+                      <button
+                        type="button"
+                        aria-label="Tăng số câu mỗi sinh viên"
+                        disabled={busy || (Number.isInteger(parsedQuestionCount) && parsedQuestionCount >= 10)}
+                        onClick={() => stepQuestionCount(1)}
+                        className="flex size-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#0F2854] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Plus className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                    Từ 1 đến 10 câu cho từng sinh viên (không phải tổng số câu của cả lớp).
+                  </p>
+                  <FieldError
+                    message={
+                      fieldErrors.questionCount ||
+                      (questionCountInvalid
+                        ? 'Số câu mỗi sinh viên phải là số nguyên từ 1 đến 10.'
+                        : undefined)
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid items-center gap-4 border-t border-slate-100 pt-3.5 sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                  <span>
+                    <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi phụ</span>
+                    <span className="text-xs text-slate-500">AI hỏi đào sâu sau câu chính</span>
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={hasFollowUp}
+                    aria-label="Câu hỏi phụ"
+                    onClick={() => {
+                      setHasFollowUp((current) => {
+                        if (!current) {
+                          setMaxFollowUpQuestions((count) => Math.min(5, Math.max(1, count || 2)))
+                        }
+                        return !current
+                      })
+                    }}
+                    className={cn(
+                      'relative h-6 w-11 shrink-0 rounded-full transition motion-reduce:transition-none',
+                      hasFollowUp ? 'bg-[#1C4D8D]' : 'bg-slate-300',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-0.5 size-5 rounded-full bg-white shadow transition motion-reduce:transition-none',
+                        hasFollowUp ? 'left-[22px]' : 'left-0.5',
+                      )}
+                    />
+                  </button>
+                </div>
+                <SliderField
+                  label="Số câu phụ tối đa"
+                  value={Math.min(5, Math.max(1, maxFollowUpQuestions || 2))}
+                  min={1}
+                  max={5}
+                  suffix="câu"
+                  disabled={!hasFollowUp}
+                  onChange={setMaxFollowUpQuestions}
+                />
+              </div>
+            </section>
+
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={fieldLabelClass(Boolean(fieldErrors.difficulties))}>
+                    Mức độ câu hỏi <span className="text-rose-600">*</span>
+                  </span>
+                  <span className="text-xs font-medium text-slate-500">Chọn một hoặc nhiều mức</span>
+                </div>
+                <div
+                  role="group"
+                  aria-label="Mức độ câu hỏi"
+                  className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3"
+                >
+                  {IN_CLASS_DIFFICULTIES.map((item) => {
+                    const checked = selectedDifficulties.includes(item.value)
+                    const count = difficultySourceCounts[item.value]
+                    return (
+                      <label
+                        key={item.value}
+                        className={cn(
+                          'flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm transition motion-reduce:transition-none',
+                          checked
+                            ? 'border-[#1C4D8D] bg-[#1C4D8D]/5 text-[#0F2854]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
                         )}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-bold text-[#5b6b84]">
-                            Chọn ít nhất {questionCount} câu đã duyệt
-                            {selectedQuestionIds.length > 0 ? ` · đã chọn ${selectedQuestionIds.length}` : ''}
-                          </p>
-                          {!questionsLoading && questionOptions.length > 0 && (
-                            <button
-                              type="button"
-                              aria-label="Phóng to danh sách câu hỏi"
-                              title="Phóng to danh sách câu hỏi"
-                              aria-haspopup="dialog"
-                              className={cn(ds.outlineButton, 'h-8 min-h-8 w-8 px-0')}
-                              onClick={() => {
-                                setQuestionSearch('')
-                                setQuestionPickerOpen(true)
-                              }}
-                            >
-                              <Move className="size-4" aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                        {questionsLoading ? (
-                          <p className="mt-2 text-xs text-[#5b6b84]">Đang tải câu hỏi...</p>
-                        ) : questionOptions.length === 0 ? (
-                          <p className="mt-2 text-xs text-[#5b6b84]">Không có câu đã duyệt cho môn của lớp này.</p>
-                        ) : (
-                          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-                            {renderQuestionChoices(questionOptions)}
-                          </ul>
+                        <span className="flex items-center gap-2 font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleDifficulty(item.value)}
+                            className="size-4 rounded accent-[#1C4D8D]"
+                          />
+                          <span>{item.label}</span>
+                        </span>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold tabular-nums text-slate-700">
+                          {poolStats ? `${count} câu` : '…'}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <FieldError
+                  message={
+                    fieldErrors.difficulties ||
+                    (selectedDifficulties.length === 0
+                      ? 'Vui lòng chọn ít nhất một mức độ câu hỏi (Dễ, Trung bình hoặc Khó).'
+                      : undefined)
+                  }
+                />
+              </div>
+
+              <div className="border-t border-slate-100 pt-3.5">
+                <span className={fieldLabelClass(false)}>
+                  Nguồn câu hỏi <span className="text-rose-600">*</span>
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label="Nguồn câu hỏi"
+                  className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+                >
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
+                      poolMode === 'ALL_COURSE_BANK'
+                        ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
+                        : 'border-slate-200 bg-white hover:border-slate-300',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="questionPoolMode"
+                      value="ALL_COURSE_BANK"
+                      checked={poolMode === 'ALL_COURSE_BANK'}
+                      onChange={() => {
+                        setPoolMode('ALL_COURSE_BANK')
+                        clearFieldError('pool')
+                      }}
+                      className="mt-1 size-4 accent-[#1C4D8D]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-[#0F2854]">
+                        Toàn bộ ngân hàng môn
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                        Lấy từ toàn bộ câu luyện tập đúng môn, đã duyệt (APPROVED), đang hoạt động và
+                        đúng mức đã chọn.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label
+                    className={cn(
+                      'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
+                      poolMode === 'SELECTED_CLOS'
+                        ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
+                        : 'border-slate-200 bg-white hover:border-slate-300',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="questionPoolMode"
+                      value="SELECTED_CLOS"
+                      checked={poolMode === 'SELECTED_CLOS'}
+                      onChange={() => {
+                        setPoolMode('SELECTED_CLOS')
+                        clearFieldError('pool')
+                      }}
+                      className="mt-1 size-4 accent-[#1C4D8D]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-[#0F2854]">
+                        Theo chuẩn đầu ra (CLO)
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
+                        Chọn các CLO đang hoạt động của môn; mỗi sinh viên nhận ít nhất 1 câu từ mỗi
+                        CLO đã chọn.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {poolLoading ? (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs font-semibold text-slate-600"
+                >
+                  <LoaderCircle className="size-4 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
+                  Đang tải thống kê câu hỏi hợp lệ và CLO của môn học...
+                </div>
+              ) : poolLoadError ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-xs text-rose-900"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-bold text-rose-800">{poolLoadError.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => setPoolReloadTick((tick) => tick + 1)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-bold text-rose-800 hover:bg-rose-100"
+                    >
+                      <RefreshCw className="size-3" />
+                      Thử lại
+                    </button>
+                  </div>
+                  <p className="mt-1 leading-relaxed text-rose-800">{poolLoadError.detail}</p>
+                </div>
+              ) : poolStats ? (
+                <>
+                  {poolMode === 'SELECTED_CLOS' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold tracking-[0.04em] text-slate-600 uppercase">
+                          Danh sách CLO đang hoạt động ({selectedCloIds.length}/
+                          {poolStats.clos.length} đã chọn)
+                        </span>
+                        {Number.isInteger(parsedQuestionCount) && parsedQuestionCount >= 1 && (
+                          <span className="text-xs font-medium text-slate-500">
+                            Tối đa {parsedQuestionCount} CLO cho {parsedQuestionCount} câu/SV
+                          </span>
                         )}
-                        <FieldError message={fieldErrors.pool} />
+                      </div>
+
+                      {poolStats.clos.length === 0 ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs font-medium text-amber-900">
+                          Môn học của lớp này chưa có chuẩn đầu ra (CLO) đang hoạt động. Vui lòng liên
+                          hệ Trưởng bộ môn thiết lập CLO hoặc chuyển sang nguồn Toàn bộ ngân hàng môn.
+                        </div>
+                      ) : (
+                        <ul className="max-h-56 space-y-2 overflow-y-auto pr-0.5">
+                          {poolStats.clos.map((clo) => {
+                            const checked = selectedCloIds.includes(clo.cloId)
+                            const validForSelectedLevels = sumCountsForDifficulties(
+                              clo.counts,
+                              selectedDifficulties,
+                            )
+                            return (
+                              <li key={clo.cloId}>
+                                <label
+                                  className={cn(
+                                    'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
+                                    checked
+                                      ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
+                                      : 'border-slate-200 bg-white hover:border-slate-300',
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleClo(clo.cloId)}
+                                    className="mt-1 size-4 shrink-0 rounded accent-[#1C4D8D]"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <span className="font-mono text-sm font-bold text-[#0F2854]">
+                                        {clo.cloCode}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          'rounded-md px-2 py-0.5 font-mono text-xs font-bold tabular-nums',
+                                          validForSelectedLevels > 0
+                                            ? 'bg-teal-50 text-teal-800'
+                                            : 'bg-rose-50 text-rose-700',
+                                        )}
+                                      >
+                                        Hợp lệ: {validForSelectedLevels} câu
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                                      {clo.description || 'Chưa có mô tả chi tiết cho CLO này.'}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px] font-semibold tabular-nums text-slate-600">
+                                      <span className="rounded bg-slate-100 px-2 py-0.5">
+                                        Dễ: {clo.counts.easy}
+                                      </span>
+                                      <span className="rounded bg-slate-100 px-2 py-0.5">
+                                        Trung bình: {clo.counts.medium}
+                                      </span>
+                                      <span className="rounded bg-slate-100 px-2 py-0.5">
+                                        Khó: {clo.counts.hard}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </label>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    data-testid="pool-allocation-preview"
+                    aria-live="polite"
+                    className={cn(
+                      'rounded-xl border p-3.5 text-xs',
+                      poolEvaluation.isValid
+                        ? 'border-slate-200 bg-slate-50/85 text-slate-700'
+                        : 'border-rose-200 bg-rose-50/75 text-rose-900',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 font-bold text-[#0F2854]">
+                        <Layers className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
+                        Tổng câu hợp lệ sẵn có & Dự kiến phân bổ mỗi sinh viên
+                      </span>
+                      <span className="rounded-md bg-white px-2.5 py-1 font-mono text-xs font-bold tabular-nums text-[#0F2854] ring-1 ring-slate-200">
+                        Sẵn có: {poolEvaluation.totalAvailable} câu · Cần:{' '}
+                        {Number.isInteger(parsedQuestionCount) && parsedQuestionCount > 0
+                          ? parsedQuestionCount
+                          : 0}{' '}
+                        câu/SV
+                      </span>
+                    </div>
+
+                    {poolEvaluation.difficultyPreview.length > 0 && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-slate-600">Theo mức độ:</span>
+                        {poolEvaluation.difficultyPreview.map((item) => (
+                          <span
+                            key={item.difficulty}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono font-semibold tabular-nums text-[#0F2854]"
+                          >
+                            {item.label}: ~{item.allocatedCount} câu (sẵn {item.availableCount})
+                          </span>
+                        ))}
                       </div>
                     )}
-                  </section>
+
+                    {poolMode === 'SELECTED_CLOS' && poolEvaluation.cloPreview.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-slate-600">Theo CLO:</span>
+                        {poolEvaluation.cloPreview.map((item) => (
+                          <span
+                            key={item.cloId}
+                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono font-semibold tabular-nums text-[#0F2854]"
+                          >
+                            {item.cloCode}: ~{item.allocatedCount} câu (sẵn{' '}
+                            {item.availableInSelectedDifficulties})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {!poolEvaluation.isValid && poolEvaluation.errors.length > 0 ? (
+                      <ul role="alert" className="mt-2.5 space-y-1 border-t border-rose-200/80 pt-2 font-semibold text-rose-800">
+                        {poolEvaluation.errors.map((err, idx) => (
+                          <li key={idx} className="flex items-start gap-1.5">
+                            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-rose-600" />
+                            <span>{err}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Hệ thống Backend sẽ bốc cố định đúng số câu cho từng sinh viên khi vào ca,
+                        ưu tiên câu ít được giao nhất (Anti-Collision) và không tự bù ngoài CLO/mức đã chọn.
+                      </p>
+                    )}
+                  </div>
                 </>
-              )}
-        </form>
-      </FormDialog>
-      {questionPickerOpen && (
-        <FormDialog
-          nested
-          align="center"
-          size="2xl"
-          maxHeight="h-[90dvh] max-h-[90dvh]"
-          eyebrow="Ca kiểm tra"
-          title="Chọn câu hỏi"
-          beforeBody={
-            <div className="border-b border-[#82aedb]/35 bg-white px-5 py-3">
-              <label className="relative block">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" aria-hidden="true" />
-                <input
-                  type="search"
-                  aria-label="Tìm theo tiêu đề câu hỏi"
-                  placeholder="Tìm theo tiêu đề câu hỏi"
-                  value={questionSearch}
-                  onChange={(event) => setQuestionSearch(event.target.value)}
-                  className={cn(ds.field, 'pl-9')}
-                />
-              </label>
-            </div>
-          }
-          icon={ClipboardList}
-          onClose={() => setQuestionPickerOpen(false)}
-          footer={
-            <DialogFooter>
-              <div role="status" className="mr-auto flex flex-wrap items-center gap-2 text-sm">
-                <span className={selectedQuestionIds.length >= questionCount ? ds.successChip : ds.infoChip}>
-                  Đã chọn {selectedQuestionIds.length} câu
-                </span>
-                <span className="text-[#5b6b84]">Tối thiểu {questionCount} câu</span>
-              </div>
-              <button type="button" className={ds.primaryButton} onClick={() => setQuestionPickerOpen(false)}>Xong</button>
-            </DialogFooter>
-          }
-        >
-          {matchingQuestions.length > 0 ? (
-            <ul className="space-y-1.5">{renderQuestionChoices(matchingQuestions, true)}</ul>
-          ) : (
-            <EmptyState compact className="h-full w-full justify-center" icon={Search} title="Không tìm thấy câu hỏi" description="Thử tìm bằng từ khóa khác." />
-          )}
-        </FormDialog>
-      )}
-    </>
+              ) : null}
+
+              <FieldError message={fieldErrors.pool} />
+            </section>
+          </div>
+        )}
+      </form>
+    </FormDialog>
   )
 }
 
@@ -1485,11 +1952,11 @@ export function InClassShiftHubPage({
                       <span className={factClass}>
                         <ClipboardList className="size-3.5 shrink-0 text-[#1C4D8D]" />
                         <span>
-                          <span className="font-bold text-[#0F2854]">{shift.questionCount}</span> câu
+                          <span className="font-bold text-[#0F2854] tabular-nums">{shift.questionCount}</span> câu/SV
                           {shift.hasFollowUp ? (
                             <>
                               {' · phụ '}
-                              <span className="font-bold text-[#0F2854]">
+                              <span className="font-bold text-[#0F2854] tabular-nums">
                                 {shift.maxFollowUpQuestions || 1}
                               </span>
                             </>
@@ -1497,8 +1964,20 @@ export function InClassShiftHubPage({
                         </span>
                       </span>
                       <span className={factClass}>
-                        <UsersRound className="size-3.5 shrink-0 text-[#1C4D8D]" />
+                        <Layers className="size-3.5 shrink-0 text-[#1C4D8D]" />
                         <span>
+                          {formatPoolModeLabel(
+                            shift.questionPoolMode,
+                            shift.selectedCloCodes,
+                            shift.selectedCloIds.length,
+                          )}
+                          {' · '}
+                          {formatDifficultyListLabel(shift.selectedDifficulties)}
+                        </span>
+                      </span>
+                      <span className={factClass}>
+                        <UsersRound className="size-3.5 shrink-0 text-[#1C4D8D]" />
+                        <span className="tabular-nums">
                           <span className="font-bold text-[#0F2854]">{shift.joinedCount}</span>
                           {' vào ca · '}
                           <span className="font-bold text-[#0F2854]">{shift.submittedCount}</span>

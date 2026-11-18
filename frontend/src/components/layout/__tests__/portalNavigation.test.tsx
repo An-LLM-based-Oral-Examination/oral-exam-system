@@ -23,6 +23,7 @@ function createAuthValue(role: UserRole): AuthContextType {
     isStudent: role === 'Student',
     isInstructor: role === 'Instructor',
     isDepartmentHead: role === 'DepartmentHead',
+    isExaminationOfficer: role === 'ExaminationOfficer',
     isProctor: role === 'Proctor',
     isAdmin: role === 'Admin',
     loginWithPassword: async () => undefined,
@@ -45,14 +46,13 @@ describe('portal navigation boundaries', () => {
   it.each([
     [
       'Instructor',
-      ['/lecturer/dashboard', '/lecturer/classes', '/lecturer/question-bank', '/lecturer/audit', '/lecturer/appeals', '/lecturer/dlq'],
+      ['/lecturer/dashboard', '/lecturer/classes', '/lecturer/question-bank'],
     ],
     [
       'DepartmentHead',
       [
         '/department-head/dashboard',
         '/department-head/question-review',
-        '/department-head/appeals',
         '/department-head/lecturer-assignments',
         '/department-head/clos',
         '/department-head/exam-structures',

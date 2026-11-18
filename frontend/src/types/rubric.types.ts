@@ -200,6 +200,56 @@ export interface BatchApproveQuestionsResult {
   approvedCount: number
 }
 
+export interface ApprovedQuestionItemRequest {
+  title: string
+  content: string
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  usageScope: UsageScope
+  source: QuestionSource
+  modelAnswer: string
+  keyPoints: string[]
+  hasFollowUp: boolean
+  followUpPrompt?: string | null
+  rubric: RubricDraft
+  imageUrl?: string | null
+  imageDescription?: string | null
+  cloId?: string | null
+  structureId?: string | null
+}
+
+export interface BatchApproveQuestionsRequest {
+  courseId: string
+  questions: ApprovedQuestionItemRequest[]
+  approverId?: string
+}
+
+export interface BatchApproveQuestionsResponse {
+  courseId: string
+  totalApproved: number
+  approvedQuestions: Array<{
+    questionId: string
+    rubricId: string
+    title: string
+    usageScope: string
+    source: string
+    status: QuestionApprovalStatus
+    approvedBy: string
+    createdAt: string
+  }>
+}
+
+export interface BatchApprovePendingFailure {
+  id: string
+  message: string
+}
+
+export interface BatchApprovePendingResult {
+  approvedCount: number
+  approvedIds: string[]
+  failed: BatchApprovePendingFailure[]
+}
+
 export interface UploadQuestionImageResponse {
   imageUrl: string
   objectKey: string

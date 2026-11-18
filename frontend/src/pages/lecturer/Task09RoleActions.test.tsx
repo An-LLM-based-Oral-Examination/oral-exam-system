@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   role: 'ExaminationOfficer',
   userId: 'actor',
   sessions: vi.fn(), shifts: vi.fn(), structures: vi.fn(), createSession: vi.fn(),
+  createStructure: vi.fn(), updateStructure: vi.fn(), lecturerCourses: vi.fn(),
   appeals: vi.fn(), regrade: vi.fn(), listDlq: vi.fn(), replay: vi.fn(),
   attendance: vi.fn(), updateAttendance: vi.fn(), violation: vi.fn(), suspend: vi.fn(),
   audit: vi.fn(), publish: vi.fn(),
@@ -23,7 +24,11 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
 vi.mock('@/services/officialExam.service', () => ({ officialExamService: {
   getSessions: mocks.sessions, getShifts: mocks.shifts, getExamStructures: mocks.structures,
   createSession: mocks.createSession,
+  createExamStructure: mocks.createStructure, updateExamStructure: mocks.updateStructure,
   getAuditEvidence: mocks.audit, publishGrades: mocks.publish,
+} }))
+vi.mock('@/services/course.service', () => ({ courseService: {
+  getLecturerCourses: mocks.lecturerCourses,
 } }))
 vi.mock('@/services/appeals.service', () => ({ appealsService: { list: mocks.appeals, regrade: mocks.regrade } }))
 vi.mock('@/services/deadLetterQueue.service', () => ({ deadLetterQueueService: { list: mocks.listDlq, replay: mocks.replay } }))
@@ -49,6 +54,20 @@ beforeEach(() => {
   mocks.shifts.mockResolvedValue([])
   mocks.structures.mockResolvedValue([])
   mocks.createSession.mockResolvedValue({})
+  mocks.createStructure.mockResolvedValue({
+    id: 'structure-new',
+    courseId: 'course-1',
+    courseCode: 'PRN231',
+    createdBy: 'actor',
+    name: 'New Structure',
+    totalQuestions: 5,
+    durationMinutes: 30,
+    bloomDistribution: '{"Remember":2}',
+    isActive: true,
+    createdAt: '2026-11-18T00:00:00Z',
+  })
+  mocks.updateStructure.mockResolvedValue({})
+  mocks.lecturerCourses.mockResolvedValue([{ id: 'course-1', code: 'PRN231', name: 'Backend' }])
   mocks.appeals.mockResolvedValue([appeal])
   mocks.listDlq.mockResolvedValue([])
   mocks.attendance.mockResolvedValue(monitor)
@@ -87,25 +106,77 @@ describe('Task 09 official exam action boundaries', () => {
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({ hasFollowUp: false, maxFollowUpQuestions: 2 })))
   })
 
-  it('DH sees academic structure controls but no operational forms', async () => {
+  it('DH sees academic structure controls, owned course dropdown, and Bloom inputs without calling sessions or shifts', async () => {
     mocks.role = 'DepartmentHead'
     render(<OfficialExamManagementPage />)
-    await screen.findByRole('button', { name: 'Tạo cấu trúc' })
+    await screen.findByRole('option', { name: /PRN231 · Backend/ })
+    expect(mocks.sessions).not.toHaveBeenCalled()
+    expect(mocks.shifts).not.toHaveBeenCalled()
+    expect(mocks.lecturerCourses).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: 'Tạo kỳ thi' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Mở ca thi' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cấp vé thi' })).toBeNull()
+    expect(screen.queryByText('Danh sách đã cấu hình')).toBeNull()
+
+    const courseSelect = screen.getByLabelText('Môn học') as HTMLSelectElement
+    expect(screen.getByRole('option', { name: /PRN231 · Backend/ })).toBeTruthy()
+    expect(courseSelect.value).toBe('course-1')
+
+    fireEvent.change(screen.getByPlaceholderText('Tên cấu trúc'), { target: { value: 'Midterm Oral' } })
+    fireEvent.change(screen.getByPlaceholderText('Số câu'), { target: { value: '5' } })
+    fireEvent.change(screen.getByPlaceholderText('Phút'), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText('Bloom Remember'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Bloom Understand'), { target: { value: '3' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Tạo cấu trúc' }).closest('form')!)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Tổng số câu phân bổ theo bậc Bloom không được vượt quá tổng số câu hỏi.')
+    expect(mocks.createStructure).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Bloom Understand'), { target: { value: '2' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Tạo cấu trúc' }).closest('form')!)
+
+    await waitFor(() =>
+      expect(mocks.createStructure).toHaveBeenCalledWith({
+        courseId: 'course-1',
+        name: 'Midterm Oral',
+        totalQuestions: 5,
+        durationMinutes: 30,
+        bloomDistribution: JSON.stringify({ Remember: 3, Understand: 2 }),
+        isActive: true,
+      }),
+    )
   })
-  it('DH loads both active and inactive structures without duplicate rows', async () => {
+  it('DH loads both active and inactive structures without duplicate rows and renders Bloom chips', async () => {
     mocks.role = 'DepartmentHead'
-    const active = { id: 'active', name: 'Active structure', isActive: true }
-    const inactive = { id: 'inactive', name: 'Inactive structure', isActive: false }
+    const active = { id: 'active', name: 'Active structure', courseCode: 'PRN231', totalQuestions: 5, durationMinutes: 30, bloomDistribution: '{"Remember":2,"Apply":1}', isActive: true }
+    const inactive = { id: 'inactive', name: 'Inactive structure', courseCode: 'PRN231', totalQuestions: 4, durationMinutes: 20, bloomDistribution: '{}', isActive: false }
     mocks.structures.mockImplementation(({ isActive }) => Promise.resolve(isActive ? [active] : [active, inactive]))
     render(<OfficialExamManagementPage />)
     expect(await screen.findByRole('button', { name: 'Tắt cấu trúc' })).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Tắt cấu trúc' })).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Bật cấu trúc' })).toBeTruthy()
+    expect(screen.getByText('Remember: 2')).toBeTruthy()
+    expect(screen.getByText('Apply: 1')).toBeTruthy()
+    expect(screen.getByText('Phân bổ linh hoạt')).toBeTruthy()
     expect(mocks.structures).toHaveBeenCalledWith({ isActive: true })
     expect(mocks.structures).toHaveBeenCalledWith({ isActive: false })
+  })
+
+  it('DH strips leading VALIDATION prefix when structure creation fails', async () => {
+    mocks.role = 'DepartmentHead'
+    mocks.createStructure.mockRejectedValueOnce({
+      status: 422,
+      detail: 'VALIDATION: Tên cấu trúc đề thi đã tồn tại trong môn học.',
+    })
+    render(<OfficialExamManagementPage />)
+    await screen.findByRole('option', { name: /PRN231 · Backend/ })
+
+    fireEvent.change(screen.getByPlaceholderText('Tên cấu trúc'), { target: { value: 'Midterm Oral' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Tạo cấu trúc' }).closest('form')!)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Tên cấu trúc đề thi đã tồn tại trong môn học.')
+    expect(alert).not.toHaveTextContent('VALIDATION:')
   })
 })
 
@@ -132,12 +203,13 @@ describe('Task 09 appeal action boundaries', () => {
     expect(screen.queryByRole('button', { name: 'Phân công GV chấm lại' })).toBeNull()
     expect(mocks.appeals).not.toHaveBeenCalled()
   })
-  it.each([['actor', true], ['other-lecturer', false]])('lecturer regrade is gated by assignment %s', async (assignedTo, allowed) => {
-    mocks.role = 'Instructor'
-    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'ASSIGNED_TO_LECTURER', assignedTo }])
+  it.each(['Instructor', 'DepartmentHead'])('%s cannot access deferred appeal management controls', async (role) => {
+    mocks.role = role
+    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'ASSIGNED_TO_LECTURER', assignedTo: 'actor' }])
     render(<AppealManagementPage />)
-    await screen.findByText('Lý do khiếu nại:')
-    expect(Boolean(screen.queryByRole('button', { name: 'Gửi biên bản & điểm chấm lại' }))).toBe(allowed)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Gửi biên bản & điểm chấm lại' })).toBeNull()
+    expect(mocks.appeals).not.toHaveBeenCalled()
   })
 })
 
@@ -161,7 +233,7 @@ describe('Task 09 proctor actions', () => {
 })
 
 describe('Task 09 DLQ flows', () => {
-  it.each(['Admin', 'ExaminationOfficer', 'Instructor'])('%s can replay an allowed task', async (role) => {
+  it.each(['Admin', 'ExaminationOfficer'])('%s can replay an allowed task', async (role) => {
     mocks.role = role
     const flowType = role === 'ExaminationOfficer' ? 'OFFICIAL_EXAM' : 'IN_CLASS_EXAM'
     mocks.listDlq.mockResolvedValue([{ id: 'task', flowType, status: 'pending', retryCount: 1, taskType: 'GRADING', errorMessage: 'Retry needed', createdAt: '2026-11-14' }])
@@ -173,7 +245,6 @@ describe('Task 09 DLQ flows', () => {
   it.each([
     ['Admin', ['ALL', 'PRACTICE', 'MOCK_EXAM', 'IN_CLASS_EXAM'], 'ALL'],
     ['ExaminationOfficer', ['OFFICIAL_EXAM'], 'OFFICIAL_EXAM'],
-    ['Instructor', ['IN_CLASS_EXAM'], 'IN_CLASS_EXAM'],
   ])('%s requests and offers only allowed flows', async (role, expected, initialFlow) => {
     mocks.role = role
     render(<DeadLetterQueuePage />)
@@ -181,7 +252,7 @@ describe('Task 09 DLQ flows', () => {
     const options = Array.from(screen.getByLabelText('Luồng nghiệp vụ').querySelectorAll('option')).map((option) => option.value)
     expect(options).toEqual(expected)
   })
-  it.each(['DepartmentHead', 'Proctor', 'Student'])('%s does not load DLQ', async (role) => {
+  it.each(['Instructor', 'DepartmentHead', 'Proctor', 'Student'])('%s does not load DLQ', async (role) => {
     mocks.role = role
     render(<DeadLetterQueuePage />)
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -205,15 +276,18 @@ describe('Task 09 publish controls', () => {
 
 describe('Task 09 sidebar portal boundaries', () => {
   it.each([
-    ['Instructor', 'Phúc khảo được giao', 'Lỗi chấm ca lớp'],
-    ['DepartmentHead', 'Quản lý phúc khảo', 'Cấu trúc đề thi'],
-    ['Admin', 'Lỗi chấm MF-01/02', null],
-    ['Proctor', 'Điểm danh', null],
-  ])('%s sees only its permitted task 09 portals in the shared sidebar', (role, primaryLink, secondaryLink) => {
+    ['Instructor', 'Quản lý lớp học', 'Câu hỏi luyện tập', ['Lỗi chấm ca lớp', 'Phúc khảo được giao', 'Hậu kiểm điểm']],
+    ['DepartmentHead', 'Duyệt câu hỏi và đề', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
+    ['Admin', 'Lỗi chấm MF-01/02', null, ['Quản lý phúc khảo']],
+    ['Proctor', 'Điểm danh', null, ['Lỗi chấm ca lớp']],
+  ] as Array<[string, string, string | null, string[]]>)('%s sees only its permitted portals in the shared sidebar', (role, primaryLink, secondaryLink, hiddenLinks) => {
     mocks.role = role
     render(<MemoryRouter><Sidebar collapsed={false} mobileOpen={false} onCollapse={vi.fn()} onMobileClose={vi.fn()} /></MemoryRouter>)
     expect(screen.getByRole('link', { name: primaryLink })).toBeTruthy()
     if (secondaryLink) expect(screen.getByRole('link', { name: secondaryLink })).toBeTruthy()
+    for (const hidden of hiddenLinks) {
+      expect(screen.queryByRole('link', { name: hidden })).toBeNull()
+    }
     expect(screen.queryByRole('link', { name: 'Kỳ thi chính thức' })).toBeNull()
   })
 
