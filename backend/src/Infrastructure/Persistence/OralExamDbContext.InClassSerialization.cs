@@ -5,6 +5,10 @@ namespace OralExamination.Infrastructure.Persistence;
 
 public partial class OralExamDbContext
 {
+    public Task<T> ExecuteClassEnrollmentAsync<T>(Guid classId, Func<CancellationToken, Task<T>> enrollment,
+        CancellationToken cancellationToken = default) =>
+        ExecuteTransactionLockAsync($"oes:class:enrollment:{classId:N}", enrollment, cancellationToken);
+
     public Task<T> ExecuteInClassJoinAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> join,
         CancellationToken cancellationToken = default) =>
         ExecuteTransactionLockAsync($"oes:in-class:join:{shiftId:N}", join, cancellationToken, shiftId);

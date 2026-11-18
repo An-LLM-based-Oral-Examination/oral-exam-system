@@ -20,6 +20,7 @@ public partial class PracticeAnswer
     public string? PromptText { get; set; }
 
     public string Status { get; set; } = "pending";
+    public DateTime? ProcessingStartedAt { get; set; }
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
     public virtual PracticeSession Session { get; set; } = null!;

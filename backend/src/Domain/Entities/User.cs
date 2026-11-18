@@ -14,8 +14,14 @@ public partial class User
     public string? PasswordHash { get; set; }
     public bool MustChangePassword { get; set; }
     public bool IsActive { get; set; } = true;
+    public int AuthVersion { get; set; } = 1;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public void BumpAuthVersion()
+    {
+        AuthVersion++;
+    }
 
     public virtual ICollection<Class> InstructedClasses { get; set; } = new List<Class>();
     public virtual ICollection<ClassEnrollment> Enrollments { get; set; } = new List<ClassEnrollment>();

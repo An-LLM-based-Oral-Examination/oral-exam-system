@@ -25,6 +25,7 @@ public partial class PracticeQuestion
     public Guid? SubmittedBy { get; set; }
     public string? ReviewNotes { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual Course Course { get; set; } = null!;

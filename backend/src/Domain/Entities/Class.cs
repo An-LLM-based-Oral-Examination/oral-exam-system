@@ -8,10 +8,8 @@ public partial class Class
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Code { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
-    public string JoinCode { get; set; } = string.Empty;
+    public string JoinCode { get; set; } = GenerateDefaultJoinCode();
     public string? JoinPasswordHash { get; set; }
-    /// <summary>Mật khẩu tham gia dạng rõ — chỉ trả về cho giảng viên phụ trách để chia sẻ lớp.</summary>
-    public string? JoinPasswordPlain { get; set; }
     public bool IsJoinEnabled { get; set; } = true;
     public bool AllowSelfEnrollment { get; set; } = true;
     public Guid CourseId { get; set; }
@@ -28,4 +26,7 @@ public partial class Class
     public virtual User? Lecturer { get; set; }
     public virtual ICollection<ClassEnrollment> Enrollments { get; set; } = new List<ClassEnrollment>();
     public virtual ICollection<InClassExamShift> InClassExamShifts { get; set; } = new List<InClassExamShift>();
+
+    private static string GenerateDefaultJoinCode() =>
+        $"CLS{Guid.NewGuid():N}"[..16].ToUpperInvariant();
 }

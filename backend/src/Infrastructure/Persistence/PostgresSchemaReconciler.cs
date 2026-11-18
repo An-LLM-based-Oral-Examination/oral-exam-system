@@ -36,8 +36,12 @@ DO $reconcile_pre$
             ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_lower ON users (lower(email));
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username_lower ON users (lower(username)) WHERE username IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code_lower ON users (lower(student_code)) WHERE student_code IS NOT NULL;
 
             -- 2. courses: các cột bổ sung trong đợt R1-R8 (trước academic_program_id)
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
@@ -120,7 +124,6 @@ DO $reconcile_pre$
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
-                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_plain character varying(128) NULL;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;
@@ -181,6 +184,11 @@ DO $reconcile_pre$
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_answers') THEN
                 ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 1;
                 ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS prompt_text text NULL;
+                ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_exam_submissions') THEN
+                ALTER TABLE in_class_exam_submissions ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
             END IF;
 
             -- 8. mock_exam_answers
@@ -254,7 +262,15 @@ DO $reconcile_pre$
                 ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS follow_up_prompt text NULL;
 
                 CREATE INDEX IF NOT EXISTS ix_ai_evaluations_student ON ai_evaluations (student_id);
-                CREATE INDEX IF NOT EXISTS ix_ai_evaluations_in_class_submission ON ai_evaluations (in_class_submission_id);
+                BEGIN
+                    DROP INDEX IF EXISTS ix_ai_evaluations_practice_answer;
+                    DROP INDEX IF EXISTS ix_ai_evaluations_mock_exam_answer;
+                    DROP INDEX IF EXISTS ix_ai_evaluations_in_class_submission;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_practice_answer ON ai_evaluations (practice_answer_id) WHERE practice_answer_id IS NOT NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_mock_exam_answer ON ai_evaluations (mock_exam_answer_id) WHERE mock_exam_answer_id IS NOT NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_in_class_submission ON ai_evaluations (in_class_submission_id) WHERE in_class_submission_id IS NOT NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
 
                 BEGIN
                     ALTER TABLE ai_evaluations ADD CONSTRAINT "FK_ai_evaluations_users_student_id"
@@ -422,7 +438,7 @@ DO $reconcile_pre$
                 review_notes text NULL,
                 reviewed_by uuid NULL,
                 session_id uuid NULL,
-                status character varying(20) NOT NULL,
+                status character varying(40) NOT NULL,
                 student_id uuid NULL,
                 submission_id uuid NULL,
                 ticket_id uuid NULL,
@@ -468,7 +484,6 @@ DO $reconcile_pre$
                 is_join_enabled boolean NULL,
                 join_code character varying(20) NOT NULL,
                 join_password_hash character varying(256) NULL,
-                join_password_plain character varying(128) NULL,
                 lecturer_id uuid NULL,
                 max_students integer NULL,
                 name character varying(150) NOT NULL,
@@ -692,6 +707,8 @@ DO $reconcile_pre$
                 lecturer_id uuid NULL,
                 max_follow_up_questions integer NULL,
                 question_pool_mode character varying(30) NOT NULL,
+                selected_clo_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+                selected_difficulties jsonb NOT NULL DEFAULT '["easy","medium","hard"]'::jsonb,
                 selected_question_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
                 shift_name character varying(255) NOT NULL,
                 start_time timestamp with time zone NULL,
@@ -716,6 +733,7 @@ DO $reconcile_pre$
                 is_follow_up boolean NULL,
                 lecturer_notes text NULL,
                 parent_submission_id uuid NULL,
+                processing_started_at timestamp with time zone NULL,
                 question_id uuid NULL,
                 shift_id uuid NULL,
                 status character varying(20) NOT NULL,
@@ -839,6 +857,7 @@ DO $reconcile_pre$
             CREATE TABLE IF NOT EXISTS official_exam_sessions (
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
                 course_id uuid NULL,
+                semester_id uuid NULL,
                 created_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 created_by uuid NULL,
                 exam_date date NULL,
@@ -859,6 +878,7 @@ DO $reconcile_pre$
                 is_follow_up boolean NULL,
                 order_index integer NULL,
                 parent_answer_id uuid NULL,
+                processing_started_at timestamp with time zone NULL,
                 prompt_text text NULL,
                 question_id uuid NULL,
                 session_id uuid NULL,
@@ -1034,8 +1054,12 @@ DO $reconcile_pre$
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
                 CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;
                 CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code ON users (student_code) WHERE student_code IS NOT NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_lower ON users (lower(email));
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username_lower ON users (lower(username)) WHERE username IS NOT NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_student_code_lower ON users (lower(student_code)) WHERE student_code IS NOT NULL;
             END IF;
 
             -- courses
@@ -1061,7 +1085,6 @@ DO $reconcile_pre$
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
-                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_plain character varying(128) NULL;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;
@@ -1119,6 +1142,17 @@ DO $reconcile_pre$
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'practice_answers') THEN
                 ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS order_index integer NOT NULL DEFAULT 1;
                 ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS prompt_text text NULL;
+                ALTER TABLE practice_answers ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_practice_answers_session_question_main ON practice_answers (session_id, question_id) WHERE is_follow_up = false AND parent_answer_id IS NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_practice_answers_session_parent ON practice_answers (session_id, parent_answer_id) WHERE is_follow_up = true AND parent_answer_id IS NOT NULL;
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conrelid = 'public.practice_answers'::regclass
+                      AND conname = 'ck_practice_answers_follow_up_parent'
+                ) THEN
+                    ALTER TABLE practice_answers ADD CONSTRAINT ck_practice_answers_follow_up_parent
+                        CHECK ((is_follow_up = false AND parent_answer_id IS NULL) OR (is_follow_up = true AND parent_answer_id IS NOT NULL));
+                END IF;
             END IF;
 
             -- mock_exam_answers
@@ -1165,7 +1199,15 @@ DO $reconcile_pre$
                 ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS in_class_submission_id uuid NULL;
                 ALTER TABLE ai_evaluations ADD COLUMN IF NOT EXISTS follow_up_prompt text NULL;
                 CREATE INDEX IF NOT EXISTS ix_ai_evaluations_student ON ai_evaluations (student_id);
-                CREATE INDEX IF NOT EXISTS ix_ai_evaluations_in_class_submission ON ai_evaluations (in_class_submission_id);
+                BEGIN
+                    DROP INDEX IF EXISTS ix_ai_evaluations_practice_answer;
+                    DROP INDEX IF EXISTS ix_ai_evaluations_mock_exam_answer;
+                    DROP INDEX IF EXISTS ix_ai_evaluations_in_class_submission;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_practice_answer ON ai_evaluations (practice_answer_id) WHERE practice_answer_id IS NOT NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_mock_exam_answer ON ai_evaluations (mock_exam_answer_id) WHERE mock_exam_answer_id IS NOT NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_evaluations_in_class_submission ON ai_evaluations (in_class_submission_id) WHERE in_class_submission_id IS NOT NULL;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -- real_exam_session_shifts
@@ -1176,6 +1218,16 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
                     EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
+                END IF;
+            END IF;
+
+            -- official_exam_sessions
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'official_exam_sessions') THEN
+                ALTER TABLE official_exam_sessions ADD COLUMN IF NOT EXISTS semester_id uuid NULL;
+                CREATE INDEX IF NOT EXISTS ix_official_exam_sessions_semester ON official_exam_sessions (semester_id);
+                CREATE INDEX IF NOT EXISTS ix_official_exam_sessions_semester_course ON official_exam_sessions (semester_id, course_id);
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
+                    EXECUTE 'UPDATE official_exam_sessions AS oes SET semester_id = c.semester_id FROM courses AS c WHERE oes.semester_id IS NULL AND oes.course_id = c.id';
                 END IF;
             END IF;
 
@@ -1196,8 +1248,35 @@ DO $reconcile_pre$
                 ALTER TABLE in_class_exam_shifts ADD COLUMN IF NOT EXISTS exam_duration_minutes integer NULL;
                 ALTER TABLE in_class_exam_shifts ADD COLUMN IF NOT EXISTS is_locked boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE in_class_exam_shifts ADD COLUMN IF NOT EXISTS finalized_at timestamp with time zone NULL;
+                ALTER TABLE in_class_exam_shifts ADD COLUMN IF NOT EXISTS selected_difficulties jsonb NOT NULL DEFAULT '["easy","medium","hard"]'::jsonb;
+                ALTER TABLE in_class_exam_shifts ADD COLUMN IF NOT EXISTS selected_clo_ids jsonb NOT NULL DEFAULT '[]'::jsonb;
                 CREATE INDEX IF NOT EXISTS ix_in_class_exam_shifts_class_status_created ON in_class_exam_shifts (class_id, status, created_at);
                 CREATE INDEX IF NOT EXISTS ix_in_class_exam_shifts_lecturer ON in_class_exam_shifts (lecturer_id);
+            END IF;
+
+            -- in_class_exam_submissions
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_exam_submissions') THEN
+                ALTER TABLE in_class_exam_submissions ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
+            END IF;
+
+            -- appeal_requests: mở rộng status varchar(40), map legacy status và đồng bộ ck_appeal_requests_status
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appeal_requests') THEN
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'appeal_requests' AND column_name = 'status'
+                          AND COALESCE(character_maximum_length, 0) < 40
+                    ) THEN
+                        ALTER TABLE appeal_requests ALTER COLUMN status TYPE character varying(40);
+                    END IF;
+                    ALTER TABLE appeal_requests ALTER COLUMN status SET DEFAULT 'SUBMITTED_TO_EXAM_OFFICE';
+                    ALTER TABLE appeal_requests DROP CONSTRAINT IF EXISTS ck_appeal_requests_status;
+                    EXECUTE 'UPDATE appeal_requests SET status = ''SUBMITTED_TO_EXAM_OFFICE'' WHERE status = ''PENDING''';
+                    EXECUTE 'UPDATE appeal_requests SET status = ''ASSIGNED_TO_LECTURER'' WHERE status = ''IN_REVIEW''';
+                    ALTER TABLE appeal_requests ADD CONSTRAINT ck_appeal_requests_status
+                        CHECK (status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED'));
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -----------------------------------------------------------------------
@@ -1277,7 +1356,7 @@ DO $reconcile_pre$
             BEGIN
                 ALTER TABLE in_class_exam_shifts DROP CONSTRAINT IF EXISTS ck_in_class_exam_shifts_pool_mode;
                 ALTER TABLE in_class_exam_shifts ADD CONSTRAINT ck_in_class_exam_shifts_pool_mode
-                    CHECK (question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL'));
+                    CHECK (question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_CLOS', 'SELECTED_POOL'));
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1510,25 +1589,15 @@ DO $reconcile_pre$
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
-            -----------------------------------------------------------------------
-            -- 4. ĐỒNG BỘ DỮ LIỆU NỀN HỌC THUẬT & TÀI KHOẢN MẪU (DYNAMIC DML)
-            -----------------------------------------------------------------------
             BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'academic_programs') THEN
-                    IF EXISTS (SELECT 1 FROM users WHERE id = '00000000-0000-0000-0000-000000000002') THEN
-                        EXECUTE 'INSERT INTO academic_programs (id, code, name, department_head_user_id, is_active, created_at, updated_at)
-                        VALUES (''00000000-0000-0000-0000-000000000010'', ''SE'', ''Kỹ thuật Phần mềm'', ''00000000-0000-0000-0000-000000000002'', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT DO NOTHING';
-
-                        EXECUTE 'UPDATE courses
-                        SET department_head_user_id = COALESCE(department_head_user_id, ''00000000-0000-0000-0000-000000000002''::uuid),
-                            academic_program_id = COALESCE(academic_program_id, (SELECT id FROM academic_programs WHERE code = ''SE'' LIMIT 1))
-                        WHERE academic_program_id IS NULL OR department_head_user_id IS NULL';
-                    END IF;
-                END IF;
+                ALTER TABLE official_exam_sessions ADD CONSTRAINT "FK_official_exam_sessions_semesters_semester_id"
+                    FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE RESTRICT;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
+            -----------------------------------------------------------------------
+            -- 4. ĐỒNG BỘ DỮ LIỆU NỀN HỌC THUẬT (DYNAMIC DML)
+            -----------------------------------------------------------------------
             BEGIN
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_offerings') THEN
                     EXECUTE 'INSERT INTO course_offerings (id, course_id, semester_id, is_enabled, created_at, updated_at)
@@ -1565,43 +1634,6 @@ DO $reconcile_pre$
                     WHERE cls.course_offering_id IS NULL
                       AND co.course_id = cls.course_id
                       AND co.semester_id = cls.semester_id';
-                END IF;
-            EXCEPTION WHEN OTHERS THEN NULL;
-            END;
-
-            BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
-                    -- Tự chữa lành: Gán must_change_password = FALSE cho 100% tài khoản seed mẫu (theo ID, username và email)
-                    EXECUTE 'UPDATE users
-                    SET must_change_password = FALSE
-                    WHERE id IN (
-                        ''00000000-0000-0000-0000-000000000001'',
-                        ''00000000-0000-0000-0000-000000000002'',
-                        ''00000000-0000-0000-0000-000000000003'',
-                        ''00000000-0000-0000-0000-000000000004'',
-                        ''00000000-0000-0000-0000-000000000005'',
-                        ''00000000-0000-0000-0000-000000000006'',
-                        ''00000000-0000-0000-0000-000000000021'',
-                        ''00000000-0000-0000-0000-000000000022'',
-                        ''00000000-0000-0000-0000-000000000023'',
-                        ''00000000-0000-0000-0000-000000000024'',
-                        ''00000000-0000-0000-0000-000000000025'',
-                        ''00000000-0000-0000-0000-00000000000b'',
-                        ''00000000-0000-0000-0000-00000000000c'',
-                        ''00000000-0000-0000-0000-00000000000d'',
-                        ''00000000-0000-0000-0000-00000000000e'',
-                        ''00000000-0000-0000-0000-00000000000f''
-                    )
-                    OR username IN (
-                        ''admin'', ''headse'', ''totnt'', ''lecturer2'', ''lecturer3'', ''lecturer4'',
-                        ''haind'', ''hoalvse170001'', ''maittse170002'', ''thanhnqse184236'', ''khaothi''
-                    )
-                    OR email IN (
-                        ''admin@fpt.edu.vn'', ''headse@fe.edu.vn'', ''totnt@fe.edu.vn'',
-                        ''lecturer2@fe.edu.vn'', ''lecturer3@fe.edu.vn'', ''lecturer4@fe.edu.vn'',
-                        ''haind@fe.edu.vn'', ''hoanglvse170001@fpt.edu.vn'', ''maittse170002@fpt.edu.vn'',
-                        ''thanhnqse184236@fpt.edu.vn'', ''khaothi@fe.edu.vn''
-                    )';
                 END IF;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
@@ -1644,6 +1676,9 @@ DO $reconcile_pre$
             return;
         }
 
+        // T8A-F008: Preflight kiểm tra dữ liệu trùng lặp trên practice_answers trước khi tạo unique index
+        await ValidatePracticeAnswersUniquePreflightAsync(context, cancellationToken);
+
         await context.Database.ExecuteSqlRawAsync(GetPreMigrationSql(), cancellationToken);
     }
 
@@ -1655,5 +1690,471 @@ DO $reconcile_pre$
         }
 
         await context.Database.ExecuteSqlRawAsync(GetPostMigrationSql(), cancellationToken);
+
+        // T8A-F008: Startup Verification Probe xác nhận sự hiện diện của unique indexes bắt buộc
+        await VerifyPracticeAnswersUniqueConstraintsAsync(context, cancellationToken);
+    }
+
+    public static async Task ValidatePracticeAnswersUniquePreflightAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    {
+        if (!context.Database.IsRelational())
+        {
+            return;
+        }
+
+        var conn = context.Database.GetDbConnection();
+        bool wasClosed = conn.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await conn.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT to_regclass('public.practice_answers') IS NOT NULL;";
+            var tableExists = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+            if (!tableExists)
+            {
+                return;
+            }
+
+            // 1. T8A-F013: Kiểm tra dữ liệu vi phạm check constraint (tổ hợp is_follow_up vs parent_answer_id không nhất quán)
+            cmd.CommandText = """
+                SELECT id, session_id, question_id, is_follow_up, parent_answer_id
+                FROM practice_answers
+                WHERE NOT ((is_follow_up = false AND parent_answer_id IS NULL)
+                        OR (is_follow_up = true AND parent_answer_id IS NOT NULL))
+                LIMIT 10;
+                """;
+            var invalidCheckList = new System.Collections.Generic.List<string>();
+            using (var reader0 = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader0.ReadAsync(cancellationToken))
+                {
+                    invalidCheckList.Add($"Id: {reader0[0]}, Session: {reader0[1]}, Question: {reader0[2]}, IsFollowUp: {reader0[3]}, ParentAnswerId: {reader0[4]}");
+                }
+            }
+
+            if (invalidCheckList.Count > 0)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Phát hiện {invalidCheckList.Count}+ bản ghi trong practice_answers vi phạm ck_practice_answers_follow_up_parent (is_follow_up vs parent_answer_id)! " +
+                    $"Chi tiết: {string.Join("; ", invalidCheckList.Take(5))}. Không tự ý sửa dữ liệu; yêu cầu can thiệp thủ công.");
+            }
+
+            // 2. Kiểm tra trùng lặp câu trả lời chính
+            cmd.CommandText = """
+                SELECT session_id, question_id, COUNT(*) AS dup_count
+                FROM practice_answers
+                WHERE (is_follow_up = false AND parent_answer_id IS NULL)
+                   OR (parent_answer_id IS NULL)
+                GROUP BY session_id, question_id
+                HAVING COUNT(*) > 1;
+                """;
+            var duplicateMainList = new System.Collections.Generic.List<string>();
+            using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    duplicateMainList.Add($"Session: {reader[0]}, Question: {reader[1]}, Count: {reader[2]}");
+                }
+            }
+
+            if (duplicateMainList.Count > 0)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Phát hiện {duplicateMainList.Count} nhóm câu trả lời chính bị trùng lặp trong practice_answers trước khi tạo unique index! " +
+                    $"Chi tiết: {string.Join("; ", duplicateMainList.Take(5))}. Không tự ý sửa dữ liệu; yêu cầu can thiệp thủ công.");
+            }
+
+            // 3. Kiểm tra trùng lặp câu trả lời phụ
+            cmd.CommandText = """
+                SELECT session_id, parent_answer_id, COUNT(*) AS dup_count
+                FROM practice_answers
+                WHERE (is_follow_up = true AND parent_answer_id IS NOT NULL)
+                   OR (parent_answer_id IS NOT NULL)
+                GROUP BY session_id, parent_answer_id
+                HAVING COUNT(*) > 1;
+                """;
+            var duplicateFollowUpList = new System.Collections.Generic.List<string>();
+            using (var reader2 = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader2.ReadAsync(cancellationToken))
+                {
+                    duplicateFollowUpList.Add($"Session: {reader2[0]}, ParentAnswer: {reader2[1]}, Count: {reader2[2]}");
+                }
+            }
+
+            if (duplicateFollowUpList.Count > 0)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Phát hiện {duplicateFollowUpList.Count} nhóm câu trả lời phụ bị trùng lặp trong practice_answers trước khi tạo unique index! " +
+                    $"Chi tiết: {string.Join("; ", duplicateFollowUpList.Take(5))}. Không tự ý sửa dữ liệu; yêu cầu can thiệp thủ công.");
+            }
+        }
+        finally
+        {
+            if (wasClosed && conn.State == System.Data.ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    public static async Task VerifyPracticeAnswersUniqueConstraintsAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    {
+        if (!context.Database.IsRelational())
+        {
+            return;
+        }
+
+        var conn = context.Database.GetDbConnection();
+        bool wasClosed = conn.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await conn.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+
+            // 1. T8A-F013: Bắt buộc bảng practice_answers phải tồn tại
+            cmd.CommandText = "SELECT to_regclass('public.practice_answers') IS NOT NULL;";
+            var tableExists = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+            if (!tableExists)
+            {
+                throw new System.InvalidOperationException("[FAIL CLOSED] Startup Verification Probe: Bảng practice_answers không tồn tại trong cơ sở dữ liệu!");
+            }
+
+            // 2. T8A-F013 / T8A-F015: Xác nhận check constraint ck_practice_answers_follow_up_parent tồn tại, validated và đúng semantic
+            cmd.CommandText = """
+                SELECT conname, convalidated, pg_get_constraintdef(oid) AS condef
+                FROM pg_constraint
+                WHERE conrelid = 'public.practice_answers'::regclass
+                  AND conname = 'ck_practice_answers_follow_up_parent';
+                """;
+            bool constraintFound = false;
+            using (var checkReader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                if (await checkReader.ReadAsync(cancellationToken))
+                {
+                    constraintFound = true;
+                    var isValidated = checkReader.GetBoolean(1);
+                    var conDef = checkReader.GetString(2);
+
+                    if (!isValidated)
+                    {
+                        throw new System.InvalidOperationException(
+                            "[FAIL CLOSED] Startup Verification Probe: Check constraint ck_practice_answers_follow_up_parent chưa được xác thực (convalidated = false)!");
+                    }
+
+                    // T8A-F015 / T8A-F018: Kiểm tra semantic chính xác qua structural whitelist, từ chối Contains lỏng lẻo & OR TRUE
+                    ValidatePracticeAnswersCheckConstraintDefinition(conDef);
+                }
+            }
+
+            if (!constraintFound)
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Thiếu check constraint ck_practice_answers_follow_up_parent trên bảng practice_answers!");
+            }
+
+            // 3. T8A-F013 / T8A-F015 / T8A-F018: Xác nhận 2 unique index qua catalog: indisunique=true, đúng số lượng & thứ tự cột, đúng predicate filter
+            cmd.CommandText = """
+                SELECT
+                    i.relname AS indexname,
+                    ix.indisunique AS is_unique,
+                    ix.indnatts AS key_count,
+                    COALESCE(pg_get_expr(ix.indpred, ix.indrelid), '') AS predicate_expr,
+                    COALESCE(pg_get_indexdef(ix.indexrelid, 1, false), '') AS col1,
+                    COALESCE(pg_get_indexdef(ix.indexrelid, 2, false), '') AS col2
+                FROM pg_class t
+                JOIN pg_index ix ON t.oid = ix.indrelid
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = 'public'
+                  AND t.relname = 'practice_answers'
+                  AND i.relname IN ('uq_practice_answers_session_question_main', 'uq_practice_answers_session_parent');
+                """;
+
+            var indexDict = new System.Collections.Generic.Dictionary<string, (bool isUnique, short keyCount, string predicateExpr, string col1, string col2)>(System.StringComparer.OrdinalIgnoreCase);
+            using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    var indexName = reader.GetString(0);
+                    var isUnique = reader.GetBoolean(1);
+                    var keyCount = reader.GetInt16(2);
+                    var predicateExpr = reader.GetString(3);
+                    var col1 = reader.GetString(4).Trim().Trim('"').ToLowerInvariant();
+                    var col2 = reader.GetString(5).Trim().Trim('"').ToLowerInvariant();
+                    indexDict[indexName] = (isUnique, keyCount, predicateExpr, col1, col2);
+                }
+            }
+
+            // Kiểm tra index main
+            if (!indexDict.TryGetValue("uq_practice_answers_session_question_main", out var mainIdx))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Thiếu unique index uq_practice_answers_session_question_main trên practice_answers!");
+            }
+            if (!mainIdx.isUnique)
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_question_main không phải unique (indisunique = false)!");
+            }
+            if (mainIdx.keyCount != 2)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_question_main phải có đúng 2 key columns! Hiện tại có {mainIdx.keyCount} columns.");
+            }
+            if (mainIdx.col1 != "session_id" || mainIdx.col2 != "question_id")
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_question_main sai thứ tự hoặc danh sách cột! Cần 'session_id, question_id', tìm thấy: '{mainIdx.col1}, {mainIdx.col2}'.");
+            }
+
+            // T8A-F015 / T8A-F018: Kiểm tra predicate filter main index chính xác, từ chối mọi mệnh đề dư (OR TRUE, AND TRUE, v.v.)
+            ValidatePracticeAnswersIndexPredicate("uq_practice_answers_session_question_main", mainIdx.predicateExpr, isMainAnswerIndex: true);
+
+            // Kiểm tra index follow-up
+            if (!indexDict.TryGetValue("uq_practice_answers_session_parent", out var fuIdx))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Thiếu unique index uq_practice_answers_session_parent trên practice_answers!");
+            }
+            if (!fuIdx.isUnique)
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_parent không phải unique (indisunique = false)!");
+            }
+            if (fuIdx.keyCount != 2)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_parent phải có đúng 2 key columns! Hiện tại có {fuIdx.keyCount} columns.");
+            }
+            if (fuIdx.col1 != "session_id" || fuIdx.col2 != "parent_answer_id")
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index uq_practice_answers_session_parent sai thứ tự hoặc danh sách cột! Cần 'session_id, parent_answer_id', tìm thấy: '{fuIdx.col1}, {fuIdx.col2}'.");
+            }
+
+            // T8A-F015 / T8A-F018: Kiểm tra predicate filter follow-up index chính xác, từ chối mọi mệnh đề dư (OR TRUE, AND TRUE, v.v.)
+            ValidatePracticeAnswersIndexPredicate("uq_practice_answers_session_parent", fuIdx.predicateExpr, isMainAnswerIndex: false);
+        }
+        finally
+        {
+            if (wasClosed && conn.State == System.Data.ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    private static void ValidatePracticeAnswersCheckConstraintDefinition(string conDef)
+    {
+        if (string.IsNullOrWhiteSpace(conDef))
+        {
+            throw new System.InvalidOperationException("[FAIL CLOSED] Startup Verification Probe: Định nghĩa check constraint rỗng!");
+        }
+
+        var norm = conDef.Trim().ToLowerInvariant();
+        if (norm.StartsWith("check"))
+        {
+            norm = norm.Substring(5).Trim();
+        }
+        norm = System.Text.RegularExpressions.Regex.Replace(norm, @"\s+", " ").Trim();
+
+        // Tách các nhánh cấp cao nhất theo toán tử ' or '
+        // Bắt buộc phải có đúng 2 nhánh: 1 nhánh cho Main Answer và 1 nhánh cho Follow-up Answer
+        var branches = SplitPracticeBooleanExpression(norm, "or");
+        if (branches.Length != 2)
+        {
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: Check constraint ck_practice_answers_follow_up_parent phải có đúng 2 nhánh nối bằng OR! " +
+                $"Hiện tại phát hiện {branches.Length} nhánh (từ chối mọi mệnh đề dư thừa như OR TRUE hoặc thiếu nhánh). Định nghĩa: '{conDef}'.");
+        }
+
+        bool hasValidMainBranch = false;
+        bool hasValidFollowUpBranch = false;
+
+        foreach (var branch in branches)
+        {
+            var terms = SplitPracticeBooleanExpression(branch, "and");
+            if (terms.Length != 2)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Mỗi nhánh trong ck_practice_answers_follow_up_parent phải có đúng 2 điều kiện nối bằng AND! " +
+                    $"Nhánh '{branch}' có {terms.Length} điều kiện (từ chối điều kiện dư thừa). Định nghĩa: '{conDef}'.");
+            }
+
+            var termSet = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var term in terms)
+            {
+                var atom = StripPracticeOuterParentheses(term);
+                if (atom.Contains('(') || atom.Contains(')') || atom.Contains(" and ") || atom.Contains(" or "))
+                {
+                    throw new System.InvalidOperationException($"[FAIL CLOSED] Startup Verification Probe: Nhóm điều kiện không hợp lệ trong ck_practice_answers_follow_up_parent: '{conDef}'.");
+                }
+                termSet.Add(atom);
+            }
+
+            // Kiểm tra nhánh Main: is_follow_up = false AND parent_answer_id IS NULL
+            bool isMainIsFollowUp = termSet.Contains("is_follow_up = false") || termSet.Contains("not is_follow_up");
+            bool isMainParentNull = termSet.Contains("parent_answer_id is null");
+            if (isMainIsFollowUp && isMainParentNull)
+            {
+                if (hasValidMainBranch)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: Check constraint ck_practice_answers_follow_up_parent có 2 nhánh Main trùng nhau! Định nghĩa: '{conDef}'.");
+                }
+                hasValidMainBranch = true;
+                continue;
+            }
+
+            // Kiểm tra nhánh Follow-up: is_follow_up = true AND parent_answer_id IS NOT NULL
+            bool isFollowUpIsFollowUp = termSet.Contains("is_follow_up = true") ||
+                                       (termSet.Contains("is_follow_up") && !termSet.Contains("not is_follow_up") && !termSet.Contains("is_follow_up = false"));
+            bool isFollowUpParentNotNull = termSet.Contains("parent_answer_id is not null");
+            if (isFollowUpIsFollowUp && isFollowUpParentNotNull)
+            {
+                if (hasValidFollowUpBranch)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: Check constraint ck_practice_answers_follow_up_parent có 2 nhánh Follow-up trùng nhau! Định nghĩa: '{conDef}'.");
+                }
+                hasValidFollowUpBranch = true;
+                continue;
+            }
+
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: Nhánh '{branch}' trong ck_practice_answers_follow_up_parent không hợp lệ! " +
+                $"Chỉ chấp nhận 'is_follow_up = false AND parent_answer_id IS NULL' hoặc 'is_follow_up = true AND parent_answer_id IS NOT NULL'. Định nghĩa: '{conDef}'.");
+        }
+
+        if (!hasValidMainBranch || !hasValidFollowUpBranch)
+        {
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: ck_practice_answers_follow_up_parent thiếu nhánh Main hoặc Follow-up hợp lệ! Định nghĩa: '{conDef}'.");
+        }
+    }
+
+    private static string[] SplitPracticeBooleanExpression(string expression, string logicalOperator)
+    {
+        expression = StripPracticeOuterParentheses(expression);
+        var parts = new System.Collections.Generic.List<string>();
+        var depth = 0;
+        var start = 0;
+        var marker = $" {logicalOperator} ";
+        for (var i = 0; i < expression.Length; i++)
+        {
+            if (expression[i] == '(') depth++;
+            else if (expression[i] == ')') depth--;
+            if (depth < 0)
+                throw new System.InvalidOperationException("[FAIL CLOSED] Startup Verification Probe: Biểu thức SQL sai cấu trúc ngoặc.");
+            if (depth == 0 && i + marker.Length <= expression.Length &&
+                string.Compare(expression, i, marker, 0, marker.Length, System.StringComparison.Ordinal) == 0)
+            {
+                parts.Add(StripPracticeOuterParentheses(expression.Substring(start, i - start).Trim()));
+                i += marker.Length - 1;
+                start = i + 1;
+            }
+        }
+        if (depth != 0)
+            throw new System.InvalidOperationException("[FAIL CLOSED] Startup Verification Probe: Biểu thức SQL sai cấu trúc ngoặc.");
+        parts.Add(StripPracticeOuterParentheses(expression.Substring(start).Trim()));
+        return parts.ToArray();
+    }
+
+    private static string StripPracticeOuterParentheses(string expression)
+    {
+        expression = expression.Trim();
+        while (expression.Length >= 2 && expression[0] == '(' && expression[^1] == ')')
+        {
+            var depth = 0;
+            var enclosesAll = true;
+            for (var i = 0; i < expression.Length; i++)
+            {
+                if (expression[i] == '(') depth++;
+                else if (expression[i] == ')') depth--;
+                if (depth < 0)
+                    throw new System.InvalidOperationException("[FAIL CLOSED] Startup Verification Probe: Biểu thức SQL sai cấu trúc ngoặc.");
+                if (depth == 0 && i < expression.Length - 1)
+                {
+                    enclosesAll = false;
+                    break;
+                }
+            }
+            if (!enclosesAll || depth != 0) break;
+            expression = expression.Substring(1, expression.Length - 2).Trim();
+        }
+        return expression;
+    }
+
+    private static void ValidatePracticeAnswersIndexPredicate(string indexName, string predicateExpr, bool isMainAnswerIndex)
+    {
+        if (string.IsNullOrWhiteSpace(predicateExpr))
+        {
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: Predicate filter của index {indexName} không được rỗng!");
+        }
+
+        var norm = predicateExpr.Trim().ToLowerInvariant();
+        if (norm.StartsWith("where"))
+        {
+            norm = norm.Substring(5).Trim();
+        }
+        norm = System.Text.RegularExpressions.Regex.Replace(norm, @"[()]+", " ");
+        norm = System.Text.RegularExpressions.Regex.Replace(norm, @"\s+", " ").Trim();
+
+        // 1. Tuyệt đối không được chứa toán tử ' or ' (từ chối OR TRUE, OR 1=1, v.v.)
+        if (norm.Contains(" or "))
+        {
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: Predicate filter của index {indexName} không được chứa toán tử OR! " +
+                $"Hiện tại phát hiện OR trong: '{predicateExpr}'.");
+        }
+
+        // 2. Phải là phép hội (AND) của đúng 2 điều kiện
+        var terms = norm.Split(new[] { " and " }, System.StringSplitOptions.TrimEntries | System.StringSplitOptions.RemoveEmptyEntries);
+        if (terms.Length != 2)
+        {
+            throw new System.InvalidOperationException(
+                $"[FAIL CLOSED] Startup Verification Probe: Predicate filter của index {indexName} phải có đúng 2 điều kiện nối bằng AND! " +
+                $"Hiện tại phát hiện {terms.Length} điều kiện (từ chối điều kiện dư thừa). Hiện tại: '{predicateExpr}'.");
+        }
+
+        var termSet = new System.Collections.Generic.HashSet<string>(terms, System.StringComparer.OrdinalIgnoreCase);
+
+        if (isMainAnswerIndex)
+        {
+            // Main index: WHERE is_follow_up = false AND parent_answer_id IS NULL
+            bool hasIsFollowUpFalse = termSet.Contains("is_follow_up = false") || termSet.Contains("not is_follow_up");
+            bool hasParentNull = termSet.Contains("parent_answer_id is null");
+
+            if (!hasIsFollowUpFalse || !hasParentNull)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index {indexName} sai predicate filter! " +
+                    $"Cần đúng 2 điều kiện 'is_follow_up = false' và 'parent_answer_id IS NULL'. Hiện tại: '{predicateExpr}'.");
+            }
+        }
+        else
+        {
+            // Follow-up index: WHERE is_follow_up = true AND parent_answer_id IS NOT NULL
+            bool hasIsFollowUpTrue = termSet.Contains("is_follow_up = true") ||
+                                    (termSet.Contains("is_follow_up") && !termSet.Contains("not is_follow_up") && !termSet.Contains("is_follow_up = false"));
+            bool hasParentNotNull = termSet.Contains("parent_answer_id is not null");
+
+            if (!hasIsFollowUpTrue || !hasParentNotNull)
+            {
+                throw new System.InvalidOperationException(
+                    $"[FAIL CLOSED] Startup Verification Probe: Index {indexName} sai predicate filter! " +
+                    $"Cần đúng 2 điều kiện 'is_follow_up = true' và 'parent_answer_id IS NOT NULL'. Hiện tại: '{predicateExpr}'.");
+            }
+        }
     }
 }

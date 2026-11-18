@@ -68,6 +68,8 @@ public interface IApplicationDbContext
     Task<T> ExecuteMockExamStartAsync<T>(Guid studentId, Guid courseId, DateOnly quotaDate, Func<CancellationToken, Task<T>> start, CancellationToken cancellationToken = default);
     /// <summary>Serialize question allocation and idempotent participation for one in-class shift.</summary>
     Task<T> ExecuteInClassJoinAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> join, CancellationToken cancellationToken = default);
+    /// <summary>Serialize capacity checks and enrollment writes for one class across API instances.</summary>
+    Task<T> ExecuteClassEnrollmentAsync<T>(Guid classId, Func<CancellationToken, Task<T>> enrollment, CancellationToken cancellationToken = default);
     /// <summary>Serialize answer persistence and participant-state calculation for one student in one in-class shift.</summary>
     Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId, Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default);
     /// <summary>Serialize one appeal transition so concurrent requests cannot skip or duplicate a workflow step.</summary>
@@ -78,4 +80,34 @@ public interface IApplicationDbContext
     Task<T> ExecuteAppealAssignmentAsync<T>(IReadOnlyCollection<Guid> appealIds, IReadOnlyCollection<Guid> lecturerIds, Func<CancellationToken, Task<T>> assignment, CancellationToken cancellationToken = default);
     /// <summary>Serialize an all-or-nothing roster import for one official-exam shift.</summary>
     Task<T> ExecuteBulkExamTicketImportAsync<T>(Guid shiftId, Func<CancellationToken, Task<T>> import, CancellationToken cancellationToken = default);
+    /// <summary>Serialize batch creation of official exam sessions within a semester.</summary>
+    Task<T> ExecuteOfficialSemesterBatchAsync<T>(Guid semesterId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
+    /// <summary>Serialize batch creation of official exam shifts to prevent room/proctor/examiner time-overlap races.</summary>
+    Task<T> ExecuteOfficialShiftScheduleBatchAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
+    /// <summary>Serialize student auto-allocation across all shifts of an official exam session.</summary>
+    Task<T> ExecuteOfficialSessionAllocationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> allocation, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bắt đầu phạm vi khóa refresh token bằng Advisory Lock trên PostgreSQL (hoặc In-Memory Lock) để chống race condition khi rotate token.
+    /// </summary>
+    Task<IRefreshTokenLockScope> BeginRefreshTokenLockScopeAsync(string tokenHash, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Phạm vi khóa refresh token để serialize/claim token và phát hiện xung đột đồng thời.
+/// </summary>
+public interface IRefreshTokenLockScope : IAsyncDisposable
+{
+    bool HasLock { get; }
+
+    /// <summary>
+    /// Commit giao dịch chứa advisory lock và các thay đổi rotation refresh token.
+    /// Bắt buộc gọi và chờ commit thành công trước khi phát hành access token mới ra ngoài.
+    /// </summary>
+    Task CommitAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Rollback giao dịch nếu có lỗi phát sinh hoặc huỷ bỏ rotation.
+    /// </summary>
+    Task RollbackAsync(CancellationToken cancellationToken = default);
 }

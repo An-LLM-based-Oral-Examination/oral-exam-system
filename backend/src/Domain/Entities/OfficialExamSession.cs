@@ -7,6 +7,7 @@ public partial class OfficialExamSession
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CourseId { get; set; }
+    public Guid? SemesterId { get; set; }
     public Guid? ExamStructureId { get; set; }
     public string Title { get; set; } = null!;
     public DateOnly ExamDate { get; set; }
@@ -19,6 +20,7 @@ public partial class OfficialExamSession
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual Course Course { get; set; } = null!;
+    public virtual Semester? Semester { get; set; }
     public virtual ExamStructure? ExamStructure { get; set; }
     public virtual User? CreatedByUser { get; set; }
     public virtual ICollection<RealExamSessionShift> Shifts { get; set; } = new List<RealExamSessionShift>();

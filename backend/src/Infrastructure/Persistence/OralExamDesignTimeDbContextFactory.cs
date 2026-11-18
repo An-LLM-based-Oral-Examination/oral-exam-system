@@ -5,8 +5,11 @@ using System.IO;
 
 namespace OralExamination.Infrastructure.Persistence;
 
-public class OralExamDbContextFactory : IDesignTimeDbContextFactory<OralExamDbContext>
+public sealed class OralExamDesignTimeDbContextFactory : IDesignTimeDbContextFactory<OralExamDbContext>
 {
+    private const string FallbackConnectionString =
+        "Host=localhost;Port=5432;Database=oralexam_offline_design;Username=oralexam;Password=oralexam_password";
+
     public OralExamDbContext CreateDbContext(string[] args)
     {
         var basePath = Directory.GetCurrentDirectory();
@@ -24,10 +27,13 @@ public class OralExamDbContextFactory : IDesignTimeDbContextFactory<OralExamDbCo
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=oralexam_db;Username=oralexam;Password=oralexam_password";
+            ?? configuration.GetConnectionString("OralExamDb")
+            ?? FallbackConnectionString;
 
         var builder = new DbContextOptionsBuilder<OralExamDbContext>();
-        builder.UseNpgsql(connectionString);
+        builder.UseNpgsql(
+            connectionString,
+            npgsql => npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
 
         return new OralExamDbContext(builder.Options);
     }

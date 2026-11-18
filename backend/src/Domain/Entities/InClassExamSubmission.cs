@@ -23,6 +23,7 @@ public partial class InClassExamSubmission
     public decimal? FinalScore { get; set; }
     public string? LecturerNotes { get; set; }
     public string Status { get; set; } = "SUBMITTED";
+    public DateTime? ProcessingStartedAt { get; set; }
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
     public DateTime? GradedAt { get; set; }
 

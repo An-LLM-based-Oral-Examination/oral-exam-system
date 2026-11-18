@@ -73,18 +73,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDatabaseName("ix_academic_programs_department_head");
 
                     b.ToTable("academic_programs", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000010"),
-                            Code = "SE",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DepartmentHeadUserId = new Guid("00000000-0000-0000-0000-000000000002"),
-                            IsActive = true,
-                            Name = "Software Engineering",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AiEvaluation", b =>
@@ -157,13 +145,19 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasFilter("exam_submission_id IS NOT NULL");
 
                     b.HasIndex("InClassSubmissionId")
-                        .HasDatabaseName("ix_ai_evaluations_in_class_submission");
+                        .IsUnique()
+                        .HasDatabaseName("uq_ai_evaluations_in_class_submission")
+                        .HasFilter("in_class_submission_id IS NOT NULL");
 
                     b.HasIndex("MockExamAnswerId")
-                        .HasDatabaseName("ix_ai_evaluations_mock_exam_answer");
+                        .IsUnique()
+                        .HasDatabaseName("uq_ai_evaluations_mock_exam_answer")
+                        .HasFilter("mock_exam_answer_id IS NOT NULL");
 
                     b.HasIndex("PracticeAnswerId")
-                        .HasDatabaseName("ix_ai_evaluations_practice_answer");
+                        .IsUnique()
+                        .HasDatabaseName("uq_ai_evaluations_practice_answer")
+                        .HasFilter("practice_answer_id IS NOT NULL");
 
                     b.HasIndex("StudentId")
                         .HasDatabaseName("ix_ai_evaluations_student");
@@ -324,21 +318,6 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_appeal_requests_status", "status IN ('SUBMITTED_TO_EXAM_OFFICE', 'ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER', 'APPROVED', 'REJECTED', 'CANCELLED')");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000026"),
-                            AssignedTo = new Guid("00000000-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            OriginalScore = 7.50m,
-                            Reason = "Em xin phúc khảo phần phát biểu về nguyên lý Dependency Inversion bị ồn mic",
-                            SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
-                            Status = "PENDING",
-                            StudentId = new Guid("00000000-0000-0000-0000-000000000005"),
-                            TicketId = new Guid("00000000-0000-0000-0000-000000000024"),
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.AuditLog", b =>
@@ -461,11 +440,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("join_password_hash");
 
-                    b.Property<string>("JoinPasswordPlain")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("join_password_plain");
-
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uuid")
                         .HasColumnName("lecturer_id");
@@ -516,24 +490,6 @@ namespace OralExamination.Infrastructure.Migrations
                     b.ToTable("classes", null, t =>
                         {
                             t.HasCheckConstraint("ck_classes_max_students", "max_students > 0");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000010"),
-                            AllowSelfEnrollment = true,
-                            Code = "SE1801-NET",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CourseOfferingId = new Guid("00000000-0000-0000-0000-000000000011"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsJoinEnabled = true,
-                            JoinCode = "SE1801NET",
-                            LecturerId = new Guid("00000000-0000-0000-0000-000000000003"),
-                            MaxStudents = 35,
-                            Name = "Lớp SE1801-NET",
-                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007")
                         });
                 });
 
@@ -593,28 +549,6 @@ namespace OralExamination.Infrastructure.Migrations
                     b.ToTable("class_enrollments", null, t =>
                         {
                             t.HasCheckConstraint("ck_class_enrollment_status", "status IN ('enrolled', 'dropped', 'completed')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000011"),
-                            ClassId = new Guid("00000000-0000-0000-0000-000000000010"),
-                            EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            JoinMethod = "assigned",
-                            JoinedViaCode = false,
-                            Status = "enrolled",
-                            StudentId = new Guid("00000000-0000-0000-0000-000000000005")
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000012"),
-                            ClassId = new Guid("00000000-0000-0000-0000-000000000010"),
-                            EnrolledAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            JoinMethod = "assigned",
-                            JoinedViaCode = false,
-                            Status = "enrolled",
-                            StudentId = new Guid("00000000-0000-0000-0000-000000000006")
                         });
                 });
 
@@ -739,7 +673,7 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("courses", null, t =>
                         {
-                            t.HasCheckConstraint("ck_courses_credits", "credits > 0");
+                            t.HasCheckConstraint("ck_courses_credits", "credits >= 1 AND credits <= 10");
 
                             t.HasCheckConstraint("ck_courses_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
 
@@ -752,48 +686,6 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_courses_mock_quota", "max_mock_exams_per_day >= 1");
 
                             t.HasCheckConstraint("ck_courses_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000008"),
-                            AcademicProgramId = new Guid("00000000-0000-0000-0000-000000000010"),
-                            Code = "PRN231",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Credits = 3,
-                            DepartmentHeadUserId = new Guid("00000000-0000-0000-0000-000000000002"),
-                            ExamInputMode = "VoiceWithTranscriptEdit",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            MaxFollowUpQuestions = 2,
-                            MaxMockExamsPerDay = 3,
-                            MockExamBloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}",
-                            MockExamDurationMinutes = 30,
-                            MockExamTotalQuestions = 5,
-                            Name = "Building Cross-Platform Back-End Applications with .NET",
-                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
-                            TranscriptBufferSeconds = 60
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000009"),
-                            AcademicProgramId = new Guid("00000000-0000-0000-0000-000000000010"),
-                            Code = "SWD392",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Credits = 3,
-                            DepartmentHeadUserId = new Guid("00000000-0000-0000-0000-000000000002"),
-                            ExamInputMode = "VoiceWithTranscriptEdit",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            MaxFollowUpQuestions = 2,
-                            MaxMockExamsPerDay = 3,
-                            MockExamBloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}",
-                            MockExamDurationMinutes = 30,
-                            MockExamTotalQuestions = 5,
-                            Name = "Software Architecture and Design",
-                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
-                            TranscriptBufferSeconds = 60
                         });
                 });
 
@@ -857,52 +749,6 @@ namespace OralExamination.Infrastructure.Migrations
                     b.ToTable("course_clos", null, t =>
                         {
                             t.HasCheckConstraint("ck_course_clos_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000061"),
-                            BloomLevel = "Understand",
-                            CloCode = "CLO1",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Hiểu và áp dụng kiến trúc ASP.NET Core Web API, Middleware, Dependency Injection",
-                            IsActive = true,
-                            OrderIndex = 1
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000062"),
-                            BloomLevel = "Apply",
-                            CloCode = "CLO2",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế và triển khai RESTful API, DTOs, Validation và xử lý lỗi chuẩn RFC 7807",
-                            IsActive = true,
-                            OrderIndex = 2
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000063"),
-                            BloomLevel = "Analyze",
-                            CloCode = "CLO3",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tích hợp Entity Framework Core, Migration, tối ưu hóa truy vấn và giao dịch cơ sở dữ liệu",
-                            IsActive = true,
-                            OrderIndex = 3
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000064"),
-                            BloomLevel = "Evaluate",
-                            CloCode = "CLO4",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Bảo mật hệ thống bằng JWT, OAuth 2.0, phân quyền RBAC và kiểm thử tự động",
-                            IsActive = true,
-                            OrderIndex = 4
                         });
                 });
 
@@ -1023,26 +869,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDatabaseName("uq_course_offerings_course_semester");
 
                     b.ToTable("course_offerings", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000011"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsEnabled = true,
-                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000012"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000009"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsEnabled = true,
-                            SemesterId = new Guid("00000000-0000-0000-0000-000000000007"),
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.DeadLetterQueue", b =>
@@ -1297,6 +1123,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
                     b.Property<string>("KeyPoints")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1371,25 +1202,6 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_exam_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
 
                             t.HasCheckConstraint("ck_exam_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000020"),
-                            ApprovalStatus = "APPROVED",
-                            ApprovedBy = new Guid("00000000-0000-0000-0000-000000000002"),
-                            BloomLevel = "Analyze",
-                            Content = "Phân biệt sự khác nhau giữa BackgroundService và IHostedService trong .NET 8 khi xây dựng hàng đợi xử lý chấm điểm ngầm?",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "hard",
-                            IsActive = true,
-                            KeyPoints = "[\"IHostedService là interface cốt lõi\",\"BackgroundService là abstract class kế thừa IHostedService\",\"ExecuteAsync chạy Task bất đồng bộ\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "IHostedService là interface nền tảng định nghĩa StartAsync và StopAsync. BackgroundService là một abstract class kế thừa IHostedService và triển khai sẵn ExecuteAsync chạy nền vòng lặp an toàn.",
-                            Source = "manual",
-                            Title = "Phân biệt BackgroundService và IHostedService trong .NET 8"
                         });
                 });
 
@@ -1590,30 +1402,6 @@ namespace OralExamination.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000019"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsSampleSet = false,
-                            SetCode = "PRN231-SET01",
-                            Status = "OFFICIAL",
-                            StructureId = new Guid("00000000-0000-0000-0000-000000000018")
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-00000000001a"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            GeneratedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            IsSampleSet = false,
-                            SetCode = "PRN231-SET02",
-                            Status = "OFFICIAL",
-                            StructureId = new Guid("00000000-0000-0000-0000-000000000018")
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetQuestion", b =>
@@ -1651,15 +1439,6 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDatabaseName("uq_exam_set_questions");
 
                     b.ToTable("exam_set_questions", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000021"),
-                            ExamQuestionId = new Guid("00000000-0000-0000-0000-000000000020"),
-                            ExamSetId = new Guid("00000000-0000-0000-0000-000000000019"),
-                            OrderIndex = 1
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
@@ -1742,22 +1521,6 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_exam_struct_questions", "total_questions > 0");
 
                             t.HasCheckConstraint("ck_exam_struct_required_sets", "required_set_count >= 1");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000018"),
-                            BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = new Guid("00000000-0000-0000-0000-000000000003"),
-                            DurationMinutes = 30,
-                            IsActive = true,
-                            Name = "Cấu trúc Đề thi Vấn đáp Cuối kỳ PRN231 (FA26)",
-                            RequiredSetCount = 1,
-                            SlotDefinitions = "[]",
-                            TotalQuestions = 5
                         });
                 });
 
@@ -1902,6 +1665,20 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue("ALL_COURSE_BANK")
                         .HasColumnName("question_pool_mode");
 
+                    b.Property<string>("SelectedCloIdsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("selected_clo_ids")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<string>("SelectedDifficultiesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("selected_difficulties")
+                        .HasDefaultValueSql("'[\"easy\",\"medium\",\"hard\"]'::jsonb");
+
                     b.Property<string>("SelectedQuestionIdsJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1957,7 +1734,7 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_in_class_exam_shifts_max_followup", "max_follow_up_questions >= 0 AND max_follow_up_questions <= 5");
 
-                            t.HasCheckConstraint("ck_in_class_exam_shifts_pool_mode", "question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_POOL')");
+                            t.HasCheckConstraint("ck_in_class_exam_shifts_pool_mode", "question_pool_mode IN ('ALL_COURSE_BANK', 'SELECTED_CLOS', 'SELECTED_POOL')");
 
                             t.HasCheckConstraint("ck_in_class_exam_shifts_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'FINALIZED', 'CLOSED')");
 
@@ -2025,6 +1802,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Property<Guid?>("ParentSubmissionId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_submission_id");
+
+                    b.Property<DateTime?>("ProcessingStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processing_started_at");
 
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid")
@@ -2639,6 +2420,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("max_follow_up_questions");
 
+                    b.Property<Guid?>("SemesterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("semester_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2670,6 +2455,12 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("ExamStructureId")
                         .HasDatabaseName("ix_official_exam_sessions_structure");
 
+                    b.HasIndex("SemesterId")
+                        .HasDatabaseName("ix_official_exam_sessions_semester");
+
+                    b.HasIndex("SemesterId", "CourseId")
+                        .HasDatabaseName("ix_official_exam_sessions_semester_course");
+
                     b.ToTable("official_exam_sessions", null, t =>
                         {
                             t.HasCheckConstraint("ck_official_sessions_input_mode", "exam_input_mode IN ('VoiceOnly', 'VoiceWithTranscriptEdit')");
@@ -2679,22 +2470,6 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_official_sessions_status", "status IN ('scheduled', 'in_progress', 'grading', 'auditing', 'concluded')");
 
                             t.HasCheckConstraint("ck_official_sessions_transcript_buffer", "transcript_buffer_seconds >= 10 AND transcript_buffer_seconds <= 300");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000022"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ExamDate = new DateOnly(2026, 10, 15),
-                            ExamInputMode = "VoiceWithTranscriptEdit",
-                            ExamStructureId = new Guid("00000000-0000-0000-0000-000000000018"),
-                            HasFollowUp = true,
-                            MaxFollowUpQuestions = 2,
-                            Status = "scheduled",
-                            Title = "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng",
-                            TranscriptBufferSeconds = 60
                         });
                 });
 
@@ -2726,6 +2501,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Property<Guid?>("ParentAnswerId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_answer_id");
+
+                    b.Property<DateTime?>("ProcessingStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processing_started_at");
 
                     b.Property<string>("PromptText")
                         .HasColumnType("text")
@@ -2771,6 +2550,16 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StudentId")
                         .HasDatabaseName("ix_practice_answers_student");
 
+                    b.HasIndex("SessionId", "ParentAnswerId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_practice_answers_session_parent")
+                        .HasFilter("is_follow_up = true AND parent_answer_id IS NOT NULL");
+
+                    b.HasIndex("SessionId", "QuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_practice_answers_session_question_main")
+                        .HasFilter("is_follow_up = false AND parent_answer_id IS NULL");
+
                     b.HasIndex("Status", "SubmittedAt")
                         .HasDatabaseName("ix_practice_answers_status_submitted");
 
@@ -2779,6 +2568,8 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("practice_answers", null, t =>
                         {
+                            t.HasCheckConstraint("ck_practice_answers_follow_up_parent", "(is_follow_up = false AND parent_answer_id IS NULL) OR (is_follow_up = true AND parent_answer_id IS NOT NULL)");
+
                             t.HasCheckConstraint("ck_practice_answers_status", "status IN ('pending', 'grading', 'graded', 'failed')");
                         });
                 });
@@ -2862,6 +2653,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
                     b.Property<string>("KeyPoints")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2929,116 +2725,6 @@ namespace OralExamination.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_practice_questions_bloom", "bloom_level IN ('Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create')");
 
                             t.HasCheckConstraint("ck_practice_questions_diff", "difficulty IN ('easy', 'medium', 'hard')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000017"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Apply",
-                            Content = "Hãy giải thích nguyên lý Dependency Inversion trong Clean Architecture .NET 8.",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "medium",
-                            FollowUpPrompt = "Nếu muốn thay đổi cơ sở dữ liệu từ PostgreSQL sang SQL Server, bạn cần thay đổi những tầng nào và tại sao?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"Module cấp cao không phụ thuộc module cấp thấp\",\"Phụ thuộc vào Abstraction/Interface\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "Module cấp cao phụ thuộc abstraction. Application khai báo interface, Infrastructure hiện thực.",
-                            Source = "manual",
-                            Title = "Nguyên lý Dependency Inversion"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000101"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Understand",
-                            Content = "Tầng Domain trong Clean Architecture chứa những thành phần nào và tại sao không được tham chiếu tới các tầng khác?",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "easy",
-                            FollowUpPrompt = "Làm thế nào để tầng Domain giao tiếp với các dịch vụ bên ngoài mà không phá vỡ tính độc lập?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"Chứa Entities và quy tắc cốt lõi\",\"Không phụ thuộc Infrastructure hay UI\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "Tầng Domain chứa Entities, Value Objects, Domain Events và Enums cốt lõi. Không phụ thuộc vào framework hay database để bảo toàn quy tắc nghiệp vụ.",
-                            Source = "manual",
-                            Title = "Vai trò tầng Domain trong Clean Architecture"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000102"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Understand",
-                            Content = "Hãy trình bày sự khác biệt giữa Command và Query khi triển khai mẫu CQRS với thư viện MediatR trong .NET 8.",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "easy",
-                            FollowUpPrompt = "Khi nào nên sử dụng AsNoTracking() trong các Query Handler?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"Command thay đổi trạng thái\",\"Query chỉ đọc dữ liệu\",\"Tách biệt mô hình đọc và ghi\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "Command dùng để thay đổi trạng thái dữ liệu (Create, Update, Delete), trong khi Query chỉ dùng để truy vấn đọc dữ liệu và không làm biến đổi trạng thái.",
-                            Source = "manual",
-                            Title = "Phân biệt Command và Query trong mẫu CQRS"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000103"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Apply",
-                            Content = "Cách thức hoạt động của IPipelineBehavior trong MediatR kết hợp với FluentValidation để kiểm tra dữ liệu đầu vào trước khi vào Handler?",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "medium",
-                            FollowUpPrompt = "Ưu điểm của việc đặt validation ở tầng Application thay vì chỉ đặt ở Controller là gì?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"Chặn trước khi vào Handler\",\"Chạy tất cả IValidator\",\"Trả lỗi chuẩn RFC 7807\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "ValidationBehavior chặn request trước khi tới Handler, chạy toàn bộ IValidator<TRequest> đã đăng ký và ném ValidationException nếu có lỗi.",
-                            Source = "manual",
-                            Title = "Cơ chế Pipeline Behavior với FluentValidation"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000104"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Analyze",
-                            Content = "Phân tích cách sử dụng BoundedChannel kết hợp BackgroundService và Polly Retry để xử lý chấm điểm bất đồng bộ chịu tải cao.",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "hard",
-                            FollowUpPrompt = "Tại sao phải tạo IServiceScope mới bên trong BackgroundService mỗi khi xử lý một item?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"BoundedChannel chống tràn RAM\",\"BackgroundService xử lý nền\",\"Polly Retry và DLQ bảo toàn dữ liệu\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "BoundedChannel giới hạn số lượng slot trong RAM để áp dụng backpressure (FullMode.Wait). BackgroundService đọc tuần tự và dùng Polly retry, nếu vẫn lỗi thì lưu vào bảng dead_letter_queues.",
-                            Source = "manual",
-                            Title = "Thiết kế hàng đợi BoundedChannel và xử lý Dead-Letter Queue"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000105"),
-                            ApprovalStatus = "APPROVED",
-                            BloomLevel = "Analyze",
-                            Content = "Phân tích nguyên nhân gây ra lỗi N+1 Query trong Entity Framework Core và các giải pháp khắc phục hiệu quả.",
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Difficulty = "hard",
-                            FollowUpPrompt = "Khi nào nên dùng AsSplitQuery() khi sử dụng nhiều lệnh Include?",
-                            HasFollowUp = true,
-                            IsActive = true,
-                            KeyPoints = "[\"Nguyên nhân do truy vấn trong vòng lặp\",\"Dùng Include/ThenInclude\",\"Dùng Select Projection và AsNoTracking\"]",
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            SampleAnswer = "Lỗi N+1 xảy ra khi truy vấn danh sách thực thể cha rồi lặp qua từng phần tử để truy vấn thực thể con. Khắc phục bằng Eager Loading (Include/ThenInclude) hoặc Projection (Select).",
-                            Source = "manual",
-                            Title = "Tối ưu hóa truy vấn EF Core 8 và phòng chống lỗi N+1 Query"
                         });
                 });
 
@@ -3222,22 +2908,6 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_shifts_time", "end_time > start_time");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000023"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            EndTime = new DateTime(2026, 10, 15, 2, 30, 0, 0, DateTimeKind.Utc),
-                            IsExamPublished = false,
-                            MaxSeats = 24,
-                            ProctorUserId = new Guid("00000000-0000-0000-0000-000000000004"),
-                            RoomLab = "Lab 301",
-                            SessionId = new Guid("00000000-0000-0000-0000-000000000022"),
-                            ShiftName = "Kíp 1 (08h00 - 09h30)",
-                            StartTime = new DateTime(2026, 10, 15, 1, 0, 0, 0, DateTimeKind.Utc),
-                            Status = "scheduled"
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RefreshToken", b =>
@@ -3338,18 +3008,6 @@ namespace OralExamination.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_rubrics_total_score", "total_max_score = 10.00");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000013"),
-                            CourseId = new Guid("00000000-0000-0000-0000-000000000008"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Đánh giá Clean Architecture",
-                            IsActive = true,
-                            Name = "Barem Đánh Giá Kiến Trúc .NET 8",
-                            TotalMaxScore = 10.00m
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.RubricCriterion", b =>
@@ -3412,44 +3070,6 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_rubric_criteria_weight", "weight > 0 AND weight <= 1.00");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000014"),
-                            BloomLevel = "Understand",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CriterionName = "Khái niệm & Ranh giới 4 tầng Clean Architecture",
-                            Description = "Hiểu rõ vai trò Domain, Application, Infrastructure, API. Domain không phụ thuộc tầng nào.",
-                            MaxScore = 3.00m,
-                            OrderIndex = 1,
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            Weight = 0.30m
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000015"),
-                            BloomLevel = "Apply",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CriterionName = "Nguyên lý Dependency Inversion & CQRS MediatR",
-                            Description = "Áp dụng tách biệt Command và Query, sử dụng Interface và Dependency Injection Container.",
-                            MaxScore = 4.00m,
-                            OrderIndex = 2,
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            Weight = 0.40m
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000016"),
-                            BloomLevel = "Analyze",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CriterionName = "Xử lý Ngoại lệ & Kiến trúc chịu lỗi (Resilience)",
-                            Description = "Trình bày cơ chế Global Exception RFC 7807, Bounded Channel và xử lý retry Polly.",
-                            MaxScore = 3.00m,
-                            OrderIndex = 3,
-                            RubricId = new Guid("00000000-0000-0000-0000-000000000013"),
-                            Weight = 0.30m
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.Semester", b =>
@@ -3499,19 +3119,7 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.ToTable("semesters", null, t =>
                         {
-                            t.HasCheckConstraint("ck_semesters_dates", "end_date >= start_date");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000007"),
-                            Code = "FA26",
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            EndDate = new DateOnly(2026, 12, 31),
-                            IsActive = true,
-                            Name = "Fall 2026",
-                            StartDate = new DateOnly(2026, 9, 1)
+                            t.HasCheckConstraint("ck_semesters_dates", "end_date > start_date");
                         });
                 });
 
@@ -3630,34 +3238,6 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_tickets_status", "status IN ('SCHEDULED', 'IN_PROGRESS', 'SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED')");
                         });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000024"),
-                            CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ExamSetId = new Guid("00000000-0000-0000-0000-000000000019"),
-                            IpAddress = "192.168.1.101",
-                            IsLocked = false,
-                            SeatNumber = 1,
-                            ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
-                            Status = "SCHEDULED",
-                            StudentAcknowledgementStatus = "PENDING",
-                            StudentId = new Guid("00000000-0000-0000-0000-000000000005")
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000025"),
-                            CheckedInAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ExamSetId = new Guid("00000000-0000-0000-0000-00000000001a"),
-                            IpAddress = "192.168.1.102",
-                            IsLocked = false,
-                            SeatNumber = 2,
-                            ShiftId = new Guid("00000000-0000-0000-0000-000000000023"),
-                            Status = "SCHEDULED",
-                            StudentAcknowledgementStatus = "PENDING",
-                            StudentId = new Guid("00000000-0000-0000-0000-000000000006")
-                        });
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.SystemConfig", b =>
@@ -3757,6 +3337,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("AuthVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("auth_version");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -3832,115 +3418,6 @@ namespace OralExamination.Infrastructure.Migrations
                     b.ToTable("users", null, t =>
                         {
                             t.HasCheckConstraint("ck_users_role", "role IN ('admin', 'department_head', 'examination_officer', 'lecturer', 'proctor', 'student')");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "admin@fpt.edu.vn",
-                            FullName = "Nguyen Quang Thanh",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000.5K2wrCgwPiV5n+ABUXfgiA==.008qe4tj/RRL8pPAl4EYA+A5+pfxVetYA6GDQh/R0mY=",
-                            Role = "admin",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "admin"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "headse@fe.edu.vn",
-                            FullName = "Tran Van Truong",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000.HpTuTN7YNAPOdlxcQWqpHA==.ZwGxFXu923/XOLQOpsxyOeQVE5WyKcnaoz26ljezdsM=",
-                            Role = "department_head",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "headse"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "totnt@fe.edu.vn",
-                            FullName = "Nguyen Trong Tot",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000.NAemlIZmGVkenMK0C4M/nA==.QMwd1s/sMi+q+NaEjyE4zZmnjyaaoiXq/fPgSa/Bxrk=",
-                            Role = "lecturer",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "totnt"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "haind@fe.edu.vn",
-                            FullName = "Nguyen Dang Hai",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000.XWSrNfAl9MJ4kGLb8pTU3Q==.3Qk6V00ldedgCY86HSofmJWukSF1OjCzPzAphfouT30=",
-                            Role = "proctor",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "haind"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000005"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "hoanglvse170001@fpt.edu.vn",
-                            FullName = "Le Vu Hoang",
-                            IsActive = true,
-                            MustChangePassword = true,
-                            PasswordHash = "pbkdf2-sha256.210000.0GiJlqUca2B7Yifgm2O6Fw==.IC/G1GWasnB5RNxlTCiIoHblv2PZ7+4UcrZCloAEpTQ=",
-                            Role = "student",
-                            StudentCode = "SE170001",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "hoalvse170001"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000006"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "maittse170002@fpt.edu.vn",
-                            FullName = "Tran Thi Mai",
-                            IsActive = true,
-                            MustChangePassword = true,
-                            PasswordHash = "pbkdf2-sha256.210000.vgos1dwrA89Q/KbEtKvbdQ==.CCAyM2KcWJkAXVkOAIiUHDJUl0wi5L8FZRhnQBXjbZQ=",
-                            Role = "student",
-                            StudentCode = "SE170002",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "maittse170002"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-00000000000b"),
-                            CreatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "thanhnqse184236@fpt.edu.vn",
-                            FullName = "Nguyen Quang Thanh",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000./uXLNIRG3H9UiZkYHTLHpg==.uKkapszbetceOex+l2duOGby+Qu8ubMrJ/eqHpM1MeQ=",
-                            Role = "student",
-                            StudentCode = "SE184236",
-                            UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "thanhnqse184236"
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-00000000000c"),
-                            CreatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Email = "khaothi@fe.edu.vn",
-                            FullName = "Phòng Khảo Thí FPTU",
-                            IsActive = true,
-                            MustChangePassword = false,
-                            PasswordHash = "pbkdf2-sha256.210000.gXk3elR90D2mDzQO6YESxg==.MFGqqSEgh1msSXnIZj554d/MyQvcksQQD0hIZNBiFNw=",
-                            Role = "examination_officer",
-                            UpdatedAt = new DateTime(2026, 10, 22, 12, 0, 0, 0, DateTimeKind.Utc),
-                            Username = "khaothi"
                         });
                 });
 
@@ -4649,11 +4126,18 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("ExamStructureId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("OralExamination.Domain.Entities.Semester", "Semester")
+                        .WithMany("OfficialExamSessions")
+                        .HasForeignKey("SemesterId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Course");
 
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("ExamStructure");
+
+                    b.Navigation("Semester");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.PracticeAnswer", b =>
@@ -5003,6 +4487,8 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("CourseOfferings");
 
                     b.Navigation("Courses");
+
+                    b.Navigation("OfficialExamSessions");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.StudentExamTicket", b =>

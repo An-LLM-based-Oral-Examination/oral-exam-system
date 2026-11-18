@@ -116,6 +116,8 @@ public static partial class DevelopmentDataSeeder
         await EnsureSemesterAndUsersAsync(context, cancellationToken);
         await EnsureSystemConfigsAsync(context, cancellationToken);
         await EnsureCoursesAsync(context, cancellationToken);
+        await EnsureAdditionalCoursesAsync(context, cancellationToken);
+        await EnsureCourseClosAsync(context, cancellationToken);
         await EnsureRubricsAndCriteriaAsync(context, cancellationToken);
         await EnsureExamStructuresAndSetsAsync(context, cancellationToken);
         await EnsurePracticeQuestionsAsync(context, cancellationToken);
@@ -1517,6 +1519,7 @@ public static partial class DevelopmentDataSeeder
                 StructureId = actualPrnStruct.Id,
                 CourseId = prnCourse.Id,
                 SetCode = "PRN231-SET01",
+                Status = ExamSetStatus.Official,
                 GeneratedAt = SeedTimestampUtc,
                 IsActive = true
             },
@@ -3422,6 +3425,88 @@ public static partial class DevelopmentDataSeeder
             }
         };
 
+        var courseCloPools = new Dictionary<Guid, Guid[]>
+        {
+            [prnCourse.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000000061"),
+                Guid.Parse("00000000-0000-0000-0000-000000000062"),
+                Guid.Parse("00000000-0000-0000-0000-000000000063"),
+                Guid.Parse("00000000-0000-0000-0000-000000000064")
+            ],
+            [swdCourse.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000000261"),
+                Guid.Parse("00000000-0000-0000-0000-000000000262"),
+                Guid.Parse("00000000-0000-0000-0000-000000000263"),
+                Guid.Parse("00000000-0000-0000-0000-000000000264")
+            ],
+            [swrCourse.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000000361"),
+                Guid.Parse("00000000-0000-0000-0000-000000000362"),
+                Guid.Parse("00000000-0000-0000-0000-000000000363"),
+                Guid.Parse("00000000-0000-0000-0000-000000000364")
+            ],
+            [ent001Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000001e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e64")
+            ],
+            [ent104Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000002e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e64")
+            ],
+            [ent203Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000003e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e64")
+            ],
+            [ent303Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000004e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e64")
+            ],
+            [ent403Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000005e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e64")
+            ],
+            [ent503Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000006e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e64")
+            ]
+        };
+
+        foreach (var group in allQuestions.GroupBy(q => (q.CourseId, q.Difficulty)))
+        {
+            if (!courseCloPools.TryGetValue(group.Key.CourseId, out var cloIds) || cloIds.Length == 0)
+            {
+                continue;
+            }
+
+            var idx = 0;
+            foreach (var item in group)
+            {
+                item.CloId ??= cloIds[idx % cloIds.Length];
+                idx++;
+            }
+        }
+
         var existingQuestionIds = (await context.PracticeQuestions
             .Select(q => q.Id)
             .ToListAsync(cancellationToken)).ToHashSet();
@@ -3439,6 +3524,10 @@ public static partial class DevelopmentDataSeeder
                 var existingQ = await context.PracticeQuestions.FindAsync(new object[] { q.Id }, cancellationToken);
                 if (existingQ != null)
                 {
+                    if (q.CloId.HasValue)
+                    {
+                        existingQ.CloId = q.CloId;
+                    }
                     existingQ.Title = q.Title;
                     existingQ.Content = q.Content;
                     existingQ.SampleAnswer = q.SampleAnswer;
@@ -4326,6 +4415,10 @@ public static partial class DevelopmentDataSeeder
             .OrderBy(c => c.OrderIndex)
             .ToListAsync(cancellationToken);
 
+        var semester = await context.Semesters
+            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
+        var semesterId = semester?.Id ?? SemesterFa26Id;
+
         // 1. Đảm bảo OfficialExamSession tồn tại
         var officialSession = await context.OfficialExamSessions
             .FirstOrDefaultAsync(s => s.Id == OfficialSessionPrn231Id, cancellationToken);
@@ -4336,6 +4429,7 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = OfficialSessionPrn231Id,
                 CourseId = prnCourse.Id,
+                SemesterId = semesterId,
                 ExamStructureId = prnStructure.Id,
                 Title = "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng",
                 ExamDate = new DateOnly(2026, 10, 15),

@@ -13,6 +13,8 @@ public partial class InClassExamShift : ILockableEntity
     public string? Description { get; set; }
     public string QuestionPoolMode { get; set; } = "ALL_COURSE_BANK";
     public string SelectedQuestionIdsJson { get; set; } = "[]";
+    public string SelectedDifficultiesJson { get; set; } = "[\"easy\",\"medium\",\"hard\"]";
+    public string SelectedCloIdsJson { get; set; } = "[]";
     public int TotalQuestionsPerStudent { get; set; } = 1;
     public bool HasFollowUp { get; set; } = false;
     public int MaxFollowUpQuestions { get; set; } = 2;
