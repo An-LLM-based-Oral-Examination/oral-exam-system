@@ -1,6 +1,6 @@
-# 🤖 AGENTS.md — CHỈ MỤC KHO MÃ NGUỒN (`oral-exam-system`)
+# 🤖 AGENTS.md — CHỈ MỤC KHO MÃ NGUỒN (`05_Source_Code`)
 
-> **SSOT:** Kế thừa toàn bộ quy chuẩn từ [`Project/AGENTS.md`](../AGENTS.md) và [`oral-exam-pipeline`](./.agents/skills/oral-exam-pipeline/SKILL.md).
-- **Backend (.NET 8):** `backend/src/{Domain,Application,Infrastructure,API}` & `backend/tests/`.
-- **Frontend (React 19 Vite SPA):** `frontend/src/{components,pages,services,stores,hooks}` (Hubs `/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`).
-- **Kiến trúc:** xác minh từ source hiện tại và tài liệu trong `../docs/`; đường dẫn cũ `docs/01_architecture/MASTER_ARCHITECTURE.md` hiện không tồn tại.
+> **SSOT & Phân tách Đặc tả / Hiện trạng:** Kế thừa toàn bộ quy chuẩn từ [`D:\Đồ Án\AGENTS.md`](../AGENTS.md) và [`oral-exam-pipeline`](../.agents/skills/oral-exam-pipeline/SKILL.md). Tuyệt đối không hiểu một tính năng được mô tả trong đặc tả là đã hoàn tất production; kiểm tra trạng thái thực tế tại [`docs/agent-coordination/CURRENT_TASK.md`](./docs/agent-coordination/CURRENT_TASK.md), [`FPT-PRODUCTION-FLOW.md`](./docs/agent-coordination/FPT-PRODUCTION-FLOW.md) và [`WAVE-01-DUAL-LANE-DELIVERY.md`](./docs/agent-coordination/WAVE-01-DUAL-LANE-DELIVERY.md).
+- **Backend (.NET 8 — Lane Codex trong WAVE-01):** `backend/src/{Domain,Application,Infrastructure,API}` (38 Entities nghiệp vụ 3NF + 3 Entities vật lý bổ trợ = 41 `DbSet`, 27 Controllers RFC 7807, 5 Background Workers) & `backend/tests/`.
+- **Client Tier (2 Phân hệ — Lane Antigravity cho Web FE trong WAVE-01):** `frontend/src/*` — Web SPA (`React 19 Vite`, UI *Calm Academic Depth*, đủ 7 trạng thái UI, 3 Hubs `/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`) & `OralExamination.DesktopKiosk` (`[Target Design / Proposed — Chưa code, nghiệm thu WAVE-02]` — Desktop App cài trên laptop cá nhân sinh viên (BYOD) mang vào phòng thi có Giám thị, vé khóa 1 thiết bị + 1 phiên, chống gian lận chỉ trong phạm vi app; trang Web `OfficialExamPage.tsx` là bản giả lập/dự phòng kiểm thử).
+- **Kiến trúc gốc:** [`docs/01_architecture/MASTER_ARCHITECTURE.md`](./docs/01_architecture/MASTER_ARCHITECTURE.md).

@@ -1,14 +1,15 @@
 # Oral Examination System
 
-Hệ thống luyện thi và đánh giá vấn đáp bằng LLM cho ngành Kỹ thuật phần mềm (Đồ án Capstone FA26SE166 — Đại học FPT TP.HCM). Hệ thống vận hành với **6 vai trò RBAC** (`admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`), **38 bảng CSDL chuẩn hóa 3NF** trên PostgreSQL 16, bao phủ 4 luồng nghiệp vụ chính (`MF-01..MF-04`) và luồng Ca thi trong lớp lấy điểm thành phần với mật khẩu tự động xoay vòng 5 phút (`MF-05`).
+Hệ thống luyện thi và đánh giá vấn đáp bằng LLM cho ngành Kỹ thuật phần mềm (Đồ án Capstone FA26SE166 — Đại học FPT TP.HCM). Hệ thống vận hành với **6 vai trò RBAC** (`admin`, `department_head`, `examination_officer`, `lecturer`, `proctor`, `student`), **38 bảng nghiệp vụ CSDL chuẩn hóa 3NF** (+ 3 bảng vật lý bổ trợ = 41 `DbSet` trong `OralExamDbContext`) trên PostgreSQL 16, bao phủ 4 luồng nghiệp vụ chính (`MF-01..MF-04`) và luồng Ca thi trong lớp theo CLO/Độ khó với mật khẩu tự động xoay vòng 5 phút (`MF-05`).
 
 ## Thành phần
 
 | Phần | Công nghệ | Hướng dẫn |
 | --- | --- | --- |
-| API | .NET 8, Clean Architecture 4 tầng, EF Core 8, PostgreSQL 16 (38 bảng 3NF) | [backend/README.md](backend/README.md) |
-| Giao diện | React 19, TypeScript, Vite, Tailwind CSS v4 (6 Roles RBAC) | [frontend/README.md](frontend/README.md) |
-| Cơ sở dữ liệu | PostgreSQL 16 trong Docker, schema từ EF Core migration | [backend/README.md](backend/README.md) |
+| API | .NET 8, Clean Architecture 4 tầng, EF Core 8, 27 Controllers RFC 7807, 3 SignalR Hubs, 5 Workers | [backend/README.md](backend/README.md) |
+| Giao diện Web SPA | React 19, TypeScript, Vite, Tailwind CSS v4 (*Calm Academic Depth*, 6 Roles RBAC — Đã hiện thực) | [frontend/README.md](frontend/README.md) |
+| Desktop Kiosk (MF-04) | `OralExamination.DesktopKiosk` (`[Target Design / Proposed — Chưa code]` cho máy phòng Lab; kiểm thử qua Web Kiosk Prototype `OfficialExamPage.tsx`) | [MASTER_ARCHITECTURE.md](docs/01_architecture/MASTER_ARCHITECTURE.md) |
+| Cơ sở dữ liệu | PostgreSQL 16 trong Docker, 38 bảng nghiệp vụ 3NF (+ 3 bảng bổ trợ), schema từ EF Core migration | [backend/README.md](backend/README.md) |
 
 Biến môi trường nằm ở một file `.env` trong thư mục này. Copy từ `.env.example` nếu chưa có. Không commit `.env`.
 

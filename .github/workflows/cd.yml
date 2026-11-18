@@ -1,16 +1,12 @@
 name: Enterprise CD Pipeline & Deployment
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+  actions: read
 
 jobs:
   # =========================================================================
@@ -20,6 +16,26 @@ jobs:
     name: Build and Push Images to GHCR
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful CI for the exact commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (!['refs/heads/develop', 'refs/heads/main'].includes(context.ref)) {
+              core.setFailed(`Production release requires develop or main, got ${context.ref}`);
+              return;
+            }
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              head_sha: context.sha,
+              status: 'success',
+              per_page: 100
+            });
+            if (runs.length === 0) {
+              core.setFailed(`No successful CI run for ${context.sha}`);
+            }
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -34,6 +50,12 @@ jobs:
             echo "BACKEND_CONTEXT=./05_Source_Code/backend" >> $GITHUB_ENV
             echo "FRONTEND_CONTEXT=./05_Source_Code/frontend" >> $GITHUB_ENV
           fi
+
+      - name: Require Google OAuth client ID for frontend build
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || secrets.VITE_GOOGLE_CLIENT_ID }}
+        run: |
+          test -n "$VITE_GOOGLE_CLIENT_ID" || { echo 'VITE_GOOGLE_CLIENT_ID is required for production Google Login' >&2; exit 1; }
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -51,7 +73,6 @@ jobs:
           context: ${{ env.BACKEND_CONTEXT }}
           push: true
           tags: |
-            ghcr.io/${{ env.REPO_LOWER }}/backend:latest
             ghcr.io/${{ env.REPO_LOWER }}/backend:${{ github.sha }}
 
       - name: Build and Push Frontend Docker Image
@@ -59,8 +80,9 @@ jobs:
         with:
           context: ${{ env.FRONTEND_CONTEXT }}
           push: true
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID || secrets.VITE_GOOGLE_CLIENT_ID }}
           tags: |
-            ghcr.io/${{ env.REPO_LOWER }}/frontend:latest
             ghcr.io/${{ env.REPO_LOWER }}/frontend:${{ github.sha }}
 
   # =========================================================================
@@ -72,19 +94,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check SSH Deployment Credentials
-        id: check_ssh
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
         run: |
-          if [ -n "$SSH_KEY" ]; then
-            echo "has_ssh_key=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_ssh_key=false" >> "$GITHUB_OUTPUT"
-            echo "Notice: SERVER_SSH_KEY secret is not configured in GitHub repository settings; images are built and pushed to GHCR."
-          fi
+          test -n "$SSH_KEY" || { echo 'SERVER_SSH_KEY is not configured; deployment stopped' >&2; exit 1; }
 
       - name: Deploy to Remote Server via SSH
-        if: steps.check_ssh.outputs.has_ssh_key == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST || '103.90.226.9' }}
@@ -92,59 +107,36 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
-            set -e
-            mkdir -p /opt/oralexam
+            set -Eeuo pipefail
             cd /opt/oralexam
-
-            echo "=== 0. Backing up .env and Synchronizing Repository on VPS (/opt/oralexam) ==="
-            if [ -f ".env" ]; then
-              cp .env /tmp/oralexam.env.bak
-            fi
-
-            if [ ! -d ".git" ]; then
-              git init
-              git remote add origin "https://github.com/${{ github.repository }}.git" || git remote set-url origin "https://github.com/${{ github.repository }}.git"
-            else
-              git remote set-url origin "https://github.com/${{ github.repository }}.git"
-            fi
-
+            test -d .git || {
+              echo "Existing Git checkout is required for release rollback" >&2
+              exit 1
+            }
+            test -z "$(git status --porcelain --untracked-files=no)" || {
+              echo "Tracked files on VPS are dirty; release stopped" >&2
+              exit 1
+            }
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
             git fetch origin "${{ github.ref_name }}"
-            git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
-            git reset --hard "origin/${{ github.ref_name }}"
-
-            if [ -f "/tmp/oralexam.env.bak" ]; then
-              cp /tmp/oralexam.env.bak .env
-              rm -f /tmp/oralexam.env.bak
-            fi
-
-            if [ -f "docker-compose.yml" ] && [ -f "docker-compose.prod.yml" ]; then
-              COMPOSE_ARGS="-f docker-compose.yml -f docker-compose.prod.yml"
-            elif [ -f "docker-compose.prod.yml" ]; then
-              COMPOSE_ARGS="-f docker-compose.prod.yml"
-            else
-              COMPOSE_ARGS="-f docker-compose.yml"
-            fi
-
-            echo "=== 1. Logging into GitHub Container Registry ==="
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
-
-            echo "=== 2. Pulling Pre-built Images or Building Production Containers ==="
-            if docker compose $COMPOSE_ARGS pull web-api frontend; then
-              docker compose $COMPOSE_ARGS up -d --no-build --remove-orphans
-            else
-              docker compose $COMPOSE_ARGS up -d --build --remove-orphans
-            fi
-
-            echo "=== 3. Waiting for API Healthcheck ==="
-            for i in $(seq 1 15); do
-              if wget -q -O - http://127.0.0.1:5000/health >/dev/null 2>&1; then
-                echo "Backend API is healthy!"
-                break
-              fi
-              sleep 2
-            done
-
-            echo "=== 4. Pruning Dangling Docker Images ==="
-            docker image prune -f
-
-            echo "=== Deployment Completed Successfully ==="
+            test "$(git rev-parse FETCH_HEAD)" = "${{ github.sha }}" || {
+              echo "Branch moved after workflow dispatch; release stopped" >&2
+              exit 1
+            }
+            previous_sha="$(git rev-parse HEAD)"
+            restore_checkout_on_error() {
+              local status=$?
+              trap - ERR
+              git checkout --detach "$previous_sha" || true
+              exit "$status"
+            }
+            trap restore_checkout_on_error ERR
+            git checkout --detach "${{ github.sha }}"
+            printf '%s' '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            repository_lower="$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+            bash scripts/deploy_cd_release.sh \
+              '${{ github.sha }}' \
+              "ghcr.io/${repository_lower}/backend:${{ github.sha }}" \
+              "ghcr.io/${repository_lower}/frontend:${{ github.sha }}" \
+              "$previous_sha"
+            trap - ERR

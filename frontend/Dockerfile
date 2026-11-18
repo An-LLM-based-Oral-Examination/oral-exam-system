@@ -29,19 +29,26 @@ RUN npm run build
 # ==============================================================================
 FROM nginx:1.27-alpine AS runner
 
-# Xóa cấu hình mặc định của Nginx
-RUN rm -rf /etc/nginx/conf.d/default.conf
+# Xóa cấu hình mặc định và chuẩn bị thư mục ghi cho non-root user nginx (UID 101)
+RUN rm -rf /etc/nginx/conf.d/default.conf && \
+    mkdir -p /var/cache/nginx /var/log/nginx /run/nginx /usr/share/nginx/html && \
+    sed -i -e '/^[[:space:]]*user[[:space:]]/d' \
+           -e 's|^[[:space:]]*pid[[:space:]][[:space:]]*/var/run/nginx\.pid;|pid /run/nginx/nginx.pid;|g' \
+           -e 's|^[[:space:]]*pid[[:space:]][[:space:]]*/run/nginx\.pid;|pid /run/nginx/nginx.pid;|g' \
+           /etc/nginx/nginx.conf && \
+    grep -Eq '^pid /run/nginx/nginx\.pid;$' /etc/nginx/nginx.conf && \
+    ! grep -Eq '^[[:space:]]*user[[:space:]]' /etc/nginx/nginx.conf && \
+    chown -R nginx:nginx /var/cache/nginx /var/log/nginx /run/nginx /etc/nginx/conf.d /usr/share/nginx/html
 
-# Sao chép build artifacts từ builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Sao chép build artifacts và cấu hình Nginx với quyền sở hữu nginx
+COPY --chown=nginx:nginx --from=builder /app/dist /usr/share/nginx/html
+COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
 
-# Sao chép tệp cấu hình Nginx tối ưu cho SPA React và SignalR WebSocket
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+USER nginx
+EXPOSE 8080 8443
 
-EXPOSE 80
-
-# Healthcheck xác thực Nginx qua endpoint nội bộ /healthz (không bị chặn bởi HTTPS 301 redirect)
+# Healthcheck xác thực Nginx qua endpoint nội bộ /healthz trên cổng non-root 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

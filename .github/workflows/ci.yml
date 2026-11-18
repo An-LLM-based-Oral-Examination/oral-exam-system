@@ -51,10 +51,15 @@ jobs:
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - name: Verify EF model matches migration snapshot
+        timeout-minutes: 3
         run: >
           dotnet ef migrations has-pending-model-changes
           --project backend/src/Infrastructure/Infrastructure.csproj
-          --startup-project backend/src/API/API.csproj
+          --startup-project backend/src/Infrastructure/Infrastructure.csproj
+          --no-build
+
+      - name: Run Expand-Contract Migration Linter
+        run: python scripts/lint_migrations_expand_contract.py
 
       - name: Run Unit Tests with Coverage
         shell: pwsh
@@ -83,10 +88,27 @@ jobs:
           cat nuget-vulnerabilities.json
           jq -e '[.projects[]?.frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' nuget-vulnerabilities.json
 
+  # =========================================================================
+  # Job 1b: Backend Integration Quality Gate (PostgreSQL 16 — Consolidated)
+  # =========================================================================
   backend-integration:
-    name: PostgreSQL 16 Integration Gate (3 consecutive runs)
+    name: Backend Integration Quality Gate (PostgreSQL 16)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: oralexam
+          POSTGRES_PASSWORD: oralexam_password
+          POSTGRES_DB: oralexam_integration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -104,13 +126,40 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
-      - name: Restore Integration Dependencies
-        run: dotnet restore backend/tests/OralExamination.IntegrationTests/OralExamination.IntegrationTests.csproj --locked-mode
+      - name: Restore NuGet Dependencies
+        run: dotnet restore backend/OralExamination.sln --locked-mode
 
-      - name: Build Integration Tests (Zero Warnings, Zero Errors)
-        run: dotnet build backend/tests/OralExamination.IntegrationTests/OralExamination.IntegrationTests.csproj --configuration Release --no-restore -warnaserror -nowarn:NU1900
+      - name: Build Backend Solution (Zero Warnings, Zero Errors)
+        run: dotnet build backend/OralExamination.sln --configuration Release --no-restore -warnaserror -nowarn:NU1900
 
-      - name: Run Isolated PostgreSQL Integration Tests Three Times
+      - name: Install EF Core CLI
+        run: |
+          dotnet tool install --global dotnet-ef --version 8.0.11
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Apply EF Migrations to Service PostgreSQL Database
+        env:
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=oralexam_integration_test;Username=oralexam;Password=oralexam_password;Include Error Detail=true;
+        run: >
+          dotnet ef database update
+          --project backend/src/Infrastructure/Infrastructure.csproj
+          --startup-project backend/src/API/API.csproj
+          --no-build
+
+      - name: Run Service-Backed PostgreSQL Integration Tests (Category=Integration)
+        shell: pwsh
+        env:
+          ORALEXAM_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Database=oralexam_integration_test;Username=oralexam;Password=oralexam_password;Include Error Detail=true;
+        run: |
+          dotnet test backend/tests/OralExamination.UnitTests/OralExamination.UnitTests.csproj --configuration Release --no-build --filter "Category=Integration" --logger "trx;LogFileName=unit-integration.trx" --results-directory ./TestResults/unit-integration --verbosity normal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml] $trx = Get-Content ./TestResults/unit-integration/unit-integration.trx -Raw
+          $counts = $trx.SelectSingleNode('/*[local-name()="TestRun"]/*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+          if ($null -eq $counts -or [int] $counts.total -le 0 -or [int] $counts.executed -ne [int] $counts.total -or [int] $counts.passed -ne [int] $counts.total -or [int] $counts.failed -ne 0 -or [int] $counts.notExecuted -ne 0) {
+            throw 'Service-backed integration tests must execute at least one test and pass all tests without skips.'
+          }
+
+      - name: Run Isolated PostgreSQL Integration Tests Three Times (Category=PostgresIntegration)
         shell: pwsh
         run: ./backend/scripts/Test-PostgresIntegration.ps1 -Iterations 3 -Configuration Release -NoBuild -NoRestore
 
@@ -119,7 +168,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-postgres-integration-evidence
-          path: TestResults/integration/
+          path: |
+            TestResults/unit-integration/
+            TestResults/integration/
           retention-days: 14
 
   # =========================================================================
@@ -148,7 +199,7 @@ jobs:
       - name: Audit High-Severity npm Vulnerabilities
         run: npm audit --audit-level=high
 
-      - name: Lint Source Code (oxlint)
+      - name: Lint Source Code (ESLint)
         run: npm run lint
 
       - name: Type Check (TypeScript strict composite)
