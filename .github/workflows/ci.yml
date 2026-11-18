@@ -57,10 +57,11 @@ jobs:
           dotnet ef migrations has-pending-model-changes
           --project backend/src/Infrastructure/Infrastructure.csproj
           --startup-project backend/src/Infrastructure/Infrastructure.csproj
+          --configuration Release
           --no-build
 
       - name: Run Expand-Contract Migration Linter
-        run: python scripts/lint_migrations_expand_contract.py
+        run: python3 scripts/lint_migrations_expand_contract.py
 
       - name: Run Unit Tests with Coverage
         shell: pwsh
@@ -144,7 +145,8 @@ jobs:
         run: >
           dotnet ef database update
           --project backend/src/Infrastructure/Infrastructure.csproj
-          --startup-project backend/src/API/API.csproj
+          --startup-project backend/src/Infrastructure/Infrastructure.csproj
+          --configuration Release
           --no-build
 
       - name: Run Service-Backed PostgreSQL Integration Tests (Category=Integration)
