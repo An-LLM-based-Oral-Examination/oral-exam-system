@@ -39,7 +39,7 @@ describe('DepartmentCourseClosPage', () => {
     fireEvent.change(screen.getByLabelText('Mã CLO'), { target: { value: 'clo1' } })
     fireEvent.change(screen.getByLabelText('Tên / mô tả chuẩn đầu ra'), { target: { value: 'Duplicate outcome' } })
     fireEvent.click(screen.getByRole('button', { name: 'Lưu CLO' }))
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Mã CLO đã tồn tại trong môn học này.')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Mã CLO đã tồn tại trong môn học.')
     expect(courseCloService.create).not.toHaveBeenCalled()
   })
 
@@ -48,7 +48,7 @@ describe('DepartmentCourseClosPage', () => {
     render(<DepartmentCourseClosPage />)
     await screen.findByText('Understand APIs')
     fireEvent.click(screen.getByRole('button', { name: 'Xóa CLO1' }))
-    const dialog = screen.getByRole('dialog', { name: 'Xác nhận xóa CLO1' })
+    const dialog = screen.getByRole('alertdialog', { name: 'Xác nhận xóa CLO1' })
     expect(courseCloService.remove).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Xác nhận xóa' }))
     expect((await screen.findByRole('alert')).textContent).toContain('CLO đang được câu hỏi sử dụng')

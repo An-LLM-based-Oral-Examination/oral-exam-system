@@ -329,7 +329,7 @@ public class AdversarialMilestone1ChallengerTests
             2,
             true,
             ExamInputMode.VoiceOnly
-        );
+        ) { ActorRole = "admin" };
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -388,7 +388,7 @@ public class AdversarialMilestone1ChallengerTests
             1,
             false,
             null // Không thay đổi chế độ thi
-        );
+        ) { ActorRole = "admin" };
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

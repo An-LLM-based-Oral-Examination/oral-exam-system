@@ -94,7 +94,8 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             question.CloId,
             question.Clo?.CloCode,
             question.StructureId,
-            usageScope
+            usageScope,
+            question.ApprovedAt
         );
     }
 
@@ -129,7 +130,8 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             question.CloId,
             question.Clo?.CloCode,
             null,
-            usageScope
+            usageScope,
+            question.ApprovedAt
         );
     }
 

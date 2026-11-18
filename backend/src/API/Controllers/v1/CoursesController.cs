@@ -199,6 +199,7 @@ public class CoursesController : ControllerBase
             MaxMockExamsPerDay = request.MaxMockExamsPerDay,
             MockExamDurationMinutes = request.MockExamDurationMinutes,
             MockExamTotalQuestions = request.MockExamTotalQuestions,
+            MockExamDifficultyDistribution = request.MockExamDifficultyDistribution,
             MockExamBloomDistribution = request.MockExamBloomDistribution,
             ActorRole = actorRole
         };
@@ -543,8 +544,9 @@ public class CoursesController : ControllerBase
     {
         var role = GetActorRole();
         var userId = GetCurrentUserId();
-        if ((string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase)
-             || string.Equals(role, "lecturer", StringComparison.OrdinalIgnoreCase)) && userId != Guid.Empty)
+        if (userId != Guid.Empty &&
+            (string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(role, "lecturer", StringComparison.OrdinalIgnoreCase)))
         {
             return $"{role}:{userId}";
         }

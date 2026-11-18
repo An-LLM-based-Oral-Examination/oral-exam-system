@@ -2,7 +2,8 @@ name: Enterprise CI Quality Gate
 
 on:
   push:
-    branches: [develop, main, "feature/**"]
+    branches: [develop, main, "feature/**", "feat/**", "refactor/**", "fix/**", "chore/**", "ci/**"]
+    tags: ["v*.*.*"]
   pull_request:
     branches: [develop, main]
 
@@ -48,7 +49,7 @@ jobs:
       - name: Install EF Core CLI
         run: |
           dotnet tool install --global dotnet-ef --version 8.0.11
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Verify EF model matches migration snapshot
         timeout-minutes: 3
@@ -197,7 +198,7 @@ jobs:
         run: npm ci
 
       - name: Audit High-Severity npm Vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm run audit:ci
 
       - name: Lint Source Code (ESLint)
         run: npm run lint
@@ -237,3 +238,14 @@ jobs:
         uses: wagoid/commitlint-github-action@v6
         with:
           configFile: commitlint.config.mjs
+
+  deploy:
+    name: Deploy verified revision
+    needs: [backend-ci, backend-integration, frontend-ci]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+    uses: ./.github/workflows/cd.yml
+    secrets: inherit

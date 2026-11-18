@@ -11,12 +11,7 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "max_seats",
-                table: "real_exam_session_shifts",
-                type: "integer",
-                nullable: false,
-                defaultValue: 24);
+            migrationBuilder.Sql("ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;");
 
             migrationBuilder.Sql(
                 """
@@ -30,12 +25,9 @@ namespace OralExamination.Infrastructure.Migrations
                     ), 0));
                 """);
 
-            migrationBuilder.UpdateData(
-                table: "real_exam_session_shifts",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000023"),
-                column: "max_seats",
-                value: 24);
+            migrationBuilder.Sql("UPDATE real_exam_session_shifts SET max_seats = 24 WHERE id = '00000000-0000-0000-0000-000000000023'::uuid;");
+
+            migrationBuilder.Sql("ALTER TABLE real_exam_session_shifts DROP CONSTRAINT IF EXISTS ck_shifts_max_seats;");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_shifts_max_seats",
@@ -46,13 +38,8 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_shifts_max_seats",
-                table: "real_exam_session_shifts");
-
-            migrationBuilder.DropColumn(
-                name: "max_seats",
-                table: "real_exam_session_shifts");
+            migrationBuilder.Sql("ALTER TABLE real_exam_session_shifts DROP CONSTRAINT IF EXISTS ck_shifts_max_seats;");
+            migrationBuilder.Sql("ALTER TABLE real_exam_session_shifts DROP COLUMN IF EXISTS max_seats;");
         }
     }
 }

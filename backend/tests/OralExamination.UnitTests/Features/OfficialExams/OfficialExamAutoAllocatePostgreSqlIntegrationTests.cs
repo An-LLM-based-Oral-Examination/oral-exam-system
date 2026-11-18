@@ -23,7 +23,7 @@ public sealed class OfficialExamAutoAllocatePostgreSqlIntegrationTests
     private static OralExamDbContext NewContext()
     {
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
-            .UseNpgsql(InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString())
+            .UseNpgsql(PostgresIntegrationTestDatabase.GetPostgresConnectionString())
             .Options;
         return new OralExamDbContext(options);
     }

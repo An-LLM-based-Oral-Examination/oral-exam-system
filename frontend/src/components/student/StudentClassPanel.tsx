@@ -1,3 +1,4 @@
+import { SearchField } from '@/components/common/SearchField'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { InClassShift } from '@/types/inClassShift.types'
@@ -110,13 +111,16 @@ function StudentClassCard({ item, onJoin, shifts }: {
             </span>
           </div>
         ) : enrolled ? (
-          <div className="mt-auto space-y-2 pt-3">
+          <div className="mt-auto space-y-0.5 pt-3">
             <p className={cn('text-sm font-semibold', activeShiftCount > 0 ? 'font-bold text-[#16836a]' : 'text-[#5b6b84]')}>{activeShiftCount > 0 ? `${activeShiftCount} ca đang diễn ra`
                 : shifts ? 'Chưa có ca đang diễn ra' : 'Chưa tải được lịch ca'}
             </p>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-[#5b6b84]">Mở lớp</span>
-              <Link to={`/classes/${encodeURIComponent(item.classId)}`} className={ds.outlineButton}>
+              <Link
+                to={`/classes/${encodeURIComponent(item.classId)}`}
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:border-[#1C4D8D] hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+              >
                 Chi tiết <ArrowRight className="size-3.5" aria-hidden="true" />
               </Link>
             </div>
@@ -333,8 +337,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
         >
           <div ref={searchRef} className="relative min-w-0 sm:w-72">
             <label className="relative block">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" />
-              <input
+              <SearchField
                 value={keyword}
                 onChange={(event) => {
                   setSubmittedKeyword('')
@@ -374,7 +377,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 ) : searchFailed ? (
                   <p className="px-2 py-3 text-sm text-[#5b6b84]">Không thể tải kết quả tìm kiếm. Vui lòng thử lại.</p>
                 ) : openClasses.length === 0 ? (
-                  <p className="px-2 py-3 text-sm text-[#5b6b84]">Không có lớp khớp. Thử tên lớp hoặc mã môn khác.</p>
+                  <EmptyState compact icon={Search} title="Không tìm thấy lớp phù hợp" description="Thử tên lớp hoặc mã môn khác." />
                 ) : (
                   <ul className="space-y-1">
                     {openClasses.map((item) => (
@@ -438,7 +441,9 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 onChange={setSemesterId}
                 options={semesterOptions}
                 emptyText="Chưa có học kỳ"
-                className="w-40"
+                className={ds.filterSemester}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
               />
             )}
 

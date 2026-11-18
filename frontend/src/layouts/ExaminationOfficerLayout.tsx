@@ -1,7 +1,11 @@
 import { PortalHeader, PortalSidebar, PortalSidebarBrand, PortalSidebarFooter } from '@/components/layout/PortalChrome'
+import { StudentNotificationDrawer } from '@/components/student/StudentNotificationDrawer'
+import { toast } from '@/components/common/toastStore'
+import { useStudentNotifications } from '@/hooks/useStudentNotifications'
 import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
+  Bell,
   CalendarDays,
   ChevronLeft,
   ClipboardCheck,
@@ -55,6 +59,9 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false)
+  const hasNotifications = Boolean(user)
+  const notifications = useStudentNotifications(hasNotifications && isNotificationOpen, hasNotifications)
   const page = pageLabels.find((item) => location.pathname.startsWith(item.prefix)) ?? pageLabels[0]
   const Icon = page.icon
   const initials = (user?.fullName ?? 'Khảo thí')
@@ -69,8 +76,44 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     void logout().finally(() => navigate('/login', { replace: true }))
   }
 
+  const handleNotificationSelect = async (notification: (typeof notifications.items)[number]) => {
+    try {
+      await notifications.markRead(notification)
+    } catch {
+      toast.error('Không thể cập nhật trạng thái thông báo.')
+      return
+    }
+    setIsNotificationOpen(false)
+  }
+
   return (
-    <PortalHeader>
+    <PortalHeader
+      overlays={
+        hasNotifications && (
+          <div id="officer-notification-drawer">
+            <StudentNotificationDrawer
+              open={isNotificationOpen}
+              onClose={() => setIsNotificationOpen(false)}
+              notifications={notifications.items}
+              unreadCount={notifications.unreadCount}
+              isLoading={notifications.isLoading}
+              isLoadingMore={notifications.isLoadingMore}
+              error={notifications.error}
+              hasMore={notifications.hasMore}
+              portalLabel="Cổng Khảo thí"
+              onRetry={() => void notifications.refresh()}
+              onLoadMore={() => void notifications.loadMore()}
+              onMarkAllRead={() => {
+                void notifications.markAllRead().catch(() => {
+                  toast.error('Không thể đánh dấu tất cả thông báo đã đọc.')
+                })
+              }}
+              onSelect={(notification) => void handleNotificationSelect(notification)}
+            />
+          </div>
+        )
+      }
+    >
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -93,6 +136,23 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {hasNotifications && (
+            <button
+              type="button"
+              onClick={() => setIsNotificationOpen(true)}
+              className="relative flex size-10 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+              aria-label="Thông báo"
+              aria-expanded={isNotificationOpen}
+              aria-controls="officer-notification-drawer"
+            >
+              <Bell className="size-[17px]" />
+              {notifications.unreadCount > 0 ? (
+                <span className="absolute -top-1 -right-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ef5c72] px-1 text-[9px] leading-none font-bold text-white ring-2 ring-white">
+                  {notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}
+                </span>
+              ) : null}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => navigate('/profile')}

@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "audit:ci": "node --test scripts/audit-policy.test.mjs && node scripts/audit-ci.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
@@ -15,6 +16,11 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "preview": "vite preview"
+  },
+  "overrides": {
+    "@ts-morph/common": {
+      "minimatch": "^11.0.9"
+    }
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

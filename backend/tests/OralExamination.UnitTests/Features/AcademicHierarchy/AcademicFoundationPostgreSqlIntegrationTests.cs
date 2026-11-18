@@ -45,7 +45,7 @@ public class AcademicFoundationPostgreSqlIntegrationTests : IAsyncLifetime
 
     private OralExamDbContext CreateNewContext()
     {
-        var connStr = InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString();
+        var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseNpgsql(connStr)
             .Options;

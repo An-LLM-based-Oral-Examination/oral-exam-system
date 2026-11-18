@@ -1,3 +1,5 @@
+import { SearchField } from '@/components/common/SearchField'
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -17,7 +19,7 @@ import {
   MessageSquareText,
   Mic2,
   RefreshCw,
-  Search,
+
   ShieldCheck,
   Trophy,
 } from 'lucide-react'
@@ -246,9 +248,7 @@ export function OfficialExamScorecardView({
 
       <div className="space-y-2">
         {grade.detailedScorecard.length === 0 ? (
-          <div className="rounded-2xl border border-[#82aedb]/55 bg-white p-6 text-center text-sm text-[#5b6b84]">
-            Chưa có chi tiết từng câu hỏi cho ca thi này.
-          </div>
+          <EmptyState compact icon={FileCheck2} title="Chưa có chi tiết từng câu hỏi cho ca thi này." />
         ) : (
           grade.detailedScorecard.map((question, idx) => {
             const isOpen = openQuestionId === question.questionId
@@ -442,7 +442,8 @@ function LiveExamHistoryPage() {
       : 'all'
   })
   const [courseFilter, setCourseFilter] = useState<string>('ALL')
-  const [searchQuery, setSearchQuery] = useState<string>('')
+  const searchQueryInput = useSearchInput()
+  const searchQuery = searchQueryInput.query
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -944,7 +945,7 @@ function LiveExamHistoryPage() {
                 value={courseFilter}
                 onChange={(event) => setCourseFilter(event.target.value)}
                 aria-label="Lọc theo môn học"
-                className="min-h-9 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-8 pl-8 text-xs font-bold text-[#0F2854] outline-none focus:border-[#1C4D8D]"
+                className={cn(ds.filterCourse, 'min-h-9 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-8 pl-8 text-xs font-bold text-[#0F2854] outline-none focus:border-[#1C4D8D]')}
               >
                 <option value="ALL">Tất cả học phần</option>
                 {courseOptions.map((c) => (
@@ -956,13 +957,13 @@ function LiveExamHistoryPage() {
             </div>
 
             <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-              <input
+              <SearchField
                 type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                value={searchQueryInput.draft}
+                onChange={(event) => searchQueryInput.change(event.target.value)}
+                onKeyDown={searchQueryInput.onKeyDown}
                 placeholder="Tìm môn học, ca thi..."
-                className="min-h-9 w-48 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-3 pl-8 text-xs font-medium text-[#0F2854] outline-none focus:border-[#1C4D8D] sm:w-56"
+                className={cn(ds.searchControl, 'min-h-9 rounded-xl border border-[#4988C4] bg-white py-1.5 pr-3 pl-8 text-xs font-medium text-[#0F2854] outline-none focus:border-[#1C4D8D]')}
               />
             </div>
 

@@ -127,7 +127,7 @@ public class QuestionsController : ControllerBase
             request.CourseId,
             requesterId,
             request.SelectedCloCodes,
-            request.Topics,
+            request.Topics ?? [],
             request.NumberOfQuestions,
             request.UsageScope,
             request.TargetBloomLevels,
@@ -388,11 +388,47 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> GetQuestions([FromQuery] GetQuestionsQuery query)
     {
         var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
-        var result = await _sender.Send(query with { ActorId = GetCurrentUserId(), ActorRole = role });
+        var result = await _sender.Send(query with { ActorId = GetCurrentUserId(), ActorRole = role, ApprovedBy = null });
         if (!result.IsSuccess)
         {
             if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
                 return QuestionProblem(403, result.Error);
+            return QuestionProblem(400, result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Xem các câu hỏi hiện đang được chính tài khoản đăng nhập phê duyệt, mới duyệt trước.
+    /// </summary>
+    [HttpGet("my-approved")]
+    [Authorize(Roles = "department_head,admin")]
+    public async Task<IActionResult> GetMyApprovedQuestions([FromQuery] GetQuestionsQuery filters)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var role = User.IsInRole("admin") ? "admin" : "department_head";
+
+        // Identity and status come from the server, never from query-string filters.
+        var query = filters with
+        {
+            ActorId = actorId,
+            ActorRole = role,
+            ApprovedBy = actorId,
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Approved
+        };
+        var result = await _sender.Send(query);
+        if (!result.IsSuccess)
+        {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+            {
+                return QuestionProblem(403, result.Error);
+            }
             return QuestionProblem(400, result.Error);
         }
 

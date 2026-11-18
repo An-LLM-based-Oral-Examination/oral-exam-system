@@ -8,6 +8,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Courses.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Courses.Queries.GetCourseClos;
 
@@ -20,16 +21,26 @@ public sealed class GetCourseClosQueryHandler(IApplicationDbContext context)
         var course = await context.Courses.AsNoTracking().Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course is null) return Result<List<CourseCloDto>>.Failure("NOT_FOUND: Môn học không tồn tại.");
-        var canReadAssignedClos = string.Equals(role, "lecturer", System.StringComparison.OrdinalIgnoreCase)
-            && actorId is { } lecturerId
-            && await context.CourseLecturers.AsNoTracking()
-                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturerId && cl.IsActive, cancellationToken);
-        if (!AcademicCourseOwnership.CanManage(course, role, actorId) && !canReadAssignedClos)
-            return Result<List<CourseCloDto>>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn, Admin hoặc Giảng viên được phân công môn học được xem CLO.");
+        if (!AcademicCourseOwnership.CanManage(course, role, actorId))
+        {
+            var canReadActiveClos = string.Equals(role, UserRole.Lecturer, System.StringComparison.OrdinalIgnoreCase) &&
+                actorId is { } lecturerId &&
+                course.IsActive &&
+                request.ActiveOnly != false &&
+                (await context.CourseLecturers.AsNoTracking().AnyAsync(
+                        assignment => assignment.CourseId == course.Id &&
+                            assignment.LecturerUserId == lecturerId &&
+                            assignment.IsActive &&
+                            (assignment.CourseOffering == null || assignment.CourseOffering.IsEnabled),
+                        cancellationToken) ||
+                    await context.Classes.AsNoTracking().AnyAsync(
+                        cls => cls.CourseId == course.Id && cls.LecturerId == lecturerId && cls.IsActive,
+                        cancellationToken));
+            if (!canReadActiveClos)
+                return Result<List<CourseCloDto>>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn, Admin hoặc Giảng viên được phân công môn học được xem CLO.");
 
-        // Giảng viên chỉ đọc CLO đang hoạt động; CLO ngừng dùng vẫn phục vụ màn quản trị của Trưởng bộ môn.
-        if (canReadAssignedClos)
             request = request with { ActiveOnly = true };
+        }
 
         var query = context.CourseClos
             .AsNoTracking()

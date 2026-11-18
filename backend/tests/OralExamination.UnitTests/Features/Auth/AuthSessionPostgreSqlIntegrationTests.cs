@@ -52,7 +52,7 @@ public class AuthSessionPostgreSqlIntegrationTests : IAsyncLifetime
 
     private OralExamDbContext CreateNewContext()
     {
-        var connStr = InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString();
+        var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseNpgsql(connStr)
             .Options;
@@ -487,7 +487,7 @@ public class AuthSessionPostgreSqlIntegrationTests : IAsyncLifetime
 
     private (TestServer server, IAccessTokenIssuer issuer, string signingKey) CreateTestHost()
     {
-        var connStr = InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString();
+        var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var signingKey = "SuperSecretKeyForIntegrationTestingMustBeAtLeast32BytesLong!";
 
         var configDict = new Dictionary<string, string?>

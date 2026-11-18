@@ -12,6 +12,9 @@ import {
   DepartmentHeadDashboardPage,
   DepartmentLecturerAssignmentPage,
   DepartmentCourseClosPage,
+  DepartmentCoursesPage,
+  DepartmentCourseDetailPage,
+  QuestionReviewRequestsPage,
   OfficialExamManagementPage,
   AppealManagementPage,
   AuditEvidencePage,
@@ -29,6 +32,7 @@ import {
   ExaminationOfficerExamListPage,
   ExaminationOfficerExamDetailPage,
   ExaminationOfficerTicketAssignmentPage,
+  ExaminationOfficerRosterImportPage,
   ExaminationOfficerMonitorSelectorPage,
   ExaminationOfficerShiftMonitorPage,
   ExaminationOfficerGradeSelectorPage,
@@ -99,6 +103,10 @@ export const appRoutes = createRoutesFromElements(
           <Route
             path="/examination-officer/tickets/assign"
             element={<ExaminationOfficerTicketAssignmentPage />}
+          />
+          <Route
+            path="/examination-officer/shifts/:shiftId/tickets/import"
+            element={<ExaminationOfficerRosterImportPage />}
           />
           <Route
             path="/examination-officer/monitor"
@@ -178,7 +186,7 @@ export const appRoutes = createRoutesFromElements(
           <LegacyRoleRouteLayout
             redirects={{
               Instructor: ROUTE_PATHS.lecturer.appeals,
-              DepartmentHead: ROUTE_PATHS.departmentHead.appeals,
+              DepartmentHead: '/unauthorized',
               ExaminationOfficer: ROUTE_PATHS.examinationOfficer.appeals,
               Admin: '/unauthorized',
             }}
@@ -192,7 +200,7 @@ export const appRoutes = createRoutesFromElements(
             redirects={{
               Admin: ROUTE_PATHS.admin.dlq,
               ExaminationOfficer: ROUTE_PATHS.examinationOfficer.dlq,
-              Instructor: '/lecturer/dlq',
+              Instructor: '/unauthorized',
               DepartmentHead: '/unauthorized',
             }}
           />
@@ -201,6 +209,7 @@ export const appRoutes = createRoutesFromElements(
 
       {/* Instructor portal: teaching, in-class shifts, question authoring and assigned review. */}
       <Route element={<ProtectedRoute allowedRoles={['Instructor']} />}>
+        <Route path="/lecturer/dlq" element={<Navigate to="/unauthorized" replace />} />
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -220,7 +229,6 @@ export const appRoutes = createRoutesFromElements(
             <Route path={ROUTE_PATHS.lecturer.createQuestion} element={<CreateQuestionPage />} />
             <Route path={ROUTE_PATHS.lecturer.audit} element={<AuditEvidencePage />} />
             <Route path={ROUTE_PATHS.lecturer.appeals} element={<AppealManagementPage />} />
-            <Route path="/lecturer/dlq" element={<DeadLetterQueuePage />} />
           </Route>
         </Route>
         <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
@@ -230,6 +238,7 @@ export const appRoutes = createRoutesFromElements(
 
       {/* Department Head portal: academic review and appeal governance. */}
       <Route element={<ProtectedRoute allowedRoles={['DepartmentHead']} />}>
+        <Route path={ROUTE_PATHS.departmentHead.appeals} element={<Navigate to="/unauthorized" replace />} />
         <Route element={<AppLayout />}>
           <Route
             element={
@@ -240,11 +249,15 @@ export const appRoutes = createRoutesFromElements(
           >
             <Route path="/department-head/lecturer-assignments" element={<DepartmentLecturerAssignmentPage />} />
             <Route path="/department-head/clos" element={<DepartmentCourseClosPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.courses} element={<DepartmentCoursesPage />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.courses}/:courseId`} element={<DepartmentCourseDetailPage />} />
             <Route path="/department-head/exam-structures" element={<OfficialExamManagementPage />} />
             <Route path="/department/clos" element={<Navigate to="/department-head/clos" replace />} />
             <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />
-            <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionStudioPage />} />
-            <Route path={ROUTE_PATHS.departmentHead.appeals} element={<AppealManagementPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionReviewRequestsPage />} />
+            <Route path={ROUTE_PATHS.departmentHead.questionBank} element={<QuestionStudioPage />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.questionReview}/bank`} element={<Navigate to={ROUTE_PATHS.departmentHead.questionBank} replace />} />
+            <Route path={`${ROUTE_PATHS.departmentHead.questionReview}/:requestId`} element={<QuestionReviewRequestsPage />} />
           </Route>
         </Route>
       </Route>

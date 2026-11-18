@@ -10,13 +10,8 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "uq_practice_answers_session_parent",
-                table: "practice_answers");
-
-            migrationBuilder.DropIndex(
-                name: "uq_practice_answers_session_question_main",
-                table: "practice_answers");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS uq_practice_answers_session_parent;");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS uq_practice_answers_session_question_main;");
 
             migrationBuilder.CreateIndex(
                 name: "uq_practice_answers_session_parent",

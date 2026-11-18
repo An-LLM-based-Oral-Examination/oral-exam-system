@@ -11,76 +11,27 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "auth_version",
-                table: "users",
-                type: "integer",
-                nullable: false,
-                defaultValue: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000001"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000002"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000003"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000004"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000005"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-000000000006"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-00000000000b"),
-                column: "auth_version",
-                value: 1);
-
-            migrationBuilder.UpdateData(
-                table: "users",
-                keyColumn: "id",
-                keyValue: new Guid("00000000-0000-0000-0000-00000000000c"),
-                column: "auth_version",
-                value: 1);
+            migrationBuilder.Sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;");
+            migrationBuilder.Sql("""
+                UPDATE users
+                SET auth_version = 1
+                WHERE id IN (
+                    '00000000-0000-0000-0000-000000000001'::uuid,
+                    '00000000-0000-0000-0000-000000000002'::uuid,
+                    '00000000-0000-0000-0000-000000000003'::uuid,
+                    '00000000-0000-0000-0000-000000000004'::uuid,
+                    '00000000-0000-0000-0000-000000000005'::uuid,
+                    '00000000-0000-0000-0000-000000000006'::uuid,
+                    '00000000-0000-0000-0000-00000000000b'::uuid,
+                    '00000000-0000-0000-0000-00000000000c'::uuid
+                );
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "auth_version",
-                table: "users");
+            migrationBuilder.Sql("ALTER TABLE users DROP COLUMN IF EXISTS auth_version;");
         }
     }
 }

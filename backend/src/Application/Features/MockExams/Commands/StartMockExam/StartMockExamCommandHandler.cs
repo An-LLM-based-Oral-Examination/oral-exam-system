@@ -90,13 +90,14 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             return Result<StartMockExamResponse>.Failure("CONFLICT:Chưa có cấu trúc đề thi thử đang hoạt động cho môn học. Vui lòng liên hệ Trưởng bộ môn.");
         }
 
-        var targetTotalQuestions = structure.TotalQuestions > 0 ? structure.TotalQuestions : defaultTotalQuestions;
+        var useDifficulty = !string.IsNullOrWhiteSpace(course.MockExamDifficultyDistribution);
+        var targetTotalQuestions = useDifficulty ? defaultTotalQuestions : structure.TotalQuestions > 0 ? structure.TotalQuestions : defaultTotalQuestions;
 
         // 4. Giải mã cấu trúc ma trận Bloom
         Dictionary<string, int>? bloomDict = null;
         try
         {
-            var bloomSource = !string.IsNullOrWhiteSpace(structure.BloomDistribution) && structure.BloomDistribution != "{}"
+            var bloomSource = useDifficulty ? course.MockExamDifficultyDistribution : !string.IsNullOrWhiteSpace(structure.BloomDistribution) && structure.BloomDistribution != "{}"
                 ? structure.BloomDistribution
                 : defaultBloomDistribution;
             if (!string.IsNullOrWhiteSpace(bloomSource))
@@ -137,7 +138,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         // 6. Thuật toán bốc đề theo Bloom Distribution kèm Fallback
         var questionsByBloom = allAvailableQuestions
-            .GroupBy(q => q.BloomLevel, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(q => useDifficulty ? q.Difficulty : q.BloomLevel, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.OrderBy(_ => Guid.NewGuid()).ToList(), StringComparer.OrdinalIgnoreCase);
 
         var selectedQuestions = new List<PracticeQuestion>();
@@ -163,6 +164,11 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // Fallback: Nếu thiếu câu theo mức Bloom, bù từ các câu còn lại trong kho practice_questions của môn học
         if (selectedQuestions.Count < targetTotalQuestions)
         {
+            if (useDifficulty)
+            {
+                return Result<StartMockExamResponse>.Failure(
+                    "Kho câu hỏi luyện tập chưa đủ câu theo phân bổ độ khó của môn học. Vui lòng liên hệ giảng viên.");
+            }
             var remainingQuestions = allAvailableQuestions
                 .Where(q => !usedIds.Contains(q.Id))
                 .OrderBy(_ => Guid.NewGuid())
@@ -219,7 +225,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // 8. Tính toán thời lượng làm bài
         // Không Follow-up: thời lượng từ structure / course (mặc định 30 phút).
         // Có Follow-up: cộng thêm 15 phút (tối thiểu 45 phút).
-        var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
+        var baseDuration = useDifficulty ? defaultDurationMinutes : structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
         var durationMinutes = request.HasFollowUp ? Math.Max(45, baseDuration + 15) : baseDuration;
         var startedAt = now;
         var expiresAt = startedAt.AddMinutes(durationMinutes);

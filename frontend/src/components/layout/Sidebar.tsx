@@ -1,11 +1,12 @@
 import { PortalSidebar, PortalSidebarBrand, PortalSidebarFooter } from '@/components/layout/PortalChrome'
 import { useEffect } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   BarChart3,
   Mic2,
   TimerReset,
   BookOpenCheck,
+  BookOpen,
   ChevronLeft,
   ClipboardCheck,
   FileCheck2,
@@ -74,11 +75,10 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
   ],
   DepartmentHead: [
-    { label: 'Phân công giảng viên', path: '/department-head/lecturer-assignments', icon: UsersRound },
-    { label: 'Chuẩn đầu ra (CLO)', path: '/department-head/clos', icon: BookOpenCheck },
-    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
+    { label: 'Quản lý môn học', path: ROUTE_PATHS.departmentHead.courses, icon: BookOpen },
     { label: 'Duyệt câu hỏi và đề', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
+    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
   ],
   ExaminationOfficer: [],
   Proctor: [
@@ -91,17 +91,20 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
 }
 
 export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: SidebarProps) {
+  const location = useLocation()
   const { user } = useAuth()
   const portalRole = user ? canonicalRole(user.role) : null
   const visibleNavigation = portalRole ? PORTAL_NAVIGATION[portalRole] : []
   const portalTitle =
     portalRole === 'Student' ? 'Cổng sinh viên' : portalRole === 'DepartmentHead'
-      ? 'Cổng Trưởng Bộ môn'
+      ? 'Cổng Trưởng BM'
       : portalRole === 'Admin'
         ? 'Cổng quản trị'
         : portalRole === 'Proctor'
           ? 'Cổng Giám thị'
-          : 'Cổng giảng viên'
+          : portalRole === 'ExaminationOfficer'
+            ? 'Cổng Khảo thí'
+            : 'Cổng giảng viên'
   useEffect(() => {
     if (!mobileOpen) return
 
@@ -151,7 +154,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
             <p className="text-xs font-bold tracking-[0.14em] text-[#1C4D8D] uppercase">
               {portalTitle}
             </p>
-            <p className="mt-0.5 truncate text-sm font-bold tracking-[-0.02em] text-[#0F2854]">
+            <p className="mt-0.5 truncate text-base font-bold tracking-[-0.02em] text-[#0F2854]">
               OralExam AI
             </p>
           </div>
@@ -179,7 +182,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
                 className={({ isActive }) =>
                   cn(
                     'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
-                    isActive
+                    (isActive || (path === ROUTE_PATHS.departmentHead.questionReview && location.pathname === ROUTE_PATHS.departmentHead.questionBank))
                       ? 'bg-[#1C4D8D] text-white'
                       : 'bg-[#D7F1F8] text-[#1C4D8D] hover:bg-[#c5e8f3] hover:text-[#0F2854]',
                     collapsed && 'md:justify-center md:px-0',

@@ -21,6 +21,10 @@ import {
 import type {
   AcknowledgeOfficialGradeResponse,
   AssignExamTicketRequest,
+  BulkExamTicketImportCommitResult,
+  BulkExamTicketImportIssue,
+  BulkExamTicketImportPreview,
+  BulkExamTicketImportPreviewRow,
   AudioSealResponse,
   AudioUploadAuthorization,
   AuditEvidenceItem,
@@ -55,6 +59,7 @@ import type {
   StudentWorkstationTicket,
   SubmitOfficialExamRequest,
   SubmitOfficialExamResponse,
+  UpdateExamShiftRequest,
   UpdateExamStructureRequest,
   WorkstationExamQuestion,
 } from '@/types/officialExam.types'
@@ -201,6 +206,10 @@ function normalizeSession(value: unknown): OfficialExamSession {
 
 function normalizeShift(value: unknown): ExamShift {
   const record = requireRecord(value, 'Ca thi thật không hợp lệ.')
+  const maxSeats = readNumber(record, 'maxSeats', 'totalSeats') ?? 24
+  const assignedTicketsCount = readNumber(record, 'assignedTicketsCount', 'ticketCount') ?? 0
+  const remainingSeats =
+    readNumber(record, 'remainingSeats') ?? Math.max(0, maxSeats - assignedTicketsCount)
   return {
     id: requiredString(record, 'id', 'Ca thi thật thiếu mã ca thi.'),
     sessionId: requiredString(record, 'sessionId', 'Ca thi thật thiếu mã kỳ thi.'),
@@ -213,6 +222,9 @@ function normalizeShift(value: unknown): ExamShift {
     examinerName: readNullableString(record, 'examinerName'),
     proctorName: readNullableString(record, 'proctorName'),
     status: requiredString(record, 'status', 'Ca thi thật thiếu trạng thái.'),
+    maxSeats,
+    assignedTicketsCount,
+    remainingSeats,
   }
 }
 
@@ -242,6 +254,8 @@ function normalizeTicket(value: unknown): ExamTicket {
     id: requiredString(record, 'id', 'Vé thi thật thiếu mã vé.'),
     shiftId: requiredString(record, 'shiftId', 'Vé thi thật thiếu mã ca thi.'),
     studentId: requiredString(record, 'studentId', 'Vé thi thật thiếu mã sinh viên.'),
+    studentCode: readNullableString(record, 'studentCode'),
+    fullName: readNullableString(record, 'fullName'),
     seatNumber: requiredNumber(record, 'seatNumber', 'Vé thi thật thiếu số ghế.'),
     ipAddress: readNullableString(record, 'ipAddress'),
     status: normalizeStatus(field(record, 'status')),
@@ -251,6 +265,96 @@ function normalizeTicket(value: unknown): ExamTicket {
       'Vé thi thật thiếu thời điểm điểm danh.',
     ),
     examSetId: readNullableString(record, 'examSetId'),
+    setCode: readNullableString(record, 'setCode', 'examSetCode'),
+  }
+}
+
+function normalizeBulkImportIssue(value: unknown): BulkExamTicketImportIssue {
+  const record = requireRecord(value, 'Lỗi import roster không hợp lệ.')
+  return {
+    sourceRow: readNullableNumber(record, 'sourceRow'),
+    code: readString(record, 'code') ?? 'IMPORT_ROW_INVALID',
+    field: readNullableString(record, 'field'),
+    message: requiredString(record, 'message', 'Lỗi import roster thiếu nội dung.'),
+  }
+}
+
+function normalizeBulkImportRow(value: unknown): BulkExamTicketImportPreviewRow {
+  const record = requireRecord(value, 'Dòng preview roster không hợp lệ.')
+  const errors = field(record, 'errors')
+  const rawIssues = field(record, 'issues')
+  const normalizedErrors = Array.isArray(errors) ? errors.map(normalizeBulkImportIssue) : []
+  const normalizedIssues = Array.isArray(rawIssues)
+    ? rawIssues.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : normalizedErrors.map((issue) => issue.message)
+  return {
+    sourceRow: requiredNumber(record, 'sourceRow', 'Dòng preview roster thiếu số dòng.'),
+    studentCode: readString(record, 'studentCode') ?? '',
+    fullName: readNullableString(record, 'fullName'),
+    seatNumber: readNullableNumber(record, 'seatNumber'),
+    ipAddress: readNullableString(record, 'ipAddress'),
+    setCode: readNullableString(record, 'setCode'),
+    isValid: readBoolean(record, 'isValid') ?? false,
+    errors: normalizedErrors,
+    issues: normalizedIssues,
+  }
+}
+
+function normalizeBulkImportPreview(payload: unknown): BulkExamTicketImportPreview {
+  const record = requireRecord(unwrapPayload(payload), 'Preview import roster không hợp lệ.')
+  const rows = field(record, 'rows')
+  const globalErrors = field(record, 'globalErrors', 'issues')
+  const reservedExamSetCodes = field(record, 'reservedExamSetCodes')
+  const normalizedRows = Array.isArray(rows) ? rows.map(normalizeBulkImportRow) : []
+  const rowErrorMessages = new Set(
+    normalizedRows.flatMap((row) =>
+      row.errors.map((issue) => `${issue.sourceRow ?? ''}:${issue.code}:${issue.message}`),
+    ),
+  )
+  const parsedGlobalErrors = Array.isArray(globalErrors)
+    ? globalErrors
+        .map(normalizeBulkImportIssue)
+        .filter(
+          (issue) =>
+            issue.sourceRow === null ||
+            !rowErrorMessages.has(`${issue.sourceRow ?? ''}:${issue.code}:${issue.message}`),
+        )
+    : []
+  const maxSeats = readNullableNumber(record, 'maxSeats') ?? undefined
+  const existingTicketCount = readNullableNumber(record, 'existingTicketCount') ?? undefined
+  const remainingSeats =
+    readNullableNumber(record, 'remainingSeats') ??
+    (maxSeats !== undefined && existingTicketCount !== undefined
+      ? Math.max(0, maxSeats - existingTicketCount)
+      : undefined)
+  return {
+    shiftId: requiredString(record, 'shiftId', 'Preview import roster thiếu mã ca thi.'),
+    totalRowCount: readNumber(record, 'totalRowCount', 'rowCount') ?? 0,
+    validRowCount: readNumber(record, 'validRowCount') ?? 0,
+    errorRowCount: readNumber(record, 'errorRowCount') ?? 0,
+    availableHandedOverSetCount:
+      readNumber(record, 'availableHandedOverSetCount', 'availableSetCount') ?? 0,
+    rows: normalizedRows,
+    globalErrors: parsedGlobalErrors,
+    reservedExamSetCodes: Array.isArray(reservedExamSetCodes)
+      ? reservedExamSetCodes.filter((code): code is string => typeof code === 'string')
+      : normalizedRows
+          .map((row) => row.setCode)
+          .filter((code): code is string => typeof code === 'string' && code.trim().length > 0),
+    maxSeats,
+    existingTicketCount,
+    remainingSeats,
+    canCommit: readBoolean(record, 'canCommit') ?? false,
+  }
+}
+
+function normalizeBulkImportCommit(payload: unknown): BulkExamTicketImportCommitResult {
+  const record = requireRecord(unwrapPayload(payload), 'Kết quả import roster không hợp lệ.')
+  const tickets = field(record, 'tickets')
+  return {
+    shiftId: requiredString(record, 'shiftId', 'Kết quả import roster thiếu mã ca thi.'),
+    createdTicketCount: readNumber(record, 'createdTicketCount') ?? 0,
+    tickets: Array.isArray(tickets) ? tickets.map(normalizeTicket) : [],
   }
 }
 
@@ -584,6 +688,14 @@ export const officialExamService = {
     return normalizeShift(unwrapPayload(response.data))
   },
 
+  async updateShift(shiftId: string, payload: UpdateExamShiftRequest): Promise<void> {
+    await apiClient.put<unknown>(`/official-exams/shifts/${shiftId}`, payload)
+  },
+
+  async deleteShift(shiftId: string): Promise<void> {
+    await apiClient.delete<unknown>(`/official-exams/shifts/${shiftId}`)
+  },
+
   async publishShift(shiftId: string): Promise<PublishExamShiftResponse> {
     const response = await apiClient.post<unknown>(`/official-exams/shifts/${shiftId}/publish`)
     return normalizePublishShiftResponse(response.data)
@@ -592,6 +704,40 @@ export const officialExamService = {
   async assignTicket(payload: AssignExamTicketRequest): Promise<ExamTicket> {
     const response = await apiClient.post<unknown>('/official-exams/tickets', payload)
     return normalizeTicket(unwrapPayload(response.data))
+  },
+
+  async previewTicketRosterImport(
+    shiftId: string,
+    file: File,
+  ): Promise<BulkExamTicketImportPreview> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiClient.post<unknown>(
+      `/official-exams/shifts/${shiftId}/tickets/import/preview`,
+      formData,
+    )
+    return normalizeBulkImportPreview(response.data)
+  },
+
+  async commitTicketRosterImport(
+    shiftId: string,
+    file: File,
+  ): Promise<BulkExamTicketImportCommitResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiClient.post<unknown>(
+      `/official-exams/shifts/${shiftId}/tickets/import/commit`,
+      formData,
+    )
+    return normalizeBulkImportCommit(response.data)
+  },
+
+  async downloadTicketRosterTemplate(format: 'csv' | 'xlsx'): Promise<OfficialExamExportFile> {
+    const response = await apiClient.get<Blob>('/official-exams/tickets/import/template', {
+      params: { format },
+      responseType: 'blob',
+    })
+    return exportFile(response, `exam-roster-template.${format}`)
   },
 
   async getCurrentTicket(): Promise<StudentWorkstationTicket> {

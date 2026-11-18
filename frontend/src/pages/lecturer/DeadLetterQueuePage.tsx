@@ -160,7 +160,7 @@ export function DeadLetterQueuePage() {
             <div className="flex flex-wrap items-center gap-2">
               <select
                 aria-label="Luồng nghiệp vụ"
-                className={ds.field}
+                className={cn(ds.field, ds.filterFlow)}
                 value={flowType}
                 onChange={(event) => setFlowType(event.target.value)}
               >
@@ -171,7 +171,7 @@ export function DeadLetterQueuePage() {
                 {allowedFlows.includes('OFFICIAL_EXAM') && <option value="OFFICIAL_EXAM">Thi thật Kiosk (MF-04)</option>}
               </select>
               <select
-                className={ds.field}
+                className={cn(ds.field, ds.filterStatus)}
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
               >

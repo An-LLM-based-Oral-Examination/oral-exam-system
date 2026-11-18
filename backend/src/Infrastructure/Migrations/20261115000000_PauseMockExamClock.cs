@@ -10,11 +10,11 @@ public sealed class PauseMockExamClock : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<System.DateTime>("paused_at", "mock_exam_sessions", "timestamp with time zone", nullable: true);
+        migrationBuilder.Sql("ALTER TABLE mock_exam_sessions ADD COLUMN IF NOT EXISTS paused_at timestamp with time zone NULL;");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropColumn("paused_at", "mock_exam_sessions");
+        migrationBuilder.Sql("ALTER TABLE mock_exam_sessions DROP COLUMN IF EXISTS paused_at;");
     }
 }

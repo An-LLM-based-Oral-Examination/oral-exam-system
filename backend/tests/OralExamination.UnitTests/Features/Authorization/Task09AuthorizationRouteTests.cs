@@ -203,6 +203,102 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
         return request;
     }
 
+    [Theory]
+    [InlineData("student", HttpStatusCode.Forbidden)]
+    [InlineData("lecturer", HttpStatusCode.Forbidden)]
+    [InlineData("department_head", HttpStatusCode.OK)]
+    [InlineData("examination_officer", HttpStatusCode.Forbidden)]
+    [InlineData("proctor", HttpStatusCode.Forbidden)]
+    [InlineData("admin", HttpStatusCode.OK)]
+    public async Task MyApprovedQuestions_EnforcesRoleMatrix(string role, HttpStatusCode expected)
+    {
+        Authenticate(_actors[role], role);
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task MyApprovedQuestions_RejectsAnonymousForgedInactiveAndUnknownActors()
+    {
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Dual-Auth OnTokenValidated rejects role-mismatched, unknown, and deactivated sessions at JWT gate (401)
+        Authenticate(_actors["lecturer"], "department_head");
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Authenticate(Guid.NewGuid(), "department_head");
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Authenticated non-approver role with valid DB-matching session receives 403 Forbidden
+        Authenticate(_actors["lecturer"], "lecturer");
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var unknownActorId = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            (await db.Users.FindAsync(_actors["department_head"]))!.IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        Authenticate(_actors["department_head"], "department_head");
+        (await _client.GetAsync("/api/v1/questions/my-approved")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Defense-in-depth: GetQuestionsQueryHandler also rejects non-head/admin, unknown, and inactive approvers directly
+        using (var verifyScope = _app.Services.CreateScope())
+        {
+            var sender = verifyScope.ServiceProvider.GetRequiredService<MediatR.ISender>();
+            var lecturerHandlerRes = await sender.Send(new OralExamination.Application.Features.QuestionBank.Queries.GetQuestions.GetQuestionsQuery(
+                ActorId: _actors["lecturer"],
+                ActorRole: "department_head",
+                ApprovedBy: _actors["lecturer"]));
+            lecturerHandlerRes.IsSuccess.Should().BeFalse();
+            lecturerHandlerRes.Error.Should().StartWith("FORBIDDEN:");
+
+            var unknownHandlerRes = await sender.Send(new OralExamination.Application.Features.QuestionBank.Queries.GetQuestions.GetQuestionsQuery(
+                ActorId: unknownActorId,
+                ActorRole: "department_head",
+                ApprovedBy: unknownActorId));
+            unknownHandlerRes.IsSuccess.Should().BeFalse();
+            unknownHandlerRes.Error.Should().StartWith("FORBIDDEN:");
+
+            var inactiveHandlerRes = await sender.Send(new OralExamination.Application.Features.QuestionBank.Queries.GetQuestions.GetQuestionsQuery(
+                ActorId: _actors["department_head"],
+                ActorRole: "department_head",
+                ApprovedBy: _actors["department_head"]));
+            inactiveHandlerRes.IsSuccess.Should().BeFalse();
+            inactiveHandlerRes.Error.Should().StartWith("FORBIDDEN:");
+        }
+    }
+
+    [Fact]
+    public async Task MyApprovedQuestions_IgnoresSpoofedApproverAndStatus_AndReturnsPersistedTime()
+    {
+        var time = DateTime.UtcNow.AddHours(-1);
+        var mine = Guid.NewGuid();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var semester = new Semester { Code = "FA26", Name = "Fall", StartDate = new(2026, 1, 1), EndDate = new(2026, 12, 31) };
+            var course = new Course { Code = "PRN", Name = "Course", Semester = semester };
+            var rubric = new Rubric { Course = course, Name = "Rubric" };
+            db.AddRange(
+                new ExamQuestion { Id = mine, Course = course, Rubric = rubric, Title = "Mine", Content = "Question",
+                    ApprovalStatus = "APPROVED", ApprovedBy = _actors["department_head"], ApprovedAt = time },
+                new ExamQuestion { Course = course, Rubric = rubric, Title = "Other", Content = "Question",
+                    ApprovalStatus = "APPROVED", ApprovedBy = _actors["admin"], ApprovedAt = time },
+                new PracticeQuestion { Course = course, Rubric = rubric, Title = "Rejected", Content = "Question",
+                    ApprovalStatus = "REJECTED", ApprovedBy = _actors["department_head"], ApprovedAt = time });
+            await db.SaveChangesAsync();
+        }
+        Authenticate(_actors["department_head"], "department_head");
+        var response = await _client.GetAsync($"/api/v1/questions/my-approved?approvedBy={_actors["admin"]}&approvalStatus=REJECTED");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("totalCount").GetInt32().Should().Be(1);
+        var item = body.GetProperty("items")[0];
+        item.GetProperty("id").GetGuid().Should().Be(mine);
+        item.GetProperty("approvedAt").GetDateTime().Should().Be(time);
+        item.GetProperty("usageScope").GetString().Should().Be("exam");
+    }
+
     private void Authenticate(Guid actorId, string role)
     {
         var token = new JwtAccessTokenIssuer(_app.Configuration)

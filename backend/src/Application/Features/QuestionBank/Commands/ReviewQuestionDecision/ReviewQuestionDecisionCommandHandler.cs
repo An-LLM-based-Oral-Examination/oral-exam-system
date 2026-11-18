@@ -10,6 +10,7 @@ using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Common.Authorization;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.ReviewQuestionDecision;
 
@@ -65,6 +66,24 @@ public sealed class ReviewQuestionDecisionCommandHandler
             return Result<QuestionReviewDecisionResponseDto>.Failure("CONFLICT: Chỉ câu hỏi đã gửi thẩm định mới được ra quyết định.");
 
         var now = DateTime.UtcNow;
+        var course = await _context.Courses.Include(c => c.AcademicProgram).FirstOrDefaultAsync(c => c.Id == courseId, cancellationToken);
+        if (course is null || !AcademicCourseOwnership.CanManage(course, reviewer.Role, reviewer.Id))
+            return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Câu hỏi không thuộc môn phụ trách.");
+        var pendingItems = await _context.QuestionReviewRequestItems.Include(i => i.Request)
+            .Where(i => i.QuestionId == request.QuestionId && i.Decision == "PENDING" &&
+                i.UsageScope == (question == null ? "practice" : "exam"))
+            .ToListAsync(cancellationToken);
+        void RecordRequestDecision()
+        {
+            foreach (var item in pendingItems)
+            {
+                item.Decision = request.Decision;
+                item.ReviewNotes = request.ReviewNotes;
+                item.ReviewedBy = request.ReviewerId;
+                item.ReviewedAt = now;
+                item.Request.Version++;
+            }
+        }
         string message;
 
         // Nhánh câu hỏi chỉ thuộc kho Luyện tập / Thi thử (PracticeQuestions)
@@ -95,6 +114,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     NormalizeRubricWeights(practiceOnlyQuestion.Rubric!);
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.Approved;
                     practiceOnlyQuestion.ApprovedBy = request.ReviewerId;
+                    practiceOnlyQuestion.ApprovedAt = now;
                     practiceOnlyQuestion.ReviewNotes = request.ReviewNotes;
                     practiceOnlyQuestion.IsActive = true;
                     message = "Câu hỏi luyện tập đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng câu hỏi luyện tập.";
@@ -118,7 +138,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     return Result<QuestionReviewDecisionResponseDto>.Failure("Quyết định thẩm định không hợp lệ.");
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            RecordRequestDecision();
+        await _context.SaveChangesAsync(cancellationToken);
 
             return Result<QuestionReviewDecisionResponseDto>.Success(new QuestionReviewDecisionResponseDto(
                 practiceOnlyQuestion.Id,
@@ -157,6 +178,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
 
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
+                question.ApprovedAt = now;
                 question.ReviewNotes = request.ReviewNotes;
                 question.IsActive = true;
 
@@ -180,6 +202,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 return Result<QuestionReviewDecisionResponseDto>.Failure("Quyết định thẩm định không hợp lệ.");
         }
 
+        RecordRequestDecision();
         await _context.SaveChangesAsync(cancellationToken);
 
         var response = new QuestionReviewDecisionResponseDto(
@@ -194,7 +217,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
         return Result<QuestionReviewDecisionResponseDto>.Success(response);
     }
 
-    private static string? ValidateQuestionBeforeApprove(string? sampleAnswer, Rubric? rubric, string? imageUrl, string? source)
+    internal static string? ValidateQuestionBeforeApprove(string? sampleAnswer, Rubric? rubric, string? imageUrl, string? source)
     {
         if (string.IsNullOrWhiteSpace(sampleAnswer) || sampleAnswer.Trim().Length < 50)
         {
@@ -221,7 +244,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
         return null;
     }
 
-    private static void NormalizeRubricWeights(Rubric rubric)
+    internal static void NormalizeRubricWeights(Rubric rubric)
     {
         foreach (var criterion in rubric.Criteria)
         {

@@ -274,11 +274,11 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
 
     private static string BuildPrompt(AiQuestionGenerationParams p)
     {
+        var topics = p.Topics.Count > 0 ? $"Các chủ đề: {string.Join(", ", p.Topics)}.\n" : "";
         return $@"Bạn là Giảng viên Đại học FPT chuyên ngành Kỹ thuật Phần mềm.
 Hãy tạo danh sách {p.NumberOfQuestions} câu hỏi vấn đáp cho môn học {p.CourseCode} - {p.CourseName}.
 Các chuẩn đầu ra (CLO): {string.Join(", ", p.SelectedCloCodes)}.
-Các chủ đề: {string.Join(", ", p.Topics)}.
-Phân bổ độ khó: {p.EasyCount} câu Dễ (easy), {p.MediumCount} câu Trung bình (medium), {p.HardCount} câu Khó (hard).
+{topics}Phân bổ độ khó: {p.EasyCount} câu Dễ (easy), {p.MediumCount} câu Trung bình (medium), {p.HardCount} câu Khó (hard).
 Bậc nhận thức Bloom mục tiêu: {string.Join(", ", p.TargetBloomLevels)}.
 Phạm vi sử dụng: {p.UsageScope}.
 

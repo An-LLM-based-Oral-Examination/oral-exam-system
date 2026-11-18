@@ -12,6 +12,8 @@ import {
   Mic2,
   TimerReset,
   BookOpenCheck,
+  BookOpen,
+  FileCheck2,
   ClipboardCheck,
   LayoutDashboard,
   LogOut,
@@ -50,8 +52,13 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/lecturer/audit': { label: 'Hậu kiểm điểm', icon: ClipboardCheck },
   [ROUTE_PATHS.lecturer.appeals]: { label: 'Phúc khảo được giao', icon: ClipboardCheck },
   [ROUTE_PATHS.departmentHead.dashboard]: { label: 'Tổng quan', icon: LayoutDashboard },
-  [ROUTE_PATHS.departmentHead.questionReview]: { label: 'Duyệt câu hỏi và đề', icon: BookOpenCheck },
+  [ROUTE_PATHS.departmentHead.questionReview]: { label: 'Quản lý câu hỏi', icon: BookOpenCheck },
+  [ROUTE_PATHS.departmentHead.questionBank]: { label: 'Quản lý câu hỏi', icon: BookOpenCheck },
   [ROUTE_PATHS.departmentHead.appeals]: { label: 'Quản lý phúc khảo', icon: ClipboardCheck },
+  [ROUTE_PATHS.departmentHead.courses]: { label: 'Quản lý môn học', icon: BookOpen },
+  '/department-head/lecturer-assignments': { label: 'Phân công giảng viên', icon: UsersRound },
+  '/department-head/clos': { label: 'Chuẩn đầu ra (CLO)', icon: BookOpenCheck },
+  '/department-head/exam-structures': { label: 'Cấu trúc đề thi', icon: FileCheck2 },
   '/official-exams/manage': { label: 'Kỳ thi chính thức', icon: TicketCheck },
   '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
   '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
@@ -81,12 +88,17 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const isInstructor = canonicalRole(user?.role) === 'Instructor'
   const isStudent = canonicalRole(user?.role) === 'Student'
+  const hasNotifications = Boolean(user)
   const [isNotificationOpen, setIsNotificationOpen] = useState(false)
-  const notifications = useStudentNotifications(isStudent && isNotificationOpen, isStudent)
+  const notifications = useStudentNotifications(hasNotifications && isNotificationOpen, hasNotifications)
   const page =
     PAGE_META[location.pathname] ??
+    (canonicalRole(user?.role) === 'DepartmentHead'
+      ? Object.entries(PAGE_META)
+        .filter(([path]) => path.startsWith('/department-head/') && location.pathname.startsWith(`${path}/`))
+        .sort(([left], [right]) => right.length - left.length)[0]?.[1]
+      : undefined) ??
     (isStudent ? { label: location.pathname.startsWith('/classes/') ? 'Chi tiết lớp học' : 'Cổng sinh viên', icon: isStudent && location.pathname.startsWith('/classes/') ? UsersRound : LayoutDashboard } : null) ??
     (location.pathname.startsWith('/lecturer/classes') || location.pathname.startsWith('/in-class-shifts')
       ? { label: 'Quản lý lớp học', icon: UsersRound }
@@ -117,12 +129,14 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
     }
 
     setIsNotificationOpen(false)
-    const route = resolveStudentNotificationRoute(notification)
-    if (route) navigate(route)
+    if (isStudent) {
+      const route = resolveStudentNotificationRoute(notification)
+      if (route) navigate(route)
+    }
   }
 
   return (
-    <PortalHeader overlays={isStudent && (
+    <PortalHeader overlays={hasNotifications && (
 
       <div id="student-notification-drawer">
         <StudentNotificationDrawer
@@ -134,6 +148,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           isLoadingMore={notifications.isLoadingMore}
           error={notifications.error}
           hasMore={notifications.hasMore}
+          portalLabel={`Cổng ${roleLabel}`}
           onRetry={() => void notifications.refresh()}
           onLoadMore={() => void notifications.loadMore()}
           onMarkAllRead={() => {
@@ -171,7 +186,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {isStudent && (
+          {hasNotifications && (
           <button
             type="button"
             onClick={() => setIsNotificationOpen(true)}
@@ -188,48 +203,25 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
             ) : null}
           </button>
           )}
-          {isInstructor ? (
-            <Link
-              to="/profile"
-              className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              aria-label="Mở hồ sơ cá nhân"
+          <Link
+            to="/profile"
+            className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+            aria-label="Mở hồ sơ cá nhân"
+          >
+            <div className="hidden text-right sm:block">
+              <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
+                {user?.fullName ?? roleLabel}
+              </p>
+              <p className="max-w-[180px] truncate text-xs font-medium text-[#1C4D8D]">
+                {isStudent ? user?.studentCode || 'Xem hồ sơ' : user?.email ?? roleLabel}
+              </p>
+            </div>
+            <div
+              className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
             >
-              <div className="hidden text-right sm:block">
-                <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
-                  {user?.fullName ?? roleLabel}
-                </p>
-                <p className="max-w-[180px] truncate text-xs font-medium text-[#1C4D8D]">
-                  {isStudent ? user?.studentCode || 'Xem hồ sơ' : user?.email ?? roleLabel}
-                </p>
-              </div>
-              <div
-                className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
-              >
-                {getInitials(user?.fullName ?? roleLabel) || 'GV'}
-              </div>
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              aria-label="Mở hồ sơ cá nhân"
-            >
-              <div className="hidden text-right sm:block">
-                <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
-                  {user?.fullName ?? roleLabel}
-                </p>
-                <p className="max-w-[180px] truncate text-xs font-medium text-[#1C4D8D]">
-                  {isStudent ? user?.studentCode || 'Xem hồ sơ' : user?.email ?? roleLabel}
-                </p>
-              </div>
-              <div
-                className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
-              >
-                {getInitials(user?.fullName ?? roleLabel) || 'GV'}
-              </div>
-            </button>
-          )}
+              {getInitials(user?.fullName ?? roleLabel) || 'GV'}
+            </div>
+          </Link>
 
 
           <button

@@ -16,8 +16,7 @@ export const UnauthorizedPage: React.FC = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Bạn không có quyền hạn cần thiết để truy cập phân hệ này (Yêu cầu vai trò Giảng viên
-            hoặc Quản trị viên).
+            Bạn không có quyền hạn cần thiết để truy cập phân hệ này.
           </p>
           <Link to="/">
             <Button variant="primary" size="md" className="w-full">

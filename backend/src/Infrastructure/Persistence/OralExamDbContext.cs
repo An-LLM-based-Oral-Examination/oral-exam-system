@@ -22,6 +22,8 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<Course> Courses { get; set; }
     public virtual DbSet<CourseOffering> CourseOfferings { get; set; }
     public virtual DbSet<CourseClo> CourseClos { get; set; }
+    public virtual DbSet<QuestionReviewRequest> QuestionReviewRequests { get; set; }
+    public virtual DbSet<QuestionReviewRequestItem> QuestionReviewRequestItems { get; set; }
     public virtual DbSet<CourseLecturer> CourseLecturers { get; set; } = null!;
     public virtual DbSet<Class> Classes { get; set; }
     public virtual DbSet<ClassEnrollment> ClassEnrollments { get; set; }
@@ -121,6 +123,27 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<QuestionReviewRequest>(entity =>
+        {
+            entity.ToTable("question_review_requests");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Version).IsConcurrencyToken();
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.HasOne(e => e.Course).WithMany().HasForeignKey(e => e.CourseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Lecturer).WithMany().HasForeignKey(e => e.SubmittedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.CourseId, e.SubmittedAt });
+        });
+        modelBuilder.Entity<QuestionReviewRequestItem>(entity =>
+        {
+            entity.ToTable("question_review_request_items");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UsageScope).HasMaxLength(20);
+            entity.Property(e => e.Decision).HasMaxLength(30).IsConcurrencyToken();
+            entity.Property(e => e.ReviewNotes).HasMaxLength(2000);
+            entity.HasOne(e => e.Request).WithMany(e => e.Items).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.UsageScope, e.QuestionId }).IsUnique().HasFilter("\"Decision\" = 'PENDING'");
+            entity.HasIndex(e => new { e.RequestId, e.QuestionId, e.UsageScope }).IsUnique();
+        });
 
         // 1. users
         modelBuilder.Entity<User>(entity =>
@@ -239,6 +262,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.MaxMockExamsPerDay).HasColumnName("max_mock_exams_per_day").HasDefaultValue(3);
             entity.Property(e => e.MockExamDurationMinutes).HasColumnName("mock_exam_duration_minutes").HasDefaultValue(30);
             entity.Property(e => e.MockExamTotalQuestions).HasColumnName("mock_exam_total_questions").HasDefaultValue(5);
+            entity.Property(e => e.MockExamDifficultyDistribution).HasColumnName("mock_exam_difficulty_distribution");
             entity.Property(e => e.MockExamBloomDistribution)
                 .HasColumnName("mock_exam_bloom_distribution")
                 .HasColumnType("jsonb")
@@ -535,6 +559,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("APPROVED").IsRequired();
             entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual").IsRequired();
             entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
+            entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
+            entity.HasIndex(e => new { e.ApprovedBy, e.ApprovalStatus, e.ApprovedAt })
+                .HasDatabaseName("ix_practice_questions_approver_status_time");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.HasIndex(e => e.CloId).HasDatabaseName("ix_practice_questions_clo");
@@ -591,6 +618,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Difficulty).HasColumnName("difficulty").HasMaxLength(20).HasDefaultValue("medium");
             entity.Property(e => e.BloomLevel).HasColumnName("bloom_level").HasMaxLength(20).HasDefaultValue("Understand");
             entity.Property(e => e.ApprovedBy).HasColumnName("approved_by");
+            entity.Property(e => e.ApprovedAt).HasColumnName("approved_at");
+            entity.HasIndex(e => new { e.ApprovedBy, e.ApprovalStatus, e.ApprovedAt })
+                .HasDatabaseName("ix_exam_questions_approver_status_time");
             entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(50).HasDefaultValue("manual");
             entity.Property(e => e.ApprovalStatus).HasColumnName("approval_status").HasMaxLength(30).HasDefaultValue("DRAFT");
             entity.Property(e => e.SubmittedBy).HasColumnName("submitted_by");

@@ -451,7 +451,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
     [Trait("Category", "Integration")]
     public async Task PostgreSql_ReconcilesRc3ColumnsAndAllocatesSelectedClosConcurrently()
     {
-        var connStr = InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString();
+        var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseNpgsql(connStr)
             .Options;

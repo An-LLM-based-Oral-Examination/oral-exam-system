@@ -16,6 +16,8 @@ public interface IApplicationDbContext
     DbSet<Course> Courses { get; }
     DbSet<CourseOffering> CourseOfferings { get; }
     DbSet<CourseClo> CourseClos { get; }
+    DbSet<QuestionReviewRequest> QuestionReviewRequests { get; }
+    DbSet<QuestionReviewRequestItem> QuestionReviewRequestItems { get; }
     DbSet<CourseLecturer> CourseLecturers { get; }
     DbSet<Class> Classes { get; }
     DbSet<ClassEnrollment> ClassEnrollments { get; }

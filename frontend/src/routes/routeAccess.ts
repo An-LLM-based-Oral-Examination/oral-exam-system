@@ -27,6 +27,8 @@ const PORTAL_PREFIXES: Record<string, UserRole[]> = {
   '/classes': ['Student'],
 }
 
+const DISABLED_ROLE_SUBROUTES = ['/lecturer/dlq', '/department-head/appeals'] as const
+
 const LEGACY_PREFIXES: Record<string, UserRole[]> = {
   '/question-bank/create': ['Instructor'],
   '/lecturer/classes': ['Instructor'],
@@ -34,8 +36,8 @@ const LEGACY_PREFIXES: Record<string, UserRole[]> = {
   '/question-bank': ['Instructor', 'DepartmentHead'],
   '/in-class-shifts': ['Instructor'],
   '/official-exams/manage': ['ExaminationOfficer'],
-  '/appeals': ['Instructor', 'DepartmentHead', 'ExaminationOfficer'],
-  '/dlq': ['ExaminationOfficer', 'Admin', 'Instructor'],
+  '/appeals': ['Instructor', 'ExaminationOfficer'],
+  '/dlq': ['ExaminationOfficer', 'Admin'],
   '/department/clos': ['DepartmentHead'],
 }
 
@@ -61,6 +63,7 @@ export function getRoleHomePath(role: UserRole): string {
 export function isRouteAllowedForRole(role: UserRole, pathname: string): boolean {
   const normalizedRole = canonicalRole(role)
   if (!normalizedRole) return false
+  if (DISABLED_ROLE_SUBROUTES.some((prefix) => matchesPrefix(pathname, prefix))) return false
   const portalRule = Object.entries(PORTAL_PREFIXES).find(([prefix]) =>
     matchesPrefix(pathname, prefix),
   )

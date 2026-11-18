@@ -338,26 +338,27 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     await expect(page.getByText('CLO1', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Thêm CLO' }).click()
-    const createDialog = page.getByRole('dialog', { name: 'Tạo CLO' })
+    const createDialog = page.getByRole('dialog', { name: 'Thêm chuẩn đầu ra' })
     await createDialog.getByLabel('Mã CLO').fill('CLO2')
     await createDialog
       .getByLabel('Tên / mô tả chuẩn đầu ra')
       .fill('Thiết kế API RESTful chuẩn RFC 7807.')
-    await createDialog.getByLabel('Cấp độ Bloom').selectOption('Apply')
+    await createDialog.getByRole('button', { name: 'Bloom mục tiêu' }).click()
+    await page.getByRole('option', { name: 'Apply' }).click()
     await createDialog.getByRole('button', { name: 'Lưu CLO' }).click()
 
     await expect(page.getByText('CLO2', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Sửa CLO2' }).click()
     const editDialog = page.getByRole('dialog', { name: 'Sửa CLO2' })
-    await editDialog.getByLabel('Hoạt động').uncheck()
+    await editDialog.getByRole('switch', { name: 'Hoạt động' }).click()
     await editDialog.getByRole('button', { name: 'Lưu CLO' }).click()
-    await expect(page.locator('tr').filter({ hasText: 'CLO2' }).getByText('Ngừng sử dụng')).toBeVisible()
+    await expect(page.getByRole('listitem').filter({ hasText: 'CLO2' }).getByText('Ngừng sử dụng')).toBeVisible()
 
     await page.getByRole('button', { name: 'Xóa CLO2' }).click()
-    const deleteDialog = page.getByRole('dialog', { name: 'Xác nhận xóa CLO2' })
+    const deleteDialog = page.getByRole('alertdialog', { name: 'Xác nhận xóa CLO2' })
     await deleteDialog.getByRole('button', { name: 'Xác nhận xóa' }).click()
-    await expect(page.locator('tr').filter({ hasText: 'CLO2' })).toHaveCount(0)
+    await expect(page.getByRole('listitem').filter({ hasText: 'CLO2' })).toHaveCount(0)
 
     if (!isLiveApiMode()) {
       expect(
@@ -394,12 +395,12 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     }
 
     await page.goto('/department-head/lecturer-assignments', { waitUntil: 'domcontentloaded' })
-    await page.getByLabel('Tìm giảng viên theo tên hoặc email').fill('Trần')
-    const select = page.getByLabel('Giảng viên đang hoạt động')
-    await expect(select.locator(`option[value="${lecturer.id}"]`)).toHaveCount(1)
-    await select.selectOption(lecturer.id)
-    await page.getByRole('button', { name: 'Thêm giảng viên' }).click()
-    await page.getByRole('button', { name: 'Xác nhận' }).click()
+    await page.getByRole('button', { name: 'Thêm phân công' }).first().click()
+    const assignDialog = page.getByRole('dialog', { name: 'Thêm phân công' })
+    await assignDialog.getByLabel('Tìm giảng viên').fill('Trần')
+    await assignDialog.getByRole('option', { name: `${lecturer.fullName} — ${lecturer.email}` }).click()
+    await assignDialog.getByRole('button', { name: 'Thêm giảng viên' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Xác nhận' }).click()
 
     await expect(page.getByText(`Đã phân công ${lecturer.fullName}.`)).toBeVisible()
     await expect(page.getByRole('button', { name: `Gỡ phân công ${lecturer.fullName}` })).toBeVisible()
@@ -539,7 +540,7 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     await page.getByRole('button', { name: 'Thêm sinh viên' }).click()
     const addDialog = page.getByRole('dialog')
     await addDialog.getByLabel('Mã hoặc email').fill('SE180002')
-    await addDialog.getByRole('button', { name: 'Tìm' }).click()
+    await addDialog.getByLabel('Mã hoặc email').press('Enter')
     await expect(addDialog.getByText(secondStudent.fullName)).toBeVisible()
     await addDialog.getByRole('button', { name: 'Thêm vào lớp' }).click()
 
@@ -708,7 +709,7 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
       }
 
       if (role === 'Instructor') {
-        await page.getByRole('button', { name: 'Mở hồ sơ cá nhân' }).click()
+        await page.getByRole('link', { name: 'Mở hồ sơ cá nhân' }).click()
         await expect(page).toHaveURL(/\/profile$/)
       }
     }
@@ -775,7 +776,7 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
 
     await page.goto('/department-head/clos', { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Xóa CLO1' }).click()
-    await page.getByRole('dialog', { name: 'Xác nhận xóa CLO1' }).getByRole('button', { name: 'Xác nhận xóa' }).click()
+    await page.getByRole('alertdialog', { name: 'Xác nhận xóa CLO1' }).getByRole('button', { name: 'Xác nhận xóa' }).click()
 
     const alert = page.getByRole('alert')
     await expect(alert).toBeVisible()

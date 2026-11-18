@@ -370,7 +370,6 @@ public sealed class QuestionImageAndMultimodalGradingTests
             new BatchSubmitQuestionsForReviewCommand(courseId, lecturerId,
                 new List<Guid> { savedPracticeQuestion.Id }, "Gửi thẩm định câu hỏi có hình ảnh"), CancellationToken.None);
         submitResult.IsSuccess.Should().BeTrue();
-
         var reviewHandler = new ReviewQuestionDecisionCommandHandler(context);
         var approveResult = await reviewHandler.Handle(new ReviewQuestionDecisionCommand(
             savedPracticeQuestion.Id,

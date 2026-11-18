@@ -18,13 +18,13 @@ describe('role route matrix', () => {
 
   const allowed: Array<[UserRole, string]> = [
     ['Instructor', '/lecturer/classes'],
-    ['DepartmentHead', '/department-head/appeals'],
+    ['DepartmentHead', '/department-head/question-review'],
     ['ExaminationOfficer', '/examination-officer/exams/123'],
     ['Admin', '/admin/dashboard'],
     ['ExaminationOfficer', '/official-exams/manage'],
     ['DepartmentHead', '/question-bank'],
     ['Student', '/practice/session'],
-    ['Instructor', '/dlq'],
+    ['Admin', '/dlq'],
   ]
 
   it.each(allowed)('allows %s to access %s', (role, pathname) => {
@@ -34,8 +34,12 @@ describe('role route matrix', () => {
   const forbidden: Array<[UserRole, string]> = [
     ['Instructor', '/admin/users'],
     ['Instructor', '/examination-officer/exams'],
+    ['Instructor', '/lecturer/dlq'],
+    ['Instructor', '/dlq'],
     ['DepartmentHead', '/lecturer/classes'],
     ['DepartmentHead', '/examination-officer/dlq'],
+    ['DepartmentHead', '/department-head/appeals'],
+    ['DepartmentHead', '/appeals'],
     ['ExaminationOfficer', '/lecturer/audit'],
     ['ExaminationOfficer', '/admin/dashboard'],
     ['Admin', '/lecturer/classes'],

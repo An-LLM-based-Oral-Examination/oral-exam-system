@@ -52,9 +52,8 @@ describe('portal navigation boundaries', () => {
       'DepartmentHead',
       [
         '/department-head/dashboard',
+        '/department-head/courses',
         '/department-head/question-review',
-        '/department-head/lecturer-assignments',
-        '/department-head/clos',
         '/department-head/exam-structures',
       ],
     ],

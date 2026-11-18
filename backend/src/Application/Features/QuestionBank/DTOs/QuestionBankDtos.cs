@@ -102,7 +102,9 @@ public sealed record QuestionSummaryDto(
     string? ImageUrl = null,
     string? ImageDescription = null,
     Guid? CloId = null,
-    Guid? StructureId = null
+    Guid? StructureId = null,
+    DateTime? ApprovedAt = null,
+    string? UsageScope = null
 );
 
 public sealed record QuestionDetailDto(
@@ -131,7 +133,8 @@ public sealed record QuestionDetailDto(
     Guid? CloId = null,
     string? CloCode = null,
     Guid? StructureId = null,
-    string? UsageScope = null
+    string? UsageScope = null,
+    DateTime? ApprovedAt = null
 );
 
 public sealed record RubricDetailDto(
@@ -163,7 +166,7 @@ public sealed record PagedResult<T>(
 public sealed record GenerateQuestionsFromCloRequestDto(
     Guid CourseId,
     List<string> SelectedCloCodes,
-    List<string> Topics,
+    List<string>? Topics,
     int NumberOfQuestions,
     string UsageScope,
     List<string> TargetBloomLevels,

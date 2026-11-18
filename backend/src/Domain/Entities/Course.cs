@@ -19,6 +19,7 @@ public partial class Course
     public int MaxMockExamsPerDay { get; set; } = 3;
     public int MockExamDurationMinutes { get; set; } = 30;
     public int MockExamTotalQuestions { get; set; } = 5;
+    public string? MockExamDifficultyDistribution { get; set; }
     public string MockExamBloomDistribution { get; set; } = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}";
     public string ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public Guid? DepartmentHeadUserId { get; set; }

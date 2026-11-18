@@ -10,13 +10,8 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_semesters_dates",
-                table: "semesters");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_courses_credits",
-                table: "courses");
+            migrationBuilder.Sql("ALTER TABLE semesters DROP CONSTRAINT IF EXISTS ck_semesters_dates;");
+            migrationBuilder.Sql("ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_credits;");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_semesters_dates",
@@ -32,13 +27,8 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_semesters_dates",
-                table: "semesters");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_courses_credits",
-                table: "courses");
+            migrationBuilder.Sql("ALTER TABLE semesters DROP CONSTRAINT IF EXISTS ck_semesters_dates;");
+            migrationBuilder.Sql("ALTER TABLE courses DROP CONSTRAINT IF EXISTS ck_courses_credits;");
 
             migrationBuilder.AddCheckConstraint(
                 name: "ck_semesters_dates",

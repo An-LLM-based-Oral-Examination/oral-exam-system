@@ -41,21 +41,10 @@ namespace OralExamination.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_official_exam_sessions_semesters_semester_id",
-                table: "official_exam_sessions");
-
-            migrationBuilder.DropIndex(
-                name: "ix_official_exam_sessions_semester",
-                table: "official_exam_sessions");
-
-            migrationBuilder.DropIndex(
-                name: "ix_official_exam_sessions_semester_course",
-                table: "official_exam_sessions");
-
-            migrationBuilder.DropColumn(
-                name: "semester_id",
-                table: "official_exam_sessions");
+            migrationBuilder.Sql("ALTER TABLE official_exam_sessions DROP CONSTRAINT IF EXISTS \"FK_official_exam_sessions_semesters_semester_id\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_official_exam_sessions_semester;");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_official_exam_sessions_semester_course;");
+            migrationBuilder.Sql("ALTER TABLE official_exam_sessions DROP COLUMN IF EXISTS semester_id;");
         }
     }
 }

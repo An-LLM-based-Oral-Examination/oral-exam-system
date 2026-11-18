@@ -25,7 +25,8 @@ export default {
         'build',    // Changes that affect the build system or external dependencies
         'ci',       // Changes to CI/CD configuration files and scripts
         'chore',    // Other changes that don't modify src or test files
-        'revert'    // Reverting previous commits
+        'revert',   // Reverting previous commits
+        'merge'     // Explicit merge commits used by this repository
       ]
     ],
     'type-empty': [2, 'never'],
@@ -45,6 +46,7 @@ export default {
         'kiosk',         // Lab Kiosk Lockdown & Hardware Security
         'db',            // Database Schema & EF Core Migrations (30 tables)
         'api',           // REST API Endpoints, Middleware, Swagger
+        'ui',           // Shared portal interface
         'storage'        // Cloudflare R2 Audio & Whisper STT
       ]
     ],

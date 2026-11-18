@@ -154,6 +154,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         // A draft is always reviewed in a separate action; request.ApprovedBy is untrusted input.
         var approvalStatus = ApprovalStatus.Draft;
         Guid? approvedBy = null;
+        DateTime? approvedAt = null;
 
         bool createPractice = normalizedScope == "practice";
         bool createExam = !createPractice;
@@ -179,6 +180,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 Source = request.Source ?? "manual",
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
+                ApprovedAt = approvedAt,
                 SubmittedBy = request.LecturerId,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
@@ -210,6 +212,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 Source = request.Source ?? "manual",
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
+                ApprovedAt = approvedAt,
                 SubmittedBy = request.LecturerId,
                 IsActive = false,
                 CreatedAt = DateTime.UtcNow

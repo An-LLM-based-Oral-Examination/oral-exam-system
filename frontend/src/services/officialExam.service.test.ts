@@ -51,6 +51,7 @@ describe('officialExamService MF-04 contract', () => {
         startTime: shiftPayload.startTime,
         endTime: shiftPayload.endTime,
         proctorUserId: 'proctor-1',
+        examinerUserId: 'examiner-1',
       }),
     ).resolves.toMatchObject({ id: shiftId, roomLab: 'Lab 301' })
 
@@ -62,6 +63,7 @@ describe('officialExamService MF-04 contract', () => {
       startTime: shiftPayload.startTime,
       endTime: shiftPayload.endTime,
       proctorUserId: 'proctor-1',
+      examinerUserId: 'examiner-1',
     })
   })
 
@@ -212,5 +214,89 @@ describe('officialExamService MF-04 contract', () => {
       undefined,
       { params: { studentId: 'student-1' } },
     )
+  })
+
+  it('sends the same roster file for preview and commit and preserves backend fullName/setCode', async () => {
+    const file = new File(['studentCode,seatNumber,ipAddress\nSE170001,1,10.0.0.1'], 'roster.csv', {
+      type: 'text/csv',
+    })
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockResolvedValueOnce({
+        data: {
+          shiftId,
+          totalRowCount: 1,
+          validRowCount: 1,
+          errorRowCount: 0,
+          availableHandedOverSetCount: 1,
+          rows: [
+            {
+              sourceRow: 2,
+              studentCode: 'SE170001',
+              fullName: 'Nguyen An',
+              seatNumber: 1,
+              ipAddress: '10.0.0.1',
+              setCode: 'SET-01',
+              isValid: true,
+              errors: [],
+            },
+          ],
+          globalErrors: [],
+          canCommit: true,
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          shiftId,
+          createdTicketCount: 1,
+          tickets: [
+            {
+              id: ticketId,
+              shiftId,
+              studentId: 'student-1',
+              studentCode: 'SE170001',
+              seatNumber: 1,
+              ipAddress: '10.0.0.1',
+              status: 'SCHEDULED',
+              checkedInAt: '2026-11-20T07:55:00.000Z',
+              examSetId: 'set-1',
+            },
+          ],
+        },
+      } as never)
+
+    await expect(officialExamService.previewTicketRosterImport(shiftId, file)).resolves.toMatchObject({
+      rows: [{ fullName: 'Nguyen An', setCode: 'SET-01' }],
+      canCommit: true,
+    })
+    await expect(officialExamService.commitTicketRosterImport(shiftId, file)).resolves.toMatchObject({
+      createdTicketCount: 1,
+      tickets: [{ studentCode: 'SE170001' }],
+    })
+
+    expect(post).toHaveBeenCalledTimes(2)
+    expect((post.mock.calls[0][1] as FormData).get('file')).toBe(file)
+    expect((post.mock.calls[1][1] as FormData).get('file')).toBe(file)
+  })
+
+  it('downloads the roster template through the Examination Officer template endpoint', async () => {
+    const blob = new Blob(['studentCode,seatNumber,ipAddress\n'], { type: 'text/csv' })
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: blob,
+      headers: {
+        'content-type': 'text/csv',
+        'content-disposition': 'attachment; filename="exam-roster-template.csv"',
+      },
+    } as never)
+
+    await expect(officialExamService.downloadTicketRosterTemplate('csv')).resolves.toMatchObject({
+      blob,
+      fileName: 'exam-roster-template.csv',
+      contentType: 'text/csv',
+    })
+    expect(get).toHaveBeenCalledWith('/official-exams/tickets/import/template', {
+      params: { format: 'csv' },
+      responseType: 'blob',
+    })
   })
 })

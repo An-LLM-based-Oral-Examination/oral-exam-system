@@ -10,7 +10,7 @@ public sealed class EnforceAppealFiveStepWorkflow : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropCheckConstraint("ck_appeal_requests_status", "appeal_requests");
+        migrationBuilder.Sql("ALTER TABLE appeal_requests DROP CONSTRAINT IF EXISTS ck_appeal_requests_status;");
         migrationBuilder.AlterColumn<string>(
             name: "status", table: "appeal_requests", type: "character varying(40)", maxLength: 40,
             nullable: false, defaultValue: "SUBMITTED_TO_EXAM_OFFICE",
@@ -25,7 +25,7 @@ public sealed class EnforceAppealFiveStepWorkflow : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropCheckConstraint("ck_appeal_requests_status", "appeal_requests");
+        migrationBuilder.Sql("ALTER TABLE appeal_requests DROP CONSTRAINT IF EXISTS ck_appeal_requests_status;");
         migrationBuilder.Sql("UPDATE appeal_requests SET status = 'PENDING' WHERE status = 'SUBMITTED_TO_EXAM_OFFICE';");
         migrationBuilder.Sql("UPDATE appeal_requests SET status = 'IN_REVIEW' WHERE status IN ('ASSIGNED_TO_LECTURER', 'REGRADED_BY_LECTURER');");
         migrationBuilder.AlterColumn<string>(

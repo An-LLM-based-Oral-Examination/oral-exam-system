@@ -1,5 +1,6 @@
 import { Bell, CheckCheck, LoaderCircle, RefreshCw } from 'lucide-react'
 import { SideDrawer } from '@/design/overlays'
+import { EmptyState } from '@/components/common/EmptyState'
 import type { StudentNotification } from '@/types/notification.types'
 
 function formatCreatedAt(value: string) {
@@ -24,6 +25,7 @@ export function StudentNotificationDrawer({
   onLoadMore,
   onMarkAllRead,
   onSelect,
+  portalLabel = 'Trung tâm thông báo',
 }: {
   open: boolean
   onClose: () => void
@@ -37,13 +39,14 @@ export function StudentNotificationDrawer({
   onLoadMore: () => void
   onMarkAllRead: () => void
   onSelect: (notification: StudentNotification) => void
+  portalLabel?: string
 }) {
   return (
     <SideDrawer
       open={open}
       onClose={onClose}
       title="Thông báo"
-      eyebrow={unreadCount > 0 ? `${unreadCount} chưa đọc` : 'Student Portal'}
+      eyebrow={unreadCount > 0 ? `${unreadCount} chưa đọc` : portalLabel}
       size="lg"
       bodyClassName="p-0"
       actions={
@@ -76,12 +79,7 @@ export function StudentNotificationDrawer({
           </button>
         </div>
       ) : notifications.length === 0 ? (
-        <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-6 text-center text-[#61779b]">
-          <span className="flex size-12 items-center justify-center rounded-full bg-[#BDE8F5]/55 text-[#1C4D8D]">
-            <Bell className="size-5" aria-hidden="true" />
-          </span>
-          <p className="text-sm font-semibold">Bạn chưa có thông báo mới.</p>
-        </div>
+        <EmptyState className="m-4 min-h-48 justify-center" icon={Bell} title="Bạn chưa có thông báo mới." />
       ) : (
         <div className="divide-y divide-[#4988C4]/15">
           {notifications.map((notification) => (

@@ -21,6 +21,7 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.TryAddSingleton<IOfficialExamRandomGenerator>(CryptoOfficialExamRandomGenerator.Instance);
+        services.AddScoped<Features.QuestionBank.ReviewRequests.QuestionReviewRequestService>();
 
         return services;
     }

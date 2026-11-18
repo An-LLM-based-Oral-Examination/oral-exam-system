@@ -64,7 +64,7 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
 
     private static OralExamDbContext CreatePostgresDbContext(params IInterceptor[] interceptors)
     {
-        var connStr = InClassShiftConcurrencyIntegrationTests.GetPostgresConnectionString();
+        var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var builder = new DbContextOptionsBuilder<OralExamDbContext>()
             .UseNpgsql(connStr);
         if (interceptors != null && interceptors.Length > 0)

@@ -1,7 +1,11 @@
+import { SectionHeader } from '@/design/ui'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
+import { BackLink } from '@/components/common/BackLink'
+import { SEARCH_DELAY_MS, useSearchInput } from '@/hooks/useSearchInput'
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   Check,
   ClipboardList,
   Copy,
@@ -18,6 +22,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
+import { RosterDate } from '@/components/common/RosterDate'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
@@ -162,20 +167,12 @@ export function LecturerClassDetailPage() {
   return (
     <div lang="vi" className={cn(ds.page, 'pb-8')}>
       <div className="space-y-3">
-      <Link
-        to="/lecturer/classes"
-        className="inline-flex min-h-8 w-fit items-center gap-1.5 rounded-lg text-base font-bold text-[#1C4D8D] transition hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
-      >
-        <ArrowLeft className="size-5" aria-hidden="true" />
-        Về danh sách
-      </Link>
+      <BackLink
+        to="/lecturer/classes">Về danh sách</BackLink>
 
       <div className="space-y-6">
       {loading && !detail ? (
-        <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#5b6b84]">
-          <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" />
-          Đang tải lớp...
-        </div>
+        <LoadingState label="Đang tải lớp…" />
       ) : null}
 
       {loadError ? (
@@ -253,6 +250,7 @@ export function LecturerClassDetailPage() {
                     Mật khẩu
                   </span>
                   <JoinPasswordReveal
+                    key={sessionJoinPassword ?? detail.joinPassword ?? 'none'}
                     password={sessionJoinPassword ?? detail.joinPassword}
                     hasPassword={detail.hasPassword}
                   />
@@ -417,31 +415,31 @@ function StudentRoster({
   onAdd: () => void
   onRemove: (student: ClassStudent) => void
 }) {
-  const [keyword, setKeyword] = useState('')
+  const keywordInput = useSearchInput()
+  const keyword = keywordInput.query
   const students = detail.students.filter((student) => {
     const text = `${student.fullName} ${student.studentCode} ${student.email}`.toLocaleLowerCase('vi-VN')
     return text.includes(keyword.trim().toLocaleLowerCase('vi-VN'))
   })
 
   return (
-    <section className={cn(ds.section, 'overflow-hidden')}>
-      <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between')}>
-        <div className={ds.sectionHeading}>
-          <div className={ds.sectionTitleRow}>
-            <span className={ds.sectionIconWrap}><Users className={ds.sectionIcon} /></span>
-            <h2 className={ds.sectionTitle}>Danh sách sinh viên</h2>
-            <span className={ds.sectionBadge}>{students.length} sinh viên</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative">
+    <section className={ds.section}>
+      <SectionHeader
+        icon={Users}
+        title="Danh sách sinh viên"
+        badge={`${students.length} sinh viên`}
+        hint="Sinh viên đang tham gia lớp này"
+        className="flex-row flex-wrap items-center justify-between"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+          <label className={cn('relative', ds.searchControl)}>
             <span className="sr-only">Tìm sinh viên</span>
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-            <input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+            <SearchField
+              value={keywordInput.draft}
+              onChange={(event) => keywordInput.change(event.target.value)}
+              onKeyDown={keywordInput.onKeyDown}
               placeholder="Tên, mã hoặc email"
-              className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#1C4D8D]/15"
+              className="h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#1C4D8D]/15"
             />
           </label>
           <button type="button" className={cn(ds.primaryButton, 'min-h-10')} onClick={onAdd}>
@@ -449,29 +447,46 @@ function StudentRoster({
             Thêm sinh viên
           </button>
         </div>
-      </div>
-      <div className={ds.sectionBody}>
+        }
+      />
+      <div className={cn(ds.sectionBody, students.length > 0 && 'py-0 sm:py-0')}>
         {detail.students.length === 0 ? (
-          <EmptyState icon={Users} title="Lớp chưa có sinh viên" description="Thêm sinh viên bằng mã hoặc email." />
+          <EmptyState
+            icon={Users}
+            title="Lớp chưa có sinh viên"
+            description="Thêm sinh viên bằng mã hoặc email."
+            action={
+              <button type="button" onClick={onAdd} className={ds.primaryButton}>
+                <Plus className="size-3.5" aria-hidden="true" />
+                Thêm sinh viên
+              </button>
+            }
+          />
         ) : students.length === 0 ? (
           <EmptyState icon={Search} title="Không có sinh viên khớp từ khóa" />
         ) : (
-          <ul className="space-y-1.5">
+          <ul aria-label="Danh sách sinh viên trong lớp" className="divide-y divide-[#82aedb]/55">
             {students.map((student) => (
-              <li key={student.studentId} className="flex items-center gap-2.5 rounded-xl bg-[#F8FBFD] px-2.5 py-2">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1C4D8D] text-xs font-black text-white">{nameInitial(student.fullName)}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-[#0F2854]">{student.fullName}</p>
-                  <p className="truncate text-xs text-[#5b6b84]">{student.studentCode || 'Chưa có mã'} · {student.email}</p>
+              <li key={student.studentId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 transition-colors hover:bg-[#F4FBFD] lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_15rem_auto_auto]">
+                <div className="flex min-w-0 basis-full items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#E7F3FB] text-sm font-bold text-[#1C4D8D]" aria-hidden="true">
+                    {nameInitial(student.fullName)}
+                  </span>
+                  <div className="min-w-0 [overflow-wrap:anywhere]">
+                    <p className="text-base font-bold text-[#0F2854]">{student.fullName}</p>
+                    <p className="font-mono text-sm font-bold text-[#1C4D8D]">{student.studentCode || 'Chưa có mã'}</p>
+                  </div>
                 </div>
-                <span className={ds.infoChip}>{joinMethodLabel(student.joinMethod)}</span>
+                <p className="min-w-0 text-sm [overflow-wrap:anywhere] text-[#5b6b84]">{student.email}</p>
+                <RosterDate label="Ngày tham gia" value={student.enrolledAt} />
+                <span className={cn(ds.infoChip, 'ml-auto text-sm whitespace-nowrap')}>{joinMethodLabel(student.joinMethod)}</span>
                 <button
                   type="button"
-                  className={cn(ds.outlineButton, 'min-h-9 px-3')}
+                  className={cn(ds.outlineButton, 'h-9 shrink-0 border-[#e8a8b5] bg-[#fff7f8] px-3 text-xs text-[#c2415b] hover:border-[#c2415b] hover:bg-[#ffe9ed] focus-visible:outline-[#c2415b]')}
+                  aria-label={`Xóa ${student.fullName}`}
                   onClick={() => onRemove(student)}
                 >
-                  <UserMinus className="size-3.5" />
-                  Xóa
+                  <UserMinus className="size-3.5" aria-hidden="true" /> Xóa
                 </button>
               </li>
             ))}
@@ -491,35 +506,58 @@ function AddStudentDialog({
   onClose: () => void
   onAdded: (name: string) => Promise<void>
 }) {
-  const [query, setQuery] = useState('')
+  const [lookup, setLookup] = useState({ query: '', delay: SEARCH_DELAY_MS })
   const [queryError, setQueryError] = useState('')
   const [match, setMatch] = useState<ClassStudentLookup | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const [looking, setLooking] = useState(false)
   const [adding, setAdding] = useState(false)
 
-  const search = async (event?: FormEvent) => {
-    event?.preventDefault()
-    const term = query.trim()
-    if (!term) {
+  useEffect(() => {
+    const term = lookup.query.trim()
+    if (!term) return
+
+    let active = true
+    const timer = window.setTimeout(async () => {
+      setLooking(true)
+      try {
+        const found = await classService.lookupStudent(term)
+        if (!active) return
+        if (found.studentId) {
+          setMatch(found)
+        } else {
+          setNotFound(true)
+        }
+      } catch (searchError) {
+        if (!active) return
+        if (typeof searchError === 'object' && searchError !== null &&
+          'status' in searchError && searchError.status === 404) {
+          setNotFound(true)
+        } else {
+          setQueryError(userMessage(searchError, 'Không tìm được sinh viên. Vui lòng thử lại.'))
+        }
+      } finally {
+        if (active) setLooking(false)
+      }
+    }, lookup.delay)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [lookup])
+
+  const search = (event: FormEvent) => {
+    event.preventDefault()
+    if (looking || adding) return
+    if (!lookup.query.trim()) {
       setQueryError('Nhập đủ mã sinh viên hoặc email.')
-      setMatch(null)
       return
     }
-    setLooking(true)
     setQueryError('')
     setMatch(null)
-    try {
-      const found = await classService.lookupStudent(term)
-      if (!found.studentId) {
-        setQueryError('Không tìm thấy sinh viên với mã hoặc email này.')
-        return
-      }
-      setMatch(found)
-    } catch (searchError) {
-      setQueryError(userMessage(searchError, 'Không tìm thấy sinh viên với mã hoặc email này.'))
-    } finally {
-      setLooking(false)
-    }
+    setNotFound(false)
+    setLookup({ query: lookup.query, delay: 0 })
   }
 
   const add = async () => {
@@ -540,6 +578,7 @@ function AddStudentDialog({
       eyebrow="Chi tiết lớp học"
       title="Thêm sinh viên"
       icon={Users}
+      size="sm"
       onClose={onClose}
       busy={adding}
       footer={(
@@ -552,28 +591,36 @@ function AddStudentDialog({
         </DialogFooter>
       )}
     >
-      <form onSubmit={(event) => void search(event)} className="space-y-3">
+      <form onSubmit={search} className="space-y-3">
         <label className="block">
           <span className={fieldLabelClass(Boolean(queryError))}>Mã hoặc email</span>
-          <div className="mt-1.5 flex gap-2">
+          <div className="relative mt-1.5">
             <input
-              value={query}
+              value={lookup.query}
               onChange={(event) => {
-                setQuery(event.target.value)
+                setLookup({ query: event.target.value, delay: SEARCH_DELAY_MS })
                 setQueryError('')
                 setMatch(null)
+                setNotFound(false)
+                setLooking(false)
               }}
-              placeholder="SE181863"
+              disabled={adding}
+              placeholder="Nhập mã sinh viên hoặc email"
               aria-invalid={Boolean(queryError) || undefined}
-              className={cn(ds.field, 'min-w-0 flex-1', queryError && fieldInvalidClass)}
+              className={cn(ds.field, 'w-full pr-10', queryError && fieldInvalidClass)}
             />
-            <button type="submit" disabled={looking || adding} className={cn(ds.outlineButton, 'min-h-10')}>
-              {looking ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-3.5" />}
-              Tìm
-            </button>
+            {looking && (
+              <span role="status" className="absolute top-1/2 right-3 -translate-y-1/2">
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                <span className="sr-only">Đang tìm sinh viên</span>
+              </span>
+            )}
           </div>
           <FieldError message={queryError} />
         </label>
+        {notFound && !looking && (
+          <EmptyState compact icon={Search} title="Không tìm thấy sinh viên" description="Thử mã sinh viên hoặc email khác." />
+        )}
         {match ? (
           <div className="rounded-xl bg-[#F8FBFD] px-3 py-2.5">
             <p className="text-sm font-bold text-[#0F2854]">{match.fullName}</p>

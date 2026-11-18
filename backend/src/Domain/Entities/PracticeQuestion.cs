@@ -22,6 +22,7 @@ public partial class PracticeQuestion
     public string ApprovalStatus { get; set; } = OralExamination.Domain.Enums.ApprovalStatus.Approved;
     public string Source { get; set; } = OralExamination.Domain.Enums.QuestionSource.Manual;
     public Guid? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
     public Guid? SubmittedBy { get; set; }
     public string? ReviewNotes { get; set; }
     public bool IsActive { get; set; } = true;

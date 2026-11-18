@@ -19,6 +19,7 @@ public sealed record UpdateCourseConfigurationCommand(
     public int? MaxMockExamsPerDay { get; init; }
     public int? MockExamDurationMinutes { get; init; }
     public int? MockExamTotalQuestions { get; init; }
+    public string? MockExamDifficultyDistribution { get; init; }
     public string? MockExamBloomDistribution { get; init; }
     public string? ActorRole { get; init; }
 }

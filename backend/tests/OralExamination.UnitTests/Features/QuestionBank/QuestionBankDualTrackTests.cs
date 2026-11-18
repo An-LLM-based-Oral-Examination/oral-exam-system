@@ -25,6 +25,28 @@ namespace OralExamination.UnitTests.Features.QuestionBank;
 
 public sealed class QuestionBankDualTrackTests
 {
+    [Theory]
+    [InlineData("exam", "department_head")]
+    [InlineData("practice", "department_head")]
+    [InlineData("exam", "admin")]
+    [InlineData("practice", "admin")]
+    [InlineData("exam", "lecturer")]
+    [InlineData("practice", "lecturer")]
+    public async Task Create_NeverAutoApprovesDraft_AndLeavesApprovalTimeNull_AcrossRoles(string scope, string role)
+    {
+        using var context = CreateDbContext();
+        var (actor, course, _, _) = await SeedEntitiesAsync(context, role);
+        var command = CreateCommand(course.Id, actor.Id, usageScope: scope) with { ApprovedBy = actor.Id };
+        var created = await new CreateDraftQuestionCommandHandler(context).Handle(command, default);
+        created.IsSuccess.Should().BeTrue(created.Error);
+        context.ChangeTracker.Clear();
+        var detail = await new GetQuestionByIdQueryHandler(context).Handle(new(created.Value, actor.Id, role), default);
+        detail.IsSuccess.Should().BeTrue(detail.Error);
+        detail.Value.ApprovedBy.Should().BeNull();
+        detail.Value.ApprovedAt.Should().BeNull();
+        detail.Value.ApprovalStatus.Should().Be(ApprovalStatus.Draft);
+    }
+
     private static OralExamDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
@@ -522,8 +544,8 @@ public sealed class QuestionBankDualTrackTests
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
-        context.Users.Add(deptHead);
         course.DepartmentHeadUserId = deptHead.Id;
+        context.Users.Add(deptHead);
         await context.SaveChangesAsync();
 
         // 1. Giảng viên gọi CreateDraftQuestionCommand với UsageScope = "practice"
@@ -595,6 +617,7 @@ public sealed class QuestionBankDualTrackTests
         approvedPq.ApprovalStatus.Should().Be(ApprovalStatus.Approved);
         approvedPq.IsActive.Should().BeTrue("sau khi Trưởng Bộ Môn phê duyệt, câu hỏi luyện tập phải được kích hoạt IsActive = true");
         approvedPq.ApprovedBy.Should().Be(deptHead.Id);
+        approvedPq.ApprovedAt.Should().Be(reviewResult.Value.ReviewedAt);
 
         var finalExamCount = await context.ExamQuestions.CountAsync(q => q.Id == questionId);
         finalExamCount.Should().Be(0, "phê duyệt câu hỏi chỉ thuộc kho practice không được tạo bản ghi bên ExamQuestions");
@@ -686,6 +709,8 @@ public sealed class QuestionBankDualTrackTests
         savedEq.Should().NotBeNull();
         savedEq!.CloId.Should().Be(clo.Id);
         savedEq.StructureId.Should().Be(structure.Id);
+        savedEq.ApprovedAt.Should().NotBeNull();
+        savedPq.ApprovedAt.Should().Be(savedEq.ApprovedAt);
 
         // 3. BatchSubmitQuestionsForReviewCommandHandler cho phép cả 'department_head' đệ trình câu hỏi
         var createDraftHandler = new CreateDraftQuestionCommandHandler(context);
