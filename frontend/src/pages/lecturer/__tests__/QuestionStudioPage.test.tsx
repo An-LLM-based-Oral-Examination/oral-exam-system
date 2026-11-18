@@ -12,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   reviewDecision: vi.fn(),
   batchApprovePendingQuestions: vi.fn(),
   batchApprove: vi.fn(),
+  updateDraft: vi.fn(),
+  setQuestionActive: vi.fn(),
+  deleteDraft: vi.fn(),
   getLecturerCourses: vi.fn(),
+  listClos: vi.fn(),
   toastWarning: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -31,6 +35,18 @@ vi.mock('@/services/question.service', () => ({
     reviewDecision: mocks.reviewDecision,
     batchApprovePendingQuestions: mocks.batchApprovePendingQuestions,
     batchApprove: mocks.batchApprove,
+    updateDraft: mocks.updateDraft,
+    setQuestionActive: mocks.setQuestionActive,
+    deleteDraft: mocks.deleteDraft,
+  },
+}))
+
+vi.mock('@/services/courseClo.service', () => ({
+  courseCloService: {
+    list: mocks.listClos,
+    getCurrentSemesterManagedCourses: vi
+      .fn()
+      .mockResolvedValue([{ id: 'course-1', code: 'PRN231', name: 'Backend' }]),
   },
 }))
 
@@ -332,5 +348,77 @@ describe('QuestionStudioPage review queue & batch approval', () => {
     expect(screen.queryByRole('button', { name: 'Phê duyệt' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Yêu cầu sửa' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Từ chối' })).toBeNull()
+  })
+
+  it('allows Lecturer to withdraw own DRAFT via ConfirmDialog and DepartmentHead to toggle APPROVED question active state', async () => {
+    mocks.role = 'Instructor'
+    const ownDraft: QuestionSummary = {
+      ...lecturerQuestion1,
+      id: 'q-own-draft',
+      title: 'Own Draft Question',
+      approvalStatus: 'DRAFT',
+      submittedBy: mocks.userId,
+    }
+    mocks.getQuestions.mockResolvedValue({
+      items: [ownDraft],
+      totalCount: 1,
+      pageNumber: 1,
+      pageSize: 12,
+      totalPages: 1,
+    })
+    mocks.getQuestionById.mockResolvedValue(makeDetail(ownDraft))
+    mocks.deleteDraft.mockResolvedValue(undefined)
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/lecturer/question-bank']}>
+        <QuestionStudioPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('Own Draft Question'))
+    expect(await screen.findByRole('button', { name: 'Chỉnh sửa câu hỏi' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thu hồi bản nháp' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận thu hồi' }))
+
+    await waitFor(() => expect(mocks.deleteDraft).toHaveBeenCalledWith('q-own-draft'))
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Đã thu hồi bản nháp câu hỏi.')
+    unmount()
+
+    // DepartmentHead toggles APPROVED question active state
+    mocks.role = 'DepartmentHead'
+    const approvedQuestion: QuestionSummary = {
+      ...lecturerQuestion1,
+      id: 'q-approved-toggle',
+      title: 'Approved Question Toggle',
+      approvalStatus: 'APPROVED',
+    }
+    mocks.getQuestions.mockResolvedValue({
+      items: [approvedQuestion],
+      totalCount: 1,
+      pageNumber: 1,
+      pageSize: 12,
+      totalPages: 1,
+    })
+    mocks.getQuestionById.mockResolvedValue({
+      ...makeDetail(approvedQuestion),
+      isActive: true,
+    })
+    mocks.setQuestionActive.mockResolvedValue(undefined)
+
+    render(
+      <MemoryRouter initialEntries={['/department-head/question-bank']}>
+        <QuestionStudioPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('Approved Question Toggle'))
+    const pauseBtn = await screen.findByRole('button', { name: 'Tạm ngưng sử dụng' })
+    fireEvent.click(pauseBtn)
+
+    await waitFor(() =>
+      expect(mocks.setQuestionActive).toHaveBeenCalledWith('q-approved-toggle', false),
+    )
+    expect(await screen.findByRole('button', { name: 'Kích hoạt lại' })).toBeEnabled()
   })
 })

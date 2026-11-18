@@ -387,11 +387,10 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
 
         var backoffMockSessionIds = await context.DeadLetterQueues
             .AsNoTracking()
-            .Where(q => q.Status == "pending" &&
-                        q.TaskType == "MockExamGrading" &&
+            .Where(q => q.TaskType == "MockExamGrading" &&
                         q.CorrelationId != null &&
-                        q.NextRetryAt != null &&
-                        q.NextRetryAt > now)
+                        (q.Status == "abandoned" ||
+                         (q.Status == "pending" && q.NextRetryAt != null && q.NextRetryAt > now)))
             .Select(q => q.CorrelationId!.Value)
             .ToListAsync(cancellationToken);
 
@@ -414,9 +413,16 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             try
             {
                 var submitHandler = new SubmitMockExamSessionCommandHandler(context, aiGradingService);
-                await submitHandler.Handle(
+                var submitRes = await submitHandler.Handle(
                     new SubmitMockExamSessionCommand(mockSession.Id, mockSession.StudentId),
                     cancellationToken);
+                if (!submitRes.IsSuccess)
+                {
+                    _logger.LogWarning(
+                        "Deferred grading for interrupted MockExamSession {SessionId} not yet completed: {Error}",
+                        mockSession.Id,
+                        submitRes.Error);
+                }
             }
             catch (Exception ex)
             {

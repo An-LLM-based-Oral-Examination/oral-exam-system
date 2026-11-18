@@ -1839,7 +1839,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       <FormDialog
         titleId="mock-scorecard-title"
         eyebrow="Thi thử"
-        title="Bảng điểm"
+        title={scorecard.isGradingPending ? 'Bài nộp chờ chấm điểm' : 'Bảng điểm'}
         icon={Award}
         onClose={returnToLobby}
         size="xl"

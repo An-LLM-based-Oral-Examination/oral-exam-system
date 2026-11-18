@@ -34,7 +34,9 @@ public sealed record InClassExamShiftResponse(
     IReadOnlyList<string>? SelectedDifficulties = null,
     IReadOnlyList<Guid>? SelectedCloIds = null,
     IReadOnlyList<string>? SelectedCloCodes = null,
-    string? CourseCode = null
+    string? CourseCode = null,
+    string? CourseName = null,
+    decimal? MyFinalScore = null
 );
 
 public sealed record InClassShiftDetailResponse(

@@ -11,11 +11,13 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ClipboardCheck,
   Clock3,
   FileCheck2,
   Filter,
   History,
   LoaderCircle,
+  Lock,
   MessageSquareText,
   Mic2,
   RefreshCw,
@@ -35,6 +37,7 @@ import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 import apiClient from '@/services/api.client'
 import { appealsService } from '@/services/appeals.service'
+import { inClassShiftService } from '@/services/inClassShift.service'
 import { mockExamService } from '@/services/mockExam.service'
 import { officialExamService } from '@/services/officialExam.service'
 import { practiceService } from '@/services/practice.service'
@@ -43,6 +46,7 @@ import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { PracticeSessionScorecard } from '@/components/practice/PracticeSessionScorecard'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import type { Appeal } from '@/types/appeal.types'
+import type { InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import type {
   MockExamHistoryItem,
   MockExamScorecard as MockExamScorecardData,
@@ -50,7 +54,7 @@ import type {
 import type { StudentOfficialExamGrade } from '@/types/officialExam.types'
 import type { PracticeHistoryItem, PracticeSessionDetail } from '@/types/practice.types'
 
-type HistoryCategory = 'all' | 'practice' | 'mock' | 'official'
+type HistoryCategory = 'all' | 'practice' | 'mock' | 'in_class' | 'official'
 
 const COURSE_CODE_TONES = [
   'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
@@ -89,7 +93,7 @@ interface LiveOfficialExamSummary {
 interface UnifiedHistoryRow {
   uid: string
   rawId: string
-  category: 'practice' | 'mock' | 'official'
+  category: 'practice' | 'mock' | 'in_class' | 'official'
   badgeLabel: string
   courseCode: string
   courseName: string
@@ -425,6 +429,312 @@ export function OfficialExamScorecardView({
   )
 }
 
+export function InClassHistoryDetailView({
+  shift,
+  results,
+}: {
+  shift: InClassShift
+  results: StudentExamResult[]
+}) {
+  const isFinalized = shift.status === 'FINALIZED' || Boolean(shift.isLocked)
+
+  const groupedQuestions = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        questionId: string
+        mainOrderIndex: number
+        main: StudentExamResult | null
+        followUps: StudentExamResult[]
+      }
+    >()
+
+    results.forEach((item, index) => {
+      const key = item.questionId || item.submissionId || `q-${index + 1}`
+      let group = groups.get(key)
+      if (!group) {
+        group = {
+          questionId: key,
+          mainOrderIndex: item.mainOrderIndex ?? groups.size + 1,
+          main: null,
+          followUps: [],
+        }
+        groups.set(key, group)
+      }
+      if (item.isFollowUp) {
+        group.followUps.push(item)
+      } else if (!group.main) {
+        group.main = item
+      } else {
+        group.followUps.push(item)
+      }
+    })
+
+    return Array.from(groups.values()).sort((a, b) => a.mainOrderIndex - b.mainOrderIndex)
+  }, [results])
+
+  const [openQuestionId, setOpenQuestionId] = useState<string | null>(
+    () => groupedQuestions[0]?.questionId ?? null,
+  )
+
+  const computedFinalScore = useMemo(() => {
+    if (!isFinalized) return null
+    if (typeof shift.myFinalScore === 'number' && Number.isFinite(shift.myFinalScore)) {
+      return shift.myFinalScore
+    }
+    const effectiveScores: number[] = []
+    groupedQuestions.forEach((group) => {
+      const candidates = [
+        ...(group.main ? [group.main.finalScore ?? group.main.aiScore] : []),
+        ...group.followUps.map((fu) => fu.finalScore ?? fu.aiScore),
+      ].filter((val): val is number => typeof val === 'number' && Number.isFinite(val))
+      if (candidates.length > 0) {
+        effectiveScores.push(Math.max(...candidates))
+      }
+    })
+    if (effectiveScores.length === 0) return null
+    const denom = Math.max(effectiveScores.length, shift.questionCount || 1)
+    const sum = effectiveScores.reduce((acc, val) => acc + val, 0)
+    return Math.round((sum / denom) * 100) / 100
+  }, [groupedQuestions, isFinalized, shift.myFinalScore, shift.questionCount])
+
+  return (
+    <div className="space-y-3">
+      <section className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white shadow-[0_10px_28px_rgba(23,48,96,0.06)]">
+        <div className="bg-[linear-gradient(118deg,#0F2854_0%,#1C4D8D_58%,#4988C4_100%)] px-5 py-5 text-white">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-xs font-bold tracking-[0.08em] text-[#BDE8F5] uppercase">
+                <ClipboardCheck className="size-3.5" />
+                Bài kiểm tra vấn đáp trên lớp
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {shift.courseCode && (
+                  <span className="inline-flex rounded-full bg-white/15 px-2.5 py-1 text-xs font-bold">
+                    {shift.courseCode}
+                  </span>
+                )}
+                <span className="inline-flex rounded-full bg-[#BDE8F5]/20 px-2.5 py-1 text-xs font-semibold text-[#BDE8F5]">
+                  {shift.className}
+                </span>
+              </div>
+              <h2 className="mt-2 text-xl leading-snug font-bold">{shift.title}</h2>
+              <p className="mt-1.5 text-sm text-[#d5e2f7]">
+                {shift.courseName ? `${shift.courseName} · ` : ''}
+                Đã ghi nhận {groupedQuestions.length}/{shift.questionCount} câu hỏi chính
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 self-start rounded-2xl bg-white/10 px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold text-[#BDE8F5]">Điểm tổng kết</p>
+                {isFinalized ? (
+                  <p className="text-4xl leading-none font-black tracking-[-0.04em]">
+                    {computedFinalScore === null ? '—' : computedFinalScore.toFixed(2)}
+                    <span className="ml-1 text-sm font-semibold text-[#BDE8F5]">/10</span>
+                  </p>
+                ) : (
+                  <p className="text-2xl leading-none font-black tracking-[-0.02em] sm:text-3xl">
+                    Chờ chốt
+                  </p>
+                )}
+              </div>
+              <span
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-bold',
+                  isFinalized
+                    ? 'bg-[#edfbf6] text-[#0f8f6b]'
+                    : 'bg-[#fff8eb] text-[#9a6414]',
+                )}
+              >
+                {isFinalized ? 'Đã chốt điểm' : 'Chờ GV chốt điểm'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-1 px-5 py-3 text-sm text-[#5b6b84] sm:grid-cols-2">
+          <p>Bắt đầu ca: {formatDateTime(shift.startTime)}</p>
+          <p>
+            {isFinalized
+              ? `Chốt điểm lúc: ${formatDateTime(shift.finalizedAt ?? shift.endTime ?? null)}`
+              : `Tham gia lúc: ${formatDateTime(shift.myJoinedAt ?? shift.startTime)}`}
+          </p>
+        </div>
+
+        {!isFinalized && (
+          <div
+            role="status"
+            className="mx-5 mb-4 flex items-start gap-2.5 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-3 text-sm leading-relaxed text-[#9a6414]"
+          >
+            <Lock className="mt-0.5 size-4 shrink-0 text-[#b45309]" />
+            <span>
+              Điểm số và nhận xét chi tiết sẽ được hiển thị sau khi Giảng viên chốt bảng điểm của ca kiểm tra.
+            </span>
+          </div>
+        )}
+      </section>
+
+      {groupedQuestions.length === 0 ? (
+        <EmptyState
+          compact
+          icon={FileCheck2}
+          title="Chưa ghi nhận câu trả lời nào cho ca kiểm tra này."
+        />
+      ) : (
+        <div className="space-y-2">
+          {groupedQuestions.map((group, idx) => {
+            const isOpen = openQuestionId === group.questionId
+            const primary = group.main ?? group.followUps[0]
+            const mainScore = isFinalized && group.main
+              ? (group.main.finalScore ?? group.main.aiScore)
+              : null
+
+            return (
+              <article
+                key={group.questionId}
+                className="overflow-hidden rounded-2xl border border-[#82aedb]/55 bg-white"
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenQuestionId(isOpen ? null : group.questionId)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#4988C4]/14"
+                  aria-expanded={isOpen}
+                >
+                  <span className="min-w-0">
+                    <span className="text-xs font-bold text-[#1C4D8D]">
+                      Câu {idx + 1} · {primary?.title || 'Câu hỏi kiểm tra trên lớp'}
+                      {group.followUps.length > 0 ? ` · ${group.followUps.length} câu phụ` : ''}
+                    </span>
+                    <span
+                      className={cn(
+                        'mt-1 block text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]',
+                        !isOpen && 'line-clamp-2',
+                      )}
+                    >
+                      {primary?.content || primary?.title || `Câu hỏi #${idx + 1}`}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {isFinalized ? (
+                      <span className="rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                        {mainScore !== null && mainScore !== undefined
+                          ? `${mainScore.toFixed(1)}/10`
+                          : '—'}
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
+                        Đã lưu câu trả lời
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={cn('size-4 text-[#74839a] transition', isOpen && 'rotate-180')}
+                    />
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-3 border-t border-[#82aedb]/55 px-4 py-4">
+                    {group.main && (
+                      <>
+                        <div className="rounded-xl bg-[#4988C4]/16 p-3">
+                          <p className="text-xs font-bold text-[#1C4D8D]">
+                            Bản bóc băng câu trả lời chính
+                          </p>
+                          <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#0F2854]">
+                            {group.main.transcript?.trim() || 'Không ghi nhận nội dung trả lời.'}
+                          </p>
+                        </div>
+
+                        {isFinalized && (
+                          <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
+                            <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
+                              <MessageSquareText className="size-3.5" />
+                              Nhận xét đánh giá
+                            </p>
+                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#3f5c52]">
+                              {group.main.aiFeedback?.trim() ||
+                                'Chưa có nhận xét AI chi tiết cho câu này.'}
+                            </p>
+                            {group.main.lecturerNotes?.trim() && (
+                              <p className="mt-2 rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D]">
+                                Ghi chú hậu kiểm của Giảng viên: {group.main.lecturerNotes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {group.followUps.map((followUp, fuIdx) => {
+                      const followUpScore = isFinalized
+                        ? (followUp.finalScore ?? followUp.aiScore)
+                        : null
+                      return (
+                        <div
+                          key={followUp.submissionId || `${group.questionId}-fu-${fuIdx}`}
+                          className="space-y-2.5 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3.5"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-[#1C4D8D]">
+                                Câu hỏi phụ {followUp.followUpIndex || fuIdx + 1}
+                              </p>
+                              <p className="mt-1 text-sm leading-relaxed font-semibold whitespace-pre-line text-[#0F2854]">
+                                {followUp.followUpPrompt?.trim() ||
+                                  followUp.content?.trim() ||
+                                  'Câu hỏi phụ làm rõ nội dung trình bày.'}
+                              </p>
+                            </div>
+                            {isFinalized && (
+                              <span className="shrink-0 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                                {followUpScore !== null && followUpScore !== undefined
+                                  ? `${followUpScore.toFixed(1)}/10`
+                                  : '—'}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="rounded-xl bg-[#4988C4]/16 p-3">
+                            <p className="text-xs font-bold text-[#1C4D8D]">
+                              Bản bóc băng câu trả lời phụ
+                            </p>
+                            <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#0F2854]">
+                              {followUp.transcript?.trim() || 'Không ghi nhận nội dung trả lời.'}
+                            </p>
+                          </div>
+
+                          {isFinalized && (
+                            <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
+                              <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
+                                <MessageSquareText className="size-3.5" />
+                                Nhận xét câu hỏi phụ
+                              </p>
+                              <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-[#3f5c52]">
+                                {followUp.aiFeedback?.trim() ||
+                                  'Chưa có nhận xét AI chi tiết cho câu hỏi phụ này.'}
+                              </p>
+                              {followUp.lecturerNotes?.trim() && (
+                                <p className="mt-2 rounded-lg bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D]">
+                                  Ghi chú hậu kiểm của Giảng viên: {followUp.lecturerNotes}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LiveExamHistoryPage() {
   const { user } = useAuth()
   const userId = user?.id
@@ -432,12 +742,16 @@ function LiveExamHistoryPage() {
 
   const [practiceItems, setPracticeItems] = useState<PracticeHistoryItem[]>([])
   const [mockItems, setMockItems] = useState<MockExamHistoryItem[]>([])
+  const [inClassShifts, setInClassShifts] = useState<InClassShift[]>([])
   const [officialItems, setOfficialItems] = useState<LiveOfficialExamSummary[]>([])
   const [appeals, setAppeals] = useState<Appeal[]>([])
 
   const [categoryFilter, setCategoryFilter] = useState<HistoryCategory>(() => {
     const paramType = searchParams.get('type')
-    return paramType === 'practice' || paramType === 'mock' || paramType === 'official'
+    return paramType === 'practice' ||
+      paramType === 'mock' ||
+      paramType === 'in_class' ||
+      paramType === 'official'
       ? paramType
       : 'all'
   })
@@ -450,7 +764,7 @@ function LiveExamHistoryPage() {
   const [notice, setNotice] = useState<string | null>(null)
 
   const [activeModal, setActiveModal] = useState<{
-    category: 'practice' | 'mock' | 'official'
+    category: 'practice' | 'mock' | 'in_class' | 'official'
     id: string
   } | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
@@ -458,6 +772,7 @@ function LiveExamHistoryPage() {
   const [appealReasonError, setAppealReasonError] = useState('')
   const [practiceDetails, setPracticeDetails] = useState<Record<string, PracticeSessionDetail>>({})
   const [mockDetails, setMockDetails] = useState<Record<string, MockExamScorecardData>>({})
+  const [inClassResults, setInClassResults] = useState<Record<string, StudentExamResult[]>>({})
   const [officialGrades, setOfficialGrades] = useState<Record<string, StudentOfficialExamGrade>>({})
   const [appealReason, setAppealReason] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
@@ -466,9 +781,10 @@ function LiveExamHistoryPage() {
     setLoading(true)
     setError(null)
 
-    const [practiceRes, mockRes, dashboardRes, appealsRes] = await Promise.allSettled([
+    const [practiceRes, mockRes, inClassRes, dashboardRes, appealsRes] = await Promise.allSettled([
       practiceService.getStudentHistory(userId),
       mockExamService.getHistory({ pageIndex: 1, pageSize: 50 }),
+      inClassShiftService.listStudentShifts(),
       apiClient.get<unknown>('/student/dashboard'),
       appealsService.list(),
     ])
@@ -483,6 +799,14 @@ function LiveExamHistoryPage() {
       setMockItems(mockRes.value.items)
     } else {
       setMockItems([])
+    }
+
+    if (inClassRes.status === 'fulfilled') {
+      setInClassShifts(
+        inClassRes.value.filter((shift) => Boolean(shift.myParticipationStatus?.trim())),
+      )
+    } else {
+      setInClassShifts([])
     }
 
     if (dashboardRes.status === 'fulfilled') {
@@ -531,6 +855,7 @@ function LiveExamHistoryPage() {
     if (
       practiceRes.status === 'rejected' &&
       mockRes.status === 'rejected' &&
+      inClassRes.status === 'rejected' &&
       dashboardRes.status === 'rejected'
     ) {
       setError(extractErrorMessage(practiceRes.reason))
@@ -547,7 +872,7 @@ function LiveExamHistoryPage() {
   }, [loadAllHistories])
 
   const openDetailModal = useCallback(
-    async (category: 'practice' | 'mock' | 'official', id: string) => {
+    async (category: 'practice' | 'mock' | 'in_class' | 'official', id: string) => {
       setActiveModal({ category, id })
       setModalLoadFailed(false)
       setAppealReasonError('')
@@ -570,14 +895,44 @@ function LiveExamHistoryPage() {
       }
 
       if (category === 'mock') {
-        if (mockDetails[id]) return
+        const cachedMock = mockDetails[id]
+        if (cachedMock && !cachedMock.isGradingPending) return
         setModalLoading(true)
         try {
           const detail = await mockExamService.getHistoryDetail(id)
           setMockDetails((prev) => ({ ...prev, [id]: detail }))
+          if (!detail.isGradingPending) {
+            setMockItems((current) =>
+              current.map((entry) =>
+                entry.sessionId === id
+                  ? { ...entry, status: 'graded', totalScore: detail.totalScore }
+                  : entry,
+              ),
+            )
+          }
         } catch (err) {
           setModalLoadFailed(true)
           toast.error(extractErrorMessage(err, 'Không thể tải bảng điểm chi tiết ca thi thử này.'))
+        } finally {
+          setModalLoading(false)
+        }
+        return
+      }
+
+      if (category === 'in_class') {
+        const targetShift = inClassShifts.find((s) => s.id === id)
+        const isFinalized =
+          targetShift?.status === 'FINALIZED' || Boolean(targetShift?.isLocked)
+        if (inClassResults[id] && isFinalized) return
+        setModalLoading(true)
+        try {
+          const results = await inClassShiftService.listStudentResults(id)
+          setInClassResults((prev) => ({ ...prev, [id]: results }))
+        } catch (err) {
+          setModalLoadFailed(true)
+          toast.error(
+            extractErrorMessage(err, 'Không thể tải chi tiết bài kiểm tra trên lớp này.'),
+          )
         } finally {
           setModalLoading(false)
         }
@@ -603,19 +958,23 @@ function LiveExamHistoryPage() {
         }
       }
     },
-    [mockDetails, officialGrades, practiceDetails, userId],
+    [inClassResults, inClassShifts, mockDetails, officialGrades, practiceDetails, userId],
   )
 
   useEffect(() => {
     const paramType = searchParams.get('type')
     const paramId = searchParams.get('id')
     if (
-      (paramType === 'practice' || paramType === 'mock' || paramType === 'official') &&
-      paramId
+      paramType === 'practice' ||
+      paramType === 'mock' ||
+      paramType === 'in_class' ||
+      paramType === 'official'
     ) {
       const timer = window.setTimeout(() => {
         setCategoryFilter(paramType)
-        void openDetailModal(paramType, paramId)
+        if (paramId) {
+          void openDetailModal(paramType, paramId)
+        }
       }, 0)
       return () => window.clearTimeout(timer)
     }
@@ -723,6 +1082,7 @@ function LiveExamHistoryPage() {
     mockItems.forEach((item) => {
       const normalizedStatus = item.status.toLowerCase()
       const inProgress = normalizedStatus === 'in_progress'
+      const isSubmittedPending = normalizedStatus === 'submitted'
       rows.push({
         uid: `mock-${item.sessionId}`,
         rawId: item.sessionId,
@@ -734,11 +1094,58 @@ function LiveExamHistoryPage() {
         subtitle: `Đã trả lời ${item.answeredQuestions}/${item.totalQuestions} câu · Thời lượng ${item.durationMinutes} phút`,
         timestamp: item.startedAt,
         statusRaw: item.status,
-        statusLabel: inProgress ? 'Đang làm bài' : 'Đã nộp & Chấm điểm',
-        statusTone: inProgress ? 'amber' : 'blue',
+        statusLabel: inProgress
+          ? 'Đang làm bài'
+          : isSubmittedPending
+            ? 'Đã nộp · Chờ chấm điểm'
+            : 'Đã nộp & Chấm điểm',
+        statusTone: inProgress || isSubmittedPending ? 'amber' : 'blue',
         score: item.totalScore,
         canContinue: inProgress,
         continueUrl: inProgress ? `/mock-exam/session?session=${encodeURIComponent(item.sessionId)}` : null,
+      })
+    })
+
+    inClassShifts.forEach((shift) => {
+      const isFinalized = shift.status === 'FINALIZED' || Boolean(shift.isLocked)
+      const partStatus = (shift.myParticipationStatus ?? '').trim().toUpperCase()
+      const canContinue =
+        !isFinalized &&
+        shift.status === 'ACTIVE' &&
+        (partStatus === 'JOINED' || partStatus === 'IN_PROGRESS') &&
+        (shift.myRemainingSeconds ?? 1) > 0
+      const isAbsent = !isFinalized && partStatus === 'ABSENT'
+
+      rows.push({
+        uid: `in_class-${shift.id}`,
+        rawId: shift.id,
+        category: 'in_class',
+        badgeLabel: 'Kiểm tra trên lớp',
+        courseCode: shift.courseCode,
+        courseName: shift.courseName || shift.className || shift.title,
+        title: shift.title,
+        subtitle: `${shift.className}${shift.courseName ? ` · ${shift.courseName}` : ''} · ${shift.questionCount} câu hỏi chính`,
+        timestamp: shift.finalizedAt ?? shift.myJoinedAt ?? shift.startTime ?? shift.createdAt,
+        statusRaw: shift.status,
+        statusLabel: isFinalized
+          ? 'Đã chốt điểm'
+          : canContinue
+            ? 'Đang làm bài'
+            : isAbsent
+              ? 'Vắng mặt'
+              : 'Đã nộp · Chờ GV chốt điểm',
+        statusTone: isFinalized
+          ? 'emerald'
+          : canContinue
+            ? 'amber'
+            : isAbsent
+              ? 'slate'
+              : 'blue',
+        score: isFinalized ? (shift.myFinalScore ?? null) : null,
+        canContinue,
+        continueUrl: canContinue
+          ? `/in-class-exam/session?shiftId=${encodeURIComponent(shift.id)}`
+          : null,
       })
     })
 
@@ -770,7 +1177,7 @@ function LiveExamHistoryPage() {
     })
 
     return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  }, [mockItems, officialItems, practiceItems])
+  }, [inClassShifts, mockItems, officialItems, practiceItems])
 
   const courseOptions = useMemo(() => {
     const map = new Map<string, string>()
@@ -802,6 +1209,10 @@ function LiveExamHistoryPage() {
     const mockScored = mockItems
       .map((i) => i.totalScore)
       .filter((s): s is number => s !== null && Number.isFinite(s))
+    const inClassScored = inClassShifts
+      .filter((shift) => shift.status === 'FINALIZED' || Boolean(shift.isLocked))
+      .map((shift) => shift.myFinalScore)
+      .filter((s): s is number => typeof s === 'number' && Number.isFinite(s))
     const officialScored = officialItems
       .map((i) => i.finalScore)
       .filter((s): s is number => s !== null && Number.isFinite(s))
@@ -811,23 +1222,28 @@ function LiveExamHistoryPage() {
       practiceAvg: averageScore(practiceScored),
       mockCount: mockItems.length,
       mockAvg: averageScore(mockScored),
+      inClassCount: inClassShifts.length,
+      inClassAvg: averageScore(inClassScored),
       officialCount: officialItems.length,
       officialAvg: averageScore(officialScored),
     }
-  }, [mockItems, officialItems, practiceItems])
+  }, [inClassShifts, mockItems, officialItems, practiceItems])
 
   return (
     <div lang="vi" className={ds.page}>
       <PageBanner
         icon={BarChart3}
         eyebrow="Hồ sơ kết quả & bảng điểm"
-        title="Lịch sử Luyện tập, Thi thử & Kết quả Thi chính thức"
-        description="Tra cứu phiên luyện tập, ca thi thử và kết quả thi chính thức kèm bảng điểm Rubric chi tiết."
+        title="Lịch sử Luyện tập, Thi thử & Kết quả Kiểm tra / Thi chính thức"
+        description="Tra cứu phiên luyện tập, ca thi thử, bài kiểm tra trên lớp và kết quả thi chính thức kèm bảng điểm Rubric chi tiết."
         extras={
           <>
             <BannerFact icon={Mic2}>Luyện tập</BannerFact>
             <BannerFact icon={BookOpenCheck} tone="green">
               Thi thử
+            </BannerFact>
+            <BannerFact icon={ClipboardCheck}>
+              Kiểm tra trên lớp
             </BannerFact>
             <BannerFact icon={Trophy} tone="violet">
               Thi chính thức
@@ -845,7 +1261,7 @@ function LiveExamHistoryPage() {
         }}
       />
 
-      <section aria-label="Thống kê tổng hợp" className="grid gap-3 md:grid-cols-3">
+      <section aria-label="Thống kê tổng hợp" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-[#b7e4cf] bg-[#f3fbf7] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -890,6 +1306,31 @@ function LiveExamHistoryPage() {
             </div>
             <div className="flex size-10 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-xs">
               <Clock3 className="size-5" />
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-2xl border border-[#9dd5e6] bg-[#f2fafe] p-4 shadow-[0_7px_24px_rgba(15,40,84,0.04)] sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="inline-flex rounded-full border border-[#9dd5e6] bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#0e7490] shadow-2xs">
+                Kiểm tra trên lớp
+              </span>
+              <div className="mt-2.5 flex items-baseline gap-2">
+                <strong className="text-3xl font-black text-[#0F2854]">
+                  {stats.inClassCount}
+                </strong>
+                <span className="text-xs font-bold text-[#0e7490]">ca kiểm tra</span>
+              </div>
+              <p className="mt-2 text-xs font-semibold text-[#0F2854]/80">
+                Điểm đã chốt TB:{' '}
+                <strong className="text-[#0e7490]">
+                  {stats.inClassAvg === null ? 'Chờ chốt điểm' : `${stats.inClassAvg.toFixed(2)}/10`}
+                </strong>
+              </p>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#0e7490] text-white shadow-xs">
+              <ClipboardCheck className="size-5" />
             </div>
           </div>
         </article>
@@ -986,6 +1427,7 @@ function LiveExamHistoryPage() {
                 { id: 'all', label: 'Tất cả', count: unifiedRows.length },
                 { id: 'practice', label: 'Luyện tập', count: practiceItems.length },
                 { id: 'mock', label: 'Thi thử', count: mockItems.length },
+                { id: 'in_class', label: 'Kiểm tra trên lớp', count: inClassShifts.length },
                 {
                   id: 'official',
                   label: 'Thi chính thức',
@@ -1025,7 +1467,7 @@ function LiveExamHistoryPage() {
           {loading ? (
             <div className="flex items-center justify-center gap-2.5 py-16 text-sm font-semibold text-[#1C4D8D]">
               <LoaderCircle className="size-5 animate-spin" />
-              Đang tải toàn bộ lịch sử luyện tập, thi thử và thi chính thức...
+              Đang tải toàn bộ lịch sử luyện tập, thi thử, kiểm tra trên lớp và thi chính thức...
             </div>
           ) : filteredRows.length === 0 ? (
             <div className="p-4 sm:p-5">
@@ -1070,6 +1512,7 @@ function LiveExamHistoryPage() {
                           'inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-xs font-bold',
                           row.category === 'practice' && 'border-[#b7e4cf] bg-[#e8f8f3] text-[#16836a]',
                           row.category === 'mock' && 'border-[#0F2854] bg-[#0F2854] text-[#BDE8F5]',
+                          row.category === 'in_class' && 'border-[#9dd5e6] bg-[#e7f6fb] text-[#0e7490]',
                           row.category === 'official' && 'border-[#c4afe8] bg-[#f3eefe] text-[#6d4cc4]',
                         )}
                       >
@@ -1156,7 +1599,9 @@ function LiveExamHistoryPage() {
               ? 'Chi tiết phiên luyện tập'
               : activeModal.category === 'mock'
                 ? 'Chi tiết ca thi thử'
-                : 'Chi tiết thi chính thức'
+                : activeModal.category === 'in_class'
+                  ? 'Chi tiết kiểm tra trên lớp'
+                  : 'Chi tiết thi chính thức'
           }
           icon={Award}
           onClose={closeDetailModal}
@@ -1182,6 +1627,39 @@ function LiveExamHistoryPage() {
             <PracticeSessionScorecard session={practiceDetails[activeModal.id]} />
           ) : activeModal.category === 'mock' && mockDetails[activeModal.id] ? (
             <MockExamScorecard scorecard={mockDetails[activeModal.id]} />
+          ) : activeModal.category === 'in_class' && inClassResults[activeModal.id] ? (
+            <InClassHistoryDetailView
+              shift={
+                inClassShifts.find((item) => item.id === activeModal.id) ?? {
+                  id: activeModal.id,
+                  classId: '',
+                  className: 'Lớp học phần',
+                  courseCode: '',
+                  courseName: '',
+                  title: 'Ca kiểm tra trên lớp',
+                  description: '',
+                  status: 'CLOSED',
+                  isLocked: false,
+                  startTime: '',
+                  durationMinutes: 20,
+                  examDurationMinutes: 20,
+                  questionCount: inClassResults[activeModal.id].filter((r) => !r.isFollowUp).length || 1,
+                  hasFollowUp: false,
+                  maxFollowUpQuestions: 0,
+                  isAutoPublishGrades: false,
+                  questionPoolMode: 'ALL_COURSE_BANK',
+                  selectedDifficulties: ['easy', 'medium', 'hard'],
+                  selectedCloIds: [],
+                  passwordRotationSeconds: 300,
+                  gracePeriodSeconds: 60,
+                  joinedCount: 1,
+                  submittedCount: 1,
+                  createdAt: '',
+                  myFinalScore: null,
+                }
+              }
+              results={inClassResults[activeModal.id]}
+            />
           ) : activeModal.category === 'official' && officialGrades[activeModal.id] ? (
             <OfficialExamScorecardView
               ticket={

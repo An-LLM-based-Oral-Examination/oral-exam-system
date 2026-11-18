@@ -328,6 +328,19 @@ public class MockExamsController : ControllerBase
 
         if (!result.IsSuccess)
         {
+            if (result.Error?.StartsWith("DEFERRED_GRADING:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var deferred = await _sender.Send(new GetMockExamSessionDetailQuery(
+                    SessionId: id,
+                    StudentId: currentUserId,
+                    IsElevatedRole: false,
+                    AttemptLazyGrading: false));
+                if (deferred.IsSuccess)
+                {
+                    return StatusCode(StatusCodes.Status202Accepted, deferred.Value);
+                }
+            }
+
             if (result.Error?.Contains("không tồn tại") == true)
             {
                 return NotFound(new

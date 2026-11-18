@@ -542,4 +542,45 @@ public class StartMockExamCommandHandlerTests
         result.Error.Should().StartWith("QUOTA_EXCEEDED:");
         result.Error.Should().Contain("3/3 lượt");
     }
+
+    [Fact(DisplayName = "14. Thiếu câu hỏi theo phân bổ độ khó hoặc tổng số câu đều trả về tiền tố CONFLICT: (HTTP 409)")]
+    public async Task Handle_InsufficientDifficultyDistributionQuestions_ReturnsConflict()
+    {
+        using var context = CreateDbContext();
+        var (course, student, structure, practiceQuestions, _) = await SeedDataAsync(context, practiceQuestionCount: 5);
+        course.MockExamDifficultyDistribution = "{\"easy\": 1, \"medium\": 2, \"hard\": 2}";
+        structure.DurationMinutes = 20;
+        foreach (var pq in practiceQuestions)
+        {
+            pq.Difficulty = "easy";
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var result = await handler.Handle(new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+        result.Error.Should().Contain("phân bổ độ khó");
+    }
+
+    [Fact(DisplayName = "15. Ưu tiên TotalQuestions và DurationMinutes từ ExamStructure active của Trưởng bộ môn")]
+    public async Task Handle_RespectsActiveExamStructureQuestionCountAndDuration()
+    {
+        using var context = CreateDbContext();
+        var (course, student, structure, _, _) = await SeedDataAsync(context, practiceQuestionCount: 10);
+        course.MockExamTotalQuestions = 5;
+        course.MockExamDurationMinutes = 30;
+        structure.TotalQuestions = 3;
+        structure.DurationMinutes = 15;
+        structure.BloomDistribution = "{\"Understand\": 2, \"Apply\": 1}";
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var result = await handler.Handle(new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Questions.Should().HaveCount(3);
+        result.Value.DurationMinutes.Should().Be(15);
+    }
 }

@@ -613,7 +613,14 @@ export const PracticeSessionPage: React.FC = () => {
       if (notifyUser) setIsManualSyncing(true)
       try {
         if (notifyUser && runtime.fullSessionSubmitted && user) {
-          await practiceService.completeSession(sessionId, user.id)
+          try {
+            await practiceService.completeSession(sessionId, user.id)
+          } catch (completeError) {
+            const completeProblem = getErrorInfo(completeError)
+            if (completeProblem.status === 404 || completeProblem.status === 410) {
+              throw completeError
+            }
+          }
         }
         const session = await practiceService.getSession(sessionId)
         setSyncedResults(session.answers)
@@ -684,7 +691,19 @@ export const PracticeSessionPage: React.FC = () => {
           return
         }
 
-        if (serverSession.status !== 'in_progress') {
+        const hasPendingGradingAnswers = serverSession.answers.some(
+          (answer) => answer.status === 'pending' || answer.status === 'grading',
+        )
+        const isSubmittedFullSession =
+          serverSession.practiceMode === 'full_session' &&
+          serverSession.status === 'completed' &&
+          serverSession.answers.length > 0
+
+        if (
+          serverSession.status !== 'in_progress' &&
+          !isSubmittedFullSession &&
+          !hasPendingGradingAnswers
+        ) {
           setPageError(
             'Phiên luyện tập này đã kết thúc hoặc tự động đóng do quá thời gian không tương tác. Vui lòng xem kết quả tại Lịch sử luyện tập.',
           )
@@ -730,7 +749,10 @@ export const PracticeSessionPage: React.FC = () => {
           const hasPendingGrading = sortedAnswers.some(
             (a) => a.status === 'pending' || a.status === 'grading',
           )
-          if (questions.length > 0 && (firstUnansweredIndex < 0 || hasPendingGrading)) {
+          if (
+            questions.length > 0 &&
+            (serverSession.status === 'completed' || firstUnansweredIndex < 0 || hasPendingGrading)
+          ) {
             currentQuestionIndex = Math.max(0, questions.length - 1)
             mainQuestionsCompleted = questions.length
             fullSessionSubmitted = true

@@ -198,7 +198,14 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                     try
                     {
                         var submitHandler = new SubmitMockExamSessionCommandHandler(_context, _aiGradingService);
-                        await submitHandler.Handle(new SubmitMockExamSessionCommand(session.Id, session.StudentId), cancellationToken);
+                        var submitRes = await submitHandler.Handle(new SubmitMockExamSessionCommand(session.Id, session.StudentId), cancellationToken);
+                        if (!submitRes.IsSuccess)
+                        {
+                            dlqItem.LastAttemptAt = now;
+                            dlqItem.ErrorMessage = submitRes.Error;
+                            await _context.SaveChangesAsync(cancellationToken);
+                            return Result<Unit>.Failure($"Replay chấm thi thử thất bại: {submitRes.Error}");
+                        }
                     }
                     catch (Exception ex)
                     {

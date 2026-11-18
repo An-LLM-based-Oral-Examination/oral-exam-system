@@ -77,6 +77,9 @@ export interface QuestionDetail {
   content: string
   imageUrl?: string | null
   imageAlt?: string | null
+  imageDescription?: string | null
+  cloId?: string | null
+  cloCode?: string | null
   sampleAnswer: string | null
   keyPoints: string[]
   difficulty: QuestionDifficulty
@@ -136,6 +139,17 @@ export interface CreateDraftQuestionRequest {
 
 export interface CreateDraftQuestionResponse {
   questionId: string
+}
+
+export interface UpdateQuestionDraftRequest {
+  title: string
+  content: string
+  sampleAnswer: string
+  keyPoints: string[]
+  difficulty: QuestionDifficulty
+  bloomLevel: BloomLevel
+  rubric: RubricDraft
+  cloId?: string | null
 }
 
 export interface GeneratedQuestionDraft {

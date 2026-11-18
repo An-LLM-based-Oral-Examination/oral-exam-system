@@ -424,6 +424,163 @@ public class SubmitMockExamSessionCommandHandlerTests
         mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(6.50m);
     }
 
+    [Fact(DisplayName = "8. AI lỗi tạm thời trả về DEFERRED_GRADING, lưu câu đã chấm trước lỗi, tạo DLQ không ném 500 và chấm bù thành công khi retry")]
+    public async Task Handle_WhenAiFailsMidSession_PersistsPartialEvaluations_QueuesDlq_AndRecoversOnRetry()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, q2) = SeedCourseAndQuestions(context);
+        var studentId = Guid.NewGuid();
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            StartedAt = DateTime.UtcNow.AddMinutes(-20),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            Status = "in_progress"
+        };
+
+        var a1 = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            AnswerText = "Câu trả lời 1 đầy đủ các tầng kiến trúc.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-15)
+        };
+        var a2 = new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q2.Id,
+            OrderIndex = 2,
+            AnswerText = "Câu trả lời 2 phân tích CQRS và CRUD.",
+            Status = "answered",
+            AnsweredAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        session.Answers.Add(a1);
+        session.Answers.Add(a2);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var callCount = 0;
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .Returns<AiGradingRequest, CancellationToken>((req, _) =>
+            {
+                var current = Interlocked.Increment(ref callCount);
+                if (req.QuestionContent == q1.Content)
+                {
+                    return Task.FromResult(new AiGradingResult
+                    {
+                        Score = 8.0m,
+                        ConfidenceScore = 0.94m,
+                        Feedback = "Câu 1 tốt",
+                        Details = new List<GradingDetailDto>
+                        {
+                            new() { CriterionId = q1.Rubric.Criteria.First().Id.ToString(), Score = 4.0m, Comment = "Tốt" },
+                            new() { CriterionId = q1.Rubric.Criteria.Last().Id.ToString(), Score = 4.0m, Comment = "Tốt" }
+                        }
+                    });
+                }
+
+                if (current <= 2)
+                {
+                    throw new InvalidOperationException("Gemini 503 Service Unavailable");
+                }
+
+                return Task.FromResult(new AiGradingResult
+                {
+                    Score = 9.0m,
+                    ConfidenceScore = 0.96m,
+                    Feedback = "Câu 2 xuất sắc",
+                    Details = new List<GradingDetailDto>
+                    {
+                        new() { CriterionId = q2.Rubric.Criteria.First().Id.ToString(), Score = 4.5m, Comment = "Rất tốt" },
+                        new() { CriterionId = q2.Rubric.Criteria.Last().Id.ToString(), Score = 4.5m, Comment = "Rất tốt" }
+                    }
+                });
+            });
+
+        var handler = new SubmitMockExamSessionCommandHandler(context, aiMock.Object);
+        var deferredResult = await handler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        deferredResult.IsSuccess.Should().BeFalse();
+        deferredResult.Error.Should().StartWith("DEFERRED_GRADING:");
+
+        var savedSession = await context.MockExamSessions.AsNoTracking().SingleAsync(s => s.Id == session.Id);
+        savedSession.Status.Should().Be("submitted");
+        savedSession.TotalScore.Should().BeNull();
+        savedSession.SubmittedAt.Should().NotBeNull();
+
+        var savedA1 = await context.MockExamAnswers.AsNoTracking().SingleAsync(a => a.Id == a1.Id);
+        savedA1.Status.Should().Be("graded");
+        (await context.AiEvaluations.CountAsync(e => e.MockExamAnswerId == a1.Id)).Should().Be(1);
+
+        var dlq = await context.DeadLetterQueues.AsNoTracking().SingleAsync(q => q.CorrelationId == session.Id);
+        dlq.TaskType.Should().Be("MockExamGrading");
+        dlq.Status.Should().Be("pending");
+        dlq.NextRetryAt.Should().NotBeNull();
+
+        // Lần retry sau khi AI phục hồi: chỉ chấm câu 2 (câu 1 dùng kết quả đã lưu) và tự động resolve DLQ
+        var retryResult = await handler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        retryResult.IsSuccess.Should().BeTrue();
+        retryResult.Value!.TotalScore.Should().Be(8.50m);
+        callCount.Should().Be(3);
+        (await context.DeadLetterQueues.AsNoTracking().SingleAsync(q => q.Id == dlq.Id)).Status.Should().Be("resolved");
+    }
+
+    [Fact(DisplayName = "9. Nộp bài khi đang tạm dừng (PausedAt có giá trị): tính đúng hạn theo PausedAt và xóa PausedAt")]
+    public async Task Handle_WhenPausedBeforeExpiry_UsesPausedAtForOverdueCheckAndClearsPausedAt()
+    {
+        using var context = CreateDbContext();
+        var (course, q1, _) = SeedCourseAndQuestions(context);
+        var studentId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            StartedAt = now.AddMinutes(-45),
+            ExpiresAt = now.AddMinutes(-15),
+            PausedAt = now.AddMinutes(-20), // Tạm dừng khi vẫn còn 5 phút làm bài
+            Status = "in_progress"
+        };
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = q1.Id,
+            OrderIndex = 1,
+            AnswerText = "Đã trả lời trước khi bấm tạm dừng.",
+            Status = "answered",
+            AnsweredAt = now.AddMinutes(-25)
+        });
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult { Score = 8.0m, ConfidenceScore = 0.9m, Feedback = "Tốt" });
+
+        var handler = new SubmitMockExamSessionCommandHandler(context, aiMock.Object);
+        var result = await handler.Handle(new SubmitMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.IsOverdue.Should().BeFalse();
+
+        var updatedSession = await context.MockExamSessions.FindAsync(session.Id);
+        updatedSession!.PausedAt.Should().BeNull();
+        updatedSession.Status.Should().Be("graded");
+    }
+
     [Fact(DisplayName = "7. Hai câu hỏi Follow-up liên tiếp nhắm vào 2 tiêu chí yếu khác nhau và cộng dồn cập nhật điểm toàn câu chính xác")]
     public async Task Handle_Should_Target_Distinct_Weak_Criteria_Across_Multiple_FollowUps_And_Merge_Question_Score()
     {

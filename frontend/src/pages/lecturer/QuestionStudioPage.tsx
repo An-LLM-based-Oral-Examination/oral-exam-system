@@ -18,19 +18,23 @@ import {
   Eye,
   Library,
   LoaderCircle,
+  PencilLine,
   Plus,
+  Power,
   RefreshCw,
-
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
   X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
+import { EditQuestionDraftDialog } from '@/components/question/EditQuestionDraftDialog'
 import { QuestionDetailContent } from '@/components/question/QuestionDetailContent'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { useAuth } from '@/hooks/useAuth'
 import { CreatePracticeQuestionDialog } from '@/pages/lecturer/CreateQuestionPage'
 import { ROUTE_PATHS } from '@/routes/routePaths'
@@ -256,6 +260,9 @@ export function QuestionStudioPage() {
   const [reviewNotesError, setReviewNotesError] = useState('')
   const [reviewNotes, setReviewNotes] = useState('')
   const [isReviewing, setIsReviewing] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isMutatingQuestion, setIsMutatingQuestion] = useState(false)
   const closeDetailButtonRef = useRef<HTMLButtonElement>(null)
   const questionRowRefs = useRef<Map<string, HTMLElement>>(new Map())
   const scrollListToViewRef = useRef(false)
@@ -635,6 +642,8 @@ export function QuestionStudioPage() {
     setSelectedQuestion(null)
     setDetailLoadFailed(false)
     setReviewNotesError('')
+    setIsEditOpen(false)
+    setIsDeleteConfirmOpen(false)
   }
 
   const scrollQuestionIntoListView = (questionId: string) => {
@@ -652,6 +661,8 @@ export function QuestionStudioPage() {
     setDetailLoadFailed(false)
     setReviewNotesError('')
     setReviewNotes('')
+    setIsEditOpen(false)
+    setIsDeleteConfirmOpen(false)
     try {
       const loaded = await questionService.getQuestionById(questionId)
       setSelectedQuestion(loaded)
@@ -862,6 +873,65 @@ export function QuestionStudioPage() {
       toast.error(userMessage(approveError, 'Không phê duyệt được câu hỏi. Vui lòng thử lại.'))
     } finally {
       setIsReviewing(false)
+    }
+  }
+
+  const handleDeleteDraft = async () => {
+    if (!selectedQuestion || isMutatingQuestion) return
+    const targetId = selectedQuestion.id
+    setIsMutatingQuestion(true)
+    try {
+      await questionService.deleteDraft(targetId)
+      setSelectedIds((current) => {
+        const next = new Set(current)
+        next.delete(targetId)
+        return next
+      })
+      setIsDeleteConfirmOpen(false)
+      closeDetail()
+      toast.success('Đã thu hồi bản nháp câu hỏi.')
+      setReloadKey((key) => key + 1)
+    } catch (deleteError) {
+      toast.error(userMessage(deleteError, 'Không thu hồi được bản nháp. Vui lòng thử lại.'))
+    } finally {
+      setIsMutatingQuestion(false)
+    }
+  }
+
+  const handleToggleQuestionActive = async () => {
+    if (!selectedQuestion || isMutatingQuestion || !canReviewQuestions) return
+    const nextActive = !selectedQuestion.isActive
+    setIsMutatingQuestion(true)
+    try {
+      await questionService.setQuestionActive(selectedQuestion.id, nextActive)
+      setSelectedQuestion((current) =>
+        current && current.id === selectedQuestion.id
+          ? { ...current, isActive: nextActive }
+          : current,
+      )
+      toast.success(
+        nextActive
+          ? 'Đã kích hoạt lại câu hỏi trong ngân hàng đề.'
+          : 'Đã tạm ngưng sử dụng câu hỏi trong ngân hàng đề.',
+      )
+      setReloadKey((key) => key + 1)
+    } catch (toggleError) {
+      toast.error(
+        userMessage(toggleError, 'Không cập nhật được trạng thái hoạt động của câu hỏi.'),
+      )
+    } finally {
+      setIsMutatingQuestion(false)
+    }
+  }
+
+  const handleDraftUpdated = async (questionId: string) => {
+    setIsEditOpen(false)
+    setReloadKey((key) => key + 1)
+    try {
+      const refreshed = await questionService.getQuestionById(questionId)
+      setSelectedQuestion(refreshed)
+    } catch (refreshError) {
+      toast.error(userMessage(refreshError, 'Đã lưu nhưng chưa tải lại được chi tiết câu hỏi.'))
     }
   }
 
@@ -1373,7 +1443,24 @@ export function QuestionStudioPage() {
                 <span className="font-mono text-xs font-bold text-[#1C4D8D]">
                   {selectedQuestion.courseCode}
                 </span>
+                {selectedQuestion.cloCode && (
+                  <span className="inline-flex items-center rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2 py-0.5 text-xs font-bold text-[#1C4D8D]">
+                    {selectedQuestion.cloCode}
+                  </span>
+                )}
                 <StatusBadge status={selectedQuestion.approvalStatus} />
+                {selectedQuestion.approvalStatus === 'APPROVED' && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                      selectedQuestion.isActive
+                        ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                        : 'border-[#e5c5d4] bg-[#fff2f7] text-[#963b66]',
+                    )}
+                  >
+                    {selectedQuestion.isActive ? 'Đang sử dụng' : 'Đang tạm ngưng'}
+                  </span>
+                )}
                 {detailIndex >= 0 && (
                   <span className="text-[11px] font-semibold text-[#7a8aa0]">
                     {detailIndex + 1}/{questions.length}
@@ -1401,16 +1488,51 @@ export function QuestionStudioPage() {
             !isDetailLoading &&
             (((selectedQuestion.approvalStatus === 'DRAFT' ||
               selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
-              isSelfSubmitted(selectedQuestion.submittedBy, user?.id)) ||
+              (isSelfSubmitted(selectedQuestion.submittedBy, user?.id) || canReviewQuestions)) ||
               (canReviewQuestions &&
-                selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW')) && (
+                (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
+                  selectedQuestion.approvalStatus === 'APPROVED'))) && (
               <div className="space-y-2">
+                {(selectedQuestion.approvalStatus === 'DRAFT' ||
+                  selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
+                  (isSelfSubmitted(selectedQuestion.submittedBy, user?.id) ||
+                    canReviewQuestions) && (
+                    <div
+                      className={cn(
+                        'grid gap-2',
+                        selectedQuestion.approvalStatus === 'DRAFT' ? 'grid-cols-2' : 'grid-cols-1',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        disabled={isSubmitting || isMutatingQuestion}
+                        onClick={() => setIsEditOpen(true)}
+                        className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
+                      >
+                        <PencilLine className="size-3.5 shrink-0" />
+                        Chỉnh sửa câu hỏi
+                      </button>
+
+                      {selectedQuestion.approvalStatus === 'DRAFT' && (
+                        <button
+                          type="button"
+                          disabled={isSubmitting || isMutatingQuestion}
+                          onClick={() => setIsDeleteConfirmOpen(true)}
+                          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#efc8cc] bg-[#fff2f3] px-3 text-xs font-bold text-[#a93d48] transition duration-200 hover:-translate-y-0.5 hover:bg-[#fde4e7] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
+                        >
+                          <Trash2 className="size-3.5 shrink-0" />
+                          Thu hồi bản nháp
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                 {(selectedQuestion.approvalStatus === 'DRAFT' ||
                   selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
                   isSelfSubmitted(selectedQuestion.submittedBy, user?.id) && (
                     <button
                       type="button"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isMutatingQuestion}
                       onClick={() => void handleSubmitSingleFromDrawer()}
                       className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
                     >
@@ -1422,6 +1544,27 @@ export function QuestionStudioPage() {
                       Gửi Trưởng BM duyệt
                     </button>
                   )}
+
+                {canReviewQuestions && selectedQuestion.approvalStatus === 'APPROVED' && (
+                  <button
+                    type="button"
+                    disabled={isMutatingQuestion}
+                    onClick={() => void handleToggleQuestionActive()}
+                    className={cn(
+                      'inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none',
+                      selectedQuestion.isActive
+                        ? 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48] hover:bg-[#fde4e7]'
+                        : 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a] hover:bg-[#d8f3e7]',
+                    )}
+                  >
+                    {isMutatingQuestion ? (
+                      <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <Power className="size-4" />
+                    )}
+                    {selectedQuestion.isActive ? 'Tạm ngưng sử dụng' : 'Kích hoạt lại'}
+                  </button>
+                )}
 
                 {canReviewQuestions &&
                   selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' && (
@@ -1515,6 +1658,27 @@ export function QuestionStudioPage() {
             </div>
           ) : null}
         </QuestionDrawer>
+      )}
+
+      <EditQuestionDraftDialog
+        open={isEditOpen}
+        question={selectedQuestion}
+        onClose={() => setIsEditOpen(false)}
+        onSaved={(questionId) => void handleDraftUpdated(questionId)}
+      />
+
+      {isDeleteConfirmOpen && selectedQuestion && (
+        <ConfirmDialog
+          tone="danger"
+          eyebrow="Ngân hàng câu hỏi"
+          title="Thu hồi bản nháp câu hỏi?"
+          message={`Bạn có chắc chắn muốn thu hồi bản nháp "${selectedQuestion.title}" không? Câu hỏi nháp này sẽ được loại khỏi danh sách soạn thảo.`}
+          confirmLabel="Xác nhận thu hồi"
+          cancelLabel="Giữ lại"
+          pending={isMutatingQuestion}
+          onConfirm={() => void handleDeleteDraft()}
+          onCancel={() => setIsDeleteConfirmOpen(false)}
+        />
       )}
 
       <CreatePracticeQuestionDialog

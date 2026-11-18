@@ -171,4 +171,148 @@ public class GetMockExamSessionDetailQueryHandlerTests
         res.Errors.Should().Contain(e => e.PropertyName == nameof(GetMockExamSessionDetailQuery.SessionId));
         res.Errors.Should().Contain(e => e.PropertyName == nameof(GetMockExamSessionDetailQuery.StudentId));
     }
+
+    [Fact(DisplayName = "5. Phiên submitted đang chờ chấm bù trả về Classification = Đang chờ chấm điểm, IsGradingPending = true, ConfidenceScore = null và không sinh CriteriaScores 0đ giả")]
+    public async Task Handle_WhenSubmittedWithoutTotalScore_ReturnsGradingPendingScorecard()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var course = new Course { Id = Guid.NewGuid(), Code = "ENT104", Name = "English Preparation 2" };
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Rubric",
+            TotalMaxScore = 10.0m,
+            Criteria = new List<RubricCriterion>
+            {
+                new() { Id = Guid.NewGuid(), CriterionName = "Fluency", MaxScore = 5.0m, Weight = 0.5m, OrderIndex = 1 },
+                new() { Id = Guid.NewGuid(), CriterionName = "Grammar", MaxScore = 5.0m, Weight = 0.5m, OrderIndex = 2 }
+            }
+        };
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Part 1",
+            Content = "Introduce yourself.",
+            Difficulty = "easy",
+            BloomLevel = "Understand"
+        };
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            ExamSetId = null,
+            StartedAt = DateTime.UtcNow.AddMinutes(-10),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            SubmittedAt = DateTime.UtcNow,
+            Status = "submitted",
+            TotalScore = null
+        };
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            OrderIndex = 1,
+            AnswerText = "My hometown is Can Tho.",
+            Status = "answered"
+        });
+
+        context.Courses.Add(course);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var handler = new GetMockExamSessionDetailQueryHandler(context);
+        var result = await handler.Handle(
+            new GetMockExamSessionDetailQuery(session.Id, studentId, IsElevatedRole: false, AttemptLazyGrading: false),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.IsGradingPending.Should().BeTrue();
+        result.Value.Classification.Should().Be("Đang chờ chấm điểm");
+        result.Value.AnsweredQuestions.Should().Be(1);
+        result.Value.Questions.Should().ContainSingle();
+        result.Value.Questions[0].ConfidenceScore.Should().BeNull();
+        result.Value.Questions[0].CriteriaScores.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "6. Truy vấn GET chi tiết bỏ qua lazy grading khi ca thi đang trong thời gian chờ DLQ backoff hoặc đã abandoned")]
+    public async Task Handle_WhenDlqIsInBackoffOrAbandoned_SkipsLazyAiGradingOnRead()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var course = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Software Architecture" };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Rubric", TotalMaxScore = 10.0m };
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Q1",
+            Content = "Explain Clean Architecture.",
+            Difficulty = "medium",
+            BloomLevel = "Apply"
+        };
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            StartedAt = DateTime.UtcNow.AddMinutes(-20),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-1),
+            Status = "submitted",
+            TotalScore = null
+        };
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            OrderIndex = 1,
+            AnswerText = "Domain at the core.",
+            Status = "answered"
+        });
+        var dlq = new OralExamination.Domain.Entities.DeadLetterQueue
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "MockExamGrading",
+            CorrelationId = session.Id,
+            FlowType = "MOCK_EXAM",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "429 Too Many Requests",
+            RetryCount = 2,
+            Status = "pending",
+            NextRetryAt = DateTime.UtcNow.AddMinutes(4)
+        };
+
+        context.Courses.Add(course);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
+        context.MockExamSessions.Add(session);
+        context.DeadLetterQueues.Add(dlq);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Moq.Mock<OralExamination.Application.Common.Interfaces.IAiGradingService>();
+        var handler = new GetMockExamSessionDetailQueryHandler(context, aiMock.Object);
+
+        var result = await handler.Handle(
+            new GetMockExamSessionDetailQuery(session.Id, studentId, IsElevatedRole: false, AttemptLazyGrading: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.IsGradingPending.Should().BeTrue();
+        aiMock.Verify(
+            x => x.GradeAnswerAsync(
+                Moq.It.IsAny<OralExamination.Application.Common.Interfaces.AiGradingRequest>(),
+                Moq.It.IsAny<CancellationToken>()),
+            Moq.Times.Never);
+    }
 }

@@ -17,6 +17,7 @@ import type {
   QuestionFilters,
   QuestionSummary,
   ReviewQuestionDecisionRequest,
+  UpdateQuestionDraftRequest,
   UploadQuestionImageResponse,
 } from '@/types/rubric.types'
 
@@ -98,7 +99,16 @@ function normalizeQuestion(payload: unknown): QuestionDetail {
   ) {
     return invalidApiResponse('API không trả về chi tiết câu hỏi và Barem Rubric hợp lệ.')
   }
-  return candidate as unknown as QuestionDetail
+  const cloIdRaw = candidate.cloId ?? candidate.CloId
+  const cloCodeRaw = candidate.cloCode ?? candidate.CloCode
+  const imageDescRaw = candidate.imageDescription ?? candidate.ImageDescription
+  return {
+    ...(candidate as unknown as QuestionDetail),
+    cloId: typeof cloIdRaw === 'string' && cloIdRaw.trim() ? cloIdRaw : null,
+    cloCode: typeof cloCodeRaw === 'string' && cloCodeRaw.trim() ? cloCodeRaw : null,
+    imageDescription:
+      typeof imageDescRaw === 'string' && imageDescRaw.trim() ? imageDescRaw : null,
+  }
 }
 
 function normalizeCreateResponse(payload: unknown): CreateDraftQuestionResponse {
@@ -326,5 +336,21 @@ export const questionService = {
       approvedIds,
       failed,
     }
+  },
+
+  async updateDraft(
+    id: string,
+    payload: UpdateQuestionDraftRequest,
+  ): Promise<CreateDraftQuestionResponse> {
+    const response = await apiClient.put<unknown>(`/questions/${id}`, payload)
+    return normalizeCreateResponse(response.data)
+  },
+
+  async setQuestionActive(id: string, isActive: boolean): Promise<void> {
+    await apiClient.patch(`/questions/${id}/active`, { isActive })
+  },
+
+  async deleteDraft(id: string): Promise<void> {
+    await apiClient.delete(`/questions/${id}`)
   },
 }

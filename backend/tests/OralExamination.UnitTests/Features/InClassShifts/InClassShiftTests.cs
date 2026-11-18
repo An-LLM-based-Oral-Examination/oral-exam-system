@@ -537,6 +537,109 @@ public class InClassShiftTests
         inactiveResult.Value.Should().BeEmpty();
     }
 
+    [Fact(DisplayName = "MF-05: GetMyInClassShifts ẩn tuyệt đối MyFinalScore trước FINALIZED và trả đúng CourseName + MyFinalScore sau FINALIZED")]
+    public async Task GetMyInClassShifts_HidesMyFinalScoreBeforeFinalized_AndReturnsScoreAndCourseNameAfterFinalized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var shift1 = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca thi MF-05 kiểm tra khóa điểm",
+            StartTime = DateTime.UtcNow.AddMinutes(-40),
+            EndTime = DateTime.UtcNow.AddMinutes(-5),
+            TotalQuestionsPerStudent = 2,
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED",
+            IsLocked = false,
+            IsAutoPublishGrades = true
+        };
+        var participant1 = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            Status = "GRADED",
+            TotalAiScore = 8.20m,
+            TotalFinalScore = 8.75m
+        };
+        var sub1 = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = Guid.NewGuid(),
+            Transcript = "Câu trả lời đã chấm hậu kiểm nhưng chưa chốt sổ",
+            AiScore = 8.20m,
+            FinalScore = 8.75m,
+            Status = "AUDITED"
+        };
+        context.InClassExamShifts.Add(shift1);
+        context.InClassShiftParticipants.Add(participant1);
+        context.InClassExamSubmissions.Add(sub1);
+        await context.SaveChangesAsync();
+
+        var handler = new GetMyInClassShiftsQueryHandler(context);
+
+        // 1. Trước khi giảng viên bấm Chốt sổ (CLOSED, IsLocked = false): cấm lộ điểm
+        var beforeFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        beforeFinalized.IsSuccess.Should().BeTrue();
+        var beforeDto = beforeFinalized.Value!.Should().ContainSingle().Subject;
+        beforeDto.CourseName.Should().Be(course.Name);
+        beforeDto.MyFinalScore.Should().BeNull();
+
+        // 2. Sau khi chốt sổ (FINALIZED, IsLocked = true): hiển thị điểm chính thức
+        shift1.Status = "FINALIZED";
+        shift1.IsLocked = true;
+        shift1.FinalizedAt = DateTime.UtcNow;
+        participant1.Status = "FINALIZED";
+        await context.SaveChangesAsync();
+
+        var afterFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        afterFinalized.IsSuccess.Should().BeTrue();
+        var afterDto = afterFinalized.Value!.Should().ContainSingle().Subject;
+        afterDto.CourseName.Should().Be(course.Name);
+        afterDto.MyFinalScore.Should().Be(8.75m);
+
+        // 3. Fallback tính trung bình câu chính khi TotalFinalScore và TotalAiScore đều null trên ca đã FINALIZED
+        participant1.TotalFinalScore = null;
+        participant1.TotalAiScore = null;
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = Guid.NewGuid(),
+            Transcript = "Câu chính 2",
+            AiScore = 7.25m,
+            FinalScore = null,
+            IsFollowUp = false,
+            Status = "AI_GRADED"
+        });
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = sub1.QuestionId,
+            ParentSubmissionId = sub1.Id,
+            Transcript = "Câu phụ không tính riêng vào trung bình",
+            AiScore = 10.0m,
+            FinalScore = 10.0m,
+            IsFollowUp = true,
+            Status = "AI_GRADED"
+        });
+        await context.SaveChangesAsync();
+
+        var fallbackFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        fallbackFinalized.IsSuccess.Should().BeTrue();
+        // (8.75 + 7.25) / 2 = 8.00
+        fallbackFinalized.Value!.Should().ContainSingle().Which.MyFinalScore.Should().Be(8.00m);
+    }
+
     [Fact]
     public async Task SubmitInClassShiftAnswer_Success_EnqueuesGradingAndDoesNotStoreAudio()
     {

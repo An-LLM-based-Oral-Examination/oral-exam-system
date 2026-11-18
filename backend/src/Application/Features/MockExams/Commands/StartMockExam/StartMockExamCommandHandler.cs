@@ -91,15 +91,16 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         }
 
         var useDifficulty = !string.IsNullOrWhiteSpace(course.MockExamDifficultyDistribution);
-        var targetTotalQuestions = useDifficulty ? defaultTotalQuestions : structure.TotalQuestions > 0 ? structure.TotalQuestions : defaultTotalQuestions;
 
-        // 4. Giải mã cấu trúc ma trận Bloom
+        // 4. Giải mã cấu trúc ma trận Bloom / Độ khó
         Dictionary<string, int>? bloomDict = null;
         try
         {
-            var bloomSource = useDifficulty ? course.MockExamDifficultyDistribution : !string.IsNullOrWhiteSpace(structure.BloomDistribution) && structure.BloomDistribution != "{}"
-                ? structure.BloomDistribution
-                : defaultBloomDistribution;
+            var bloomSource = useDifficulty
+                ? course.MockExamDifficultyDistribution
+                : !string.IsNullOrWhiteSpace(structure.BloomDistribution) && structure.BloomDistribution != "{}"
+                    ? structure.BloomDistribution
+                    : defaultBloomDistribution;
             if (!string.IsNullOrWhiteSpace(bloomSource))
             {
                 bloomDict = JsonSerializer.Deserialize<Dictionary<string, int>>(bloomSource, new JsonSerializerOptions
@@ -110,11 +111,15 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         }
         catch
         {
-            // fallback nếu parse JSON thất bại
+            if (useDifficulty)
+            {
+                useDifficulty = false;
+            }
         }
 
         if (bloomDict == null || bloomDict.Count == 0)
         {
+            useDifficulty = false;
             bloomDict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Remember"] = 1,
@@ -122,6 +127,13 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
                 ["Apply"] = 2
             };
         }
+
+        var difficultyQuestionSum = useDifficulty ? bloomDict.Values.Where(v => v > 0).Sum() : 0;
+        var targetTotalQuestions = useDifficulty && difficultyQuestionSum > 0
+            ? difficultyQuestionSum
+            : structure.TotalQuestions > 0
+                ? structure.TotalQuestions
+                : defaultTotalQuestions;
 
         // 5. Lấy danh sách câu hỏi từ kho practice_questions (CÔ LẬP TUYỆT ĐỐI VỚI exam_questions)
         var allAvailableQuestions = await _context.PracticeQuestions
@@ -133,7 +145,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         if (allAvailableQuestions.Count < targetTotalQuestions)
         {
-            return Result<StartMockExamResponse>.Failure($"Kho câu hỏi luyện tập của môn học hiện chỉ có {allAvailableQuestions.Count} câu, không đủ {targetTotalQuestions} câu theo cấu trúc đề thi.");
+            return Result<StartMockExamResponse>.Failure($"CONFLICT:Kho câu hỏi luyện tập của môn học hiện chỉ có {allAvailableQuestions.Count} câu, không đủ {targetTotalQuestions} câu theo cấu trúc đề thi.");
         }
 
         // 6. Thuật toán bốc đề theo Bloom Distribution kèm Fallback
@@ -167,7 +179,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             if (useDifficulty)
             {
                 return Result<StartMockExamResponse>.Failure(
-                    "Kho câu hỏi luyện tập chưa đủ câu theo phân bổ độ khó của môn học. Vui lòng liên hệ giảng viên.");
+                    "CONFLICT:Kho câu hỏi luyện tập chưa đủ câu theo phân bổ độ khó của môn học. Vui lòng liên hệ giảng viên.");
             }
             var remainingQuestions = allAvailableQuestions
                 .Where(q => !usedIds.Contains(q.Id))
@@ -225,7 +237,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         // 8. Tính toán thời lượng làm bài
         // Không Follow-up: thời lượng từ structure / course (mặc định 30 phút).
         // Có Follow-up: cộng thêm 15 phút (tối thiểu 45 phút).
-        var baseDuration = useDifficulty ? defaultDurationMinutes : structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
+        var baseDuration = structure.DurationMinutes > 0 ? structure.DurationMinutes : defaultDurationMinutes;
         var durationMinutes = request.HasFollowUp ? Math.Max(45, baseDuration + 15) : baseDuration;
         var startedAt = now;
         var expiresAt = startedAt.AddMinutes(durationMinutes);

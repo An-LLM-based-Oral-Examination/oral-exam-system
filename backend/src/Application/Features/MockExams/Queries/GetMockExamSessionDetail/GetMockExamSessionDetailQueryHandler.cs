@@ -58,28 +58,42 @@ public sealed class GetMockExamSessionDetailQueryHandler
             return Result<MockExamScorecardDto>.Failure("Bạn không có quyền truy cập ca thi này.");
         }
 
+        var nowUtc = DateTime.UtcNow;
         var isExpiredInProgress = string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase)
-            && DateTime.UtcNow > session.ExpiresAt.AddSeconds(10);
+            && session.PausedAt == null
+            && nowUtc > session.ExpiresAt.AddSeconds(10);
         var isPendingDeferredGrading = string.Equals(session.Status, "submitted", StringComparison.OrdinalIgnoreCase)
             && (!session.TotalScore.HasValue
                 || session.Answers.Any(a => !string.IsNullOrWhiteSpace(a.AnswerText) && a.Status != "graded"));
 
-        if (_aiGradingService != null && (isExpiredInProgress || isPendingDeferredGrading))
+        if (request.AttemptLazyGrading && _aiGradingService != null && (isExpiredInProgress || isPendingDeferredGrading))
         {
-            try
-            {
-                var submitHandler = new SubmitMockExamSessionCommandHandler(_context, _aiGradingService);
-                var autoGradedResult = await submitHandler.Handle(
-                    new SubmitMockExamSessionCommand(session.Id, session.StudentId),
+            var isBlockedByDlq = await _context.DeadLetterQueues
+                .AsNoTracking()
+                .AnyAsync(
+                    q => q.TaskType == "MockExamGrading"
+                         && q.CorrelationId == session.Id
+                         && (q.Status == "abandoned"
+                             || (q.Status == "pending" && q.NextRetryAt != null && q.NextRetryAt > nowUtc)),
                     cancellationToken);
-                if (autoGradedResult.IsSuccess && autoGradedResult.Value != null)
-                {
-                    return autoGradedResult;
-                }
-            }
-            catch
+
+            if (!isBlockedByDlq)
             {
-                // Nếu AI vẫn đang tạm thời gián đoạn, tiếp tục trả về dữ liệu hiện có đã lưu của các câu trả lời
+                try
+                {
+                    var submitHandler = new SubmitMockExamSessionCommandHandler(_context, _aiGradingService);
+                    var autoGradedResult = await submitHandler.Handle(
+                        new SubmitMockExamSessionCommand(session.Id, session.StudentId),
+                        cancellationToken);
+                    if (autoGradedResult.IsSuccess && autoGradedResult.Value != null)
+                    {
+                        return autoGradedResult;
+                    }
+                }
+                catch
+                {
+                    // Nếu AI vẫn đang tạm thời gián đoạn, tiếp tục trả về dữ liệu hiện có đã lưu của các câu trả lời
+                }
             }
         }
 
@@ -111,33 +125,39 @@ public sealed class GetMockExamSessionDetailQueryHandler
             var displayContent = a.IsFollowUp
                 ? (!string.IsNullOrWhiteSpace(a.PromptText) ? a.PromptText! : q.Content)
                 : q.Content;
+            var isAnswerAwaitingAi = aiEval == null
+                && !string.IsNullOrWhiteSpace(a.AnswerText)
+                && (isPendingDeferredGrading || !string.Equals(a.Status, "graded", StringComparison.OrdinalIgnoreCase));
 
             var criterionScores = new List<MockExamCriterionScoreDto>();
-            var allRubricCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
-            var effectiveCriteria = (a.IsFollowUp && aiEval?.Details != null && aiEval.Details.Count > 0 && aiEval.Details.Count < allRubricCriteria.Count)
-                ? allRubricCriteria.Where(c => aiEval.Details.Any(d => d.CriterionId == c.Id)).ToList()
-                : allRubricCriteria;
-            if (effectiveCriteria.Count == 0)
+            if (!isAnswerAwaitingAi)
             {
-                effectiveCriteria = allRubricCriteria;
-            }
+                var allRubricCriteria = q.Rubric?.Criteria?.OrderBy(x => x.OrderIndex).ToList() ?? new List<RubricCriterion>();
+                var effectiveCriteria = (a.IsFollowUp && aiEval?.Details != null && aiEval.Details.Count > 0 && aiEval.Details.Count < allRubricCriteria.Count)
+                    ? allRubricCriteria.Where(c => aiEval.Details.Any(d => d.CriterionId == c.Id)).ToList()
+                    : allRubricCriteria;
+                if (effectiveCriteria.Count == 0)
+                {
+                    effectiveCriteria = allRubricCriteria;
+                }
 
-            foreach (var c in effectiveCriteria)
-            {
-                var detail = aiEval?.Details?.FirstOrDefault(d => d.CriterionId == c.Id);
-                var score = detail?.Score ?? 0.0m;
-                var comment = detail?.Comment ?? (string.IsNullOrWhiteSpace(a.AnswerText)
-                    ? unansweredReason
-                    : string.Empty);
+                foreach (var c in effectiveCriteria)
+                {
+                    var detail = aiEval?.Details?.FirstOrDefault(d => d.CriterionId == c.Id);
+                    var score = detail?.Score ?? 0.0m;
+                    var comment = detail?.Comment ?? (string.IsNullOrWhiteSpace(a.AnswerText)
+                        ? unansweredReason
+                        : string.Empty);
 
-                criterionScores.Add(new MockExamCriterionScoreDto(
-                    CriterionId: c.Id,
-                    CriterionName: c.CriterionName,
-                    BloomLevel: c.BloomLevel,
-                    MaxScore: c.MaxScore,
-                    Score: score,
-                    Comment: comment
-                ));
+                    criterionScores.Add(new MockExamCriterionScoreDto(
+                        CriterionId: c.Id,
+                        CriterionName: c.CriterionName,
+                        BloomLevel: c.BloomLevel,
+                        MaxScore: c.MaxScore,
+                        Score: score,
+                        Comment: comment
+                    ));
+                }
             }
 
             questionScores.Add(new MockExamQuestionScoreDto(
@@ -150,7 +170,7 @@ public sealed class GetMockExamSessionDetailQueryHandler
                 Transcript: a.AnswerText,
                 Score: aiEval?.TotalScore ?? 0.0m,
                 Feedback: aiEval?.Feedback ?? (string.IsNullOrWhiteSpace(a.AnswerText) ? unansweredReason : null),
-                ConfidenceScore: aiEval?.ConfidenceScore ?? 1.0m,
+                ConfidenceScore: isAnswerAwaitingAi ? null : (aiEval?.ConfidenceScore ?? 1.0m),
                 CriteriaScores: criterionScores,
                 ImageUrl: a.IsFollowUp ? null : q.ImageUrl,
                 ImageDescription: a.IsFollowUp ? null : q.ImageDescription,
@@ -162,11 +182,11 @@ public sealed class GetMockExamSessionDetailQueryHandler
         }
 
         var mainAnswers = orderedAnswers.Where(a => !a.IsFollowUp).ToList();
-        var examSet = session.ExamSetId != Guid.Empty
+        var examSet = session.ExamSetId.HasValue && session.ExamSetId.Value != Guid.Empty
             ? await _context.ExamSets
                 .AsNoTracking()
                 .Include(es => es.Structure)
-                .FirstOrDefaultAsync(es => es.Id == session.ExamSetId, cancellationToken)
+                .FirstOrDefaultAsync(es => es.Id == session.ExamSetId.Value, cancellationToken)
             : null;
 
         int structureTotalQuestions = examSet?.Structure?.TotalQuestions ?? 0;
@@ -229,18 +249,23 @@ public sealed class GetMockExamSessionDetailQueryHandler
         }
 
         var mainScores = questionScores.Where(x => !x.IsFollowUp).ToList();
+        bool isGradingPending = string.Equals(session.Status, "submitted", StringComparison.OrdinalIgnoreCase)
+            && !session.TotalScore.HasValue;
+
         decimal totalScore = session.TotalScore ?? (mainScores.Count > 0
             ? Math.Round(mainScores.Sum(x => x.Score) / mainScores.Count, 2, MidpointRounding.AwayFromZero)
             : 0.0m);
 
-        string classification = totalScore switch
-        {
-            >= 9.0m => "Xuất sắc",
-            >= 8.0m => "Giỏi",
-            >= 6.5m => "Khá",
-            >= 5.0m => "Trung bình",
-            _ => "Yếu"
-        };
+        string classification = isGradingPending
+            ? "Đang chờ chấm điểm"
+            : totalScore switch
+            {
+                >= 9.0m => "Xuất sắc",
+                >= 8.0m => "Giỏi",
+                >= 6.5m => "Khá",
+                >= 5.0m => "Trung bình",
+                _ => "Yếu"
+            };
 
         int totalQuestions = expectedTotalQuestions > 0
             ? Math.Max(expectedTotalQuestions, mainScores.Count)
@@ -263,7 +288,8 @@ public sealed class GetMockExamSessionDetailQueryHandler
             IsOverdue: isOverdue,
             StartedAt: session.StartedAt,
             SubmittedAt: session.SubmittedAt ?? session.StartedAt,
-            Questions: questionScores
+            Questions: questionScores,
+            IsGradingPending: isGradingPending
         );
 
         return Result<MockExamScorecardDto>.Success(scorecard);

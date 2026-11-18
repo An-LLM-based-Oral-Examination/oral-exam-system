@@ -117,6 +117,7 @@ export interface MockExamScorecard {
   courseName: string
   totalScore: number
   classification: string
+  isGradingPending?: boolean
   totalQuestions: number
   answeredQuestions: number
   durationMinutes: number

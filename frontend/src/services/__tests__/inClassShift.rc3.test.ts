@@ -291,4 +291,56 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
       },
     ])
   })
+
+  it('falls back to /student/classes/my-classes and only exposes myFinalScore when FINALIZED or locked', async () => {
+    vi.mocked(apiClient.get)
+      .mockRejectedValueOnce({ status: 404 })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            classId: 'cls-42',
+            className: 'SE1842',
+            courseCode: 'SWD392',
+            courseName: 'Software Architecture and Design',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'sh-open',
+            classId: 'cls-42',
+            shiftName: 'Quiz chưa chốt',
+            status: 'CLOSED',
+            isLocked: false,
+            myParticipationStatus: 'GRADED',
+            myFinalScore: 9.0,
+            startTime: '2026-11-18T08:00:00Z',
+            endTime: '2026-11-18T09:00:00Z',
+          },
+          {
+            id: 'sh-final',
+            classId: 'cls-42',
+            shiftName: 'Quiz đã chốt',
+            status: 'FINALIZED',
+            isLocked: true,
+            myParticipationStatus: 'FINALIZED',
+            myFinalScore: 8.75,
+            startTime: '2026-11-18T08:00:00Z',
+            endTime: '2026-11-18T09:00:00Z',
+          },
+        ],
+      })
+
+    const shifts = await inClassShiftService.listStudentShifts()
+
+    expect(apiClient.get).toHaveBeenNthCalledWith(1, '/student/in-class-shifts/my')
+    expect(apiClient.get).toHaveBeenNthCalledWith(2, '/student/classes/my-classes')
+    expect(apiClient.get).toHaveBeenNthCalledWith(3, '/student/in-class-shifts/by-class/cls-42')
+
+    expect(shifts).toHaveLength(2)
+    expect(shifts[0].courseName).toBe('Software Architecture and Design')
+    expect(shifts[0].myFinalScore).toBeNull()
+    expect(shifts[1].myFinalScore).toBe(8.75)
+  })
 })

@@ -81,13 +81,12 @@ public class PasswordLoginAdversarialChallengerTests
         result.Value.RefreshToken.Should().NotBeNullOrWhiteSpace();
     }
 
-    [Theory(DisplayName = "Challenger 1.2: Đăng nhập Sinh viên hoang se181212 với khoảng trắng trong username và password")]
-    [InlineData("hoang se181212", "Hoang se181212")]
-    [InlineData(" hoang   se181212 ", "Hoang se181212")]
-    [InlineData("HOANG SE181212", "Hoang se181212")]
-    [InlineData("hoangse181212", "Hoang se181212")]
+    [Theory(DisplayName = "Challenger 1.2: Đăng nhập Sinh viên hoang se181212 với khoảng trắng trong username và mật khẩu khớp chính xác")]
     [InlineData("hoang se181212", "Hoangse181212")]
-    [InlineData("hoanglvse181212@fpt.edu.vn", "Hoang se181212")]
+    [InlineData(" hoang   se181212 ", "Hoangse181212")]
+    [InlineData("HOANG SE181212", "Hoangse181212")]
+    [InlineData("hoangse181212", "Hoangse181212")]
+    [InlineData("hoanglvse181212@fpt.edu.vn", "Hoangse181212")]
     public async Task Challenger_Student_HoangSe181212_WhitespaceVariants_Success(string usernameOrEmail, string password)
     {
         await using var context = CreateDbContext();
@@ -158,7 +157,9 @@ public class PasswordLoginAdversarialChallengerTests
 
     [Theory(DisplayName = "Challenger 1.4: Mật khẩu sai hoặc tài khoản không tồn tại không được ném 500, trả mã lỗi rõ ràng")]
     [InlineData("lecture", "Wrong-Password-123", AuthErrors.WrongPassword)]
+    [InlineData("lecture", "Lecture -123", AuthErrors.WrongPassword)]
     [InlineData("lecture@fe.edu.vn", "Wrong-Password-123", AuthErrors.WrongPassword)]
+    [InlineData("totse18191414", "Lecture-123", AuthErrors.AccountNotFound)]
     [InlineData("nonexistent_user", "Lecture-123", AuthErrors.AccountNotFound)]
     [InlineData("unknown@fpt.edu.vn", "Lecture-123", AuthErrors.AccountNotFound)]
     [InlineData("random_student@fe.edu.vn", "Pass123", AuthErrors.AccountNotFound)]

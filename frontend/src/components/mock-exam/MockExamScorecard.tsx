@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ChevronDown, MessageSquareText, Trophy } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Clock3, MessageSquareText, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import type {
@@ -13,6 +13,20 @@ const CLASSIFICATION_STYLES: Record<string, string> = {
   Khá: 'bg-[#4988C4]/16 text-[#1C4D8D]',
   'Trung bình': 'bg-[#fff8eb] text-[#9a6414]',
   Yếu: 'bg-[#fff1f3] text-[#c4475c]',
+  'Đang chờ chấm điểm': 'bg-[#fff8eb] text-[#9a6414]',
+}
+
+function isQuestionPendingEvaluation(
+  question: MockExamQuestionScore,
+  scorecardPending: boolean,
+) {
+  if (!scorecardPending) return false
+  const hasAnswer = Boolean(question.transcript?.trim())
+  const hasAiEvaluation =
+    Boolean(question.feedback?.trim()) ||
+    question.criteriaScores.some((c) => c.score > 0 || Boolean(c.comment?.trim())) ||
+    question.score > 0
+  return hasAnswer && !hasAiEvaluation
 }
 
 function formatDateTime(value: string) {
@@ -61,7 +75,27 @@ function AnswerBlock({
   )
 }
 
-function FeedbackBlock({ question }: { question: MockExamQuestionScore }) {
+function FeedbackBlock({
+  question,
+  pendingEvaluation = false,
+}: {
+  question: MockExamQuestionScore
+  pendingEvaluation?: boolean
+}) {
+  if (pendingEvaluation) {
+    return (
+      <div className="rounded-xl border border-[#f3ddb0] bg-[#fffaf2] p-3">
+        <p className="flex items-center gap-1.5 text-xs font-bold text-[#9a6414]">
+          <Clock3 className="size-3.5" />
+          Trạng thái chấm điểm
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-[#7c5313]">
+          Đang chờ hệ thống chấm điểm tự động
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-xl border border-[#d9f3ea] bg-[#f4fbf8] p-3">
       <p className="flex items-center gap-1.5 text-xs font-bold text-[#16886c]">
@@ -111,6 +145,10 @@ function CriteriaBlock({ question }: { question: MockExamQuestionScore }) {
 }
 
 export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardData }) {
+  const isGradingPending =
+    Boolean(scorecard.isGradingPending) || scorecard.classification === 'Đang chờ chấm điểm'
+  const displayClassification = isGradingPending ? 'Đang chờ chấm điểm' : scorecard.classification
+
   const mainQuestions = useMemo(
     () => scorecard.questions.filter((item) => !item.isFollowUp),
     [scorecard.questions],
@@ -134,7 +172,7 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
     mainQuestions[0] ? questionKey(mainQuestions[0]) : null,
   )
   const classificationClassName =
-    CLASSIFICATION_STYLES[scorecard.classification] ?? 'bg-[#4988C4]/16 text-[#5b6b84]'
+    CLASSIFICATION_STYLES[displayClassification] ?? 'bg-[#4988C4]/16 text-[#5b6b84]'
 
   return (
     <div className="space-y-3">
@@ -158,10 +196,16 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
             <div className="flex items-center gap-3 self-start rounded-2xl bg-white/10 px-4 py-3">
               <div>
                 <p className="text-xs font-semibold text-[#BDE8F5]">Điểm</p>
-                <p className="text-4xl leading-none font-black tracking-[-0.04em]">
-                  {formatScore(scorecard.totalScore)}
-                  <span className="ml-1 text-sm font-semibold text-[#BDE8F5]">/10</span>
-                </p>
+                {isGradingPending ? (
+                  <p className="text-2xl leading-none font-black tracking-[-0.02em] sm:text-3xl">
+                    Chờ chấm
+                  </p>
+                ) : (
+                  <p className="text-4xl leading-none font-black tracking-[-0.04em]">
+                    {formatScore(scorecard.totalScore)}
+                    <span className="ml-1 text-sm font-semibold text-[#BDE8F5]">/10</span>
+                  </p>
+                )}
               </div>
               <span
                 className={cn(
@@ -169,7 +213,7 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                   classificationClassName,
                 )}
               >
-                {scorecard.classification}
+                {displayClassification}
               </span>
             </div>
           </div>
@@ -178,6 +222,17 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
           <p>Bắt đầu: {formatDateTime(scorecard.startedAt)}</p>
           <p>Nộp bài: {formatDateTime(scorecard.submittedAt)}</p>
         </div>
+        {isGradingPending && (
+          <div
+            role="status"
+            className="mx-5 mb-4 flex items-start gap-2.5 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-3 text-sm leading-relaxed text-[#9a6414]"
+          >
+            <Clock3 className="mt-0.5 size-4 shrink-0 text-[#b45309]" />
+            <span>
+              Bài thi thử đã được lưu an toàn. Hệ thống chấm điểm AI đang xử lý tự động và sẽ cập nhật điểm số trong ít phút.
+            </span>
+          </div>
+        )}
         {scorecard.isOverdue && (
           <div className="mx-5 mb-4 flex items-start gap-2 rounded-xl border border-[#f1c7ce] bg-[#fff5f6] p-3 text-sm leading-relaxed text-[#ae3d50]">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -190,6 +245,7 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
         {mainQuestions.map((question) => {
           const key = questionKey(question)
           const isOpen = openQuestionKey === key
+          const pendingMainEval = isQuestionPendingEvaluation(question, isGradingPending)
           const followUps =
             followUpsByParent.get(question.answerId ?? '') ??
             followUpsByParent.get(`order-${question.orderIndex}`) ??
@@ -222,9 +278,15 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
-                    {formatScore(question.score, 1)}/10
-                  </span>
+                  {pendingMainEval ? (
+                    <span className="rounded-full border border-[#f3ddb0] bg-[#fff8eb] px-2.5 py-1 text-xs font-bold text-[#9a6414]">
+                      Đang chờ hệ thống chấm điểm tự động
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-[#4988C4]/16 px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                      {formatScore(question.score, 1)}/10
+                    </span>
+                  )}
                   <ChevronDown
                     className={cn('size-4 text-[#74839a] transition', isOpen && 'rotate-180')}
                   />
@@ -245,10 +307,14 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                     </div>
                   ) : null}
                   <AnswerBlock label="Câu trả lời" transcript={question.transcript} />
-                  <FeedbackBlock question={question} />
+                  <FeedbackBlock question={question} pendingEvaluation={pendingMainEval} />
                   <CriteriaBlock question={question} />
 
                   {followUps.map((followUp, index) => {
+                    const pendingFollowUpEval = isQuestionPendingEvaluation(
+                      followUp,
+                      isGradingPending,
+                    )
                     const singleFuCriterion =
                       followUp.criteriaScores.length === 1 ? followUp.criteriaScores[0] : null
                     const showSingleCriterionScale =
@@ -270,14 +336,23 @@ export function MockExamScorecard({ scorecard }: { scorecard: MockExamScorecardD
                               {followUp.content}
                             </p>
                           </div>
-                          <span className="shrink-0 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
-                            {showSingleCriterionScale
-                              ? `${formatScore(singleFuCriterion.score, 1)}/${formatScore(singleFuCriterion.maxScore, 1)}đ (${formatScore(followUp.score, 1)}/10)`
-                              : `${formatScore(followUp.score, 1)}/10`}
-                          </span>
+                          {pendingFollowUpEval ? (
+                            <span className="shrink-0 rounded-full border border-[#f3ddb0] bg-[#fff8eb] px-2.5 py-1 text-xs font-bold text-[#9a6414]">
+                              Đang chờ hệ thống chấm điểm tự động
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-sm font-bold text-[#1C4D8D]">
+                              {showSingleCriterionScale
+                                ? `${formatScore(singleFuCriterion.score, 1)}/${formatScore(singleFuCriterion.maxScore, 1)}đ (${formatScore(followUp.score, 1)}/10)`
+                                : `${formatScore(followUp.score, 1)}/10`}
+                            </span>
+                          )}
                         </div>
                         <AnswerBlock label="Câu trả lời phụ" transcript={followUp.transcript} />
-                        <FeedbackBlock question={followUp} />
+                        <FeedbackBlock
+                          question={followUp}
+                          pendingEvaluation={pendingFollowUpEval}
+                        />
                         <CriteriaBlock question={followUp} />
                       </div>
                     )

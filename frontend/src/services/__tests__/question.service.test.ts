@@ -127,4 +127,71 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
       ],
     })
   })
+
+  it('updateDraft sends PUT /questions/{id} with UpdateQuestionDraftRequest payload', async () => {
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue({
+      data: { questionId: 'q-draft-1' },
+    } as never)
+
+    const payload = {
+      title: 'Giải thích Clean Architecture',
+      content: 'Trình bày quy tắc phụ thuộc giữa các tầng trong Clean Architecture.',
+      sampleAnswer:
+        'Clean Architecture tổ chức phụ thuộc hướng vào trong về tầng Domain, tách biệt hoàn toàn UI và Infrastructure.',
+      keyPoints: ['Dependency Rule', 'Domain Isolation'],
+      difficulty: 'medium' as const,
+      bloomLevel: 'Understand' as const,
+      cloId: 'clo-1',
+      rubric: {
+        name: 'Rubric Clean Architecture',
+        description: 'Đánh giá hiểu biết phân tầng',
+        totalMaxScore: 10,
+        criteria: [
+          {
+            criterionName: 'Dependency Rule',
+            maxScore: 5,
+            weight: 0.5,
+            bloomLevel: 'Understand' as const,
+            description: 'Nêu đúng chiều phụ thuộc',
+            orderIndex: 1,
+          },
+          {
+            criterionName: 'Layer Responsibilities',
+            maxScore: 5,
+            weight: 0.5,
+            bloomLevel: 'Understand' as const,
+            description: 'Phân biệt đúng 4 tầng',
+            orderIndex: 2,
+          },
+        ],
+      },
+    }
+
+    const res = await questionService.updateDraft('q-draft-1', payload)
+
+    expect(put).toHaveBeenCalledWith('/questions/q-draft-1', payload)
+    expect(res).toEqual({ questionId: 'q-draft-1' })
+  })
+
+  it('setQuestionActive sends PATCH /questions/{id}/active with { isActive }', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: null } as never)
+
+    await questionService.setQuestionActive('q-approved-1', false)
+    expect(patch).toHaveBeenNthCalledWith(1, '/questions/q-approved-1/active', {
+      isActive: false,
+    })
+
+    await questionService.setQuestionActive('q-approved-1', true)
+    expect(patch).toHaveBeenNthCalledWith(2, '/questions/q-approved-1/active', {
+      isActive: true,
+    })
+  })
+
+  it('deleteDraft sends DELETE /questions/{id}', async () => {
+    const del = vi.spyOn(apiClient, 'delete').mockResolvedValue({ data: null } as never)
+
+    await questionService.deleteDraft('q-draft-99')
+
+    expect(del).toHaveBeenCalledWith('/questions/q-draft-99')
+  })
 })

@@ -87,16 +87,18 @@ public sealed class SubmitMockExamSessionCommandHandler(
             return Result<MockExamScorecardDto>.Failure("CONFLICT: Ca thi đã được nộp và chấm điểm trước đó.");
         }
 
-        // 2. Server Master Timer check (kèm 10s Network Grace Period)
+        // 2. Server Master Timer check (kèm 10s Network Grace Period & hỗ trợ ca đang tạm dừng PausedAt)
         var submittedAt = session.SubmittedAt ?? DateTime.UtcNow;
-        var isOverdue = submittedAt > session.ExpiresAt.AddSeconds(10);
+        var effectiveSubmittedAt = session.PausedAt ?? submittedAt;
+        var isOverdue = effectiveSubmittedAt > session.ExpiresAt.AddSeconds(10);
+        session.PausedAt = null;
         session.Status = "submitted";
         session.SubmittedAt = submittedAt;
         await _context.SaveChangesAsync(cancellationToken);
 
         // Dọn dẹp các slot câu hỏi phụ đang chờ (pending / chưa có câu trả lời) trước khi sắp xếp và chấm điểm
         var unansweredFollowUps = session.Answers
-            .Where(a => a.IsFollowUp && (a.Status != "answered" || string.IsNullOrWhiteSpace(a.AnswerText)))
+            .Where(a => a.IsFollowUp && (a.Status != "answered" && a.Status != "graded" || string.IsNullOrWhiteSpace(a.AnswerText)))
             .ToList();
         if (unansweredFollowUps.Count > 0)
         {
@@ -115,7 +117,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
         {
             var q = a.Question;
             int orderIndex = a.OrderIndex > 0 ? a.OrderIndex : index + 1;
-            bool isAnswered = !string.IsNullOrWhiteSpace(a.AnswerText) && a.Status == "answered";
+            bool isAnswered = !string.IsNullOrWhiteSpace(a.AnswerText) && (a.Status == "answered" || a.Status == "graded");
             var displayTitle = a.IsFollowUp ? $"Câu hỏi phụ · {q.Title}" : q.Title;
             var displayContent = a.IsFollowUp
                 ? (!string.IsNullOrWhiteSpace(a.PromptText) ? a.PromptText! : q.Content)
@@ -533,46 +535,91 @@ public sealed class SubmitMockExamSessionCommandHandler(
         }
 
         List<(MockExamAnswer a, MockExamQuestionScoreDto score, AiEvaluation? eval)> results;
+        var rawResults = new (MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval)[sessionAnswers.Count];
         var newEvaluationIds = new HashSet<Guid>();
+        var syncLock = new object();
         try
         {
-            var rawResults = new (MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval)[sessionAnswers.Count];
+            using var gradingGate = new SemaphoreSlim(3, 3);
 
-            // Chấm lần lượt trong một bài thi để không nhân tải AI theo số câu khi nhiều sinh viên nộp cùng lúc.
+            // Pha 1: Chấm song song giới hạn tối đa 3 luồng AI cho các câu hỏi chính, cập nhật entity trên luồng điều phối đơn
             var mainIndexed = sessionAnswers
                 .Select((a, idx) => (a, idx))
                 .Where(x => !x.a.IsFollowUp)
                 .ToList();
 
-            foreach (var item in mainIndexed)
+            var mainTasks = mainIndexed.Select(async item =>
             {
-                var res = await EvaluateSingleAnswerAsync(item.a, item.idx);
-                rawResults[item.idx] = res;
-                if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                await gradingGate.WaitAsync(cancellationToken);
+                try
                 {
-                    res.a.AiEvaluations ??= new List<AiEvaluation>();
-                    res.a.AiEvaluations.Add(res.eval);
-                    newEvaluationIds.Add(res.eval.Id);
+                    return (item.idx, res: await EvaluateSingleAnswerAsync(item.a, item.idx));
+                }
+                finally
+                {
+                    gradingGate.Release();
+                }
+            }).ToArray();
+
+            try
+            {
+                await Task.WhenAll(mainTasks);
+            }
+            finally
+            {
+                foreach (var task in mainTasks)
+                {
+                    if (task.IsCompletedSuccessfully)
+                    {
+                        var (idx, res) = task.Result;
+                        rawResults[idx] = res;
+                        if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                        {
+                            res.a.AiEvaluations ??= new List<AiEvaluation>();
+                            res.a.AiEvaluations.Add(res.eval);
+                            newEvaluationIds.Add(res.eval.Id);
+                        }
+                    }
                 }
             }
 
-            // Pha 2: Chấm các câu trả lời phụ theo thứ tự để bám sát tiêu chí yếu nhất của câu chính và không trùng lặp giữa các lượt follow-up
-            var followUpIndexed = sessionAnswers
+            // Pha 2: Gom nhóm câu phụ theo QuestionId; các nhóm câu gốc khác nhau qua SemaphoreSlim(3,3),
+            // các câu phụ cùng 1 câu gốc chạy tuần tự theo thứ tự để câu sau đọc đúng alreadyTargetedFollowUpCriteria
+            var followUpGroups = sessionAnswers
                 .Select((a, idx) => (a, idx))
                 .Where(x => x.a.IsFollowUp)
+                .GroupBy(x => x.a.QuestionId)
                 .ToList();
 
-            foreach (var fuItem in followUpIndexed)
+            var followUpGroupTasks = followUpGroups.Select(async group =>
             {
-                var res = await EvaluateSingleAnswerAsync(fuItem.a, fuItem.idx);
-                rawResults[fuItem.idx] = res;
-                if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                foreach (var fuItem in group)
                 {
-                    res.a.AiEvaluations ??= new List<AiEvaluation>();
-                    res.a.AiEvaluations.Add(res.eval);
-                    newEvaluationIds.Add(res.eval.Id);
+                    (MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval) res;
+                    await gradingGate.WaitAsync(cancellationToken);
+                    try
+                    {
+                        res = await EvaluateSingleAnswerAsync(fuItem.a, fuItem.idx);
+                    }
+                    finally
+                    {
+                        gradingGate.Release();
+                    }
+
+                    lock (syncLock)
+                    {
+                        rawResults[fuItem.idx] = res;
+                        if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
+                        {
+                            res.a.AiEvaluations ??= new List<AiEvaluation>();
+                            res.a.AiEvaluations.Add(res.eval);
+                            newEvaluationIds.Add(res.eval.Id);
+                        }
+                    }
                 }
-            }
+            }).ToArray();
+
+            await Task.WhenAll(followUpGroupTasks);
 
             results = rawResults
                 .Where(r => r.score is not null)
@@ -581,14 +628,29 @@ public sealed class SubmitMockExamSessionCommandHandler(
         }
         catch (Exception ex)
         {
-            // Persist First: Giữ nguyên trạng thái "submitted" và thời điểm SubmittedAt để bảo toàn bài làm của sinh viên,
-            // cho phép hệ thống chấm điểm bù tự động (Background Worker / Lazy Recovery) ngay khi AI phục hồi.
+            // Persist First: Lưu các câu đã chấm xong trước khi gặp lỗi để không phải chấm lại từ đầu khi retry,
+            // giữ trạng thái "submitted" và chuyển vào DLQ để chấm bù tự động.
+            foreach (var r in rawResults)
+            {
+                if (r.a != null && r.eval != null && newEvaluationIds.Contains(r.eval.Id))
+                {
+                    r.a.Status = "graded";
+                    _context.AiEvaluations.Add(r.eval);
+                }
+            }
+
+            session.PausedAt = null;
             session.Status = "submitted";
             session.SubmittedAt = submittedAt;
 
             var now = DateTime.UtcNow;
             var existingDlq = await _context.DeadLetterQueues
-                .FirstOrDefaultAsync(q => q.CorrelationId == session.Id && q.Status == "pending", CancellationToken.None);
+                .OrderByDescending(q => q.CreatedAt)
+                .FirstOrDefaultAsync(
+                    q => q.CorrelationId == session.Id
+                         && q.TaskType == "MockExamGrading"
+                         && q.Status != "resolved",
+                    CancellationToken.None);
 
             if (existingDlq != null)
             {
@@ -626,7 +688,7 @@ public sealed class SubmitMockExamSessionCommandHandler(
             }
 
             await _context.SaveChangesAsync(CancellationToken.None);
-            throw;
+            return Result<MockExamScorecardDto>.Failure("DEFERRED_GRADING:Bài thi thử đã được lưu an toàn. Hệ thống chấm điểm AI đang tạm thời bận và sẽ tự động chấm bù trong ít phút.");
         }
 
         // 3b. Tổng hợp điểm tích lũy từ các câu trả lời phụ (Follow-up) vào câu trả lời chính tương ứng

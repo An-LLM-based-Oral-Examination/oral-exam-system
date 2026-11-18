@@ -311,6 +311,10 @@ function normalizeQuestionScore(value: unknown): MockExamQuestionScore {
 
 function normalizeScorecard(value: unknown): MockExamScorecard {
   const record = requireRecord(value, 'Bảng điểm thi thử không hợp lệ.')
+  const classification = requireString(record, 'classification', 'Bảng điểm thiếu xếp loại.')
+  const isGradingPending =
+    Boolean(record.isGradingPending ?? record.IsGradingPending) ||
+    classification === 'Đang chờ chấm điểm'
   const questions = readArray(record, 'questions', 'Bảng điểm thiếu danh sách câu hỏi.')
     .map(normalizeQuestionScore)
     .sort((left, right) => left.orderIndex - right.orderIndex)
@@ -321,7 +325,8 @@ function normalizeScorecard(value: unknown): MockExamScorecard {
     courseCode: requireString(record, 'courseCode', 'Bảng điểm thiếu mã môn.'),
     courseName: requireString(record, 'courseName', 'Bảng điểm thiếu tên môn.'),
     totalScore: requireDecimal(record, 'totalScore', 'Bảng điểm thiếu điểm tổng.'),
-    classification: requireString(record, 'classification', 'Bảng điểm thiếu xếp loại.'),
+    classification,
+    isGradingPending,
     totalQuestions: requireInteger(record, 'totalQuestions', 'Bảng điểm thiếu tổng số câu.'),
     answeredQuestions: requireInteger(
       record,

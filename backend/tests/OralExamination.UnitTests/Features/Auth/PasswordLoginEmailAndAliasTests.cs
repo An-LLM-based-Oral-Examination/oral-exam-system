@@ -126,8 +126,8 @@ public class PasswordLoginEmailAndAliasTests
         result.Value.User.StudentCode.Should().Be("SE181212");
     }
 
-    [Fact(DisplayName = "Đăng nhập với khoảng trắng trong Mật khẩu tự động fallback")]
-    public async Task Handle_LoginWithSpaceInPassword_Success()
+    [Fact(DisplayName = "Đăng nhập với khoảng trắng thừa trong Mật khẩu bị từ chối với WrongPassword")]
+    public async Task Handle_LoginWithSpaceInPassword_ReturnsWrongPassword()
     {
         await using var context = CreateDbContext();
         var student = new User
@@ -148,8 +148,8 @@ public class PasswordLoginEmailAndAliasTests
         var handler = CreateLoginHandler(context, new RecordingIssuer());
 
         var result = await handler.Handle(new PasswordLoginCommand("hoangse181212", "Hoang se181212"), CancellationToken.None);
-        result.IsSuccess.Should().BeTrue();
-        result.Value.User.Id.Should().Be(student.Id);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(AuthErrors.WrongPassword);
     }
 
     [Fact(DisplayName = "Đăng nhập với Username totse181414 và Email totntse181414@fpt.edu.vn")]

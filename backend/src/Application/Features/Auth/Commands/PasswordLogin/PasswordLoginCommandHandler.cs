@@ -54,21 +54,12 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
                 (item.Email != null && (item.Email.ToLower() == inputLower || item.Email.ToLower() == normalizedLower)),
                 cancellationToken);
 
-        if (user is null && (normalizedLower == "totse18191414" || inputLower == "totse18191414"))
-        {
-            user = await _context.Users
-                .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == "totse181414", cancellationToken);
-        }
-
         if (user is null && inputLower.Contains('@'))
         {
-            var localPart = inputLower.Split('@')[0].Trim();
-            if (localPart == "totse18191414")
-            {
-                user = await _context.Users
-                    .FirstOrDefaultAsync(item => item.Username != null && item.Username.ToLower() == "totse181414", cancellationToken);
-            }
-            else if (!string.IsNullOrWhiteSpace(localPart))
+            var atIndex = inputLower.IndexOf('@');
+            var localPart = inputLower[..atIndex].Trim();
+            var domainPart = inputLower[(atIndex + 1)..].Trim();
+            if (!string.IsNullOrWhiteSpace(localPart) && domainPart is "fpt.edu.vn" or "fe.edu.vn")
             {
                 user = await _context.Users
                     .FirstOrDefaultAsync(item =>
@@ -97,10 +88,6 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
         }
 
         var passwordMatches = _passwordHasher.Verify(request.Password!, user.PasswordHash);
-        if (!passwordMatches && request.Password!.Contains(' '))
-        {
-            passwordMatches = _passwordHasher.Verify(request.Password!.Replace(" ", ""), user.PasswordHash);
-        }
 
         if (!passwordMatches)
         {

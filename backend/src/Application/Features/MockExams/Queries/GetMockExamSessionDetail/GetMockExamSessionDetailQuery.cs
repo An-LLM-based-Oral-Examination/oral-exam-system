@@ -11,5 +11,6 @@ namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamSess
 public sealed record GetMockExamSessionDetailQuery(
     Guid SessionId,
     Guid StudentId,
-    bool IsElevatedRole = false
+    bool IsElevatedRole = false,
+    bool AttemptLazyGrading = true
 ) : IRequest<Result<MockExamScorecardDto>>;

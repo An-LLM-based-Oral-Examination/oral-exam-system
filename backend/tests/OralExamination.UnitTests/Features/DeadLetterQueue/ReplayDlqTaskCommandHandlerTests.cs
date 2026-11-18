@@ -302,6 +302,77 @@ public class ReplayDlqTaskCommandHandlerTests
         updatedDlq.NextRetryAt.Should().BeNull();
     }
 
+    [Fact(DisplayName = "6b. ReplayDlqTaskCommand: MockExamGrading trả về Failure và giữ DLQ pending khi AI vẫn lỗi DEFERRED_GRADING")]
+    public async Task Handle_WhenMockExamGradingFailsAgain_ReturnsFailureAndKeepsDlqPending()
+    {
+        using var context = CreateDbContext();
+        var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = ".NET 8" };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Rubric", TotalMaxScore = 10.0m };
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Title = "Q1",
+            Content = "Explain DI",
+            Difficulty = "easy",
+            BloomLevel = "Understand"
+        };
+        var studentId = Guid.NewGuid();
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            Status = "submitted",
+            StartedAt = DateTime.UtcNow.AddMinutes(-20),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-5),
+            TotalScore = null
+        };
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = question.Id,
+            OrderIndex = 1,
+            AnswerText = "DI decouples components.",
+            Status = "answered"
+        });
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "MockExamGrading",
+            FlowType = "MOCK_EXAM",
+            ManagedByRole = "admin",
+            CorrelationId = session.Id,
+            PayloadJson = JsonSerializer.Serialize(new { SessionId = session.Id, StudentId = studentId }),
+            ErrorMessage = "Initial timeout",
+            RetryCount = 1,
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+
+        context.Courses.Add(course);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.Add(question);
+        context.MockExamSessions.Add(session);
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var aiMock = new Mock<IAiGradingService>();
+        aiMock.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Gemini 429 rate limited"));
+
+        var handler = new ReplayDlqTaskCommandHandler(context, new Mock<IGradingQueueChannel>().Object, aiMock.Object);
+        var result = await handler.Handle(new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("DEFERRED_GRADING:");
+        var refreshedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        refreshedDlq!.Status.Should().Be("pending");
+    }
+
     [Fact(DisplayName = "7. ReplayDlqTaskCommand: Replay tác vụ Practice với role admin thành công")]
     public async Task Handle_WhenPracticeTask_WithAdminRole_Succeeds()
     {

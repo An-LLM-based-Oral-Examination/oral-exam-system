@@ -391,4 +391,47 @@ public class MockExamsControllerTests
         var notFoundResult = actionResult.Should().BeOfType<NotFoundObjectResult>().Subject;
         notFoundResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
+
+    [Fact(DisplayName = "15. SubmitSession trả về 202 Accepted kèm IsGradingPending=true khi AI tạm bận (DEFERRED_GRADING)")]
+    public async Task SubmitSession_Should_Return_202_Accepted_When_Deferred_Grading()
+    {
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        var pendingScorecard = new MockExamScorecardDto(
+            SessionId: sessionId,
+            CourseId: Guid.NewGuid(),
+            CourseCode: "SWD392",
+            CourseName: "Software Architecture",
+            TotalScore: 0.0m,
+            Classification: "Đang chờ chấm điểm",
+            TotalQuestions: 3,
+            AnsweredQuestions: 3,
+            DurationMinutes: 20,
+            IsOverdue: false,
+            StartedAt: DateTime.UtcNow.AddMinutes(-15),
+            SubmittedAt: DateTime.UtcNow,
+            Questions: new List<MockExamQuestionScoreDto>(),
+            IsGradingPending: true
+        );
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<SubmitMockExamSessionCommand>(c => c.SessionId == sessionId && c.StudentId == studentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<MockExamScorecardDto>.Failure("DEFERRED_GRADING:Bài thi thử đã được lưu an toàn."));
+
+        _senderMock
+            .Setup(s => s.Send(
+                It.Is<GetMockExamSessionDetailQuery>(q => q.SessionId == sessionId && q.StudentId == studentId && !q.AttemptLazyGrading),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<MockExamScorecardDto>.Success(pendingScorecard));
+
+        var actionResult = await _controller.SubmitSession(sessionId);
+
+        var accepted = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        accepted.StatusCode.Should().Be(StatusCodes.Status202Accepted);
+        var dto = accepted.Value.Should().BeOfType<MockExamScorecardDto>().Subject;
+        dto.IsGradingPending.Should().BeTrue();
+        dto.Classification.Should().Be("Đang chờ chấm điểm");
+    }
 }

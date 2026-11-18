@@ -366,13 +366,21 @@ public class AdversarialMilestone1DbSeederChallengerTests
             duplicatePks.Should().BeEmpty(
                 $"Phát hiện khóa chính UUID bị trùng lặp trong tệp SQL {path}: {string.Join(", ", duplicatePks)}");
 
-            // 4. Kiểm tra sự hiện diện của 6 ENT courses trong SQL
+            // 4. Kiểm tra sự hiện diện của 6 ENT courses và 24 ENT CLOs trong SQL
             content.Should().Contain("ENT001");
             content.Should().Contain("ENT104");
             content.Should().Contain("ENT203");
             content.Should().Contain("ENT303");
             content.Should().Contain("ENT403");
             content.Should().Contain("ENT503");
+            for (int courseIdx = 1; courseIdx <= 6; courseIdx++)
+            {
+                for (int cloIdx = 1; cloIdx <= 4; cloIdx++)
+                {
+                    content.Should().Contain($"00000000-0000-0000-0000-00000000{courseIdx}e6{cloIdx}");
+                }
+            }
+            content.Should().Contain("UPDATE practice_questions pq");
         }
     }
 }

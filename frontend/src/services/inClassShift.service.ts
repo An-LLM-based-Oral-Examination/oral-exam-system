@@ -190,6 +190,7 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
   if (!id) return null
   const statusRaw = readString(raw, 'status').toUpperCase()
   const isLocked = readBool(raw, 'isLocked', 'IsLocked')
+  const isFinalizedOrLocked = isLocked || statusRaw === 'FINALIZED'
   const startTime = readString(raw, 'startTime')
   const endTime = readString(raw, 'endTime')
   const durationMinutes = readNumber(raw, 'durationMinutes') || durationFromRange(startTime, endTime)
@@ -201,10 +202,11 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     className:
       readString(raw, 'className', 'classCode') || fallbackClass?.name || 'Lớp học phần',
     courseCode: readString(raw, 'courseCode', 'classCode') || fallbackClass?.courseCode || '',
+    courseName: readString(raw, 'courseName', 'CourseName') || fallbackClass?.courseName || '',
     title: readString(raw, 'shiftName', 'title') || 'Ca thi trên lớp',
     description: readString(raw, 'description'),
     status: mapShiftStatus(statusRaw, isLocked),
-    isLocked: isLocked || statusRaw === 'FINALIZED',
+    isLocked: isFinalizedOrLocked,
     startTime,
     durationMinutes,
     examDurationMinutes: (() => {
@@ -233,6 +235,9 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     myJoinedAt: readString(raw, 'myJoinedAt', 'MyJoinedAt') || null,
     myExamEndsAt: readString(raw, 'myExamEndsAt', 'MyExamEndsAt') || null,
     myRemainingSeconds: readNullableNumber(raw, 'myRemainingSeconds', 'MyRemainingSeconds'),
+    myFinalScore: isFinalizedOrLocked
+      ? readNullableNumber(raw, 'myFinalScore', 'MyFinalScore')
+      : null,
   }
 }
 
@@ -939,16 +944,21 @@ export const inClassShiftService = {
       }
     }
 
-    const classes = await apiClient.get<unknown>('/classes/my')
-    const classIds = unwrapList(classes.data)
+    const classes = await apiClient.get<unknown>('/student/classes/my-classes')
+    const studentClasses: LecturerClassOption[] = unwrapList(classes.data)
       .filter(isRecord)
-      .map((item) => readString(item, 'classId', 'id'))
-      .filter(Boolean)
+      .map((item) => ({
+        id: readString(item, 'classId', 'id'),
+        name: readString(item, 'name', 'className', 'code') || 'Lớp học phần',
+        courseCode: readString(item, 'courseCode', 'code'),
+        courseName: readString(item, 'courseName', 'CourseName'),
+      }))
+      .filter((item) => Boolean(item.id))
     const batches = await Promise.all(
-      classIds.map(async (classId) => {
-        const response = await apiClient.get<unknown>(`/student/in-class-shifts/by-class/${classId}`)
+      studentClasses.map(async (cls) => {
+        const response = await apiClient.get<unknown>(`/student/in-class-shifts/by-class/${cls.id}`)
         return unwrapList(response.data)
-          .map((item) => normalizeShift(item))
+          .map((item) => normalizeShift(item, cls))
           .filter((item): item is InClassShift => Boolean(item))
       }),
     )

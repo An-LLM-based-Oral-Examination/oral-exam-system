@@ -55,6 +55,7 @@ export interface InClassShift {
   classId: string
   className: string
   courseCode: string
+  courseName?: string
   title: string
   description: string
   status: InClassShiftStatus
@@ -85,6 +86,8 @@ export interface InClassShift {
   myExamEndsAt?: string | null
   /** Số giây còn lại theo đồng hồ server. */
   myRemainingSeconds?: number | null
+  /** Điểm chốt của SV hiện tại (chỉ hợp lệ khi ca đã FINALIZED / isLocked). */
+  myFinalScore?: number | null
 }
 
 export interface CreateInClassShiftRequest {

@@ -226,6 +226,59 @@ public class PasswordLoginCommandHandlerTests
         result.Error.Should().Be(AuthErrors.AccountNotFound);
     }
 
+    [Fact]
+    public async Task Handle_PasswordWithExtraSpaces_ReturnsWrongPassword()
+    {
+        await using var context = CreateDbContext();
+        await SeedStudent(context, SampleCode, "MatKhau-Tam-1!", mustChangePassword: true);
+        var handler = CreateLoginHandler(context, new RecordingIssuer());
+
+        var middleSpace = await handler.Handle(
+            new PasswordLoginCommand(SampleUsername, "MatKhau- Tam-1!"),
+            CancellationToken.None);
+        var outerSpace = await handler.Handle(
+            new PasswordLoginCommand(SampleUsername, " MatKhau-Tam-1! "),
+            CancellationToken.None);
+
+        middleSpace.IsSuccess.Should().BeFalse();
+        middleSpace.Error.Should().Be(AuthErrors.WrongPassword);
+        outerSpace.IsSuccess.Should().BeFalse();
+        outerSpace.Error.Should().Be(AuthErrors.WrongPassword);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_LegacyHardcodedAliasTotse18191414_ReturnsAccountNotFound()
+    {
+        await using var context = CreateDbContext();
+        context.Users.Add(new User
+        {
+            Email = "totse181414@fpt.edu.vn",
+            FullName = SampleName,
+            StudentCode = "SE181414",
+            Username = "totse181414",
+            Role = UserRole.Student,
+            PasswordHash = _hasher.Hash("MatKhau-Tam-1!"),
+            MustChangePassword = false,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = CreateLoginHandler(context, new RecordingIssuer());
+        var byUsername = await handler.Handle(
+            new PasswordLoginCommand("totse18191414", "MatKhau-Tam-1!"),
+            CancellationToken.None);
+        var byEmail = await handler.Handle(
+            new PasswordLoginCommand("totse18191414@fpt.edu.vn", "MatKhau-Tam-1!"),
+            CancellationToken.None);
+
+        byUsername.IsSuccess.Should().BeFalse();
+        byUsername.Error.Should().Be(AuthErrors.AccountNotFound);
+        byEmail.IsSuccess.Should().BeFalse();
+        byEmail.Error.Should().Be(AuthErrors.AccountNotFound);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+    }
+
     private async Task<User> SeedStudent(
         OralExamDbContext context,
         string studentCode,

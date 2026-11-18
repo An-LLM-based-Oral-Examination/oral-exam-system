@@ -37,7 +37,8 @@ public sealed class GetMyInClassShiftsQueryHandler(
                 e.ClassId,
                 ClassCode = e.Class != null ? e.Class.Code : string.Empty,
                 ClassName = e.Class != null ? e.Class.Name : string.Empty,
-                CourseCode = e.Class != null && e.Class.Course != null ? e.Class.Course.Code : string.Empty
+                CourseCode = e.Class != null && e.Class.Course != null ? e.Class.Course.Code : string.Empty,
+                CourseName = e.Class != null && e.Class.Course != null ? e.Class.Course.Name : string.Empty
             })
             .ToListAsync(cancellationToken);
 
@@ -63,11 +64,52 @@ public sealed class GetMyInClassShiftsQueryHandler(
 
         var rawShifts = await context.InClassExamShifts
             .AsNoTracking()
-            .Include(s => s.Lecturer)
-            .Include(s => s.Participants)
-            .Include(s => s.Submissions)
             .Where(s => classIds.Contains(s.ClassId))
             .OrderByDescending(s => s.StartTime)
+            .Select(s => new
+            {
+                s.Id,
+                s.ClassId,
+                s.LecturerId,
+                LecturerFullName = s.Lecturer != null ? s.Lecturer.FullName : null,
+                s.ShiftName,
+                s.StartTime,
+                s.EndTime,
+                s.Status,
+                s.IsLocked,
+                s.FinalizedAt,
+                s.CreatedAt,
+                ParticipantsCount = s.Participants.Count(),
+                SubmissionsCount = s.Submissions
+                    .Where(submission => !submission.IsFollowUp)
+                    .Select(submission => submission.StudentId)
+                    .Distinct()
+                    .Count(),
+                s.Description,
+                s.QuestionPoolMode,
+                s.SelectedQuestionIdsJson,
+                s.TotalQuestionsPerStudent,
+                s.HasFollowUp,
+                s.MaxFollowUpQuestions,
+                s.IsAutoPublishGrades,
+                s.ExamDurationMinutes,
+                s.SelectedDifficultiesJson,
+                s.SelectedCloIdsJson,
+                Mine = s.Participants
+                    .Where(p => p.StudentId == request.StudentUserId)
+                    .Select(p => new
+                    {
+                        p.Status,
+                        p.JoinedAt,
+                        p.TotalFinalScore,
+                        p.TotalAiScore
+                    })
+                    .FirstOrDefault(),
+                MyMainScores = s.Submissions
+                    .Where(sub => sub.StudentId == request.StudentUserId && !sub.IsFollowUp)
+                    .Select(sub => sub.FinalScore ?? sub.AiScore ?? 0m)
+                    .ToList()
+            })
             .ToListAsync(cancellationToken);
 
         var allSelectedCloIds = rawShifts
@@ -88,7 +130,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .Select(s =>
             {
                 var classInfo = classMap.TryGetValue(s.ClassId, out var found) ? found : null;
-                var mine = s.Participants.FirstOrDefault(p => p.StudentId == request.StudentUserId);
+                var mine = s.Mine;
                 DateTime? joinedAt = mine?.JoinedAt;
                 DateTime? examEndsAt = mine is null
                     ? null
@@ -102,13 +144,35 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     .Select(id => cloCodeMap[id])
                     .ToList();
 
+                decimal? myFinalScore = null;
+                var isFinalized = s.IsLocked || string.Equals(s.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+                if (isFinalized && mine is not null)
+                {
+                    if (mine.TotalFinalScore.HasValue)
+                    {
+                        myFinalScore = Math.Round(mine.TotalFinalScore.Value, 2, MidpointRounding.AwayFromZero);
+                    }
+                    else if (mine.TotalAiScore.HasValue)
+                    {
+                        myFinalScore = Math.Round(mine.TotalAiScore.Value, 2, MidpointRounding.AwayFromZero);
+                    }
+                    else if (s.MyMainScores.Count > 0)
+                    {
+                        var sumScores = s.MyMainScores.Sum();
+                        myFinalScore = Math.Round(
+                            sumScores / Math.Max(1, s.TotalQuestionsPerStudent),
+                            2,
+                            MidpointRounding.AwayFromZero);
+                    }
+                }
+
                 return new InClassExamShiftResponse(
                     s.Id,
                     s.ClassId,
                     classInfo?.ClassCode ?? string.Empty,
                     classInfo?.ClassName ?? string.Empty,
                     s.LecturerId,
-                    s.Lecturer != null ? s.Lecturer.FullName : null,
+                    s.LecturerFullName,
                     s.ShiftName,
                     s.StartTime,
                     s.EndTime,
@@ -116,12 +180,8 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     s.IsLocked,
                     s.FinalizedAt,
                     s.CreatedAt,
-                    s.Participants.Count,
-                    s.Submissions
-                        .Where(submission => !submission.IsFollowUp)
-                        .Select(submission => submission.StudentId)
-                        .Distinct()
-                        .Count(),
+                    s.ParticipantsCount,
+                    s.SubmissionsCount,
                     s.Description,
                     s.QuestionPoolMode,
                     EnterInClassShiftCommandHandler.ParseGuidList(s.SelectedQuestionIdsJson),
@@ -137,7 +197,9 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     InClassShiftPoolConfig.ParseStoredDifficulties(s.SelectedDifficultiesJson),
                     shiftCloIds,
                     shiftCloCodes,
-                    classInfo?.CourseCode
+                    classInfo?.CourseCode,
+                    classInfo?.CourseName,
+                    myFinalScore
                 );
             })
             .ToList();

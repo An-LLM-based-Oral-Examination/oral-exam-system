@@ -56,5 +56,6 @@ public record MockExamScorecardDto(
     DateTime StartedAt,
     DateTime SubmittedAt,
     List<MockExamQuestionScoreDto> Questions,
-    string? CloCode = null
+    string? CloCode = null,
+    bool IsGradingPending = false
 );

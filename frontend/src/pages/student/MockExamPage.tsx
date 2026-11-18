@@ -251,9 +251,10 @@ function canResumeHistoryItem(status: string) {
   return normalizeHistoryStatus(status) === 'in_progress'
 }
 
-/** Chỉ ca đã chấm mới xem bảng điểm. */
+/** Ca đã chấm hoặc đã nộp chờ chấm đều xem được chi tiết bài nộp / bảng điểm. */
 function canViewScorecard(status: string) {
-  return normalizeHistoryStatus(status) === 'graded'
+  const normalized = normalizeHistoryStatus(status)
+  return normalized === 'graded' || normalized === 'submitted'
 }
 
 export function MockExamPage() {
@@ -649,12 +650,29 @@ export function MockExamPage() {
     }
 
     setExpandedHistoryId(item.sessionId)
-    if (historyDetails[item.sessionId]) return
+    const cachedDetail = historyDetails[item.sessionId]
+    if (cachedDetail && !cachedDetail.isGradingPending) return
 
     setLoadingDetailId(item.sessionId)
     try {
       const detail = await mockExamService.getHistoryDetail(item.sessionId)
       setHistoryDetails((current) => ({ ...current, [item.sessionId]: detail }))
+      if (!detail.isGradingPending) {
+        setHistoryItems((current) =>
+          current.map((entry) =>
+            entry.sessionId === item.sessionId
+              ? { ...entry, status: 'graded', totalScore: detail.totalScore }
+              : entry,
+          ),
+        )
+        setArchiveItems((current) =>
+          current.map((entry) =>
+            entry.sessionId === item.sessionId
+              ? { ...entry, status: 'graded', totalScore: detail.totalScore }
+              : entry,
+          ),
+        )
+      }
     } catch (error) {
       toast.error(getMockExamErrorDetail(error, 'Không thể mở bảng điểm của ca thi này.'))
       setExpandedHistoryId(null)
@@ -683,6 +701,7 @@ export function MockExamPage() {
     }
 
     if (canView) {
+      const isSubmittedPending = status === 'submitted'
       return (
         <button
           type="button"
@@ -691,14 +710,20 @@ export function MockExamPage() {
           aria-expanded={isOpen}
         >
           <Eye className="size-3" />
-          {isOpen ? 'Đóng bảng điểm' : 'Xem bảng điểm'}
+          {isSubmittedPending
+            ? isOpen
+              ? 'Đóng bài nộp'
+              : 'Xem bài nộp'
+            : isOpen
+              ? 'Đóng bảng điểm'
+              : 'Xem bảng điểm'}
         </button>
       )
     }
 
     return (
       <span className="inline-flex min-h-9 items-center rounded-lg border border-[#82aedb]/55 bg-[#f7f9fc] px-3 text-xs font-semibold text-[#74839a]">
-        {status === 'submitted' ? 'Đang chấm điểm' : status === 'abandoned' ? 'Không có bảng điểm' : 'Chưa có bảng điểm'}
+        {status === 'abandoned' ? 'Không có bảng điểm' : 'Chưa có bảng điểm'}
       </span>
     )
   }
@@ -1255,7 +1280,7 @@ export function MockExamPage() {
         <FormDialog
           titleId="mock-scorecard-title"
           eyebrow="Thi thử"
-          title="Bảng điểm"
+          title={selectedDetail?.isGradingPending ? 'Bài nộp chờ chấm điểm' : 'Bảng điểm'}
           icon={Award}
           onClose={() => setExpandedHistoryId(null)}
           size="xl"
