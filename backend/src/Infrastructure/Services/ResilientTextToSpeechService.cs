@@ -176,6 +176,27 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             _cache.TryRemove(cacheKey, out _);
         }
 
+        // Production can restrict TTS to official Gemini endpoints when OfficialTtsOnly=true.
+        if (string.Equals(_configuration["Speech:OfficialTtsOnly"], "true", StringComparison.OrdinalIgnoreCase))
+        {
+            var apiKeys = GeminiApiKeyPriority.GetCandidates(_configuration);
+            var officialResult = await TrySynthesizeWithGeminiCandidatesAsync(
+                cleanedText,
+                resolvedVoice,
+                apiKeys,
+                cancellationToken);
+
+            if (officialResult is not null)
+            {
+                var (audioBytes, contentType) = officialResult.Value;
+                StoreInCache(cacheKey, audioBytes, "GeminiAudioTts", usedFallback: false, contentType: contentType);
+                return new SpeechSynthesisResult(audioBytes, contentType, "GeminiAudioTts", resolvedVoice,
+                    clampedRate, false, false, cacheKey);
+            }
+
+            throw new InvalidOperationException("Gemini TTS không khả dụng hoặc chưa cấu hình API key hợp lệ.");
+        }
+
         Exception? primaryException = null;
 
         // Bước 1: Phương án 1 (Primary) — Edge Neural TTS (Hoài My & Nam Minh chuẩn Neural)
@@ -236,46 +257,37 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             }
         }
 
-        var geminiApiKey = _configuration["Gemini:ApiKey"] ?? _configuration["Gemini__ApiKey"]; if (string.IsNullOrWhiteSpace(geminiApiKey) || geminiApiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) || geminiApiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase)) { geminiApiKey = _configuration["Gemini:FallbackApiKey"] ?? _configuration["Gemini__FallbackApiKey"]; }
-        var hasUsableGeminiKey = !string.IsNullOrWhiteSpace(geminiApiKey) &&
-            !geminiApiKey.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) && !geminiApiKey.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
+        var geminiApiKeys = GeminiApiKeyPriority.GetCandidates(_configuration);
         var preferGeminiFallback = string.Equals(
             _configuration["Speech:PreferGeminiTtsFallback"],
             "true",
             StringComparison.OrdinalIgnoreCase);
+        var triedGeminiFallback = false;
 
-        // Nếu cấu hình ưu tiên Gemini 3.8 TTS làm Fallback số 1 khi Edge Neural lỗi
-        if (preferGeminiFallback && hasUsableGeminiKey)
+        // Nếu cấu hình ưu tiên Gemini TTS làm Fallback số 1 khi Edge Neural lỗi
+        if (preferGeminiFallback && geminiApiKeys.Count > 0)
         {
-            try
+            triedGeminiFallback = true;
+            var geminiFirstResult = await TrySynthesizeWithGeminiCandidatesAsync(
+                cleanedText,
+                resolvedVoice,
+                geminiApiKeys,
+                cancellationToken);
+
+            if (geminiFirstResult is not null)
             {
-                var (geminiBytes, geminiContentType) = await SynthesizeWithGeminiAudioFallbackAsync(
-                    cleanedText,
-                    resolvedVoice,
-                    geminiApiKey!,
-                    cancellationToken);
-                if (geminiBytes is { Length: > 0 })
-                {
-                    var isFallback = !disablePrimary;
-                    StoreInCache(cacheKey, geminiBytes, "GeminiAudioTts", usedFallback: isFallback, contentType: geminiContentType);
-                    return new SpeechSynthesisResult(
-                        AudioBytes: geminiBytes,
-                        ContentType: geminiContentType,
-                        Provider: "GeminiAudioTts",
-                        VoiceName: resolvedVoice,
-                        SpeakingRate: clampedRate,
-                        UsedFallback: isFallback,
-                        FromCache: false,
-                        CacheKeySha256: cacheKey);
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception geminiFirstEx)
-            {
-                _logger?.LogWarning(geminiFirstEx, "Nhánh Gemini 3.8 TTS ưu tiên gặp lỗi, chuyển sang nhánh tiếp theo.");
+                var (geminiBytes, geminiContentType) = geminiFirstResult.Value;
+                var isFallback = !disablePrimary;
+                StoreInCache(cacheKey, geminiBytes, "GeminiAudioTts", usedFallback: isFallback, contentType: geminiContentType);
+                return new SpeechSynthesisResult(
+                    AudioBytes: geminiBytes,
+                    ContentType: geminiContentType,
+                    Provider: "GeminiAudioTts",
+                    VoiceName: resolvedVoice,
+                    SpeakingRate: clampedRate,
+                    UsedFallback: isFallback,
+                    FromCache: false,
+                    CacheKeySha256: cacheKey);
             }
         }
 
@@ -329,34 +341,29 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         {
             _logger?.LogWarning(
                 googleEx,
-                "Phương án 2A (GoogleNeuralTranslateTts) gặp sự cố. Kiểm tra nhánh Gemini 3.8 TTS dự phòng.");
+                "Phương án 2A (GoogleNeuralTranslateTts) gặp sự cố. Kiểm tra nhánh Gemini TTS dự phòng.");
 
-            if (hasUsableGeminiKey)
+            if (!triedGeminiFallback && geminiApiKeys.Count > 0)
             {
-                try
+                var geminiFallbackResult = await TrySynthesizeWithGeminiCandidatesAsync(
+                    cleanedText,
+                    resolvedVoice,
+                    geminiApiKeys,
+                    cancellationToken);
+
+                if (geminiFallbackResult is not null)
                 {
-                    var (geminiBytes, geminiContentType) = await SynthesizeWithGeminiAudioFallbackAsync(
-                        cleanedText,
-                        resolvedVoice,
-                        geminiApiKey!,
-                        cancellationToken);
-                    if (geminiBytes is { Length: > 0 })
-                    {
-                        StoreInCache(cacheKey, geminiBytes, "GeminiAudioTts", usedFallback: true, contentType: geminiContentType);
-                        return new SpeechSynthesisResult(
-                            AudioBytes: geminiBytes,
-                            ContentType: geminiContentType,
-                            Provider: "GeminiAudioTts",
-                            VoiceName: resolvedVoice,
-                            SpeakingRate: clampedRate,
-                            UsedFallback: true,
-                            FromCache: false,
-                            CacheKeySha256: cacheKey);
-                    }
-                }
-                catch (Exception geminiEx)
-                {
-                    _logger?.LogError(geminiEx, "Nhánh Gemini 3.8 TTS dự phòng cũng thất bại.");
+                    var (geminiBytes, geminiContentType) = geminiFallbackResult.Value;
+                    StoreInCache(cacheKey, geminiBytes, "GeminiAudioTts", usedFallback: true, contentType: geminiContentType);
+                    return new SpeechSynthesisResult(
+                        AudioBytes: geminiBytes,
+                        ContentType: geminiContentType,
+                        Provider: "GeminiAudioTts",
+                        VoiceName: resolvedVoice,
+                        SpeakingRate: clampedRate,
+                        UsedFallback: true,
+                        FromCache: false,
+                        CacheKeySha256: cacheKey);
                 }
             }
 
@@ -634,7 +641,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
 
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -789,6 +796,36 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         return [];
     }
 
+    private async Task<(byte[] AudioBytes, string ContentType)?> TrySynthesizeWithGeminiCandidatesAsync(
+        string cleanedText,
+        string resolvedVoice,
+        IReadOnlyList<string> apiKeys,
+        CancellationToken cancellationToken)
+    {
+        foreach (var apiKey in apiKeys)
+        {
+            try
+            {
+                var (audioBytes, contentType) = await SynthesizeWithGeminiAudioFallbackAsync(
+                    cleanedText, resolvedVoice, apiKey, cancellationToken);
+                if (audioBytes.Length > 0)
+                {
+                    return (audioBytes, contentType);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Gemini TTS key failed; trying next configured key.");
+            }
+        }
+
+        return null;
+    }
+
     private async Task<(byte[] AudioBytes, string ContentType)> SynthesizeWithGeminiAudioFallbackAsync(
         string cleanedText,
         string resolvedVoice,
@@ -796,16 +833,31 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         CancellationToken cancellationToken)
     {
         var candidateUrls = new List<string>();
-        var configuredUrl = _configuration["Gemini:TtsApiUrl"];
+        var configuredUrl = _configuration["Gemini:TtsApiUrl"] ?? _configuration["Gemini__TtsApiUrl"];
         if (!string.IsNullOrWhiteSpace(configuredUrl))
         {
             candidateUrls.Add(configuredUrl.Trim());
         }
 
+        var configuredModel = _configuration["Gemini:TtsModel"] ?? _configuration["Gemini__TtsModel"];
+        if (!string.IsNullOrWhiteSpace(configuredModel))
+        {
+            var trimmedModel = configuredModel.Trim();
+            var modelUrl = trimmedModel.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                           trimmedModel.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                ? trimmedModel
+                : $"https://generativelanguage.googleapis.com/v1beta/models/{trimmedModel}:generateContent";
+
+            if (!candidateUrls.Contains(modelUrl, StringComparer.OrdinalIgnoreCase))
+            {
+                candidateUrls.Add(modelUrl);
+            }
+        }
+
         string[] defaultGeminiTtsUrls =
         [
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent",
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent"
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-tts:generateContent"
         ];
 
         foreach (var url in defaultGeminiTtsUrls)
@@ -821,8 +873,8 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             ? "Puck"
             : "Kore";
 
-        // Chuẩn Gemini 3.8 TTS: parts[].text CHỈ chứa nguyên văn nội dung cần đọc (verbatim transcript),
-        // phong cách trình bày đặt trong speech_metadata.style để tránh bị đọc thành tiếng.
+        // Gemini TTS accepts only the spoken text in contents. Do not add unsupported
+        // speech_metadata or set multiple voice_config oneof fields.
         var payload = new
         {
             contents = new[]
@@ -835,10 +887,6 @@ public class ResilientTextToSpeechService : ITextToSpeechService
                     }
                 }
             },
-            speech_metadata = new
-            {
-                style = "clear, calm, professional bilingual Vietnamese-English academic examiner"
-            },
             generationConfig = new
             {
                 responseModalities = new[] { "AUDIO" },
@@ -846,7 +894,6 @@ public class ResilientTextToSpeechService : ITextToSpeechService
                 {
                     voiceConfig = new
                     {
-                        voice = geminiVoiceName,
                         prebuiltVoiceConfig = new
                         {
                             voiceName = geminiVoiceName
@@ -867,12 +914,12 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             };
             request.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
 
-            var response = await _httpClient.SendAsync(request, cancellationToken);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                lastException = new HttpRequestException($"Gemini Audio TTS failed ({apiUrl}): {response.StatusCode} - {body}", null, response.StatusCode);
+                lastException = new HttpRequestException($"Gemini Audio TTS failed: {response.StatusCode}", null, response.StatusCode);
                 continue;
             }
 
@@ -956,7 +1003,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             return (rawAudioBytes, "audio/mpeg");
         }
 
-        // Mặc định Gemini 3.8 TTS trả về PCM/WAV 24kHz 16-bit mono -> bọc RIFF WAV header để trình duyệt phát trực tiếp
+        // Mặc định Gemini TTS trả về PCM/WAV 24kHz 16-bit mono -> bọc RIFF WAV header để trình duyệt phát trực tiếp
         return (WrapPcm16InWavHeader(rawAudioBytes, sampleRate: 24000, channels: 1, bitsPerSample: 16), "audio/wav");
     }
 

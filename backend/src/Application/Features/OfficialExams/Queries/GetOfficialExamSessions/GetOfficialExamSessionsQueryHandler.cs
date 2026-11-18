@@ -49,7 +49,8 @@ public sealed class GetOfficialExamSessionsQueryHandler(IApplicationDbContext co
                 s.MaxFollowUpQuestions,
                 s.ExamInputMode,
                 s.TranscriptBufferSeconds,
-                s.Status))
+                s.Status,
+                s.SemesterId ?? (s.Course != null ? s.Course.SemesterId : null)))
             .ToListAsync(cancellationToken);
 
         return Result<List<OfficialExamSessionResponse>>.Success(sessions);

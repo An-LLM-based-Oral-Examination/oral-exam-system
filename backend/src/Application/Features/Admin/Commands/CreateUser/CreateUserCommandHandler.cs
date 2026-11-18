@@ -51,9 +51,28 @@ public sealed class CreateUserCommandHandler(
 
             studentCode = request.StudentCode.Trim().ToUpperInvariant();
 
+            var studentCodeExists = await context.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.StudentCode != null && u.StudentCode.ToUpper() == studentCode, cancellationToken);
+            if (studentCodeExists)
+            {
+                return Result<AdminUserItemDto>.Failure("CONFLICT: Mã sinh viên đã tồn tại trong hệ thống.");
+            }
+
             if (StudentUsername.TryCreate(request.FullName, studentCode, out var generatedUsername))
             {
                 username = generatedUsername;
+            }
+        }
+
+        if (username != null)
+        {
+            var usernameExists = await context.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Username != null && u.Username.ToLower() == username.ToLower(), cancellationToken);
+            if (usernameExists)
+            {
+                return Result<AdminUserItemDto>.Failure("CONFLICT: Tên đăng nhập đã tồn tại trong hệ thống.");
             }
         }
 
@@ -71,6 +90,7 @@ public sealed class CreateUserCommandHandler(
             Username = username,
             MustChangePassword = true,
             IsActive = true,
+            AuthVersion = 1,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -88,7 +108,14 @@ public sealed class CreateUserCommandHandler(
             CreatedAt = now
         });
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Result<AdminUserItemDto>.Failure("CONFLICT: Email, Mã sinh viên hoặc Tên đăng nhập đã tồn tại trong hệ thống.");
+        }
 
         var dto = new AdminUserItemDto
         {
@@ -105,5 +132,34 @@ public sealed class CreateUserCommandHandler(
         };
 
         return Result<AdminUserItemDto>.Success(dto);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException;
+        if (inner != null)
+        {
+            var prop = inner.GetType().GetProperty("SqlState");
+            if (prop != null)
+            {
+                var sqlState = prop.GetValue(inner) as string;
+                if (sqlState == "23505")
+                {
+                    return true;
+                }
+            }
+
+            var message = inner.Message;
+            if (message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("unique", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("ix_users", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return ex.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+               ex.Message.Contains("unique", StringComparison.OrdinalIgnoreCase);
     }
 }

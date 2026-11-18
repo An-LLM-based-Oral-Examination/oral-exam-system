@@ -174,7 +174,9 @@ public sealed class ResumeInClassShiftCommandHandler(
                 q.Title,
                 q.Content,
                 q.Difficulty.ToString().ToLowerInvariant(),
-                q.BloomLevel.ToString().ToLowerInvariant()))
+                q.BloomLevel.ToString().ToLowerInvariant(),
+                q.ImageUrl,
+                q.ImageDescription))
             .ToListAsync(cancellationToken);
 
         var dict = rawQuestions.ToDictionary(q => q.QuestionId);

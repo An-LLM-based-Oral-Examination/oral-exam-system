@@ -39,4 +39,5 @@ public static class OfficialExamErrors
     public const string ExamSetNoQuestions = "Bộ đề phải có ít nhất một câu hỏi.";
     public const string ShiftAlreadyPublished = "Ca thi đã được công bố đề thi trước đó.";
     public const string ShiftNotScheduledForPublish = "Chỉ có thể công bố đề thi cho ca thi đang ở trạng thái chờ diễn ra (scheduled).";
+    public const string SemesterNotFound = "NOT_FOUND: Học kỳ không tồn tại.";
 }

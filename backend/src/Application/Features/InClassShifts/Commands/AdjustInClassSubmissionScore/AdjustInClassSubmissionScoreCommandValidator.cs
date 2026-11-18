@@ -15,5 +15,9 @@ public sealed class AdjustInClassSubmissionScoreCommandValidator : AbstractValid
         RuleFor(x => x.FinalScore)
             .InclusiveBetween(0.0m, 10.0m)
             .WithMessage(InClassShiftErrors.InvalidScoreRange);
+
+        RuleFor(x => x.LecturerNotes)
+            .Must(notes => !string.IsNullOrWhiteSpace(notes))
+            .WithMessage(InClassShiftErrors.EmptyAuditReason);
     }
 }

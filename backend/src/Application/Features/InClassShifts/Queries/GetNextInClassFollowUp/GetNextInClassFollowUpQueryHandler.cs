@@ -48,6 +48,41 @@ public sealed class GetNextInClassFollowUpQueryHandler(
 
         int nextFollowUpIndex = submission.FollowUpIndex + 1;
 
+        var utcNow = DateTime.UtcNow;
+        var shiftClosed = shift.Status is "CLOSED" or "ENDED";
+        if (shift.IsLocked ||
+            shift.Status == "FINALIZED" ||
+            (shiftClosed && !InClassShiftLifecycle.CanAcceptLateAnswer(shift, utcNow)) ||
+            (!shiftClosed && shift.Status != "IN_PROGRESS"))
+        {
+            return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
+                HasMoreFollowUp: false,
+                FollowUpIndex: submission.FollowUpIndex,
+                MaxFollowUpQuestions: shift.MaxFollowUpQuestions,
+                ParentSubmissionId: submission.Id,
+                QuestionId: submission.QuestionId,
+                FollowUpPrompt: null));
+        }
+
+        var participant = await context.InClassShiftParticipants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                p => p.ShiftId == shift.Id && p.StudentId == request.StudentUserId,
+                cancellationToken);
+
+        if (participant is not null &&
+            (string.Equals(participant.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+             InClassShiftLifecycle.IsPersonalExamTimeExpired(participant, shift, utcNow)))
+        {
+            return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
+                HasMoreFollowUp: false,
+                FollowUpIndex: submission.FollowUpIndex,
+                MaxFollowUpQuestions: shift.MaxFollowUpQuestions,
+                ParentSubmissionId: submission.Id,
+                QuestionId: submission.QuestionId,
+                FollowUpPrompt: null));
+        }
+
         if (string.IsNullOrWhiteSpace(submission.FollowUpPrompt))
         {
             var question = await context.PracticeQuestions
@@ -147,11 +182,53 @@ public sealed class GetNextInClassFollowUpQueryHandler(
                     previousFollowUpPrompts);
             }
 
-            submission.FollowUpPrompt = !string.IsNullOrWhiteSpace(aiFollowUpPrompt)
+            var resolvedFollowUpPrompt = !string.IsNullOrWhiteSpace(aiFollowUpPrompt)
                 ? aiFollowUpPrompt
                 : $"Câu hỏi phụ #{nextFollowUpIndex}: Hãy phân tích sâu hơn tình huống thực tế và cách xử lý ngoại lệ của kiến thức vừa trình bày?";
 
-            await context.SaveChangesAsync(cancellationToken);
+            submission.FollowUpPrompt = resolvedFollowUpPrompt;
+
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (context is DbContext dbContext)
+                {
+                    dbContext.Entry(submission).State = EntityState.Detached;
+                }
+
+                var latestSubmission = await context.InClassExamSubmissions
+                    .Include(s => s.Shift)
+                    .FirstOrDefaultAsync(
+                        s => s.Id == request.SubmissionId && s.ShiftId == request.ShiftId && s.StudentId == request.StudentUserId,
+                        cancellationToken);
+
+                if (latestSubmission?.Shift is null)
+                {
+                    return Result<InClassNextFollowUpResponse>.Failure(InClassShiftErrors.SubmissionNotFound);
+                }
+
+                if (latestSubmission.Shift.IsLocked || latestSubmission.Shift.Status == "FINALIZED")
+                {
+                    return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
+                        HasMoreFollowUp: false,
+                        FollowUpIndex: latestSubmission.FollowUpIndex,
+                        MaxFollowUpQuestions: latestSubmission.Shift.MaxFollowUpQuestions,
+                        ParentSubmissionId: latestSubmission.Id,
+                        QuestionId: latestSubmission.QuestionId,
+                        FollowUpPrompt: null));
+                }
+
+                if (string.IsNullOrWhiteSpace(latestSubmission.FollowUpPrompt))
+                {
+                    latestSubmission.FollowUpPrompt = resolvedFollowUpPrompt;
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+
+                submission = latestSubmission;
+            }
         }
 
         return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(

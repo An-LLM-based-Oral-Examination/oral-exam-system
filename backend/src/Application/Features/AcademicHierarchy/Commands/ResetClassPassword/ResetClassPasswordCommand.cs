@@ -22,7 +22,8 @@ public sealed record ResetClassPasswordResponseDto(
     string JoinCode,
     bool HasPassword,
     bool IsJoinEnabled,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? JoinPassword = null);
 
 /// <summary>
 /// CQRS Command cho phép Giảng viên phụ trách lớp, Trưởng bộ môn của môn học hoặc Admin đổi mật khẩu lớp học.

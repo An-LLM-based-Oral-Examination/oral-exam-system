@@ -51,6 +51,7 @@ public sealed class UpdateUserRoleCommandHandler
         }
 
         var user = await _context.Users
+            .Include(u => u.RefreshTokens)
             .FirstOrDefaultAsync(u => u.Id == request.TargetUserId, cancellationToken);
 
         if (user is null)
@@ -64,6 +65,15 @@ public sealed class UpdateUserRoleCommandHandler
 
         user.Role = normalizedRole;
         user.UpdatedAt = now;
+
+        if (oldRole != normalizedRole)
+        {
+            user.AuthVersion++;
+            foreach (var token in user.RefreshTokens.Where(t => t.RevokedAt == null))
+            {
+                token.RevokedAt = now;
+            }
+        }
 
         _context.AuditLogs.Add(new AuditLog
         {

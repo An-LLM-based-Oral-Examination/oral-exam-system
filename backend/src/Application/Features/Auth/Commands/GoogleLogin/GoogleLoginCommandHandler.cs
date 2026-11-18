@@ -98,7 +98,8 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             user.Email,
             user.FullName,
             user.Role,
-            user.MustChangePassword);
+            user.MustChangePassword,
+            user.AuthVersion);
 
         var rawRefreshToken = GenerateRawToken();
         var refreshTokenHash = HashToken(rawRefreshToken);

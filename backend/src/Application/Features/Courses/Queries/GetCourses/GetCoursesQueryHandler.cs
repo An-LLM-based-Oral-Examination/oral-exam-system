@@ -21,9 +21,14 @@ public sealed class GetCoursesQueryHandler : IRequestHandler<GetCoursesQuery, Re
 
     public async Task<Result<List<CourseDto>>> Handle(GetCoursesQuery request, CancellationToken cancellationToken)
     {
-        var courses = await _context.Courses
-            .AsNoTracking()
-            .Where(c => c.IsActive)
+        var query = _context.Courses.AsNoTracking();
+
+        if (!request.IncludeInactive)
+        {
+            query = query.Where(c => c.IsActive);
+        }
+
+        var courses = await query
             .OrderBy(c => c.Code)
             .Select(c => new CourseDto
             {
@@ -34,7 +39,9 @@ public sealed class GetCoursesQueryHandler : IRequestHandler<GetCoursesQuery, Re
                 Credits = c.Credits,
                 AcademicProgramId = c.AcademicProgramId,
                 SemesterId = c.SemesterId,
+                SemesterCode = c.Semester != null ? c.Semester.Code : null,
                 DepartmentHeadUserId = c.DepartmentHeadUserId,
+                DepartmentHeadName = c.DepartmentHeadUser != null ? c.DepartmentHeadUser.FullName : null,
                 TranscriptBufferSeconds = c.TranscriptBufferSeconds,
                 MaxFollowUpQuestions = c.MaxFollowUpQuestions,
                 MaxMockExamsPerDay = c.MaxMockExamsPerDay,

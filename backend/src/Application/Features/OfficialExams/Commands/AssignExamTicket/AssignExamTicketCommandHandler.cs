@@ -35,13 +35,14 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
-        var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
+        var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
         var shift = await _context.RealExamSessionShifts
+            .AsNoTracking()
             .Include(s => s.Session)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
         if (shift is null)
@@ -62,7 +63,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure("CONFLICT: Ca thi đã đủ số lượng vé theo sức chứa được cấu hình.");
         }
 
-        var student = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);
+        var student = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);
         if (student is null || !student.IsActive || student.Role != UserRole.Student)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.StudentNotFound);
@@ -84,7 +85,11 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.StudentAlreadyAssigned);
         }
 
-        WorkstationAddress.TryNormalize(request.IpAddress, out var ipAddress);
+        string? ipAddress = null;
+        if (!string.IsNullOrWhiteSpace(request.IpAddress))
+        {
+            WorkstationAddress.TryNormalize(request.IpAddress, out ipAddress);
+        }
         var resolvedExamSetId = await TryResolveOrCreateExamSetIdAsync(_context, shift, request.SeatNumber, cancellationToken);
         var ticket = new StudentExamTicket
         {
@@ -116,7 +121,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
 
         var candidateSetsQuery = context.ExamSets
             .AsNoTracking()
-            .Where(es => es.IsActive);
+            .Where(es => es.IsActive && (es.Status == ExamSetStatus.HandedOver || es.Status == ExamSetStatus.Official));
 
         if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
         {
@@ -195,7 +200,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         return autoExamSet.Id;
     }
 
-    internal static ExamTicketResponse ToResponse(StudentExamTicket ticket)
+    internal static ExamTicketResponse ToResponse(StudentExamTicket ticket, string? examSetCode = null)
     {
         return new ExamTicketResponse(
             ticket.Id,
@@ -205,6 +210,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             ticket.IpAddress,
             ticket.Status,
             ticket.CheckedInAt,
-            ticket.ExamSetId);
+            ticket.ExamSetId,
+            examSetCode ?? ticket.ExamSet?.SetCode);
     }
 }

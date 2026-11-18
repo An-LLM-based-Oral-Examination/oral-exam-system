@@ -201,7 +201,6 @@ public sealed class CreateClassCommandHandler(
             Name = request.Name.Trim(),
             JoinCode = joinCode,
             JoinPasswordHash = passwordHash,
-            JoinPasswordPlain = plainPassword,
             CourseId = course.Id,
             SemesterId = semester.Id,
             CourseOfferingId = courseOffering?.Id,
@@ -243,7 +242,8 @@ public sealed class CreateClassCommandHandler(
             newClass.IsJoinEnabled,
             newClass.AllowSelfEnrollment,
             newClass.CreatedAt,
-            newClass.CourseOfferingId));
+            newClass.CourseOfferingId,
+            JoinPassword: plainPassword));
     }
 
     private async Task<string?> ResolveJoinCodeAsync(

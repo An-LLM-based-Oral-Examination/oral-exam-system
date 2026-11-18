@@ -37,6 +37,7 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
 
         var tickets = await _context.StudentExamTickets
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
             .Include(t => t.Submissions)

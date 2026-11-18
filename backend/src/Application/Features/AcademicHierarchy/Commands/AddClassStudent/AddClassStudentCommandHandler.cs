@@ -106,9 +106,11 @@ public sealed class AddClassStudentCommandHandler
             return Result<AddClassStudentResponseDto>.Failure("VALIDATION: Tài khoản sinh viên hiện đang bị khóa hoặc vô hiệu hóa.");
         }
 
-        // 4. Kiểm tra sĩ số tối đa
+        return await _context.ExecuteClassEnrollmentAsync(targetClass.Id, async lockToken =>
+        {
+        // 4. Kiểm tra sĩ số tối đa trong cùng transaction với INSERT/UPDATE.
         var currentCount = await _context.ClassEnrollments
-            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", cancellationToken);
+            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", lockToken);
 
         if (currentCount >= targetClass.MaxStudents)
         {
@@ -118,7 +120,7 @@ public sealed class AddClassStudentCommandHandler
 
         // 5. Kiểm tra ghi danh hiện hữu
         var existingEnrollment = await _context.ClassEnrollments
-            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == student.Id, cancellationToken);
+            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == student.Id, lockToken);
 
         DateTime enrolledAt;
         if (existingEnrollment is not null)
@@ -163,7 +165,7 @@ public sealed class AddClassStudentCommandHandler
             CreatedAt = DateTime.UtcNow
         });
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(lockToken);
 
         var response = new AddClassStudentResponseDto(
             targetClass.Id,
@@ -176,6 +178,7 @@ public sealed class AddClassStudentCommandHandler
             "assigned");
 
         return Result<AddClassStudentResponseDto>.Success(response);
+        }, cancellationToken);
     }
 
     private async Task<User?> ResolveStudentAsync(

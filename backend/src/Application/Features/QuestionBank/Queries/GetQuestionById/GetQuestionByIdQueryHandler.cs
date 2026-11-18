@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.QuestionBank.Queries.GetQuestionById;
@@ -24,6 +25,9 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
 
     public async Task<Result<QuestionDetailDto>> Handle(GetQuestionByIdQuery request, CancellationToken cancellationToken)
     {
+        if (request.ActorId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+            return Result<QuestionDetailDto>.Failure("FORBIDDEN: Thiếu định danh người tra cứu.");
+        var allowedCourseIds = QuestionCourseAccess.AllowedCourseIds(_context, request.ActorRole, request.ActorId);
         var question = await _context.ExamQuestions
             .AsNoTracking()
             .Include(q => q.Course)
@@ -33,7 +37,7 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             .Include(q => q.SubmittedByUser)
             .Include(q => q.ApprovedByUser)
             .AsSplitQuery()
-            .FirstOrDefaultAsync(q => q.Id == request.Id, cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == request.Id && !q.IsDeleted && allowedCourseIds.Contains(q.CourseId), cancellationToken);
 
         var practiceQuestion = await _context.PracticeQuestions
             .AsNoTracking()
@@ -44,7 +48,7 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             .Include(q => q.SubmittedByUser)
             .Include(q => q.ApprovedByUser)
             .AsSplitQuery()
-            .FirstOrDefaultAsync(q => q.Id == request.Id, cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == request.Id && !q.IsDeleted && allowedCourseIds.Contains(q.CourseId), cancellationToken);
 
         if (question != null)
         {

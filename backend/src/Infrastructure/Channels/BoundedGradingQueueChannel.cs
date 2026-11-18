@@ -26,6 +26,9 @@ public class BoundedGradingQueueChannel : IGradingQueueChannel
         _logger = logger;
     }
 
+    public int Count => _channel.Reader.Count;
+    public int Capacity => MaxMessagesInChannel;
+
     public async ValueTask EnqueueAsync(GradingTask task, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(task);

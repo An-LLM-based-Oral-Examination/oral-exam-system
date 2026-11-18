@@ -51,11 +51,7 @@ public sealed class FinalizeInClassShiftGradesCommandHandler(
             return Result<FinalizeInClassGradesResponse>.Failure(InClassShiftErrors.ShiftMustBeClosedBeforeFinalizing);
         }
 
-        bool isAssigned = shift.LecturerId == actor.Id ||
-            shift.Class.LecturerId == actor.Id ||
-            await context.CourseLecturers.AnyAsync(
-                cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                cancellationToken);
+        bool isAssigned = shift.Class.LecturerId == actor.Id;
 
         if (!isAssigned)
         {

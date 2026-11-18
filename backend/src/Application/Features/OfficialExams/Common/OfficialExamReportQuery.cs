@@ -13,6 +13,7 @@ internal static class OfficialExamReportQuery
         CancellationToken cancellationToken) =>
         context.RealExamSessionShifts
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(shift => shift.Session)
                 .ThenInclude(session => session.Course)
                     .ThenInclude(course => course.Semester)

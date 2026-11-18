@@ -85,6 +85,7 @@ public static class DependencyInjection
         services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
+        services.AddSingleton<IRuntimeMetricsTracker, RuntimeMetricsTracker>();
         services.AddSingleton<IOfficialExamGradingQueue, OralExamination.Infrastructure.Channels.BoundedOfficialExamGradingQueue>();
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
         services.AddSingleton<IExamRosterFileParser, OralExamination.Infrastructure.Services.ExamRosterFileParser>();
@@ -97,14 +98,14 @@ public static class DependencyInjection
         try
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString);
-            if (builder.MaxPoolSize < 200)
-            {
-                builder.MaxPoolSize = 200;
-            }
-
             if (builder.MinPoolSize < 10)
             {
                 builder.MinPoolSize = 10;
+            }
+
+            if (builder.MinPoolSize > builder.MaxPoolSize)
+            {
+                builder.MinPoolSize = builder.MaxPoolSize;
             }
 
             if (builder.ConnectionIdleLifetime == 300)

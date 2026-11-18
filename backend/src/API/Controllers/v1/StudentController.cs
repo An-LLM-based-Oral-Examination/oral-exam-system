@@ -20,7 +20,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/student")]
-[Authorize(Roles = "student,lecturer,department_head,admin")]
+[Authorize(Roles = "student")]
 public class StudentController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
@@ -30,18 +30,9 @@ public class StudentController(ISender sender) : ControllerBase
         var claimValue = User?.FindFirstValue(ClaimTypes.NameIdentifier)
                          ?? User?.FindFirstValue("sub");
 
-        var hasClaimId = Guid.TryParse(claimValue, out var claimId) && claimId != Guid.Empty;
-        var isElevatedRole = User?.IsInRole("admin") == true
-                             || User?.IsInRole("department_head") == true
-                             || User?.IsInRole("lecturer") == true;
-
-        // Nếu là Admin / Trưởng BM / Giảng viên và có truyền ?studentId=... thì ưu tiên lấy studentId được truyền vào
-        if (isElevatedRole && fallbackStudentId.HasValue && fallbackStudentId.Value != Guid.Empty)
-        {
-            return fallbackStudentId.Value;
-        }
-
-        return hasClaimId ? claimId : Guid.Empty;
+        if (!Guid.TryParse(claimValue, out var claimId) || claimId == Guid.Empty)
+            return Guid.Empty;
+        return fallbackStudentId is { } requested && requested != claimId ? Guid.Empty : claimId;
     }
 
     /// <summary>
@@ -145,7 +136,7 @@ public class StudentController(ISender sender) : ControllerBase
     /// <summary>
     /// Sinh viên xác nhận đồng ý kết quả điểm thi thật đã công bố (ACKNOWLEDGED) trên Student Portal (MF-04).
     /// </summary>
-    [Authorize(Roles = "student,admin")]
+    [Authorize(Roles = "student")]
     [HttpPost("official-exams/{ticketId:guid}/acknowledge-grade")]
     [HttpPost("/api/v1/official-exams/tickets/{ticketId:guid}/acknowledge")]
     public async Task<IActionResult> AcknowledgeOfficialGrade(

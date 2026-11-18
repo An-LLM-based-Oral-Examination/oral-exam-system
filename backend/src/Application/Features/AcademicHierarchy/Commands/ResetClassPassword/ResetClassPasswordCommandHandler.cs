@@ -101,6 +101,7 @@ public sealed class ResetClassPasswordCommandHandler
             targetClass.JoinCode = normalizedJoinCode;
         }
 
+        string? oneTimePassword = null;
         if (request.NewPassword is not null)
         {
             var trimmedPassword = request.NewPassword.Trim();
@@ -115,12 +116,11 @@ public sealed class ResetClassPasswordCommandHandler
             if (string.IsNullOrWhiteSpace(trimmedPassword))
             {
                 targetClass.JoinPasswordHash = null;
-                targetClass.JoinPasswordPlain = null;
             }
             else
             {
                 targetClass.JoinPasswordHash = HashPassword(trimmedPassword);
-                targetClass.JoinPasswordPlain = trimmedPassword;
+                oneTimePassword = trimmedPassword;
             }
         }
 
@@ -138,7 +138,8 @@ public sealed class ResetClassPasswordCommandHandler
             targetClass.JoinCode,
             HasPassword: !string.IsNullOrWhiteSpace(targetClass.JoinPasswordHash),
             targetClass.IsJoinEnabled,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            JoinPassword: oneTimePassword);
 
         return Result<ResetClassPasswordResponseDto>.Success(response);
     }

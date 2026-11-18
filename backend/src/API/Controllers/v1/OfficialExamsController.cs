@@ -10,7 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Common.Interfaces;
 using API.Common;
 using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShiftStatus;
 using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.DistributeShiftTickets;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
@@ -26,6 +28,9 @@ using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetF
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.ImportExamRoster;
+using OralExamination.Application.Features.OfficialExams.Commands.BatchCreateOfficialExamSessions;
+using OralExamination.Application.Features.OfficialExams.Commands.BatchOpenExamShifts;
+using OralExamination.Application.Features.OfficialExams.Commands.AutoAllocateSessionStudents;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExcel;
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
@@ -33,7 +38,9 @@ using OralExamination.Application.Features.OfficialExams.Queries.GetAntiCheatLog
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
+using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamEnrollmentEstimate;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamSessions;
+using OralExamination.Application.Features.OfficialExams.Queries.GetSemesterEligibleExamCourses;
 
 namespace API.Controllers.v1;
 
@@ -56,25 +63,8 @@ public class OfficialExamsController : ControllerBase
         _rosterParser = rosterParser;
     }
 
-    private Guid GetCurrentUserId()
-    {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User?.FindFirst("sub")?.Value;
-
-        if (Guid.TryParse(claim, out var id))
-        {
-            return id;
-        }
-
-        return Guid.Empty;
-    }
-
-    private Guid GetAuthenticatedUserId()
-    {
-        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User?.FindFirst("sub")?.Value;
-        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
-    }
+    private Guid GetCurrentUserId() => GetActorId() ?? Guid.Empty;
+    private Guid GetAuthenticatedUserId() => GetCurrentUserId();
 
     /// <summary>
     /// Lấy danh sách kỳ thi thật (OfficialExamSession). Hỗ trợ alias seasons & sessions.
@@ -393,6 +383,172 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Bước 0.1: Lấy danh sách các môn học mở trong học kỳ kèm sĩ số sinh viên enrolled thực tế và đề xuất số phòng thi (chuẩn tối đa 24 SV/phòng).
+    /// </summary>
+    [HttpGet("semesters/{semesterId:guid}/eligible-courses")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(IReadOnlyList<SemesterEligibleExamCourseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSemesterEligibleCourses(
+        Guid semesterId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new GetSemesterEligibleExamCoursesQuery(actorId.Value, semesterId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 0.2: Khởi tạo hàng loạt kỳ thi chính thức (OfficialExamSession) cho các môn được chọn trong học kỳ, tự động kế thừa cấu trúc đề và Follow-up từ Trưởng Bộ Môn.
+    /// </summary>
+    [HttpPost("semesters/{semesterId:guid}/sessions/batch")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(BatchCreateOfficialExamSessionsResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> BatchCreateSessions(
+        Guid semesterId,
+        [FromBody] BatchCreateOfficialExamSessionsRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: Nội dung yêu cầu khởi tạo hàng loạt kỳ thi không được để trống.");
+        }
+
+        var result = await _sender.Send(new BatchCreateOfficialExamSessionsCommand(
+            actorId.Value,
+            semesterId,
+            request.ExamDate,
+            request.ExamInputMode,
+            request.TranscriptBufferSeconds,
+            request.SkipExisting,
+            request.Courses), cancellationToken);
+
+        return result.IsSuccess
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 0.3: Ước tính sĩ số sinh viên enrolled hợp lệ của môn trong kỳ và đề xuất số phòng thi theo trần chuẩn 24 SV/phòng.
+    /// </summary>
+    [HttpGet("sessions/{sessionId:guid}/enrollment-estimate")]
+    [HttpGet("seasons/{sessionId:guid}/enrollment-estimate")]
+    [Authorize(Roles = "examination_officer,department_head,admin")]
+    [ProducesResponseType(typeof(OfficialExamEnrollmentEstimateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetEnrollmentEstimate(
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new GetOfficialExamEnrollmentEstimateQuery(actorId.Value, sessionId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 0.4: Tạo ca thi và sinh nguyên tử K phòng thi Lab (maxSeats &lt;= 24) trong cùng khung giờ, chặn đụng lịch phòng/Giám thị/Giám khảo.
+    /// </summary>
+    [HttpPost("sessions/{sessionId:guid}/shifts/batch")]
+    [HttpPost("seasons/{sessionId:guid}/shifts/batch")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(BatchOpenExamShiftsResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> BatchOpenShifts(
+        Guid sessionId,
+        [FromBody] BatchOpenExamShiftsRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: Nội dung yêu cầu mở hàng loạt phòng thi không được để trống.");
+        }
+
+        var result = await _sender.Send(new BatchOpenExamShiftsCommand(
+            actorId.Value,
+            sessionId,
+            request.ShiftGroupName,
+            request.StartTime,
+            request.EndTime,
+            request.Rooms), cancellationToken);
+
+        return result.IsSuccess
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 0.5: Phân bổ ngẫu nhiên (CSPRNG) sinh viên enrolled chưa có vé vào các phòng thi và tự động cân bằng đều sĩ số ở ca thi cuối cùng (chênh lệch &lt;= 1 SV/phòng).
+    /// </summary>
+    [HttpPost("sessions/{sessionId:guid}/auto-allocate-students")]
+    [HttpPost("seasons/{sessionId:guid}/auto-allocate-students")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(AutoAllocateSessionStudentsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> AutoAllocateSessionStudents(
+        Guid sessionId,
+        [FromBody] AutoAllocateSessionStudentsRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var effectiveRequest = request ?? new AutoAllocateSessionStudentsRequest();
+        var result = await _sender.Send(new AutoAllocateSessionStudentsCommand(
+            actorId.Value,
+            sessionId,
+            effectiveRequest.ShiftIds,
+            effectiveRequest.AssignHandedOverExamSets,
+            effectiveRequest.DryRun), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
     /// Khảo thí tạo kỳ thi thật với cấu hình học thuật mặc định an toàn.
     /// </summary>
     [HttpPost("sessions")]
@@ -646,6 +802,56 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
+    /// Cán bộ Khảo thí điều khiển chuyển đổi trạng thái ca thi (scheduled -> in_progress -> completed, hoặc cancelled).
+    /// </summary>
+    [HttpPut("shifts/{id:guid}/status")]
+    [HttpPatch("shifts/{id:guid}/status")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(ExamShiftResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateShiftStatus(
+        Guid id,
+        [FromBody] UpdateExamShiftStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var actorRole = GetActorRole();
+        var result = await _sender.Send(new UpdateExamShiftStatusCommand(
+            actorId.Value, actorRole, id, request?.Status ?? string.Empty), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Cán bộ Khảo thí phân bổ bộ đề thi HANDED_OVER không trùng lặp (uq_tickets_shift_exam_set) cho các vé chưa có đề trong ca thi.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/distribute-tickets")]
+    [Authorize(Roles = "examination_officer,admin")]
+    [ProducesResponseType(typeof(DistributeShiftTicketsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> DistributeShiftTickets(
+        Guid id,
+        [FromBody] DistributeShiftTicketsRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null) return Unauthorized();
+        var actorRole = GetActorRole();
+        var effectiveRequest = request ?? new DistributeShiftTicketsRequest();
+        var result = await _sender.Send(new DistributeShiftTicketsCommand(
+            actorId.Value, actorRole, id, effectiveRequest.AllowRandomShuffle), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
     /// Ghi nhận sự kiện vi phạm an ninh phòng thi từ Kiosk Desktop App.
     /// </summary>
     [HttpPost("anti-cheat/log")]
@@ -706,7 +912,7 @@ public class OfficialExamsController : ControllerBase
     /// Giảng viên hoặc Trưởng bộ môn tạo mới bộ đề thi.
     /// </summary>
     [HttpPost("exam-sets")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     public async Task<IActionResult> CreateExamSet([FromBody] CreateExamSetRequest request, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -821,8 +1027,8 @@ public class OfficialExamsController : ControllerBase
 
     private Guid? GetActorId()
     {
-        var claim = User.FindFirst("sub")?.Value
-            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var claim = User?.FindFirst("sub")?.Value
+            ?? User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(claim, out var id) ? id : null;
     }
 
@@ -860,40 +1066,43 @@ public class OfficialExamsController : ControllerBase
         }));
     }
 
-    private IActionResult BulkImportProblem(string error)
-    {
-        var statusCode = error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
-            ? StatusCodes.Status403Forbidden
-            : error == OfficialExamErrors.ShiftNotFound
-                ? StatusCodes.Status404NotFound
-                : StatusCodes.Status409Conflict;
-        return StatusCode(statusCode, new ProblemDetails
-        {
-            Status = statusCode,
-            Title = statusCode switch
-            {
-                StatusCodes.Status403Forbidden => "Không được phép.",
-                StatusCodes.Status404NotFound => "Không tìm thấy ca thi.",
-                _ => "Không thể nhập danh sách trong trạng thái hiện tại."
-            },
-            Detail = error,
-            Type = $"https://oralexam.fpt.edu.vn/errors/bulk-ticket-import-{statusCode}"
-        });
-    }
+    private IActionResult BulkImportProblem(string error) => OfficialExamWorkflowProblem(error);
+    private IActionResult OfficialExamProblem(string error) => OfficialExamWorkflowProblem(error);
 
-    private IActionResult OfficialExamProblem(string error)
+    private IActionResult OfficialExamWorkflowProblem(string error)
     {
-        var statusCode = error switch
+        var (statusCode, detail) = error switch
         {
-            OfficialExamErrors.Forbidden or OfficialExamErrors.WrongWorkstation => StatusCodes.Status403Forbidden,
-            OfficialExamErrors.CourseNotFound
+            _ when error.StartsWith("LOCKED:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status403Forbidden, error["LOCKED:".Length..].Trim()),
+            _ when error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status403Forbidden, error["FORBIDDEN:".Length..].Trim()),
+            _ when error is OfficialExamErrors.Forbidden or OfficialExamErrors.WrongWorkstation or PublishGradesErrors.Forbidden =>
+                (StatusCodes.Status403Forbidden, error),
+            _ when error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status404NotFound, error["NOT_FOUND:".Length..].Trim()),
+            _ when error is OfficialExamErrors.CourseNotFound
                 or OfficialExamErrors.StructureNotFound
                 or OfficialExamErrors.SessionNotFound
                 or OfficialExamErrors.ShiftNotFound
                 or OfficialExamErrors.TicketNotFound
                 or OfficialExamErrors.WorkstationTicketNotFound
-                or OfficialExamErrors.StudentNotFound => StatusCodes.Status404NotFound,
-            _ => StatusCodes.Status400BadRequest
+                or OfficialExamErrors.StudentNotFound
+                or PublishGradesErrors.ActorNotFound
+                or PublishGradesErrors.ShiftNotFound =>
+                (StatusCodes.Status404NotFound, error),
+            _ when error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status409Conflict, error["CONFLICT:".Length..].Trim()),
+            _ when error is OfficialExamErrors.ShiftAlreadyPublished
+                or PublishGradesErrors.AlreadyPublished
+                or PublishGradesErrors.IncompleteGrades
+                or PublishGradesErrors.ShiftNotEnded =>
+                (StatusCodes.Status409Conflict, error),
+            _ when error.StartsWith("UNPROCESSABLE:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status422UnprocessableEntity, error["UNPROCESSABLE:".Length..].Trim()),
+            _ when error.StartsWith("BAD_REQUEST:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status400BadRequest, error["BAD_REQUEST:".Length..].Trim()),
+            _ => (StatusCodes.Status400BadRequest, error)
         };
 
         return StatusCode(statusCode, new ProblemDetails
@@ -901,12 +1110,14 @@ public class OfficialExamsController : ControllerBase
             Status = statusCode,
             Title = statusCode switch
             {
-                StatusCodes.Status403Forbidden => "Không được phép.",
-                StatusCodes.Status404NotFound => "Không tìm thấy.",
+                StatusCodes.Status403Forbidden => "Thao tác bị từ chối.",
+                StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên.",
+                StatusCodes.Status409Conflict => "Xung đột dữ liệu hoặc trạng thái tài nguyên.",
+                StatusCodes.Status422UnprocessableEntity => "Không thể xử lý yêu cầu nghiệp vụ.",
                 _ => "Dữ liệu đầu vào không hợp lệ."
             },
-            Detail = error,
-            Type = "https://tools.ietf.org/html/rfc7231"
+            Detail = string.IsNullOrWhiteSpace(detail) ? error : detail,
+            Type = $"https://oralexam.fpt.edu.vn/errors/official-exam-workflow-{statusCode}"
         });
     }
 }

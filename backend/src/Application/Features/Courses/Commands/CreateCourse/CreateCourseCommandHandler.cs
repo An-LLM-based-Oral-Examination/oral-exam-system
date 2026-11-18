@@ -53,6 +53,10 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
         }
 
         Guid? deptHeadId = null;
+        string? deptHeadName = null;
+        var explicitlyClearedHead = request.DepartmentHeadUserId.HasValue &&
+            request.DepartmentHeadUserId.Value == Guid.Empty;
+
         if (request.DepartmentHeadUserId.HasValue && request.DepartmentHeadUserId.Value != Guid.Empty)
         {
             var deptHead = await _context.Users
@@ -76,6 +80,7 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             }
 
             deptHeadId = deptHead.Id;
+            deptHeadName = deptHead.FullName;
         }
 
         var academicProgram = await _context.AcademicPrograms
@@ -84,15 +89,22 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             .Select(p => new { p.Id, p.DepartmentHeadUserId })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (academicProgram?.DepartmentHeadUserId is Guid programHeadId)
+        if (!explicitlyClearedHead &&
+            !deptHeadId.HasValue &&
+            academicProgram?.DepartmentHeadUserId is Guid programHeadId &&
+            programHeadId != Guid.Empty)
         {
-            if (deptHeadId.HasValue && deptHeadId.Value != programHeadId)
-            {
-                return Result<CourseDto>.Failure(
-                    "VALIDATION: Môn học ngành SE phải sử dụng Trưởng bộ môn đã gán ở cấp ngành.");
-            }
+            var programHead = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == programHeadId, cancellationToken);
 
-            deptHeadId = programHeadId;
+            if (programHead is not null &&
+                programHead.IsActive &&
+                string.Equals(programHead.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+            {
+                deptHeadId = programHead.Id;
+                deptHeadName = programHead.FullName;
+            }
         }
 
         var semesterId = request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty
@@ -138,6 +150,18 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
                 UpdatedAt = course.CreatedAt
             });
         }
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.ActorUserId.HasValue && request.ActorUserId.Value != Guid.Empty ? request.ActorUserId.Value : null,
+            Action = "COURSE_CREATED",
+            EntityName = "courses",
+            EntityId = course.Id,
+            NewValues = $"code={course.Code};name={course.Name};credits={course.Credits};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}",
+            CreatedAt = course.CreatedAt
+        });
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new CourseDto
@@ -150,6 +174,7 @@ public sealed class CreateCourseCommandHandler : IRequestHandler<CreateCourseCom
             AcademicProgramId = course.AcademicProgramId,
             SemesterId = course.SemesterId,
             DepartmentHeadUserId = course.DepartmentHeadUserId,
+            DepartmentHeadName = deptHeadName,
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,
             MaxFollowUpQuestions = course.MaxFollowUpQuestions,
             MaxMockExamsPerDay = course.MaxMockExamsPerDay,

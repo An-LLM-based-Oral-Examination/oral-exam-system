@@ -71,7 +71,118 @@ public sealed record OfficialExamSessionResponse(
     int MaxFollowUpQuestions,
     string ExamInputMode,
     int TranscriptBufferSeconds,
-    string Status);
+    string Status,
+    Guid? SemesterId = null);
+
+public sealed record SemesterEligibleExamCourseDto(
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    int ActiveClassCount,
+    int EligibleStudentCount,
+    int MaxStudentsPerRoom,
+    int RecommendedRoomCount,
+    Guid? ActiveExamStructureId,
+    string? ActiveExamStructureName,
+    int HandedOverExamSetCount,
+    bool HasFollowUp,
+    int MaxFollowUpQuestions,
+    Guid? ExistingSessionId,
+    string? ExistingSessionTitle,
+    string? ExistingSessionStatus);
+
+public sealed class BatchCreateOfficialExamSessionCourseItemDto
+{
+    public Guid CourseId { get; set; }
+    public string? Title { get; set; }
+}
+
+public sealed class BatchCreateOfficialExamSessionsRequest
+{
+    public DateOnly ExamDate { get; set; }
+    public string? ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
+    public int TranscriptBufferSeconds { get; set; } = 60;
+    public bool SkipExisting { get; set; } = false;
+    public IReadOnlyList<BatchCreateOfficialExamSessionCourseItemDto> Courses { get; set; } = Array.Empty<BatchCreateOfficialExamSessionCourseItemDto>();
+}
+
+public sealed record BatchCreateOfficialExamSessionsResponse(
+    Guid SemesterId,
+    int CreatedCount,
+    IReadOnlyList<OfficialExamSessionResponse> Sessions);
+
+public sealed record OfficialExamEnrollmentEstimateDto(
+    Guid SessionId,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    Guid SemesterId,
+    string SemesterCode,
+    int EligibleStudentCount,
+    int AllocatedStudentCount,
+    int UnallocatedStudentCount,
+    int MaxStudentsPerRoom,
+    int RecommendedTotalRooms,
+    int RecommendedAdditionalRooms,
+    int CurrentShiftRoomCount,
+    int CurrentTotalCapacity,
+    int CurrentAvailableSeats,
+    int HandedOverExamSetCount);
+
+public sealed class BatchOpenExamShiftRoomDto
+{
+    public string? RoomLab { get; set; }
+    public int MaxSeats { get; set; } = OfficialExamRules.DefaultShiftCapacity;
+    public Guid? ProctorUserId { get; set; }
+    public Guid? ExaminerUserId { get; set; }
+}
+
+public sealed class BatchOpenExamShiftsRequest
+{
+    public string? ShiftGroupName { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public IReadOnlyList<BatchOpenExamShiftRoomDto> Rooms { get; set; } = Array.Empty<BatchOpenExamShiftRoomDto>();
+}
+
+public sealed record BatchOpenExamShiftsResponse(
+    Guid SessionId,
+    string ShiftGroupName,
+    int CreatedRoomCount,
+    int TotalCapacityCreated,
+    IReadOnlyList<ExamShiftResponse> Shifts);
+
+public sealed class AutoAllocateSessionStudentsRequest
+{
+    public IReadOnlyList<Guid>? ShiftIds { get; set; }
+    public bool AssignHandedOverExamSets { get; set; } = false;
+    public bool DryRun { get; set; } = false;
+}
+
+public sealed record AutoAllocatedRoomDto(
+    Guid ShiftId,
+    string RoomLab,
+    int MaxSeats,
+    int AssignedBefore,
+    int AssignedNow,
+    int TotalAfter);
+
+public sealed record AutoAllocatedShiftGroupDto(
+    DateTime StartTime,
+    DateTime EndTime,
+    bool IsFinalBalancedShift,
+    int TotalAssignedInGroup,
+    IReadOnlyList<AutoAllocatedRoomDto> Rooms);
+
+public sealed record AutoAllocateSessionStudentsResponse(
+    Guid SessionId,
+    bool DryRun,
+    int TotalEligibleStudents,
+    int PreviouslyAllocatedCount,
+    int NewlyAllocatedCount,
+    IReadOnlyList<AutoAllocatedShiftGroupDto> ShiftGroups);
 
 public sealed class OpenExamShiftRequest
 {
@@ -131,7 +242,8 @@ public sealed record ExamTicketResponse(
     string? IpAddress,
     string Status,
     DateTime CheckedInAt,
-    Guid? ExamSetId = null);
+    Guid? ExamSetId = null,
+    string? ExamSetCode = null);
 
 /// <summary>One imported roster row. SourceRow is the human-facing spreadsheet/CSV row number.</summary>
 public sealed record BulkExamTicketImportRow(

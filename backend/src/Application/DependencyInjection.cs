@@ -1,9 +1,11 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using MediatR;
 using OralExamination.Application.Common.Behaviors;
+using OralExamination.Application.Common.Interfaces;
 
 namespace OralExamination.Application;
 
@@ -18,6 +20,7 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+        services.TryAddSingleton<IOfficialExamRandomGenerator>(CryptoOfficialExamRandomGenerator.Instance);
 
         return services;
     }

@@ -13,15 +13,9 @@ internal static class InClassShiftMutationGuard
         InClassExamShift shift, CancellationToken cancellationToken)
     {
         var actor = await context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == actorId, cancellationToken);
-        if (actor is null || !actor.IsActive) return InClassShiftErrors.LecturerNotAuthorized;
-        if (actor.Role == UserRole.Admin) return null;
-        if (actor.Role == UserRole.DepartmentHead)
-            return AcademicCourseOwnership.IsOwnedBy(shift.Class.Course, actor.Id) ? null : InClassShiftErrors.LecturerNotAuthorized;
-        if (actor.Role != UserRole.Lecturer) return InClassShiftErrors.LecturerNotAuthorized;
-        if (shift.LecturerId == actor.Id || shift.Class.LecturerId == actor.Id ||
-            await context.CourseLecturers.AnyAsync(x => x.CourseId == shift.Class.CourseId && x.LecturerUserId == actor.Id, cancellationToken))
-            return null;
-        return InClassShiftErrors.LecturerNotAuthorized;
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
+            return InClassShiftErrors.LecturerNotAuthorized;
+        return shift.Class.LecturerId == actor.Id ? null : InClassShiftErrors.LecturerNotAuthorized;
     }
 
     public static async Task<string?> CheckMutableAsync(IApplicationDbContext context,

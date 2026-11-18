@@ -16,7 +16,7 @@ internal static class DlqAuthorization
     {
         if (!id.HasValue || id == Guid.Empty || (requireRole && string.IsNullOrWhiteSpace(claimedRole))) return null;
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id && u.IsActive, ct);
-        if (actor is null || actor.Role is not (UserRole.Admin or UserRole.ExaminationOfficer or UserRole.Lecturer)) return null;
+        if (actor is null || actor.Role is not (UserRole.Admin or UserRole.ExaminationOfficer)) return null;
         return claimedRole is not null && !string.Equals(claimedRole, actor.Role, StringComparison.Ordinal) ? null : actor;
     }
 
@@ -34,18 +34,12 @@ internal static class DlqAuthorization
     {
         UserRole.Admin => flow is "PRACTICE" or "MOCK_EXAM" or "IN_CLASS_EXAM",
         UserRole.ExaminationOfficer => flow == "OFFICIAL_EXAM",
-        UserRole.Lecturer => flow == "IN_CLASS_EXAM",
         _ => false
     };
 
-    internal static async Task<bool> CanAccessAsync(IApplicationDbContext db, User actor, DlqEntity item, CancellationToken ct)
+    internal static Task<bool> CanAccessAsync(IApplicationDbContext db, User actor, DlqEntity item, CancellationToken ct)
     {
-        var flow = Flow(item);
-        if (!CanManageFlow(actor.Role, flow)) return false;
-        if (actor.Role != UserRole.Lecturer) return true;
-        var submission = await InClassSubmissionAsync(db, item, ct);
-        return submission is not null && await db.InClassExamShifts.AsNoTracking()
-            .AnyAsync(s => s.Id == submission.ShiftId && s.LecturerId == actor.Id, ct);
+        return Task.FromResult(CanManageFlow(actor.Role, Flow(item)));
     }
 
     internal static async Task<InClassExamSubmission?> InClassSubmissionAsync(IApplicationDbContext db, DlqEntity item, CancellationToken ct)

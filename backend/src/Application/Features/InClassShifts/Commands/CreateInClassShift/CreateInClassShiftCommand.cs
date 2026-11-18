@@ -19,5 +19,7 @@ public sealed record CreateInClassShiftCommand(
     bool HasFollowUp = false,
     int MaxFollowUpQuestions = 2,
     bool IsAutoPublishGrades = true,
-    int ExamDurationMinutes = 20
+    int ExamDurationMinutes = 20,
+    IReadOnlyList<string>? SelectedDifficulties = null,
+    IReadOnlyList<Guid>? SelectedCloIds = null
 ) : IRequest<Result<InClassExamShiftResponse>>;

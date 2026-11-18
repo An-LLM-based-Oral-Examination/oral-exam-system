@@ -2,15 +2,17 @@ using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using System.Threading;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchApproveQuestions;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 using OralExamination.Application.Features.QuestionBank.Commands.CreateDraftQuestion;
+using OralExamination.Application.Features.QuestionBank.Commands.MutateQuestion;
 using OralExamination.Application.Features.QuestionBank.Commands.GenerateQuestionsFromClo;
-using OralExamination.Application.Features.QuestionBank.Commands.GenerateQuestionsFromFlm;
 using OralExamination.Application.Features.QuestionBank.Commands.ReviewQuestionDecision;
 using OralExamination.Application.Features.QuestionBank.Commands.UploadQuestionImage;
 using OralExamination.Application.Features.QuestionBank.DTOs;
@@ -68,7 +70,7 @@ public class QuestionsController : ControllerBase
 
         if (targetFile == null || targetFile.Length == 0)
         {
-            return BadRequest(new { error = "BAD_REQUEST: Không tìm thấy tệp hình ảnh hoặc tệp rỗng." });
+            return QuestionProblem(400, "Không tìm thấy tệp hình ảnh hoặc tệp rỗng.");
         }
 
         string contentType = "application/octet-stream";
@@ -94,15 +96,15 @@ public class QuestionsController : ControllerBase
         {
             if (result.Error.StartsWith("PAYLOAD_TOO_LARGE:", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = result.Error });
+                return QuestionProblem(413, result.Error);
             }
 
             if (result.Error.StartsWith("UNSUPPORTED_MEDIA_TYPE:", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status415UnsupportedMediaType, new { error = result.Error });
+                return QuestionProblem(415, result.Error);
             }
 
-            return BadRequest(new { error = result.Error });
+            return QuestionProblem(400, result.Error);
         }
 
         return Ok(result.Value);
@@ -118,7 +120,8 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> GenerateFromClo([FromBody] GenerateQuestionsFromCloRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var requesterId = currentUserId != Guid.Empty ? currentUserId : (request.RequesterUserId ?? Guid.Empty);
+        if (currentUserId == Guid.Empty) return Unauthorized();
+        var requesterId = currentUserId;
 
         var command = new GenerateQuestionsFromCloCommand(
             request.CourseId,
@@ -134,7 +137,7 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            return BadRequest(new { type = "https://oralexam.fpt.edu.vn/errors/generation-failed", detail = result.Error });
+            return QuestionProblem(400, result.Error);
         }
 
         return Ok(result.Value);
@@ -148,10 +151,10 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> CreateDraftQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty) return Unauthorized();
         var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
-        var lecturerId = currentUserId != Guid.Empty
-            ? (isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty ? request.LecturerId.Value : currentUserId)
-            : (request.LecturerId ?? Guid.Empty);
+        var lecturerId = isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
+            ? request.LecturerId.Value : currentUserId;
         var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
             ? null
             : request.ApprovedBy;
@@ -181,7 +184,7 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            return UnprocessableEntity(new { type = "https://oralexam.fpt.edu.vn/errors/validation-failed", detail = result.Error });
+            return QuestionProblem(422, result.Error);
         }
 
         return CreatedAtAction(nameof(GetQuestionById), new { id = result.Value }, new { questionId = result.Value });
@@ -194,10 +197,10 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> CreatePracticeQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty) return Unauthorized();
         var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
-        var lecturerId = currentUserId != Guid.Empty
-            ? (isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty ? request.LecturerId.Value : currentUserId)
-            : (request.LecturerId ?? Guid.Empty);
+        var lecturerId = isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
+            ? request.LecturerId.Value : currentUserId;
         var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
             ? null
             : request.ApprovedBy;
@@ -227,7 +230,7 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            return UnprocessableEntity(new { type = "https://oralexam.fpt.edu.vn/errors/validation-failed", detail = result.Error });
+            return QuestionProblem(422, result.Error);
         }
 
         return CreatedAtAction(nameof(GetQuestionById), new { id = result.Value }, new { questionId = result.Value });
@@ -241,8 +244,9 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> CreateOfficialExamQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var lecturerId = currentUserId != Guid.Empty ? currentUserId : (request.LecturerId ?? Guid.Empty);
-        var approvedBy = currentUserId != Guid.Empty ? currentUserId : request.ApprovedBy;
+        if (currentUserId == Guid.Empty) return Unauthorized();
+        var lecturerId = currentUserId;
+        var approvedBy = currentUserId;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
@@ -269,7 +273,7 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            return UnprocessableEntity(new { type = "https://oralexam.fpt.edu.vn/errors/validation-failed", detail = result.Error });
+            return QuestionProblem(422, result.Error);
         }
 
         return CreatedAtAction(nameof(GetQuestionById), new { id = result.Value }, new { questionId = result.Value });
@@ -283,7 +287,8 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> BatchApprove([FromBody] BatchApproveQuestionsRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var approverId = currentUserId != Guid.Empty ? currentUserId : (request.ApproverId ?? Guid.Empty);
+        if (currentUserId == Guid.Empty) return Unauthorized();
+        var approverId = currentUserId;
 
         var command = new BatchApproveQuestionsCommand(
             request.CourseId,
@@ -296,44 +301,20 @@ public class QuestionsController : ControllerBase
         {
             if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    type = "https://oralexam.fpt.edu.vn/errors/forbidden",
-                    title = "Không đủ quyền phê duyệt",
-                    status = StatusCodes.Status403Forbidden,
-                    detail = result.Error
-                });
+                return QuestionProblem(403, result.Error);
             }
 
             if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
             {
-                return NotFound(new
-                {
-                    type = "https://oralexam.fpt.edu.vn/errors/course-not-found",
-                    title = "Không tìm thấy môn học",
-                    status = StatusCodes.Status404NotFound,
-                    detail = result.Error
-                });
+                return QuestionProblem(404, result.Error);
             }
 
             if (result.Error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase))
             {
-                return UnprocessableEntity(new
-                {
-                    type = "https://oralexam.fpt.edu.vn/errors/batch-approve-invariant-violation",
-                    title = "Vi phạm ràng buộc Barem 10.00 điểm hoặc Model Answer",
-                    status = StatusCodes.Status422UnprocessableEntity,
-                    detail = result.Error
-                });
+                return QuestionProblem(422, result.Error);
             }
 
-            return BadRequest(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/batch-approve-failed",
-                title = "Phê duyệt hàng loạt thất bại",
-                status = StatusCodes.Status400BadRequest,
-                detail = result.Error
-            });
+            return QuestionProblem(400, result.Error);
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
@@ -346,7 +327,8 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> BatchSubmitReview([FromBody] BatchSubmitQuestionsForReviewRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var lecturerId = currentUserId != Guid.Empty ? currentUserId : (request.LecturerId ?? Guid.Empty);
+        if (currentUserId == Guid.Empty) return Unauthorized();
+        var lecturerId = currentUserId;
 
         var command = new BatchSubmitQuestionsForReviewCommand(
             request.CourseId,
@@ -358,7 +340,7 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            return UnprocessableEntity(new { type = "https://oralexam.fpt.edu.vn/errors/batch-submit-failed", detail = result.Error });
+            return QuestionProblem(422, result.Error);
         }
 
         return Ok(result.Value);
@@ -373,7 +355,8 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> ReviewDecision(Guid id, [FromBody] QuestionReviewDecisionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
-        var reviewerId = currentUserId != Guid.Empty ? currentUserId : (request.ReviewerId ?? Guid.Empty);
+        if (currentUserId == Guid.Empty) return Unauthorized();
+        var reviewerId = currentUserId;
 
         var command = new ReviewQuestionDecisionCommand(
             id,
@@ -389,10 +372,10 @@ public class QuestionsController : ControllerBase
             if (result.Error.Contains("Chỉ Trưởng Bộ Môn", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("không có quyền", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new { type = "https://oralexam.fpt.edu.vn/errors/forbidden", detail = result.Error });
+                return QuestionProblem(403, result.Error);
             }
 
-            return BadRequest(new { type = "https://oralexam.fpt.edu.vn/errors/review-decision-failed", detail = result.Error });
+            return QuestionProblem(400, result.Error);
         }
 
         return Ok(result.Value);
@@ -404,10 +387,13 @@ public class QuestionsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetQuestions([FromQuery] GetQuestionsQuery query)
     {
-        var result = await _sender.Send(query);
+        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var result = await _sender.Send(query with { ActorId = GetCurrentUserId(), ActorRole = role });
         if (!result.IsSuccess)
         {
-            return BadRequest(new { detail = result.Error });
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+                return QuestionProblem(403, result.Error);
+            return QuestionProblem(400, result.Error);
         }
 
         return Ok(result.Value);
@@ -419,12 +405,68 @@ public class QuestionsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetQuestionById(Guid id)
     {
-        var result = await _sender.Send(new GetQuestionByIdQuery(id));
+        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var result = await _sender.Send(new GetQuestionByIdQuery(id, GetCurrentUserId(), role));
         if (!result.IsSuccess)
         {
-            return NotFound(new { detail = result.Error });
+            return QuestionProblem(404, result.Error);
         }
 
         return Ok(result.Value);
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateQuestion(Guid id, [FromBody] UpdateQuestionDraftDto request,
+        CancellationToken cancellationToken)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
+            QuestionMutationKind.Update, Draft: request), cancellationToken);
+        return result.IsSuccess ? Ok(new { questionId = result.Value }) : MutationProblem(result.Error);
+    }
+
+    [HttpPatch("{id:guid}/active")]
+    [Authorize(Roles = "department_head,admin")]
+    public async Task<IActionResult> SetQuestionActive(Guid id, [FromBody] SetQuestionActiveRequest request,
+        CancellationToken cancellationToken)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var role = User.IsInRole("admin") ? "admin" : "department_head";
+        var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
+            QuestionMutationKind.SetActive, Active: request.IsActive), cancellationToken);
+        return result.IsSuccess ? NoContent() : MutationProblem(result.Error);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> SoftDeleteQuestion(Guid id, CancellationToken cancellationToken)
+    {
+        var actorId = GetCurrentUserId();
+        if (actorId == Guid.Empty) return Unauthorized();
+        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
+            QuestionMutationKind.SoftDelete), cancellationToken);
+        return result.IsSuccess ? NoContent() : MutationProblem(result.Error);
+    }
+
+    private IActionResult MutationProblem(string error) =>
+        QuestionProblem(error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ? 403 :
+            error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ? 404 :
+            error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ? 409 : 422, error);
+
+    private IActionResult QuestionProblem(int status, string detail)
+    {
+        var problem = ApiProblems.CreateForController(HttpContext, status, detail);
+        return status switch
+        {
+            400 => BadRequest(problem),
+            404 => NotFound(problem),
+            422 => UnprocessableEntity(problem),
+            _ => StatusCode(status, problem)
+        };
+    }
 }
+
+public sealed record SetQuestionActiveRequest(bool IsActive);

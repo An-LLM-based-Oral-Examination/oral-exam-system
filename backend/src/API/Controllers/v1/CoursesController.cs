@@ -38,19 +38,49 @@ public class CoursesController : ControllerBase
     /// Lấy danh sách toàn bộ các môn học đang hoạt động (phục vụ Student Portal & chọn môn luyện tập MF-01).
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetCourses()
+    public async Task<IActionResult> GetCourses(
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
     {
-        var query = new OralExamination.Application.Features.Courses.Queries.GetCourses.GetCoursesQuery();
-        var result = await _sender.Send(query);
+        // Sinh viên và người dùng thông thường tuyệt đối không được phép xem môn học inactive
+        var effectiveIncludeInactive = includeInactive && User?.IsInRole("admin") == true;
+        var query = new OralExamination.Application.Features.Courses.Queries.GetCourses.GetCoursesQuery(effectiveIncludeInactive);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            return BadRequest(new
+            return BadRequest(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/courses-query-failed",
-                title = "Bad Request",
-                status = 400,
-                detail = result.Error
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Lấy danh sách môn học dành riêng cho Quản trị viên (Admin), bao gồm cả môn tạm khóa / inactive.
+    /// </summary>
+    [Authorize(Roles = "admin")]
+    [HttpGet("/api/v1/admin/courses")]
+    public async Task<IActionResult> GetAdminCourses(
+        [FromQuery] bool includeInactive = true,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new OralExamination.Application.Features.Courses.Queries.GetCourses.GetCoursesQuery(includeInactive);
+        var result = await _sender.Send(query, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
             });
         }
 
@@ -77,7 +107,8 @@ public class CoursesController : ControllerBase
             request.MockExamDurationMinutes,
             request.MockExamTotalQuestions,
             request.IsActive,
-            request.SemesterId);
+            request.SemesterId,
+            GetCurrentUserId());
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -110,7 +141,8 @@ public class CoursesController : ControllerBase
             request.MockExamDurationMinutes,
             request.MockExamTotalQuestions,
             request.IsActive,
-            request.SemesterId);
+            request.SemesterId,
+            GetCurrentUserId());
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -338,12 +370,25 @@ public class CoursesController : ControllerBase
     public async Task<IActionResult> AssignDepartmentHead(Guid id, [FromBody] AssignDepartmentHeadRequest request)
     {
         var actorRole = GetActorRole();
-        var command = new AssignDepartmentHeadCommand(id, request.DepartmentHeadUserId, actorRole);
+        var command = new AssignDepartmentHeadCommand(id, request.DepartmentHeadUserId, actorRole, GetCurrentUserId());
         var result = await _sender.Send(command);
 
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("Không tìm thấy môn học", StringComparison.OrdinalIgnoreCase))
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("Không tìm thấy môn học", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("Không tìm thấy người dùng", StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new ProblemDetails
                 {
@@ -498,9 +543,10 @@ public class CoursesController : ControllerBase
     {
         var role = GetActorRole();
         var userId = GetCurrentUserId();
-        if (string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase) && userId != Guid.Empty)
+        if ((string.Equals(role, "department_head", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(role, "lecturer", StringComparison.OrdinalIgnoreCase)) && userId != Guid.Empty)
         {
-            return $"department_head:{userId}";
+            return $"{role}:{userId}";
         }
 
         return role;

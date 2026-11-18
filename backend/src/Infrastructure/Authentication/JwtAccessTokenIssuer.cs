@@ -18,7 +18,7 @@ public sealed class JwtAccessTokenIssuer : IAccessTokenIssuer
         _configuration = configuration;
     }
 
-    public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false)
+    public IssuedAccessToken Issue(Guid userId, string email, string fullName, string role, bool mustChangePassword = false, int authVersion = 1)
     {
         var signingKey = AuthConfiguration.JwtSigningKey(_configuration);
         if (string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)
@@ -38,7 +38,8 @@ public sealed class JwtAccessTokenIssuer : IAccessTokenIssuer
             new(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new(JwtRegisteredClaimNames.Email, email),
             new(JwtRegisteredClaimNames.Name, fullName),
-            new("role", role)
+            new("role", role),
+            new("auth_version", authVersion.ToString())
         };
         if (mustChangePassword)
         {

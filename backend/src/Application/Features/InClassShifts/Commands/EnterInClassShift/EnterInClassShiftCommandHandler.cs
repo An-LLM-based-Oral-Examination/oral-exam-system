@@ -248,33 +248,83 @@ public sealed class EnterInClassShiftCommandHandler(
 
     /// <summary>
     /// Phân bổ bộ N câu hỏi từ kho câu hỏi luyện tập (PracticeQuestions) đã APPROVED của môn học (cô lập R8),
-    /// hỗ trợ chế độ ALL_COURSE_BANK / SELECTED_POOL và thuật toán Anti-Collision ưu tiên câu hỏi ít xuất hiện nhất trong ca thi.
+    /// hỗ trợ chế độ ALL_COURSE_BANK / SELECTED_CLOS (cùng tương thích ngược SELECTED_POOL cho ca cũ),
+    /// cân bằng giữa các CLO & độ khó đã chọn và ưu tiên câu hỏi ít xuất hiện nhất trong ca thi (Anti-Collision).
     /// </summary>
     private async Task<List<Guid>> AllocateQuestionsForStudentAsync(
         InClassExamShift shift,
         int targetCount,
         CancellationToken cancellationToken)
     {
-        var query = context.PracticeQuestions
+        var baseQuery = context.PracticeQuestions
             .AsNoTracking()
             .Where(q => q.CourseId == shift.Class.CourseId &&
                         q.ApprovalStatus == ApprovalStatus.Approved &&
                         q.IsActive);
 
-        if (string.Equals(shift.QuestionPoolMode, "SELECTED_POOL", StringComparison.OrdinalIgnoreCase))
+        var mode = (shift.QuestionPoolMode ?? InClassShiftPoolConfig.AllCourseBank).Trim().ToUpperInvariant();
+        var selectedCloIds = new List<Guid>();
+
+        if (mode == InClassShiftPoolConfig.SelectedPoolLegacy)
         {
             var poolIds = ParseGuidList(shift.SelectedQuestionIdsJson);
-            if (poolIds.Count > 0)
+            if (poolIds.Count == 0)
             {
-                query = query.Where(q => poolIds.Contains(q.Id));
+                return new List<Guid>();
+            }
+
+            baseQuery = baseQuery.Where(q => poolIds.Contains(q.Id));
+        }
+        else if (mode == InClassShiftPoolConfig.SelectedClos)
+        {
+            selectedCloIds = InClassShiftPoolConfig.ParseGuidList(shift.SelectedCloIdsJson);
+            if (selectedCloIds.Count == 0 || selectedCloIds.Count > targetCount)
+            {
+                return new List<Guid>();
+            }
+
+            var activeCloIds = await context.CourseClos
+                .AsNoTracking()
+                .Where(c =>
+                    c.CourseId == shift.Class.CourseId &&
+                    c.IsActive &&
+                    selectedCloIds.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToListAsync(cancellationToken);
+
+            if (activeCloIds.Count != selectedCloIds.Count)
+            {
+                return new List<Guid>();
+            }
+
+            baseQuery = baseQuery.Where(q => q.CloId.HasValue && activeCloIds.Contains(q.CloId.Value));
+        }
+
+        var rawQuestions = await baseQuery
+            .Select(q => new
+            {
+                q.Id,
+                q.CloId,
+                q.Difficulty
+            })
+            .ToListAsync(cancellationToken);
+
+        var allowedDiffs = mode == InClassShiftPoolConfig.SelectedPoolLegacy
+            ? InClassShiftPoolConfig.CanonicalDifficulties.ToHashSet(StringComparer.Ordinal)
+            : InClassShiftPoolConfig.ParseStoredDifficulties(shift.SelectedDifficultiesJson)
+                .ToHashSet(StringComparer.Ordinal);
+
+        var candidates = new List<PoolCandidateQuestion>(rawQuestions.Count);
+        foreach (var q in rawQuestions)
+        {
+            if (InClassShiftPoolConfig.TryNormalizeDifficulty(q.Difficulty, out var canonicalDiff) &&
+                allowedDiffs.Contains(canonicalDiff))
+            {
+                candidates.Add(new PoolCandidateQuestion(q.Id, q.CloId, canonicalDiff));
             }
         }
 
-        var candidateIds = await query
-            .Select(q => q.Id)
-            .ToListAsync(cancellationToken);
-
-        if (candidateIds.Count < targetCount)
+        if (candidates.Count < targetCount)
         {
             return new List<Guid>();
         }
@@ -285,7 +335,7 @@ public sealed class EnterInClassShiftCommandHandler(
             .Select(p => new { p.AssignedQuestionId, p.AssignedQuestionIdsJson })
             .ToListAsync(cancellationToken);
 
-        var usageCounts = candidateIds.ToDictionary(id => id, _ => 0);
+        var usageCounts = candidates.ToDictionary(q => q.Id, _ => 0);
 
         foreach (var p in existingParticipants)
         {
@@ -304,11 +354,12 @@ public sealed class EnterInClassShiftCommandHandler(
             }
         }
 
-        return candidateIds
-            .OrderBy(id => usageCounts[id])
-            .ThenBy(_ => Random.Shared.Next())
-            .Take(Math.Min(targetCount, candidateIds.Count))
-            .ToList();
+        return InClassShiftPoolConfig.AllocateBalancedQuestions(
+            candidates,
+            mode,
+            selectedCloIds,
+            targetCount,
+            usageCounts);
     }
 
     private async Task<List<InClassAssignedQuestionDto>> LoadQuestionDtosAsync(
@@ -328,7 +379,9 @@ public sealed class EnterInClassShiftCommandHandler(
                 q.Title,
                 q.Content,
                 q.Difficulty.ToString().ToLowerInvariant(),
-                q.BloomLevel.ToString().ToLowerInvariant()))
+                q.BloomLevel.ToString().ToLowerInvariant(),
+                q.ImageUrl,
+                q.ImageDescription))
             .ToListAsync(cancellationToken);
 
         var dict = rawQuestions.ToDictionary(q => q.QuestionId);

@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.AcademicHierarchy;
 using OralExamination.Application.Features.MockExams.DTOs;
 
 namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
@@ -26,6 +27,11 @@ public class GetMockExamQuotaQueryHandler(IApplicationDbContext context, TimePro
         if (course is null)
         {
             return Result<MockExamQuotaDto>.Failure("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
+        }
+
+        if (!await StudentCourseAccess.IsEnrolledAsync(context, request.StudentId, request.CourseId, cancellationToken))
+        {
+            return Result<MockExamQuotaDto>.Failure(StudentCourseAccess.Denied);
         }
 
         var sysQuotaStr = await context.SystemConfigs

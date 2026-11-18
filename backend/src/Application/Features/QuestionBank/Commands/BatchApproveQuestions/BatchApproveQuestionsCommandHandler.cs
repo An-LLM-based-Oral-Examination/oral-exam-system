@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
@@ -46,6 +47,9 @@ public sealed class BatchApproveQuestionsCommandHandler
             return Result<BatchApproveQuestionsResponseDto>.Failure(
                 "NOT_FOUND: Môn học không tồn tại trong hệ thống.");
         }
+        if (!await QuestionCourseAccess.AllowedCourseIds(_context, approver.Role, approver.Id)
+                .ContainsAsync(request.CourseId, cancellationToken))
+            return Result<BatchApproveQuestionsResponseDto>.Failure("FORBIDDEN: Người duyệt không phụ trách môn học này.");
 
         if (request.Questions == null || request.Questions.Count == 0)
         {

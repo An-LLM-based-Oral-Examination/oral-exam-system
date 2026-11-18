@@ -21,7 +21,6 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
     [
         UserRole.Lecturer,
         UserRole.DepartmentHead,
-        UserRole.ExaminationOfficer,
         UserRole.Admin
     ];
 

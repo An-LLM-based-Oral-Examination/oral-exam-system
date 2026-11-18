@@ -43,10 +43,11 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        var courseExists = await _context.Courses.AnyAsync(
-            course => course.Id == request.CourseId && course.IsActive,
-            cancellationToken);
-        if (!courseExists)
+        var course = await _context.Courses.AsNoTracking()
+            .Where(item => item.Id == request.CourseId && item.IsActive)
+            .Select(item => new { item.Id, item.SemesterId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (course is null)
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.CourseNotFound);
         }
@@ -67,6 +68,7 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
         var session = new OfficialExamSession
         {
             CourseId = request.CourseId,
+            SemesterId = course.SemesterId,
             ExamStructureId = request.ExamStructureId,
             Title = request.Title!.Trim(),
             ExamDate = request.ExamDate,
@@ -91,6 +93,7 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             session.MaxFollowUpQuestions,
             session.ExamInputMode,
             session.TranscriptBufferSeconds,
-            session.Status));
+            session.Status,
+            session.SemesterId));
     }
 }

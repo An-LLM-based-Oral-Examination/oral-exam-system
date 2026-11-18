@@ -112,8 +112,7 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
             IsAlreadyEnrolled: isAlreadyEnrolled,
             CreatedAt: targetClass.CreatedAt,
             Shifts: shifts,
-            EnrolledStudents: enrolledStudents,
-            JoinPassword: targetClass.JoinPasswordPlain);
+            EnrolledStudents: enrolledStudents);
 
         return Result<ClassDetailDto>.Success(detail);
     }

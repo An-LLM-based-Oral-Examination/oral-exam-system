@@ -107,15 +107,6 @@ public class JoinClassCommandHandler(
             return Result<JoinClassResponseDto>.Failure("Lớp học không cho phép sinh viên tự ghi danh.");
         }
 
-        // Kiểm tra sĩ số tối đa
-        var currentEnrollmentCount = await context.ClassEnrollments
-            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", cancellationToken);
-
-        if (currentEnrollmentCount >= targetClass.MaxStudents)
-        {
-            return Result<JoinClassResponseDto>.Failure("Lớp học đã đạt số lượng sinh viên tối đa.");
-        }
-
         // Xác thực mật khẩu nếu lớp học được đặt mật khẩu
         if (!string.IsNullOrWhiteSpace(targetClass.JoinPasswordHash))
         {
@@ -130,9 +121,20 @@ public class JoinClassCommandHandler(
             }
         }
 
+        return await context.ExecuteClassEnrollmentAsync(targetClass.Id, async lockToken =>
+        {
+        // Kiểm tra sĩ số và ghi danh trong cùng transaction có khóa theo lớp.
+        var currentEnrollmentCount = await context.ClassEnrollments
+            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", lockToken);
+
+        if (currentEnrollmentCount >= targetClass.MaxStudents)
+        {
+            return Result<JoinClassResponseDto>.Failure("Lớp học đã đạt số lượng sinh viên tối đa.");
+        }
+
         // Kiểm tra đã enroll chưa
         var existingEnrollment = await context.ClassEnrollments
-            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == request.StudentId, cancellationToken);
+            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == request.StudentId, lockToken);
 
         DateTime enrolledAt;
         var joinMethod = string.IsNullOrWhiteSpace(targetClass.JoinPasswordHash) ? "INVITATION" : "PASSWORD";
@@ -178,7 +180,7 @@ public class JoinClassCommandHandler(
             CreatedAt = enrolledAt
         });
 
-        await context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(lockToken);
 
         var response = new JoinClassResponseDto(
             targetClass.Id,
@@ -197,5 +199,6 @@ public class JoinClassCommandHandler(
             targetClass.CourseOfferingId);
 
         return Result<JoinClassResponseDto>.Success(response);
+        }, cancellationToken);
     }
 }

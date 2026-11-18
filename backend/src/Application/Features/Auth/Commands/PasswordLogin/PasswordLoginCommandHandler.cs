@@ -123,7 +123,8 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             user.Email,
             user.FullName,
             user.Role,
-            user.MustChangePassword);
+            user.MustChangePassword,
+            user.AuthVersion);
 
         var rawRefreshToken = GenerateRawToken();
         _context.RefreshTokens.Add(new Domain.Entities.RefreshToken

@@ -76,10 +76,9 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             }
 
             if (isInClassTask &&
-                !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(request.ActorRole, "lecturer", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase))
             {
-                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Giảng viên hoặc Quản trị viên mới có quyền replay tác vụ Ca thi trong lớp.");
+                return Result<Unit>.Failure("FORBIDDEN: Chỉ có Quản trị viên (Admin) mới có quyền replay tác vụ Ca thi trong lớp.");
             }
         }
 

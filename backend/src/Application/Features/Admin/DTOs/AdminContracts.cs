@@ -58,3 +58,39 @@ public sealed record PagedAuditLogsResponseDto
     public int PageSize { get; init; }
     public int TotalPages { get; init; }
 }
+
+public sealed record AdminNotificationItemDto
+{
+    public Guid Id { get; init; }
+    public Guid UserId { get; init; }
+    public string UserEmail { get; init; } = string.Empty;
+    public string UserFullName { get; init; } = string.Empty;
+    public string UserRole { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
+    public bool IsRead { get; init; }
+    public DateTime? ReadAt { get; init; }
+    public DateTime CreatedAt { get; init; }
+}
+
+public sealed record PagedAdminNotificationsResponseDto
+{
+    public IReadOnlyList<AdminNotificationItemDto> Items { get; init; } = Array.Empty<AdminNotificationItemDto>();
+    public int TotalCount { get; init; }
+    public int UnreadTotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public int TotalPages { get; init; }
+}
+
+public sealed record DispatchAdminNotificationResultDto
+{
+    public int CreatedCount { get; init; }
+    public string TargetScope { get; init; } = string.Empty;
+    public string? TargetRole { get; init; }
+    public Guid? TargetUserId { get; init; }
+    public string Type { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public DateTime CreatedAt { get; init; }
+}

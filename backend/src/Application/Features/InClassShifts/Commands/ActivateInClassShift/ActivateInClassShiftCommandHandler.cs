@@ -26,7 +26,7 @@ public sealed class ActivateInClassShiftCommandHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
 
-        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
         {
             return Result<ActivateInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
@@ -50,11 +50,7 @@ public sealed class ActivateInClassShiftCommandHandler(
 
         if (actor.Role == UserRole.Lecturer)
         {
-            bool isAssigned = shift.LecturerId == actor.Id ||
-                shift.Class.LecturerId == actor.Id ||
-                await context.CourseLecturers.AnyAsync(
-                    cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                    cancellationToken);
+            bool isAssigned = shift.Class.LecturerId == actor.Id;
 
             if (!isAssigned)
             {

@@ -25,6 +25,7 @@ public sealed class AssignExamTicketCommandValidator : AbstractValidator<AssignE
 
         RuleFor(command => command.IpAddress)
             .Must(address => WorkstationAddress.TryNormalize(address, out _))
+            .When(command => !string.IsNullOrWhiteSpace(command.IpAddress))
             .WithMessage(OfficialExamErrors.IpInvalid);
     }
 }

@@ -120,7 +120,8 @@ public record CreateClassResponseDto(
     bool IsJoinEnabled,
     bool AllowSelfEnrollment,
     DateTime CreatedAt,
-    Guid? CourseOfferingId = null);
+    Guid? CourseOfferingId = null,
+    string? JoinPassword = null);
 
 /// <summary>
 /// DTO yêu cầu sinh viên tham gia lớp học phần bằng mã (JoinCode hoặc ClassId) và mật khẩu.
@@ -220,7 +221,6 @@ public sealed record LecturerClassItemDto(
     bool AllowSelfEnrollment,
     bool IsActive,
     DateTime CreatedAt,
-    string? JoinPassword = null,
     int ActiveShiftCount = 0);
 
 public sealed record ClassStudentLookupDto(
@@ -280,8 +280,7 @@ public sealed record ClassDetailDto(
     bool IsAlreadyEnrolled,
     DateTime CreatedAt,
     IReadOnlyList<ClassInClassShiftSummaryDto> Shifts,
-    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents,
-    string? JoinPassword = null);
+    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents);
 
 /// <summary>
 /// DTO yêu cầu thêm sinh viên vào lớp học phần (Giảng viên / Admin / Trưởng BM).

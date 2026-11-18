@@ -52,7 +52,7 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             .ToListAsync(cancellationToken);
 
         var onThisMachine = tickets
-            .Where(item => WorkstationAddress.Same(item.IpAddress, request.RemoteIpAddress))
+            .Where(item => string.IsNullOrWhiteSpace(item.IpAddress) || WorkstationAddress.Same(item.IpAddress, request.RemoteIpAddress))
             .ToList();
         if (onThisMachine.Count == 0)
         {

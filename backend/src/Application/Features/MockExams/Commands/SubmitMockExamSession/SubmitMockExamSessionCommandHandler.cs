@@ -538,18 +538,16 @@ public sealed class SubmitMockExamSessionCommandHandler(
         {
             var rawResults = new (MockExamAnswer a, MockExamQuestionScoreDto? score, AiEvaluation? eval)[sessionAnswers.Count];
 
-            // Pha 1: Chấm song song tất cả các câu trả lời chính trước để có điểm từng tiêu chí (xác định tiêu chí yếu nhất)
+            // Chấm lần lượt trong một bài thi để không nhân tải AI theo số câu khi nhiều sinh viên nộp cùng lúc.
             var mainIndexed = sessionAnswers
                 .Select((a, idx) => (a, idx))
                 .Where(x => !x.a.IsFollowUp)
                 .ToList();
 
-            var mainEvaluated = await Task.WhenAll(mainIndexed.Select(x => EvaluateSingleAnswerAsync(x.a, x.idx)));
-            for (int m = 0; m < mainIndexed.Count; m++)
+            foreach (var item in mainIndexed)
             {
-                var idx = mainIndexed[m].idx;
-                var res = mainEvaluated[m];
-                rawResults[idx] = res;
+                var res = await EvaluateSingleAnswerAsync(item.a, item.idx);
+                rawResults[item.idx] = res;
                 if (res.eval != null && (res.a.AiEvaluations == null || !res.a.AiEvaluations.Any(e => e.Id == res.eval.Id)))
                 {
                     res.a.AiEvaluations ??= new List<AiEvaluation>();

@@ -35,4 +35,5 @@ public sealed record CreateCourseCommand(
     int MockExamDurationMinutes = 20,
     int MockExamTotalQuestions = 5,
     bool IsActive = true,
-    Guid? SemesterId = null) : IRequest<Result<CourseDto>>;
+    Guid? SemesterId = null,
+    Guid? ActorUserId = null) : IRequest<Result<CourseDto>>;

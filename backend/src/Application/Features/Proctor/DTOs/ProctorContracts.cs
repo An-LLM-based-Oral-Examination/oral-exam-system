@@ -19,6 +19,8 @@ public sealed record ProctorSeatItemDto
     public string? SuspensionReason { get; init; }
     public DateTime? CheckedInAt { get; init; }
     public DateTime? SubmittedAt { get; init; }
+    public Guid? ExamSetId { get; init; }
+    public string? ExamSetCode { get; init; }
 }
 
 public sealed record ShiftAttendanceMonitorResponseDto

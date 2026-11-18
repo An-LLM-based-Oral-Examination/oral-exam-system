@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.DTOs;
@@ -30,6 +31,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
         var shift = await context.InClassExamShifts
             .AsNoTracking()
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+                    .ThenInclude(c => c.AcademicProgram)
             .Include(s => s.Lecturer)
             .Include(s => s.Participants)
                 .ThenInclude(p => p.Student)
@@ -65,16 +68,21 @@ public sealed class GetInClassShiftByIdQueryHandler(
         }
         else if (actor.Role == UserRole.Lecturer)
         {
-            bool isAssigned = shift.LecturerId == actor.Id ||
-                shift.Class.LecturerId == actor.Id ||
-                await context.CourseLecturers.AnyAsync(
-                    cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                    cancellationToken);
+            bool isAssigned = shift.Class.LecturerId == actor.Id;
 
             if (!isAssigned)
             {
                 return Result<InClassShiftDetailResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
             }
+        }
+        else if (actor.Role == UserRole.DepartmentHead)
+        {
+            if (!AcademicCourseOwnership.IsOwnedBy(shift.Class.Course, actor.Id))
+                return Result<InClassShiftDetailResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
+        }
+        else if (actor.Role != UserRole.Admin)
+        {
+            return Result<InClassShiftDetailResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
 
         // BOLA & Privacy Enforcement: Sinh viên chỉ được xem dữ liệu của chính mình
@@ -115,7 +123,9 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     q.Title,
                     q.Content,
                     q.Difficulty.ToString().ToLowerInvariant(),
-                    q.BloomLevel.ToString().ToLowerInvariant()))
+                    q.BloomLevel.ToString().ToLowerInvariant(),
+                    q.ImageUrl,
+                    q.ImageDescription))
                 .ToListAsync(cancellationToken);
 
             foreach (var pq in practiceQs)
@@ -125,6 +135,24 @@ public sealed class GetInClassShiftByIdQueryHandler(
         }
 
         var selectedPoolIds = EnterInClassShiftCommandHandler.ParseGuidList(shift.SelectedQuestionIdsJson);
+        var selectedDifficulties = InClassShiftPoolConfig.ParseStoredDifficulties(shift.SelectedDifficultiesJson);
+        var selectedCloIds = InClassShiftPoolConfig.ParseGuidList(shift.SelectedCloIdsJson);
+        var selectedCloCodes = new List<string>();
+        if (selectedCloIds.Count > 0)
+        {
+            var cloCodeMap = await context.CourseClos
+                .AsNoTracking()
+                .Where(c => selectedCloIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.CloCode, cancellationToken);
+
+            foreach (var cloId in selectedCloIds)
+            {
+                if (cloCodeMap.TryGetValue(cloId, out var code))
+                {
+                    selectedCloCodes.Add(code);
+                }
+            }
+        }
 
         var participants = visibleParticipants
             .OrderBy(p => p.JoinedAt)
@@ -225,7 +253,11 @@ public sealed class GetInClassShiftByIdQueryHandler(
             shift.HasFollowUp,
             shift.MaxFollowUpQuestions,
             shift.IsAutoPublishGrades,
-            shift.ExamDurationMinutes
+            shift.ExamDurationMinutes,
+            selectedDifficulties,
+            selectedCloIds,
+            selectedCloCodes,
+            shift.Class.Course?.Code
         );
         return Result<InClassShiftDetailResponse>.Success(detail);
     }

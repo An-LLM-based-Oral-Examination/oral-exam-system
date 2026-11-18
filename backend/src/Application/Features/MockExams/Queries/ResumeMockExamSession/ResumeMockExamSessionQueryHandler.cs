@@ -25,6 +25,8 @@ public sealed class ResumeMockExamSessionQueryHandler(
     {
         var session = await context.MockExamSessions
             .Include(s => s.Course)
+            .Include(s => s.ExamSet)
+                .ThenInclude(es => es!.Structure)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.Question!)
                     .ThenInclude(q => q.Rubric!)
@@ -215,9 +217,10 @@ public sealed class ResumeMockExamSessionQueryHandler(
 
         var usedQuota = quota?.UsedCount ?? 0;
         var remainingQuota = Math.Max(0, maxDailyQuota - usedQuota);
-        var durationMinutes = Math.Max(
-            1,
-            (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes));
+        var structureDuration = session.ExamSet?.Structure?.DurationMinutes ?? 0;
+        var durationMinutes = structureDuration > 0
+            ? structureDuration
+            : Math.Max(1, (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes));
 
         var response = new ResumeMockExamResponse(
             SessionId: session.Id,

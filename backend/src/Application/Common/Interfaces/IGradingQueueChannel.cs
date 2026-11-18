@@ -7,6 +7,8 @@ namespace OralExamination.Application.Common.Interfaces;
 
 public interface IGradingQueueChannel
 {
+    int Count { get; }
+    int Capacity { get; }
     ValueTask EnqueueAsync(GradingTask task, CancellationToken cancellationToken = default);
     IAsyncEnumerable<GradingTask> ReadAllAsync(CancellationToken cancellationToken = default);
 }

@@ -36,7 +36,8 @@ public sealed class GetMyInClassShiftsQueryHandler(
             {
                 e.ClassId,
                 ClassCode = e.Class != null ? e.Class.Code : string.Empty,
-                ClassName = e.Class != null ? e.Class.Name : string.Empty
+                ClassName = e.Class != null ? e.Class.Name : string.Empty,
+                CourseCode = e.Class != null && e.Class.Course != null ? e.Class.Course.Code : string.Empty
             })
             .ToListAsync(cancellationToken);
 
@@ -69,10 +70,38 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .OrderByDescending(s => s.StartTime)
             .ToListAsync(cancellationToken);
 
+        var allSelectedCloIds = rawShifts
+            .SelectMany(s => InClassShiftPoolConfig.ParseGuidList(s.SelectedCloIdsJson))
+            .Distinct()
+            .ToList();
+
+        var cloCodeMap = allSelectedCloIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await context.CourseClos
+                .AsNoTracking()
+                .Where(c => allSelectedCloIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.CloCode, cancellationToken);
+
+        var utcNow = DateTime.UtcNow;
+
         var shifts = rawShifts
             .Select(s =>
             {
                 var classInfo = classMap.TryGetValue(s.ClassId, out var found) ? found : null;
+                var mine = s.Participants.FirstOrDefault(p => p.StudentId == request.StudentUserId);
+                DateTime? joinedAt = mine?.JoinedAt;
+                DateTime? examEndsAt = mine is null
+                    ? null
+                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes);
+                int? remaining = examEndsAt is null
+                    ? null
+                    : InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt.Value, utcNow);
+                var shiftCloIds = InClassShiftPoolConfig.ParseGuidList(s.SelectedCloIdsJson);
+                var shiftCloCodes = shiftCloIds
+                    .Where(cloCodeMap.ContainsKey)
+                    .Select(id => cloCodeMap[id])
+                    .ToList();
+
                 return new InClassExamShiftResponse(
                     s.Id,
                     s.ClassId,
@@ -101,7 +130,14 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     s.MaxFollowUpQuestions,
                     s.IsAutoPublishGrades,
                     s.ExamDurationMinutes,
-                    s.Participants.FirstOrDefault(p => p.StudentId == request.StudentUserId)?.Status
+                    mine?.Status,
+                    joinedAt,
+                    examEndsAt,
+                    remaining,
+                    InClassShiftPoolConfig.ParseStoredDifficulties(s.SelectedDifficultiesJson),
+                    shiftCloIds,
+                    shiftCloCodes,
+                    classInfo?.CourseCode
                 );
             })
             .ToList();

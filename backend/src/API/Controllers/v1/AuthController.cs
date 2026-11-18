@@ -2,17 +2,21 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using OralExamination.Application.Common.Auth;
+using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.Auth;
 using OralExamination.Application.Features.Auth.Commands.ChangePassword;
-using OralExamination.Application.Features.Auth.Commands.GoogleLogin;
 using OralExamination.Application.Features.Auth.Commands.CreateGoogleLoginChallenge;
-using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Features.Auth.Commands.GoogleLogin;
 using OralExamination.Application.Features.Auth.Commands.PasswordLogin;
 using OralExamination.Application.Features.Auth.Commands.RefreshToken;
 using OralExamination.Application.Features.Auth.Commands.SignOut;
 using OralExamination.Application.Features.Auth.DTOs;
 using OralExamination.Application.Features.Auth.Queries.GetCurrentUser;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -70,6 +74,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("google-challenge")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(GoogleLoginChallengeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
@@ -86,6 +91,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("google-login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(BrowserGoogleLoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -116,6 +122,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("refresh-token")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest? request, CancellationToken cancellationToken)
     {
         var cookieToken = Request.Cookies[RefreshSessionCookieName];
@@ -136,23 +143,27 @@ public class AuthController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            if (!string.IsNullOrWhiteSpace(cookieToken))
+            var statusCode = result.Error switch
+            {
+                "Tài khoản đã bị khóa." => StatusCodes.Status403Forbidden,
+                var err when err.StartsWith("CONFLICT", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status401Unauthorized
+            };
+
+            if (!string.IsNullOrWhiteSpace(cookieToken) && statusCode != StatusCodes.Status409Conflict)
             {
                 DeleteRefreshSessionCookie();
             }
 
-            var statusCode = result.Error switch
-            {
-                "Tài khoản đã bị khóa." => StatusCodes.Status403Forbidden,
-                _ => StatusCodes.Status401Unauthorized
-            };
-
             return StatusCode(statusCode, new ProblemDetails
             {
                 Status = statusCode,
-                Title = statusCode == StatusCodes.Status403Forbidden
-                    ? "Tài khoản bị khóa."
-                    : "Token không hợp lệ.",
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Tài khoản bị khóa.",
+                    StatusCodes.Status409Conflict => "Xung đột token đồng thời.",
+                    _ => "Token không hợp lệ."
+                },
                 Detail = result.Error,
                 Type = "https://tools.ietf.org/html/rfc7231"
             });
@@ -196,6 +207,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("password-login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> PasswordLogin([FromBody] PasswordLoginRequest request, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new PasswordLoginCommand(request.Username, request.Password), cancellationToken);
@@ -222,9 +234,15 @@ public class AuthController : ControllerBase
     {
         var sub = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                   ?? User.FindFirst("sub")?.Value;
-        if (!Guid.TryParse(sub, out var userId))
+        if (!Guid.TryParse(sub, out var userId) || userId == Guid.Empty)
         {
-            return Unauthorized();
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Không xác thực được.",
+                Detail = "Danh tính trong token không hợp lệ.",
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.2"
+            });
         }
 
         var result = await _sender.Send(
@@ -247,12 +265,15 @@ public class AuthController : ControllerBase
     {
         var statusCode = error switch
         {
-            AuthErrors.AccountNotFound => StatusCodes.Status404NotFound,
-            AuthErrors.WrongPassword or AuthErrors.CurrentPasswordWrong or AuthErrors.GoogleTokenInvalid or AuthErrors.GoogleNonceInvalid => StatusCodes.Status401Unauthorized,
+            AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials => StatusCodes.Status401Unauthorized,
+            AuthErrors.GoogleTokenInvalid or AuthErrors.GoogleNonceInvalid or AuthErrors.CurrentPasswordWrong => StatusCodes.Status401Unauthorized,
             AuthErrors.AccountLocked => StatusCodes.Status403Forbidden,
             AuthErrors.LoginTemporarilyLocked => StatusCodes.Status429TooManyRequests,
             _ => StatusCodes.Status400BadRequest
         };
+
+        var isCredentialError = error is AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials;
+        var detail = isCredentialError ? AuthErrors.InvalidCredentials : error;
 
         var problem = new ProblemDetails
         {
@@ -265,12 +286,12 @@ public class AuthController : ControllerBase
                 StatusCodes.Status429TooManyRequests => "Đăng nhập tạm thời bị khóa.",
                 _ => "Dữ liệu đầu vào không hợp lệ."
             },
-            Detail = error,
+            Detail = detail,
             Type = "https://tools.ietf.org/html/rfc7231"
         };
         problem.Extensions["errorCode"] = error switch
         {
-            AuthErrors.AccountNotFound => "ACCOUNT_NOT_FOUND",
+            AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials => "INVALID_CREDENTIALS",
             AuthErrors.AccountLocked => "ACCOUNT_LOCKED",
             AuthErrors.LoginTemporarilyLocked => "LOGIN_TEMPORARILY_LOCKED",
             AuthErrors.GoogleTokenInvalid => "GOOGLE_TOKEN_INVALID",
@@ -279,13 +300,13 @@ public class AuthController : ControllerBase
         };
         problem.Extensions["traceId"] = HttpContext?.TraceIdentifier;
         if (statusCode == 429 && HttpContext is not null)
-            Response.Headers.RetryAfter = (HttpContext.RequestServices.GetService<OralExamination.Application.Common.Auth.LoginProtectionOptions>()?.LockoutSeconds ?? 900).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            Response.Headers.RetryAfter = (HttpContext.RequestServices.GetService<LoginProtectionOptions>()?.LockoutSeconds ?? 900).ToString(System.Globalization.CultureInfo.InvariantCulture);
         return StatusCode(statusCode, problem);
     }
 
     private CookieOptions GoogleNonceCookie(TimeSpan? maxAge = null)
     {
-        var environment = HttpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>();
+        var environment = HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
         return new CookieOptions
         {
             HttpOnly = true, SameSite = SameSiteMode.Strict, Path = GoogleLoginRules.CookiePath, MaxAge = maxAge,

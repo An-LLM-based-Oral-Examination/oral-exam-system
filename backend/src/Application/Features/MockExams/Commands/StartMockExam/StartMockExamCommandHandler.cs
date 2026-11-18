@@ -8,6 +8,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.AcademicHierarchy;
 using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
@@ -49,6 +50,11 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             return Result<StartMockExamResponse>.Failure("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
+        if (!await StudentCourseAccess.IsEnrolledAsync(_context, request.StudentId, request.CourseId, cancellationToken))
+        {
+            return Result<StartMockExamResponse>.Failure(StudentCourseAccess.Denied);
+        }
+
         // 2. Kiểm tra Daily Quota Guard do Quản trị viên (Admin) cấu hình (Múi giờ GMT+7)
         var sysQuotaStr = await _context.SystemConfigs
             .AsNoTracking()
@@ -72,7 +78,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             ? course.MockExamBloomDistribution
             : "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}";
 
-        // 3. Tra cứu ExamStructure mới nhất của môn học (nếu chưa có cấu trúc đề, khởi tạo theo cấu hình thi thử trên bảng courses)
+        // 3. Chỉ sử dụng cấu trúc đề đã được cán bộ học thuật thiết lập.
         var structure = await _context.ExamStructures
             .AsNoTracking()
             .Where(s => s.CourseId == request.CourseId && s.IsActive)
@@ -81,31 +87,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
 
         if (structure == null)
         {
-            var creatorId = course.DepartmentHeadUserId ?? await _context.Users
-                .AsNoTracking()
-                .Where(u => u.IsActive && (u.Role == "department_head" || u.Role == "admin" || u.Id == request.StudentId))
-                .OrderBy(u => u.Role == "department_head" ? 0 : u.Role == "admin" ? 1 : 2)
-                .Select(u => u.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (creatorId == Guid.Empty)
-            {
-                creatorId = request.StudentId;
-            }
-
-            structure = new ExamStructure
-            {
-                Id = Guid.NewGuid(),
-                CourseId = request.CourseId,
-                CreatedBy = creatorId,
-                Name = $"Cấu trúc mặc định - {course.Code}",
-                TotalQuestions = defaultTotalQuestions,
-                DurationMinutes = defaultDurationMinutes,
-                BloomDistribution = defaultBloomDistribution,
-                IsActive = true,
-                CreatedAt = now
-            };
-            _context.ExamStructures.Add(structure);
+            return Result<StartMockExamResponse>.Failure("CONFLICT:Chưa có cấu trúc đề thi thử đang hoạt động cho môn học. Vui lòng liên hệ Trưởng bộ môn.");
         }
 
         var targetTotalQuestions = structure.TotalQuestions > 0 ? structure.TotalQuestions : defaultTotalQuestions;
@@ -242,24 +224,12 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         var startedAt = now;
         var expiresAt = startedAt.AddMinutes(durationMinutes);
 
-        // 9. Khởi tạo ExamSet & MockExamSession & MockExamAnswer
-        var uniqueSuffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-        var examSet = new ExamSet
-        {
-            Id = Guid.NewGuid(),
-            StructureId = structure.Id,
-            CourseId = request.CourseId,
-            SetCode = $"MOCK-{course.Code}-{now:yyyyMMddHHmmss}-{uniqueSuffix}",
-            GeneratedAt = startedAt,
-            IsActive = true
-        };
-        _context.ExamSets.Add(examSet);
-
+        // 9. Cố định câu hỏi trong MockExamAnswers; ExamSet chỉ dành cho kho đề thi thật.
         var session = new MockExamSession
         {
             Id = Guid.NewGuid(),
             StudentId = request.StudentId,
-            ExamSetId = examSet.Id,
+            ExamSetId = null,
             CourseId = request.CourseId,
             HasFollowUp = request.HasFollowUp,
             StartedAt = startedAt,

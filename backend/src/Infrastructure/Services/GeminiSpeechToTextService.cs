@@ -29,9 +29,8 @@ public class GeminiSpeechToTextService
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -45,7 +44,8 @@ public class GeminiSpeechToTextService
     private readonly IReadOnlyList<string> _candidateSttUrls;
     private readonly ILogger<GeminiSpeechToTextService>? _logger;
 
-    private readonly IReadOnlyList<string> _candidateApiKeys; public bool HasCredentials => _candidateApiKeys.Count > 0;
+    private readonly IReadOnlyList<string> _candidateApiKeys;
+    public bool HasCredentials => _candidateApiKeys.Count > 0;
 
     private static bool IsUsableGeminiApiKey(string? apiKey) =>
         !string.IsNullOrWhiteSpace(apiKey) &&
@@ -97,7 +97,8 @@ public class GeminiSpeechToTextService
             }
         }
 
-        _candidateSttUrls = urls; var fallbackKey = configuration["Gemini:FallbackApiKey"] ?? configuration["Gemini__FallbackApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY") ?? string.Empty; _candidateApiKeys = new[] { _apiKey.Trim(), fallbackKey.Trim() }.Where(IsUsableGeminiApiKey).Distinct(StringComparer.Ordinal).ToList();
+        _candidateSttUrls = urls;
+        _candidateApiKeys = GeminiApiKeyPriority.GetCandidates(configuration);
         _logger = logger;
     }
 
@@ -245,7 +246,9 @@ public class GeminiSpeechToTextService
         var serializedMultimodalPayload = JsonSerializer.Serialize(multimodalPayload, JsonOptions);
         HttpRequestException? lastHttpException = null;
 
-        foreach (var activeApiKey in _candidateApiKeys) foreach (var candidateUrl in _candidateSttUrls)
+        foreach (var activeApiKey in _candidateApiKeys)
+        {
+        foreach (var candidateUrl in _candidateSttUrls)
         {
             var isDedicatedTranscribeModel = candidateUrl.Contains("gemini-3.5-transcribe", StringComparison.OrdinalIgnoreCase);
             var payloadJson = isDedicatedTranscribeModel ? serializedTranscribePayload : serializedMultimodalPayload;
@@ -265,7 +268,13 @@ public class GeminiSpeechToTextService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new HttpRequestException("Gemini Multimodal STT exceeded its timeout budget.", null, System.Net.HttpStatusCode.RequestTimeout);
+                lastHttpException = new HttpRequestException("Gemini Multimodal STT exceeded its timeout budget.", null, System.Net.HttpStatusCode.RequestTimeout);
+                break;
+            }
+            catch (HttpRequestException exception)
+            {
+                lastHttpException = exception;
+                break;
             }
             using var ownedResponse = response;
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -273,17 +282,18 @@ public class GeminiSpeechToTextService
             if (!response.IsSuccessStatusCode)
             {
                 _logger?.LogWarning(
-                    "Gemini Multimodal STT ({Url}) trả về lỗi HTTP {StatusCode}: {Body}",
+                    "Gemini Multimodal STT ({Url}) trả về lỗi HTTP {StatusCode}",
                     candidateUrl,
-                    response.StatusCode,
-                    responseBody);
+                    response.StatusCode);
                 lastHttpException = new HttpRequestException(
-                    $"Gemini Multimodal STT failed: {response.StatusCode} - {responseBody}",
+                    $"Gemini Multimodal STT failed: {response.StatusCode}",
                     null,
                     response.StatusCode);
-                if (OralExamination.Infrastructure.Resilience.ExternalDependencyResilience.IsTransientStatus(response.StatusCode))
-                    throw lastHttpException;
-                if (response.StatusCode is System.Net.HttpStatusCode.TooManyRequests or System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase))) break; continue;
+                if (OralExamination.Infrastructure.Resilience.ExternalDependencyResilience.IsTransientStatus(response.StatusCode)
+                    || response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
+                    || (response.StatusCode == System.Net.HttpStatusCode.BadRequest && responseBody.Contains("API_KEY_INVALID", StringComparison.OrdinalIgnoreCase)))
+                    break;
+                continue;
             }
 
             var rawText = ExtractCandidateText(responseBody);
@@ -304,6 +314,7 @@ public class GeminiSpeechToTextService
                 UsedFallback: true,
                 TimestampsJson: null,
                 ConfidenceScore: finalConfidence);
+        }
         }
 
         throw lastHttpException ?? new HttpRequestException("Gemini Multimodal STT failed across all fallback models.");

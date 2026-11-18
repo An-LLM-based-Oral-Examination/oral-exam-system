@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.Speech.Commands.TranscribeSpeech;
 using OralExamination.Application.Features.Speech.Queries.GetTtsVoices;
 using OralExamination.Application.Features.Speech.Queries.SynthesizeSpeech;
@@ -35,7 +36,7 @@ public class SpeechController : ControllerBase
         var result = await _sender.Send(new GetTtsVoicesQuery(), ct);
         if (!result.IsSuccess)
         {
-            return BadRequest(new { error = result.Error });
+            return BadRequest(ApiProblems.CreateForController(HttpContext, StatusCodes.Status400BadRequest, result.Error));
         }
 
         return Ok(result.Value);
@@ -52,7 +53,10 @@ public class SpeechController : ControllerBase
     {
         if (request is null || string.IsNullOrWhiteSpace(request.Text))
         {
-            return BadRequest(new { error = "Nội dung văn bản cần đọc không được để trống." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "Nội dung văn bản cần đọc không được để trống."));
         }
 
         return await ExecuteSynthesizeSpeechAsync(
@@ -74,7 +78,10 @@ public class SpeechController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return BadRequest(new { error = "Nội dung văn bản cần đọc không được để trống." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "Nội dung văn bản cần đọc không được để trống."));
         }
 
         return await ExecuteSynthesizeSpeechAsync(text, voiceName, speakingRate, ct);
@@ -116,12 +123,18 @@ public class SpeechController : ControllerBase
 
         if (resolvedFile is null || resolvedFile.Length == 0)
         {
-            return BadRequest(new { error = "File ghi âm không hợp lệ hoặc rỗng." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "File ghi âm không hợp lệ hoặc rỗng."));
         }
 
         if (resolvedFile.Length > MaxAudioFileSizeBytes)
         {
-            return BadRequest(new { error = "Dung lượng file ghi âm vượt quá giới hạn 25MB." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "Dung lượng file ghi âm vượt quá giới hạn 25MB."));
         }
 
         using var memoryStream = new MemoryStream();
@@ -138,7 +151,10 @@ public class SpeechController : ControllerBase
         var result = await _sender.Send(command, ct);
         if (!result.IsSuccess || result.Value is null)
         {
-            return BadRequest(new { error = result.Error });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                result.Error));
         }
 
         return Ok(result.Value);
@@ -155,7 +171,10 @@ public class SpeechController : ControllerBase
 
         if (!result.IsSuccess || result.Value is null)
         {
-            return BadRequest(new { error = result.Error });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                result.Error));
         }
 
         var synthesis = result.Value;

@@ -10,6 +10,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
+using OralExamination.Application.Features.QuestionBank;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 
@@ -38,19 +39,29 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
                 "Chỉ Giảng viên ('lecturer') hoặc Quản trị viên mới có quyền đệ trình câu hỏi lên Bộ Môn.");
         }
 
-        var distinctIds = request.QuestionIds.Distinct().ToList();
+        var canAccessCourse = await QuestionCourseAccess.AllowedCourseIds(_context, lecturer.Role, lecturer.Id)
+            .ContainsAsync(request.CourseId, cancellationToken);
+        if (!canAccessCourse && lecturer.Role == UserRole.Lecturer)
+            canAccessCourse = await _context.Classes.AnyAsync(c => c.CourseId == request.CourseId &&
+                c.LecturerId == lecturer.Id && c.IsActive, cancellationToken);
+        if (!canAccessCourse)
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure("FORBIDDEN: Người gửi không phụ trách môn học này.");
+
+        var distinctIds = request.QuestionIds?.Distinct().ToList() ?? new List<Guid>();
+        if (distinctIds.Count == 0)
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure("VALIDATION: Phải chọn ít nhất một câu hỏi để gửi thẩm định.");
 
         // 2. Tìm danh sách câu hỏi trong cả ExamQuestions và PracticeQuestions kèm Rubric và Criteria
         var examQuestions = await _context.ExamQuestions
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
-            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId)
+            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId && !q.IsDeleted)
             .ToListAsync(cancellationToken);
 
         var practiceQuestions = await _context.PracticeQuestions
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
-            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId)
+            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId && !q.IsDeleted)
             .ToListAsync(cancellationToken);
 
         var foundIds = examQuestions.Select(q => q.Id)
@@ -62,6 +73,13 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
             return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure(
                 "Một số câu hỏi không tồn tại hoặc không thuộc môn học đã chọn.");
         }
+
+        if (examQuestions.Any(q => q.SubmittedBy != lecturer.Id ||
+                q.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.NeedsRevision)) ||
+            practiceQuestions.Any(q => q.SubmittedBy != lecturer.Id ||
+                q.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.NeedsRevision)))
+            return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure(
+                "FORBIDDEN: Chỉ người soạn được gửi câu hỏi nháp hoặc cần chỉnh sửa của chính mình.");
 
         // 3. HARD VERIFICATION GATE: Kiểm tra Barem 10.0 và Model Answer >= 50 ký tự cho TỪNG CÂU
         foreach (var q in examQuestions)

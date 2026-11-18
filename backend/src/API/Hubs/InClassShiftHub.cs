@@ -58,14 +58,22 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
         var isLecturer = Context.User?.IsInRole("lecturer") == true;
         var isStudent = Context.User?.IsInRole("student") == true;
 
+        var isInvalidOrInactiveActor = await context.Users
+            .AsNoTracking()
+            .AnyAsync(
+                u => u.Id == userId &&
+                     (!u.IsActive ||
+                      (isLecturer && u.Role != "lecturer") ||
+                      (isStudent && u.Role != "student")),
+                Context.ConnectionAborted);
+        if (isInvalidOrInactiveActor)
+        {
+            throw new HubException("FORBIDDEN: Tài khoản đã bị khóa hoặc thay đổi quyền truy cập.");
+        }
+
         if (isLecturer)
         {
-            var isAssigned = shift.LecturerId == userId ||
-                shift.Class.LecturerId == userId ||
-                await context.CourseLecturers.AsNoTracking().AnyAsync(
-                    assignment => assignment.CourseId == shift.Class.CourseId &&
-                                  assignment.LecturerUserId == userId,
-                    Context.ConnectionAborted);
+            var isAssigned = shift.Class.LecturerId == userId;
             if (!isAssigned)
             {
                 throw new HubException("FORBIDDEN: Giảng viên không phụ trách ca thi này.");

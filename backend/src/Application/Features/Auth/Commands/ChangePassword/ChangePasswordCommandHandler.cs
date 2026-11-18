@@ -63,9 +63,24 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
 
         user.PasswordHash = _passwordHasher.Hash(request.NewPassword!);
         user.MustChangePassword = false;
+        user.AuthVersion++;
         user.UpdatedAt = DateTime.UtcNow;
 
-        var accessToken = _accessTokenIssuer.Issue(user.Id, user.Email, user.FullName, user.Role, mustChangePassword: false);
+        var activeTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == user.Id && rt.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+        }
+
+        var accessToken = _accessTokenIssuer.Issue(
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.Role,
+            mustChangePassword: false,
+            authVersion: user.AuthVersion);
         var rawRefreshToken = GenerateRawToken();
         _context.RefreshTokens.Add(new Domain.Entities.RefreshToken
         {

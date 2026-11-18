@@ -23,7 +23,7 @@ public sealed class CloseInClassShiftCommandHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
 
-        if (actor is null || !actor.IsActive || actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
         {
             return Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
@@ -39,11 +39,7 @@ public sealed class CloseInClassShiftCommandHandler(
 
         if (actor.Role == UserRole.Lecturer)
         {
-            bool isAssigned = shift.LecturerId == actor.Id ||
-                shift.Class.LecturerId == actor.Id ||
-                await context.CourseLecturers.AnyAsync(
-                    cl => cl.CourseId == shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                    cancellationToken);
+            bool isAssigned = shift.Class.LecturerId == actor.Id;
 
             if (!isAssigned)
             {

@@ -22,9 +22,13 @@ public sealed class CreateInClassShiftCommandValidator : AbstractValidator<Creat
             .WithMessage(InClassShiftErrors.InvalidTimeRange);
 
         RuleFor(x => x.QuestionPoolMode)
-            .Must(m => string.Equals(m, "ALL_COURSE_BANK", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(m, "SELECTED_POOL", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Chế độ nguồn câu hỏi chỉ chấp nhận 'ALL_COURSE_BANK' hoặc 'SELECTED_POOL'.");
+            .Must(m => string.Equals(m, InClassShiftPoolConfig.AllCourseBank, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(m, InClassShiftPoolConfig.SelectedClos, StringComparison.OrdinalIgnoreCase))
+            .WithMessage(InClassShiftErrors.InvalidPoolMode);
+
+        RuleFor(x => x.SelectedQuestionIds)
+            .Must(ids => ids is null || ids.All(id => id == Guid.Empty))
+            .WithMessage(InClassShiftErrors.LegacySelectedQuestionIdsForbidden);
 
         RuleFor(x => x.TotalQuestionsPerStudent)
             .InclusiveBetween(1, 10)

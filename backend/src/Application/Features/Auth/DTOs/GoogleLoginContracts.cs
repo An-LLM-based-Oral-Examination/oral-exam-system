@@ -14,4 +14,5 @@ public record GoogleLoginResponse(
     string RefreshToken,
     string TokenType,
     int ExpiresIn,
-    GoogleLoginUserDto User);
+    GoogleLoginUserDto User,
+    bool MustChangePassword = false);

@@ -31,7 +31,7 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
             return Result<ExamTicketResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
-        var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
+        var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
@@ -64,12 +64,16 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.TicketNotScheduled);
         }
 
-        if (!WorkstationAddress.TryNormalize(request.RemoteIpAddress, out _))
+        if (!WorkstationAddress.TryNormalize(request.RemoteIpAddress, out var normalizedRemoteIp))
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.WorkstationUnknown);
         }
 
-        if (!WorkstationAddress.Same(ticket.IpAddress, request.RemoteIpAddress))
+        if (string.IsNullOrWhiteSpace(ticket.IpAddress))
+        {
+            ticket.IpAddress = normalizedRemoteIp;
+        }
+        else if (!WorkstationAddress.Same(ticket.IpAddress, request.RemoteIpAddress))
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.WrongWorkstation);
         }

@@ -8,4 +8,5 @@ namespace OralExamination.Application.Features.AcademicHierarchy.Commands.Assign
 public record AssignDepartmentHeadCommand(
     Guid CourseId,
     Guid DepartmentHeadUserId,
-    string? ActorRole = null) : IRequest<Result<AssignDepartmentHeadResponseDto>>;
+    string? ActorRole = null,
+    Guid? ActorUserId = null) : IRequest<Result<AssignDepartmentHeadResponseDto>>;

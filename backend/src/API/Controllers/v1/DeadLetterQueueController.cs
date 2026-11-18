@@ -19,11 +19,12 @@ public class ResolveDlqTaskRequest
 
 /// <summary>
 /// Controller giám sát và xử lý hàng đợi sự cố (Dead-Letter Queue - DLQ).
-/// Phân quyền nghiêm ngặt: Quản trị viên (admin) quản lý MF-01/02; Cán bộ Khảo thí (examination_officer) quản lý MF-04.
-/// Cấm tuyệt đối Trưởng Bộ Môn (department_head) can thiệp vào DLQ.
+/// Phân quyền nghiêm ngặt: Quản trị viên (admin) quản lý MF-01/02/05 (PRACTICE, MOCK_EXAM, IN_CLASS_EXAM);
+/// Cán bộ Khảo thí (examination_officer) quản lý MF-04 (OFFICIAL_EXAM).
+/// Cấm tuyệt đối Trưởng Bộ Môn (department_head) và Giảng viên (lecturer) can thiệp vào DLQ.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "admin,examination_officer,lecturer")]
+[Authorize(Roles = "admin,examination_officer")]
 public class DeadLetterQueueController : ControllerBase
 {
     private readonly ISender _sender;
@@ -204,23 +205,6 @@ public class DeadLetterQueueController : ControllerBase
             }
 
             effectiveFlowType = "OFFICIAL_EXAM";
-        }
-        else if (User.IsInRole("lecturer") && !User.IsInRole("admin") && !User.IsInRole("examination_officer"))
-        {
-            managedByRole = "lecturer";
-            if (!string.IsNullOrWhiteSpace(effectiveFlowType) &&
-                effectiveFlowType != "IN_CLASS_EXAM")
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = "FORBIDDEN: Giảng viên chỉ được xem và xử lý DLQ của luồng Ca thi trong lớp (IN_CLASS_EXAM).",
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            effectiveFlowType = "IN_CLASS_EXAM";
         }
 
         var query = new GetDlqTasksQuery(

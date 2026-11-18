@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.Practice.Commands.UploadAudioPractice;
 
 namespace API.Controllers.v1;
@@ -53,12 +54,18 @@ public class StorageController : ControllerBase
 
         if (targetFile == null || targetFile.Length == 0)
         {
-            return BadRequest(new { error = "Không tìm thấy file ghi âm." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "Không tìm thấy file ghi âm."));
         }
 
         if (targetFile.Length > 25 * 1024 * 1024)
         {
-            return BadRequest(new { error = "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)." });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."));
         }
 
         string contentType = "application/octet-stream";
@@ -82,7 +89,10 @@ public class StorageController : ControllerBase
 
         if (!result.IsSuccess)
         {
-            return BadRequest(new { error = result.Error });
+            return BadRequest(ApiProblems.CreateForController(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                result.Error));
         }
 
         return Ok(result.Value);

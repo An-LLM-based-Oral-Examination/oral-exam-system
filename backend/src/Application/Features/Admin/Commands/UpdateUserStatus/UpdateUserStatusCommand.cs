@@ -52,6 +52,7 @@ public sealed class UpdateUserStatusCommandHandler
         var now = DateTime.UtcNow;
 
         user.IsActive = request.IsActive;
+        user.BumpAuthVersion();
         user.UpdatedAt = now;
 
         if (!request.IsActive)

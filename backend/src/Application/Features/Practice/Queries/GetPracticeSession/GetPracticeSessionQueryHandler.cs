@@ -143,7 +143,7 @@ public sealed class GetPracticeSessionQueryHandler(
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Key == "MaxPracticeFollowUpQuestions", cancellationToken);
         int maxAllowedFollowUps = (maxFollowUpConfig != null && int.TryParse(maxFollowUpConfig.Value, out var parsedMaxFollowUps))
-            ? parsedMaxFollowUps
+            ? Math.Clamp(parsedMaxFollowUps, 1, 5)
             : 2;
 
         var answerDtos = sessionAnswers

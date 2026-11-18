@@ -27,16 +27,8 @@ public class GradingQueueWorker : BackgroundService
     private readonly ILogger<GradingQueueWorker> _logger;
     private readonly int _maxDegreeOfParallelism;
 
-    // Cấu hình Polly Resilience Pipeline: Retry 3 lần với Exponential Backoff (2s, 4s, 8s)
-    private readonly ResiliencePipeline _resiliencePipeline = new ResiliencePipelineBuilder()
-        .AddRetry(new RetryStrategyOptions
-        {
-            MaxRetryAttempts = 3,
-            BackoffType = DelayBackoffType.Exponential,
-            Delay = TimeSpan.FromSeconds(2),
-            ShouldHandle = new PredicateBuilder().Handle<Exception>()
-        })
-        .Build();
+    // Cấu hình Polly Resilience Pipeline: Retry 3 lần với Exponential Backoff (mặc định 2s, 4s, 8s)
+    private readonly ResiliencePipeline _resiliencePipeline;
 
     public GradingQueueWorker(
         IGradingQueueChannel queueChannel,
@@ -58,6 +50,22 @@ public class GradingQueueWorker : BackgroundService
         _maxDegreeOfParallelism = int.TryParse(configuredParallelism, out var parsedParallelism)
             ? Math.Clamp(parsedParallelism, 1, 32)
             : 12;
+
+        var configuredRetryDelayMs = configuration?["GradingQueue:RetryDelayMilliseconds"]
+            ?? configuration?["GradingQueue__RetryDelayMilliseconds"];
+        var retryDelayMs = int.TryParse(configuredRetryDelayMs, out var parsedRetryDelayMs)
+            ? Math.Clamp(parsedRetryDelayMs, 0, 60000)
+            : 2000;
+
+        _resiliencePipeline = new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = 3,
+                BackoffType = DelayBackoffType.Exponential,
+                Delay = TimeSpan.FromMilliseconds(retryDelayMs),
+                ShouldHandle = new PredicateBuilder().Handle<Exception>()
+            })
+            .Build();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -216,33 +224,37 @@ public class GradingQueueWorker : BackgroundService
                             {
                                 _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho Answer {AnswerId}!", task.AnswerId);
                             }
+                        }
 
-                            // 2. Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt
-                            try
+                        // Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt (áp dụng cho cả MF-05 và MF-01)
+                        try
+                        {
+                            const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
+                            if (task.InClassSubmissionId.HasValue)
                             {
-                                const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
-                                if (task.InClassSubmissionId.HasValue && _inClassHubContext is not null)
+                                if (_inClassHubContext is not null)
                                 {
+                                    var errorEntityId = task.AnswerId != Guid.Empty ? task.AnswerId : task.InClassSubmissionId.Value;
                                     await _inClassHubContext.Clients
                                         .Group(InClassShiftHub.StaffGroupName(task.SessionId))
-                                        .ReceiveGradingError(task.AnswerId, gradingError);
+                                        .ReceiveGradingError(errorEntityId, gradingError);
                                     if (task.StudentId != Guid.Empty)
                                     {
                                         await _inClassHubContext.Clients
                                             .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
-                                            .ReceiveGradingError(task.AnswerId, gradingError);
+                                            .ReceiveGradingError(errorEntityId, gradingError);
                                     }
                                 }
-                                else
-                                {
-                                    await _hubContext.Clients.Group($"session_{task.SessionId}")
-                                        .ReceiveGradingError(task.AnswerId, gradingError);
-                                }
                             }
-                            catch (Exception signalrEx)
+                            else
                             {
-                                _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
+                                await _hubContext.Clients.Group($"session_{task.SessionId}")
+                                    .ReceiveGradingError(task.AnswerId, gradingError);
                             }
+                        }
+                        catch (Exception signalrEx)
+                        {
+                            _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
                         }
                     }
                 });
@@ -679,20 +691,57 @@ public class GradingQueueWorker : BackgroundService
 
         var answer = await dbContext.PracticeAnswers.FindAsync(new object[] { gradingTask.AnswerId }, cancellationToken);
 
-        var evaluation = new AiEvaluation
-        {
-            AnswerType = "practice",
-            StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId,
-            PracticeAnswerId = gradingTask.AnswerId,
-            TotalScore = finalTotalScore,
-            ConfidenceScore = gradingResult.ConfidenceScore,
-            Feedback = gradingResult.Feedback,
-            CotTrace = gradingResult.CotTrace,
-            FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null,
-            Details = evalDetails
-        };
+        var evaluation = await dbContext.AiEvaluations
+            .Include(e => e.Details)
+            .FirstOrDefaultAsync(e => e.PracticeAnswerId == gradingTask.AnswerId, cancellationToken);
 
-        dbContext.AiEvaluations.Add(evaluation);
+        if (evaluation != null)
+        {
+            evaluation.AnswerType = "practice";
+            evaluation.StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId;
+            evaluation.TotalScore = finalTotalScore;
+            evaluation.ConfidenceScore = gradingResult.ConfidenceScore;
+            evaluation.Feedback = gradingResult.Feedback;
+            evaluation.CotTrace = gradingResult.CotTrace;
+            evaluation.FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null;
+            evaluation.EvaluatedAt = DateTime.UtcNow;
+
+            if (evaluation.Details.Count > 0)
+            {
+                dbContext.AiEvaluationDetails.RemoveRange(evaluation.Details);
+                evaluation.Details.Clear();
+            }
+
+            foreach (var detail in evalDetails)
+            {
+                detail.EvaluationId = evaluation.Id;
+                evaluation.Details.Add(detail);
+                dbContext.AiEvaluationDetails.Add(detail);
+            }
+        }
+        else
+        {
+            evaluation = new AiEvaluation
+            {
+                AnswerType = "practice",
+                StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId,
+                PracticeAnswerId = gradingTask.AnswerId,
+                TotalScore = finalTotalScore,
+                ConfidenceScore = gradingResult.ConfidenceScore,
+                Feedback = gradingResult.Feedback,
+                CotTrace = gradingResult.CotTrace,
+                FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null,
+                EvaluatedAt = DateTime.UtcNow,
+                Details = evalDetails
+            };
+
+            dbContext.AiEvaluations.Add(evaluation);
+
+            if (answer != null)
+            {
+                answer.AiEvaluations.Add(evaluation);
+            }
+        }
 
         // Cập nhật câu trả lời: DÙNG 'graded' THAY VÌ 'AI_GRADED' (Tuân thủ ck_practice_answers_status)
         if (answer != null)
@@ -702,7 +751,6 @@ public class GradingQueueWorker : BackgroundService
             {
                 answer.PromptText = answeredFollowUpPrompt;
             }
-            answer.AiEvaluations.Add(evaluation);
         }
 
         var sessionEntity = await dbContext.PracticeSessions
@@ -749,7 +797,18 @@ public class GradingQueueWorker : BackgroundService
         };
 
         // Bắn SignalR RIÊNG cho nhóm Session (Bảo vệ tính riêng tư, không dùng Clients.All)
-        await _hubContext.Clients.Group($"session_{gradingTask.SessionId}").ReceiveGradingResult(detailDto);
+        try
+        {
+            await _hubContext.Clients.Group($"session_{gradingTask.SessionId}").ReceiveGradingResult(detailDto);
+        }
+        catch (Exception signalrEx)
+        {
+            _logger.LogWarning(
+                signalrEx,
+                "Không thể gửi SignalR ReceiveGradingResult cho Session {SessionId}, Answer {AnswerId}",
+                gradingTask.SessionId,
+                gradingTask.AnswerId);
+        }
     }
 
     private async Task ProcessInClassGradingTaskAsync(GradingTask gradingTask, CancellationToken cancellationToken)
@@ -933,19 +992,6 @@ public class GradingQueueWorker : BackgroundService
             return;
         }
 
-        var inClassEvaluation = new AiEvaluation
-        {
-            AnswerType = "in_class",
-            StudentId = submission.StudentId,
-            InClassSubmissionId = submission.Id,
-            TotalScore = score,
-            ConfidenceScore = gradingResult.ConfidenceScore,
-            Feedback = gradingResult.Feedback,
-            CotTrace = gradingResult.CotTrace,
-            EvaluatedAt = DateTime.UtcNow,
-            Details = evalDetails
-        };
-
         // Tải lại trạng thái mới nhất từ CSDL để chống race condition khi giảng viên đã hậu kiểm trong lúc AI đang chấm
         var freshSubmission = await dbContext.InClassExamSubmissions
             .AsNoTracking()
@@ -958,7 +1004,50 @@ public class GradingQueueWorker : BackgroundService
             return;
         }
 
-        dbContext.AiEvaluations.Add(inClassEvaluation);
+        var existingInClassEval = await dbContext.AiEvaluations
+            .Include(e => e.Details)
+            .FirstOrDefaultAsync(e => e.InClassSubmissionId == submission.Id, cancellationToken);
+
+        if (existingInClassEval != null)
+        {
+            existingInClassEval.AnswerType = "in_class";
+            existingInClassEval.StudentId = submission.StudentId;
+            existingInClassEval.TotalScore = score;
+            existingInClassEval.ConfidenceScore = gradingResult.ConfidenceScore;
+            existingInClassEval.Feedback = gradingResult.Feedback;
+            existingInClassEval.CotTrace = gradingResult.CotTrace;
+            existingInClassEval.EvaluatedAt = DateTime.UtcNow;
+
+            if (existingInClassEval.Details.Count > 0)
+            {
+                dbContext.AiEvaluationDetails.RemoveRange(existingInClassEval.Details);
+                existingInClassEval.Details.Clear();
+            }
+
+            foreach (var detail in evalDetails)
+            {
+                detail.EvaluationId = existingInClassEval.Id;
+                existingInClassEval.Details.Add(detail);
+                dbContext.AiEvaluationDetails.Add(detail);
+            }
+        }
+        else
+        {
+            var inClassEvaluation = new AiEvaluation
+            {
+                AnswerType = "in_class",
+                StudentId = submission.StudentId,
+                InClassSubmissionId = submission.Id,
+                TotalScore = score,
+                ConfidenceScore = gradingResult.ConfidenceScore,
+                Feedback = gradingResult.Feedback,
+                CotTrace = gradingResult.CotTrace,
+                EvaluatedAt = DateTime.UtcNow,
+                Details = evalDetails
+            };
+
+            dbContext.AiEvaluations.Add(inClassEvaluation);
+        }
 
         submission.AiScore = score;
         submission.AiConfidenceScore = gradingResult.ConfidenceScore;
@@ -974,9 +1063,15 @@ public class GradingQueueWorker : BackgroundService
             submission.FollowUpIndex < submission.Shift.MaxFollowUpQuestions)
         {
             hasMoreFollowUp = true;
-            submission.FollowUpPrompt = !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt)
-                ? gradingResult.FollowUpPrompt
-                : $"Câu hỏi phụ #{submission.FollowUpIndex + 1}: Em hãy phân tích sâu hơn tình huống thực tế và cách xử lý ngoại lệ của kiến thức vừa nêu?";
+            var existingFollowUpPrompt = !string.IsNullOrWhiteSpace(freshSubmission.FollowUpPrompt)
+                ? freshSubmission.FollowUpPrompt!.Trim()
+                : (!string.IsNullOrWhiteSpace(submission.FollowUpPrompt) ? submission.FollowUpPrompt!.Trim() : null);
+
+            submission.FollowUpPrompt = !string.IsNullOrWhiteSpace(existingFollowUpPrompt)
+                ? existingFollowUpPrompt
+                : (!string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt)
+                    ? gradingResult.FollowUpPrompt.Trim()
+                    : $"Câu hỏi phụ #{submission.FollowUpIndex + 1}: Em hãy phân tích sâu hơn tình huống thực tế và cách xử lý ngoại lệ của kiến thức vừa nêu?");
         }
 
         var participant = await dbContext.InClassShiftParticipants
@@ -1062,6 +1157,31 @@ public class GradingQueueWorker : BackgroundService
             {
                 participant.TotalFinalScore = Math.Round(effectiveFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
             }
+
+            if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
+            {
+                var assignedIds = OralExamination.Application.Features.InClassShifts.InClassShiftPoolConfig
+                    .ParseGuidList(participant.AssignedQuestionIdsJson)
+                    .ToList();
+                if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+                {
+                    assignedIds.Add(participant.AssignedQuestionId.Value);
+                }
+
+                var mainSubmittedIds = allSubs
+                    .Where(s => !s.IsFollowUp)
+                    .Select(s => s.QuestionId)
+                    .ToHashSet();
+                var allMainSubmitted = assignedIds.Count == 0 || assignedIds.All(mainSubmittedIds.Contains);
+                var allGraded = allSubs.Count > 0 && allSubs.All(s =>
+                    !string.Equals(s.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
+                    (s.FinalScore.HasValue || s.AiScore.HasValue));
+
+                if (allMainSubmitted && allGraded)
+                {
+                    participant.Status = "GRADED";
+                }
+            }
         }
 
         var nowForDlq = DateTime.UtcNow;
@@ -1117,6 +1237,21 @@ public class GradingQueueWorker : BackgroundService
                 await _inClassHubContext.Clients
                     .Group(InClassShiftHub.StaffGroupName(submission.ShiftId))
                     .InClassSubmissionGraded(inClassEventDto);
+
+                await _inClassHubContext.Clients
+                    .Group(InClassShiftHub.StudentGroupName(submission.ShiftId, submission.StudentId))
+                    .InClassSubmissionGraded(new
+                    {
+                        shiftId = submission.ShiftId,
+                        submissionId = submission.Id,
+                        questionId = submission.QuestionId,
+                        status = "AI_GRADED",
+                        isFollowUp = submission.IsFollowUp,
+                        parentSubmissionId = submission.ParentSubmissionId,
+                        followUpIndex = submission.FollowUpIndex,
+                        needsFollowUp = hasMoreFollowUp,
+                        followUpPrompt = hasMoreFollowUp ? submission.FollowUpPrompt : null
+                    });
             }
         }
         catch (Exception signalrEx)

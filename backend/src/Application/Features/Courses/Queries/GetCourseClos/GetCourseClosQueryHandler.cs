@@ -20,8 +20,16 @@ public sealed class GetCourseClosQueryHandler(IApplicationDbContext context)
         var course = await context.Courses.AsNoTracking().Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course is null) return Result<List<CourseCloDto>>.Failure("NOT_FOUND: Môn học không tồn tại.");
-        if (!AcademicCourseOwnership.CanManage(course, role, actorId))
-            return Result<List<CourseCloDto>>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn phụ trách môn học hoặc Admin được quản lý CLO.");
+        var canReadAssignedClos = string.Equals(role, "lecturer", System.StringComparison.OrdinalIgnoreCase)
+            && actorId is { } lecturerId
+            && await context.CourseLecturers.AsNoTracking()
+                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturerId && cl.IsActive, cancellationToken);
+        if (!AcademicCourseOwnership.CanManage(course, role, actorId) && !canReadAssignedClos)
+            return Result<List<CourseCloDto>>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn, Admin hoặc Giảng viên được phân công môn học được xem CLO.");
+
+        // Giảng viên chỉ đọc CLO đang hoạt động; CLO ngừng dùng vẫn phục vụ màn quản trị của Trưởng bộ môn.
+        if (canReadAssignedClos)
+            request = request with { ActiveOnly = true };
 
         var query = context.CourseClos
             .AsNoTracking()

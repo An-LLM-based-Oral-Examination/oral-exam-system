@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Courses.DTOs;
+using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Courses.Commands.UpdateCourse;
@@ -58,6 +60,11 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
             return Result<CourseDto>.Failure($"CONFLICT: Mã môn học '{normalizedCode}' đã tồn tại trong hệ thống.");
         }
 
+        var wasActive = course.IsActive;
+        var oldSummary =
+            $"code={course.Code};name={course.Name};credits={course.Credits};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}";
+
+        string? deptHeadName = null;
         if (request.DepartmentHeadUserId.HasValue)
         {
             if (request.DepartmentHeadUserId.Value == Guid.Empty)
@@ -87,12 +94,116 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
                 }
 
                 course.DepartmentHeadUserId = deptHead.Id;
+                deptHeadName = deptHead.FullName;
             }
         }
-
-        if (request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty)
+        else if (course.DepartmentHeadUserId.HasValue)
         {
-            course.SemesterId = request.SemesterId.Value;
+            deptHeadName = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Id == course.DepartmentHeadUserId.Value)
+                .Select(u => u.FullName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        if (request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty && request.SemesterId.Value != course.SemesterId)
+        {
+            var targetSemester = await _context.Semesters
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == request.SemesterId.Value, cancellationToken);
+
+            if (targetSemester is null)
+            {
+                return Result<CourseDto>.Failure("NOT_FOUND: Không tìm thấy học kỳ đích trong hệ thống.");
+            }
+
+            var oldSemesterId = course.SemesterId;
+            var newSemesterId = request.SemesterId.Value;
+
+            var oldOfferingId = await _context.CourseOfferings
+                .Where(co => co.CourseId == course.Id && co.SemesterId == oldSemesterId)
+                .Select(co => (Guid?)co.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var hasDependentClasses = await _context.Classes
+                .AnyAsync(c => c.CourseId == course.Id && c.SemesterId == oldSemesterId, cancellationToken);
+
+            var hasDependentLecturers = await _context.CourseLecturers
+                .AnyAsync(cl => cl.CourseId == course.Id &&
+                    (cl.SemesterId == oldSemesterId || (oldOfferingId.HasValue && cl.CourseOfferingId == oldOfferingId.Value)),
+                    cancellationToken);
+
+            if (hasDependentClasses || hasDependentLecturers)
+            {
+                return Result<CourseDto>.Failure(
+                    "CONFLICT: Không thể chuyển học kỳ của môn học vì đã có lớp học hoặc phân công giảng viên trong học kỳ hiện tại.");
+            }
+
+            // Đồng bộ course_offerings trong cùng transaction
+            var newOffering = await _context.CourseOfferings
+                .FirstOrDefaultAsync(co => co.CourseId == course.Id && co.SemesterId == newSemesterId, cancellationToken);
+
+            if (newOffering is null)
+            {
+                newOffering = new CourseOffering
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = course.Id,
+                    SemesterId = newSemesterId,
+                    IsEnabled = request.IsActive,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                _context.CourseOfferings.Add(newOffering);
+            }
+            else
+            {
+                newOffering.IsEnabled = request.IsActive;
+                newOffering.UpdatedAt = now;
+            }
+
+            var oldOffering = await _context.CourseOfferings
+                .FirstOrDefaultAsync(co => co.CourseId == course.Id && co.SemesterId == oldSemesterId, cancellationToken);
+
+            if (oldOffering is not null)
+            {
+                oldOffering.IsEnabled = false;
+                oldOffering.UpdatedAt = now;
+            }
+
+            course.SemesterId = newSemesterId;
+        }
+        else if (course.SemesterId != Guid.Empty)
+        {
+            var currentOffering = await _context.CourseOfferings
+                .FirstOrDefaultAsync(co => co.CourseId == course.Id && co.SemesterId == course.SemesterId, cancellationToken);
+
+            if (!request.IsActive)
+            {
+                if (currentOffering is not null && currentOffering.IsEnabled)
+                {
+                    currentOffering.IsEnabled = false;
+                    currentOffering.UpdatedAt = now;
+                }
+            }
+            else if (currentOffering is null)
+            {
+                _context.CourseOfferings.Add(new CourseOffering
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = course.Id,
+                    SemesterId = course.SemesterId,
+                    IsEnabled = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+            else if (!wasActive && !currentOffering.IsEnabled)
+            {
+                currentOffering.IsEnabled = true;
+                currentOffering.UpdatedAt = now;
+            }
         }
 
         course.Code = normalizedCode;
@@ -113,6 +224,18 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
         }
         course.IsActive = request.IsActive;
 
+        _context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.ActorUserId.HasValue && request.ActorUserId.Value != Guid.Empty ? request.ActorUserId.Value : null,
+            Action = "COURSE_UPDATED",
+            EntityName = "courses",
+            EntityId = course.Id,
+            OldValues = oldSummary,
+            NewValues = $"code={course.Code};name={course.Name};credits={course.Credits};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}",
+            CreatedAt = now
+        });
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = new CourseDto
@@ -122,8 +245,10 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
             Name = course.Name,
             Description = course.Description,
             Credits = course.Credits,
+            AcademicProgramId = course.AcademicProgramId,
             SemesterId = course.SemesterId,
             DepartmentHeadUserId = course.DepartmentHeadUserId,
+            DepartmentHeadName = deptHeadName,
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,
             MaxFollowUpQuestions = course.MaxFollowUpQuestions,
             MaxMockExamsPerDay = course.MaxMockExamsPerDay,

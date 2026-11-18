@@ -20,6 +20,12 @@ public class AssignDepartmentHeadCommandHandler(
         AssignDepartmentHeadCommand request,
         CancellationToken cancellationToken)
     {
+        if (!string.Equals(request.ActorRole, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<AssignDepartmentHeadResponseDto>.Failure(
+                "FORBIDDEN: Chỉ có Quản trị viên (Admin) mới có quyền gán Trưởng bộ môn cho môn học.");
+        }
+
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -48,14 +54,27 @@ public class AssignDepartmentHeadCommandHandler(
                 "VALIDATION: Tài khoản Trưởng bộ môn đang bị khóa hoặc vô hiệu hóa.");
         }
 
-        if (!string.Equals(user.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(user.Role, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(user.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
         {
             return Result<AssignDepartmentHeadResponseDto>.Failure(
                 $"Người dùng '{user.FullName}' không có vai trò Trưởng bộ môn ({UserRole.DepartmentHead}).");
         }
 
+        var previousHeadId = course.DepartmentHeadUserId;
         course.DepartmentHeadUserId = request.DepartmentHeadUserId;
+
+        context.AuditLogs.Add(new OralExamination.Domain.Entities.AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = request.ActorUserId.HasValue && request.ActorUserId.Value != Guid.Empty ? request.ActorUserId.Value : null,
+            Action = "COURSE_DEPARTMENT_HEAD_ASSIGNED",
+            EntityName = "courses",
+            EntityId = course.Id,
+            OldValues = $"department_head_user_id={previousHeadId?.ToString() ?? "null"}",
+            NewValues = $"department_head_user_id={user.Id};email={user.Email}",
+            CreatedAt = DateTime.UtcNow
+        });
+
         await context.SaveChangesAsync(cancellationToken);
 
         var response = new AssignDepartmentHeadResponseDto(

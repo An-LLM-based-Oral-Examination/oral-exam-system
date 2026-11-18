@@ -28,9 +28,14 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
                 .ThenInclude(a => a.AiEvaluations)
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
-        if (session == null || session.StudentId != request.StudentId)
+        if (session == null)
         {
-            return Result.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
+            return Result.Failure("NOT_FOUND: Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
+        }
+
+        if (session.StudentId != request.StudentId)
+        {
+            return Result.Failure("FORBIDDEN: Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
         }
 
         var hasAddedSkippedAnswers = false;

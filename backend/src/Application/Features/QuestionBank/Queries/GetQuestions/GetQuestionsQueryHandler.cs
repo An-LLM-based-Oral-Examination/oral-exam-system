@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Application.Features.QuestionBank;
 
 namespace OralExamination.Application.Features.QuestionBank.Queries.GetQuestions;
 
@@ -25,17 +26,24 @@ public sealed class GetQuestionsQueryHandler
         GetQuestionsQuery request,
         CancellationToken cancellationToken)
     {
+        if (request.ActorId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+            return Result<PagedResult<QuestionSummaryDto>>.Failure("FORBIDDEN: Thiếu định danh người tra cứu.");
+
+        var allowedCourseIds = QuestionCourseAccess.AllowedCourseIds(_context, request.ActorRole, request.ActorId);
         var examQuery = _context.ExamQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
             .AsNoTracking()
-            .AsQueryable();
+            .Where(q => !q.IsDeleted && allowedCourseIds.Contains(q.CourseId));
 
         var practiceQuery = _context.PracticeQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
             .AsNoTracking()
-            .AsQueryable();
+            .Where(q => !q.IsDeleted && allowedCourseIds.Contains(q.CourseId));
+
+        if (request.CourseId.HasValue && !await allowedCourseIds.ContainsAsync(request.CourseId.Value, cancellationToken))
+            return Result<PagedResult<QuestionSummaryDto>>.Failure("FORBIDDEN: Không được xem câu hỏi của môn học này.");
 
         if (request.CourseId.HasValue)
         {

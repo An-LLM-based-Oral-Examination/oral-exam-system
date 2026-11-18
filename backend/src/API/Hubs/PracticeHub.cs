@@ -8,18 +8,12 @@ using OralExamination.Application.Common.Interfaces;
 
 namespace OralExamination.API.Hubs;
 
-[Authorize]
-public class PracticeHub : Hub<IPracticeClient>
+[Authorize(Roles = "student")]
+public sealed class PracticeHub(IApplicationDbContext context) : Hub<IPracticeClient>
 {
-    private readonly IApplicationDbContext? _context;
-
-    public PracticeHub(IApplicationDbContext? context = null)
-    {
-        _context = context;
-    }
-
     /// <summary>
-    /// Cho phép Frontend tham gia nhóm phiên luyện tập để nhận kết quả chấm điểm realtime.
+    /// Cho phép Sinh viên tham gia nhóm phiên luyện tập của chính mình để nhận kết quả chấm điểm realtime.
+    /// Khóa cứng BOLA: Chỉ cho phép role student và bắt buộc session.StudentId == currentUserId.
     /// </summary>
     public async Task JoinSession(string sessionId)
     {
@@ -28,48 +22,43 @@ public class PracticeHub : Hub<IPracticeClient>
             throw new HubException("BAD_REQUEST: Mã phiên luyện tập không hợp lệ.");
         }
 
-        var userIdStr = Context?.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? Context?.User?.FindFirstValue("sub");
-        var hasUserId = Guid.TryParse(userIdStr, out var currentUserId) && currentUserId != Guid.Empty;
-        var isElevatedRole = Context?.User?.IsInRole("admin") == true
-            || Context?.User?.IsInRole("department_head") == true
-            || Context?.User?.IsInRole("lecturer") == true;
-
-        if (!hasUserId && !isElevatedRole)
+        if (Context?.User?.IsInRole("student") != true)
         {
-            throw new HubException("UNAUTHORIZED: Không xác định được danh tính người dùng.");
+            throw new HubException("FORBIDDEN: Chỉ sinh viên mới có quyền tham gia phiên luyện tập.");
         }
 
-        if (_context != null)
+        var userIdStr = Context?.User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? Context?.User?.FindFirstValue("sub");
+        if (!Guid.TryParse(userIdStr, out var currentUserId) || currentUserId == Guid.Empty)
         {
-            var session = await _context.PracticeSessions
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == parsedSessionId);
+            throw new HubException("FORBIDDEN: Không xác định được danh tính sinh viên.");
+        }
 
-            if (session != null)
-            {
-                if (!isElevatedRole && session.StudentId != currentUserId)
-                {
-                    throw new HubException("FORBIDDEN: Bạn không có quyền tham gia phiên luyện tập của sinh viên khác.");
-                }
-            }
-            else
-            {
-                throw new HubException("NOT_FOUND: Phiên luyện tập không tồn tại.");
-            }
+        var session = await context.PracticeSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == parsedSessionId, Context!.ConnectionAborted);
+
+        if (session is null)
+        {
+            throw new HubException("FORBIDDEN: Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này (NOT_FOUND).");
+        }
+
+        if (session.StudentId != currentUserId)
+        {
+            throw new HubException("FORBIDDEN: Bạn không có quyền tham gia phiên luyện tập của sinh viên khác.");
         }
 
         await Groups.AddToGroupAsync(Context!.ConnectionId, $"session_{parsedSessionId:D}");
     }
 
     /// <summary>
-    /// Cho phép Frontend rời nhóm phiên luyện tập khi kết thúc hoặc chuyển trang.
+    /// Cho phép Sinh viên rời nhóm phiên luyện tập khi kết thúc hoặc chuyển trang.
     /// </summary>
     public async Task LeaveSession(string sessionId)
     {
         var groupName = Guid.TryParse(sessionId, out var parsedSessionId)
             ? $"session_{parsedSessionId:D}"
             : $"session_{sessionId}";
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        await Groups.RemoveFromGroupAsync(Context!.ConnectionId, groupName);
     }
-
 }

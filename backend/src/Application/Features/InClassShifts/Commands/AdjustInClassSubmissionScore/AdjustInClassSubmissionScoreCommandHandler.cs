@@ -52,11 +52,7 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
             return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        bool isAssigned = submission.Shift.LecturerId == actor.Id ||
-            submission.Shift.Class.LecturerId == actor.Id ||
-            await context.CourseLecturers.AnyAsync(
-                cl => cl.CourseId == submission.Shift.Class.CourseId && cl.LecturerUserId == actor.Id,
-                cancellationToken);
+        bool isAssigned = submission.Shift.Class.LecturerId == actor.Id;
 
         if (!isAssigned)
         {
@@ -64,7 +60,7 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
         }
 
         submission.FinalScore = Math.Round(request.FinalScore, 2, MidpointRounding.AwayFromZero);
-        submission.LecturerNotes = request.LecturerNotes;
+        submission.LecturerNotes = request.LecturerNotes?.Trim();
         submission.Status = "AUDITED";
         submission.GradedAt = DateTime.UtcNow;
 
@@ -93,6 +89,27 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
             if (effectiveQuestionScores.Count > 0)
             {
                 participant.TotalFinalScore = Math.Round(effectiveQuestionScores.Average(), 2, MidpointRounding.AwayFromZero);
+            }
+
+            if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
+            {
+                var assignedIds = OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift.EnterInClassShiftCommandHandler
+                    .ParseGuidList(participant.AssignedQuestionIdsJson);
+                if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+                {
+                    assignedIds.Add(participant.AssignedQuestionId.Value);
+                }
+
+                var mainSubmittedIds = allSubmissions
+                    .Where(s => !s.IsFollowUp)
+                    .Select(s => s.QuestionId)
+                    .ToHashSet();
+                var allMainAnswered = assignedIds.Count == 0 || assignedIds.All(mainSubmittedIds.Contains);
+                var allScored = allSubmissions.Count > 0 && allSubmissions.All(s => s.FinalScore.HasValue || s.AiScore.HasValue);
+                if (allMainAnswered && allScored)
+                {
+                    participant.Status = "GRADED";
+                }
             }
         }
 

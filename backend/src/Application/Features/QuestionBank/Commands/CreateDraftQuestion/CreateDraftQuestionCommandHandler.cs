@@ -37,31 +37,24 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         if (lecturer.Role == "lecturer")
         {
-            bool courseHasLecturerAssignments = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive, cancellationToken);
+            bool isAssigned = await _context.CourseLecturers
+                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturer.Id && cl.IsActive, cancellationToken)
+                || await _context.Classes
+                    .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == lecturer.Id && c.IsActive, cancellationToken);
 
-            if (courseHasLecturerAssignments)
+            if (!isAssigned)
             {
-                bool isAssigned = await _context.CourseLecturers
-                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturer.Id && cl.IsActive, cancellationToken)
-                    || await _context.Classes
-                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == lecturer.Id && c.IsActive, cancellationToken);
-
-                if (!isAssigned)
-                {
-                    return Result<Guid>.Failure("Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
-                }
+                return Result<Guid>.Failure("Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
             }
         }
         else if (lecturer.Role == "department_head")
         {
-            var deptHeadId = await _context.Courses
-                .AsNoTracking()
-                .Where(c => c.Id == request.CourseId)
-                .Select(c => c.DepartmentHeadUserId)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (deptHeadId.HasValue && deptHeadId.Value != Guid.Empty && deptHeadId.Value != lecturer.Id)
+            if (!await _context.Courses.AsNoTracking().AnyAsync(
+                    c => c.Id == request.CourseId &&
+                        (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == lecturer.Id ||
+                         (c.AcademicProgram == null || c.AcademicProgram.DepartmentHeadUserId == null ||
+                          c.AcademicProgram.DepartmentHeadUserId == Guid.Empty) && c.DepartmentHeadUserId == lecturer.Id),
+                    cancellationToken))
             {
                 return Result<Guid>.Failure("Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
             }
@@ -147,7 +140,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         // 2. Tạo Question tách biệt độc lập hoàn toàn giữa 2 kho: practice_questions và exam_questions (R8)
         // Bất biến MF-03: Mọi câu hỏi do Giảng viên tạo đều phải ở trạng thái DRAFT chờ Trưởng Bộ môn duyệt;
-        // PracticeQuestion chỉ được kích hoạt (IsActive = true) khi Trưởng Bộ môn/Admin tự duyệt hoặc sau khi ReviewQuestionDecision phê duyệt.
+        // PracticeQuestion chỉ được kích hoạt sau khi ReviewQuestionDecision phê duyệt.
         var keyPointsJson = JsonSerializer.Serialize(request.KeyPoints ?? new());
         var normalizedScope = (request.UsageScope ?? "exam").Trim().ToLowerInvariant();
         if (normalizedScope is not ("practice" or "exam" or "official_exam"))
@@ -158,16 +151,9 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         var imageUrl = string.IsNullOrWhiteSpace(request.ImageUrl) ? null : request.ImageUrl.Trim();
         var imageDescription = string.IsNullOrWhiteSpace(request.ImageDescription) ? null : request.ImageDescription.Trim();
 
-        var isAutoApproved = request.ApprovedBy.HasValue &&
-                             request.ApprovedBy.Value != Guid.Empty &&
-                             (lecturer.Role == "department_head" || lecturer.Role == "admin");
-        if (isAutoApproved && (string.IsNullOrWhiteSpace(request.SampleAnswer) || request.SampleAnswer.Trim().Length < 50))
-        {
-            return Result<Guid>.Failure("Câu trả lời mẫu (Model Answer) bắt buộc phải từ 50 ký tự trở lên khi phê duyệt câu hỏi.");
-        }
-
-        var approvalStatus = isAutoApproved ? ApprovalStatus.Approved : ApprovalStatus.Draft;
-        Guid? approvedBy = isAutoApproved ? request.ApprovedBy!.Value : null;
+        // A draft is always reviewed in a separate action; request.ApprovedBy is untrusted input.
+        var approvalStatus = ApprovalStatus.Draft;
+        Guid? approvedBy = null;
 
         bool createPractice = normalizedScope == "practice";
         bool createExam = !createPractice;
@@ -225,7 +211,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
                 SubmittedBy = request.LecturerId,
-                IsActive = isAutoApproved,
+                IsActive = false,
                 CreatedAt = DateTime.UtcNow
             };
             _context.PracticeQuestions.Add(pq);

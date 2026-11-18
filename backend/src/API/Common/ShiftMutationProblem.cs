@@ -13,8 +13,15 @@ public static class ShiftMutationProblem
         var status = code is not null ? 409
             : error == OfficialExamErrors.Forbidden || error == InClassShiftErrors.LecturerNotAuthorized ? 403
             : error == OfficialExamErrors.ShiftNotFound || error == InClassShiftErrors.ShiftNotFound
-                || error == OfficialExamErrors.SessionNotFound || error == InClassShiftErrors.ClassNotFound ? 404 : 400;
-        code ??= status switch { 403 => "SHIFT_FORBIDDEN", 404 => "SHIFT_RESOURCE_NOT_FOUND", _ => "SHIFT_INVALID_INPUT" };
+                || error == OfficialExamErrors.SessionNotFound || error == InClassShiftErrors.ClassNotFound ? 404
+            : InClassShiftErrors.IsUnprocessablePoolError(error) ? 422 : 400;
+        code ??= status switch
+        {
+            403 => "SHIFT_FORBIDDEN",
+            404 => "SHIFT_RESOURCE_NOT_FOUND",
+            422 => "SHIFT_UNPROCESSABLE_POOL",
+            _ => "SHIFT_INVALID_INPUT"
+        };
         var problem = new ProblemDetails
         {
             Status = status,

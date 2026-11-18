@@ -25,13 +25,18 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
 
     public async Task<Result<NextQuestionResponse>> Handle(NextQuestionCommand request, CancellationToken cancellationToken)
     {
-        // 1. Kiểm tra session tồn tại và quyền sở hữu của sinh viên
+        // 1. Kiểm tra session tồn tại và quyền sở hữu của sinh viên (Chặn BOLA)
         var session = await _context.PracticeSessions
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
-        if (session == null || session.StudentId != request.StudentId)
+        if (session == null)
         {
-            return Result<NextQuestionResponse>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
+            return Result<NextQuestionResponse>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
+        }
+
+        if (session.StudentId != request.StudentId)
+        {
+            return Result<NextQuestionResponse>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
         }
 
         // 2. Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
@@ -150,15 +155,9 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         var candidatePool = availableQuestions;
         if (excludeDifficulty != null)
         {
-            var nonExcludedPool = availableQuestions
+            candidatePool = availableQuestions
                 .Where(q => !string.Equals(q.Difficulty.Trim(), excludeDifficulty, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-
-            candidatePool = nonExcludedPool.Any()
-                ? nonExcludedPool
-                : availableQuestions
-                    .Where(q => string.Equals(q.Difficulty.Trim(), excludeDifficulty, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
         }
 
         if (!candidatePool.Any())

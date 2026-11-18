@@ -40,6 +40,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         var tokenHash = HashToken(request.RefreshToken!);
 
+        await using var lockScope = await _context.BeginRefreshTokenLockScopeAsync(tokenHash, cancellationToken);
+        if (!lockScope.HasLock)
+        {
+            return Result<RefreshTokenResponse>.Failure("CONFLICT: Refresh token này đang được xử lý trong một yêu cầu đồng thời khác. Vui lòng thử lại với token mới.");
+        }
+
         var existingToken = await _context.RefreshTokens
             .Include(rt => rt.User)
             .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
@@ -51,9 +57,27 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         if (existingToken.IsRevoked)
         {
+            // RFC 6819 Grace Period cho Concurrent Requests:
+            // Nếu token đã được thay thế (ReplacedByTokenHash != null) và vừa mới được xoay vòng trong vòng 10 giây trước,
+            // coi đây là xung đột đồng thời (Race Condition) và trả về lỗi xung đột (CONFLICT)
+            // mà KHÔNG thu hồi phiên đang hoạt động của yêu cầu vừa hoàn thành hợp lệ.
+            if (existingToken.RevokedAt.HasValue &&
+                (DateTime.UtcNow - existingToken.RevokedAt.Value).TotalSeconds <= 10 &&
+                !string.IsNullOrEmpty(existingToken.ReplacedByTokenHash))
+            {
+                return Result<RefreshTokenResponse>.Failure("CONFLICT: Refresh token này vừa được làm mới trong một yêu cầu đồng thời khác. Vui lòng sử dụng refresh token mới đã được cấp.");
+            }
+
             // RFC 6819 §5.2.2.3 — Replay Attack Detection:
             // Token đã bị thu hồi mà vẫn bị gửi lên → dấu hiệu rò rỉ token.
-            // Thu hồi toàn bộ refresh token đang hoạt động của user để ép đăng nhập lại.
+            // Thu hồi toàn bộ refresh token đang hoạt động của user VÀ tăng AuthVersion
+            // để lập tức vô hiệu hóa mọi access token đang lưu hành trong OnTokenValidated.
+            if (existingToken.User != null)
+            {
+                existingToken.User.AuthVersion++;
+                existingToken.User.UpdatedAt = DateTime.UtcNow;
+            }
+
             var activeTokens = await _context.RefreshTokens
                 .Where(rt => rt.UserId == existingToken.UserId && rt.RevokedAt == null)
                 .ToListAsync(cancellationToken);
@@ -63,10 +87,8 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
                 token.RevokedAt = DateTime.UtcNow;
             }
 
-            if (activeTokens.Count > 0)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-            }
+            await _context.SaveChangesAsync(cancellationToken);
+            await lockScope.CommitAsync(cancellationToken);
 
             return Result<RefreshTokenResponse>.Failure("Refresh token đã bị thu hồi. Toàn bộ phiên đăng nhập đã bị vô hiệu hóa vì phát hiện nghi ngờ rò rỉ token.");
         }
@@ -100,12 +122,16 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         _context.RefreshTokens.Add(newRefreshToken);
         await _context.SaveChangesAsync(cancellationToken);
 
+        // T3-F008: Bắt buộc commit transaction advisory-lock và token rotation thành công TRƯỚC KHI phát hành token
+        await lockScope.CommitAsync(cancellationToken);
+
         var accessToken = _accessTokenIssuer.Issue(
             user.Id,
             user.Email,
             user.FullName,
             user.Role,
-            user.MustChangePassword);
+            user.MustChangePassword,
+            authVersion: user.AuthVersion);
 
         return Result<RefreshTokenResponse>.Success(new RefreshTokenResponse(
             accessToken.Token,

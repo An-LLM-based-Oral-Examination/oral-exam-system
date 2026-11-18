@@ -30,6 +30,7 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
     {
         // 1. Only the active examination officer may publish school-wide official grades.
         var lecturer = await _context.Users
+            .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
 
         if (lecturer == null)
@@ -65,7 +66,10 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.NoTickets);
         }
 
-        if (shift.EndTime > DateTime.UtcNow || shift.Status is "scheduled" or "cancelled")
+        var isEnded = shift.Status == ExamShiftWindow.Completed
+            || (shift.Status == ExamShiftWindow.InProgress && DateTime.UtcNow >= shift.EndTime);
+
+        if (!isEnded || shift.Status is ExamShiftWindow.Scheduled or ExamShiftWindow.Cancelled)
         {
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotEnded);
         }

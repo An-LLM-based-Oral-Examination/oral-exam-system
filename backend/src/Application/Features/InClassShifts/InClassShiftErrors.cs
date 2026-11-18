@@ -20,7 +20,14 @@ public static class InClassShiftErrors
     public const string QuestionMismatch = "Câu hỏi nộp bài không khớp với đề câu hỏi đã được hệ thống phân bổ cho sinh viên.";
     public const string InvalidCourseQuestion = "Câu hỏi không tồn tại, chưa được phê duyệt hoặc không thuộc môn học của lớp này.";
     public const string InsufficientQuestionPool = "Ngân hàng câu hỏi luyện tập của môn học chưa đủ số lượng câu hỏi đã duyệt (APPROVED) để phân bổ cho ca thi.";
+    public const string InvalidPoolMode = "Chế độ nguồn câu hỏi khi tạo ca mới chỉ chấp nhận 'ALL_COURSE_BANK' hoặc 'SELECTED_CLOS'.";
+    public const string LegacySelectedQuestionIdsForbidden = "Form tạo ca mới không cho phép chọn từng câu hỏi thủ công (selectedQuestionIds). Vui lòng chọn nguồn Ngân hàng môn hoặc Theo CLO.";
+    public const string EmptySelectedDifficulties = "Vui lòng chọn ít nhất một mức độ câu hỏi (Dễ, Trung bình hoặc Khó).";
+    public const string InvalidDifficultyValue = "Mức độ câu hỏi chỉ chấp nhận 'easy', 'medium' hoặc 'hard'.";
+    public const string EmptySelectedClos = "Vui lòng chọn ít nhất một chuẩn đầu ra (CLO) đang hoạt động khi dùng chế độ SELECTED_CLOS.";
+    public const string InvalidCourseClo = "Một hoặc nhiều CLO đã chọn không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học của lớp này.";
     public const string InvalidScoreRange = "Điểm số phải nằm trong khoảng từ 0.00 đến 10.00 điểm.";
+    public const string EmptyAuditReason = "Vui lòng nhập nhận xét hoặc lý do hậu kiểm khi điều chỉnh điểm.";
     public const string EmptyTranscript = "Nội dung bài nói không được để trống.";
     public const string FollowUpDisabled = "Ca thi không bật câu hỏi phụ.";
     public const string InvalidFollowUpRequest = "Dữ liệu câu trả lời chính không được chứa thông tin câu hỏi phụ.";
@@ -29,5 +36,25 @@ public static class InClassShiftErrors
     public const string ExamTimeExpired = "Đã hết thời gian làm bài. Bài làm được nộp tự động để AI chấm.";
     public const string ShiftMustBeClosedBeforeFinalizing = "Phải đóng ca thi trước khi chốt sổ điểm.";
     public const string PendingGradingBeforeFinalizing = "Chưa thể chốt sổ vì vẫn còn bài chưa nộp đủ hoặc đang chờ chấm điểm.";
+
+    public static bool IsUnprocessablePoolError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        return error == InsufficientQuestionPool
+            || error == InvalidCourseQuestion
+            || error == InvalidCourseClo
+            || error == EmptySelectedClos
+            || error == EmptySelectedDifficulties
+            || error == InvalidDifficultyValue
+            || error.StartsWith("Số CLO đã chọn (", System.StringComparison.Ordinal)
+            || error.StartsWith("Thiếu câu hỏi hợp lệ", System.StringComparison.Ordinal)
+            || error.StartsWith("Ngân hàng môn không đủ câu hỏi hợp lệ", System.StringComparison.Ordinal)
+            || error.StartsWith("Các CLO đã chọn chưa có câu hỏi hợp lệ", System.StringComparison.Ordinal)
+            || error.StartsWith("Tổng câu hợp lệ của các CLO đã chọn không đủ", System.StringComparison.Ordinal);
+    }
 }
 

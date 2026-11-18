@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.AcademicHierarchy;
 using OralExamination.Application.Features.Practice.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -30,6 +31,11 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         if (course == null)
         {
             return Result<StartPracticeSessionResponse>.Failure("Môn học không tồn tại.");
+        }
+
+        if (!await StudentCourseAccess.IsEnrolledAsync(_context, request.StudentId, request.CourseId, cancellationToken))
+        {
+            return Result<StartPracticeSessionResponse>.Failure(StudentCourseAccess.Denied);
         }
 
         // Đọc gộp toàn bộ cấu hình SystemConfigs cần thiết cho phiên luyện tập trong 1 lượt truy vấn duy nhất

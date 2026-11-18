@@ -36,6 +36,7 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
         }
 
         var session = await _context.OfficialExamSessions
+            .Include(s => s.Course)
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session is null)
@@ -63,6 +64,7 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
             session.MaxFollowUpQuestions,
             session.ExamInputMode,
             session.TranscriptBufferSeconds,
-            session.Status));
+            session.Status,
+            session.SemesterId ?? session.Course?.SemesterId));
     }
 }

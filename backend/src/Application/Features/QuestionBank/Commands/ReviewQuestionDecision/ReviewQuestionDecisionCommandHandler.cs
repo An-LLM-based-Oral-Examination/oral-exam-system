@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
@@ -41,19 +42,27 @@ public sealed class ReviewQuestionDecisionCommandHandler
         var question = await _context.ExamQuestions
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
-            .FirstOrDefaultAsync(q => q.Id == request.QuestionId, cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == request.QuestionId && !q.IsDeleted, cancellationToken);
 
         var practiceOnlyQuestion = question == null
             ? await _context.PracticeQuestions
                 .Include(q => q.Rubric)
                     .ThenInclude(r => r.Criteria)
-                .FirstOrDefaultAsync(q => q.Id == request.QuestionId, cancellationToken)
+                .FirstOrDefaultAsync(q => q.Id == request.QuestionId && !q.IsDeleted, cancellationToken)
             : null;
 
         if (question == null && practiceOnlyQuestion == null)
         {
             return Result<QuestionReviewDecisionResponseDto>.Failure("Không tìm thấy câu hỏi tương ứng.");
         }
+
+        var courseId = question?.CourseId ?? practiceOnlyQuestion!.CourseId;
+        if (!await QuestionCourseAccess.AllowedCourseIds(_context, reviewer.Role, reviewer.Id)
+                .ContainsAsync(courseId, cancellationToken))
+            return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Người duyệt không phụ trách môn học này.");
+
+        if ((question?.ApprovalStatus ?? practiceOnlyQuestion!.ApprovalStatus) != ApprovalStatus.SubmittedForReview)
+            return Result<QuestionReviewDecisionResponseDto>.Failure("CONFLICT: Chỉ câu hỏi đã gửi thẩm định mới được ra quyết định.");
 
         var now = DateTime.UtcNow;
         string message;
@@ -80,6 +89,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     {
                         return Result<QuestionReviewDecisionResponseDto>.Failure(pqError);
                     }
+                    if (practiceOnlyQuestion.SubmittedBy == reviewer.Id)
+                        return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Không được tự phê duyệt câu hỏi của mình.");
 
                     NormalizeRubricWeights(practiceOnlyQuestion.Rubric!);
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.Approved;
@@ -139,6 +150,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 {
                     return Result<QuestionReviewDecisionResponseDto>.Failure(eqError);
                 }
+                if (question.SubmittedBy == reviewer.Id)
+                    return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Không được tự phê duyệt câu hỏi của mình.");
 
                 NormalizeRubricWeights(question.Rubric!);
 

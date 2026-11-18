@@ -14,7 +14,9 @@ public sealed class CourseDto
     public int Credits { get; set; }
     public Guid? AcademicProgramId { get; set; }
     public Guid SemesterId { get; set; }
+    public string? SemesterCode { get; set; }
     public Guid? DepartmentHeadUserId { get; set; }
+    public string? DepartmentHeadName { get; set; }
     public int TranscriptBufferSeconds { get; set; }
     public int MaxFollowUpQuestions { get; set; }
     public int MaxMockExamsPerDay { get; set; } = 3;

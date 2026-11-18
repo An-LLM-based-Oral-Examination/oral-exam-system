@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -69,6 +70,65 @@ public static class AuthenticationServiceCollectionExtensions
                             context.Token = accessToken;
                         }
                         return Task.CompletedTask;
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var sub = context.Principal?.FindFirst("sub")?.Value
+                            ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                        if (string.IsNullOrWhiteSpace(sub) || !Guid.TryParse(sub, out var userId))
+                        {
+                            context.Fail("Thiếu hoặc sai định dạng claim sub (User ID).");
+                            return;
+                        }
+
+                        var tokenRole = context.Principal?.FindFirst("role")?.Value
+                            ?? context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                        if (string.IsNullOrWhiteSpace(tokenRole))
+                        {
+                            context.Fail("Thiếu claim role bắt buộc.");
+                            return;
+                        }
+
+                        var tokenAuthVersion = context.Principal?.FindFirst("auth_version")?.Value;
+                        if (string.IsNullOrWhiteSpace(tokenAuthVersion) || !int.TryParse(tokenAuthVersion, out var ver))
+                        {
+                            context.Fail("Thiếu hoặc sai định dạng claim auth_version.");
+                            return;
+                        }
+
+                        IApplicationDbContext dbContext;
+                        try
+                        {
+                            dbContext = context.HttpContext.RequestServices.GetRequiredService<IApplicationDbContext>();
+                        }
+                        catch (Exception)
+                        {
+                            context.Fail("Không thể khởi tạo dịch vụ xác thực phiên (DB verifier).");
+                            return;
+                        }
+
+                        var user = await dbContext.Users.AsNoTracking()
+                            .Where(u => u.Id == userId)
+                            .Select(u => new { u.IsActive, u.Role, u.AuthVersion })
+                            .FirstOrDefaultAsync();
+
+                        if (user is null || !user.IsActive)
+                        {
+                            context.Fail("Tài khoản không tồn tại hoặc đã bị khóa.");
+                            return;
+                        }
+
+                        if (!string.Equals(tokenRole, user.Role, StringComparison.OrdinalIgnoreCase))
+                        {
+                            context.Fail("Quyền tài khoản đã thay đổi. Vui lòng đăng nhập lại.");
+                            return;
+                        }
+
+                        if (ver != user.AuthVersion)
+                        {
+                            context.Fail("Phiên đăng nhập đã hết hiệu lực hoặc không hợp lệ. Vui lòng đăng nhập lại.");
+                            return;
+                        }
                     }
                 };
             });

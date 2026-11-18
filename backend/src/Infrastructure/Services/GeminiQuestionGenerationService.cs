@@ -21,7 +21,6 @@ namespace OralExamination.Infrastructure.Services;
 public class GeminiQuestionGenerationService : IAiQuestionGenerationService
 {
     private static readonly SemaphoreSlim AiGenerationBulkhead = new(16, 16);
-    private static int _roundRobinKeyCounter;
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
@@ -45,41 +44,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         AiQuestionGenerationParams parameters,
         CancellationToken cancellationToken = default)
     {
-        var apiKey = _configuration["Gemini:ApiKey"]
-            ?? _configuration["Gemini__ApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-            ?? string.Empty;
-
-        var fallbackApiKey = _configuration["Gemini:FallbackApiKey"]
-            ?? _configuration["Gemini__FallbackApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY")
-            ?? string.Empty;
-
-        var rawKeyPool = _configuration["Gemini:ApiKeys"]
-            ?? _configuration["Gemini__ApiKeys"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEYS")
-            ?? string.Empty;
-
-        var pooledKeys = rawKeyPool
-            .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var baseKeys = new[] { apiKey.Trim(), fallbackApiKey.Trim() }
-            .Concat(pooledKeys)
-            .Where(k => !string.IsNullOrWhiteSpace(k) &&
-                        !k.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) &&
-                        !k.Contains("YourActual", StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        var candidateKeys = new List<string>(baseKeys.Count);
-        if (baseKeys.Count > 0)
-        {
-            var startIdx = (int)(unchecked((uint)Interlocked.Increment(ref _roundRobinKeyCounter)) % (uint)baseKeys.Count);
-            for (var i = 0; i < baseKeys.Count; i++)
-            {
-                candidateKeys.Add(baseKeys[(startIdx + i) % baseKeys.Count]);
-            }
-        }
+        var candidateKeys = GeminiApiKeyPriority.GetCandidates(_configuration);
 
         string lastError = string.Empty;
 
@@ -101,7 +66,8 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             {
                 lastError = ex.Message;
                 _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang key tiếp theo hoặc Cloudflare Workers AI (Llama 3.1).");
-                if (ExternalDependencyResilience.IsTransient(ex)) break;
+                // Key hiện tại có thể hết quota; thử key kế tiếp trước khi dùng provider dự phòng.
+                if (ExternalDependencyResilience.IsTransient(ex)) continue;
             }
         }
 
@@ -127,9 +93,8 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             "gemini-flash-lite-latest",
             "gemini-3.1-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
             "gemini-flash-latest",
-            "gemini-1.5-flash"
+            "gemini-3.5-flash-lite"
         };
         var prompt = BuildPrompt(parameters);
 

@@ -50,6 +50,7 @@ public class SemestersController(ISender sender) : ControllerBase
     }
 
     [HttpPost]
+    [HttpPost("/api/v1/admin/semesters")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> CreateSemester(
         [FromBody] SaveSemesterRequest request,
@@ -69,6 +70,7 @@ public class SemestersController(ISender sender) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [HttpPut("/api/v1/admin/semesters/{id:guid}")]
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> UpdateSemester(
         [FromRoute] Guid id,

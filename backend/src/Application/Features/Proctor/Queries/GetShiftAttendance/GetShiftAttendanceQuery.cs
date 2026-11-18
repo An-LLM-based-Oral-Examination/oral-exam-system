@@ -46,6 +46,7 @@ public sealed class GetShiftAttendanceQueryHandler
             .AsNoTracking()
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
+            .Include(t => t.ExamSet)
             .Where(t => t.ShiftId == shift.Id)
             .ToListAsync(cancellationToken);
 
@@ -115,7 +116,9 @@ public sealed class GetShiftAttendanceQueryHandler
                     IsSuspended = isSuspended,
                     SuspensionReason = isSuspended ? resolvedSuspReason : null,
                     CheckedInAt = isCheckedIn ? ticket.CheckedInAt : null,
-                    SubmittedAt = ticket.SubmittedAt
+                    SubmittedAt = ticket.SubmittedAt,
+                    ExamSetId = ticket.ExamSetId,
+                    ExamSetCode = ticket.ExamSet?.SetCode
                 });
             }
             else

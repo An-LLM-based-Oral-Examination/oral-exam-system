@@ -46,6 +46,37 @@ public static class ApiProblems
         return problem;
     }
 
+    public static ProblemDetails CreateForController(
+        HttpContext? context,
+        int status,
+        string? detail = null,
+        string? errorCode = null,
+        string? title = null,
+        string? type = null)
+    {
+        var resolvedTitle = string.IsNullOrWhiteSpace(title) ? ReasonPhrases.GetReasonPhrase(status) : title;
+        if (string.IsNullOrWhiteSpace(resolvedTitle)) resolvedTitle = "Yêu cầu không thành công.";
+
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = resolvedTitle,
+            Detail = string.IsNullOrWhiteSpace(detail) ? resolvedTitle : detail,
+            Type = string.IsNullOrWhiteSpace(type) ? "https://tools.ietf.org/html/rfc7807" : type
+        };
+
+        if (context is not null)
+        {
+            Enrich(context, problem, status, errorCode);
+        }
+        else if (!problem.Extensions.ContainsKey("errorCode"))
+        {
+            problem.Extensions["errorCode"] = errorCode ?? DefaultCode(status);
+        }
+
+        return problem;
+    }
+
     public static void Enrich(HttpContext context, ProblemDetails problem, int status, string? errorCode = null)
     {
         problem.Status = status;
