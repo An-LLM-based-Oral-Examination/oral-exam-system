@@ -21,11 +21,12 @@ public class UpdateCourseConfigurationCommandHandlerTests
     public async Task Handle_DifficultyDistributionDeterminesQuestionCount(string distribution, bool valid)
     {
         using var context = CreateDbContext();
-        var course = await SeedCourseAsync(context);
+        var ownerId = Guid.NewGuid();
+        var course = await SeedCourseAsync(context, ownerId);
         var originalCount = course.MockExamTotalQuestions;
         var command = new UpdateCourseConfigurationCommand(course.Id, 60, 2, true)
         {
-            ActorRole = "admin",
+            ActorRole = $"department_head:{ownerId}",
             MockExamDifficultyDistribution = distribution,
             MockExamTotalQuestions = 99
         };
@@ -98,7 +99,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
         return new OralExamDbContext(options);
     }
 
-    private async Task<Course> SeedCourseAsync(OralExamDbContext context)
+    private async Task<Course> SeedCourseAsync(OralExamDbContext context, Guid? departmentHeadUserId = null)
     {
         var semester = new Semester
         {
@@ -117,6 +118,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             Name = "Software Architecture & Design",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = departmentHeadUserId,
             TranscriptBufferSeconds = 60,
             MaxFollowUpQuestions = 1,
             HasFollowUp = false,
@@ -134,7 +136,8 @@ public class UpdateCourseConfigurationCommandHandlerTests
     public async Task Handle_Should_Update_Course_Configuration_Successfully()
     {
         using var context = CreateDbContext();
-        var course = await SeedCourseAsync(context);
+        var ownerId = Guid.NewGuid();
+        var course = await SeedCourseAsync(context, ownerId);
 
         var handler = new UpdateCourseConfigurationCommandHandler(context);
         var command = new UpdateCourseConfigurationCommand(
@@ -142,7 +145,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 90,
             MaxFollowUpQuestions: 3,
             HasFollowUp: true
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{ownerId}" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -172,7 +175,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 120,
             MaxFollowUpQuestions: 2,
             HasFollowUp: false
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{Guid.NewGuid()}" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -184,7 +187,8 @@ public class UpdateCourseConfigurationCommandHandlerTests
     public async Task Handle_Should_Keep_Existing_HasFollowUp_When_Null()
     {
         using var context = CreateDbContext();
-        var course = await SeedCourseAsync(context);
+        var ownerId = Guid.NewGuid();
+        var course = await SeedCourseAsync(context, ownerId);
         course.HasFollowUp = true;
         await context.SaveChangesAsync();
 
@@ -194,7 +198,7 @@ public class UpdateCourseConfigurationCommandHandlerTests
             TranscriptBufferSeconds: 45,
             MaxFollowUpQuestions: 2,
             HasFollowUp: null
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{ownerId}" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -216,10 +220,10 @@ public class UpdateCourseConfigurationCommandHandlerTests
         var handler = new UpdateCourseConfigurationCommandHandler(context);
         var command = new UpdateCourseConfigurationCommand(
             CourseId: course.Id,
-            TranscriptBufferSeconds: 60,
-            MaxFollowUpQuestions: 2,
-            HasFollowUp: true,
-            ExamInputMode: "VoiceOnly"
+            TranscriptBufferSeconds: course.TranscriptBufferSeconds,
+            MaxFollowUpQuestions: course.MaxFollowUpQuestions,
+            HasFollowUp: course.HasFollowUp,
+            ExamInputMode: course.ExamInputMode
         )
         {
             ActorRole = "admin",
@@ -233,5 +237,114 @@ public class UpdateCourseConfigurationCommandHandlerTests
 
         var updatedCourse = await context.Courses.FindAsync(course.Id);
         updatedCourse!.MaxMockExamsPerDay.Should().Be(5);
+    }
+
+    [Fact(DisplayName = "5. Admin bị chặn FORBIDDEN khi thay đổi tham số học thuật hoặc không truyền MaxMockExamsPerDay")]
+    public async Task Handle_Should_Forbid_Admin_From_Mutating_Academic_Fields_Or_Omitting_Quota()
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+        var handler = new UpdateCourseConfigurationCommandHandler(context);
+
+        var missingQuota = await handler.Handle(new UpdateCourseConfigurationCommand(
+            course.Id,
+            course.TranscriptBufferSeconds,
+            course.MaxFollowUpQuestions,
+            course.HasFollowUp)
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = null
+        }, CancellationToken.None);
+
+        missingQuota.IsSuccess.Should().BeFalse();
+        missingQuota.Error.Should().StartWith("FORBIDDEN:");
+
+        var mutateAcademic = await handler.Handle(new UpdateCourseConfigurationCommand(
+            course.Id,
+            90,
+            course.MaxFollowUpQuestions,
+            true,
+            "VoiceOnly")
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 5
+        }, CancellationToken.None);
+
+        mutateAcademic.IsSuccess.Should().BeFalse();
+        mutateAcademic.Error.Should().StartWith("FORBIDDEN:");
+
+        var persisted = await context.Courses.FindAsync(course.Id);
+        persisted!.TranscriptBufferSeconds.Should().Be(60);
+        persisted.HasFollowUp.Should().BeFalse();
+        persisted.MaxMockExamsPerDay.Should().Be(3);
+    }
+
+    [Fact(DisplayName = "6. Admin cập nhật MaxMockExamsPerDay thành công với payload tối giản, ExamInputMode/Difficulty rỗng và JSON đảo thứ tự/khoảng trắng")]
+    public async Task Handle_Should_Allow_Admin_QuotaUpdate_With_MinimalPayload_EmptyNullEquivalent_And_SemanticJson()
+    {
+        using var context = CreateDbContext();
+        var course = await SeedCourseAsync(context);
+        course.MockExamDifficultyDistribution = "{\"easy\":1,\"medium\":2,\"hard\":1}";
+        course.MockExamBloomDistribution = "{\"Remember\": 1, \"Understand\": 2, \"Apply\": 2}";
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateCourseConfigurationCommandHandler(context);
+
+        // 1. Minimal payload + reordered Difficulty keys + minified/reordered Bloom JSON
+        var reorderedResult = await handler.Handle(new UpdateCourseConfigurationCommand(
+            CourseId: course.Id,
+            TranscriptBufferSeconds: 0,
+            MaxFollowUpQuestions: 0,
+            HasFollowUp: null,
+            ExamInputMode: "")
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 5,
+            MockExamDifficultyDistribution = "{ \"hard\": 1, \"medium\": 2, \"easy\": 1 }",
+            MockExamBloomDistribution = "{\"Apply\":2,\"Remember\":1,\"Understand\":2}"
+        }, CancellationToken.None);
+
+        reorderedResult.IsSuccess.Should().BeTrue();
+        reorderedResult.Value.MaxMockExamsPerDay.Should().Be(5);
+        reorderedResult.Value.TranscriptBufferSeconds.Should().Be(60);
+        reorderedResult.Value.MaxFollowUpQuestions.Should().Be(1);
+        reorderedResult.Value.ExamInputMode.Should().Be(course.ExamInputMode);
+
+        // 2. Empty string DifficultyDistribution when DB has null -> succeeds without overwriting null
+        course.MockExamDifficultyDistribution = null;
+        await context.SaveChangesAsync();
+
+        var emptyOnNullResult = await handler.Handle(new UpdateCourseConfigurationCommand(
+            CourseId: course.Id,
+            TranscriptBufferSeconds: 0,
+            MaxFollowUpQuestions: 0,
+            HasFollowUp: null,
+            ExamInputMode: "")
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 8,
+            MockExamDifficultyDistribution = "",
+            MockExamBloomDistribution = "{\"Remember\":1,\"Understand\":2,\"Apply\":2}"
+        }, CancellationToken.None);
+
+        emptyOnNullResult.IsSuccess.Should().BeTrue();
+        emptyOnNullResult.Value.MaxMockExamsPerDay.Should().Be(8);
+        emptyOnNullResult.Value.MockExamDifficultyDistribution.Should().BeNull();
+
+        // 3. Semantic value change in Bloom JSON still returns FORBIDDEN
+        var semanticDiffResult = await handler.Handle(new UpdateCourseConfigurationCommand(
+            CourseId: course.Id,
+            TranscriptBufferSeconds: 0,
+            MaxFollowUpQuestions: 0,
+            HasFollowUp: null,
+            ExamInputMode: "")
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 8,
+            MockExamBloomDistribution = "{\"Remember\":2,\"Understand\":2,\"Apply\":1}"
+        }, CancellationToken.None);
+
+        semanticDiffResult.IsSuccess.Should().BeFalse();
+        semanticDiffResult.Error.Should().StartWith("FORBIDDEN:");
     }
 }

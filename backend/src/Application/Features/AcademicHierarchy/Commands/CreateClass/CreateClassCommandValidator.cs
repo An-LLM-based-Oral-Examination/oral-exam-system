@@ -34,5 +34,9 @@ public class CreateClassCommandValidator : AbstractValidator<CreateClassCommand>
             .NotEmpty().WithMessage("Lớp tạo từ course offering phải có mật khẩu tham gia cố định.")
             .MinimumLength(8).WithMessage("Mật khẩu tham gia lớp phải có ít nhất 8 ký tự.")
             .When(x => x.CourseOfferingId.HasValue && x.CourseOfferingId != Guid.Empty && x.AllowSelfEnrollment);
+
+        RuleFor(x => x.Password!)
+            .MaximumLength(128).WithMessage("Mật khẩu tham gia lớp không được vượt quá 128 ký tự.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Password));
     }
 }

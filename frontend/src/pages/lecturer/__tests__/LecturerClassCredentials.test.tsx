@@ -97,7 +97,7 @@ describe('Lecturer class credentials management & password reset', () => {
     mocks.getClassDetail.mockResolvedValue(baseDetail)
   })
 
-  it('creates a class, opens one-time credentials dialog with joinCode & joinPassword, and copies safely', async () => {
+  it('creates a class, opens credentials dialog with joinPassword only (hides joinCode), and copies safely', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -141,11 +141,9 @@ describe('Lecturer class credentials management & password reset', () => {
     fireEvent.submit(document.getElementById('create-class-form')!)
 
     expect(await screen.findByText('Thông tin tham gia lớp học')).toBeTruthy()
-    expect(screen.getByText('JOIN8888')).toBeTruthy()
+    expect(screen.queryByText('JOIN8888')).toBeNull()
+    expect(screen.queryByText(/Mã tham gia/i)).toBeNull()
     expect(screen.getByText('ClassPass#2026')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('JOIN8888'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mật khẩu' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('ClassPass#2026'))
@@ -191,18 +189,13 @@ describe('Lecturer class credentials management & password reset', () => {
     fireEvent.change(screen.getByPlaceholderText('Ít nhất 8 ký tự'), { target: { value: 'ClassPass#2026' } })
     fireEvent.submit(document.getElementById('create-class-form')!)
 
-    expect(await screen.findByText('JOIN7777')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã' }))
-    expect(screen.getByText('JOIN7777')).toBeTruthy()
+    expect(await screen.findByText('ClassPass#2026')).toBeTruthy()
+    expect(screen.queryByText('JOIN7777')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mật khẩu' }))
+    expect(screen.getByText('ClassPass#2026')).toBeTruthy()
   })
 
-  it('displays joinCode on detail page, validates reset modal, preserves one-time password across reload, and clears stale state on reopen', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    })
-
+  it('hides joinCode on detail page, validates reset modal password, preserves session password across reload, and clears stale state on reopen', async () => {
     mocks.getClassDetail
       .mockResolvedValueOnce(baseDetail)
       .mockResolvedValueOnce({ ...baseDetail, joinCode: 'JOIN9999', isJoinEnabled: true, joinPassword: null })
@@ -226,21 +219,19 @@ describe('Lecturer class credentials management & password reset', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('JOIN8888')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã tham gia' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('JOIN8888'))
+    expect(await screen.findByText('Lớp SE1802')).toBeTruthy()
+    expect(screen.queryByText('JOIN8888')).toBeNull()
+    expect(screen.queryByText(/Mã tham gia/i)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Đặt lại mật khẩu lớp' }))
     const passwordInput = await screen.findByPlaceholderText('Ít nhất 8 ký tự')
-    const codeInput = screen.getByPlaceholderText('JOIN8888')
+    expect(screen.queryByText(/Mã tham gia mới/i)).toBeNull()
 
-    // Validation blocks < 8 char password and < 4 char joinCode
+    // Validation blocks < 8 char password
     fireEvent.change(passwordInput, { target: { value: 'short' } })
-    fireEvent.change(codeInput, { target: { value: 'AB' } })
     fireEvent.submit(document.getElementById('reset-class-password-form')!)
 
     expect(await screen.findByText('Mật khẩu mới cần ít nhất 8 ký tự.')).toBeTruthy()
-    expect(screen.getByText('Mã tham gia mới cần từ 4 đến 32 ký tự.')).toBeTruthy()
     expect(mocks.resetPassword).not.toHaveBeenCalled()
 
     // Close and reopen: stale values and errors must be cleared
@@ -250,21 +241,21 @@ describe('Lecturer class credentials management & password reset', () => {
     expect(freshPasswordInput.value).toBe('')
     expect(screen.queryByText('Mật khẩu mới cần ít nhất 8 ký tự.')).toBeNull()
 
-    // Valid submit with empty optional newJoinCode
+    // Valid submit
     fireEvent.change(freshPasswordInput, { target: { value: 'FreshPassword#9' } })
     fireEvent.submit(document.getElementById('reset-class-password-form')!)
 
     await waitFor(() =>
       expect(mocks.resetPassword).toHaveBeenCalledWith('class-1', {
         newPassword: 'FreshPassword#9',
-        newJoinCode: undefined,
         isJoinEnabled: true,
       }),
     )
 
-    // One-time reveal dialog opens AND reload happened without wiping session password
+    // Credentials dialog opens showing password only (no joinCode) AND reload happened without wiping session password
     expect(await screen.findByText('Đã cập nhật mật khẩu lớp')).toBeTruthy()
     expect(screen.getByText('FreshPassword#9')).toBeTruthy()
+    expect(screen.queryByText('JOIN9999')).toBeNull()
     expect(mocks.getClassDetail).toHaveBeenCalledTimes(2)
 
     fireEvent.click(screen.getByRole('button', { name: 'Đã lưu thông tin' }))
@@ -287,7 +278,7 @@ describe('Lecturer class credentials management & password reset', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('JOIN8888')
+    await screen.findByText('Lớp SE1802')
     fireEvent.click(screen.getByRole('button', { name: 'Đặt lại mật khẩu lớp' }))
     fireEvent.change(await screen.findByPlaceholderText('Ít nhất 8 ký tự'), {
       target: { value: 'ValidPass123' },
@@ -300,7 +291,7 @@ describe('Lecturer class credentials management & password reset', () => {
     expect(document.getElementById('reset-class-password-form')).toBeTruthy()
   })
 
-  it('preserves detail view, updated joinCode, and sessionJoinPassword reveal if reload fails transiently after resetPassword', async () => {
+  it('preserves detail view and sessionJoinPassword reveal if reload fails transiently after resetPassword', async () => {
     mocks.getClassDetail
       .mockResolvedValueOnce(baseDetail)
       .mockRejectedValueOnce({ status: 500, detail: 'Transient server error' })
@@ -324,7 +315,7 @@ describe('Lecturer class credentials management & password reset', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('JOIN8888')).toBeTruthy()
+    expect(await screen.findByText('Lớp SE1802')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Đặt lại mật khẩu lớp' }))
     fireEvent.change(await screen.findByPlaceholderText('Ít nhất 8 ký tự'), {
       target: { value: 'FreshPassword#9' },
@@ -337,7 +328,7 @@ describe('Lecturer class credentials management & password reset', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Đã lưu thông tin' }))
 
     expect(screen.getByText('Lớp SE1802')).toBeTruthy()
-    expect(screen.getByText('JOIN9999')).toBeTruthy()
+    expect(screen.queryByText('JOIN9999')).toBeNull()
     expect(screen.getByText('Đã khóa')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Hiện mật khẩu tham gia' }))
     expect(screen.getByText('FreshPassword#9')).toBeTruthy()
@@ -358,6 +349,10 @@ describe('Lecturer class credentials management & password reset', () => {
     })
 
     try {
+      mocks.getClassDetail.mockResolvedValueOnce({
+        ...baseDetail,
+        joinPassword: 'CopyFallback#2026',
+      })
       mocks.createClass.mockResolvedValueOnce({
         id: 'class-new',
         code: 'SE1802-CSD',
@@ -387,8 +382,8 @@ describe('Lecturer class credentials management & password reset', () => {
         </MemoryRouter>,
       )
 
-      expect(await screen.findByText('JOIN8888')).toBeTruthy()
-      fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã tham gia' }))
+      expect(await screen.findByText('Lớp SE1802')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Sao chép mật khẩu tham gia' }))
       await waitFor(() => expect(document.body.querySelectorAll('textarea').length).toBe(0))
 
       const managementView = render(
@@ -403,8 +398,8 @@ describe('Lecturer class credentials management & password reset', () => {
       fireEvent.change(managementView.getByPlaceholderText('Ít nhất 8 ký tự'), { target: { value: 'ClassPass#2026' } })
       fireEvent.submit(document.getElementById('create-class-form')!)
 
-      expect(await managementView.findByText('JOIN7777')).toBeTruthy()
-      fireEvent.click(managementView.getByRole('button', { name: 'Sao chép mã' }))
+      expect(await managementView.findByText('ClassPass#2026')).toBeTruthy()
+      fireEvent.click(managementView.getByRole('button', { name: 'Sao chép mật khẩu' }))
       await waitFor(() => expect(document.body.querySelectorAll('textarea').length).toBe(0))
     } finally {
       if (originalExecCommand) {
@@ -413,5 +408,84 @@ describe('Lecturer class credentials management & password reset', () => {
         delete (document as { execCommand?: unknown }).execCommand
       }
     }
+  })
+
+  it('reveals, hides, and copies persisted joinPassword immediately on detail page without resetting', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    mocks.getClassDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      joinPassword: 'PersistedPass#2026',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/lecturer/classes/class-1']}>
+        <Routes>
+          <Route path="/lecturer/classes/:classId" element={<LecturerClassDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Lớp SE1802')).toBeTruthy()
+    expect(screen.queryByText('PersistedPass#2026')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hiện mật khẩu tham gia' }))
+    expect(screen.getByText('PersistedPass#2026')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mật khẩu tham gia' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('PersistedPass#2026'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ẩn mật khẩu tham gia' }))
+    expect(screen.queryByText('PersistedPass#2026')).toBeNull()
+  })
+
+  it('keeps eye icon visible for legacy hash-only classes and supports eye toggles in create/reset password inputs', async () => {
+    mocks.getClassDetail.mockResolvedValueOnce({
+      ...baseDetail,
+      hasPassword: true,
+      joinPassword: null,
+    })
+
+    const detailView = render(
+      <MemoryRouter initialEntries={['/lecturer/classes/class-1']}>
+        <Routes>
+          <Route path="/lecturer/classes/:classId" element={<LecturerClassDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await detailView.findByText('Lớp SE1802')).toBeTruthy()
+    const legacyEye = detailView.getByRole('button', { name: 'Hiện mật khẩu tham gia' })
+    fireEvent.click(legacyEye)
+    expect(detailView.getByText('••••••••')).toBeTruthy()
+
+    // Reset password modal eye toggle
+    fireEvent.click(detailView.getByRole('button', { name: 'Đặt lại mật khẩu lớp' }))
+    const resetInput = (await detailView.findByPlaceholderText('Ít nhất 8 ký tự')) as HTMLInputElement
+    expect(resetInput.type).toBe('password')
+    fireEvent.click(detailView.getByRole('button', { name: 'Hiện mật khẩu' }))
+    expect(resetInput.type).toBe('text')
+    fireEvent.click(detailView.getByRole('button', { name: 'Ẩn mật khẩu' }))
+    expect(resetInput.type).toBe('password')
+    detailView.unmount()
+
+    // Create class modal eye toggle
+    const managementView = render(
+      <MemoryRouter>
+        <LecturerClassManagementPage />
+      </MemoryRouter>,
+    )
+    const createBtn = await managementView.findAllByRole('button', { name: 'Tạo lớp' })
+    fireEvent.click(createBtn[0])
+    const createInput = (await managementView.findByPlaceholderText('Ít nhất 8 ký tự')) as HTMLInputElement
+    expect(createInput.type).toBe('password')
+    fireEvent.click(managementView.getByRole('button', { name: 'Hiện mật khẩu' }))
+    expect(createInput.type).toBe('text')
+    fireEvent.click(managementView.getByRole('button', { name: 'Ẩn mật khẩu' }))
+    expect(createInput.type).toBe('password')
   })
 })

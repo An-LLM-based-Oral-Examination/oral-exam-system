@@ -103,7 +103,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu danh sách đơn phúc khảo có hỗ trợ lọc theo trạng thái, ca thi, sinh viên, người thụ lý.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "student,lecturer,department_head,examination_officer")]
     public async Task<IActionResult> GetAppeals(
         [FromQuery] string? status,
         [FromQuery] Guid? sessionId,
@@ -146,7 +146,7 @@ public class AppealsController : ControllerBase
     /// Tra cứu chi tiết một đơn phúc khảo theo ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "student,lecturer,department_head,examination_officer")]
     public async Task<IActionResult> GetAppealById(Guid id)
     {
         var requesterId = GetAuthenticatedUserId();
@@ -182,7 +182,7 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ Khảo thí, Trưởng Bộ Môn hoặc Admin thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
+    /// Cán bộ Khảo thí thẩm định và ra quyết định phúc khảo (APPROVED / REJECTED).
     /// </summary>
     [HttpPut("{id:guid}/review")]
     [HttpPut("{id:guid}/decision")]
@@ -210,7 +210,7 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ Khảo thí hoặc Quản trị viên phân công một giảng viên đang hoạt động chấm lại đơn phúc khảo.
+    /// Cán bộ Khảo thí phân công một giảng viên đang hoạt động chấm lại đơn phúc khảo.
     /// </summary>
     [HttpPut("{id:guid}/assign-lecturer")]
     [HttpPost("{id:guid}/assign-lecturer")]
@@ -278,7 +278,7 @@ public class AppealsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ Khảo thí hoặc Quản trị viên xác nhận lưu phân công chấm lại đồng loạt sau khi điều chỉnh thủ công.
+    /// Cán bộ Khảo thí xác nhận lưu phân công chấm lại đồng loạt sau khi điều chỉnh thủ công.
     /// </summary>
     [HttpPost("/api/v1/examination-officer/appeals/batch-assign")]
     [HttpPost("batch-assign")]

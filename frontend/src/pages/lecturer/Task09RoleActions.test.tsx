@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   userId: 'actor',
   sessions: vi.fn(), shifts: vi.fn(), structures: vi.fn(), createSession: vi.fn(),
   createStructure: vi.fn(), updateStructure: vi.fn(), lecturerCourses: vi.fn(),
-  appeals: vi.fn(), regrade: vi.fn(), listDlq: vi.fn(), replay: vi.fn(),
+  appeals: vi.fn(), regrade: vi.fn(), listDlq: vi.fn(), replay: vi.fn(), resolve: vi.fn(),
   attendance: vi.fn(), updateAttendance: vi.fn(), violation: vi.fn(), suspend: vi.fn(),
   audit: vi.fn(), publish: vi.fn(),
 }))
@@ -31,7 +31,19 @@ vi.mock('@/services/course.service', () => ({ courseService: {
   getLecturerCourses: mocks.lecturerCourses,
 } }))
 vi.mock('@/services/appeals.service', () => ({ appealsService: { list: mocks.appeals, regrade: mocks.regrade } }))
-vi.mock('@/services/deadLetterQueue.service', () => ({ deadLetterQueueService: { list: mocks.listDlq, replay: mocks.replay } }))
+vi.mock('@/services/deadLetterQueue.service', () => ({
+  deadLetterQueueService: {
+    list: mocks.listDlq,
+    replay: mocks.replay,
+    resolve: mocks.resolve,
+    listForAdmin: mocks.listDlq,
+    replayForAdmin: mocks.replay,
+    resolveForAdmin: mocks.resolve,
+    listForExaminationOfficer: mocks.listDlq,
+    replayForExaminationOfficer: mocks.replay,
+    resolveForExaminationOfficer: mocks.resolve,
+  },
+}))
 vi.mock('@/services/proctor.service', () => ({ proctorService: {
   getShiftAttendance: mocks.attendance, updateTicketAttendance: mocks.updateAttendance,
   recordViolation: mocks.violation, suspendTicket: mocks.suspend,
@@ -235,28 +247,119 @@ describe('Task 09 proctor actions', () => {
 describe('Task 09 DLQ flows', () => {
   it.each(['Admin', 'ExaminationOfficer'])('%s can replay an allowed task', async (role) => {
     mocks.role = role
-    const flowType = role === 'ExaminationOfficer' ? 'OFFICIAL_EXAM' : 'IN_CLASS_EXAM'
+    const flowType = role === 'ExaminationOfficer' ? 'OFFICIAL_EXAM' : 'PRACTICE'
     mocks.listDlq.mockResolvedValue([{ id: 'task', flowType, status: 'pending', retryCount: 1, taskType: 'GRADING', errorMessage: 'Retry needed', createdAt: '2026-11-14' }])
     mocks.replay.mockResolvedValue({ message: 'Replayed' })
-    render(<DeadLetterQueuePage />)
+    render(<MemoryRouter><DeadLetterQueuePage /></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Replay task' }))
     await waitFor(() => expect(mocks.replay).toHaveBeenCalledWith('task'))
   })
   it.each([
-    ['Admin', ['ALL', 'PRACTICE', 'MOCK_EXAM', 'IN_CLASS_EXAM'], 'ALL'],
-    ['ExaminationOfficer', ['OFFICIAL_EXAM'], 'OFFICIAL_EXAM'],
-  ])('%s requests and offers only allowed flows', async (role, expected, initialFlow) => {
+    ['Admin', ['Tất cả luồng được phép', 'Luyện tập (MF-01)', 'Thi thử (MF-02)'], 'ALL'],
+    ['ExaminationOfficer', ['Thi thật Kiosk (MF-04)'], 'OFFICIAL_EXAM'],
+  ])('%s requests and offers only allowed flows', async (role, expectedLabels, initialFlow) => {
     mocks.role = role
-    render(<DeadLetterQueuePage />)
-    await waitFor(() => expect(mocks.listDlq).toHaveBeenCalledWith('pending', initialFlow))
-    const options = Array.from(screen.getByLabelText('Luồng nghiệp vụ').querySelectorAll('option')).map((option) => option.value)
-    expect(options).toEqual(expected)
+    render(<MemoryRouter><DeadLetterQueuePage /></MemoryRouter>)
+    if (role === 'Admin') {
+      await waitFor(() => expect(mocks.listDlq).toHaveBeenCalledWith('pending', initialFlow))
+    } else {
+      await waitFor(() => expect(mocks.listDlq).toHaveBeenCalledWith('pending'))
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Luồng nghiệp vụ' }))
+    const optionElements = await screen.findAllByRole('option')
+    const optionTexts = optionElements.map((option) => option.textContent?.trim())
+    expect(optionTexts).toEqual(expectedLabels)
+    expect(screen.queryByText('Ca thi lớp (MF-05)')).toBeNull()
   })
   it.each(['Instructor', 'DepartmentHead', 'Proctor', 'Student'])('%s does not load DLQ', async (role) => {
     mocks.role = role
-    render(<DeadLetterQueuePage />)
+    render(<MemoryRouter><DeadLetterQueuePage /></MemoryRouter>)
     expect(screen.getByRole('alert')).toBeTruthy()
     await waitFor(() => expect(mocks.listDlq).not.toHaveBeenCalled())
+  })
+
+  it('Admin selecting "Tất cả trạng thái" calls listForAdmin(undefined, "ALL") and mounts /admin/dlq?status=all cleanly', async () => {
+    mocks.role = 'Admin'
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/dlq']}>
+        <DeadLetterQueuePage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mocks.listDlq).toHaveBeenCalledWith('pending', 'ALL'))
+    fireEvent.click(screen.getByRole('button', { name: 'Trạng thái' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Tất cả trạng thái' }))
+
+    await waitFor(() => expect(mocks.listDlq).toHaveBeenLastCalledWith(undefined, 'ALL'))
+    expect(screen.getByRole('button', { name: 'Trạng thái' })).toHaveTextContent('Tất cả trạng thái')
+    unmount()
+
+    mocks.listDlq.mockClear()
+    render(
+      <MemoryRouter initialEntries={['/admin/dlq?status=all']}>
+        <DeadLetterQueuePage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(mocks.listDlq).toHaveBeenCalledWith(undefined, 'ALL'))
+    expect(screen.getByRole('button', { name: 'Trạng thái' })).toHaveTextContent('Tất cả trạng thái')
+  })
+
+  it('Admin filters out IN_CLASS_EXAM and OFFICIAL_EXAM rows returned by API and renders resolve errors inside FormDialog', async () => {
+    mocks.role = 'Admin'
+    mocks.listDlq.mockResolvedValue([
+      {
+        id: 'task-practice',
+        flowType: 'PRACTICE',
+        status: 'pending',
+        retryCount: 1,
+        taskType: 'GRADING',
+        errorMessage: 'Practice task error',
+        createdAt: '2026-11-18T08:00:00Z',
+      },
+      {
+        id: 'task-inclass',
+        flowType: 'IN_CLASS_EXAM',
+        status: 'pending',
+        retryCount: 2,
+        taskType: 'GRADING',
+        errorMessage: 'In-class task should stay hidden',
+        createdAt: '2026-11-18T08:01:00Z',
+      },
+      {
+        id: 'task-official',
+        flowType: 'OFFICIAL_EXAM',
+        status: 'pending',
+        retryCount: 3,
+        taskType: 'GRADING',
+        errorMessage: 'Official task should stay hidden',
+        createdAt: '2026-11-18T08:02:00Z',
+      },
+    ])
+    mocks.resolve.mockRejectedValueOnce({
+      status: 409,
+      detail: 'Tác vụ DLQ đã được xử lý trước đó.',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/dlq']}>
+        <DeadLetterQueuePage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Practice task error')).toBeTruthy()
+    expect(screen.queryByText('In-class task should stay hidden')).toBeNull()
+    expect(screen.queryByText('Official task should stay hidden')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đánh dấu đã xử lý' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã xử lý' }))
+
+    await waitFor(() => {
+      expect(dialog.querySelector('[role="alert"]')).toHaveTextContent(
+        'Tác vụ DLQ đã được xử lý trước đó.',
+      )
+    })
   })
 })
 
@@ -267,7 +370,7 @@ describe('Task 09 publish controls', () => {
     await screen.findByText('Phân nhóm hậu kiểm')
     expect(Boolean(screen.queryByRole('button', { name: 'Công bố điểm toàn ca' }))).toBe(role === 'ExaminationOfficer')
     fireEvent.click(screen.getByRole('button', { name: /^Tất cả/ }))
-    const canAudit = ['Instructor', 'DepartmentHead', 'Admin'].includes(role)
+    const canAudit = ['Instructor', 'DepartmentHead'].includes(role)
     expect(Boolean(screen.queryByRole('button', { name: 'Lưu điểm hậu kiểm' }))).toBe(canAudit)
     expect(Boolean(screen.queryByRole('button', { name: 'Khóa điểm vé thi' }))).toBe(canAudit)
     expect(mocks.publish).not.toHaveBeenCalled()

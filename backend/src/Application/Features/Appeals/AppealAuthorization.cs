@@ -42,5 +42,5 @@ internal static class AppealAuthorization
     }
 
     internal static bool IsReadRole(string role) => role is
-        UserRole.Student or UserRole.Lecturer or UserRole.DepartmentHead or UserRole.ExaminationOfficer or UserRole.Admin;
+        UserRole.Student or UserRole.Lecturer or UserRole.DepartmentHead or UserRole.ExaminationOfficer;
 }

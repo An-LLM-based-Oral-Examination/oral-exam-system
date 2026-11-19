@@ -158,6 +158,52 @@ public class SatelliteModulesTests
         lockedResult.Error.Should().StartWith("LOCKED:");
     }
 
+    [Fact(DisplayName = "BE-4.4b / RBAC: Admin bị chặn FORBIDDEN khi cố OverrideExamScore hoặc LockExamTicket")]
+    public async Task OverrideExamScore_And_LockExamTicket_WhenAdmin_ShouldReturnForbidden()
+    {
+        await using var context = CreateDbContext();
+        var admin = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin.audit@fpt.edu.vn",
+            FullName = "System Admin",
+            Role = UserRole.Admin,
+            IsActive = true
+        };
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = Guid.NewGuid(),
+            StudentId = Guid.NewGuid(),
+            SeatNumber = 3,
+            Status = ExamTicketStatus.AiGraded,
+            IsLocked = false
+        };
+        context.Users.Add(admin);
+        context.StudentExamTickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        var overrideHandler = new OverrideExamScoreCommandHandler(context);
+        var overrideRes = await overrideHandler.Handle(
+            new OverrideExamScoreCommand(admin.Id, ticket.Id, 8.0m, "Admin thử ghi đè điểm trên Evidence Panel"),
+            CancellationToken.None);
+        overrideRes.IsSuccess.Should().BeFalse();
+        overrideRes.Error.Should().StartWith("FORBIDDEN:");
+
+        var lockHandler = new OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket.LockExamTicketCommandHandler(context);
+        var lockRes = await lockHandler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket.LockExamTicketCommand(admin.Id, ticket.Id),
+            CancellationToken.None);
+        lockRes.IsSuccess.Should().BeFalse();
+        lockRes.Error.Should().StartWith("FORBIDDEN:");
+
+        var adminBadInputRes = await overrideHandler.Handle(
+            new OverrideExamScoreCommand(admin.Id, Guid.NewGuid(), -1.0m, "bad"),
+            CancellationToken.None);
+        adminBadInputRes.IsSuccess.Should().BeFalse();
+        adminBadInputRes.Error.Should().StartWith("FORBIDDEN:");
+    }
+
     [Fact(DisplayName = "BE-V05 / BE-V09b: Admin quản lý trạng thái & role User, thu hồi RefreshToken và ghi AuditLogs")]
     public async Task AdminUserManagement_ShouldUpdateRoleAndStatus_RevokeTokens_AndLogAudit()
     {

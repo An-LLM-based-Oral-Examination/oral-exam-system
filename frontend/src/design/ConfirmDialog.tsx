@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Info, LoaderCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { lockBodyScroll } from './bodyScrollLock'
 import { ds, overlay } from './system'
+import { isTopmostOverlayModal, trapOverlayTabKey } from './overlayFocus'
 import { DialogFooter, OverlayCloseButton } from './overlays'
 
 type ConfirmTone = 'info' | 'warning' | 'danger'
@@ -36,6 +37,7 @@ export function ConfirmDialog({
   title,
   message,
   tone = 'warning',
+  variant = 'default',
   eyebrow,
   icon: Icon,
   confirmLabel,
@@ -48,6 +50,7 @@ export function ConfirmDialog({
   title: string
   message?: string
   tone?: ConfirmTone
+  variant?: 'default' | 'calm'
   eyebrow?: string
   icon?: LucideIcon
   confirmLabel: string
@@ -57,29 +60,76 @@ export function ConfirmDialog({
   pending?: boolean
   children?: ReactNode
 }) {
+  const dialogRef = useRef<HTMLElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const dismissRef = useRef(onCancel ?? onConfirm)
+  const [previousFocus] = useState<HTMLElement | null>(() =>
+    typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  )
   const style = TONE_STYLE[tone]
   const Glyph = Icon ?? style.icon
+  const isCalm = variant === 'calm'
 
-  useEffect(() => {
+  const calmIconWrap =
+    tone === 'danger'
+      ? 'border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
+      : tone === 'warning'
+        ? 'border border-[#f3ddb0] bg-[#fff8eb] text-[#9a6b12]'
+        : 'border border-[#0F2854]/10 bg-[#F4FBFD] text-[#1C4D8D]'
+
+  const calmCancelClass =
+    'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none'
+
+  const calmConfirmClass =
+    tone === 'danger'
+      ? 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c2415b] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#a4334b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none'
+      : 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none'
+
+  const pendingRef = useRef(pending)
+
+  useLayoutEffect(() => {
     dismissRef.current = onCancel ?? onConfirm
-  }, [onCancel, onConfirm])
+    pendingRef.current = pending
+  }, [onCancel, onConfirm, pending])
 
   useEffect(() => {
-    confirmRef.current?.focus()
+    const dialog = dialogRef.current
+    if (dialog && !dialog.contains(document.activeElement)) {
+      if (confirmRef.current && !confirmRef.current.disabled) {
+        confirmRef.current.focus()
+      } else {
+        dialog.focus()
+      }
+    }
     const unlock = lockBodyScroll()
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || pending) return
-      event.preventDefault()
-      dismissRef.current()
+      const currentDialog = dialogRef.current
+      if (!currentDialog || !isTopmostOverlayModal(currentDialog)) return
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (pendingRef.current) return
+        dismissRef.current()
+        return
+      }
+
+      if (event.key === 'Tab') {
+        event.stopPropagation()
+        trapOverlayTabKey(event, currentDialog)
+      }
     }
-    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
     return () => {
       unlock()
-      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keydown', onKeyDown, true)
+      if (!dialog?.isConnected && previousFocus?.isConnected) {
+        previousFocus.focus()
+      }
     }
-  }, [pending])
+  }, [previousFocus])
 
   return (
     <div
@@ -91,28 +141,45 @@ export function ConfirmDialog({
       }}
     >
       <section
+        ref={dialogRef}
+        tabIndex={-1}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className={cn(overlay.panelCompact, 'max-w-md')}
+        className={cn(
+          isCalm
+            ? 'flex w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[#0F2854]/12 bg-white shadow-[0_20px_50px_rgba(15,40,84,0.16)]'
+            : cn(overlay.panelCompact, 'max-w-md'),
+          'focus:outline-none',
+        )}
       >
         <div className="px-5 pt-5 pb-4 sm:px-6">
           <div className="flex items-start gap-3">
             <span
               className={cn(
-                'flex size-11 shrink-0 items-center justify-center rounded-2xl',
-                style.iconWrap,
+                'flex size-11 shrink-0 items-center justify-center',
+                isCalm ? cn('rounded-xl', calmIconWrap) : cn('rounded-2xl', style.iconWrap),
               )}
             >
-              <Glyph className="size-5" aria-hidden="true" />
+              <Glyph className="size-5" strokeWidth={1.5} aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-xs font-bold tracking-[0.08em] text-[#5b6b84] uppercase">
+              <p
+                className={
+                  isCalm
+                    ? 'text-xs font-medium text-[#5b6b84]'
+                    : 'text-xs font-bold tracking-[0.08em] text-[#5b6b84] uppercase'
+                }
+              >
                 {eyebrow ?? style.eyebrow}
               </p>
               <h2
                 id="confirm-dialog-title"
-                className="mt-1 text-base font-bold tracking-[-0.02em] text-[#0F2854] sm:text-lg"
+                className={
+                  isCalm
+                    ? 'mt-1 break-words [overflow-wrap:anywhere] text-base font-semibold tracking-[-0.01em] text-[#0F2854] sm:text-lg'
+                    : 'mt-1 break-words [overflow-wrap:anywhere] text-base font-bold tracking-[-0.02em] text-[#0F2854] sm:text-lg'
+                }
               >
                 {title}
               </h2>
@@ -120,22 +187,26 @@ export function ConfirmDialog({
             <OverlayCloseButton
               onClose={() => dismissRef.current()}
               busy={pending}
-              className="rounded-full"
+              className={
+                isCalm
+                  ? 'rounded-xl border-[#0F2854]/15 hover:bg-[#F4FBFD]'
+                  : 'rounded-full'
+              }
             />
           </div>
           {message && (
-            <p className="mt-4 text-sm leading-relaxed text-[#5b6b84]">{message}</p>
+            <p className="mt-4 break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-[#5b6b84]">{message}</p>
           )}
           {children && <div className="mt-4">{children}</div>}
         </div>
-        <DialogFooter>
+        <DialogFooter variant={variant}>
           {cancelLabel && onCancel && (
             <button
               type="button"
               data-space-ignore="true"
               onClick={onCancel}
               disabled={pending}
-              className={ds.outlineButton}
+              className={isCalm ? calmCancelClass : ds.outlineButton}
             >
               {cancelLabel}
             </button>
@@ -146,7 +217,7 @@ export function ConfirmDialog({
             data-space-ignore="true"
             onClick={onConfirm}
             disabled={pending}
-            className={style.confirm}
+            className={isCalm ? calmConfirmClass : style.confirm}
           >
             {pending && (
               <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />

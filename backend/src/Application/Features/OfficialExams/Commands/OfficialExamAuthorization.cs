@@ -22,14 +22,18 @@ internal static class OfficialExamAuthorization
             ? Task.FromResult(false)
             : IsActiveActorAsync(context, actorUserId, requiredRole, cancellationToken);
 
-    public static Task<bool> IsActiveOfficerOrAdminAsync(
+    public static Task<bool> IsActiveOfficerAsync(
+        IApplicationDbContext context, Guid actorUserId, CancellationToken cancellationToken) =>
+        IsActiveActorAsync(context, actorUserId, UserRole.ExaminationOfficer, cancellationToken);
+
+    public static Task<bool> IsActiveEnrollmentEstimateRoleAsync(
         IApplicationDbContext context, Guid actorUserId, CancellationToken cancellationToken) =>
         actorUserId == Guid.Empty
             ? Task.FromResult(false)
             : context.Users.AsNoTracking().AnyAsync(
                 user => user.Id == actorUserId
                     && user.IsActive
-                    && (user.Role == UserRole.ExaminationOfficer || user.Role == UserRole.Admin),
+                    && (user.Role == UserRole.ExaminationOfficer || user.Role == UserRole.DepartmentHead),
                 cancellationToken);
 
     public static async Task<bool> CanReadEnrollmentEstimateAsync(
@@ -50,7 +54,7 @@ internal static class OfficialExamAuthorization
             return false;
         }
 
-        if (actor.Role == UserRole.ExaminationOfficer || actor.Role == UserRole.Admin)
+        if (actor.Role == UserRole.ExaminationOfficer)
         {
             return true;
         }

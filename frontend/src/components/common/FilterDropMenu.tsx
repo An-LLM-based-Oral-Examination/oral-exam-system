@@ -15,6 +15,7 @@ interface FilterDropMenuProps {
   options: FilterDropMenuOption[]
   onChange: (value: string) => void
   className?: string
+  buttonClassName?: string
   menuMinWidth?: number
   wrapOptions?: boolean
   /** Thông báo khi danh sách trống. */
@@ -43,6 +44,7 @@ export function FilterDropMenu({
   options,
   onChange,
   className,
+  buttonClassName,
   menuMinWidth = 176,
   wrapOptions = false,
   emptyText = 'Không có dữ liệu',
@@ -120,10 +122,32 @@ export function FilterDropMenu({
       setOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setOpen(false)
+        buttonRef.current?.focus()
+        return
+      }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+      const optionButtons = Array.from(
+        panelRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)') ?? [],
+      )
+      if (optionButtons.length === 0) return
       event.preventDefault()
-      event.stopPropagation()
-      setOpen(false)
+      const currentIndex = optionButtons.findIndex((el) => el === document.activeElement)
+      let nextIndex = 0
+      if (event.key === 'ArrowDown') {
+        nextIndex = currentIndex >= 0 ? (currentIndex + 1) % optionButtons.length : 0
+      } else if (event.key === 'ArrowUp') {
+        nextIndex =
+          currentIndex >= 0
+            ? (currentIndex - 1 + optionButtons.length) % optionButtons.length
+            : optionButtons.length - 1
+      } else if (event.key === 'End') {
+        nextIndex = optionButtons.length - 1
+      }
+      optionButtons[nextIndex]?.focus()
     }
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('keydown', onKeyDown, true)
@@ -151,19 +175,27 @@ export function FilterDropMenu({
           if (unavailable) return
           setOpen((current) => !current)
         }}
+        onKeyDown={(event) => {
+          if (unavailable) return
+          if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !open) {
+            event.preventDefault()
+            setOpen(true)
+          }
+        }}
         aria-invalid={invalid || undefined}
         className={cn(
-          'relative inline-flex h-10 w-full items-center rounded-full border bg-white py-0 pr-11 pl-4 text-left text-sm font-semibold shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition',
+          'relative inline-flex h-10 w-full items-center rounded-full border bg-white py-0 pr-11 pl-4 text-left text-sm font-semibold shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition motion-reduce:transition-none',
           invalid ? 'border-[#c2415b] bg-[#fff7f8]' : 'border-[#4988C4]',
           unavailable ? 'cursor-default text-[#8aa0b8]' : 'text-[#0F2854]',
           open && !invalid && 'ring-2 ring-[#1C4D8D]/15',
           open && invalid && 'ring-2 ring-[#c2415b]/20',
+          buttonClassName,
         )}
       >
         <span className="truncate">{triggerLabel}</span>
         <ChevronDown
           className={cn(
-            'pointer-events-none absolute right-5 size-4 text-[#1C4D8D] transition',
+            'pointer-events-none absolute right-5 size-4 text-[#1C4D8D] transition motion-reduce:transition-none',
             open && 'rotate-180',
             unavailable && 'opacity-50',
           )}
@@ -200,7 +232,7 @@ export function FilterDropMenu({
                       if (!multiple) setOpen(false)
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold transition',
+                      'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold transition motion-reduce:transition-none',
                       isSelected
                         ? 'bg-[#4988C4]/16 text-[#1C4D8D]'
                         : 'text-[#0F2854] hover:bg-[#4988C4]/18',

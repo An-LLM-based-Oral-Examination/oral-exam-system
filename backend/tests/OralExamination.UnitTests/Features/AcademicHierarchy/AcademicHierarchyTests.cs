@@ -356,7 +356,8 @@ public class AcademicHierarchyTests
         result.Value.JoinCode.Should().Be("JOIN1802");
         result.Value.HasPassword.Should().BeTrue();
         result.Value.JoinPassword.Should().Be("SecurePassword123!");
-        typeof(ClassDetailDto).GetProperty("JoinPassword").Should().BeNull();
+        typeof(Class).GetProperty("JoinPasswordPlain").Should().BeNull();
+        typeof(ClassDetailDto).GetProperty("JoinPassword").Should().NotBeNull();
         typeof(LecturerClassItemDto).GetProperty("JoinPassword").Should().BeNull();
 
         var savedClass = await context.Classes.FindAsync(result.Value.Id);

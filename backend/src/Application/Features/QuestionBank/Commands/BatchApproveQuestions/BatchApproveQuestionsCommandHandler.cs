@@ -33,10 +33,10 @@ public sealed class BatchApproveQuestionsCommandHandler
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ApproverUserId && u.IsActive, cancellationToken);
 
-        if (approver == null || (approver.Role != "department_head" && approver.Role != "admin"))
+        if (approver == null || approver.Role != UserRole.DepartmentHead)
         {
             return Result<BatchApproveQuestionsResponseDto>.Failure(
-                "FORBIDDEN: Chỉ 'department_head' hoặc 'admin' mới có quyền phê duyệt lưu hàng loạt câu hỏi.");
+                "FORBIDDEN: Chỉ Trưởng Bộ Môn ('department_head') mới có quyền phê duyệt lưu hàng loạt câu hỏi.");
         }
 
         var courseExists = await _context.Courses

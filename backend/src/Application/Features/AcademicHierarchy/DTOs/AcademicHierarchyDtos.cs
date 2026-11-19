@@ -280,7 +280,8 @@ public sealed record ClassDetailDto(
     bool IsAlreadyEnrolled,
     DateTime CreatedAt,
     IReadOnlyList<ClassInClassShiftSummaryDto> Shifts,
-    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents);
+    IReadOnlyList<ClassEnrolledStudentDto> EnrolledStudents,
+    string? JoinPassword = null);
 
 /// <summary>
 /// DTO yêu cầu thêm sinh viên vào lớp học phần (Giảng viên / Admin / Trưởng BM).

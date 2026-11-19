@@ -28,6 +28,14 @@ interface AuthState {
   token: string | null
 }
 
+function readAuthFailureStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const direct = (error as { status?: unknown }).status
+  if (typeof direct === 'number') return direct
+  const response = (error as { response?: { status?: unknown } }).response
+  return typeof response?.status === 'number' ? response.status : undefined
+}
+
 function getInitialAuthState(): AuthState {
   const user = authService.getCurrentUser()
   const token = authService.getToken()
@@ -55,14 +63,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true)
     setAuthError(null)
 
+    const cachedUser = authService.getCurrentUser()
+    const cachedToken = authService.getToken()
+    const hasCachedSession = Boolean(
+      cachedToken && cachedUser && browserAuthSession.isIdentityAllowed(cachedUser.id),
+    )
+
     void (async () => {
-      const cachedUser = authService.getCurrentUser()
-      const cachedToken = authService.getToken()
-      if (cachedToken && cachedUser && browserAuthSession.isIdentityAllowed(cachedUser.id)) {
+      if (hasCachedSession && cachedToken && cachedUser) {
         setAuthState({ user: null, token: cachedToken })
         const verifiedUser = await authService.synchronizeCurrentUser(current)
         if (!current()) return
-        if (!verifiedUser) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng thử lại.')
+        if (!verifiedUser) {
+          throw { status: 401, detail: 'Phiên đăng nhập đã hết hạn hoặc thay đổi.' }
+        }
         setAuthState({ user: verifiedUser, token: authService.getToken() })
         setIsLoading(false)
         return
@@ -80,12 +94,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       browserAuthSession.activateIdentity(restored.user.id)
       setAuthState({ user: restored.user, token: restored.accessToken })
       setIsLoading(false)
-    })().catch(() => {
+    })().catch((error: unknown) => {
       if (!current()) return
-      authService.clearSession()
-      setAuthState({ user: null, token: null })
+      const status = readAuthFailureStatus(error)
+      const isTerminalAuthRejection = status === 401 || status === 403 || status === 404
+
+      // Khi tab chưa có phiên cục bộ hoặc máy chủ đã từ chối phiên hết hạn/bị thu hồi:
+      // dọn phiên và để ProtectedRoute chuyển thẳng về /login thay vì kẹt màn hình lỗi trắng.
+      if (!hasCachedSession || isTerminalAuthRejection) {
+        if (hasCachedSession || authService.getToken() || authService.getCurrentUser()) {
+          authService.clearSession()
+        }
+        setAuthState({ user: null, token: null })
+        setIsLoading(false)
+        setAuthError(null)
+        return
+      }
+
+      setAuthState({ user: null, token: authService.getToken() })
       setIsLoading(false)
-      setAuthError(null)
+      setAuthError(
+        'Không thể xác minh phiên đăng nhập với máy chủ. Vui lòng kiểm tra kết nối và thử lại.',
+      )
     })
   }, [])
 

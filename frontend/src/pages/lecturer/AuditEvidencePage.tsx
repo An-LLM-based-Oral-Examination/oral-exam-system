@@ -26,6 +26,7 @@ import { StatusToast } from '@/components/common/toast'
 import { ScoreOverrideForm } from '@/components/rubric/ScoreOverrideForm'
 import { officialExamService } from '@/services/officialExam.service'
 import { useAuth } from '@/hooks/useAuth'
+import { canonicalRole } from '@/routes/routeAccess'
 import type { AuditEvidenceItem, ExamTicketStatus } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
@@ -104,8 +105,9 @@ function StatusBadge({ status }: { status: ExamTicketStatus }) {
 
 export function AuditEvidencePage() {
   const { user } = useAuth()
+  const normalizedRole = canonicalRole(user?.role)
   // Match the existing override/lock API contract; publication is EO-only.
-  const canAudit = user?.role === 'Instructor' || user?.role === 'DepartmentHead' || user?.role === 'Admin'
+  const canAudit = normalizedRole === 'Instructor' || normalizedRole === 'DepartmentHead'
   const [searchParams, setSearchParams] = useSearchParams()
   const routeShiftId = searchParams.get('shiftId') ?? ''
   const [shiftInput, setShiftInput] = useState(routeShiftId)
@@ -191,7 +193,7 @@ export function AuditEvidencePage() {
         candidate.isLocked || candidate.status === 'PUBLISHED' || candidate.status === 'LOCKED',
     )
   const canPublish =
-    user?.role === 'ExaminationOfficer' && allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
+    normalizedRole === 'ExaminationOfficer' && allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
 
   const filteredEvidence = useMemo(() => {
     if (filter === 'attention') return evidence.filter(needsLecturerAttention)
@@ -501,7 +503,7 @@ export function AuditEvidencePage() {
                 >
                   <RefreshCw className="size-4" />
                 </button>
-                {user?.role === 'ExaminationOfficer' && <button
+                {normalizedRole === 'ExaminationOfficer' && <button
                   type="button"
                   onClick={() => setShowPublishConfirm(true)}
                   disabled={!canPublish}
@@ -516,7 +518,7 @@ export function AuditEvidencePage() {
                 </button>}
               </div>
             </div>
-            {user?.role === 'ExaminationOfficer' && !canPublish && !alreadyPublished && (
+            {normalizedRole === 'ExaminationOfficer' && !canPublish && !alreadyPublished && (
               <div className="flex items-start gap-2 border-b border-[#ead9ae] bg-[#fff9ec] px-4 py-3 text-xs leading-relaxed text-[#805a20] sm:px-5">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                 {!allScoresComplete
@@ -802,7 +804,7 @@ export function AuditEvidencePage() {
         </>
       ) : null}
 
-      {user?.role === 'ExaminationOfficer' && showPublishConfirm && (
+      {normalizedRole === 'ExaminationOfficer' && showPublishConfirm && (
         <ConfirmDialog
           tone="danger"
           icon={LockKeyhole}

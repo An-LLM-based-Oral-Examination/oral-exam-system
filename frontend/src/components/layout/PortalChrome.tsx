@@ -17,7 +17,7 @@ export function PortalSidebar({ className, ...props }: ComponentProps<'aside'>) 
     <aside
       {...props}
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out md:translate-x-0',
+        'fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col overflow-hidden border-r border-[#4988C4] bg-[#D7F1F8] text-[#0F2854] shadow-[16px_0_40px_rgba(15,40,84,0.06)] transition-[width,transform] duration-300 ease-out motion-reduce:transition-none md:translate-x-0',
         className,
       )}
     />

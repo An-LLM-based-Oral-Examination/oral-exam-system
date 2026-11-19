@@ -28,6 +28,17 @@ public sealed class OverrideExamScoreCommandHandler
         OverrideExamScoreCommand request,
         CancellationToken cancellationToken)
     {
+        var actor = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
+
+        if (actor is null || !actor.IsActive ||
+            actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
+        {
+            return Result<OverrideExamScoreResponseDto>.Failure(
+                "FORBIDDEN: Chỉ giảng viên hoặc Trưởng bộ môn đang hoạt động mới có quyền hậu kiểm và chỉnh sửa điểm.");
+        }
+
         if (request.AuditedScore < 0.0m || request.AuditedScore > 10.0m)
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
@@ -38,17 +49,6 @@ public sealed class OverrideExamScoreCommandHandler
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
                 "VALIDATION: Bắt buộc nhập lý do ghi đè điểm (override_reason) tối thiểu 10 ký tự.");
-        }
-
-        var actor = await _context.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
-
-        if (actor is null || !actor.IsActive ||
-            actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
-        {
-            return Result<OverrideExamScoreResponseDto>.Failure(
-                "FORBIDDEN: Chỉ giảng viên hoặc Trưởng bộ môn đang hoạt động mới có quyền hậu kiểm và chỉnh sửa điểm.");
         }
 
         var ticket = await _context.StudentExamTickets

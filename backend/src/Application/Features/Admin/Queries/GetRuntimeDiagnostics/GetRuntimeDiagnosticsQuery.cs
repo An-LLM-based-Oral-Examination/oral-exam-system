@@ -56,21 +56,21 @@ public sealed class GetRuntimeDiagnosticsQueryHandler(
         var snapshot = metricsTracker.GetSnapshot();
         var abuse = abuseMetricsReader.Snapshot(loginGuard.Lockouts);
 
-        var totalPending = await dbContext.DeadLetterQueues
+        var pendingFlows = await dbContext.DeadLetterQueues
             .AsNoTracking()
-            .CountAsync(d => d.Status == "pending", cancellationToken);
+            .Where(d => d.Status == "pending")
+            .Select(d =>
+                d.TaskType == "PracticeGrading" ? "PRACTICE" :
+                d.TaskType == "MockExamGrading" ? "MOCK_EXAM" :
+                d.TaskType == "OfficialExamGrading" ? "OFFICIAL_EXAM" :
+                d.TaskType == "InClassGrading" ? "IN_CLASS_EXAM" :
+                d.FlowType)
+            .ToListAsync(cancellationToken);
 
-        var practice = await dbContext.DeadLetterQueues
-            .AsNoTracking()
-            .CountAsync(d => d.Status == "pending" && (d.FlowType == "PRACTICE" || d.TaskType == "PracticeGrading"), cancellationToken);
-
-        var mockExam = await dbContext.DeadLetterQueues
-            .AsNoTracking()
-            .CountAsync(d => d.Status == "pending" && (d.FlowType == "MOCK_EXAM" || d.TaskType == "MockExamGrading"), cancellationToken);
-
-        var inClassExam = await dbContext.DeadLetterQueues
-            .AsNoTracking()
-            .CountAsync(d => d.Status == "pending" && (d.FlowType == "IN_CLASS_EXAM" || d.TaskType == "InClassGrading"), cancellationToken);
+        var practice = pendingFlows.Count(flow => flow == "PRACTICE");
+        var mockExam = pendingFlows.Count(flow => flow == "MOCK_EXAM");
+        var inClassExam = pendingFlows.Count(flow => flow == "IN_CLASS_EXAM");
+        var totalPending = practice + mockExam + inClassExam;
 
         var boundedChannels = new BoundedChannelsStats(
             new BoundedQueueStats(gradingQueue.Count, gradingQueue.Capacity));

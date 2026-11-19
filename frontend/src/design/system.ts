@@ -99,7 +99,7 @@ export const overlay = {
   footer:
     'shrink-0 flex flex-col-reverse gap-2 border-t border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3.5 sm:flex-row sm:justify-end sm:px-5',
   close:
-    'flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#82aedb]/55 bg-white text-[#5b6b84] transition hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:opacity-45',
+    'flex size-11 sm:size-10 shrink-0 items-center justify-center rounded-xl border border-[#82aedb]/55 bg-white text-[#5b6b84] transition hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:opacity-45 motion-reduce:transition-none',
   iconWrap:
     'flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[#1C4D8D] text-white',
   eyebrow: 'text-[11px] font-bold tracking-[0.08em] text-[#1C4D8D] uppercase',

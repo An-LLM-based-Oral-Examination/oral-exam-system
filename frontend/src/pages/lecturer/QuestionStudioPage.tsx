@@ -41,6 +41,7 @@ import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { useAuth } from '@/hooks/useAuth'
 import { CreatePracticeQuestionDialog } from '@/pages/lecturer/CreateQuestionPage'
 import { ROUTE_PATHS } from '@/routes/routePaths'
+import { canonicalRole } from '@/routes/routeAccess'
 import { courseService } from '@/services/course.service'
 import { courseCloService } from '@/services/courseClo.service'
 import { questionService } from '@/services/question.service'
@@ -223,12 +224,7 @@ export function QuestionStudioPage() {
   const location = useLocation()
   const isDepartmentWorkspace = location.pathname.startsWith('/department-head/')
   const navigate = useNavigate()
-  const rawRole = String(user?.role ?? '')
-  const canReviewQuestions =
-    rawRole === 'DepartmentHead' ||
-    rawRole === 'Admin' ||
-    rawRole === 'department_head' ||
-    rawRole === 'admin'
+  const canReviewQuestions = canonicalRole(user?.role) === 'DepartmentHead'
 
   const [workspace, setWorkspace] = useState<WorkspaceTab>(() =>
     location.pathname === ROUTE_PATHS.departmentHead.questionBank
@@ -1429,8 +1425,7 @@ export function QuestionStudioPage() {
                           {selfSubmitted ? 'Của bạn · Không thể tự duyệt' : 'Giảng viên gửi'}
                         </span>
                       ) : (
-                        workspace === 'mine' &&
-                        user?.role !== 'Admin' && (
+                        workspace === 'mine' && (
                           <span
                             className={cn(
                               'rounded-full px-2 py-1 text-xs font-bold',

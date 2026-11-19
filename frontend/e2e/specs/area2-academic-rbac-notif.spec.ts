@@ -162,18 +162,18 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     await createDialog.locator('input[type="date"]').nth(1).fill('2027-04-30')
     await createDialog.getByRole('button', { name: 'Tạo học kỳ' }).click()
 
-    await expect(page.getByText('Spring 2027', { exact: true })).toBeVisible()
-
     const sp27Row = page.locator('tr').filter({ hasText: 'SP27' })
+    await expect(sp27Row.getByText('Spring 2027', { exact: true })).toBeVisible()
+
     await sp27Row.getByRole('button', { name: 'Sửa' }).click()
     const editDialog = page.getByRole('dialog', { name: 'Chỉnh sửa học kỳ' })
     await editDialog.getByPlaceholder('ví dụ: Fall 2026, Spring 2026').fill('Spring 2027 Updated')
     await editDialog.getByRole('button', { name: 'Cập nhật học kỳ' }).click()
-    await expect(page.getByText('Spring 2027 Updated')).toBeVisible()
+    await expect(sp27Row.getByText('Spring 2027 Updated', { exact: true })).toBeVisible()
 
     const fa26Row = page.locator('tr').filter({ hasText: 'FA26' })
     await fa26Row.getByRole('button', { name: 'Môn mở trong kỳ' }).click()
-    const offeringsDialog = page.getByRole('dialog', { name: 'Môn mở trong kỳ FA26' })
+    const offeringsDialog = page.getByRole('dialog', { name: 'Danh mục môn mở trong học kỳ (FA26)' })
     await expect(offeringsDialog).toBeVisible()
     await offeringsDialog.getByRole('button', { name: 'Lưu danh mục môn mở' }).click()
 
@@ -250,13 +250,12 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     const courseDialog = page.getByRole('dialog', { name: 'Tạo môn học mới' })
     await courseDialog.getByPlaceholder('ví dụ: PRN231').fill('SWD392')
     await courseDialog.getByPlaceholder('ví dụ: Cross-Platform .NET').fill('Software Architecture and Design')
-    await courseDialog.locator('#courseSemesterSelect').selectOption(E2E_IDS.semester)
-    await courseDialog.locator('#courseMaxMockQuota').fill('5')
+    await courseDialog.locator('#course-semester').selectOption(E2E_IDS.semester)
+    await courseDialog.locator('#course-max-mock').fill('5')
     await courseDialog.getByRole('button', { name: 'Tạo môn học' }).click()
 
-    await expect(page.getByText('SWD392', { exact: true })).toBeVisible()
-
     const swdRow = page.locator('tr').filter({ hasText: 'SWD392' })
+    await expect(swdRow.getByText('SWD392', { exact: true })).toBeVisible()
     await swdRow.getByRole('button', { name: 'Gán Trưởng BM' }).click()
     const assignDialog = page.getByRole('dialog', { name: 'Gán Trưởng bộ môn' })
     await assignDialog.locator('select').selectOption(E2E_IDS.users.DepartmentHead)
@@ -741,21 +740,23 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
       )
     }
 
-    await page.goto('/admin/dashboard', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('button', { name: 'Tạo tài khoản trường cấp' }).click()
-    const userDialog = page.getByRole('dialog', { name: 'Tạo tài khoản nhà trường cấp' })
+    await page.goto('/admin/users', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Tạo tài khoản mới' }).click()
+    const userDialog = page.getByRole('dialog', { name: 'Tạo tài khoản người dùng mới' })
     await userDialog.locator('input[type="email"]').fill('created.stu@fe.edu.vn')
-    await userDialog.getByPlaceholder('ví dụ: Nguyễn Văn A').fill('Sinh Viên Mới Tạo')
+    await userDialog.getByPlaceholder('Nguyễn Văn A').fill('Sinh Viên Mới Tạo')
     await userDialog.locator('input[type="password"]').fill('TempPass!123')
-    await userDialog.getByPlaceholder('ví dụ: SE180001').fill('SE190999')
+    await userDialog.getByPlaceholder('VD: SE180101').fill('SE190999')
     await userDialog.getByRole('button', { name: 'Tạo tài khoản' }).click()
+    await expect(userDialog).toBeHidden()
 
-    await page.getByRole('button', { name: /^Cấu hình hệ thống \(/ }).click()
-    await page.locator('tr').filter({ hasText: 'MaxPracticeFollowUpQuestions' }).getByRole('button', { name: 'Chỉnh sửa' }).click()
+    await page.goto('/admin/configs', { waitUntil: 'domcontentloaded' })
+    const followUpRow = page.locator('tr').filter({ hasText: 'MaxPracticeFollowUpQuestions' })
+    await followUpRow.getByRole('button', { name: 'Chỉnh sửa' }).click()
     const configDialog = page.getByRole('dialog', { name: 'Chỉnh sửa tham số hệ thống' })
     await configDialog.locator('input[type="number"]').fill('3')
     await configDialog.getByRole('button', { name: 'Lưu cấu hình' }).click()
-    await expect(page.locator('tr').filter({ hasText: 'MaxPracticeFollowUpQuestions' }).getByText('3', { exact: true })).toBeVisible()
+    await expect(followUpRow.getByText('3', { exact: true })).toBeVisible()
   })
 
   test('A2-T2-01 @tier2 @wave01 Deleting referenced CLO returns 409 Conflict and guides deactivating via isActive=false (AZ-C08)', async ({
@@ -1110,16 +1111,16 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
       )
     }
 
-    await page.goto('/admin/dashboard', { waitUntil: 'domcontentloaded' })
-    await page.getByRole('button', { name: 'Tạo tài khoản trường cấp' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Tạo tài khoản nhà trường cấp' })
+    await page.goto('/admin/users', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Tạo tài khoản mới' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Tạo tài khoản người dùng mới' })
     await dialog.locator('input[type="email"]').fill('STUDENT.E2E@FE.EDU.VN')
-    await dialog.getByPlaceholder('ví dụ: Nguyễn Văn A').fill('Trùng Email')
+    await dialog.getByPlaceholder('Nguyễn Văn A').fill('Trùng Email')
     await dialog.locator('input[type="password"]').fill('ValidPass!123')
-    await dialog.getByPlaceholder('ví dụ: SE180001').fill('se180001')
+    await dialog.getByPlaceholder('VD: SE180101').fill('se180001')
     await dialog.getByRole('button', { name: 'Tạo tài khoản' }).click()
 
-    await expect(page.getByRole('alert').filter({ hasText: 'đã tồn tại' })).toBeVisible()
+    await expect(dialog.getByRole('alert').filter({ hasText: 'đã tồn tại' })).toBeVisible()
 
     if (!isLiveApiMode()) {
       await apiMocks.mockProblem('POST', '/api/v1/admin/users', 400, 'Mật khẩu phải đủ độ mạnh (chữ hoa, thường, số, ký tự đặc biệt).', {
@@ -1129,7 +1130,7 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
       await dialog.locator('input[type="email"]').fill('weak.pwd@fe.edu.vn')
       await dialog.locator('input[type="password"]').fill('12345678')
       await dialog.getByRole('button', { name: 'Tạo tài khoản' }).click()
-      await expect(page.getByRole('alert').filter({ hasText: 'Mật khẩu phải đủ độ mạnh' })).toBeVisible()
+      await expect(dialog.getByRole('alert').filter({ hasText: 'Mật khẩu phải đủ độ mạnh' })).toBeVisible()
     }
   })
 

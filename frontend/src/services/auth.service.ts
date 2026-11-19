@@ -124,8 +124,13 @@ export interface RestoredAuthSession {
 }
 
 export const authService = {
-  async fetchCurrentUser(): Promise<CurrentUserResponse> {
-    const { data } = await apiClient.get<CurrentUserResponse>('/auth/me')
+  async fetchCurrentUser(requestConfig?: {
+    _skipAuthRefresh?: boolean
+    _silentAuthFailure?: boolean
+  }): Promise<CurrentUserResponse> {
+    const { data } = requestConfig
+      ? await apiClient.get<CurrentUserResponse>('/auth/me', requestConfig)
+      : await apiClient.get<CurrentUserResponse>('/auth/me')
     const role = normalizePortalRole(data.role)
     if (
       !role ||
@@ -305,7 +310,9 @@ export const authService = {
       )
     } catch (error) {
       const status = readFailureStatus(error)
-      if (status === 401 || status === 403) return null
+      if (status === 400 || status === 401 || status === 403 || status === 404 || status === 409) {
+        return null
+      }
       throw error
     }
 
@@ -316,12 +323,30 @@ export const authService = {
 
     sessionStorage.setItem('access_token', response.data.accessToken)
     sessionStorage.removeItem('refresh_token')
-    const profile = await this.fetchCurrentUser()
+    let profile: CurrentUserResponse
+    try {
+      profile = await this.fetchCurrentUser({
+        _skipAuthRefresh: true,
+        _silentAuthFailure: true,
+      })
+    } catch (error) {
+      if (this.getToken() === response.data.accessToken) {
+        sessionStorage.removeItem('access_token')
+      }
+      const status = readFailureStatus(error)
+      if (status === 400 || status === 401 || status === 403 || status === 404) {
+        return null
+      }
+      throw error
+    }
     if (
       !isCurrent() ||
       !isSessionEpochCurrent(epoch) ||
       this.getToken() !== response.data.accessToken
     ) {
+      if (this.getToken() === response.data.accessToken) {
+        sessionStorage.removeItem('access_token')
+      }
       return null
     }
 

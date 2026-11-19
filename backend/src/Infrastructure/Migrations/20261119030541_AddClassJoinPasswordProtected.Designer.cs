@@ -12,8 +12,8 @@ using OralExamination.Infrastructure.Persistence;
 namespace OralExamination.Infrastructure.Migrations
 {
     [DbContext(typeof(OralExamDbContext))]
-    [Migration("20261119042029_ReloadDB2")]
-    partial class ReloadDB2
+    [Migration("20261119030541_AddClassJoinPasswordProtected")]
+    partial class AddClassJoinPasswordProtected
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -442,6 +442,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("join_password_hash");
+
+                    b.Property<string>("JoinPasswordProtected")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("join_password_protected");
 
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uuid")

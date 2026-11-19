@@ -21,15 +21,18 @@ public sealed class UpdateCourseConfigurationCommandValidator : AbstractValidato
             .WithMessage("Mã môn học không được để trống.");
 
         RuleFor(v => v.TranscriptBufferSeconds)
-            .InclusiveBetween(10, 300)
+            .Must((cmd, seconds) => (IsAdminQuotaUpdate(cmd) && seconds == 0) || (seconds >= 10 && seconds <= 300))
             .WithMessage("Thời gian đệm chỉnh sửa transcript phải nằm trong khoảng từ 10 đến 300 giây.");
 
         RuleFor(v => v.MaxFollowUpQuestions)
-            .InclusiveBetween(1, 5)
+            .Must((cmd, count) => (IsAdminQuotaUpdate(cmd) && count == 0) || (count >= 1 && count <= 5))
             .WithMessage("Số lượng câu hỏi phụ tối đa phải nằm trong khoảng từ 1 đến 5 câu.");
 
         RuleFor(v => v.ExamInputMode)
-            .Must(m => m == null || ExamInputMode.All.Contains(m))
+            .Must((cmd, mode) =>
+                (IsAdminQuotaUpdate(cmd) && string.IsNullOrWhiteSpace(mode)) ||
+                mode == null ||
+                ExamInputMode.All.Contains(mode))
             .WithMessage("Phương thức thi ExamInputMode không hợp lệ. Chỉ chấp nhận: VoiceOnly, VoiceWithTranscriptEdit.");
 
         When(v => v.MaxMockExamsPerDay.HasValue, () =>
@@ -39,4 +42,8 @@ public sealed class UpdateCourseConfigurationCommandValidator : AbstractValidato
                 .WithMessage("Hạn ngạch thi thử mỗi ngày phải nằm trong khoảng từ 1 đến 20 lượt.");
         });
     }
+
+    private static bool IsAdminQuotaUpdate(UpdateCourseConfigurationCommand command) =>
+        string.Equals(command.ActorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase) &&
+        command.MaxMockExamsPerDay.HasValue;
 }

@@ -1,48 +1,41 @@
 import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AdminDashboardPage } from '../AdminDashboardPage'
+import { AdminCoursesPage } from '../AdminCoursesPage'
+import { AdminSemestersPage } from '../AdminSemestersPage'
 import { adminService } from '@/services/admin.service'
 
 vi.mock('@/services/admin.service', () => ({
   adminService: {
-    getUsers: vi.fn(),
-    createUser: vi.fn(),
-    updateUserStatus: vi.fn(),
-    updateUserRole: vi.fn(),
-    getSystemConfigs: vi.fn(),
-    updateSystemConfig: vi.fn(),
-    getAuditLogs: vi.fn(),
     getSemesters: vi.fn(),
     createSemester: vi.fn(),
     updateSemester: vi.fn(),
+    getSemesterCourseOfferings: vi.fn(),
+    syncSemesterCourseOfferings: vi.fn(),
     getCourses: vi.fn(),
     createCourse: vi.fn(),
     updateCourse: vi.fn(),
     assignDepartmentHead: vi.fn(),
     getDepartmentHeads: vi.fn(),
+    getAcademicPrograms: vi.fn(),
+    assignProgramDepartmentHead: vi.fn(),
   },
 }))
 
-const mockGetUsers = vi.mocked(adminService.getUsers)
 const mockGetSemesters = vi.mocked(adminService.getSemesters)
 const mockCreateSemester = vi.mocked(adminService.createSemester)
+const mockUpdateSemester = vi.mocked(adminService.updateSemester)
 const mockGetCourses = vi.mocked(adminService.getCourses)
 const mockCreateCourse = vi.mocked(adminService.createCourse)
+const mockUpdateCourse = vi.mocked(adminService.updateCourse)
 const mockGetDepartmentHeads = vi.mocked(adminService.getDepartmentHeads)
 const mockAssignDepartmentHead = vi.mocked(adminService.assignDepartmentHead)
+const mockGetAcademicPrograms = vi.mocked(adminService.getAcademicPrograms)
+const mockAssignProgramDepartmentHead = vi.mocked(adminService.assignProgramDepartmentHead)
 
-describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
+describe('Admin Academic Management — Semesters, Programs & Courses (M3)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-
-    mockGetUsers.mockResolvedValue({
-      items: [],
-      totalCount: 0,
-      page: 1,
-      pageSize: 15,
-      totalPages: 1,
-    })
 
     mockGetSemesters.mockResolvedValue([
       {
@@ -52,7 +45,20 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
         startDate: '2026-09-01T00:00:00Z',
         endDate: '2026-12-31T00:00:00Z',
         isActive: true,
+        coursesCount: 2,
+        classesCount: 4,
         createdAt: '2026-08-01T00:00:00Z',
+      },
+      {
+        id: 'sem-old',
+        code: 'SU25',
+        name: 'Summer 2025',
+        startDate: '2025-05-01T00:00:00Z',
+        endDate: '2025-08-31T00:00:00Z',
+        isActive: false,
+        coursesCount: 1,
+        classesCount: 2,
+        createdAt: '2025-04-01T00:00:00Z',
       },
     ])
 
@@ -69,6 +75,18 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
       },
     ])
 
+    mockGetAcademicPrograms.mockResolvedValue([
+      {
+        id: 'prog-1',
+        code: 'SE',
+        name: 'Kỹ thuật phần mềm',
+        departmentHeadUserId: null,
+        departmentHeadName: null,
+        isActive: true,
+        coursesCount: 1,
+      },
+    ])
+
     mockGetCourses.mockResolvedValue([
       {
         id: 'course-1',
@@ -76,9 +94,11 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
         name: 'Building Cross-Platform Apps',
         credits: 3,
         description: 'Dotnet 8 Clean Architecture',
+        academicProgramId: 'prog-1',
         departmentHeadUserId: 'dh-1',
         departmentHeadName: 'Trưởng BM CNTT',
         semesterId: 'sem-1',
+        semesterCode: 'FA26',
         maxMockExamsPerDay: 3,
         mockExamDurationMinutes: 30,
         mockExamTotalQuestions: 5,
@@ -89,29 +109,27 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
     ])
   })
 
-  it('renders Semesters tab and shows semester list without delete action', async () => {
+  it('renders Semesters page with ON DELETE RESTRICT notice, URL filter restore, and zero delete buttons', async () => {
     render(
-      <MemoryRouter>
-        <AdminDashboardPage />
+      <MemoryRouter initialEntries={['/admin/semesters?q=FA26&status=active']}>
+        <AdminSemestersPage />
       </MemoryRouter>,
     )
 
-    // Switch to Semesters tab
-    const tabBtn = screen.getByRole('button', { name: /Học kỳ/i })
-    fireEvent.click(tabBtn)
-
     await waitFor(() => {
       expect(mockGetSemesters).toHaveBeenCalled()
-      expect(screen.getByText('FA26')).toBeInTheDocument()
-      expect(screen.getByText('Fall 2026')).toBeInTheDocument()
+      expect(screen.getAllByText('FA26').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Fall 2026').length).toBeGreaterThan(0)
     })
 
-    // Confirm immutability rule text is present and no delete button exists
-    expect(screen.getByText(/CẤM XÓA/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Xóa/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('SU25')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Tìm mã học kỳ/i)).toHaveValue('FA26')
+    expect(screen.getByText(/ON DELETE RESTRICT/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Xóa$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Xóa học kỳ/i })).not.toBeInTheDocument()
   })
 
-  it('allows creating a semester and calls adminService.createSemester', async () => {
+  it('creates a semester with uppercase code and rejects EndDate == StartDate', async () => {
     mockCreateSemester.mockResolvedValue({
       id: 'sem-2',
       code: 'SP27',
@@ -124,26 +142,28 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
+        <AdminSemestersPage />
       </MemoryRouter>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Học kỳ/i }))
+    await waitFor(() => expect(screen.getAllByText('FA26').length).toBeGreaterThan(0))
 
-    await waitFor(() => expect(screen.getByText('FA26')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Thêm học kỳ mới/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    // Click "Thêm học kỳ mới"
-    const addBtn = screen.getByRole('button', { name: /Thêm học kỳ mới/i })
-    fireEvent.click(addBtn)
+    fireEvent.change(screen.getByLabelText(/Mã học kỳ/i), { target: { value: 'sp27' } })
+    fireEvent.change(screen.getByLabelText(/Tên học kỳ/i), { target: { value: 'Spring 2027' } })
+    fireEvent.change(screen.getByLabelText(/Ngày bắt đầu/i), { target: { value: '2027-09-01' } })
+    fireEvent.change(screen.getByLabelText(/Ngày kết thúc/i), { target: { value: '2027-09-01' } })
 
-    expect(screen.getByText('Tạo Học Kỳ Mới')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo học kỳ' }))
+    expect(mockCreateSemester).not.toHaveBeenCalled()
+    expect(
+      screen.getByText(/Ngày kết thúc học kỳ bắt buộc phải sau ngày bắt đầu/i),
+    ).toBeInTheDocument()
 
-    // Fill the form
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: FA26/i), { target: { value: 'sp27' } })
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: Fall 2026/i), { target: { value: 'Spring 2027' } })
-
-    const submitBtn = screen.getByRole('button', { name: 'Tạo học kỳ' })
-    fireEvent.click(submitBtn)
+    fireEvent.change(screen.getByLabelText(/Ngày kết thúc/i), { target: { value: '2027-12-20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo học kỳ' }))
 
     await waitFor(() => {
       expect(mockCreateSemester).toHaveBeenCalledWith(
@@ -155,82 +175,82 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
     })
   })
 
-  it('renders Courses tab and displays course details', async () => {
-    render(
+  it('handles 401/403/409/429 and keyboard Escape/FilterDropMenu navigation on Semesters page', async () => {
+    mockGetSemesters
+      .mockRejectedValueOnce({ status: 401, detail: 'Phiên đăng nhập hết hạn.' })
+      .mockRejectedValueOnce({ status: 403, detail: 'Không đủ quyền truy cập.' })
+      .mockRejectedValueOnce({ status: 429, detail: 'Quá giới hạn yêu cầu.' })
+
+    const { unmount } = render(
       <MemoryRouter>
-        <AdminDashboardPage />
+        <AdminSemestersPage />
       </MemoryRouter>,
     )
 
-    // Switch to Courses tab
-    const tabBtn = screen.getByRole('button', { name: /Môn học/i })
-    fireEvent.click(tabBtn)
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Đăng nhập lại' })).toHaveAttribute('href', '/login')
+    })
+    expect(screen.queryByText(/Chưa có học kỳ nào trong hệ thống/i)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Không đủ quyền truy cập.')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Quá giới hạn yêu cầu.')
+    })
+    unmount()
+
+    mockGetSemesters.mockResolvedValue([
+      {
+        id: 'sem-1',
+        code: 'FA26',
+        name: 'Fall 2026',
+        startDate: '2026-09-01',
+        endDate: '2026-12-31',
+        isActive: true,
+        createdAt: '2026-08-01T00:00:00Z',
+      },
+    ])
+    mockCreateSemester.mockRejectedValueOnce({
+      status: 409,
+      detail: 'CONFLICT: Học kỳ có mã FA26 đã tồn tại.',
+    })
+
+    render(
+      <MemoryRouter>
+        <AdminSemestersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('FA26').length).toBeGreaterThan(0))
+
+    // FilterDropMenu keyboard navigation
+    const filterBtn = screen.getByRole('button', { name: 'Trạng thái học kỳ' })
+    fireEvent.keyDown(filterBtn, { key: 'ArrowDown' })
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+
+    // 409 conflict inside dialog + Escape close
+    fireEvent.click(screen.getByRole('button', { name: /Thêm học kỳ mới/i }))
+    fireEvent.change(screen.getByLabelText(/Mã học kỳ/i), { target: { value: 'FA26' } })
+    fireEvent.change(screen.getByLabelText(/Tên học kỳ/i), { target: { value: 'Fall 2026' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo học kỳ' }))
 
     await waitFor(() => {
-      expect(mockGetCourses).toHaveBeenCalled()
-      expect(mockGetDepartmentHeads).toHaveBeenCalled()
-      expect(screen.getByText('PRN231')).toBeInTheDocument()
-      expect(screen.getByText('Building Cross-Platform Apps')).toBeInTheDocument()
-      expect(screen.getByText('3 TC')).toBeInTheDocument()
-      expect(screen.getByText('Trưởng BM CNTT')).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent('Học kỳ có mã FA26 đã tồn tại.')
     })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('allows creating a course and calls adminService.createCourse', async () => {
+  it('T4A-F005: preloads semesters, programs, and courses on AdminCoursesPage and creates course with explicit semesterId', async () => {
     mockCreateCourse.mockResolvedValue({
       id: 'course-2',
-      code: 'SWD392',
-      name: 'Software Architecture and Design',
-      credits: 3,
-      departmentHeadUserId: 'dh-1',
-      departmentHeadName: 'Trưởng BM CNTT',
-      semesterId: 'sem-1',
-      maxMockExamsPerDay: 3,
-      mockExamDurationMinutes: 30,
-      mockExamTotalQuestions: 5,
-      hasFollowUp: true,
-      examInputMode: 'VoiceWithTranscriptEdit',
-      isActive: true,
-    })
-
-    render(
-      <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Môn học/i }))
-
-    await waitFor(() => expect(screen.getByText('PRN231')).toBeInTheDocument())
-
-    // Click "Thêm môn học mới"
-    const addBtn = screen.getByRole('button', { name: /Thêm môn học mới/i })
-    fireEvent.click(addBtn)
-
-    expect(screen.getByText('Tạo Môn Học Mới')).toBeInTheDocument()
-
-    // Fill form
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: PRN231/i), { target: { value: 'swd392' } })
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: Cross-Platform/i), { target: { value: 'Software Architecture' } })
-
-    const submitBtn = screen.getByRole('button', { name: 'Tạo môn học' })
-    fireEvent.click(submitBtn)
-
-    await waitFor(() => {
-      expect(mockCreateCourse).toHaveBeenCalledWith(
-        expect.objectContaining({
-          code: 'SWD392',
-          name: 'Software Architecture',
-          credits: 3,
-          semesterId: 'sem-1',
-        }),
-      )
-    })
-  })
-
-  it('T4A-F005: directly navigating from Users to Courses loads semesters and submits with explicit semesterId', async () => {
-    mockCreateCourse.mockResolvedValue({
-      id: 'course-new',
       code: 'PRN232',
       name: 'Advanced .NET Architecture',
       credits: 4,
@@ -246,42 +266,33 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
     })
 
     render(
-      <MemoryRouter>
-        <AdminDashboardPage />
+      <MemoryRouter initialEntries={['/admin/courses?q=PRN&semester=sem-1&status=active']}>
+        <AdminCoursesPage />
       </MemoryRouter>,
     )
-
-    // Initially on Users tab
-    await waitFor(() => expect(mockGetUsers).toHaveBeenCalled())
-
-    // Directly click Courses tab without opening Semesters tab first
-    const coursesTabBtn = screen.getByRole('button', { name: /Môn học/i })
-    fireEvent.click(coursesTabBtn)
 
     await waitFor(() => {
       expect(mockGetCourses).toHaveBeenCalledWith(true)
       expect(mockGetDepartmentHeads).toHaveBeenCalled()
-      // Proves semesters are preloaded when directly opening Courses tab (T4A-F005)
       expect(mockGetSemesters).toHaveBeenCalled()
-      expect(screen.getByText('PRN231')).toBeInTheDocument()
+      expect(mockGetAcademicPrograms).toHaveBeenCalled()
+      expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('3 TC').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Trưởng BM CNTT').length).toBeGreaterThan(0)
     })
 
-    // Click "Thêm môn học mới"
-    const addCourseBtn = screen.getByRole('button', { name: /Thêm môn học mới/i })
-    fireEvent.click(addCourseBtn)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm môn học mới/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    expect(screen.getByText('Tạo Môn Học Mới')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/^Mã môn$/i), { target: { value: 'prn232' } })
+    fireEvent.change(screen.getByLabelText(/Tên môn học/i), {
+      target: { value: 'Advanced .NET Architecture' },
+    })
 
-    // Fill form
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: PRN231/i), { target: { value: 'PRN232' } })
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: Cross-Platform/i), { target: { value: 'Advanced .NET Architecture' } })
-
-    // Verify semester select contains FA26 option
     const semesterSelect = screen.getByRole('combobox', { name: /Học kỳ áp dụng/i })
     expect(semesterSelect).toHaveValue('sem-1')
 
-    const submitBtn = screen.getByRole('button', { name: 'Tạo môn học' })
-    fireEvent.click(submitBtn)
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo môn học' }))
 
     await waitFor(() => {
       expect(mockCreateCourse).toHaveBeenCalledWith(
@@ -295,64 +306,323 @@ describe('AdminDashboardPage - Academic Foundation (TASK-004A)', () => {
     })
   })
 
-  it('T4A-F006: rejects semester creation when EndDate equals StartDate', async () => {
-    render(
-      <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Học kỳ/i }))
-
-    await waitFor(() => expect(screen.getByText('FA26')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: /Thêm học kỳ mới/i }))
-
-    expect(screen.getByText('Tạo Học Kỳ Mới')).toBeInTheDocument()
-
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: FA26/i), { target: { value: 'FA27' } })
-    fireEvent.change(screen.getByPlaceholderText(/ví dụ: Fall 2026/i), { target: { value: 'Fall 2027' } })
-
-    // Set identical start and end dates (EndDate == StartDate)
-    const dateInputs = screen.getAllByDisplayValue(/\d{4}-\d{2}-\d{2}/)
-    // Start date and end date
-    fireEvent.change(dateInputs[0], { target: { value: '2027-09-01' } })
-    fireEvent.change(dateInputs[1], { target: { value: '2027-09-01' } })
-
-    const submitBtn = screen.getByRole('button', { name: 'Tạo học kỳ' })
-    fireEvent.click(submitBtn)
-
-    // Must NOT call createSemester when EndDate == StartDate
-    expect(mockCreateSemester).not.toHaveBeenCalled()
-  })
-
-  it('allows assigning Department Head to a course', async () => {
+  it('assigns Department Head to both a course and an academic program', async () => {
     mockAssignDepartmentHead.mockResolvedValue({
       courseId: 'course-1',
+      courseCode: 'PRN231',
+      courseName: 'Building Cross-Platform Apps',
       departmentHeadUserId: 'dh-1',
+      departmentHeadName: 'Trưởng BM CNTT',
+      departmentHeadEmail: 'head@fpt.edu.vn',
+    })
+    mockAssignProgramDepartmentHead.mockResolvedValue({
+      id: 'prog-1',
+      code: 'SE',
+      name: 'Kỹ thuật phần mềm',
+      departmentHeadUserId: 'dh-1',
+      departmentHeadName: 'Trưởng BM CNTT',
+      isActive: true,
+      coursesCount: 1,
     })
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
+        <AdminCoursesPage />
       </MemoryRouter>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Môn học/i }))
+    await waitFor(() => expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0))
 
-    await waitFor(() => expect(screen.getByText('PRN231')).toBeInTheDocument())
+    // Assign Program Dept Head
+    fireEvent.click(screen.getByRole('button', { name: /Gán Trưởng BM ngành SE/i }))
+    fireEvent.change(screen.getByLabelText(/Chọn Trưởng bộ môn/i), { target: { value: 'dh-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phân công ngành' }))
 
-    // Click "Gán Trưởng BM"
-    const assignBtn = screen.getByRole('button', { name: /Gán Trưởng BM/i })
-    fireEvent.click(assignBtn)
+    await waitFor(() => {
+      expect(mockAssignProgramDepartmentHead).toHaveBeenCalledWith('prog-1', 'dh-1')
+    })
 
-    expect(screen.getByText('Gán Trưởng Bộ Môn')).toBeInTheDocument()
-
-    const saveBtn = screen.getByRole('button', { name: 'Lưu phân công' })
-    fireEvent.click(saveBtn)
+    // Assign Course Dept Head
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gán Trưởng BM PRN231' })[0])
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu phân công' }))
 
     await waitFor(() => {
       expect(mockAssignDepartmentHead).toHaveBeenCalledWith('course-1', 'dh-1')
+    })
+  })
+
+  it('edits an existing semester via updateSemester and maps 400/422 server FieldError on AdminSemestersPage', async () => {
+    mockUpdateSemester
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          data: {
+            detail: 'Dữ liệu học kỳ không hợp lệ.',
+            errors: {
+              Code: ['Mã học kỳ đã tồn tại ở kỳ khác.'],
+              EndDate: ['Ngày kết thúc vượt quá giới hạn.'],
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'sem-1',
+        code: 'FA26',
+        name: 'Fall 2026 Updated',
+        startDate: '2026-09-01T00:00:00Z',
+        endDate: '2027-01-15T00:00:00Z',
+        isActive: true,
+        coursesCount: 2,
+        classesCount: 4,
+        createdAt: '2026-08-01T00:00:00Z',
+      })
+
+    render(
+      <MemoryRouter>
+        <AdminSemestersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('FA26').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sửa học kỳ FA26' })[0])
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Mã học kỳ/i)).toHaveValue('FA26')
+    expect(screen.getByLabelText(/Tên học kỳ/i)).toHaveValue('Fall 2026')
+
+    fireEvent.change(screen.getByLabelText(/Tên học kỳ/i), {
+      target: { value: 'Fall 2026 Updated' },
+    })
+    fireEvent.change(screen.getByLabelText(/Ngày kết thúc/i), {
+      target: { value: '2027-01-15' },
+    })
+
+    // First submit triggers 422 field errors
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật học kỳ' }))
+    await waitFor(() => {
+      expect(screen.getByText('Mã học kỳ đã tồn tại ở kỳ khác.')).toBeInTheDocument()
+      expect(screen.getByText('Ngày kết thúc vượt quá giới hạn.')).toBeInTheDocument()
+    })
+
+    // Second submit succeeds
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật học kỳ' }))
+    await waitFor(() => {
+      expect(mockUpdateSemester).toHaveBeenLastCalledWith('sem-1', {
+        code: 'FA26',
+        name: 'Fall 2026 Updated',
+        startDate: '2026-09-01',
+        endDate: '2027-01-15',
+        isActive: true,
+      })
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Đã cập nhật học kỳ [FA26] thành công.',
+      )
+    })
+  })
+
+  it('validates Course credits/maxMockExamsPerDay bounds and rejects decimal strings like 3.5', async () => {
+    render(
+      <MemoryRouter>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: /Thêm môn học mới/i }))
+    fireEvent.change(screen.getByLabelText(/^Mã môn$/i), { target: { value: 'SWD392' } })
+    fireEvent.change(screen.getByLabelText(/Tên môn học/i), {
+      target: { value: 'Software Architecture' },
+    })
+
+    // Decimal string '3.5' and '4.9' must fail integer validation
+    fireEvent.change(screen.getByLabelText(/Số tín chỉ/i), { target: { value: '3.5' } })
+    fireEvent.change(screen.getByLabelText(/Hạn ngạch thi thử mỗi ngày/i), {
+      target: { value: '4.9' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo môn học' }))
+
+    expect(screen.getByText('Số tín chỉ phải là số nguyên từ 1 đến 10.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Hạn ngạch thi thử mỗi ngày (max_mock_exams_per_day) phải từ 1 đến 20 lượt.'),
+    ).toBeInTheDocument()
+    expect(mockCreateCourse).not.toHaveBeenCalled()
+
+    // Out-of-bounds: credits 11 and maxMockExamsPerDay 21
+    fireEvent.change(screen.getByLabelText(/Số tín chỉ/i), { target: { value: '11' } })
+    fireEvent.change(screen.getByLabelText(/Hạn ngạch thi thử mỗi ngày/i), {
+      target: { value: '21' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo môn học' }))
+
+    expect(screen.getByText('Số tín chỉ phải là số nguyên từ 1 đến 10.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Hạn ngạch thi thử mỗi ngày (max_mock_exams_per_day) phải từ 1 đến 20 lượt.'),
+    ).toBeInTheDocument()
+    expect(mockCreateCourse).not.toHaveBeenCalled()
+  })
+
+  it('clears course description with empty string on Edit and maps 400/422 server FieldError', async () => {
+    mockUpdateCourse
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          data: {
+            detail: 'Dữ liệu môn học chưa hợp lệ.',
+            errors: {
+              Code: ['Mã môn học bị trùng.'],
+              DepartmentHeadUserId: ['Trưởng bộ môn không hợp lệ.'],
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'course-1',
+        code: 'PRN231',
+        name: 'Building Cross-Platform Apps',
+        credits: 3,
+        description: null,
+        academicProgramId: 'prog-1',
+        departmentHeadUserId: 'dh-1',
+        departmentHeadName: 'Trưởng BM CNTT',
+        semesterId: 'sem-1',
+        semesterCode: 'FA26',
+        maxMockExamsPerDay: 3,
+        mockExamDurationMinutes: 30,
+        mockExamTotalQuestions: 5,
+        hasFollowUp: true,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        isActive: true,
+      })
+
+    render(
+      <MemoryRouter>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa môn học PRN231' }))
+    expect(screen.getByLabelText(/Mô tả tóm tắt môn học/i)).toHaveValue(
+      'Dotnet 8 Clean Architecture',
+    )
+
+    // Clear description
+    fireEvent.change(screen.getByLabelText(/Mô tả tóm tắt môn học/i), {
+      target: { value: '   ' },
+    })
+
+    // First submit triggers 400 FieldErrors including departmentHeadUserId
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật môn học' }))
+    await waitFor(() => {
+      expect(screen.getByText('Mã môn học bị trùng.')).toBeInTheDocument()
+      expect(screen.getByText('Trưởng bộ môn không hợp lệ.')).toBeInTheDocument()
+      expect(screen.getByLabelText(/Trưởng bộ môn phụ trách/i)).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      )
+    })
+
+    // Second submit succeeds and sends description: "" (NOT undefined)
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật môn học' }))
+    await waitFor(() => {
+      expect(mockUpdateCourse).toHaveBeenLastCalledWith(
+        'course-1',
+        expect.objectContaining({
+          description: '',
+        }),
+      )
+    })
+  })
+
+  it('surfaces 401/403/429 + Retry on courses, programsProblem, and getDepartmentHeads/getSemesters partial rejections', async () => {
+    // 1) Auxiliary partial rejections (heads & semesters fail while courses succeed)
+    mockGetDepartmentHeads.mockRejectedValueOnce({
+      status: 403,
+      detail: 'Không có quyền đọc danh sách Trưởng bộ môn.',
+    })
+    mockGetSemesters.mockRejectedValueOnce({
+      status: 500,
+      detail: 'Lỗi máy chủ khi tải học kỳ.',
+    })
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0)
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('Không có quyền đọc danh sách Trưởng bộ môn.')
+      expect(alert).toHaveTextContent('Lỗi máy chủ khi tải học kỳ.')
+    })
+
+    // Retry reloads all data cleanly
+    mockGetDepartmentHeads.mockResolvedValueOnce([
+      {
+        id: 'dh-1',
+        email: 'head@fpt.edu.vn',
+        fullName: 'Trưởng BM CNTT',
+        role: 'department_head',
+        isActive: true,
+        mustChangePassword: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    mockGetSemesters.mockResolvedValueOnce([])
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull()
+    })
+    unmount()
+
+    // 2) programsProblem isolated while courses succeed, plus courses 401 -> 403 -> 429 + Retry
+    mockGetAcademicPrograms.mockRejectedValueOnce({
+      status: 429,
+      detail: 'Quá tải danh sách chương trình đào tạo.',
+    })
+    const { unmount: unmount2 } = render(
+      <MemoryRouter>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('PRN231').length).toBeGreaterThan(0)
+      expect(screen.getByRole('alert')).toHaveTextContent('Quá tải danh sách chương trình đào tạo.')
+      expect(screen.queryByText('Chưa có chương trình đào tạo nào')).toBeNull()
+    })
+    unmount2()
+
+    mockGetCourses
+      .mockRejectedValueOnce({ status: 401, detail: 'Phiên đăng nhập hết hạn.' })
+      .mockRejectedValueOnce({ status: 403, detail: 'Không có quyền quản trị môn học.' })
+      .mockRejectedValueOnce({ status: 429, detail: 'Giới hạn tần suất gọi API môn học.' })
+
+    render(
+      <MemoryRouter>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Đăng nhập lại' })).toHaveAttribute('href', '/login')
+      expect(screen.queryByText('Chưa có môn học nào trong hệ thống')).toBeNull()
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0])
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Không có quyền quản trị môn học.')
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0])
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Giới hạn tần suất gọi API môn học.')
     })
   })
 })

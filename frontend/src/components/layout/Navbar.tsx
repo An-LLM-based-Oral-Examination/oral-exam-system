@@ -13,13 +13,16 @@ import {
   TimerReset,
   BookOpenCheck,
   BookOpen,
+  CalendarDays,
   FileCheck2,
+  FileText,
   ClipboardCheck,
   LayoutDashboard,
   LogOut,
   Menu,
   ServerCog,
   ShieldAlert,
+  SlidersHorizontal,
   TicketCheck,
   UserRound,
   UsersRound,
@@ -63,8 +66,14 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
   '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
   '/dlq': { label: 'Lỗi chấm AI', icon: ServerCog },
-  '/admin': { label: 'Quản trị hệ thống', icon: ShieldAlert },
-  [ROUTE_PATHS.admin.dashboard]: { label: 'Quản trị hệ thống', icon: ShieldAlert },
+  '/admin': { label: 'Tổng quan quản trị', icon: LayoutDashboard },
+  [ROUTE_PATHS.admin.dashboard]: { label: 'Tổng quan quản trị', icon: LayoutDashboard },
+  [ROUTE_PATHS.admin.users]: { label: 'Quản lý người dùng', icon: UsersRound },
+  [ROUTE_PATHS.admin.semesters]: { label: 'Học kỳ & Môn mở', icon: CalendarDays },
+  [ROUTE_PATHS.admin.courses]: { label: 'Môn học, CTĐT & CLO', icon: BookOpen },
+  [ROUTE_PATHS.admin.configs]: { label: 'Cấu hình MF-01', icon: SlidersHorizontal },
+  [ROUTE_PATHS.admin.notifications]: { label: 'Thông báo 3NF', icon: Bell },
+  [ROUTE_PATHS.admin.auditLogs]: { label: 'Nhật ký kiểm toán', icon: FileText },
   [ROUTE_PATHS.admin.dlq]: { label: 'Lỗi chấm MF-01/02', icon: ServerCog },
   '/profile': { label: 'Hồ sơ cá nhân', icon: UserRound },
 }
@@ -88,33 +97,57 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const isStudent = canonicalRole(user?.role) === 'Student'
+  const normalizedRole = user ? canonicalRole(user.role) : null
+  const isStudent = normalizedRole === 'Student'
   const hasNotifications = Boolean(user)
   const [isNotificationOpen, setIsNotificationOpen] = useState(false)
   const notifications = useStudentNotifications(hasNotifications && isNotificationOpen, hasNotifications)
   const page =
     PAGE_META[location.pathname] ??
-    (canonicalRole(user?.role) === 'DepartmentHead'
+    (normalizedRole === 'DepartmentHead'
       ? Object.entries(PAGE_META)
         .filter(([path]) => path.startsWith('/department-head/') && location.pathname.startsWith(`${path}/`))
         .sort(([left], [right]) => right.length - left.length)[0]?.[1]
       : undefined) ??
+    (location.pathname.startsWith('/admin')
+      ? { label: 'Cổng quản trị', icon: ShieldAlert }
+      : undefined) ??
     (isStudent ? { label: location.pathname.startsWith('/classes/') ? 'Chi tiết lớp học' : 'Cổng sinh viên', icon: isStudent && location.pathname.startsWith('/classes/') ? UsersRound : LayoutDashboard } : null) ??
     (location.pathname.startsWith('/lecturer/classes') || location.pathname.startsWith('/in-class-shifts')
       ? { label: 'Quản lý lớp học', icon: UsersRound }
-      : { label: 'Cổng giảng viên', icon: LayoutDashboard })
+      : normalizedRole === 'Admin'
+        ? { label: 'Cổng quản trị', icon: ShieldAlert }
+        : normalizedRole === 'DepartmentHead'
+          ? { label: 'Cổng Trưởng BM', icon: LayoutDashboard }
+          : normalizedRole === 'ExaminationOfficer'
+            ? { label: 'Cổng Khảo thí', icon: TicketCheck }
+            : normalizedRole === 'Proctor'
+              ? { label: 'Cổng Giám thị', icon: ClipboardCheck }
+              : { label: 'Cổng giảng viên', icon: LayoutDashboard })
   const PageIcon = page.icon
   const semesterLabel = getSemesterLabel()
   const roleLabel =
-    isStudent ? 'Sinh viên' : user?.role === 'Admin'
+    normalizedRole === 'Student' ? 'Sinh viên' : normalizedRole === 'Admin'
       ? 'Quản trị viên'
-      : user?.role === 'DepartmentHead'
+      : normalizedRole === 'DepartmentHead'
         ? 'Trưởng Bộ môn'
-        : user?.role === 'ExaminationOfficer'
+        : normalizedRole === 'ExaminationOfficer'
           ? 'Cán bộ Khảo thí'
-          : user?.role === 'Proctor'
+          : normalizedRole === 'Proctor'
             ? 'Giám thị'
             : 'Giảng viên'
+  const roleInitialsFallback =
+    normalizedRole === 'Admin'
+      ? 'QT'
+      : normalizedRole === 'Student'
+        ? 'SV'
+        : normalizedRole === 'DepartmentHead'
+          ? 'TB'
+          : normalizedRole === 'ExaminationOfficer'
+            ? 'KT'
+            : normalizedRole === 'Proctor'
+              ? 'GT'
+              : 'GV'
 
   const handleLogout = () => {
     void logout().finally(() => navigate('/login', { replace: true }))
@@ -165,10 +198,10 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           <button
             type="button"
             onClick={onOpenSidebar}
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#4988C4]/30 bg-[#BDE8F5] text-[#0F2854] transition hover:bg-[#4988C4]/20 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:hidden"
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#4988C4]/30 bg-[#BDE8F5] text-[#0F2854] transition-colors duration-150 hover:bg-[#4988C4]/20 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none md:hidden"
             aria-label="Mở menu điều hướng"
           >
-            <Menu className="size-5" aria-hidden="true" />
+            <Menu className="size-5" strokeWidth={1.5} aria-hidden="true" />
           </button>
 
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D] text-white shadow-[0_8px_16px_rgba(28,77,141,0.28)]">
@@ -190,14 +223,14 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           <button
             type="button"
             onClick={() => setIsNotificationOpen(true)}
-            className="relative flex size-10 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+            className="relative flex size-11 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             aria-label="Thông báo"
             aria-expanded={isNotificationOpen}
             aria-controls="student-notification-drawer"
           >
-            <Bell className="size-[17px]" />
+            <Bell className="size-[17px]" strokeWidth={1.5} />
             {notifications.unreadCount > 0 ? (
-              <span className="absolute -top-1 -right-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ef5c72] px-1 text-[9px] leading-none font-bold text-white ring-2 ring-white">
+              <span className="absolute -top-1 -right-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-[#ef5c72] px-1 text-[9px] leading-none font-bold text-white tabular-nums ring-2 ring-white">
                 {notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}
               </span>
             ) : null}
@@ -205,7 +238,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           )}
           {isStudent ? <Link
             to="/profile"
-            className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
+            className="flex min-h-11 items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             aria-label="Mở hồ sơ cá nhân"
           >
             <div className="hidden text-right sm:block">
@@ -219,7 +252,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
             <div
               className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white"
             >
-              {getInitials(user?.fullName ?? roleLabel) || 'GV'}
+              {getInitials(user?.fullName ?? roleLabel) || roleInitialsFallback}
             </div>
           </Link> : <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left">
             <div className="hidden text-right sm:block">
@@ -233,10 +266,10 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex size-10 items-center justify-center rounded-xl border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b] transition hover:bg-[#f8d5d8] focus-visible:outline-2 focus-visible:outline-[#c2415b]"
+            className="flex size-11 items-center justify-center rounded-xl border border-[#f3c2c8] bg-[#fdecec] text-[#c2415b] transition-colors duration-150 hover:bg-[#f8d5d8] focus-visible:outline-2 focus-visible:outline-[#c2415b] motion-reduce:transition-none"
             aria-label="Đăng xuất"
           >
-            <LogOut className="size-4" aria-hidden="true" />
+            <LogOut className="size-4" strokeWidth={1.5} aria-hidden="true" />
           </button>
         </div>
     </PortalHeader>

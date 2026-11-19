@@ -22,7 +22,7 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
         BatchCreateOfficialExamSessionsCommand request,
         CancellationToken cancellationToken)
     {
-        if (!await OfficialExamAuthorization.IsActiveOfficerOrAdminAsync(context, request.ActorUserId, cancellationToken))
+        if (!await OfficialExamAuthorization.IsActiveOfficerAsync(context, request.ActorUserId, cancellationToken))
         {
             return Result<BatchCreateOfficialExamSessionsResponse>.Failure($"FORBIDDEN: {OfficialExamErrors.Forbidden}");
         }

@@ -105,7 +105,12 @@ public sealed class GetLecturerDashboardQueryHandler
             return Result<LecturerDashboardResponseDto>.Failure("NOT_FOUND: Không tìm thấy thông tin giảng viên.");
         }
 
-        var isDeptHeadOrAdmin = user.Role is UserRole.DepartmentHead or UserRole.Admin;
+        if (!user.IsActive || user.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
+        {
+            return Result<LecturerDashboardResponseDto>.Failure("FORBIDDEN: Không có quyền truy cập bảng điều khiển giảng viên.");
+        }
+
+        var isDeptHeadOrAdmin = user.Role == UserRole.DepartmentHead;
 
         var examQuestionsQuery = _context.ExamQuestions
             .AsNoTracking()

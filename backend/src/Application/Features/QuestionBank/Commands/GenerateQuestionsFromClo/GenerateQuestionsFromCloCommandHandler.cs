@@ -40,15 +40,15 @@ public sealed class GenerateQuestionsFromCloCommandHandler
             return Result<GenerateQuestionsFromCloResponseDto>.Failure("Không tìm thấy môn học tương ứng hoặc môn học đã bị khóa.");
         }
 
-        // 2. Kiểm tra quyền người dùng (Phải là lecturer, department_head hoặc admin)
+        // 2. Kiểm tra quyền người dùng (Phải là lecturer hoặc department_head)
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.RequesterUserId && u.IsActive, cancellationToken);
 
-        if (user == null || (user.Role != UserRole.Lecturer && user.Role != UserRole.DepartmentHead && user.Role != UserRole.Admin))
+        if (user == null || (user.Role != UserRole.Lecturer && user.Role != UserRole.DepartmentHead))
         {
             return Result<GenerateQuestionsFromCloResponseDto>.Failure(
-                "Chỉ Giảng viên ('lecturer'), Trưởng Bộ Môn ('department_head') hoặc Quản trị viên mới được kích hoạt AI sinh câu hỏi.");
+                "Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head') mới được kích hoạt AI sinh câu hỏi.");
         }
 
         // Kiểm tra phân công môn học nếu môn học đã được thiết lập phân công giảng viên / trưởng bộ môn

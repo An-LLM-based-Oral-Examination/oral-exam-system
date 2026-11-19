@@ -3,7 +3,7 @@ import { LoadingState } from '@/components/common/LoadingState'
 import { SearchField } from '@/components/common/SearchField'
 import { BackLink } from '@/components/common/BackLink'
 import { SEARCH_DELAY_MS, useSearchInput } from '@/hooks/useSearchInput'
-import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Check,
@@ -100,26 +100,31 @@ export function LecturerClassDetailPage() {
   const [resetOpen, setResetOpen] = useState(false)
   const [resetResult, setResetResult] = useState<ResetClassPasswordResponse | null>(null)
   const [sessionJoinPassword, setSessionJoinPassword] = useState<string | null>(null)
-  const [copiedJoinCode, setCopiedJoinCode] = useState(false)
   const [removing, setRemoving] = useState<ClassStudent | null>(null)
   const [removingBusy, setRemovingBusy] = useState(false)
+  const loadRequestIdRef = useRef(0)
 
-  const load = async (targetClassId = classId) => {
+  const load = useCallback(async (targetClassId: string) => {
     if (!targetClassId) return
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
     setLoadError('')
     try {
       const nextDetail = await classService.getClassDetail(targetClassId)
+      if (requestId !== loadRequestIdRef.current) return
       setDetail(nextDetail)
     } catch (error) {
+      if (requestId !== loadRequestIdRef.current) return
       const message = formatClassError(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
       setLoadError(message)
       toast.error(message)
       setDetail((current) => (current?.classId === targetClassId ? current : null))
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     return scheduleUi(() => {
@@ -128,20 +133,9 @@ export function LecturerClassDetailPage() {
       setSessionJoinPassword(null)
       setResetResult(null)
       setResetOpen(false)
-      setCopiedJoinCode(false)
       void load(classId)
     })
-  }, [classId])
-
-  const handleCopyJoinCode = async (joinCode: string) => {
-    const copied = await copyText(joinCode)
-    if (copied) {
-      setCopiedJoinCode(true)
-      toast.success('Đã sao chép mã tham gia lớp.')
-      return
-    }
-    toast.warning('Không thể tự động sao chép. Vui lòng sao chép thủ công mã tham gia.')
-  }
+  }, [classId, load])
 
   const selectTab = (next: DetailTab) => {
     const params = new URLSearchParams(searchParams)
@@ -156,7 +150,7 @@ export function LecturerClassDetailPage() {
       await classService.dropStudent(detail.classId, removing.studentId)
       toast.success(`Đã xóa ${removing.fullName} khỏi lớp.`)
       setRemoving(null)
-      await load()
+      await load(detail.classId)
     } catch (removeError) {
       toast.error(userMessage(removeError, 'Không xóa được sinh viên. Vui lòng thử lại.'))
     } finally {
@@ -225,25 +219,6 @@ export function LecturerClassDetailPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {detail.joinCode ? (
-                  <div className="inline-flex max-w-full items-center gap-1.5 rounded-xl border border-[#82aedb]/55 bg-white py-1 pr-1.5 pl-2.5">
-                    <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
-                      Mã tham gia
-                    </span>
-                    <span className="font-mono text-sm font-black tracking-[0.06em] text-[#0F2854]">
-                      {detail.joinCode}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Sao chép mã tham gia"
-                      onClick={() => void handleCopyJoinCode(detail.joinCode)}
-                      className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
-                    >
-                      {copiedJoinCode ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-                      <span>{copiedJoinCode ? 'Đã sao chép' : 'Sao chép'}</span>
-                    </button>
-                  </div>
-                ) : null}
                 <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-[#82aedb]/55 bg-white py-1.5 pr-1.5 pl-2.5">
                   <KeyRound className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
                   <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
@@ -352,7 +327,7 @@ export function LecturerClassDetailPage() {
           onAdded={async (name) => {
             setAddOpen(false)
             toast.success(`Đã thêm ${name} vào lớp.`)
-            await load()
+            await load(detail.classId)
           }}
         />
       ) : null}
@@ -647,7 +622,12 @@ function JoinPasswordReveal({
   const toggle = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (!canReveal) return
+    if (!canReveal) {
+      toast.info(
+        'Mật khẩu cũ được mã hóa một chiều. Bấm "Đặt lại mật khẩu lớp" một lần để lưu và bật xem trực tiếp.',
+      )
+      return
+    }
     setVisible((current) => !current)
   }
 
@@ -666,29 +646,39 @@ function JoinPasswordReveal({
 
   return (
     <div className="inline-flex min-w-0 items-center gap-0.5">
-      <p className="max-w-[9rem] truncate font-mono text-sm font-black tracking-[0.06em] text-[#0F2854] sm:max-w-[12rem]">
+      <p
+        title={visible && secret ? secret : undefined}
+        className="max-w-[11rem] truncate font-mono text-sm font-black tracking-[0.06em] text-[#0F2854] sm:max-w-[16rem]"
+      >
         {!hasPassword && !secret ? 'Chưa đặt' : visible && secret ? secret : '••••••••'}
       </p>
+      {canReveal || hasPassword ? (
+        <button
+          type="button"
+          aria-label={visible ? 'Ẩn mật khẩu tham gia' : 'Hiện mật khẩu tham gia'}
+          aria-pressed={canReveal ? visible : undefined}
+          title={
+            canReveal
+              ? visible
+                ? 'Ẩn mật khẩu tham gia'
+                : 'Hiện mật khẩu tham gia'
+              : 'Mật khẩu cũ chưa thể hiển thị lại — bấm Đặt lại mật khẩu lớp một lần để bật xem trực tiếp'
+          }
+          onClick={toggle}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
+        >
+          {visible && canReveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+        </button>
+      ) : null}
       {canReveal ? (
-        <>
-          <button
-            type="button"
-            aria-label={visible ? 'Ẩn mật khẩu tham gia' : 'Hiện mật khẩu tham gia'}
-            aria-pressed={visible}
-            onClick={toggle}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
-          >
-            {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-          </button>
-          <button
-            type="button"
-            aria-label="Sao chép mật khẩu tham gia"
-            onClick={(event) => void handleCopy(event)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
-          >
-            {copied ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-          </button>
-        </>
+        <button
+          type="button"
+          aria-label="Sao chép mật khẩu tham gia"
+          onClick={(event) => void handleCopy(event)}
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
+        >
+          {copied ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+        </button>
       ) : null}
     </div>
   )
@@ -704,9 +694,9 @@ function ResetClassPasswordDialog({
   onResetSuccess: (response: ResetClassPasswordResponse) => Promise<void>
 }) {
   const [newPassword, setNewPassword] = useState('')
-  const [newJoinCode, setNewJoinCode] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
   const [isJoinEnabled, setIsJoinEnabled] = useState(detail.isJoinEnabled)
-  const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string; newJoinCode?: string }>({})
+  const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string }>({})
   const [submitError, setSubmitError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -715,15 +705,11 @@ function ResetClassPasswordDialog({
     if (busy) return
 
     const trimmedPassword = newPassword.trim()
-    const trimmedCode = newJoinCode.trim()
-    const nextErrors: { newPassword?: string; newJoinCode?: string } = {}
+    const nextErrors: { newPassword?: string } = {}
     if (trimmedPassword.length < 8) {
       nextErrors.newPassword = 'Mật khẩu mới cần ít nhất 8 ký tự.'
     } else if (trimmedPassword.length > 128) {
       nextErrors.newPassword = 'Mật khẩu mới tối đa 128 ký tự.'
-    }
-    if (trimmedCode && (trimmedCode.length < 4 || trimmedCode.length > 32)) {
-      nextErrors.newJoinCode = 'Mã tham gia mới cần từ 4 đến 32 ký tự.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -737,7 +723,6 @@ function ResetClassPasswordDialog({
     try {
       const response = await classService.resetPassword(detail.classId, {
         newPassword: trimmedPassword,
-        newJoinCode: trimmedCode || undefined,
         isJoinEnabled,
       })
       await onResetSuccess(response)
@@ -782,38 +767,36 @@ function ResetClassPasswordDialog({
           </div>
         ) : null}
 
-        <label className="block">
-          <span className={fieldLabelClass(Boolean(fieldErrors.newPassword))}>Mật khẩu mới</span>
-          <input
-            value={newPassword}
-            onChange={(event) => {
-              setNewPassword(event.target.value)
-              setSubmitError('')
-              setFieldErrors((current) => ({ ...current, newPassword: undefined }))
-            }}
-            placeholder="Ít nhất 8 ký tự"
-            aria-invalid={Boolean(fieldErrors.newPassword) || undefined}
-            className={cn(ds.field, 'mt-1.5', fieldErrors.newPassword && fieldInvalidClass)}
-          />
+        <div className="block">
+          <label htmlFor="reset-class-new-password" className={fieldLabelClass(Boolean(fieldErrors.newPassword))}>
+            Mật khẩu mới
+          </label>
+          <div className="relative mt-1.5">
+            <input
+              id="reset-class-new-password"
+              type={showNewPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(event) => {
+                setNewPassword(event.target.value)
+                setSubmitError('')
+                setFieldErrors((current) => ({ ...current, newPassword: undefined }))
+              }}
+              placeholder="Ít nhất 8 ký tự"
+              aria-invalid={Boolean(fieldErrors.newPassword) || undefined}
+              className={cn(ds.field, 'pr-10', fieldErrors.newPassword && fieldInvalidClass)}
+            />
+            <button
+              type="button"
+              aria-label={showNewPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              aria-pressed={showNewPassword}
+              onClick={() => setShowNewPassword((visible) => !visible)}
+              className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+            >
+              {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
           <FieldError message={fieldErrors.newPassword} />
-        </label>
-
-        <label className="block">
-          <span className={fieldLabelClass(Boolean(fieldErrors.newJoinCode))}>Mã tham gia mới (tùy chọn)</span>
-          <input
-            value={newJoinCode}
-            onChange={(event) => {
-              setNewJoinCode(event.target.value)
-              setSubmitError('')
-              setFieldErrors((current) => ({ ...current, newJoinCode: undefined }))
-            }}
-            placeholder={detail.joinCode || 'Để trống để giữ nguyên mã hiện tại'}
-            aria-invalid={Boolean(fieldErrors.newJoinCode) || undefined}
-            className={cn(ds.field, 'mt-1.5', fieldErrors.newJoinCode && fieldInvalidClass)}
-          />
-          <p className="mt-1 text-xs text-[#5b6b84]">Để trống để giữ nguyên mã tham gia hiện tại.</p>
-          <FieldError message={fieldErrors.newJoinCode} />
-        </label>
+        </div>
 
         <label className="flex items-center gap-2.5 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3 py-2.5">
           <input
@@ -836,14 +819,14 @@ function ResetCredentialsDialog({
   result: ResetClassPasswordResponse
   onClose: () => void
 }) {
-  const [copiedField, setCopiedField] = useState<'joinCode' | 'joinPassword' | null>(null)
+  const [copiedPassword, setCopiedPassword] = useState(false)
 
-  const handleCopy = async (field: 'joinCode' | 'joinPassword', value: string | null) => {
+  const handleCopyPassword = async (value: string | null) => {
     if (!value) return
     const ok = await copyText(value)
     if (ok) {
-      setCopiedField(field)
-      toast.success(field === 'joinCode' ? 'Đã sao chép mã tham gia.' : 'Đã sao chép mật khẩu mới.')
+      setCopiedPassword(true)
+      toast.success('Đã sao chép mật khẩu mới.')
       return
     }
     toast.warning('Không thể tự động sao chép. Vui lòng sao chép thủ công.')
@@ -866,25 +849,7 @@ function ResetCredentialsDialog({
     >
       <div className="space-y-3">
         <div className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3.5 py-2.5 text-xs font-semibold text-[#8a5e17]">
-          Mật khẩu mới chỉ hiển thị một lần ngay sau khi đặt lại. Hãy sao chép để gửi cho sinh viên.
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3.5 py-2.5">
-          <div>
-            <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mã tham gia</p>
-            <p className="mt-0.5 font-mono text-base font-black tracking-[0.08em] text-[#0F2854]">
-              {result.joinCode}
-            </p>
-          </div>
-          {result.joinCode ? (
-            <button
-              type="button"
-              onClick={() => void handleCopy('joinCode', result.joinCode)}
-              className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
-            >
-              {copiedField === 'joinCode' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-              {copiedField === 'joinCode' ? 'Đã sao chép' : 'Sao chép mã'}
-            </button>
-          ) : null}
+          Bạn có thể sao chép ngay để gửi cho sinh viên, hoặc bấm biểu tượng con mắt tại trang chi tiết lớp để xem lại bất cứ lúc nào.
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3.5 py-2.5">
           <div>
@@ -896,11 +861,11 @@ function ResetCredentialsDialog({
           {result.joinPassword ? (
             <button
               type="button"
-              onClick={() => void handleCopy('joinPassword', result.joinPassword)}
+              onClick={() => void handleCopyPassword(result.joinPassword)}
               className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
             >
-              {copiedField === 'joinPassword' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-              {copiedField === 'joinPassword' ? 'Đã sao chép' : 'Sao chép mật khẩu'}
+              {copiedPassword ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+              {copiedPassword ? 'Đã sao chép' : 'Sao chép mật khẩu'}
             </button>
           ) : null}
         </div>

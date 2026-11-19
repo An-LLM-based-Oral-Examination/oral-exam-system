@@ -410,6 +410,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(150).HasDefaultValue("").IsRequired();
             entity.Property(e => e.JoinCode).HasColumnName("join_code").HasMaxLength(20).IsRequired();
             entity.Property(e => e.JoinPasswordHash).HasColumnName("join_password_hash").HasMaxLength(256);
+            entity.Property(e => e.JoinPasswordProtected).HasColumnName("join_password_protected").HasMaxLength(1024);
             entity.Property(e => e.IsJoinEnabled).HasColumnName("is_join_enabled").HasDefaultValue(true);
             entity.Property(e => e.AllowSelfEnrollment).HasColumnName("allow_self_enrollment").HasDefaultValue(true);
             entity.HasIndex(e => e.Code).IsUnique().HasDatabaseName("ix_classes_code");

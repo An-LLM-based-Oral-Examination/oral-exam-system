@@ -1,6 +1,7 @@
 import { StudentClassesPage } from '@/pages/student/StudentClassesPage'
 import { Suspense } from 'react'
 import { Navigate, Outlet, Route, createRoutesFromElements } from 'react-router-dom'
+import { AdminDashboardRouteEntry } from '@/routes/AdminDashboardRouteEntry'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
 import { LegacyRoleRouteLayout } from '@/routes/LegacyRoleRouteLayout'
@@ -8,7 +9,12 @@ import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { ProfileRouteLayout } from '@/routes/ProfileRouteLayout'
 import { RoleBasedRedirect } from '@/routes/RoleBasedRedirect'
 import {
-  AdminDashboardPage,
+  AdminAuditLogsPage,
+  AdminConfigsPage,
+  AdminCoursesPage,
+  AdminNotificationsPage,
+  AdminSemestersPage,
+  AdminUsersPage,
   DepartmentHeadDashboardPage,
   DepartmentLecturerAssignmentPage,
   DepartmentCourseClosPage,
@@ -22,7 +28,7 @@ import {
   DeadLetterQueuePage,
   InClassLiveRedirect,
   InClassShiftResultsPage,
-  InstructorPageFallback,
+  PortalPageFallback,
   LecturerClassDetailPage,
   LecturerClassManagementPage,
   LecturerDashboardPage,
@@ -213,7 +219,7 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<InstructorPageFallback />}>
+              <Suspense fallback={<PortalPageFallback />}>
                 <Outlet />
               </Suspense>
             }
@@ -242,7 +248,7 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<InstructorPageFallback />}>
+              <Suspense fallback={<PortalPageFallback />}>
                 <Outlet />
               </Suspense>
             }
@@ -267,7 +273,7 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<InstructorPageFallback />}>
+              <Suspense fallback={<PortalPageFallback />}>
                 <Outlet />
               </Suspense>
             }
@@ -277,18 +283,25 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      {/* Admin Portal: User management, system configs & audit logs */}
+      {/* Admin Portal: User management, academic catalog, configs, notifications, audit & MF-01/02 DLQ */}
       <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+        <Route path="/admin" element={<Navigate to={ROUTE_PATHS.admin.dashboard} replace />} />
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<InstructorPageFallback />}>
+              <Suspense fallback={<PortalPageFallback label="Đang tải cổng quản trị…" />}>
                 <Outlet />
               </Suspense>
             }
           >
-            <Route path={ROUTE_PATHS.admin.dashboard} element={<AdminDashboardPage />} />
+            <Route path={ROUTE_PATHS.admin.dashboard} element={<AdminDashboardRouteEntry />} />
+            <Route path={ROUTE_PATHS.admin.users} element={<AdminUsersPage />} />
+            <Route path={ROUTE_PATHS.admin.notifications} element={<AdminNotificationsPage />} />
+            <Route path={ROUTE_PATHS.admin.auditLogs} element={<AdminAuditLogsPage />} />
             <Route path={ROUTE_PATHS.admin.dlq} element={<DeadLetterQueuePage />} />
+            <Route path={ROUTE_PATHS.admin.semesters} element={<AdminSemestersPage />} />
+            <Route path={ROUTE_PATHS.admin.courses} element={<AdminCoursesPage />} />
+            <Route path={ROUTE_PATHS.admin.configs} element={<AdminConfigsPage />} />
           </Route>
         </Route>
       </Route>
